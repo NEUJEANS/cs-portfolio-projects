@@ -1,6 +1,6 @@
 # Wrap-up — bloom-filter-cli
 
-- Timestamp: 2026-04-14T10:36:16Z
+- Timestamp: 2026-04-14T10:36:50Z
 - Project: bloom-filter-cli
 - What changed:
   - added a new probabilistic data-structure portfolio project implementing a Bloom filter in Python
@@ -8,15 +8,16 @@
   - added research, learning, checklist, and three review-pass notes
   - added a sample input file and README usage docs
 - Tests run:
-  -         
-  - 
-  - smoke test: 
+  - `python3 -m unittest projects/bloom-filter-cli/test_bloom_filter.py`
+  - `python3 -m py_compile projects/bloom-filter-cli/bloom_filter.py`
+  - smoke tests for `build`, `check`, and `stats` against `sample_items.txt`
 - Reviews run:
   - pass 1: persistence/output-path robustness
   - pass 2: CLI input normalization
   - pass 3: docs/sample usability audit
 - Secret scan:
-  - 
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 - Implementation commit hash: d55d712
+- Wrap-up commit hash: 6fc05d3
 - Next step:
   - add benchmark mode to compare theoretical and observed false-positive rates on generated probe sets
