@@ -1,0 +1,4 @@
+[info] boot sequence start
+[warn] cache warmup incomplete
+[error] failed to open config
+[panic] unrecoverable state reached
