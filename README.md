@@ -39,3 +39,4 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 21. consistent-hashing-lab
 22. vector-clock-lab
 23. pagerank-lab
+24. autocomplete-trie-cli
