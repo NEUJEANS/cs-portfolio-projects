@@ -18,32 +18,33 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 
 ## Current progress
 - [x] `task-tracker-cli` - Python CLI with JSON persistence, filtering, stats, and tests
-- [ ] `expense-tracker-sqlite`
-- [ ] `password-strength-auditor`
-- [ ] `file-integrity-monitor`
-- [ ] `markdown-notes-search`
-- [ ] `flashcard-quiz-app`
-- [ ] `log-analyzer`
-- [ ] `sudoku-solver`
-- [ ] `pathfinding-visualizer`
-- [ ] `mini-shell`
-- [ ] `url-shortener-http`
-- [ ] `library-manager-sqlite`
-- [ ] `static-site-generator`
-- [ ] `github-repo-reporter`
-- [ ] `file-organizer-cli`
-- [ ] `huffman-compressor`
-- [ ] `cpu-scheduler-simulator`
-- [ ] `cache-simulator`
-- [ ] `bloom-filter-cli`
-- [ ] `rate-limiter-lab`
-- [ ] `consistent-hashing-lab`
-- [ ] `vector-clock-lab`
-- [ ] `pagerank-lab`
-- [ ] `autocomplete-trie-cli`
-- [ ] `external-merge-sort-lab`
-- [ ] `wal-kv-store`
-- [ ] `tfidf-search-lab`
+- [x] `expense-tracker-sqlite`
+- [x] `password-strength-auditor`
+- [x] `file-integrity-monitor`
+- [x] `markdown-notes-search`
+- [x] `flashcard-quiz-app`
+- [x] `log-analyzer`
+- [x] `sudoku-solver`
+- [x] `pathfinding-visualizer`
+- [x] `mini-shell`
+- [x] `url-shortener-http`
+- [x] `library-manager-sqlite`
+- [x] `static-site-generator`
+- [x] `github-repo-reporter`
+- [x] `file-organizer-cli`
+- [x] `huffman-compressor`
+- [x] `cpu-scheduler-simulator`
+- [x] `cache-simulator`
+- [x] `bloom-filter-cli`
+- [x] `rate-limiter-lab`
+- [x] `consistent-hashing-lab`
+- [x] `vector-clock-lab`
+- [x] `pagerank-lab`
+- [x] `autocomplete-trie-cli`
+- [x] `external-merge-sort-lab`
+- [x] `wal-kv-store`
+- [x] `tfidf-search-lab`
+- [x] `dependency-graph-planner`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.

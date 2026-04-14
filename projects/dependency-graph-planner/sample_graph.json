@@ -1,0 +1,9 @@
+{
+  "tasks": [
+    {"name": "lint", "duration": 1, "command": "ruff check ."},
+    {"name": "compile", "deps": ["lint"], "duration": 4, "command": "python -m build"},
+    {"name": "unit", "deps": ["compile"], "duration": 2, "command": "pytest"},
+    {"name": "package", "deps": ["compile"], "duration": 1, "command": "python -m zipapp"},
+    {"name": "publish", "deps": ["unit", "package"], "duration": 1, "command": "twine upload dist/*"}
+  ]
+}
