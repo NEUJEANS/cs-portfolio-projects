@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--description")
     update_parser.add_argument("--priority", choices=VALID_PRIORITIES)
     update_parser.add_argument("--due")
+    update_parser.add_argument("--clear-due", action="store_true", help="Remove the due date from the task.")
     update_parser.add_argument("--status", choices=VALID_STATUSES)
     update_parser.add_argument("--tag", action="append", default=None, help="Replace tags. Repeat or pass comma-separated values.")
     update_parser.add_argument("--clear-tags", action="store_true", help="Remove all tags from the task.")
@@ -104,6 +105,13 @@ def _select_tasks(service: TaskService, args: argparse.Namespace) -> list[Task]:
     )
 
 
+def _render_summary(payload: dict[str, int], as_json: bool) -> str:
+    if as_json:
+        return json.dumps(payload, indent=2)
+    ordered_keys = ["todo", "in-progress", "done", "total", "overdue", "tagged", "unique_tags"]
+    return " | ".join(f"{key}: {payload[key]}" for key in ordered_keys)
+
+
 def run_cli(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -124,13 +132,15 @@ def run_cli(argv: list[str] | None = None) -> int:
         if args.command == "update":
             if args.clear_tags and args.tag is not None:
                 raise TaskTrackerError("Use either --tag or --clear-tags, not both.")
-            if all(value is None for value in [args.description, args.priority, args.due, args.status]) and not args.clear_tags and args.tag is None:
+            if args.clear_due and args.due is not None:
+                raise TaskTrackerError("Use either --due or --clear-due, not both.")
+            if all(value is None for value in [args.description, args.priority, args.due, args.status]) and not args.clear_tags and args.tag is None and not args.clear_due:
                 raise TaskTrackerError("Provide at least one field to update.")
             task = service.update_task(
                 args.id,
                 description=args.description,
                 priority=args.priority,
-                due_date=args.due,
+                due_date="" if args.clear_due else args.due,
                 status=args.status,
                 tags=[] if args.clear_tags else args.tag,
             )
@@ -153,11 +163,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             print(f"Deleted task #{task.id}: {task.description}")
             return 0
         if args.command == "summary":
-            payload = service.summary()
-            if args.json:
-                print(json.dumps(payload, indent=2))
-            else:
-                print(json.dumps(payload, indent=2))
+            print(_render_summary(service.summary(), args.json))
             return 0
         if args.command == "export":
             tasks = _select_tasks(service, args)
