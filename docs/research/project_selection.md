@@ -18,6 +18,10 @@
    - tooling: CLIs, file organization, report generation
 4. no fragile external dependencies required for the default happy path
 5. clear room for v2 improvements
+6. keep adding compact advanced-CS labs once the initial batches are complete
+
+## Post-batch extensions
+- minhash-near-duplicate-lab - approximate similarity search with shingling, MinHash, and LSH-style banding
 
 ## Expected Portfolio Features Incorporated
 - crisp problem statement per project
