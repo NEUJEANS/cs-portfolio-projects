@@ -21,7 +21,7 @@ dependency-graph-planner
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit hash
-- `ed7cf68`
+- `40ad3c0`
 
 ## Next step
 - add a visualization/export slice (Graphviz DOT or Mermaid) or introduce worker-count/resource constraints for richer scheduling tradeoff demos
