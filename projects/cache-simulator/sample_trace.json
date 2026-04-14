@@ -1,0 +1,6 @@
+[
+  {"op": "read", "address": 0},
+  {"op": "write", "address": 16},
+  {"op": "read", "address": 64},
+  {"op": "write", "address": 0}
+]

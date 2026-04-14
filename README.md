@@ -33,3 +33,4 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 15. file-organizer-cli
 16. huffman-compressor
 17. cpu-scheduler-simulator
+18. cache-simulator
