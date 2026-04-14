@@ -1,0 +1,21 @@
+# Wrap-up — cache-simulator
+
+- Timestamp: 2026-04-14T10:21:00Z
+- Project: `cache-simulator`
+- What changed:
+  - added a new systems-focused portfolio project for set-associative cache simulation
+  - implemented configurable cache geometry, LRU replacement, and write-back / write-through behavior
+  - added JSON trace loading, summary formatting, sample trace input, README, research, learning notes, and review logs
+  - fixed review findings by validating cross-block accesses and aligning docs with the portable unittest runner
+- Tests run:
+  - `python3 -m unittest -v projects/cache-simulator/test_cache_simulator.py`
+  - `python3 projects/cache-simulator/cache_simulator.py projects/cache-simulator/sample_trace.json --cache-size 64 --block-size 16 --associativity 2 --write-policy write-back`
+- Reviews run:
+  - pass 1: trace size / cross-block access validation
+  - pass 2: README/test command portability and sample trace usability
+  - pass 3: inventory/checklist resumability audit
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: `223c1ac280ef478eaa5868f7495fc1e57ee32d53`
+- Next step:
+  - add write-allocate vs no-write-allocate and one additional replacement policy such as FIFO
