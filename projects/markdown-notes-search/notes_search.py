@@ -8,6 +8,7 @@ FRONT_MATTER_TAGS_RE = re.compile(r'^tags\s*:\s*(.+)$', re.IGNORECASE)
 QUERY_TOKEN_RE = re.compile(r'"[^"]+"|\(|\)|\bAND\b|\bOR\b|\bNOT\b|[^\s()]+', re.IGNORECASE)
 BOOLEAN_OPERATORS = {'AND', 'OR', 'NOT'}
 PRECEDENCE = {'OR': 1, 'AND': 2, 'NOT': 3}
+DEFAULT_INDEX_FILENAME = '.notes_search_index.json'
 
 
 def parse_front_matter(text):
@@ -58,27 +59,88 @@ def extract_snippet(text, query, radius=55):
     return snippet
 
 
-def index_notes(directory, recursive=False):
+def build_note_record(base, path):
+    text = path.read_text(encoding='utf-8')
+    metadata = parse_front_matter(text)
+    body = strip_front_matter(text)
+    tags = sorted({*TAG_RE.findall(body), *metadata.get('tags', [])}, key=str.lower)
+    relative_path = path.relative_to(base)
+    stat = path.stat()
+    return {
+        'name': path.name,
+        'path': str(relative_path),
+        'tags': tags,
+        'text': body,
+        'metadata': metadata,
+        'source': {
+            'mtime_ns': stat.st_mtime_ns,
+            'size': stat.st_size,
+        },
+    }
+
+
+def load_index_cache(index_path):
+    if not index_path.exists():
+        return {}
+    try:
+        payload = json.loads(index_path.read_text(encoding='utf-8'))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    entries = payload.get('entries', {})
+    return entries if isinstance(entries, dict) else {}
+
+
+def save_index_cache(index_path, entries):
+    serializable_entries = {path: value for path, value in sorted(entries.items())}
+    payload = {
+        'version': 1,
+        'entries': serializable_entries,
+    }
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+
+
+def cache_matches_signature(cached_note, stat_result):
+    source = cached_note.get('source', {})
+    return source.get('mtime_ns') == stat_result.st_mtime_ns and source.get('size') == stat_result.st_size
+
+
+def resolve_index_path(base, index_file):
+    if not index_file:
+        return base / DEFAULT_INDEX_FILENAME
+    candidate = Path(index_file)
+    return candidate if candidate.is_absolute() else base / candidate
+
+
+def index_notes(directory, recursive=False, index_file=None, rebuild_index=False):
     notes = []
     base = Path(directory)
     pattern = '**/*.md' if recursive else '*.md'
-    for path in sorted(base.glob(pattern)):
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding='utf-8')
-        metadata = parse_front_matter(text)
-        body = strip_front_matter(text)
-        tags = sorted({*TAG_RE.findall(body), *metadata.get('tags', [])}, key=str.lower)
-        relative_path = path.relative_to(base)
-        notes.append(
-            {
-                'name': path.name,
-                'path': str(relative_path),
-                'tags': tags,
-                'text': body,
-                'metadata': metadata,
-            }
-        )
+    paths = [path for path in sorted(base.glob(pattern)) if path.is_file()]
+
+    if index_file is None and not rebuild_index:
+        for path in paths:
+            notes.append(build_note_record(base, path))
+        return notes
+
+    index_path = resolve_index_path(base, index_file)
+    cached_entries = {} if rebuild_index else load_index_cache(index_path)
+    refreshed_entries = {}
+
+    for path in paths:
+        relative_path = str(path.relative_to(base))
+        stat_result = path.stat()
+        cached_note = cached_entries.get(relative_path)
+        if cached_note and cache_matches_signature(cached_note, stat_result):
+            refreshed_entries[relative_path] = cached_note
+        else:
+            refreshed_entries[relative_path] = build_note_record(base, path)
+
+    save_index_cache(index_path, refreshed_entries)
+    for relative_path in sorted(refreshed_entries):
+        notes.append(refreshed_entries[relative_path])
     return notes
 
 
@@ -263,9 +325,22 @@ def main(argv=None):
     parser.add_argument('--recursive', action='store_true', help='search nested directories for Markdown files')
     parser.add_argument('--limit', type=int, default=None, help='maximum number of results to return')
     parser.add_argument('--json', action='store_true', help='emit machine-readable JSON')
+    parser.add_argument(
+        '--index-file',
+        default=None,
+        help='persist and reuse note metadata in a JSON index file (defaults to .notes_search_index.json inside the notes directory when enabled)',
+    )
+    parser.add_argument('--rebuild-index', action='store_true', help='ignore any existing cached index contents and rebuild it')
     args = parser.parse_args(argv)
 
-    results = search_notes(index_notes(args.directory, recursive=args.recursive), args.query, limit=args.limit)
+    use_index = args.index_file is not None or args.rebuild_index
+    notes = index_notes(
+        args.directory,
+        recursive=args.recursive,
+        index_file=args.index_file if use_index else None,
+        rebuild_index=args.rebuild_index,
+    )
+    results = search_notes(notes, args.query, limit=args.limit)
     if args.json:
         payload = [
             {

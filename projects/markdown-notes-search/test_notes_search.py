@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from notes_search import index_notes, search_notes
+from notes_search import DEFAULT_INDEX_FILENAME, index_notes, search_notes
 
 
 class NotesSearchTests(unittest.TestCase):
@@ -22,6 +22,82 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(len(notes), 1)
             self.assertEqual(notes[0]['path'], 'algorithms.md')
             self.assertEqual(notes[0]['tags'], ['cli', 'graphs', 'ranking'])
+
+    def test_index_notes_writes_and_reuses_persistent_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            note_path = root / 'algorithms.md'
+            note_path.write_text('Graph search #graphs', encoding='utf-8')
+
+            notes = index_notes(root, index_file='index.json')
+            cache_path = root / 'index.json'
+            cache_payload = json.loads(cache_path.read_text(encoding='utf-8'))
+
+            self.assertEqual(notes[0]['path'], 'algorithms.md')
+            self.assertIn('algorithms.md', cache_payload['entries'])
+
+            cached_entry = cache_payload['entries']['algorithms.md']
+            note_path.unlink()
+            note_path.write_text('Updated graph search #graphs #updated', encoding='utf-8')
+
+            refreshed_notes = index_notes(root, index_file='index.json')
+            refreshed_payload = json.loads(cache_path.read_text(encoding='utf-8'))
+
+            self.assertEqual(refreshed_notes[0]['tags'], ['graphs', 'updated'])
+            self.assertNotEqual(cached_entry['source']['mtime_ns'], refreshed_payload['entries']['algorithms.md']['source']['mtime_ns'])
+
+    def test_index_notes_removes_deleted_files_from_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            keep = root / 'keep.md'
+            drop = root / 'drop.md'
+            keep.write_text('keep me', encoding='utf-8')
+            drop.write_text('remove me', encoding='utf-8')
+
+            index_notes(root, index_file='index.json')
+            drop.unlink()
+            notes = index_notes(root, index_file='index.json')
+            payload = json.loads((root / 'index.json').read_text(encoding='utf-8'))
+
+            self.assertEqual([note['path'] for note in notes], ['keep.md'])
+            self.assertEqual(sorted(payload['entries']), ['keep.md'])
+
+    def test_rebuild_index_discards_stale_cache_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text('distributed systems', encoding='utf-8')
+            cache_path = root / 'index.json'
+            cache_path.write_text(
+                json.dumps({'version': 1, 'entries': {'ghost.md': {'path': 'ghost.md', 'source': {'mtime_ns': 1, 'size': 1}}}}),
+                encoding='utf-8',
+            )
+
+            notes = index_notes(root, index_file='index.json', rebuild_index=True)
+            payload = json.loads(cache_path.read_text(encoding='utf-8'))
+
+            self.assertEqual([note['path'] for note in notes], ['systems.md'])
+            self.assertEqual(sorted(payload['entries']), ['systems.md'])
+
+    def test_invalid_cache_json_is_treated_as_empty_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text('distributed systems', encoding='utf-8')
+            (root / 'index.json').write_text('{not valid json', encoding='utf-8')
+
+            notes = index_notes(root, index_file='index.json')
+            payload = json.loads((root / 'index.json').read_text(encoding='utf-8'))
+
+            self.assertEqual([note['path'] for note in notes], ['systems.md'])
+            self.assertEqual(sorted(payload['entries']), ['systems.md'])
+
+    def test_index_notes_can_write_nested_index_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text('distributed systems', encoding='utf-8')
+
+            index_notes(root, index_file='cache/index.json')
+
+            self.assertTrue((root / 'cache' / 'index.json').exists())
 
     def test_search_notes_ranks_exact_tag_and_filename_matches_highest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -142,6 +218,29 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(payload[0]['path'], 'db.md')
             self.assertEqual(payload[0]['tags'], ['sql'])
             self.assertIn('sql', payload[0]['snippet'].lower())
+
+    def test_cli_can_build_default_index_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'db.md').write_text('Index tuning for #sql search.', encoding='utf-8')
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    'notes_search.py',
+                    str(root),
+                    'sql',
+                    '--index-file',
+                    DEFAULT_INDEX_FILENAME,
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads((root / DEFAULT_INDEX_FILENAME).read_text(encoding='utf-8'))
+            self.assertIn('db.md', payload['entries'])
 
     def test_plain_cli_output_includes_score_tags_and_snippet(self):
         with tempfile.TemporaryDirectory() as tmp:
