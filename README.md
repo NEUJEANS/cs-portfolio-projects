@@ -34,3 +34,4 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 16. huffman-compressor
 17. cpu-scheduler-simulator
 18. cache-simulator
+19. bloom-filter-cli

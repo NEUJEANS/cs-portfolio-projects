@@ -1,0 +1,6 @@
+apple
+banana
+carrot
+delta
+echo
+foxtrot
