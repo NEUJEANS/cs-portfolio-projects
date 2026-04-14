@@ -41,3 +41,4 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 23. pagerank-lab
 24. autocomplete-trie-cli
 25. external-merge-sort-lab
+26. wal-kv-store
