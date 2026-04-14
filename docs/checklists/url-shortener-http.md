@@ -23,8 +23,8 @@
 - [x] complete review pass 1 and fix issues
 - [x] complete review pass 2 and fix issues
 - [x] complete review pass 3 and fix issues
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 
 ## Future improvements
 - [ ] expiration / deletion support
