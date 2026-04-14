@@ -1,16 +1,5 @@
-# File Integrity Monitor Review Pass 3
+# Review Pass 3 — file-integrity-monitor
 
-## Focus
-Portfolio clarity and automation ergonomics.
-
-## Findings
-1. The diff result exposed lists but did not provide a direct summary flag for automation or quick human inspection.
-2. The README undersold the project and did not explain the stronger workflow after the upgrade.
-
-## Fixes Applied
-- added `summary.has_changes` to the diff payload.
-- rewrote the README with clearer positioning, feature descriptions, and examples for scan/diff workflows.
-- added a dedicated project checklist for resumable future work.
-
-## Result
-- the project now reads more like a polished portfolio artifact and is easier to extend later.
+- Focus: README/checklist/documentation coherence.
+- Checked: feature list mentions CI exit codes, usage shows the new `--fail-on-changes` flag, checklist marks the slice complete, and the learning note explains the exit-code convention.
+- Result: docs align with implementation and keep the slice resumable for a future signed-manifest pass.

@@ -5,7 +5,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from integrity_monitor import build_manifest, diff_snapshots, format_text_report, should_include
+from integrity_monitor import (
+    EXIT_CHANGES_FOUND,
+    EXIT_OK,
+    build_manifest,
+    diff_exit_code,
+    diff_snapshots,
+    format_text_report,
+    should_include,
+)
 
 SCRIPT = Path(__file__).with_name("integrity_monitor.py")
 
@@ -64,6 +72,25 @@ class IntegrityMonitorTests(unittest.TestCase):
         self.assertEqual(diff["changed"], ["a.txt"])
         self.assertEqual(diff["added"], ["b.txt"])
 
+    def test_diff_exit_code_respects_fail_on_changes_flag(self):
+        clean_diff = {
+            "added": [],
+            "removed": [],
+            "changed": [],
+            "unchanged": ["same.txt"],
+            "summary": {"added": 0, "removed": 0, "changed": 0, "unchanged": 1, "has_changes": False},
+        }
+        changed_diff = {
+            "added": ["new.txt"],
+            "removed": [],
+            "changed": [],
+            "unchanged": [],
+            "summary": {"added": 1, "removed": 0, "changed": 0, "unchanged": 0, "has_changes": True},
+        }
+        self.assertEqual(diff_exit_code(clean_diff, fail_on_changes=False), EXIT_OK)
+        self.assertEqual(diff_exit_code(changed_diff, fail_on_changes=False), EXIT_OK)
+        self.assertEqual(diff_exit_code(changed_diff, fail_on_changes=True), EXIT_CHANGES_FOUND)
+
     def test_cli_scan_output_and_diff_text_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -114,6 +141,85 @@ class IntegrityMonitorTests(unittest.TestCase):
             self.assertIn("changed: 1", diff.stdout)
             self.assertIn("added: 1", diff.stdout)
             self.assertIn("beta.txt", diff.stdout)
+
+    def test_cli_fail_on_changes_returns_exit_code_1(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_path = root / "baseline.json"
+            data_path = root / "data"
+            data_path.mkdir()
+            (data_path / "alpha.txt").write_text("alpha")
+
+            subprocess.run(
+                [sys.executable, str(SCRIPT), "scan", str(data_path), "--output", str(baseline_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            (data_path / "alpha.txt").write_text("updated")
+
+            diff = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "diff",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--fail-on-changes",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(diff.returncode, EXIT_CHANGES_FOUND)
+            self.assertIn('"has_changes": true', diff.stdout)
+
+    def test_cli_fail_on_changes_stays_zero_when_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_path = root / "baseline.json"
+            data_path = root / "data"
+            data_path.mkdir()
+            (data_path / "alpha.txt").write_text("alpha")
+
+            subprocess.run(
+                [sys.executable, str(SCRIPT), "scan", str(data_path), "--output", str(baseline_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            diff = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "diff",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--fail-on-changes",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(diff.returncode, EXIT_OK)
+            self.assertIn('"has_changes": false', diff.stdout)
+
+    def test_cli_missing_baseline_returns_usage_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_path = root / "data"
+            data_path.mkdir()
+            (data_path / "alpha.txt").write_text("alpha")
+
+            diff = subprocess.run(
+                [sys.executable, str(SCRIPT), "diff", str(data_path)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(diff.returncode, 2)
+            self.assertIn("diff requires --baseline", diff.stderr)
 
 
 if __name__ == "__main__":

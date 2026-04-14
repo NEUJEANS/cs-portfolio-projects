@@ -45,6 +45,15 @@ python3 integrity_monitor.py diff ../task-tracker-cli \
   --format json
 ```
 
+Fail a CI job when unexpected changes are found:
+
+```bash
+python3 integrity_monitor.py diff ../task-tracker-cli \
+  --baseline baseline.json \
+  --format text \
+  --fail-on-changes
+```
+
 ## Test
 ```bash
 python3 -m unittest discover -s . -p "test_*.py"

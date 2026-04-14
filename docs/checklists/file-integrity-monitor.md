@@ -6,5 +6,5 @@
 - [x] add human-readable diff output alongside JSON output
 - [x] expand tests to cover manifest metadata, diff behavior, and CLI flows
 - [x] refresh README usage examples and explain why the project is portfolio-worthy
-- [ ] consider CI-friendly exit codes in a future pass
+- [x] add CI-friendly exit codes for diff automation workflows
 - [ ] consider signed manifests in a future pass

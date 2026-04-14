@@ -2,11 +2,16 @@ import argparse
 import fnmatch
 import hashlib
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 SUPPORTED_ALGORITHMS = {"sha256": hashlib.sha256, "sha1": hashlib.sha1, "md5": hashlib.md5}
+
+EXIT_OK = 0
+EXIT_CHANGES_FOUND = 1
+EXIT_USAGE_ERROR = 2
 
 
 def hash_file(path: Path, algorithm: str = "sha256") -> str:
@@ -111,6 +116,17 @@ def format_text_report(diff_result):
     return "\n".join(lines)
 
 
+def diff_exit_code(diff_result, fail_on_changes: bool) -> int:
+    if fail_on_changes and diff_result["summary"]["has_changes"]:
+        return EXIT_CHANGES_FOUND
+    return EXIT_OK
+
+
+def fail_usage(message: str) -> int:
+    print(message, file=sys.stderr)
+    return EXIT_USAGE_ERROR
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="File integrity monitor")
     parser.add_argument("command", choices=["scan", "diff"])
@@ -125,6 +141,11 @@ def parse_args(argv=None):
         help="Glob pattern to ignore (repeat flag for multiple patterns)",
     )
     parser.add_argument("--format", choices=["json", "text"], default="json")
+    parser.add_argument(
+        "--fail-on-changes",
+        action="store_true",
+        help="Exit with status 1 after a diff when added, removed, or changed files are detected",
+    )
     return parser.parse_args(argv)
 
 
@@ -139,11 +160,11 @@ def main(argv=None):
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(payload + "\n")
         print(payload)
-        return
+        return EXIT_OK
 
     baseline_path = Path(args.baseline) if args.baseline else None
     if baseline_path is None:
-        raise SystemExit("diff requires --baseline")
+        return fail_usage("diff requires --baseline")
 
     baseline = json.loads(baseline_path.read_text())
     algorithm = baseline.get("algorithm", args.algorithm)
@@ -156,6 +177,8 @@ def main(argv=None):
     else:
         print(json.dumps(diff_result, indent=2))
 
+    return diff_exit_code(diff_result, fail_on_changes=args.fail_on_changes)
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

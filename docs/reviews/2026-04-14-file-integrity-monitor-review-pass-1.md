@@ -1,13 +1,6 @@
-# File Integrity Monitor Review Pass 1
+# Review Pass 1 — file-integrity-monitor
 
-## Focus
-API and data-format review after the manifest upgrade.
-
-## Findings
-1. `diff_snapshots()` assumed the new manifest shape and would break on legacy baselines that stored plain `{"path": "hash"}` pairs.
-
-## Fixes Applied
-- added `_hash_value()` and compatibility handling so both v1-style flat snapshots and v2 manifests can be diffed safely.
-
-## Result
-- backward compatibility preserved while keeping the richer manifest format.
+- Focus: CLI behavior and automation semantics.
+- Found: `--fail-on-changes` returned the right status for changed files, but missing `--baseline` still exited like a generic failure rather than a clear usage error.
+- Fix made: route missing-baseline handling through an explicit usage-path that prints to stderr and exits with code `2`.
+- Result: CLI semantics now better match standard automation expectations.
