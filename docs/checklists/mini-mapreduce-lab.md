@@ -16,4 +16,13 @@
 - [x] extend tests for deterministic partitioning and CLI validation
 - [x] update README with skew-focused usage and talking points
 - [x] run tests and 3 review passes
-- [ ] consider benchmark fixture for larger synthetic datasets in a future run
+
+## Synthetic benchmark slice (2026-04-14 21:00 UTC run)
+- [x] confirm repo sync before editing
+- [x] refresh Python perf-counter and deterministic fixture patterns
+- [x] add a synthetic benchmark command for balanced vs skewed wordcount workloads
+- [x] report per-reducer-count elapsed time and skew metrics in JSON output
+- [x] extend project and repo-level tests for benchmark behavior
+- [x] update README with benchmark usage and interview framing
+- [x] run tests and 3 review passes
+- [ ] consider external mapper/reducer plugin support in a future run

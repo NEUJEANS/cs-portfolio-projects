@@ -4,6 +4,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import random
+import time
+import tempfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +37,32 @@ class JobResult:
                 "reducers": self.reducers,
                 "reducer_stats": self.reducer_stats,
                 "output": self.output,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+
+
+@dataclass(slots=True)
+class BenchmarkResult:
+    scenario: str
+    seed: int
+    total_records: int
+    unique_keys: int
+    shard_size: int
+    reducers: list[int]
+    timings_ms: list[dict[str, int | float]]
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "scenario": self.scenario,
+                "seed": self.seed,
+                "total_records": self.total_records,
+                "unique_keys": self.unique_keys,
+                "shard_size": self.shard_size,
+                "reducers": self.reducers,
+                "timings_ms": self.timings_ms,
             },
             indent=2,
             sort_keys=True,
@@ -110,6 +139,16 @@ def reduce_shards(partials: Iterable[Counter[str]], reducers: int) -> tuple[dict
     return ordered, reducer_stats
 
 
+def reducer_skew(reducer_stats: list[dict[str, int]]) -> float:
+    records = [item["records"] for item in reducer_stats]
+    if not records:
+        return 0.0
+    average = sum(records) / len(records)
+    if average == 0:
+        return 0.0
+    return max(records) / average
+
+
 def read_lines(inputs: list[Path]) -> list[str]:
     lines: list[str] = []
     for path in inputs:
@@ -157,6 +196,71 @@ def execute_job(
     )
 
 
+def build_benchmark_lines(scenario: str, records: int, seed: int) -> list[str]:
+    if records <= 0:
+        raise ValueError("records must be positive")
+    rng = random.Random(seed)
+    if scenario == "balanced":
+        keys = [f"key-{index:02d}" for index in range(24)]
+        return [f"{keys[index % len(keys)]} {keys[(index * 7) % len(keys)]}" for index in range(records)]
+    if scenario == "skewed":
+        hot_keys = ["hot-key"] * 12 + [f"warm-{index}" for index in range(6)] + [f"cold-{index}" for index in range(18)]
+        return [f"{rng.choice(hot_keys)} {rng.choice(hot_keys)}" for _ in range(records)]
+    raise ValueError(f"unsupported benchmark scenario: {scenario}")
+
+
+def benchmark_wordcount(
+    scenario: str,
+    records: int,
+    shard_size: int,
+    reducers: list[int],
+    seed: int = 42,
+) -> BenchmarkResult:
+    if shard_size <= 0:
+        raise ValueError("shard_size must be positive")
+    if not reducers:
+        raise ValueError("at least one reducer count is required")
+    if any(count <= 0 for count in reducers):
+        raise ValueError("reducers must be positive")
+
+    lines = build_benchmark_lines(scenario, records, seed)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", prefix="mini-mapreduce-benchmark-", delete=False) as handle:
+        handle.write("\n".join(lines) + "\n")
+        input_path = Path(handle.name)
+
+    timings: list[dict[str, int | float]] = []
+    unique_keys = 0
+    try:
+        for reducer_count in reducers:
+            started = time.perf_counter()
+            result = execute_job("wordcount", [input_path], shard_size=shard_size, reducers=reducer_count)
+            elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
+            unique_keys = result.unique_keys
+            timings.append(
+                {
+                    "reducers": reducer_count,
+                    "elapsed_ms": elapsed_ms,
+                    "shards": result.shard_count,
+                    "map_records": result.map_records,
+                    "unique_keys": result.unique_keys,
+                    "max_reducer_records": max((item["records"] for item in result.reducer_stats), default=0),
+                    "skew_ratio": round(reducer_skew(result.reducer_stats), 3),
+                }
+            )
+    finally:
+        input_path.unlink(missing_ok=True)
+
+    return BenchmarkResult(
+        scenario=scenario,
+        seed=seed,
+        total_records=records,
+        unique_keys=unique_keys,
+        shard_size=shard_size,
+        reducers=reducers,
+        timings_ms=timings,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Tiny MapReduce-style data processing lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -168,6 +272,14 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--reducers", type=int, default=1, help="number of reducer buckets to simulate")
     run_parser.add_argument("--group-field", help="JSON field to count for json-group-count")
     run_parser.add_argument("--output", help="optional output JSON path")
+
+    benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic wordcount benchmark")
+    benchmark_parser.add_argument("--scenario", choices=["balanced", "skewed"], default="skewed")
+    benchmark_parser.add_argument("--records", type=int, default=5000, help="synthetic input line count")
+    benchmark_parser.add_argument("--shard-size", type=int, default=250, help="lines per shard")
+    benchmark_parser.add_argument("--reducers", type=int, nargs="+", default=[1, 2, 4, 8], help="one or more reducer counts to compare")
+    benchmark_parser.add_argument("--seed", type=int, default=42, help="seed for deterministic synthetic data generation")
+    benchmark_parser.add_argument("--output", help="optional output JSON path")
 
     return parser
 
@@ -187,6 +299,27 @@ def main(argv: list[str] | None = None) -> int:
             shard_size=args.shard_size,
             group_field=args.group_field,
             reducers=args.reducers,
+        )
+        rendered = result.to_json()
+        if args.output:
+            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+        else:
+            print(rendered)
+        return 0
+
+    if args.command == "benchmark":
+        if args.records <= 0:
+            parser.error("--records must be positive")
+        if args.shard_size <= 0:
+            parser.error("--shard-size must be positive")
+        if any(count <= 0 for count in args.reducers):
+            parser.error("--reducers values must be positive")
+        result = benchmark_wordcount(
+            scenario=args.scenario,
+            records=args.records,
+            shard_size=args.shard_size,
+            reducers=args.reducers,
+            seed=args.seed,
         )
         rendered = result.to_json()
         if args.output:

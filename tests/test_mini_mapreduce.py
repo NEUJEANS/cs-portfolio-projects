@@ -18,6 +18,7 @@ assert spec is not None and spec.loader is not None
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
+benchmark_wordcount = module.benchmark_wordcount
 execute_job = module.execute_job
 stable_partition = module.stable_partition
 
@@ -74,6 +75,23 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(single.output, many.output)
             self.assertNotEqual(single.reducer_stats, many.reducer_stats)
 
+    def test_benchmark_result_is_deterministic_for_same_seed(self) -> None:
+        first = benchmark_wordcount("balanced", records=90, shard_size=15, reducers=[1, 3], seed=99)
+        second = benchmark_wordcount("balanced", records=90, shard_size=15, reducers=[1, 3], seed=99)
+
+        self.assertEqual(first.scenario, second.scenario)
+        self.assertEqual(first.total_records, second.total_records)
+        self.assertEqual(first.unique_keys, second.unique_keys)
+        self.assertEqual([row["reducers"] for row in first.timings_ms], [1, 3])
+        self.assertEqual(
+            [(row["reducers"], row["map_records"], row["unique_keys"]) for row in first.timings_ms],
+            [(row["reducers"], row["map_records"], row["unique_keys"]) for row in second.timings_ms],
+        )
+
+    def test_benchmark_rejects_non_positive_shard_size(self) -> None:
+        with self.assertRaisesRegex(ValueError, "shard_size must be positive"):
+            benchmark_wordcount("skewed", records=100, shard_size=0, reducers=[1, 2])
+
     def test_cli_writes_json_output_with_reducer_stats(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "words.txt"
@@ -99,6 +117,37 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(payload["reducers"], 2)
             self.assertEqual(len(payload["reducer_stats"]), 2)
+
+    def test_cli_benchmark_writes_timing_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "benchmark.json"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--scenario",
+                    "skewed",
+                    "--records",
+                    "150",
+                    "--shard-size",
+                    "30",
+                    "--reducers",
+                    "1",
+                    "2",
+                    "4",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["scenario"], "skewed")
+            self.assertEqual(payload["reducers"], [1, 2, 4])
+            self.assertEqual(len(payload["timings_ms"]), 3)
+            self.assertIn("skew_ratio", payload["timings_ms"][2])
 
     def test_programmatic_api_rejects_non_positive_reducers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -13,6 +13,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - built-in `json-group-count` job for JSONL event aggregation
 - stable SHA-256-based partitioner to simulate multiple reducer buckets reproducibly across processes
 - reducer distribution stats so you can talk about key skew in interviews
+- synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts
 - machine-readable JSON output with shard and record statistics
 
 ## Usage
@@ -43,29 +44,46 @@ python3 projects/mini-mapreduce-lab/mapreduce.py run \
   --reducers 4
 ```
 
-Write the result to disk:
+Benchmark balanced vs skewed synthetic inputs:
 
 ```bash
-python3 projects/mini-mapreduce-lab/mapreduce.py run \
-  wordcount sample.txt \
-  --reducers 2 \
-  --output result.json
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --scenario skewed \
+  --records 5000 \
+  --shard-size 250 \
+  --reducers 1 2 4 8
+```
+
+Write the benchmark result to disk:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --scenario balanced \
+  --reducers 1 4 8 \
+  --output benchmark.json
 ```
 
 ## Output shape
 
 ```json
 {
-  "job": "wordcount",
-  "reducers": 2,
-  "reducer_stats": [
-    {"reducer": 0, "unique_keys": 1, "records": 1},
-    {"reducer": 1, "unique_keys": 1, "records": 2}
+  "reducers": [1, 2, 4],
+  "scenario": "skewed",
+  "seed": 42,
+  "shard_size": 250,
+  "timings_ms": [
+    {
+      "elapsed_ms": 4.112,
+      "map_records": 10000,
+      "max_reducer_records": 8123,
+      "reducers": 4,
+      "shards": 20,
+      "skew_ratio": 3.249,
+      "unique_keys": 25
+    }
   ],
-  "output": {
-    "alpha": 2,
-    "beta": 1
-  }
+  "total_records": 5000,
+  "unique_keys": 25
 }
 ```
 
@@ -78,9 +96,10 @@ python3 -m unittest projects/mini-mapreduce-lab/test_mapreduce.py
 ## Interview talking points
 - why combiners reduce shuffle volume before the global reduce step
 - how partitioning affects reducer balance and hot-key skew
-- why deterministic hashing and sorted output make demos and tests reproducible
+- how deterministic benchmark fixtures make systems demos reproducible
+- why timing alone can mislead without reducer-distribution metrics beside it
 
 ## Future improvements
 - support external mapper/reducer plugins for custom portfolio demos
-- add timing/throughput benchmarks for larger synthetic datasets
+- export benchmark runs as CSV for charting in notebooks or slide decks
 - visualize reducer skew across shards over time
