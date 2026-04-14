@@ -1,0 +1,18 @@
+{
+  "nodes": ["n1", "n2", "n3", "n4", "n5"],
+  "election_timeouts": {
+    "n1": 3,
+    "n2": 5,
+    "n3": 7,
+    "n4": 8,
+    "n5": 9
+  },
+  "heartbeat_interval": 2,
+  "steps": [
+    {"action": "run", "ticks": 8},
+    {"action": "isolate", "node": "n1"},
+    {"action": "run", "ticks": 8},
+    {"action": "heal", "node": "n1"},
+    {"action": "run", "ticks": 4}
+  ]
+}
