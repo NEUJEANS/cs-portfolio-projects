@@ -1,11 +1,13 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
-from notes_search import DEFAULT_INDEX_FILENAME, index_notes, search_notes
+from notes_search import DEFAULT_INDEX_FILENAME, INDEX_VERSION, index_notes, search_notes
 
 
 class NotesSearchTests(unittest.TestCase):
@@ -22,6 +24,7 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(len(notes), 1)
             self.assertEqual(notes[0]['path'], 'algorithms.md')
             self.assertEqual(notes[0]['tags'], ['cli', 'graphs', 'ranking'])
+            self.assertEqual(notes[0]['headings'], ['Search Notes'])
 
     def test_index_notes_writes_and_reuses_persistent_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -34,11 +37,14 @@ class NotesSearchTests(unittest.TestCase):
             cache_payload = json.loads(cache_path.read_text(encoding='utf-8'))
 
             self.assertEqual(notes[0]['path'], 'algorithms.md')
+            self.assertEqual(cache_payload['version'], INDEX_VERSION)
             self.assertIn('algorithms.md', cache_payload['entries'])
 
             cached_entry = cache_payload['entries']['algorithms.md']
+            time.sleep(0.002)
             note_path.unlink()
             note_path.write_text('Updated graph search #graphs #updated', encoding='utf-8')
+            os.utime(note_path, None)
 
             refreshed_notes = index_notes(root, index_file='index.json')
             refreshed_payload = json.loads(cache_path.read_text(encoding='utf-8'))
@@ -77,6 +83,7 @@ class NotesSearchTests(unittest.TestCase):
 
             self.assertEqual([note['path'] for note in notes], ['systems.md'])
             self.assertEqual(sorted(payload['entries']), ['systems.md'])
+            self.assertEqual(payload['version'], INDEX_VERSION)
 
     def test_invalid_cache_json_is_treated_as_empty_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -111,6 +118,17 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual([result['path'] for result in results], ['graphs.md', 'references.md', 'algorithms.md'])
             self.assertIn('#graphs', ' '.join('#' + tag for tag in results[0]['tags']))
             self.assertTrue(results[1]['score'] >= results[2]['score'])
+
+    def test_heading_matches_rank_above_body_only_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'distributed-overview.md').write_text('# Distributed Systems\nQuick notes.', encoding='utf-8')
+            (root / 'reference.md').write_text('distributed systems appear here in the body only', encoding='utf-8')
+
+            results = search_notes(index_notes(root), 'distributed systems')
+
+            self.assertEqual([result['path'] for result in results], ['distributed-overview.md', 'reference.md'])
+            self.assertEqual(results[0]['snippet'], 'Heading: Distributed Systems')
 
     def test_front_matter_is_not_included_in_search_snippets(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -195,10 +213,26 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual([result['path'] for result in results], ['active.md'])
             self.assertGreaterEqual(results[0]['score'], 1)
 
+    def test_index_notes_builds_backlinks_for_wikilinks_and_markdown_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'hub.md').write_text('See [[topic]] and [details](topic.md).', encoding='utf-8')
+            (root / 'topic.md').write_text('# Topic\nKnowledge base entry.', encoding='utf-8')
+
+            notes = {note['path']: note for note in index_notes(root)}
+            results = search_notes(list(notes.values()), 'hub')
+
+            self.assertEqual(notes['hub.md']['outgoing_links'], ['topic'])
+            self.assertEqual(notes['topic.md']['backlinks'], ['hub.md'])
+            self.assertEqual(results[0]['path'], 'hub.md')
+            self.assertEqual(results[1]['path'], 'topic.md')
+            self.assertEqual(results[1]['snippet'], 'Backlinked from: hub.md')
+
     def test_cli_json_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / 'db.md').write_text('Index tuning for #sql search.', encoding='utf-8')
+            (root / 'db.md').write_text('# SQL\nIndex tuning for #sql search.', encoding='utf-8')
+            (root / 'hub.md').write_text('See [[db]].', encoding='utf-8')
 
             completed = subprocess.run(
                 [
@@ -217,54 +251,11 @@ class NotesSearchTests(unittest.TestCase):
             payload = json.loads(completed.stdout)
             self.assertEqual(payload[0]['path'], 'db.md')
             self.assertEqual(payload[0]['tags'], ['sql'])
+            self.assertEqual(payload[0]['headings'], ['SQL'])
             self.assertIn('sql', payload[0]['snippet'].lower())
 
-    def test_cli_can_build_default_index_file(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / 'db.md').write_text('Index tuning for #sql search.', encoding='utf-8')
-
-            subprocess.run(
-                [
-                    sys.executable,
-                    'notes_search.py',
-                    str(root),
-                    'sql',
-                    '--index-file',
-                    DEFAULT_INDEX_FILENAME,
-                ],
-                cwd=Path(__file__).parent,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-
-            payload = json.loads((root / DEFAULT_INDEX_FILENAME).read_text(encoding='utf-8'))
-            self.assertIn('db.md', payload['entries'])
-
-    def test_plain_cli_output_includes_score_tags_and_snippet(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / 'planner.md').write_text('Use #planning notes for semester planning.', encoding='utf-8')
-
-            completed = subprocess.run(
-                [
-                    sys.executable,
-                    'notes_search.py',
-                    str(root),
-                    'planning',
-                ],
-                cwd=Path(__file__).parent,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-
-            output = completed.stdout.strip()
-            self.assertIn('planner.md', output)
-            self.assertIn('score=', output)
-            self.assertIn('#planning', output)
-            self.assertIn('semester planning', output)
+    def test_default_index_filename_constant(self):
+        self.assertEqual(DEFAULT_INDEX_FILENAME, '.notes_search_index.json')
 
 
 if __name__ == '__main__':

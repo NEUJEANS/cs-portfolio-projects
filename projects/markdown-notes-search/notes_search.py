@@ -9,6 +9,9 @@ QUERY_TOKEN_RE = re.compile(r'"[^"]+"|\(|\)|\bAND\b|\bOR\b|\bNOT\b|[^\s()]+', re
 BOOLEAN_OPERATORS = {'AND', 'OR', 'NOT'}
 PRECEDENCE = {'OR': 1, 'AND': 2, 'NOT': 3}
 DEFAULT_INDEX_FILENAME = '.notes_search_index.json'
+INDEX_VERSION = 2
+WIKILINK_RE = re.compile(r'\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]')
+MARKDOWN_LINK_RE = re.compile(r'\[[^\]]+\]\(([^)]+)\)')
 
 
 def parse_front_matter(text):
@@ -59,6 +62,42 @@ def extract_snippet(text, query, radius=55):
     return snippet
 
 
+def extract_headings(text):
+    headings = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            heading = stripped.lstrip('#').strip()
+            if heading:
+                headings.append(heading)
+    return headings
+
+
+def normalize_link_target(raw_target):
+    target = raw_target.strip()
+    if not target or '://' in target or target.startswith('#'):
+        return None
+    target = target.split('#', 1)[0].strip()
+    if not target:
+        return None
+    if target.endswith('.md'):
+        target = target[:-3]
+    return target.replace('\\', '/').strip().lower()
+
+
+def extract_outgoing_links(text):
+    outgoing = set()
+    for match in WIKILINK_RE.findall(text):
+        normalized = normalize_link_target(match)
+        if normalized:
+            outgoing.add(normalized)
+    for raw_target in MARKDOWN_LINK_RE.findall(text):
+        normalized = normalize_link_target(raw_target)
+        if normalized:
+            outgoing.add(normalized)
+    return sorted(outgoing)
+
+
 def build_note_record(base, path):
     text = path.read_text(encoding='utf-8')
     metadata = parse_front_matter(text)
@@ -71,6 +110,9 @@ def build_note_record(base, path):
         'path': str(relative_path),
         'tags': tags,
         'text': body,
+        'headings': extract_headings(body),
+        'outgoing_links': extract_outgoing_links(body),
+        'backlinks': [],
         'metadata': metadata,
         'source': {
             'mtime_ns': stat.st_mtime_ns,
@@ -86,7 +128,7 @@ def load_index_cache(index_path):
         payload = json.loads(index_path.read_text(encoding='utf-8'))
     except json.JSONDecodeError:
         return {}
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or payload.get('version') != INDEX_VERSION:
         return {}
     entries = payload.get('entries', {})
     return entries if isinstance(entries, dict) else {}
@@ -95,7 +137,7 @@ def load_index_cache(index_path):
 def save_index_cache(index_path, entries):
     serializable_entries = {path: value for path, value in sorted(entries.items())}
     payload = {
-        'version': 1,
+        'version': INDEX_VERSION,
         'entries': serializable_entries,
     }
     index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,6 +156,30 @@ def resolve_index_path(base, index_file):
     return candidate if candidate.is_absolute() else base / candidate
 
 
+def note_link_aliases(note):
+    path_without_suffix = str(Path(note['path']).with_suffix('')).lower()
+    name_without_suffix = Path(note['name']).stem.lower()
+    return {path_without_suffix, name_without_suffix}
+
+
+def apply_backlinks(notes):
+    alias_to_path = {}
+    for note in notes:
+        for alias in note_link_aliases(note):
+            alias_to_path[alias] = note['path']
+
+    backlinks_map = {note['path']: set() for note in notes}
+    for note in notes:
+        for outgoing in note.get('outgoing_links', []):
+            target_path = alias_to_path.get(outgoing)
+            if target_path and target_path != note['path']:
+                backlinks_map[target_path].add(note['path'])
+
+    for note in notes:
+        note['backlinks'] = sorted(backlinks_map[note['path']])
+    return notes
+
+
 def index_notes(directory, recursive=False, index_file=None, rebuild_index=False):
     notes = []
     base = Path(directory)
@@ -123,7 +189,7 @@ def index_notes(directory, recursive=False, index_file=None, rebuild_index=False
     if index_file is None and not rebuild_index:
         for path in paths:
             notes.append(build_note_record(base, path))
-        return notes
+        return apply_backlinks(notes)
 
     index_path = resolve_index_path(base, index_file)
     cached_entries = {} if rebuild_index else load_index_cache(index_path)
@@ -138,9 +204,10 @@ def index_notes(directory, recursive=False, index_file=None, rebuild_index=False
         else:
             refreshed_entries[relative_path] = build_note_record(base, path)
 
+    notes = [refreshed_entries[relative_path] for relative_path in sorted(refreshed_entries)]
+    apply_backlinks(notes)
+    refreshed_entries = {note['path']: note for note in notes}
     save_index_cache(index_path, refreshed_entries)
-    for relative_path in sorted(refreshed_entries):
-        notes.append(refreshed_entries[relative_path])
     return notes
 
 
@@ -150,6 +217,7 @@ def score_note(note, query):
     path_lower = note['path'].lower()
     text_lower = note['text'].lower()
     tag_lowers = [tag.lower() for tag in note['tags']]
+    heading_lowers = [heading.lower() for heading in note.get('headings', [])]
 
     score = 0
     if q == name_lower:
@@ -160,12 +228,17 @@ def score_note(note, query):
         score += 25
     if q in tag_lowers:
         score += 80
+    if q in heading_lowers:
+        score += 95
+    heading_substring_hits = sum(1 for heading in heading_lowers if q in heading and q != heading)
+    score += heading_substring_hits * 35
 
     word_hits = len(re.findall(rf'(?<!\w){re.escape(q)}(?!\w)', text_lower))
     substring_hits = text_lower.count(q)
     score += word_hits * 15
     score += max(0, substring_hits - word_hits) * 4
     score += len(note['tags'])
+    score += min(len(note.get('backlinks', [])), 5) * 3
     return score
 
 
@@ -226,7 +299,14 @@ def to_postfix(tokens):
 
 def query_term_matches(note, term):
     q = term.lower()
-    haystacks = [note['name'].lower(), note['path'].lower(), note['text'].lower(), *[tag.lower() for tag in note['tags']]]
+    haystacks = [
+        note['name'].lower(),
+        note['path'].lower(),
+        note['text'].lower(),
+        *[tag.lower() for tag in note['tags']],
+        *[heading.lower() for heading in note.get('headings', [])],
+        *[path.lower() for path in note.get('backlinks', [])],
+    ]
     return any(q in haystack for haystack in haystacks)
 
 
@@ -256,6 +336,19 @@ def evaluate_postfix(postfix_tokens, note):
 
 def is_boolean_query(query):
     return bool(re.search(r'\b(?:AND|OR|NOT)\b|["()]', query, re.IGNORECASE))
+
+
+def best_snippet_for_query(note, query):
+    for heading in note.get('headings', []):
+        if query.lower() in heading.lower():
+            return f'Heading: {heading}'
+    snippet = extract_snippet(note['text'], query)
+    if snippet:
+        return snippet
+    for backlink in note.get('backlinks', []):
+        if query.lower() in backlink.lower():
+            return f'Backlinked from: {backlink}'
+    return ''
 
 
 def search_notes(notes, query, limit=None):
@@ -289,14 +382,14 @@ def search_notes(notes, query, limit=None):
                 score = max(score, 1 + len(note['tags']))
             snippet = ''
             for term in matched_terms:
-                snippet = extract_snippet(note['text'], term)
+                snippet = best_snippet_for_query(note, term)
                 if snippet:
                     break
         else:
             score = score_note(note, query)
             if score <= 0:
                 continue
-            snippet = extract_snippet(note['text'], query)
+            snippet = best_snippet_for_query(note, query)
 
         if not boolean_mode and score <= 0:
             continue
@@ -312,10 +405,13 @@ def search_notes(notes, query, limit=None):
     return results
 
 
-def format_result(note):
+def format_result(note, show_backlinks=False):
     tags = f" [{' '.join('#' + tag for tag in note['tags'])}]" if note['tags'] else ''
     snippet = f"\n  {note['snippet']}" if note.get('snippet') else ''
-    return f"{note['path']} (score={note['score']}){tags}{snippet}"
+    backlinks = ''
+    if show_backlinks and note.get('backlinks'):
+        backlinks = f"\n  backlinks: {', '.join(note['backlinks'])}"
+    return f"{note['path']} (score={note['score']}){tags}{snippet}{backlinks}"
 
 
 def main(argv=None):
@@ -325,6 +421,7 @@ def main(argv=None):
     parser.add_argument('--recursive', action='store_true', help='search nested directories for Markdown files')
     parser.add_argument('--limit', type=int, default=None, help='maximum number of results to return')
     parser.add_argument('--json', action='store_true', help='emit machine-readable JSON')
+    parser.add_argument('--show-backlinks', action='store_true', help='include backlink references in plain-text output')
     parser.add_argument(
         '--index-file',
         default=None,
@@ -347,6 +444,8 @@ def main(argv=None):
                 'name': note['name'],
                 'path': note['path'],
                 'tags': note['tags'],
+                'headings': note['headings'],
+                'backlinks': note['backlinks'],
                 'score': note['score'],
                 'snippet': note['snippet'],
             }
@@ -356,7 +455,7 @@ def main(argv=None):
         return
 
     for note in results:
-        print(format_result(note))
+        print(format_result(note, show_backlinks=args.show_backlinks))
 
 
 if __name__ == '__main__':

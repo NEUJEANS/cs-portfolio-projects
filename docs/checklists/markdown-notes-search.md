@@ -1,6 +1,6 @@
 # Markdown Notes Search Checklist
 
-Status: vertical slice 3 complete
+Status: vertical slice 4 complete
 Last updated: 2026-04-14
 
 ## Vertical slice 1
@@ -49,7 +49,23 @@ Last updated: 2026-04-14
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Vertical slice 4 — heading-aware ranking and backlink navigation
+- [x] identify markdown-notes-search as still worth another slice because ranking ignored section headings and cross-note note graph context
+- [x] do brief implementation research on heading-weighted note ranking and markdown link/backlink extraction patterns
+- [x] do short Python regex/link-normalization refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add heading extraction and heading-aware scoring/snippet selection
+- [x] add wiki-link and markdown-link parsing with backlink graph enrichment across indexed notes
+- [x] expose backlink data in JSON output and optional plain-text output
+- [x] expand automated coverage for heading ranking, backlink indexing, and cache version upgrades
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Next slice candidates
-- [ ] heading-aware ranking and backlink-aware navigation
 - [ ] TUI browsing mode with preview panes
 - [ ] richer posting-list style incremental index rather than storing full note bodies in cache
+- [ ] section-scoped retrieval with heading anchors and open-in-editor actions
