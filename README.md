@@ -53,6 +53,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `stack-vm-lab`
 - [x] `segment-tree-range-query-lab`
 - [x] `regex-engine-lab`
+- [x] `hyperloglog-cardinality-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.
