@@ -1,0 +1,16 @@
+func main:
+  PUSH 9
+  PUSH 14
+  CALL max 2
+  PRINT
+  HALT
+
+func max:
+  LOAD arg0
+  LOAD arg1
+  GT
+  JIF 6
+  LOAD arg0
+  RET
+  LOAD arg1
+  RET
