@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import json
 import math
+import random
 from pathlib import Path
 from typing import Iterable, List
 
@@ -102,6 +103,34 @@ def read_items(path: Path) -> List[str]:
     return [line.strip() for line in path.read_text().splitlines() if line.strip()]
 
 
+def benchmark_filter(capacity: int, error_rate: float, inserted_count: int, probe_count: int, seed: int = 0) -> dict:
+    if inserted_count <= 0:
+        raise ValueError("inserted_count must be greater than 0")
+    if probe_count <= 0:
+        raise ValueError("probe_count must be greater than 0")
+
+    rng = random.Random(seed)
+    bloom_filter = BloomFilter(capacity=capacity, error_rate=error_rate)
+    bloom_filter.extend(
+        f"inserted-{seed}-{index}-{rng.getrandbits(64):016x}" for index in range(inserted_count)
+    )
+
+    false_positive_count = 0
+    for index in range(probe_count):
+        probe = f"probe-{seed}-{index}-{rng.getrandbits(64):016x}"
+        if bloom_filter.might_contain(probe):
+            false_positive_count += 1
+
+    observed_false_positive_rate = false_positive_count / probe_count
+    return {
+        **bloom_filter.stats(),
+        "probe_count": probe_count,
+        "seed": seed,
+        "false_positive_count": false_positive_count,
+        "observed_false_positive_rate": observed_false_positive_rate,
+    }
+
+
 def build_command(args: argparse.Namespace) -> int:
     bloom_filter = BloomFilter(capacity=args.capacity, error_rate=args.error_rate)
     inserted = bloom_filter.extend(read_items(Path(args.input)))
@@ -124,6 +153,18 @@ def stats_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def benchmark_command(args: argparse.Namespace) -> int:
+    result = benchmark_filter(
+        capacity=args.capacity,
+        error_rate=args.error_rate,
+        inserted_count=args.inserted_count,
+        probe_count=args.probe_count,
+        seed=args.seed,
+    )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build and query a Bloom filter from the command line")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -143,6 +184,14 @@ def build_parser() -> argparse.ArgumentParser:
     stats_parser = subparsers.add_parser("stats", help="show filter statistics")
     stats_parser.add_argument("--filter", required=True, help="saved filter JSON")
     stats_parser.set_defaults(func=stats_command)
+
+    benchmark_parser = subparsers.add_parser("benchmark", help="estimate and sample false-positive behavior")
+    benchmark_parser.add_argument("--capacity", type=int, required=True, help="filter capacity used for sizing")
+    benchmark_parser.add_argument("--error-rate", type=float, default=0.01, help="target false-positive rate")
+    benchmark_parser.add_argument("--inserted-count", type=int, required=True, help="number of generated items to insert")
+    benchmark_parser.add_argument("--probe-count", type=int, required=True, help="number of generated probe items to test")
+    benchmark_parser.add_argument("--seed", type=int, default=0, help="deterministic RNG seed for reproducible benchmark output")
+    benchmark_parser.set_defaults(func=benchmark_command)
 
     return parser
 

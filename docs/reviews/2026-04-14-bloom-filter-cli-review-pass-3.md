@@ -1,15 +1,13 @@
-# Review pass 3 — bloom-filter-cli
+# Bloom filter CLI review pass 3 — 2026-04-14
 
 ## Focus
-Docs, packaging, and smoke-test usability.
+Docs and resumability review.
+
+## Checks
+- Confirmed README usage examples cover the new benchmark mode.
+- Confirmed checklist records the completed slice.
+- Confirmed research and learning notes explain the benchmark rationale and formulas.
 
 ## Findings
-1. README usage referenced an input file but the project did not include one.
-
-## Fixes applied
-- Added `sample_items.txt` to make the build command runnable immediately.
-- Updated README to point to the sample input file.
-
-## Verification
-- `python3 -m py_compile projects/bloom-filter-cli/bloom_filter.py`
-- full build/check/stats smoke test against `sample_items.txt`
+- No doc gaps blocking future resume work.
+- Next strongest follow-up remains counting Bloom filter support.

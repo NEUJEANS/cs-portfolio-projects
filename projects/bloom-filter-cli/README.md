@@ -12,6 +12,7 @@ A small portfolio project that implements a Bloom filter with a reusable Python 
 - add newline-delimited items from a file
 - query a saved filter for possible membership
 - inspect estimated false-positive rate and load statistics
+- benchmark observed false-positive rate with deterministic generated samples
 - save/load filter state as JSON for resumable usage
 
 ## Usage
@@ -38,6 +39,17 @@ View stats:
 python3 bloom_filter.py stats --filter sample_filter.json
 ```
 
+Benchmark sampled false positives:
+
+```bash
+python3 bloom_filter.py benchmark \
+  --capacity 1000 \
+  --error-rate 0.01 \
+  --inserted-count 800 \
+  --probe-count 5000 \
+  --seed 42
+```
+
 Example input file: `sample_items.txt`
 
 ## Test
@@ -47,6 +59,5 @@ python3 -m unittest projects/bloom-filter-cli/test_bloom_filter.py
 ```
 
 ## Future improvements
-- benchmark observed false-positive rates with generated probes
 - add counting Bloom filter support for approximate deletion
 - support binary serialization for larger filters

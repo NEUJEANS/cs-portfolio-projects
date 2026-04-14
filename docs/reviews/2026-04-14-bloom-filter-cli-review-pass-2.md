@@ -1,13 +1,13 @@
-# Review pass 2 — bloom-filter-cli
+# Bloom filter CLI review pass 2 — 2026-04-14
 
 ## Focus
-CLI robustness and user input handling.
+CLI smoke review and output contract audit.
+
+## Checks
+- Ran the unit test suite.
+- Ran the new `benchmark` subcommand manually with a fixed seed.
+- Verified output contains both estimated and observed false-positive rates plus counts.
 
 ## Findings
-1. Query items in the `check` subcommand were not normalized, so accidental whitespace could produce misleading results.
-
-## Fixes applied
-- Normalized query items with `strip()` and ignored blank inputs before membership checks.
-
-## Verification
-- `python3 projects/bloom-filter-cli/bloom_filter.py check --filter <generated-filter> apple kiwi`
+- No additional issues found after the streaming insertion fix.
+- Output is deterministic enough for tests when a seed is provided.
