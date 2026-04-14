@@ -1,0 +1,21 @@
+# MinHash persistence + benchmark slice
+
+- Timestamp: 2026-04-14 22:39 UTC
+- Project: `minhash-near-duplicate-lab`
+- What changed:
+  - added persistent signature index support with `build-index` and `scan-index`
+  - added benchmark mode for LSH candidate generation vs exact all-pairs scanning
+  - expanded tests, README usage, checklist, learning note, and 3 review-pass logs
+- Tests run:
+  - `python3 -m unittest tests.test_minhash_near_duplicate`
+  - manual CLI smoke tests for `build-index`, `scan-index`, and `benchmark`
+  - `python3 projects/minhash-near-duplicate-lab/minhash_lab.py --help`
+- Reviews run:
+  - `docs/reviews/2026-04-14-minhash-persistence-review-pass-1.md`
+  - `docs/reviews/2026-04-14-minhash-persistence-review-pass-2.md`
+  - `docs/reviews/2026-04-14-minhash-persistence-review-pass-3.md`
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: eb87fb559c757cb6eca2ee3eba39ea991a15728e
+- Next step:
+  - add incremental index refresh so unchanged files can reuse prior signatures without full rebuilds

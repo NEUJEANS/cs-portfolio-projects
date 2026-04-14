@@ -7,6 +7,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - lets you talk about exact similarity vs probabilistic approximation
 - stays runnable locally with standard-library-only code and CLI workflows
 - includes both pairwise comparison and corpus scanning modes
+- now supports persisted signature indexes and benchmark runs for repeated demos
 
 ## Features
 - token normalization and word-shingle generation
@@ -14,6 +15,8 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - deterministic MinHash signature generation with configurable signature length
 - LSH-style banding to surface likely duplicate pairs without brute-force comparison of every pair
 - small-corpus fallback that still checks all pairs when banding would otherwise miss every candidate in tiny demos
+- persistent signature-index export for repeated scans without recomputing signatures every time
+- benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - CLI output in human-readable or JSON form
 - repository-level tests for API behavior and CLI workflows
 
@@ -39,19 +42,52 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus \
   --json
 ```
 
+Build a persistent signature index:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py build-index \
+  samples/ \
+  samples/minhash-index.json \
+  --glob '*.txt' \
+  --json
+```
+
+Scan using a previously saved index:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py scan-index \
+  samples/minhash-index.json \
+  --threshold 0.45 \
+  --json
+```
+
+Benchmark candidate reduction vs exact all-pairs scanning:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
+  samples/ \
+  --glob '*.txt' \
+  --threshold 0.45 \
+  --json
+```
+
 ## Example JSON output
 
 ```json
 {
-  "bands": 8,
-  "command": "compare",
-  "estimated_jaccard": 0.5781,
-  "exact_jaccard": 0.6,
-  "left": "samples/a.txt",
-  "left_shingles": 8,
-  "right": "samples/b.txt",
-  "right_shingles": 9,
-  "shared_bands": 2
+  "command": "benchmark",
+  "documents_scanned": 12,
+  "all_pairs": 66,
+  "candidate_pairs": 9,
+  "exact_pairs_above_threshold": 4,
+  "lsh_pairs_above_threshold": 4,
+  "lsh_recall_vs_exact": 1.0,
+  "candidate_reduction_ratio": 0.8636,
+  "timings_seconds": {
+    "build_signatures": 0.004821,
+    "lsh_candidate_generation": 0.000517,
+    "exact_all_pairs_scan": 0.001933
+  }
 }
 ```
 
@@ -59,15 +95,16 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus \
 - why k-shingles preserve local ordering better than simple bag-of-words counts
 - how MinHash compresses large shingle sets into signatures that approximate Jaccard similarity
 - why LSH banding reduces the number of candidate pairs you need to inspect exactly
-- how false positives and false negatives shift as you change shingle size, signature length, and band count
+- why persisted signatures matter when you rerun scans across the same corpus repeatedly
+- how recall and candidate-reduction trade off as you change shingle size, signature length, and band count
 
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m unittest tests.test_minhash_near_duplicate
 ```
 
 ## Future improvements
 - add character-shingle and code-token modes for source-code deduplication demos
-- persist signatures to disk for repeated corpus scans on larger datasets
-- benchmark approximate candidate generation vs naive all-pairs comparison
+- support incremental index refresh so unchanged files can reuse prior signatures directly
+- export benchmark runs as CSV/Markdown summaries for portfolio write-ups

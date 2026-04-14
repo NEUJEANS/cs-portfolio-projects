@@ -18,11 +18,16 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 build_shingles = module.build_shingles
+build_signature_index = module.build_signature_index
 compare_texts = module.compare_texts
 estimate_jaccard = module.estimate_jaccard
 exact_jaccard = module.exact_jaccard
 find_candidate_pairs = module.find_candidate_pairs
+find_candidate_pairs_from_index = module.find_candidate_pairs_from_index
+load_signature_index = module.load_signature_index
 minhash_signature = module.minhash_signature
+save_signature_index = module.save_signature_index
+benchmark_corpus = module.benchmark_corpus
 
 
 class MinhashNearDuplicateRepoTests(unittest.TestCase):
@@ -80,6 +85,53 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "threshold must be between 0 and 1"):
             find_candidate_pairs({"a": "x", "b": "y"}, threshold=1.5)
 
+    def test_signature_index_round_trip_preserves_pairs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "a.txt").write_text("alpha beta gamma delta epsilon\n", encoding="utf-8")
+            (root / "b.txt").write_text("alpha beta gamma delta zeta\n", encoding="utf-8")
+            (root / "c.txt").write_text("operating systems scheduling disk arm movement\n", encoding="utf-8")
+            paths = sorted(root.glob("*.txt"))
+
+            index = build_signature_index(
+                paths,
+                root=root,
+                glob_pattern="*.txt",
+                shingle_size=2,
+                num_hashes=32,
+                bands=8,
+                seed=5,
+            )
+            index_path = root / "index.json"
+            save_signature_index(index, index_path)
+            loaded = load_signature_index(index_path)
+            reports = find_candidate_pairs_from_index(loaded, threshold=0.2)
+
+            self.assertEqual(len(loaded.documents), 3)
+            self.assertEqual(len(reports), 1)
+            self.assertTrue(reports[0].left.endswith("a.txt"))
+            self.assertEqual(loaded.num_hashes, 32)
+
+    def test_benchmark_reports_candidate_counts_and_timings(self) -> None:
+        payload = benchmark_corpus(
+            {
+                "a.txt": "alpha beta gamma delta epsilon zeta",
+                "b.txt": "alpha beta gamma delta epsilon eta",
+                "c.txt": "distributed systems consistent hashing lab",
+            },
+            shingle_size=2,
+            num_hashes=32,
+            bands=8,
+            threshold=0.2,
+            seed=9,
+        )
+        self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["documents_scanned"], 3)
+        self.assertIn("timings_seconds", payload)
+        self.assertGreaterEqual(payload["all_pairs"], payload["candidate_pairs"])
+        self.assertIn("exact_pairs_above_threshold", payload)
+        self.assertIn("lsh_recall_vs_exact", payload)
+
     def test_cli_compare_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             left = Path(tmpdir) / "left.txt"
@@ -134,6 +186,85 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(payload["documents_scanned"], 3)
             self.assertEqual(len(payload["pairs"]), 1)
             self.assertTrue(payload["pairs"][0]["left"].endswith("a.txt"))
+
+    def test_cli_build_index_and_scan_index_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "docs"
+            root.mkdir()
+            (root / "a.txt").write_text("alpha beta gamma delta epsilon\n", encoding="utf-8")
+            (root / "b.txt").write_text("alpha beta gamma delta zeta\n", encoding="utf-8")
+            (root / "c.txt").write_text("systems programming memory allocator heap blocks\n", encoding="utf-8")
+            index_path = Path(tmpdir) / "signatures.json"
+
+            build_completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "build-index",
+                    str(root),
+                    str(index_path),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            build_payload = json.loads(build_completed.stdout)
+            self.assertEqual(build_payload["command"], "build-index")
+            self.assertEqual(build_payload["documents_indexed"], 3)
+            self.assertTrue(index_path.exists())
+
+            scan_completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "scan-index",
+                    str(index_path),
+                    "--threshold",
+                    "0.2",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            scan_payload = json.loads(scan_completed.stdout)
+            self.assertEqual(scan_payload["command"], "scan-index")
+            self.assertEqual(scan_payload["documents_scanned"], 3)
+            self.assertEqual(len(scan_payload["pairs"]), 1)
+
+    def test_cli_benchmark_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "a.txt").write_text("alpha beta gamma delta epsilon zeta\n", encoding="utf-8")
+            (root / "b.txt").write_text("alpha beta gamma delta epsilon eta\n", encoding="utf-8")
+            (root / "c.txt").write_text("network routing consistent hashing replicas\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    str(root),
+                    "--threshold",
+                    "0.2",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "benchmark")
+            self.assertEqual(payload["documents_scanned"], 3)
+            self.assertIn("candidate_pairs", payload)
+            self.assertIn("timings_seconds", payload)
+            self.assertIn("exact_pairs_above_threshold", payload)
+            self.assertIn("lsh_pairs_above_threshold", payload)
 
     def test_cli_rejects_band_mismatch(self) -> None:
         completed = subprocess.run(
