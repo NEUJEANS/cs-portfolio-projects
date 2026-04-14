@@ -1,29 +1,31 @@
-# task-tracker-cli
+# Task Tracker CLI
 
-## Overview
-Track tasks with JSON persistence, priorities, and completion workflow.
-
-## Stack
-- Python
-- no extra runtime dependency required for the default path
+A portfolio-friendly command-line task manager built with Python and JSON persistence.
 
 ## Features
-- focused scope suitable for a CS student portfolio
-- runnable locally from the command line
-- core behavior covered by tests
-- clear v2 expansion path
+- add tasks with priority and due dates
+- list tasks with status/priority search filters
+- mark tasks as done
+- delete tasks
+- show summary statistics
+- print either table-style text or JSON
+- persist data safely with atomic writes
 
-## Usage
+## Run
 ```bash
-python3 task_tracker.py --storage tasks.json add "finish OS assignment" --priority high
+python3 -m src.task_tracker_cli --help
+python3 -m src.task_tracker_cli add "Finish OS assignment" --priority high --due 2026-04-20
+python3 -m src.task_tracker_cli list --status todo
+python3 -m src.task_tracker_cli done 1
+python3 -m src.task_tracker_cli summary
 ```
 
-## Test
+## Optional custom data file
 ```bash
-python3 -m unittest discover -s . -p "test_*.py"
+python3 -m src.task_tracker_cli --db /tmp/tasks.json add "Test task"
 ```
 
-## Future Improvements
-- richer validation and edge-case handling
-- packaging / release automation
-- more integration or end-to-end tests
+## Tests
+```bash
+python3 -m unittest discover -s tests -v
+```

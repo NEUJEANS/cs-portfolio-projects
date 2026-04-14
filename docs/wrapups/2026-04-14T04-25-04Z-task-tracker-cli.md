@@ -1,0 +1,21 @@
+# Wrap-up - 2026-04-14T04-25-04Z
+
+- Project: task-tracker-cli
+- Commit: 4dd4f02
+- What changed:
+  - added the first end-to-end Python portfolio project with JSON persistence
+  - implemented add/list/done/delete/summary commands with filters and JSON output
+  - added research notes, a short Python CLI refresher, a checklist, and a 3-pass review log
+  - added 4 automated tests covering happy path and error cases
+- Tests run:
+  - python3 -m unittest discover -s tests -v (pass)
+  - python3 -m src.task_tracker_cli --help (pass)
+  - python3 -m src.task_tracker_cli summary (pass)
+- Reviews run:
+  - review pass 1: timestamp consistency on creation
+  - review pass 2: cleaner JSON serialization via dataclasses.asdict()
+  - review pass 3: added missing edge-case test coverage
+- Secret scan:
+  - /home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail (pass)
+- Next step:
+  - build the next project, likely expense-tracker-sqlite, with the same research/checklist/test/review workflow
