@@ -111,7 +111,7 @@ class MerkleSyncLabTests(unittest.TestCase):
             subprocess.run(
                 [
                     "python3",
-                    "projects/merkle-sync-lab/merkle_sync_lab.py",
+                    str(MODULE_PATH),
                     "build",
                     str(source),
                     "--output",
@@ -122,7 +122,7 @@ class MerkleSyncLabTests(unittest.TestCase):
             diff_result = subprocess.run(
                 [
                     "python3",
-                    "projects/merkle-sync-lab/merkle_sync_lab.py",
+                    str(MODULE_PATH),
                     "diff",
                     str(manifest_path),
                     str(target),
@@ -140,7 +140,7 @@ class MerkleSyncLabTests(unittest.TestCase):
             plan_result = subprocess.run(
                 [
                     "python3",
-                    "projects/merkle-sync-lab/merkle_sync_lab.py",
+                    str(MODULE_PATH),
                     "plan",
                     str(manifest_path),
                     str(target),

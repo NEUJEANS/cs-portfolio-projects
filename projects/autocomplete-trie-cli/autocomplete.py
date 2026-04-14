@@ -1,7 +1,9 @@
 import argparse
 import csv
 import heapq
-from dataclasses import dataclass, field
+import json
+import time
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -21,6 +23,15 @@ class TrieNode:
     max_subtree_weight: int = 0
 
 
+@dataclass
+class QueryResult:
+    query: str
+    prefix_matches: List[Suggestion]
+    fuzzy_matches: List[Suggestion]
+    prefix_time_ms: float
+    fuzzy_time_ms: float
+
+
 class DatasetError(ValueError):
     pass
 
@@ -28,6 +39,7 @@ class DatasetError(ValueError):
 class TrieAutocomplete:
     def __init__(self) -> None:
         self.root = TrieNode()
+        self.word_count = 0
 
     def insert(self, word: str, weight: int) -> None:
         if not word:
@@ -37,11 +49,16 @@ class TrieAutocomplete:
 
         node = self.root
         node.max_subtree_weight = max(node.max_subtree_weight, weight)
+        is_new_word = False
         for ch in word.lower():
             node = node.children.setdefault(ch, TrieNode())
             node.max_subtree_weight = max(node.max_subtree_weight, weight)
+        if not node.is_terminal:
+            is_new_word = True
         node.is_terminal = True
         node.weight = max(node.weight, weight)
+        if is_new_word:
+            self.word_count += 1
 
     def _find_node(self, prefix: str) -> Optional[TrieNode]:
         node = self.root
@@ -168,6 +185,70 @@ def format_suggestions(prefix_results: Sequence[Suggestion], fuzzy_results: Sequ
     return '\n'.join(lines)
 
 
+def format_query_result(result: QueryResult) -> str:
+    lines = [f'query: {result.query}']
+    lines.append(format_suggestions(result.prefix_matches, result.fuzzy_matches))
+    lines.append('')
+    lines.append(f'prefix_time_ms: {result.prefix_time_ms:.3f}')
+    lines.append(f'fuzzy_time_ms: {result.fuzzy_time_ms:.3f}')
+    return '\n'.join(lines)
+
+
+def format_benchmark_report(results: Sequence[QueryResult], trie: TrieAutocomplete) -> str:
+    if not results:
+        return 'No benchmark queries provided.'
+    average_prefix = sum(item.prefix_time_ms for item in results) / len(results)
+    average_fuzzy = sum(item.fuzzy_time_ms for item in results) / len(results)
+    slowest_prefix = max(results, key=lambda item: item.prefix_time_ms)
+    slowest_fuzzy = max(results, key=lambda item: item.fuzzy_time_ms)
+
+    lines = [
+        'benchmark_summary:',
+        f'- queries: {len(results)}',
+        f'- indexed_words: {trie.word_count}',
+        f'- avg_prefix_time_ms: {average_prefix:.3f}',
+        f'- avg_fuzzy_time_ms: {average_fuzzy:.3f}',
+        f'- slowest_prefix_query: {slowest_prefix.query} ({slowest_prefix.prefix_time_ms:.3f} ms)',
+        f'- slowest_fuzzy_query: {slowest_fuzzy.query} ({slowest_fuzzy.fuzzy_time_ms:.3f} ms)',
+        '',
+        'per_query_top_hits:',
+    ]
+    for item in results:
+        prefix_words = ', '.join(match.word for match in item.prefix_matches) or 'none'
+        fuzzy_words = ', '.join(match.word for match in item.fuzzy_matches) or 'none'
+        lines.append(
+            f'- {item.query}: prefix=[{prefix_words}] fuzzy=[{fuzzy_words}] '
+            f'prefix_ms={item.prefix_time_ms:.3f} fuzzy_ms={item.fuzzy_time_ms:.3f}'
+        )
+    return '\n'.join(lines)
+
+
+def query_to_dict(result: QueryResult) -> Dict[str, object]:
+    return {
+        'query': result.query,
+        'prefix_matches': [asdict(item) for item in result.prefix_matches],
+        'fuzzy_matches': [asdict(item) for item in result.fuzzy_matches],
+        'prefix_time_ms': round(result.prefix_time_ms, 6),
+        'fuzzy_time_ms': round(result.fuzzy_time_ms, 6),
+    }
+
+
+def benchmark_to_dict(results: Sequence[QueryResult], trie: TrieAutocomplete) -> Dict[str, object]:
+    average_prefix = (sum(item.prefix_time_ms for item in results) / len(results)) if results else 0.0
+    average_fuzzy = (sum(item.fuzzy_time_ms for item in results) / len(results)) if results else 0.0
+    slowest_prefix = max(results, key=lambda item: item.prefix_time_ms) if results else None
+    slowest_fuzzy = max(results, key=lambda item: item.fuzzy_time_ms) if results else None
+    return {
+        'query_count': len(results),
+        'indexed_words': trie.word_count,
+        'avg_prefix_time_ms': round(average_prefix, 6),
+        'avg_fuzzy_time_ms': round(average_fuzzy, 6),
+        'slowest_prefix_query': query_to_dict(slowest_prefix) if slowest_prefix else None,
+        'slowest_fuzzy_query': query_to_dict(slowest_fuzzy) if slowest_fuzzy else None,
+        'results': [query_to_dict(item) for item in results],
+    }
+
+
 def normalize_query(raw: str) -> str:
     query = raw.strip().lower()
     if not query:
@@ -177,12 +258,43 @@ def normalize_query(raw: str) -> str:
     return query
 
 
+def load_queries(lines: Iterable[str]) -> List[str]:
+    queries = [normalize_query(line) for line in lines if line.strip() and not line.lstrip().startswith('#')]
+    if not queries:
+        raise DatasetError('query file must contain at least one non-empty query line')
+    return queries
+
+
+def run_query(trie: TrieAutocomplete, query: str, limit: int, max_distance: int) -> QueryResult:
+    prefix_start = time.perf_counter()
+    prefix_matches = trie.top_k_prefix(query, limit)
+    prefix_time_ms = (time.perf_counter() - prefix_start) * 1000
+
+    prefix_words = {match.word for match in prefix_matches}
+    fuzzy_start = time.perf_counter()
+    fuzzy_matches = [
+        item for item in trie.fuzzy_search(query, limit, max_distance)
+        if item.word not in prefix_words
+    ]
+    fuzzy_time_ms = (time.perf_counter() - fuzzy_start) * 1000
+
+    return QueryResult(
+        query=query,
+        prefix_matches=prefix_matches,
+        fuzzy_matches=fuzzy_matches,
+        prefix_time_ms=prefix_time_ms,
+        fuzzy_time_ms=fuzzy_time_ms,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Weighted trie autocomplete with typo-tolerant fuzzy search')
     parser.add_argument('dataset', help='CSV-like text file containing word,weight rows')
-    parser.add_argument('query', help='prefix or typo-prone query string')
+    parser.add_argument('query', nargs='?', help='prefix or typo-prone query string')
+    parser.add_argument('--batch-file', help='optional file of one query per line for benchmark mode')
     parser.add_argument('--limit', type=int, default=5, help='maximum number of suggestions per section')
     parser.add_argument('--max-distance', type=int, default=1, help='maximum edit distance for fuzzy matches')
+    parser.add_argument('--json', action='store_true', help='emit machine-readable JSON output')
     return parser
 
 
@@ -194,23 +306,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         parser.exit(2, 'argument error: --limit must be positive\n')
     if args.max_distance < 0:
         parser.exit(2, 'argument error: --max-distance must be non-negative\n')
+    if bool(args.query) == bool(args.batch_file):
+        parser.exit(2, 'argument error: provide exactly one of QUERY or --batch-file\n')
 
     try:
         entries = load_entries(Path(args.dataset).read_text(encoding='utf-8').splitlines())
-        query = normalize_query(args.query)
         trie = build_trie(entries)
+        if args.batch_file:
+            queries = load_queries(Path(args.batch_file).read_text(encoding='utf-8').splitlines())
+            results = [run_query(trie, query, args.limit, args.max_distance) for query in queries]
+            if args.json:
+                print(json.dumps(benchmark_to_dict(results, trie), indent=2))
+            else:
+                print(format_benchmark_report(results, trie))
+        else:
+            result = run_query(trie, normalize_query(args.query), args.limit, args.max_distance)
+            if args.json:
+                print(json.dumps(query_to_dict(result), indent=2))
+            else:
+                print(format_query_result(result))
     except OSError as exc:
         parser.exit(2, f'file error: {exc}\n')
     except DatasetError as exc:
         parser.exit(2, f'dataset error: {exc}\n')
 
-    prefix_results = trie.top_k_prefix(query, args.limit)
-    prefix_words = {match.word for match in prefix_results}
-    fuzzy_results = [
-        item for item in trie.fuzzy_search(query, args.limit, args.max_distance)
-        if item.word not in prefix_words
-    ]
-    print(format_suggestions(prefix_results, fuzzy_results))
     return 0
 
 

@@ -1,18 +1,30 @@
-import tempfile, unittest
+from __future__ import annotations
+
+import tempfile
+import unittest
 from pathlib import Path
-from task_tracker import TaskTracker
+
+from src.task_tracker_cli.repository import TaskRepository
+from src.task_tracker_cli.service import TaskService
+
 
 class TaskTrackerTests(unittest.TestCase):
-    def test_add_complete_remove(self):
+    def test_add_complete_remove(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'tasks.json'
-            tracker = TaskTracker(path)
-            task = tracker.add('study graphs', 'high')
-            self.assertEqual(len(tracker.list()), 1)
-            tracker.complete(task['id'])
-            self.assertTrue(tracker.list()[0]['done'])
-            tracker.remove(task['id'])
-            self.assertEqual(tracker.list(), [])
+            service = TaskService(TaskRepository(path))
+
+            task = service.add_task('study graphs')
+            self.assertEqual(len(service.list_tasks()), 1)
+
+            completed = service.mark_done(task.id)
+            self.assertTrue(completed.completed)
+            self.assertTrue(service.list_tasks()[0].completed)
+
+            deleted = service.delete_task(task.id)
+            self.assertEqual(deleted.id, task.id)
+            self.assertEqual(service.list_tasks(), [])
+
 
 if __name__ == '__main__':
     unittest.main()
