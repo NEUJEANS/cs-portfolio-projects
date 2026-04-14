@@ -1,0 +1,2 @@
+Search engines build inverted indexes to find relevant documents quickly.
+TF IDF weighting helps rank search results by important terms.

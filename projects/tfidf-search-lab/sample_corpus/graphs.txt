@@ -1,0 +1,1 @@
+Graph algorithms can rank nodes with pagerank and shortest path methods.
