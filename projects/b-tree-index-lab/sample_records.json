@@ -1,0 +1,7 @@
+[
+  {"key": 42, "value": "compiler"},
+  {"key": 7, "value": "cache"},
+  {"key": 15, "value": "kernel"},
+  {"key": 64, "value": "database"},
+  {"key": 23, "value": "network"}
+]
