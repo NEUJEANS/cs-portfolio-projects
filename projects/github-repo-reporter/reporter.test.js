@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   applyRepoFilters,
+  buildListReposUrl,
+  buildOrgReposUrl,
   buildReposUrl,
   formatMarkdownSummary,
   formatTextSummary,
@@ -100,11 +102,26 @@ test('buildReposUrl encodes username and query options', () => {
   assert.match(url, /type=owner/);
 });
 
-test('parseArgs accepts filters and output format', () => {
-  const { username, options } = parseArgs([
+test('buildOrgReposUrl encodes org name and keeps repo list parameters', () => {
+  const url = buildOrgReposUrl('student-lab', { page: 3, sort: 'full_name', direction: 'asc', type: 'public' });
+  assert.match(url, /orgs\/student-lab\/repos\?/);
+  assert.match(url, /page=3/);
+  assert.match(url, /sort=full_name/);
+  assert.match(url, /direction=asc/);
+  assert.match(url, /type=public/);
+});
+
+test('buildListReposUrl switches endpoint by subject type', () => {
+  assert.match(buildListReposUrl('octocat', { subjectType: 'user' }), /users\/octocat\/repos/);
+  assert.match(buildListReposUrl('neu-lab', { subjectType: 'org' }), /orgs\/neu-lab\/repos/);
+});
+
+test('parseArgs accepts filters, output format, and org mode', () => {
+  const { subject, options } = parseArgs([
     'node',
     'reporter.js',
-    'octocat',
+    'openai',
+    '--org',
     '--format',
     'markdown',
     '--language',
@@ -114,7 +131,8 @@ test('parseArgs accepts filters and output format', () => {
     '--include-forks'
   ]);
 
-  assert.equal(username, 'octocat');
+  assert.equal(subject, 'openai');
+  assert.equal(options.subjectType, 'org');
   assert.equal(options.format, 'markdown');
   assert.equal(options.language, 'Python');
   assert.equal(options.topN, 3);
@@ -122,8 +140,18 @@ test('parseArgs accepts filters and output format', () => {
   assert.equal(options.includeArchived, false);
 });
 
+test('parseArgs defaults to user mode without --org', () => {
+  const { subject, options } = parseArgs(['node', 'reporter.js', 'octocat']);
+  assert.equal(subject, 'octocat');
+  assert.equal(options.subjectType, 'user');
+});
+
 test('parseArgs rejects invalid top values', () => {
   assert.throws(() => parseArgs(['node', 'reporter.js', 'octocat', '--top', '0']), /positive integer/);
+});
+
+test('parseArgs usage text mentions org mode when subject is missing', () => {
+  assert.throws(() => parseArgs(['node', 'reporter.js']), /--org/);
 });
 
 test('formatters produce readable text and markdown output', () => {

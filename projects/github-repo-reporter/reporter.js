@@ -2,7 +2,7 @@ const https = require('https');
 
 const DEFAULT_USER_AGENT = 'cs-portfolio-projects';
 
-function buildReposUrl(username, options = {}) {
+function buildListReposUrl(subject, options = {}) {
   const params = new URLSearchParams({
     per_page: String(options.perPage || 100),
     sort: options.sort || 'updated',
@@ -14,7 +14,19 @@ function buildReposUrl(username, options = {}) {
     params.set('type', options.type);
   }
 
-  return `https://api.github.com/users/${encodeURIComponent(username)}/repos?${params.toString()}`;
+  const basePath = options.subjectType === 'org'
+    ? `/orgs/${encodeURIComponent(subject)}/repos`
+    : `/users/${encodeURIComponent(subject)}/repos`;
+
+  return `https://api.github.com${basePath}?${params.toString()}`;
+}
+
+function buildReposUrl(username, options = {}) {
+  return buildListReposUrl(username, { ...options, subjectType: 'user' });
+}
+
+function buildOrgReposUrl(org, options = {}) {
+  return buildListReposUrl(org, { ...options, subjectType: 'org' });
 }
 
 function parseLinkHeader(headerValue = '') {
@@ -77,9 +89,12 @@ function safeErrorMessage(body) {
   return body;
 }
 
-async function fetchRepos(username, options = {}) {
+async function fetchRepos(subject, options = {}) {
   const repos = [];
-  let nextUrl = buildReposUrl(username, options);
+  const subjectType = options.subjectType === 'org' ? 'org' : 'user';
+  let nextUrl = subjectType === 'org'
+    ? buildOrgReposUrl(subject, options)
+    : buildReposUrl(subject, options);
 
   while (nextUrl) {
     const { body, headers } = await requestJson(nextUrl, options.headers);
@@ -226,15 +241,16 @@ function parseArgs(argv) {
     topN: 5,
     perPage: 100,
     sort: 'updated',
-    direction: 'desc'
+    direction: 'desc',
+    subjectType: 'user'
   };
 
-  let username = null;
+  let subject = null;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-    if (!arg.startsWith('--') && !username) {
-      username = arg;
+    if (!arg.startsWith('--') && !subject) {
+      subject = arg;
       continue;
     }
 
@@ -242,6 +258,8 @@ function parseArgs(argv) {
       options.includeForks = true;
     } else if (arg === '--include-archived') {
       options.includeArchived = true;
+    } else if (arg === '--org') {
+      options.subjectType = 'org';
     } else if (arg === '--format') {
       options.format = args[++index];
     } else if (arg === '--language') {
@@ -257,8 +275,8 @@ function parseArgs(argv) {
     }
   }
 
-  if (!username) {
-    throw new Error('usage: node reporter.js <username> [--format json|text|markdown] [--language <name>] [--top <n>] [--include-forks] [--include-archived]');
+  if (!subject) {
+    throw new Error('usage: node reporter.js <username-or-org> [--org] [--format json|text|markdown] [--language <name>] [--top <n>] [--include-forks] [--include-archived]');
   }
 
   if (!['json', 'text', 'markdown'].includes(options.format)) {
@@ -269,12 +287,12 @@ function parseArgs(argv) {
     throw new Error('--top must be a positive integer');
   }
 
-  return { username, options };
+  return { subject, options };
 }
 
 async function main() {
-  const { username, options } = parseArgs(process.argv);
-  const repos = await fetchRepos(username, options);
+  const { subject, options } = parseArgs(process.argv);
+  const repos = await fetchRepos(subject, options);
   const summary = summarize(repos, options);
   console.log(formatSummary(summary, options));
 }
@@ -288,6 +306,8 @@ if (require.main === module) {
 
 module.exports = {
   applyRepoFilters,
+  buildListReposUrl,
+  buildOrgReposUrl,
   buildReposUrl,
   fetchRepos,
   formatMarkdownSummary,
