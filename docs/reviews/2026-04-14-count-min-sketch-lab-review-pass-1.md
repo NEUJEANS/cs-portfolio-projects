@@ -1,11 +1,13 @@
-# Review Pass 1 - Count-Min Sketch Lab
+# Review pass 1 — count-min-sketch-lab
 
-## Checks
-- read core implementation and CLI flow
-- checked whether serialization could load malformed dimensions silently
+## Focus
+Correctness of the new memory benchmark implementation.
 
 ## Issue found
-- The original load path trusted serialized table dimensions too much.
+- `deep_size_bytes()` initially counted only the shallow size of custom objects, so `sketch_full_bytes` could incorrectly appear smaller than the sketch core tables.
 
-## Fix
-- Added validation that serialized table rows match epsilon/delta-derived width and depth.
+## Fix applied
+- Extended recursive sizing to include `__dict__` for custom objects, which makes the full sketch size reflect the contained config, tables, counters, and metadata.
+
+## Validation
+- Re-ran the pytest suite after the fix and confirmed the CLI benchmark test now passes.

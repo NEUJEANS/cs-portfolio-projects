@@ -6,5 +6,6 @@
 - [x] support build / estimate / heavy-hitters / merge CLI flows
 - [x] add JSON serialization for resumable experiments
 - [x] add focused automated tests
-- [ ] add benchmark comparing CMS memory to exact counters
+- [x] add benchmark comparing CMS memory to exact counters
 - [ ] consider conservative update mode
+- [x] document benchmark trade-offs and resumable next step

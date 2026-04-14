@@ -1,11 +1,13 @@
-# Review Pass 2 - Count-Min Sketch Lab
+# Review pass 2 — count-min-sketch-lab
 
-## Checks
-- reviewed README wording against returned JSON fields
-- checked heavy hitter output naming for clarity
+## Focus
+Benchmark interpretation and portfolio honesty.
 
 ## Issue found
-- `lower_bound` was misleading because the stored value is the exact observed count in this teaching version.
+- The benchmark can show that an exact `Counter` beats the sketch on tiny streams with very few unique keys, which could confuse readers if not explained.
 
-## Fix
-- Renamed the field to `exact_count` and updated README language.
+## Fix applied
+- Updated the README architecture notes to clarify that the benchmark is intentionally honest: small Python workloads may favor exact counting, while CMS is more compelling as the key space or memory pressure grows.
+
+## Validation
+- Ran `benchmark-memory` on the sample stream and confirmed the output now matches the documented caveat.

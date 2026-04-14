@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from count_min_sketch_lab import CountMinSketch, build_sketch, load_sketch, save_sketch
+from count_min_sketch_lab import CountMinSketch, benchmark_memory, build_sketch, load_sketch, save_sketch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -67,3 +67,35 @@ def test_error_bound_tracks_total_count_growth():
     for _ in range(10):
         sketch.add('stream')
     assert sketch.error_bound() == pytest.approx(1.0)
+
+
+def test_benchmark_memory_reports_exact_and_sketch_sizes():
+    payload = benchmark_memory(
+        ['hot'] * 10 + ['warm'] * 5 + ['cold'] * 2,
+        epsilon=0.05,
+        delta=0.01,
+        sample_size=2,
+    )
+    assert payload['stream_items'] == 17
+    assert payload['unique_items'] == 3
+    assert payload['exact_counter_bytes'] > 0
+    assert payload['sketch_core_bytes'] > 0
+    assert len(payload['top_item_estimates']) == 2
+    assert payload['top_item_estimates'][0]['item'] == 'hot'
+    assert payload['top_item_estimates'][0]['estimate'] >= payload['top_item_estimates'][0]['exact_count']
+
+
+def test_cli_benchmark_memory(tmp_path: Path):
+    tokens = tmp_path / 'tokens.txt'
+    tokens.write_text('alpha beta alpha gamma alpha beta delta', encoding='utf-8')
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), '--epsilon', '0.05', '--delta', '0.01', 'benchmark-memory', str(tokens), '--sample-size', '3'],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload['stream_items'] == 7
+    assert payload['unique_items'] == 4
+    assert payload['top_item_estimates'][0]['item'] == 'alpha'
+    assert payload['sketch_core_bytes'] <= payload['sketch_full_bytes']

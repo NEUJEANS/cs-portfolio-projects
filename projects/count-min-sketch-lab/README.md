@@ -17,6 +17,7 @@ This lab demonstrates a classic streaming-data structure used when exact per-ite
 - report heavy hitters from observed stream items with exact-count reference values
 - merge compatible sketches
 - JSON save/load for resumable experiments
+- benchmark CLI for comparing sketch memory with an exact `Counter`
 
 ## Quickstart
 ```bash
@@ -24,6 +25,7 @@ python3 projects/count-min-sketch-lab/count_min_sketch_lab.py   --epsilon 0.05 -
 
 python3 projects/count-min-sketch-lab/count_min_sketch_lab.py estimate cms.json login checkout
 python3 projects/count-min-sketch-lab/count_min_sketch_lab.py heavy-hitters cms.json --threshold 10
+python3 projects/count-min-sketch-lab/count_min_sketch_lab.py --epsilon 0.01 --delta 0.01 benchmark-memory projects/count-min-sketch-lab/sample_stream.txt --sample-size 5
 ```
 
 ## Run tests
@@ -36,6 +38,8 @@ python3 -m pytest projects/count-min-sketch-lab/test_count_min_sketch_lab.py -q
 - `estimate(item)` returns the minimum row count, which avoids underestimation.
 - `heavy_hitters()` scans tracked observed items for demo friendliness; production variants often pair CMS with a heap or Space-Saving summary.
 - `merge()` supports distributed aggregation when sketches share the same shape and seed.
+- `benchmark-memory` reports both the core sketch table footprint and the full demo object footprint so the space trade-off stays honest.
+- Small streams with few unique keys can still favor an exact `Counter` in Python; the sketch becomes compelling as the key space grows or stricter memory caps matter.
 
 ## Interview talking points
 - why the error is one-sided (overestimation only)
@@ -45,6 +49,6 @@ python3 -m pytest projects/count-min-sketch-lab/test_count_min_sketch_lab.py -q
 
 ## Future improvements
 - add conservative update mode to reduce overcount inflation
+- add conservative update mode to reduce overcount inflation further under collisions
 - pair CMS with a top-k heap for true streaming heavy hitters
-- benchmark memory savings versus `collections.Counter`
 - ingest CSV columns or JSONL event fields directly

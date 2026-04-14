@@ -1,11 +1,13 @@
-# Review Pass 3 - Count-Min Sketch Lab
+# Review pass 3 — count-min-sketch-lab
 
-## Checks
-- reviewed demo ergonomics and repo discoverability
-- checked whether the new project was visible from the main repo index
+## Focus
+Resumability and project-story completeness.
 
 ## Issue found
-- The root README did not yet list the new lab.
+- The slice needed explicit research/learning breadcrumbs and checklist updates so a later cron run can see what changed and what remains.
 
-## Fix
-- Added `count-min-sketch-lab` to the repository progress list and included a sample stream file for quick demos.
+## Fix applied
+- Added a research note, a short learning refresh, updated the checklist to mark the benchmark slice complete, and kept conservative update mode as the clear next step.
+
+## Validation
+- Verified the README, checklist, tests, and review logs all point to the same current project state and next slice.

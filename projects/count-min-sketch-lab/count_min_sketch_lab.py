@@ -4,10 +4,11 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Sequence
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,66 @@ def load_sketch(path: Path) -> CountMinSketch:
     return CountMinSketch.from_dict(json.loads(path.read_text(encoding='utf-8')))
 
 
+def deep_size_bytes(value: Any, seen: set[int] | None = None) -> int:
+    if seen is None:
+        seen = set()
+    identity = id(value)
+    if identity in seen:
+        return 0
+    seen.add(identity)
+
+    size = sys.getsizeof(value)
+    if isinstance(value, dict):
+        size += sum(deep_size_bytes(key, seen) + deep_size_bytes(item, seen) for key, item in value.items())
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        size += sum(deep_size_bytes(item, seen) for item in value)
+    elif hasattr(value, '__dict__'):
+        size += deep_size_bytes(vars(value), seen)
+    return size
+
+
+def sketch_core_size_bytes(sketch: CountMinSketch) -> int:
+    return deep_size_bytes(sketch.tables)
+
+
+def benchmark_memory(items: Sequence[str], epsilon: float, delta: float, seed: int = 0, sample_size: int = 10) -> Dict[str, Any]:
+    sketch = build_sketch(items, epsilon=epsilon, delta=delta, seed=seed)
+    exact_counter = Counter(items)
+    top_items = exact_counter.most_common(max(0, sample_size))
+
+    sketch_core_bytes = sketch_core_size_bytes(sketch)
+    sketch_full_bytes = deep_size_bytes(sketch)
+    exact_bytes = deep_size_bytes(exact_counter)
+
+    sample_estimates = []
+    for item, exact_count in top_items:
+        estimate = sketch.estimate(item)
+        sample_estimates.append(
+            {
+                'item': item,
+                'exact_count': exact_count,
+                'estimate': estimate,
+                'overestimate': estimate - exact_count,
+            }
+        )
+
+    return {
+        'stream_items': len(items),
+        'unique_items': len(exact_counter),
+        'epsilon': epsilon,
+        'delta': delta,
+        'width': sketch.width,
+        'depth': sketch.depth,
+        'exact_counter_bytes': exact_bytes,
+        'sketch_core_bytes': sketch_core_bytes,
+        'sketch_full_bytes': sketch_full_bytes,
+        'core_vs_exact_ratio': round(sketch_core_bytes / exact_bytes, 4) if exact_bytes else None,
+        'full_vs_exact_ratio': round(sketch_full_bytes / exact_bytes, 4) if exact_bytes else None,
+        'error_bound': sketch.error_bound(),
+        'top_item_estimates': sample_estimates,
+    }
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Count-Min Sketch lab for approximate stream frequencies.')
     parser.add_argument('--epsilon', type=float, default=0.02)
@@ -160,6 +221,10 @@ def create_parser() -> argparse.ArgumentParser:
     merge_parser.add_argument('left', type=Path)
     merge_parser.add_argument('right', type=Path)
     merge_parser.add_argument('--output', type=Path, required=True)
+
+    benchmark_parser = subparsers.add_parser('benchmark-memory', help='Compare Count-Min Sketch memory with an exact Counter for a token stream.')
+    benchmark_parser.add_argument('input', type=Path)
+    benchmark_parser.add_argument('--sample-size', type=int, default=10, help='How many top exact items to include in the estimate sample.')
 
     return parser
 
@@ -195,6 +260,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         left.merge(right)
         save_sketch(args.output, left)
         print(json.dumps({'output': str(args.output), 'total_count': left.total_count}, indent=2))
+        return 0
+
+    if args.command == 'benchmark-memory':
+        payload = benchmark_memory(
+            load_tokens_from_file(args.input),
+            epsilon=args.epsilon,
+            delta=args.delta,
+            seed=args.seed,
+            sample_size=args.sample_size,
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
     parser.error('Unknown command')
