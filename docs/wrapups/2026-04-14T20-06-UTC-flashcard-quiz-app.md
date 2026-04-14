@@ -14,6 +14,6 @@
   - `docs/reviews/2026-04-14-flashcard-quiz-app-review-pass-1.md`
   - `docs/reviews/2026-04-14-flashcard-quiz-app-review-pass-2.md`
   - `docs/reviews/2026-04-14-flashcard-quiz-app-review-pass-3.md`
-- Commit hash: `1488938`
+- Commit hash: `5329bd3`
 - Next step:
   - add deck import/export support so recommendation history can be reused across CSV and JSON workflows
