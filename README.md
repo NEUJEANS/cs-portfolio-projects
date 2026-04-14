@@ -36,3 +36,4 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 18. cache-simulator
 19. bloom-filter-cli
 20. rate-limiter-lab
+21. consistent-hashing-lab
