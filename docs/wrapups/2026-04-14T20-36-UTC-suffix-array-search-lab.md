@@ -1,0 +1,21 @@
+# Wrap-up — Suffix Array Search Lab
+
+- Timestamp: 2026-04-14T20:36:00Z
+- Project: `suffix-array-search-lab`
+- What changed:
+  - added a new Python portfolio project that builds/saves a suffix-array text index and performs substring lookup with KWIC output
+  - documented the project with research notes, refresh/self-test notes, checklist, README, sample corpus, and three review logs
+  - improved usability during review with validated CLI arguments, highlighted matches, and case-insensitive search support
+- Tests run:
+  - `python3 -m unittest projects/suffix-array-search-lab/test_suffix_array_search.py`
+  - `python3 projects/suffix-array-search-lab/suffix_array_search.py --help`
+  - `python3 projects/suffix-array-search-lab/suffix_array_search.py build --input projects/suffix-array-search-lab/sample_text.txt --output /tmp/suffix-array-search-sample.json`
+  - `python3 projects/suffix-array-search-lab/suffix_array_search.py search --index /tmp/suffix-array-search-sample.json --show-line-numbers --ignore-case banana`
+  - `python3 projects/suffix-array-search-lab/suffix_array_search.py stats --index /tmp/suffix-array-search-sample.json`
+- Reviews run:
+  - `docs/reviews/2026-04-14-suffix-array-search-lab-review-pass-1.md`
+  - `docs/reviews/2026-04-14-suffix-array-search-lab-review-pass-2.md`
+  - `docs/reviews/2026-04-14-suffix-array-search-lab-review-pass-3.md`
+- Commit hash: `db745b2`
+- Next step:
+  - add multi-file corpus indexing so search results can report which source document each hit came from
