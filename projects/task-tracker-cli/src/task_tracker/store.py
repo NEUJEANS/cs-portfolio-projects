@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import csv
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
+from io import StringIO
 from pathlib import Path
 from typing import Iterable
 
@@ -191,6 +193,13 @@ class TaskService:
         counts["unique_tags"] = len(unique_tags)
         return counts
 
+    def export_tasks(self, tasks: list[Task], output_format: str) -> str:
+        if output_format == "csv":
+            return render_csv(tasks)
+        if output_format == "markdown":
+            return render_markdown(tasks)
+        raise TaskTrackerError("format must be one of: csv, markdown")
+
 
 def find_task(tasks: list[Task], task_id: int) -> Task:
     for task in tasks:
@@ -248,3 +257,47 @@ def sort_key(task: Task, sort_by: str):
     if sort_by in {"id", "created_at", "updated_at"}:
         return getattr(task, sort_by)
     raise TaskTrackerError("sort-by must be one of: id, created_at, updated_at, due_date, priority")
+
+
+def render_csv(tasks: list[Task]) -> str:
+    buffer = StringIO(newline="")
+    writer = csv.DictWriter(
+        buffer,
+        fieldnames=["id", "description", "status", "priority", "due_date", "tags", "created_at", "updated_at"],
+    )
+    writer.writeheader()
+    for task in tasks:
+        writer.writerow(
+            {
+                "id": task.id,
+                "description": task.description,
+                "status": task.status,
+                "priority": task.priority,
+                "due_date": task.due_date or "",
+                "tags": ",".join(task.tags),
+                "created_at": task.created_at,
+                "updated_at": task.updated_at,
+            }
+        )
+    return buffer.getvalue()
+
+
+def render_markdown(tasks: list[Task]) -> str:
+    lines = ["# Task Export", "", f"Total tasks: {len(tasks)}", ""]
+    if not tasks:
+        lines.append("No tasks found.")
+        return "\n".join(lines) + "\n"
+
+    lines.extend(
+        [
+            "| ID | Description | Status | Priority | Due | Tags |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for task in tasks:
+        description = task.description.replace("|", "\\|")
+        tags = ", ".join(task.tags) if task.tags else "-"
+        lines.append(
+            f"| {task.id} | {description} | {task.status} | {task.priority} | {task.due_date or '-'} | {tags} |"
+        )
+    return "\n".join(lines) + "\n"

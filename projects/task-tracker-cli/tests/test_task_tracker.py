@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import subprocess
 import sys
@@ -82,6 +84,20 @@ class TaskServiceTests(unittest.TestCase):
         cleared = self.service.update_task(1, tags=[])
         self.assertEqual(cleared.tags, [])
 
+    def test_export_tasks_supports_csv_and_markdown(self):
+        self.service.add_task("Prepare demo", priority="high", due_date="2026-04-16", tags=["demo", "school"])
+        self.service.add_task("Write docs", tags=["docs"])
+
+        tasks = self.service.list_tasks(sort_by="priority")
+        csv_output = self.service.export_tasks(tasks, "csv")
+        rows = list(csv.DictReader(io.StringIO(csv_output)))
+        self.assertEqual(rows[0]["description"], "Prepare demo")
+        self.assertEqual(rows[0]["tags"], "demo,school")
+
+        markdown_output = self.service.export_tasks(tasks, "markdown")
+        self.assertIn("# Task Export", markdown_output)
+        self.assertIn("| 1 | Prepare demo | todo | high | 2026-04-16 | demo, school |", markdown_output)
+
     def test_delete_missing_task_raises_error(self):
         with self.assertRaises(TaskTrackerError):
             self.service.delete_task(99)
@@ -97,9 +113,10 @@ class TaskServiceTests(unittest.TestCase):
 
 
 class TaskCliSmokeTests(unittest.TestCase):
-    def test_cli_add_search_update_and_summary(self):
+    def test_cli_add_search_update_export_and_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data_file = Path(temp_dir) / "tasks.json"
+            export_file = Path(temp_dir) / "tasks.md"
             project_dir = Path(__file__).resolve().parents[1]
 
             add_result = subprocess.run(
@@ -167,6 +184,47 @@ class TaskCliSmokeTests(unittest.TestCase):
             )
             self.assertEqual(update_result.returncode, 0, update_result.stdout + update_result.stderr)
             self.assertIn("tags=refined,backend", update_result.stdout)
+
+            export_stdout_result = subprocess.run(
+                [
+                    "python3",
+                    "-m",
+                    "src.task_tracker",
+                    "--data-file",
+                    str(data_file),
+                    "export",
+                    "--format",
+                    "csv",
+                ],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(export_stdout_result.returncode, 0, export_stdout_result.stdout + export_stdout_result.stderr)
+            self.assertIn("description,status,priority", export_stdout_result.stdout)
+
+            export_file_result = subprocess.run(
+                [
+                    "python3",
+                    "-m",
+                    "src.task_tracker",
+                    "--data-file",
+                    str(data_file),
+                    "export",
+                    "--format",
+                    "markdown",
+                    "--output",
+                    str(export_file),
+                ],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(export_file_result.returncode, 0, export_file_result.stdout + export_file_result.stderr)
+            self.assertTrue(export_file.exists())
+            self.assertIn("# Task Export", export_file.read_text(encoding="utf-8"))
 
             summary_result = subprocess.run(
                 ["python3", "-m", "src.task_tracker", "--data-file", str(data_file), "summary", "--json"],

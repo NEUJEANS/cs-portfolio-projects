@@ -1,6 +1,6 @@
 # Task Tracker CLI Checklist
 
-Status: vertical slice 2 complete
+Status: vertical slice 3 complete
 Last updated: 2026-04-14
 
 ## Vertical slice: initial runnable project
@@ -30,8 +30,23 @@ Last updated: 2026-04-14
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Vertical slice 3
+- [x] choose task export as the next meaningful portfolio improvement
+- [x] do brief export-format research
+- [x] do short Python csv/io refresh and self-test
+- [x] extend checklist and docs for export workflow
+- [x] implement `export` command with shared task filters
+- [x] support CSV export for spreadsheet-friendly output
+- [x] support Markdown export for project notes and status docs
+- [x] add automated tests for export output and file writing
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Next slice candidates
 - [ ] colored terminal output
-- [ ] CSV or Markdown export
 - [ ] packaging for pipx installation
 - [ ] recurring tasks or reminders

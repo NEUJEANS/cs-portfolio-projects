@@ -21,11 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--tag", action="append", default=[], help="Attach a tag. Repeat or pass comma-separated values.")
 
     list_parser = subparsers.add_parser("list", help="List tasks.")
-    list_parser.add_argument("--status", choices=VALID_STATUSES)
-    list_parser.add_argument("--priority", choices=VALID_PRIORITIES)
-    list_parser.add_argument("--sort-by", default="id", choices=("id", "created_at", "updated_at", "due_date", "priority"))
-    list_parser.add_argument("--search", help="Filter by keyword in description or tags.")
-    list_parser.add_argument("--tag", action="append", default=[], help="Require a tag. Repeat or pass comma-separated values.")
+    add_list_arguments(list_parser)
     list_parser.add_argument("--json", action="store_true", help="Render tasks as JSON.")
 
     update_parser = subparsers.add_parser("update", help="Update task fields.")
@@ -53,7 +49,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     summary_parser = subparsers.add_parser("summary", help="Print task summary counts.")
     summary_parser.add_argument("--json", action="store_true")
+
+    export_parser = subparsers.add_parser("export", help="Export tasks as CSV or Markdown.")
+    add_list_arguments(export_parser)
+    export_parser.add_argument("--format", choices=("csv", "markdown"), default="csv")
+    export_parser.add_argument("--output", help="Optional destination file path. Prints to stdout when omitted.")
     return parser
+
+
+def add_list_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--status", choices=VALID_STATUSES)
+    parser.add_argument("--priority", choices=VALID_PRIORITIES)
+    parser.add_argument("--sort-by", default="id", choices=("id", "created_at", "updated_at", "due_date", "priority"))
+    parser.add_argument("--search", help="Filter by keyword in description or tags.")
+    parser.add_argument("--tag", action="append", default=[], help="Require a tag. Repeat or pass comma-separated values.")
 
 
 def format_task(task: Task) -> str:
@@ -85,6 +94,16 @@ def _coalesce_task_id(args: argparse.Namespace) -> int:
     return task_id if task_id is not None else alt_task_id
 
 
+def _select_tasks(service: TaskService, args: argparse.Namespace) -> list[Task]:
+    return service.list_tasks(
+        status=getattr(args, "status", None),
+        priority=getattr(args, "priority", None),
+        sort_by=getattr(args, "sort_by", "id"),
+        search=getattr(args, "search", None),
+        tags=getattr(args, "tag", None),
+    )
+
+
 def run_cli(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -96,13 +115,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             print(f"Added: {format_task(task)}")
             return 0
         if args.command == "list":
-            tasks = service.list_tasks(
-                status=args.status,
-                priority=args.priority,
-                sort_by=args.sort_by,
-                search=args.search,
-                tags=args.tag,
-            )
+            tasks = _select_tasks(service, args)
             if args.json:
                 print(json.dumps([task.to_dict() for task in tasks], indent=2))
             else:
@@ -145,6 +158,17 @@ def run_cli(argv: list[str] | None = None) -> int:
                 print(json.dumps(payload, indent=2))
             else:
                 print(json.dumps(payload, indent=2))
+            return 0
+        if args.command == "export":
+            tasks = _select_tasks(service, args)
+            exported = service.export_tasks(tasks, args.format)
+            if args.output:
+                destination = Path(args.output)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(exported, encoding="utf-8", newline="")
+                print(f"Exported {len(tasks)} task(s) to {destination}")
+            else:
+                print(exported, end="" if exported.endswith("\n") else "\n")
             return 0
     except TaskTrackerError as exc:
         print(str(exc), file=sys.stderr)
