@@ -66,6 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_list_arguments(export_parser)
     export_parser.add_argument("--format", choices=("csv", "markdown"), default="csv")
     export_parser.add_argument("--output", help="Optional destination file path. Prints to stdout when omitted.")
+
+    import_parser = subparsers.add_parser("import", help="Import tasks from CSV or JSON.")
+    import_parser.add_argument("source", help="Source file to import.")
+    import_parser.add_argument("--format", choices=("csv", "json"), required=True)
     return parser
 
 
@@ -212,6 +216,12 @@ def run_cli(argv: list[str] | None = None) -> int:
                 print(f"Exported {len(tasks)} task(s) to {destination}")
             else:
                 print(exported, end="" if exported.endswith("\n") else "\n")
+            return 0
+        if args.command == "import":
+            imported = service.import_tasks(Path(args.source), args.format)
+            print(f"Imported {len(imported)} task(s) from {args.source}")
+            if imported:
+                print(f"Newest task: {format_task(imported[-1])}")
             return 0
     except TaskTrackerError as exc:
         print(str(exc), file=sys.stderr)

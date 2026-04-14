@@ -104,6 +104,51 @@ class TaskServiceTests(unittest.TestCase):
         self.assertEqual(cleared.tags, [])
         self.assertIsNone(cleared.recurrence)
 
+    def test_import_tasks_supports_csv_and_json(self):
+        csv_file = Path(self.temp_dir.name) / "incoming.csv"
+        csv_file.write_text(
+            "description,status,priority,due_date,recurrence,tags\n"
+            "Prepare slides,todo,high,2026-04-16,,\"demo,school\"\n"
+            "Weekly sync,in-progress,medium,2026-04-18,weekly,team\n",
+            encoding="utf-8",
+        )
+
+        imported_csv = self.service.import_tasks(csv_file, "csv")
+        self.assertEqual(len(imported_csv), 2)
+        self.assertEqual(imported_csv[0].id, 1)
+        self.assertEqual(imported_csv[1].status, "in-progress")
+        self.assertEqual(imported_csv[1].recurrence, "weekly")
+
+        json_file = Path(self.temp_dir.name) / "incoming.json"
+        json_file.write_text(
+            json.dumps([
+                {
+                    "description": "Write recap",
+                    "status": "done",
+                    "priority": "low",
+                    "tags": "docs,writing",
+                }
+            ]),
+            encoding="utf-8",
+        )
+
+        imported_json = self.service.import_tasks(json_file, "json")
+        self.assertEqual(len(imported_json), 1)
+        self.assertEqual(imported_json[0].id, 3)
+        self.assertEqual(imported_json[0].status, "done")
+        self.assertEqual(imported_json[0].tags, ["docs", "writing"])
+
+    def test_import_rejects_recurring_task_without_due_date(self):
+        csv_file = Path(self.temp_dir.name) / "invalid.csv"
+        csv_file.write_text(
+            "description,status,priority,due_date,recurrence,tags\n"
+            "Broken task,todo,medium,,weekly,ops\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(TaskTrackerError):
+            self.service.import_tasks(csv_file, "csv")
+
     def test_export_tasks_supports_csv_and_markdown(self):
         self.service.add_task(
             "Prepare demo",

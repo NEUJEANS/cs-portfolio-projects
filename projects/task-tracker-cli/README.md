@@ -14,25 +14,28 @@ A small but polished command-line task tracker built with Python's standard libr
 - mark tasks done
 - delete tasks
 - print summary statistics
+- import tasks from CSV or JSON snapshots
+- export filtered task views as CSV or Markdown
 
 ## Run
 ```bash
-python3 -m task_tracker_cli --help
-python3 -m task_tracker_cli add "Finish systems assignment"
-python3 -m task_tracker_cli list --status open
-python3 -m task_tracker_cli done 1
-python3 -m task_tracker_cli stats
+python3 -m src.task_tracker --help
+python3 -m src.task_tracker add "Finish systems assignment"
+python3 -m src.task_tracker list --status todo
+python3 -m src.task_tracker done 1
+python3 -m src.task_tracker summary
+python3 -m src.task_tracker export --format csv --output tasks.csv
+python3 -m src.task_tracker import sample_tasks.json --format json
 ```
 
-By default, data is stored in `.task-tracker/tasks.json` under the current working directory. You can override the path with `TASK_TRACKER_DATA_FILE`.
+By default, data is stored in `data/tasks.json` under the current working directory. You can override the path with `--data-file`.
 
 ## Test
 ```bash
-python3 -m unittest discover -s tests -p 'test_task_tracker.py' -v
+.venv/bin/pytest tests -q
 ```
 
 ## Next upgrades
-- edit task titles
-- due dates and priorities
-- CSV export
 - richer terminal formatting
+- bulk task actions (complete/delete by filter)
+- archive completed tasks into dated snapshots

@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from src.task_tracker.cli import build_parser, render_table, run_cli
 from src.task_tracker.store import Task, TaskService, TaskStorage
 
@@ -52,6 +55,32 @@ def test_cli_update_clear_due_and_export(data_file: Path, tmp_path: Path, capsys
     capsys.readouterr()
     assert export_path.exists()
     assert "# Task Export" in export_path.read_text(encoding="utf-8")
+
+
+def test_cli_imports_json_tasks(data_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    source = tmp_path / "import.json"
+    source.write_text(
+        json.dumps([
+            {
+                "description": "Imported task",
+                "status": "in-progress",
+                "priority": "high",
+                "due_date": "2026-04-20",
+                "tags": "demo,portfolio",
+            }
+        ]),
+        encoding="utf-8",
+    )
+
+    assert run_args(data_file, "import", str(source), "--format", "json") == 0
+    output = capsys.readouterr().out
+    assert "Imported 1 task(s)" in output
+    assert "Imported task" in output
+
+    assert run_args(data_file, "list", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["status"] == "in-progress"
+    assert payload[0]["tags"] == ["demo", "portfolio"]
 
 
 def test_cli_rejects_conflicting_update_flags(data_file: Path, capsys: pytest.CaptureFixture[str]) -> None:

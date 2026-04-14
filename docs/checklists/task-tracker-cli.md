@@ -19,11 +19,11 @@ Build a portfolio-friendly command-line task manager that demonstrates:
 - [x] Add readable CLI help text
 - [x] Add unit tests for repository + service + CLI output
 - [x] Add usage-focused project README
-- [ ] Add task editing / renaming
-- [ ] Add due dates / priorities
-- [ ] Add import/export support
+- [x] Add task editing / renaming
+- [x] Add due dates / priorities
+- [x] Add import/export support
 - [ ] Add richer terminal formatting
 
 ## Notes for next run
-- Editing and due-date support would make the project feel more complete.
-- Consider adding CSV export for internship/demo storytelling.
+- Richer terminal formatting is still the biggest presentation gap.
+- Bulk actions or archiving would make repeated demo workflows stronger.

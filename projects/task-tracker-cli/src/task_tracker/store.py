@@ -243,6 +243,35 @@ class TaskService:
             return render_markdown(tasks)
         raise TaskTrackerError("format must be one of: csv, markdown")
 
+    def import_tasks(self, source: Path, input_format: str) -> list[Task]:
+        if input_format == "json":
+            imported = parse_json_tasks(source)
+        elif input_format == "csv":
+            imported = parse_csv_tasks(source)
+        else:
+            raise TaskTrackerError("format must be one of: csv, json")
+
+        tasks = self.storage.load()
+        next_id = self._next_id(tasks)
+        created: list[Task] = []
+        for imported_task in imported:
+            task = Task.create(
+                next_id,
+                imported_task["description"],
+                priority=imported_task["priority"],
+                due_date=imported_task["due_date"],
+                tags=imported_task["tags"],
+                recurrence=imported_task["recurrence"],
+            )
+            task.status = imported_task["status"]
+            task.updated_at = task.created_at
+            created.append(task)
+            tasks.append(task)
+            next_id += 1
+
+        self.storage.save(tasks)
+        return created
+
     @staticmethod
     def _next_id(tasks: list[Task]) -> int:
         return max((task.id for task in tasks), default=0) + 1
@@ -350,6 +379,67 @@ def render_csv(tasks: list[Task]) -> str:
             }
         )
     return buffer.getvalue()
+
+
+def _row_to_import_payload(row: dict[str, str], *, source_name: str, row_number: int) -> dict[str, object]:
+    description = (row.get("description") or row.get("title") or "").strip()
+    if not description:
+        raise TaskTrackerError(f"{source_name} row {row_number}: description is required.")
+
+    status = (row.get("status") or "todo").strip() or "todo"
+    validate_status(status)
+
+    priority = (row.get("priority") or "medium").strip() or "medium"
+    validate_priority(priority)
+
+    due_date = normalize_due_date((row.get("due_date") or "").strip() or None)
+    recurrence = normalize_recurrence((row.get("recurrence") or row.get("repeat") or "").strip() or None)
+    if recurrence and due_date is None:
+        raise TaskTrackerError(f"{source_name} row {row_number}: recurring tasks require a due date.")
+
+    raw_tags = row.get("tags") or row.get("tag") or ""
+    tags = normalize_tags([raw_tags]) if raw_tags else []
+    return {
+        "description": description,
+        "status": status,
+        "priority": priority,
+        "due_date": due_date,
+        "recurrence": recurrence,
+        "tags": tags,
+    }
+
+
+def parse_csv_tasks(source: Path) -> list[dict[str, object]]:
+    try:
+        with source.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if reader.fieldnames is None:
+                return []
+            return [
+                _row_to_import_payload({key: value or "" for key, value in row.items()}, source_name=source.name, row_number=index)
+                for index, row in enumerate(reader, start=2)
+            ]
+    except FileNotFoundError as exc:
+        raise TaskTrackerError(f"Import file was not found: {source}") from exc
+
+
+def parse_json_tasks(source: Path) -> list[dict[str, object]]:
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise TaskTrackerError(f"Import file was not found: {source}") from exc
+    except json.JSONDecodeError as exc:
+        raise TaskTrackerError(f"Import file is not valid JSON: {source}") from exc
+
+    if not isinstance(payload, list):
+        raise TaskTrackerError("JSON import expects a top-level list of task objects.")
+
+    normalized: list[dict[str, object]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            raise TaskTrackerError(f"{source.name} item {index}: each task must be an object.")
+        normalized.append(_row_to_import_payload({str(key): "" if value is None else str(value) for key, value in item.items()}, source_name=source.name, row_number=index))
+    return normalized
 
 
 def render_markdown(tasks: list[Task]) -> str:
