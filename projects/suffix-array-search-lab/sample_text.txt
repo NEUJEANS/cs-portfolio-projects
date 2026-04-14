@@ -1,0 +1,4 @@
+banana bandana
+suffix arrays make substring search fast.
+A suffix array can power keyword in context views.
+Band members like bandwidth jokes in banana-themed demos.
