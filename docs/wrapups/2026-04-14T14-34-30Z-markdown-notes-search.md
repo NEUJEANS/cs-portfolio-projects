@@ -11,6 +11,7 @@
   - `python3 -m py_compile projects/markdown-notes-search/notes_search.py projects/markdown-notes-search/test_notes_search.py`
   - review pass 1, pass 2, pass 3 documented under `docs/reviews/`
   - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
-- Commit hash: PLACEHOLDER_COMMIT
+- Commit hash: a67260e
 - Next step:
   - build a persistent inverted index for larger note vaults, or add heading/backlink-aware ranking
+nk-aware ranking
