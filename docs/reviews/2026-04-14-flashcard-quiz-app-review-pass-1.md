@@ -1,15 +1,12 @@
 # Flashcard Quiz App Review Pass 1
 
 ## Focus
-CLI failure behavior and input validation UX.
+Data model and CSV parsing for tagged decks.
+
+## Checks
+- confirmed the optional `tags` column does not break old two-column decks
+- confirmed tags are normalized to lowercase and deduplicated
+- confirmed missing required fields still fail fast with a clear message
 
 ## Findings
-1. Invalid CSV input would raise a raw Python traceback in `main()`, which is too rough for a portfolio CLI.
-
-## Fixes Applied
-- wrapped session setup in `main()` with `try/except ValueError`
-- converted validation failures into a clean argparse exit with code 2 and a readable `Error: ...` message
-- added an automated test covering the invalid-CSV CLI path
-
-## Result
-CLI now fails cleanly for malformed decks instead of dumping an implementation traceback.
+No code changes required after this pass.

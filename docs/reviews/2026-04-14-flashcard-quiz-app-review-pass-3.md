@@ -1,15 +1,12 @@
 # Flashcard Quiz App Review Pass 3
 
 ## Focus
-Portfolio presentation quality: README clarity, resumability, and next-step positioning.
+Portfolio presentation quality and resumability.
 
 ## Checks
-- confirmed README now documents CSV format, flags, and a realistic sample session
-- confirmed checklist file exists so later runs can extend the project without rediscovering context
-- confirmed future improvements point toward stronger next slices (tagged decks, history, alternate formats)
+- updated README examples to document optional tags and focused study workflows
+- confirmed the project now demonstrates content modeling, filtering, and lightweight analytics instead of only Q&A prompting
+- confirmed checklist/research/learning notes leave the next persistent-history slice easy to resume
 
 ## Findings
-No further issues requiring code changes.
-
-## Result
-This project now reads like a stronger portfolio artifact instead of a barebones practice script.
+No code changes required after this pass.

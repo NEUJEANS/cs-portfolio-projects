@@ -1,16 +1,12 @@
 # Flashcard Quiz App Review Pass 2
 
 ## Focus
-Session flow correctness for shuffle/limit/retry behavior.
+CLI filter behavior and result-summary usefulness.
 
 ## Checks
-- verified seeded shuffle is deterministic in tests
-- verified `--limit` slices after shuffle for reproducible short study rounds
-- verified retry mode only re-asks missed cards once
-- verified summary reports attempts separately from unique-card count
+- confirmed repeated `--tag` flags require all requested tags to match
+- confirmed unmatched tag filters exit cleanly instead of starting an empty session
+- confirmed weakest-tag reporting reflects missed-card topics
 
 ## Findings
-No additional defects found after the new test coverage and manual diff review.
-
-## Result
-The new study-session flow is coherent and demo-friendly.
+No code changes required after this pass.
