@@ -9,11 +9,15 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 
-RING_SIZE = 2**128
-
-
 def stable_hash(value: str) -> int:
     return int(hashlib.md5(value.encode("utf-8")).hexdigest(), 16)
+
+
+def positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
 
 
 @dataclass(frozen=True)
@@ -59,32 +63,66 @@ class ConsistentHashRing:
         self._ring = [point for point in self._ring if point.physical_node != node]
         self._positions = [point.position for point in self._ring]
 
-    def get_node(self, key: str) -> str:
+    def effective_replication_factor(self, replication_factor: int) -> int:
+        if replication_factor <= 0:
+            raise ValueError("replication_factor must be positive")
+        return min(replication_factor, len(self.nodes))
+
+    def get_nodes(self, key: str, replication_factor: int = 1) -> list[str]:
         if not self._ring:
             raise ValueError("ring has no nodes")
+
+        distinct_target = self.effective_replication_factor(replication_factor)
         position = stable_hash(key)
         index = bisect.bisect_left(self._positions, position)
         if index == len(self._positions):
             index = 0
-        return self._ring[index].physical_node
 
-    def assign_keys(self, keys: Iterable[str]) -> dict[str, str]:
-        return {key: self.get_node(key) for key in keys}
+        selected: list[str] = []
+        seen: set[str] = set()
+        for offset in range(len(self._ring)):
+            point = self._ring[(index + offset) % len(self._ring)]
+            if point.physical_node in seen:
+                continue
+            selected.append(point.physical_node)
+            seen.add(point.physical_node)
+            if len(selected) == distinct_target:
+                return selected
 
-    def distribution(self, keys: Iterable[str]) -> dict[str, int]:
-        counts = Counter(self.assign_keys(keys).values())
+        return selected
+
+    def get_node(self, key: str) -> str:
+        return self.get_nodes(key, replication_factor=1)[0]
+
+    def assign_keys(self, keys: Iterable[str], replication_factor: int = 1) -> dict[str, str] | dict[str, list[str]]:
+        if replication_factor == 1:
+            return {key: self.get_node(key) for key in keys}
+        return {key: self.get_nodes(key, replication_factor=replication_factor) for key in keys}
+
+    def distribution(self, keys: Iterable[str], replication_factor: int = 1) -> dict[str, int]:
+        counts: Counter[str] = Counter()
+        for nodes in self.assign_keys(keys, replication_factor=replication_factor).values():
+            if isinstance(nodes, str):
+                counts[nodes] += 1
+            else:
+                counts.update(nodes)
         return {node: counts.get(node, 0) for node in self.nodes}
 
-    def load_report(self, keys: Iterable[str]) -> dict[str, object]:
+    def load_report(self, keys: Iterable[str], replication_factor: int = 1) -> dict[str, object]:
         key_list = list(keys)
-        distribution = self.distribution(key_list)
-        total = len(key_list)
+        effective_replication_factor = self.effective_replication_factor(replication_factor) if self.nodes else 0
+        distribution = self.distribution(key_list, replication_factor=replication_factor)
+        total_keys = len(key_list)
         loads = list(distribution.values())
-        average = total / len(self.nodes) if self.nodes else 0.0
+        placement_count = total_keys * effective_replication_factor if self.nodes else 0
+        average = placement_count / len(self.nodes) if self.nodes else 0.0
         return {
-            "total_keys": total,
+            "total_keys": total_keys,
             "nodes": len(self.nodes),
             "virtual_nodes_per_physical": self.virtual_nodes,
+            "replication_factor": replication_factor,
+            "effective_replication_factor": effective_replication_factor,
+            "total_replica_placements": placement_count,
             "distribution": distribution,
             "max_load": max(loads) if loads else 0,
             "min_load": min(loads) if loads else 0,
@@ -99,11 +137,18 @@ def generate_keys(count: int, prefix: str = "key") -> list[str]:
     return [f"{prefix}-{index}" for index in range(count)]
 
 
-def simulate_remap(nodes: Sequence[str], keys: Sequence[str], virtual_nodes: int, add: str | None = None, remove: str | None = None) -> dict[str, object]:
+def simulate_remap(
+    nodes: Sequence[str],
+    keys: Sequence[str],
+    virtual_nodes: int,
+    add: str | None = None,
+    remove: str | None = None,
+    replication_factor: int = 1,
+) -> dict[str, object]:
     if add and remove:
         raise ValueError("choose either add or remove, not both")
     before = ConsistentHashRing(nodes, virtual_nodes=virtual_nodes)
-    before_assignments = before.assign_keys(keys)
+    before_assignments = before.assign_keys(keys, replication_factor=replication_factor)
 
     if add:
         after_nodes = list(nodes)
@@ -116,18 +161,32 @@ def simulate_remap(nodes: Sequence[str], keys: Sequence[str], virtual_nodes: int
         raise ValueError("either add or remove must be provided")
 
     after = ConsistentHashRing(after_nodes, virtual_nodes=virtual_nodes)
-    after_assignments = after.assign_keys(keys)
+    after_assignments = after.assign_keys(keys, replication_factor=replication_factor)
 
     moved = sorted(key for key in keys if before_assignments[key] != after_assignments[key])
+    replica_placement_changes = 0
+    for key in keys:
+        before_nodes = before_assignments[key]
+        after_nodes_for_key = after_assignments[key]
+        if isinstance(before_nodes, str):
+            if before_nodes != after_nodes_for_key:
+                replica_placement_changes += 1
+        else:
+            replica_placement_changes += len(set(before_nodes).symmetric_difference(set(after_nodes_for_key)))
+
     return {
         "before_nodes": list(nodes),
         "after_nodes": after_nodes,
         "key_count": len(keys),
+        "replication_factor": replication_factor,
+        "effective_before_replication_factor": before.effective_replication_factor(replication_factor),
+        "effective_after_replication_factor": after.effective_replication_factor(replication_factor),
         "moved_keys": len(moved),
         "movement_ratio": (len(moved) / len(keys)) if keys else 0.0,
+        "replica_placement_changes": replica_placement_changes,
         "sample_moved_keys": moved[:10],
-        "before_distribution": before.distribution(keys),
-        "after_distribution": after.distribution(keys),
+        "before_distribution": before.distribution(keys, replication_factor=replication_factor),
+        "after_distribution": after.distribution(keys, replication_factor=replication_factor),
     }
 
 
@@ -138,19 +197,22 @@ def build_parser() -> argparse.ArgumentParser:
     assign = subparsers.add_parser("assign", help="assign keys to nodes")
     assign.add_argument("--nodes", nargs="+", required=True)
     assign.add_argument("--keys", nargs="+", required=True)
-    assign.add_argument("--virtual-nodes", type=int, default=128)
+    assign.add_argument("--virtual-nodes", type=positive_int, default=128)
+    assign.add_argument("--replication-factor", type=positive_int, default=1)
 
     report = subparsers.add_parser("report", help="show load distribution for generated keys")
     report.add_argument("--nodes", nargs="+", required=True)
     report.add_argument("--key-count", type=int, required=True)
     report.add_argument("--key-prefix", default="key")
-    report.add_argument("--virtual-nodes", type=int, default=128)
+    report.add_argument("--virtual-nodes", type=positive_int, default=128)
+    report.add_argument("--replication-factor", type=positive_int, default=1)
 
     remap = subparsers.add_parser("remap", help="simulate node add/remove remapping")
     remap.add_argument("--nodes", nargs="+", required=True)
     remap.add_argument("--key-count", type=int, required=True)
     remap.add_argument("--key-prefix", default="key")
-    remap.add_argument("--virtual-nodes", type=int, default=128)
+    remap.add_argument("--virtual-nodes", type=positive_int, default=128)
+    remap.add_argument("--replication-factor", type=positive_int, default=1)
     remap.add_argument("--add-node")
     remap.add_argument("--remove-node")
 
@@ -163,10 +225,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "assign":
         ring = ConsistentHashRing(args.nodes, virtual_nodes=args.virtual_nodes)
-        payload = ring.assign_keys(args.keys)
+        payload = ring.assign_keys(args.keys, replication_factor=args.replication_factor)
     elif args.command == "report":
         ring = ConsistentHashRing(args.nodes, virtual_nodes=args.virtual_nodes)
-        payload = ring.load_report(generate_keys(args.key_count, args.key_prefix))
+        payload = ring.load_report(
+            generate_keys(args.key_count, args.key_prefix),
+            replication_factor=args.replication_factor,
+        )
     else:
         payload = simulate_remap(
             args.nodes,
@@ -174,6 +239,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             virtual_nodes=args.virtual_nodes,
             add=args.add_node,
             remove=args.remove_node,
+            replication_factor=args.replication_factor,
         )
 
     print(json.dumps(payload, indent=2, sort_keys=True))
