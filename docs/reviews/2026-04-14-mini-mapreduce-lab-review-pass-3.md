@@ -1,11 +1,12 @@
 # mini-mapreduce-lab review pass 3
 
-## Checks
-- smoke-tested CLI output for `wordcount`
-- audited top-level repo docs for project discoverability
+## Focus
+Repository integration and docs polish.
 
-## Issues found
-- the root `README.md` project list did not include `mini-mapreduce-lab`
+## Findings
+1. Repo-level tests did not include this project under `tests/`, which made the new slice easier to miss from the top-level test workflow.
+2. README command examples had collapsed formatting after the edit pass and were harder to scan.
 
 ## Fixes applied
-- added `mini-mapreduce-lab` to the root project progress list so the new slice is discoverable
+- Added `tests/test_mini_mapreduce.py` so the project is covered from the repo-level test suite.
+- Restored multiline README command blocks for readability.

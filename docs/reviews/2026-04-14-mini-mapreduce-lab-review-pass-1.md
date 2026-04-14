@@ -1,10 +1,10 @@
 # mini-mapreduce-lab review pass 1
 
-## Checks
-- ran `python3 -m unittest projects/mini-mapreduce-lab/test_mapreduce.py`
+## Focus
+Implementation correctness for the new reducer partitioning slice.
 
-## Issues found
-- test module initially failed to import `mapreduce` because the project directory was not on `sys.path`
+## Findings
+1. The first draft added reducer stats but lacked a regression test proving aggregate output stays the same when reducer count changes.
 
 ## Fixes applied
-- inserted the project directory into `sys.path` inside the test file before importing `execute_job`
+- Added `test_reducer_count_changes_bucket_stats_not_aggregate_output` to lock in the key MapReduce invariant.

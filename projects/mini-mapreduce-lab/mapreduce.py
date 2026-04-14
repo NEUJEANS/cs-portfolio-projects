@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ class JobResult:
     map_records: int
     unique_keys: int
     output: dict[str, int | dict[str, int]]
+    reducers: int
+    reducer_stats: list[dict[str, int]]
 
     def to_json(self) -> str:
         return json.dumps(
@@ -28,6 +31,8 @@ class JobResult:
                 "shard_count": self.shard_count,
                 "map_records": self.map_records,
                 "unique_keys": self.unique_keys,
+                "reducers": self.reducers,
+                "reducer_stats": self.reducer_stats,
                 "output": self.output,
             },
             indent=2,
@@ -47,6 +52,13 @@ def tokenize(text: str) -> list[str]:
     for char in text.lower():
         cleaned.append(char if char.isalnum() else " ")
     return [token for token in "".join(cleaned).split() if token]
+
+
+def stable_partition(key: str, reducers: int) -> int:
+    if reducers <= 0:
+        raise ValueError("reducers must be positive")
+    digest = hashlib.sha256(key.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % reducers
 
 
 def map_wordcount(lines: Iterable[str]) -> Iterator[KeyValue]:
@@ -73,12 +85,29 @@ def combine(mapped: Iterable[KeyValue]) -> Counter[str]:
     return counts
 
 
-def reduce_shards(partials: Iterable[Counter[str]]) -> dict[str, int]:
-    combined: defaultdict[str, int] = defaultdict(int)
+def reduce_shards(partials: Iterable[Counter[str]], reducers: int) -> tuple[dict[str, int], list[dict[str, int]]]:
+    if reducers <= 0:
+        raise ValueError("reducers must be positive")
+    buckets: list[defaultdict[str, int]] = [defaultdict(int) for _ in range(reducers)]
     for partial in partials:
         for key, value in partial.items():
-            combined[key] += value
-    return dict(sorted(combined.items(), key=lambda item: (-item[1], item[0])))
+            buckets[stable_partition(key, reducers)][key] += value
+
+    reduced: dict[str, int] = {}
+    reducer_stats: list[dict[str, int]] = []
+    for reducer_id, bucket in enumerate(buckets):
+        reducer_stats.append(
+            {
+                "reducer": reducer_id,
+                "unique_keys": len(bucket),
+                "records": sum(bucket.values()),
+            }
+        )
+        for key, value in bucket.items():
+            reduced[key] = value
+
+    ordered = dict(sorted(reduced.items(), key=lambda item: (-item[1], item[0])))
+    return ordered, reducer_stats
 
 
 def read_lines(inputs: list[Path]) -> list[str]:
@@ -93,6 +122,7 @@ def execute_job(
     inputs: list[Path],
     shard_size: int,
     group_field: str | None = None,
+    reducers: int = 1,
 ) -> JobResult:
     lines = read_lines(inputs)
     partials: list[Counter[str]] = []
@@ -114,13 +144,15 @@ def execute_job(
         map_records += len(mapped)
         partials.append(combine(mapped))
 
-    reduced = reduce_shards(partials)
+    reduced, reducer_stats = reduce_shards(partials, reducers)
     return JobResult(
         job=job,
         inputs=[str(path) for path in inputs],
         shard_count=len(shards),
         map_records=map_records,
         unique_keys=len(reduced),
+        reducers=reducers,
+        reducer_stats=reducer_stats,
         output=reduced,
     )
 
@@ -133,6 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("job", choices=["wordcount", "json-group-count"])
     run_parser.add_argument("inputs", nargs="+", help="input text or JSONL files")
     run_parser.add_argument("--shard-size", type=int, default=100, help="lines per shard")
+    run_parser.add_argument("--reducers", type=int, default=1, help="number of reducer buckets to simulate")
     run_parser.add_argument("--group-field", help="JSON field to count for json-group-count")
     run_parser.add_argument("--output", help="optional output JSON path")
 
@@ -146,11 +179,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         if args.job == "json-group-count" and not args.group_field:
             parser.error("--group-field is required for json-group-count")
+        if args.reducers <= 0:
+            parser.error("--reducers must be positive")
         result = execute_job(
             job=args.job,
             inputs=[Path(item) for item in args.inputs],
             shard_size=args.shard_size,
             group_field=args.group_field,
+            reducers=args.reducers,
         )
         rendered = result.to_json()
         if args.output:
