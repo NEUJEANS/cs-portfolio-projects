@@ -5,7 +5,7 @@ import json
 from bisect import bisect_left
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import List, Sequence
 
 
 @dataclass
@@ -27,6 +27,10 @@ class BTreeIndex:
     @property
     def max_keys(self) -> int:
         return 2 * self.minimum_degree - 1
+
+    @property
+    def min_keys(self) -> int:
+        return self.minimum_degree - 1
 
     def search(self, key: int) -> str | None:
         return self._search(self.root, key)
@@ -92,6 +96,126 @@ class BTreeIndex:
         parent.values.insert(child_index, promoted_value)
         parent.children.insert(child_index + 1, sibling)
 
+    def delete(self, key: int) -> bool:
+        deleted = self._delete(self.root, key)
+        if not deleted:
+            return False
+
+        self.item_count -= 1
+        if not self.root.leaf and not self.root.keys:
+            self.root = self.root.children[0]
+        return True
+
+    def _delete(self, node: BTreeNode, key: int) -> bool:
+        index = bisect_left(node.keys, key)
+
+        if index < len(node.keys) and node.keys[index] == key:
+            if node.leaf:
+                del node.keys[index]
+                del node.values[index]
+                return True
+            return self._delete_from_internal(node, index)
+
+        if node.leaf:
+            return False
+
+        child_index = index
+        child = node.children[child_index]
+        if len(child.keys) == self.min_keys:
+            child_index = self._ensure_child_has_capacity(node, child_index)
+            child = node.children[child_index]
+        return self._delete(child, key)
+
+    def _delete_from_internal(self, node: BTreeNode, index: int) -> bool:
+        key = node.keys[index]
+        left_child = node.children[index]
+        right_child = node.children[index + 1]
+
+        if len(left_child.keys) >= self.minimum_degree:
+            predecessor_key, predecessor_value = self._get_predecessor(left_child)
+            node.keys[index] = predecessor_key
+            node.values[index] = predecessor_value
+            return self._delete(left_child, predecessor_key)
+
+        if len(right_child.keys) >= self.minimum_degree:
+            successor_key, successor_value = self._get_successor(right_child)
+            node.keys[index] = successor_key
+            node.values[index] = successor_value
+            return self._delete(right_child, successor_key)
+
+        merged_child = self._merge_children(node, index)
+        return self._delete(merged_child, key)
+
+    def _get_predecessor(self, node: BTreeNode) -> tuple[int, str]:
+        current = node
+        while not current.leaf:
+            current = current.children[-1]
+        return current.keys[-1], current.values[-1]
+
+    def _get_successor(self, node: BTreeNode) -> tuple[int, str]:
+        current = node
+        while not current.leaf:
+            current = current.children[0]
+        return current.keys[0], current.values[0]
+
+    def _ensure_child_has_capacity(self, parent: BTreeNode, child_index: int) -> int:
+        child = parent.children[child_index]
+        if len(child.keys) >= self.minimum_degree:
+            return child_index
+
+        if child_index > 0 and len(parent.children[child_index - 1].keys) >= self.minimum_degree:
+            self._borrow_from_left(parent, child_index)
+            return child_index
+
+        if child_index < len(parent.children) - 1 and len(parent.children[child_index + 1].keys) >= self.minimum_degree:
+            self._borrow_from_right(parent, child_index)
+            return child_index
+
+        if child_index < len(parent.children) - 1:
+            self._merge_children(parent, child_index)
+            return child_index
+
+        self._merge_children(parent, child_index - 1)
+        return child_index - 1
+
+    def _borrow_from_left(self, parent: BTreeNode, child_index: int) -> None:
+        child = parent.children[child_index]
+        left_sibling = parent.children[child_index - 1]
+
+        child.keys.insert(0, parent.keys[child_index - 1])
+        child.values.insert(0, parent.values[child_index - 1])
+        if not child.leaf:
+            child.children.insert(0, left_sibling.children.pop())
+
+        parent.keys[child_index - 1] = left_sibling.keys.pop()
+        parent.values[child_index - 1] = left_sibling.values.pop()
+
+    def _borrow_from_right(self, parent: BTreeNode, child_index: int) -> None:
+        child = parent.children[child_index]
+        right_sibling = parent.children[child_index + 1]
+
+        child.keys.append(parent.keys[child_index])
+        child.values.append(parent.values[child_index])
+        if not child.leaf:
+            child.children.append(right_sibling.children.pop(0))
+
+        parent.keys[child_index] = right_sibling.keys.pop(0)
+        parent.values[child_index] = right_sibling.values.pop(0)
+
+    def _merge_children(self, parent: BTreeNode, left_index: int) -> BTreeNode:
+        left_child = parent.children[left_index]
+        right_child = parent.children[left_index + 1]
+
+        left_child.keys.append(parent.keys.pop(left_index))
+        left_child.values.append(parent.values.pop(left_index))
+        left_child.keys.extend(right_child.keys)
+        left_child.values.extend(right_child.values)
+        if not left_child.leaf:
+            left_child.children.extend(right_child.children)
+
+        del parent.children[left_index + 1]
+        return left_child
+
     def items(self) -> List[dict[str, str | int]]:
         result: List[dict[str, str | int]] = []
         self._collect_items(self.root, result)
@@ -144,12 +268,13 @@ class BTreeIndex:
         return tree
 
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="B-tree index lab")
     parser.add_argument("--dataset", type=Path, help="JSON file of [{\"key\": int, \"value\": str}] records")
     parser.add_argument("--degree", type=int, default=2, help="Minimum B-tree degree (default: 2)")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
-    parser.add_argument("command", nargs="*", help="search KEY | range START END | stats | dump")
+    parser.add_argument("command", nargs="*", help="search KEY | range START END | delete KEY | stats | dump")
     return parser
 
 
@@ -168,6 +293,11 @@ def _run_command(tree: BTreeIndex, command: Sequence[str]) -> dict[str, object]:
             raise ValueError("range requires START END")
         start, end = int(command[1]), int(command[2])
         return {"items": tree.range_query(start, end), "stats": tree.stats()}
+    if action == "delete":
+        if len(command) != 2:
+            raise ValueError("delete requires exactly 1 key")
+        key = int(command[1])
+        return {"key": key, "deleted": tree.delete(key), "items": tree.items(), "stats": tree.stats()}
     if action == "stats":
         return {"stats": tree.stats()}
     raise ValueError(f"unsupported command: {action}")

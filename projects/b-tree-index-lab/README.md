@@ -1,10 +1,10 @@
 # B-Tree Index Lab
 
-A compact B-tree indexing project that demonstrates top-down node splitting, sorted traversal, and range queries.
+A compact B-tree indexing project that demonstrates top-down node splitting, sorted traversal, range queries, and deletion rebalancing.
 
 ## Why it belongs in a CS portfolio
 - shows understanding of balanced multi-way search trees used by databases and filesystems
-- implements insertion with split handling instead of relying on a library container
+- implements insertion and deletion with split/borrow/merge handling instead of relying on a library container
 - includes ordered dumps and range queries to connect the data structure to indexing workloads
 - ships with automated tests and a small CLI for reproducible demos
 
@@ -13,6 +13,7 @@ A compact B-tree indexing project that demonstrates top-down node splitting, sor
 - insert/search with duplicate-key updates
 - sorted traversal of all key/value pairs
 - inclusive range queries for index-style lookups
+- deletion with predecessor/successor replacement and borrow/merge rebalancing
 - JSON CLI output for demos and scripting
 
 ## Usage
@@ -20,6 +21,7 @@ A compact B-tree indexing project that demonstrates top-down node splitting, sor
 python3 btree_index.py --dataset sample_records.json dump
 python3 btree_index.py --dataset sample_records.json search 17
 python3 btree_index.py --dataset sample_records.json --json range 10 30
+python3 btree_index.py --dataset sample_records.json --json delete 17
 ```
 
 Dataset format:
@@ -36,7 +38,6 @@ python3 -m unittest projects/b-tree-index-lab/test_btree_index.py
 ```
 
 ## Future improvements
-- deletion with borrow/merge rebalancing
 - on-disk page serialization
 - bulk loading from already sorted data
 - simple performance comparison against other ordered structures
