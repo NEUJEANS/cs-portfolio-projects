@@ -13,33 +13,37 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - `docs/learning/` - language/tool refresh notes and self-test exercises
 - `docs/checklists/` - implementation checklists per batch/project
 - `docs/reviews/` - multi-pass review logs and fixes
+- `docs/wrapups/` - concise per-run change summaries
 - `projects/` - the finished projects
 
-## Project List
-1. task-tracker-cli
-2. expense-tracker-sqlite
-3. password-strength-auditor
-4. file-integrity-monitor
-5. markdown-notes-search
-6. flashcard-quiz-app
-7. log-analyzer
-8. sudoku-solver
-9. pathfinding-visualizer
-10. mini-shell
-11. url-shortener-http
-12. library-manager-sqlite
-13. static-site-generator
-14. github-repo-reporter
-15. file-organizer-cli
-16. huffman-compressor
-17. cpu-scheduler-simulator
-18. cache-simulator
-19. bloom-filter-cli
-20. rate-limiter-lab
-21. consistent-hashing-lab
-22. vector-clock-lab
-23. pagerank-lab
-24. autocomplete-trie-cli
-25. external-merge-sort-lab
-26. wal-kv-store
-27. tfidf-search-lab
+## Current progress
+- [x] `task-tracker-cli` - Python CLI with JSON persistence, filtering, stats, and tests
+- [ ] `expense-tracker-sqlite`
+- [ ] `password-strength-auditor`
+- [ ] `file-integrity-monitor`
+- [ ] `markdown-notes-search`
+- [ ] `flashcard-quiz-app`
+- [ ] `log-analyzer`
+- [ ] `sudoku-solver`
+- [ ] `pathfinding-visualizer`
+- [ ] `mini-shell`
+- [ ] `url-shortener-http`
+- [ ] `library-manager-sqlite`
+- [ ] `static-site-generator`
+- [ ] `github-repo-reporter`
+- [ ] `file-organizer-cli`
+- [ ] `huffman-compressor`
+- [ ] `cpu-scheduler-simulator`
+- [ ] `cache-simulator`
+- [ ] `bloom-filter-cli`
+- [ ] `rate-limiter-lab`
+- [ ] `consistent-hashing-lab`
+- [ ] `vector-clock-lab`
+- [ ] `pagerank-lab`
+- [ ] `autocomplete-trie-cli`
+- [ ] `external-merge-sort-lab`
+- [ ] `wal-kv-store`
+- [ ] `tfidf-search-lab`
+
+## Suggested order
+Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.

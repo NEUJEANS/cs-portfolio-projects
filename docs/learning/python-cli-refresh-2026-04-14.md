@@ -1,15 +1,15 @@
-# Python CLI Refresh - 2026-04-14
+# Python CLI Refresh — 2026-04-14
 
-## Refresher
-- `argparse` is enough for a portfolio-quality standard-library CLI when the command tree is modest.
-- `dataclasses` keep domain objects small and explicit.
-- `tempfile` + `Path.replace()` gives a simple atomic write path for JSON persistence.
-- `unittest` with isolated temp directories is enough for reliable CLI integration tests.
+## Quick refresh used for this slice
+- `argparse` subparsers keep a small CLI easy to grow.
+- `dataclasses` make the task model compact and readable.
+- Keeping domain logic separate from CLI printing makes tests much easier.
+- `pathlib.Path` keeps file handling cleaner than string concatenation.
 
-## Tiny self-test
-1. Can `argparse` subcommands share common flags? Yes, via parent parsers or repeated additions.
-2. What avoids partial JSON writes? Write temp file first, then replace the target.
-3. Best fit for ISO date parsing here? `date.fromisoformat()` with validation.
-
-## Result
-Refresher complete; no extra training needed before implementation.
+## Self-test
+1. Why not store business logic directly inside argparse handlers?
+   - It makes the code harder to test and easier to tangle with I/O.
+2. Why use an atomic write pattern for JSON persistence?
+   - It reduces the chance of leaving a corrupt data file if the process is interrupted.
+3. Why keep filtering in a service layer instead of only in the CLI?
+   - The behavior becomes reusable by tests and future interfaces.
