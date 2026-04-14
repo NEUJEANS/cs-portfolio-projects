@@ -1,0 +1,21 @@
+# Wrap-up — task-tracker-cli
+
+- Timestamp: 2026-04-14T05:19Z
+- Project: `task-tracker-cli`
+- What changed:
+  - consolidated the maintained implementation into `projects/task-tracker-cli/src/task_tracker/`
+  - added package exports and a working `python3 -m task_tracker` wrapper entry point
+  - aligned CLI behavior with the richer task service and smoke tests
+  - refreshed README, checklist, and review log for resumable continuation
+- Tests run:
+  - `python3 -m unittest discover -s tests -v` → 11/11 passing
+- Reviews run:
+  - pass 1: implementation overlap and entry-point confusion
+  - pass 2: package export and CLI compatibility gaps
+  - pass 3: test environment/shadowing issues and validation message mismatch
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → clean
+- Implementation commit hash:
+  - `0d81333464800fe8fec5a70afe77d76215f2bfbe`
+- Next step:
+  - remove or migrate older duplicate source trees (`src/task_tracker.py`, `src/task_tracker_cli/`) and then add tags/search or packaging polish
