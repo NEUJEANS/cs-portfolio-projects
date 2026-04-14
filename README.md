@@ -38,3 +38,4 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 20. rate-limiter-lab
 21. consistent-hashing-lab
 22. vector-clock-lab
+23. pagerank-lab
