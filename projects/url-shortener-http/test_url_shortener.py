@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from url_shortener import Store, build_server, validate_url
+from url_shortener import Store, build_server, validate_custom_code, validate_url
 
 
 class UrlShortenerStoreTests(unittest.TestCase):
@@ -17,7 +17,8 @@ class UrlShortenerStoreTests(unittest.TestCase):
             code_a = store.shorten('https://example.com/docs')
             code_b = store.shorten('https://example.com/docs')
             self.assertEqual(code_a, code_b)
-            self.assertEqual(store.resolve(code_a), 'https://example.com/docs')
+            info = store.resolve(code_a)
+            self.assertEqual(info['url'], 'https://example.com/docs')
             self.assertEqual(store.stats()['link_count'], 1)
 
     def test_store_handles_code_collision_by_retrying(self):
@@ -37,7 +38,36 @@ class UrlShortenerStoreTests(unittest.TestCase):
 
             self.assertEqual(first, 'repeat1')
             self.assertNotEqual(second, first)
-            self.assertEqual(store.resolve(second), 'https://example.com/two')
+            self.assertEqual(store.resolve(second)['url'], 'https://example.com/two')
+
+    def test_store_supports_custom_codes_and_tracks_clicks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'shortener.db'
+            store = Store(db)
+            code = store.shorten('https://example.com/portfolio', custom_code='portfolio')
+            self.assertEqual(code, 'portfolio')
+
+            first = store.resolve(code, record_click=True)
+            second = store.resolve(code, record_click=True)
+
+            self.assertEqual(first['clicks'], 1)
+            self.assertEqual(second['clicks'], 2)
+            self.assertIsNotNone(second['last_accessed_at'])
+            stats = store.stats()
+            self.assertEqual(stats['total_clicks'], 2)
+            self.assertEqual(stats['top_links'][0]['code'], 'portfolio')
+
+    def test_store_rejects_conflicting_custom_code_requests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'shortener.db'
+            store = Store(db)
+            store.shorten('https://example.com/a', custom_code='alpha')
+
+            with self.assertRaisesRegex(ValueError, 'already in use'):
+                store.shorten('https://example.com/b', custom_code='alpha')
+
+            with self.assertRaisesRegex(ValueError, 'already shortened'):
+                store.shorten('https://example.com/a', custom_code='beta')
 
 
 class UrlValidationTests(unittest.TestCase):
@@ -49,6 +79,12 @@ class UrlValidationTests(unittest.TestCase):
         for bad in ['', 'ftp://example.com/file', 'example.com/no-scheme', 'https:///missing-host', None]:
             with self.assertRaises(ValueError):
                 validate_url(bad)
+
+    def test_validate_custom_code_rejects_invalid_or_reserved_values(self):
+        self.assertEqual(validate_custom_code('portfolio_v1'), 'portfolio_v1')
+        for bad in ['', 'ab', 'with space', 'shorten', None]:
+            with self.assertRaises(ValueError):
+                validate_custom_code(bad)
 
 
 class UrlShortenerHttpTests(unittest.TestCase):
@@ -89,20 +125,38 @@ class UrlShortenerHttpTests(unittest.TestCase):
         payload = json.loads(body.decode('utf-8'))
         self.assertEqual(payload['service'], 'url-shortener-http')
         self.assertEqual(payload['stats']['link_count'], 0)
+        self.assertEqual(payload['stats']['total_clicks'], 0)
 
-    def test_post_shorten_returns_created_payload_and_redirect_works(self):
-        status, _, body = self._request('/shorten', method='POST', payload={'url': 'https://example.com/coursework'})
+    def test_post_shorten_returns_created_payload_and_redirect_updates_stats(self):
+        status, _, body = self._request(
+            '/shorten',
+            method='POST',
+            payload={'url': 'https://example.com/coursework', 'code': 'coursework'},
+        )
         self.assertEqual(status, 201)
         payload = json.loads(body.decode('utf-8'))
-        self.assertIn('code', payload)
-        self.assertEqual(payload['url'], 'https://example.com/coursework')
+        self.assertEqual(payload['code'], 'coursework')
+        self.assertEqual(payload['clicks'], 0)
+        self.assertTrue(payload['short_url'].endswith('/coursework'))
 
-        status, headers, body = self._request(f"/{payload['code']}")
+        status, headers, body = self._request('/coursework?from=test')
         self.assertEqual(status, 302)
         self.assertEqual(headers['Location'], 'https://example.com/coursework')
         self.assertEqual(body, b'')
 
-    def test_post_shorten_rejects_invalid_json_and_invalid_urls(self):
+        status, _, body = self._request('/links/coursework')
+        self.assertEqual(status, 200)
+        info = json.loads(body.decode('utf-8'))
+        self.assertEqual(info['clicks'], 1)
+        self.assertIsNotNone(info['last_accessed_at'])
+
+        status, _, body = self._request('/stats')
+        stats = json.loads(body.decode('utf-8'))
+        self.assertEqual(status, 200)
+        self.assertEqual(stats['total_clicks'], 1)
+        self.assertEqual(stats['top_links'][0]['code'], 'coursework')
+
+    def test_post_shorten_rejects_invalid_json_invalid_urls_and_bad_custom_codes(self):
         status, _, body = self._request('/shorten', method='POST', raw_data=b'{bad json')
         self.assertEqual(status, 400)
         self.assertIn('valid JSON', body.decode('utf-8'))
@@ -111,6 +165,10 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('http or https', body.decode('utf-8'))
 
+        status, _, body = self._request('/shorten', method='POST', payload={'url': 'https://example.com', 'code': 'x'})
+        self.assertEqual(status, 400)
+        self.assertIn('3-32 chars', body.decode('utf-8'))
+
     def test_route_specific_method_not_allowed_and_missing_codes(self):
         status, headers, body = self._request('/shorten')
         self.assertEqual(status, 405)
@@ -118,6 +176,10 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertIn('method not allowed', body.decode('utf-8'))
 
         status, _, body = self._request('/missing-code')
+        self.assertEqual(status, 404)
+        self.assertIn('short code not found', body.decode('utf-8'))
+
+        status, _, body = self._request('/links/missing-code')
         self.assertEqual(status, 404)
         self.assertIn('short code not found', body.decode('utf-8'))
 

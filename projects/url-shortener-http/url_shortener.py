@@ -2,12 +2,19 @@ import argparse
 import hashlib
 import http.server
 import json
+import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 DEFAULT_CODE_LENGTH = 7
+CUSTOM_CODE_PATTERN = re.compile(r'^[A-Za-z0-9_-]{3,32}$')
+RESERVED_CODES = {'shorten', 'stats', 'links'}
+
+
+def _request_path(path):
+    return urlsplit(path).path
 
 
 class Store:
@@ -26,21 +33,56 @@ class Store:
                 'CREATE TABLE IF NOT EXISTS links ('
                 'code TEXT PRIMARY KEY, '
                 'url TEXT NOT NULL UNIQUE, '
-                'created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
+                'created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'clicks INTEGER NOT NULL DEFAULT 0, '
+                'last_accessed_at TEXT'
                 ')'
             )
+            self._ensure_column(conn, 'clicks', 'INTEGER NOT NULL DEFAULT 0')
+            self._ensure_column(conn, 'last_accessed_at', 'TEXT')
             conn.commit()
+
+    def _ensure_column(self, conn, column_name, definition):
+        columns = {
+            row['name']
+            for row in conn.execute('PRAGMA table_info(links)').fetchall()
+        }
+        if column_name not in columns:
+            conn.execute(f'ALTER TABLE links ADD COLUMN {column_name} {definition}')
 
     def _candidate_code(self, url, attempt=0, length=DEFAULT_CODE_LENGTH):
         seed = url if attempt == 0 else f'{url}:{attempt}'
         return hashlib.sha256(seed.encode('utf-8')).hexdigest()[:length]
 
-    def shorten(self, url):
+    def shorten(self, url, custom_code=None):
         normalized_url = validate_url(url)
+        if custom_code is not None:
+            custom_code = validate_custom_code(custom_code)
+
         with closing(self._connect()) as conn:
-            existing = conn.execute('SELECT code FROM links WHERE url = ?', (normalized_url,)).fetchone()
-            if existing:
-                return existing['code']
+            existing_for_url = conn.execute(
+                'SELECT code FROM links WHERE url = ?',
+                (normalized_url,),
+            ).fetchone()
+            if existing_for_url:
+                existing_code = existing_for_url['code']
+                if custom_code and existing_code != custom_code:
+                    raise ValueError(f'url already shortened with code {existing_code}')
+                return existing_code
+
+            if custom_code:
+                existing_for_code = conn.execute(
+                    'SELECT url FROM links WHERE code = ?',
+                    (custom_code,),
+                ).fetchone()
+                if existing_for_code and existing_for_code['url'] != normalized_url:
+                    raise ValueError('custom code is already in use')
+                conn.execute(
+                    'INSERT INTO links(code, url) VALUES (?, ?)',
+                    (custom_code, normalized_url),
+                )
+                conn.commit()
+                return custom_code
 
             attempt = 0
             while True:
@@ -54,15 +96,52 @@ class Store:
                     return code
                 attempt += 1
 
-    def resolve(self, code):
+    def resolve(self, code, record_click=False):
         with closing(self._connect()) as conn:
-            row = conn.execute('SELECT url FROM links WHERE code = ?', (code,)).fetchone()
-            return row['url'] if row else None
+            row = conn.execute(
+                'SELECT code, url, clicks, created_at, last_accessed_at FROM links WHERE code = ?',
+                (code,),
+            ).fetchone()
+            if not row:
+                return None
+            if record_click:
+                conn.execute(
+                    'UPDATE links '
+                    'SET clicks = clicks + 1, last_accessed_at = CURRENT_TIMESTAMP '
+                    'WHERE code = ?',
+                    (code,),
+                )
+                conn.commit()
+                row = conn.execute(
+                    'SELECT code, url, clicks, created_at, last_accessed_at FROM links WHERE code = ?',
+                    (code,),
+                ).fetchone()
+            return dict(row)
 
     def stats(self):
         with closing(self._connect()) as conn:
-            row = conn.execute('SELECT COUNT(*) AS link_count FROM links').fetchone()
-            return {'link_count': row['link_count']}
+            row = conn.execute(
+                'SELECT COUNT(*) AS link_count, COALESCE(SUM(clicks), 0) AS total_clicks FROM links'
+            ).fetchone()
+            top_links = [
+                {
+                    'code': link['code'],
+                    'url': link['url'],
+                    'clicks': link['clicks'],
+                }
+                for link in conn.execute(
+                    'SELECT code, url, clicks FROM links '
+                    'ORDER BY clicks DESC, code ASC LIMIT 5'
+                ).fetchall()
+            ]
+            return {
+                'link_count': row['link_count'],
+                'total_clicks': row['total_clicks'],
+                'top_links': top_links,
+            }
+
+    def get_link_info(self, code):
+        return self.resolve(code, record_click=False)
 
 
 def validate_url(url):
@@ -80,9 +159,22 @@ def validate_url(url):
     return candidate
 
 
+def validate_custom_code(code):
+    if not isinstance(code, str):
+        raise ValueError('custom code must be a string')
+    candidate = code.strip()
+    if not candidate:
+        raise ValueError('custom code must not be empty')
+    if candidate in RESERVED_CODES:
+        raise ValueError('custom code uses a reserved route name')
+    if not CUSTOM_CODE_PATTERN.fullmatch(candidate):
+        raise ValueError('custom code must be 3-32 chars using letters, numbers, hyphen, or underscore')
+    return candidate
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     store = None
-    server_version = 'UrlShortener/1.0'
+    server_version = 'UrlShortener/1.1'
 
     def _send_json(self, status_code, payload, headers=None):
         body = json.dumps(payload).encode('utf-8')
@@ -112,7 +204,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return payload
 
     def do_POST(self):
-        if self.path != '/shorten':
+        request_path = _request_path(self.path)
+        if request_path != '/shorten':
             self._send_json(404, {'error': 'not found'})
             return
         try:
@@ -120,47 +213,66 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if 'url' not in payload:
                 raise ValueError('JSON body must include url')
             normalized_url = validate_url(payload['url'])
-            code = self.store.shorten(normalized_url)
+            custom_code = payload.get('code')
+            code = self.store.shorten(normalized_url, custom_code=custom_code)
+            info = self.store.get_link_info(code)
         except ValueError as exc:
             self._send_json(400, {'error': str(exc)})
             return
 
+        host = self.headers.get('Host') or f'{self.server.server_name}:{self.server.server_port}'
         body = {
             'code': code,
-            'short_url': f'http://127.0.0.1:{self.server.server_port}/{code}',
+            'short_url': f'http://{host}/{code}',
             'url': normalized_url,
+            'clicks': info['clicks'],
         }
         self._send_json(201, body)
 
     def do_GET(self):
-        if self.path == '/':
+        request_path = _request_path(self.path)
+        if request_path == '/':
             self._send_json(200, {'service': 'url-shortener-http', 'stats': self.store.stats()})
             return
-        if self.path == '/shorten':
+        if request_path == '/shorten':
             self._send_method_not_allowed('POST')
             return
+        if request_path == '/stats':
+            self._send_json(200, self.store.stats())
+            return
+        if request_path.startswith('/links/'):
+            code = request_path.removeprefix('/links/').strip('/')
+            if not code:
+                self._send_json(404, {'error': 'not found'})
+                return
+            info = self.store.get_link_info(code)
+            if not info:
+                self._send_json(404, {'error': 'short code not found'})
+                return
+            self._send_json(200, info)
+            return
 
-        code = self.path.lstrip('/')
+        code = request_path.lstrip('/')
         if not code:
             self._send_json(404, {'error': 'not found'})
             return
-        url = self.store.resolve(code)
-        if not url:
+        info = self.store.resolve(code, record_click=True)
+        if not info:
             self._send_json(404, {'error': 'short code not found'})
             return
         self.send_response(302)
-        self.send_header('Location', url)
+        self.send_header('Location', info['url'])
         self.send_header('Content-Length', '0')
         self.end_headers()
 
     def do_PUT(self):
-        if self.path == '/shorten':
+        if _request_path(self.path) == '/shorten':
             self._send_method_not_allowed('POST')
         else:
             self._send_json(404, {'error': 'not found'})
 
     def do_DELETE(self):
-        if self.path == '/shorten':
+        if _request_path(self.path) == '/shorten':
             self._send_method_not_allowed('POST')
         else:
             self._send_json(404, {'error': 'not found'})
