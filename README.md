@@ -60,6 +60,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `minhash-near-duplicate-lab`
 - [x] `count-min-sketch-lab`
 - [x] `quadtree-spatial-index-lab`
+- [x] `skip-list-kv-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.

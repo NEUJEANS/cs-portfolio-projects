@@ -1,0 +1,7 @@
+[
+  {"key": "apple", "value": {"qty": 4, "aisle": 1}},
+  {"key": "banana", "value": {"qty": 7, "aisle": 1}},
+  {"key": "carrot", "value": {"qty": 9, "aisle": 4}},
+  {"key": "date", "value": {"qty": 3, "aisle": 5}},
+  {"key": "fig", "value": {"qty": 6, "aisle": 5}}
+]
