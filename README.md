@@ -37,3 +37,4 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 19. bloom-filter-cli
 20. rate-limiter-lab
 21. consistent-hashing-lab
+22. vector-clock-lab
