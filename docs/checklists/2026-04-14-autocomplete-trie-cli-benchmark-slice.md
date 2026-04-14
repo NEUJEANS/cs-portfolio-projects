@@ -19,4 +19,4 @@ Upgrade the project from a simple demo CLI into a stronger portfolio artifact by
 - [x] Run focused and repo-level tests
 - [x] Perform at least 3 review passes and fix issues
 - [x] Run secret scan before push
-- [ ] Commit, push, and append wrap-up
+- [x] Commit, push, and append wrap-up
