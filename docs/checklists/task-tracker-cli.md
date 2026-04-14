@@ -1,14 +1,19 @@
 # Task Tracker CLI Checklist
 
-- [x] Pick project scope for first vertical slice
-- [x] Capture brief research notes
-- [x] Capture short Python CLI refresher + self-test
-- [x] Create project README with usage examples
-- [x] Implement domain model and JSON storage
-- [x] Implement add/list/done/delete/summary commands
-- [x] Support status/priority/due-date filtering
-- [x] Add human-readable and JSON output modes
+Status: vertical slice 1 complete
+Last updated: 2026-04-14
+
+## Vertical slice 1
+- [x] Pick project scope and persistence model
+- [x] Write short research note
+- [x] Write short language/tool refresh note
+- [x] Scaffold project folder structure
+- [x] Implement task model + validation
+- [x] Implement JSON storage layer
+- [x] Implement CLI commands
+- [x] Add project README with usage examples
 - [x] Add automated tests
-- [x] Run at least 3 review passes and fix issues
-- [ ] Secret scan before push
+- [x] Run tests locally
+- [x] Perform 3 review passes and fix issues
+- [x] Run secret scan before push
 - [ ] Commit, push, and add wrap-up
