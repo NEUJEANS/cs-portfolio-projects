@@ -2,7 +2,7 @@
 
 - Timestamp: 2026-04-14 22:10 UTC
 - Project: `url-shortener-http`
-- Commit: `ff96f737111b5827a861c6cc9b280d237f4f40cb`
+- Commit: `95cee738445e34f2e28f7202d0812212a9192902`
 
 ## What changed
 - added optional `expires_in_seconds` support with persisted `expires_at` metadata
