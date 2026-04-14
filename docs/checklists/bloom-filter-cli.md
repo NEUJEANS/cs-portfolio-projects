@@ -9,7 +9,8 @@
 - [x] log three review passes and fix issues found
 - [x] prepare wrap-up with next step
 - [x] add optional benchmark mode for observed false-positive sampling on generated tokens
+- [x] add counting Bloom filter variant for delete support
 
 ## Next ideas
-- [ ] add counting Bloom filter variant for delete support
 - [ ] add binary export format for larger filters
+- [ ] compare standard vs. counting memory overhead in a small benchmark note

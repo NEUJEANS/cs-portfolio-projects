@@ -1,13 +1,13 @@
-# Bloom filter CLI review pass 3 — 2026-04-14
+# Bloom Filter CLI Review Pass 3
 
 ## Focus
-Docs and resumability review.
+Docs, resumability, and test hygiene.
 
-## Checks
-- Confirmed README usage examples cover the new benchmark mode.
-- Confirmed checklist records the completed slice.
-- Confirmed research and learning notes explain the benchmark rationale and formulas.
+## Issues found
+1. The checklist and README still described counting Bloom filters as a future idea instead of shipped functionality.
+2. The test helper for JSON reloads used a fixed temporary filename, which could collide across runs.
 
-## Findings
-- No doc gaps blocking future resume work.
-- Next strongest follow-up remains counting Bloom filter support.
+## Fixes applied
+- Updated the checklist, README, research note, and learning note to reflect the new counting-filter slice and next steps.
+- Switched the JSON reload helper to `tempfile.NamedTemporaryFile` for safer resumable test runs.
+- Re-ran the targeted unit suite and counting-filter CLI smoke tests after the doc and helper cleanup.

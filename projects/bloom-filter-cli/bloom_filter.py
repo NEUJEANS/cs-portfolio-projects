@@ -8,7 +8,17 @@ from typing import Iterable, List
 
 
 class BloomFilter:
-    def __init__(self, capacity: int, error_rate: float, bit_count: int | None = None, hash_count: int | None = None, inserted_count: int = 0, bits: int = 0):
+    variant = "standard"
+
+    def __init__(
+        self,
+        capacity: int,
+        error_rate: float,
+        bit_count: int | None = None,
+        hash_count: int | None = None,
+        inserted_count: int = 0,
+        bits: int = 0,
+    ):
         if capacity <= 0:
             raise ValueError("capacity must be greater than 0")
         if not (0 < error_rate < 1):
@@ -26,6 +36,9 @@ class BloomFilter:
 
     @classmethod
     def from_dict(cls, data: dict) -> "BloomFilter":
+        variant = data.get("variant", "standard")
+        if variant == "counting":
+            return CountingBloomFilter.from_dict(data)
         return cls(
             capacity=data["capacity"],
             error_rate=data["error_rate"],
@@ -37,6 +50,7 @@ class BloomFilter:
 
     def to_dict(self) -> dict:
         return {
+            "variant": self.variant,
             "capacity": self.capacity,
             "error_rate": self.error_rate,
             "bit_count": self.bit_count,
@@ -79,6 +93,7 @@ class BloomFilter:
         set_bits = self.bits.bit_count()
         load_factor = set_bits / self.bit_count
         return {
+            "variant": self.variant,
             "capacity": self.capacity,
             "target_error_rate": self.error_rate,
             "bit_count": self.bit_count,
@@ -86,6 +101,108 @@ class BloomFilter:
             "inserted_count": self.inserted_count,
             "set_bits": set_bits,
             "load_factor": load_factor,
+            "estimated_false_positive_rate": self.estimated_false_positive_rate(),
+        }
+
+
+class CountingBloomFilter(BloomFilter):
+    variant = "counting"
+
+    def __init__(
+        self,
+        capacity: int,
+        error_rate: float,
+        bit_count: int | None = None,
+        hash_count: int | None = None,
+        inserted_count: int = 0,
+        counters: Iterable[int] | None = None,
+        counter_bits: int = 8,
+        max_counter_value: int | None = None,
+    ):
+        super().__init__(
+            capacity=capacity,
+            error_rate=error_rate,
+            bit_count=bit_count,
+            hash_count=hash_count,
+            inserted_count=inserted_count,
+            bits=0,
+        )
+        if counter_bits <= 0:
+            raise ValueError("counter_bits must be greater than 0")
+        self.counter_bits = counter_bits
+        self.max_counter_value = max_counter_value if max_counter_value is not None else (2**counter_bits - 1)
+        if self.max_counter_value <= 0:
+            raise ValueError("max_counter_value must be greater than 0")
+
+        raw_counters = list(counters) if counters is not None else [0] * self.bit_count
+        if len(raw_counters) != self.bit_count:
+            raise ValueError("counter length must match bit_count")
+        if any(counter < 0 or counter > self.max_counter_value for counter in raw_counters):
+            raise ValueError("counter values must stay within the configured range")
+        self.counters = raw_counters
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CountingBloomFilter":
+        return cls(
+            capacity=data["capacity"],
+            error_rate=data["error_rate"],
+            bit_count=data["bit_count"],
+            hash_count=data["hash_count"],
+            inserted_count=data.get("inserted_count", 0),
+            counters=data.get("counters", []),
+            counter_bits=data.get("counter_bits", 8),
+            max_counter_value=data.get("max_counter_value"),
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "variant": self.variant,
+            "capacity": self.capacity,
+            "error_rate": self.error_rate,
+            "bit_count": self.bit_count,
+            "hash_count": self.hash_count,
+            "inserted_count": self.inserted_count,
+            "counter_bits": self.counter_bits,
+            "max_counter_value": self.max_counter_value,
+            "counters": self.counters,
+        }
+
+    def add(self, item: str) -> None:
+        for index in self._hashes(item):
+            if self.counters[index] >= self.max_counter_value:
+                raise OverflowError(
+                    f"counter overflow at index {index}; choose a larger counter size or rebuild with a higher capacity"
+                )
+            self.counters[index] += 1
+        self.inserted_count += 1
+
+    def remove(self, item: str) -> bool:
+        indexes = self._hashes(item)
+        if any(self.counters[index] == 0 for index in indexes):
+            return False
+        for index in indexes:
+            self.counters[index] -= 1
+        self.inserted_count = max(0, self.inserted_count - 1)
+        return True
+
+    def might_contain(self, item: str) -> bool:
+        return all(self.counters[index] > 0 for index in self._hashes(item))
+
+    def stats(self) -> dict:
+        non_zero_counters = sum(1 for counter in self.counters if counter > 0)
+        max_counter = max(self.counters, default=0)
+        return {
+            "variant": self.variant,
+            "capacity": self.capacity,
+            "target_error_rate": self.error_rate,
+            "bit_count": self.bit_count,
+            "hash_count": self.hash_count,
+            "inserted_count": self.inserted_count,
+            "non_zero_counters": non_zero_counters,
+            "load_factor": non_zero_counters / self.bit_count,
+            "max_counter": max_counter,
+            "counter_bits": self.counter_bits,
+            "max_counter_value": self.max_counter_value,
             "estimated_false_positive_rate": self.estimated_false_positive_rate(),
         }
 
@@ -139,11 +256,38 @@ def build_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def build_counting_command(args: argparse.Namespace) -> int:
+    bloom_filter = CountingBloomFilter(
+        capacity=args.capacity,
+        error_rate=args.error_rate,
+        counter_bits=args.counter_bits,
+    )
+    inserted = bloom_filter.extend(read_items(Path(args.input)))
+    save_filter(Path(args.output), bloom_filter)
+    print(json.dumps({"written_to": args.output, "inserted": inserted, **bloom_filter.stats()}, indent=2))
+    return 0
+
+
 def check_command(args: argparse.Namespace) -> int:
     bloom_filter = load_filter(Path(args.filter))
     normalized_items = [item.strip() for item in args.items if item.strip()]
     results = [{"item": item, "might_contain": bloom_filter.might_contain(item)} for item in normalized_items]
     print(json.dumps(results, indent=2))
+    return 0
+
+
+def remove_command(args: argparse.Namespace) -> int:
+    bloom_filter = load_filter(Path(args.filter))
+    if not isinstance(bloom_filter, CountingBloomFilter):
+        raise ValueError("remove requires a counting Bloom filter artifact")
+
+    normalized_items = [item.strip() for item in args.items if item.strip()]
+    results = []
+    for item in normalized_items:
+        removed = bloom_filter.remove(item)
+        results.append({"item": item, "removed": removed, "might_contain_after": bloom_filter.might_contain(item)})
+    save_filter(Path(args.filter), bloom_filter)
+    print(json.dumps({"updated_filter": args.filter, "results": results, **bloom_filter.stats()}, indent=2))
     return 0
 
 
@@ -169,17 +313,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build and query a Bloom filter from the command line")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    build_parser = subparsers.add_parser("build", help="build a filter from a newline-delimited file")
+    build_parser = subparsers.add_parser("build", help="build a standard filter from a newline-delimited file")
     build_parser.add_argument("--input", required=True, help="path to newline-delimited items")
     build_parser.add_argument("--output", required=True, help="path to write filter JSON")
     build_parser.add_argument("--capacity", type=int, required=True, help="expected number of inserted items")
     build_parser.add_argument("--error-rate", type=float, default=0.01, help="target false-positive rate")
     build_parser.set_defaults(func=build_command)
 
+    build_counting_parser = subparsers.add_parser("build-counting", help="build a counting Bloom filter with delete support")
+    build_counting_parser.add_argument("--input", required=True, help="path to newline-delimited items")
+    build_counting_parser.add_argument("--output", required=True, help="path to write filter JSON")
+    build_counting_parser.add_argument("--capacity", type=int, required=True, help="expected number of inserted items")
+    build_counting_parser.add_argument("--error-rate", type=float, default=0.01, help="target false-positive rate")
+    build_counting_parser.add_argument("--counter-bits", type=int, default=8, help="bits allocated per counter before overflow")
+    build_counting_parser.set_defaults(func=build_counting_command)
+
     check_parser = subparsers.add_parser("check", help="query one or more items against a saved filter")
     check_parser.add_argument("--filter", required=True, help="saved filter JSON")
     check_parser.add_argument("items", nargs="+", help="items to check")
     check_parser.set_defaults(func=check_command)
+
+    remove_parser = subparsers.add_parser("remove", help="remove one or more items from a counting Bloom filter")
+    remove_parser.add_argument("--filter", required=True, help="saved counting filter JSON")
+    remove_parser.add_argument("items", nargs="+", help="items to remove")
+    remove_parser.set_defaults(func=remove_command)
 
     stats_parser = subparsers.add_parser("stats", help="show filter statistics")
     stats_parser.add_argument("--filter", required=True, help="saved filter JSON")
@@ -199,7 +356,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: List[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (ValueError, OverflowError) as exc:
+        parser.exit(2, f"error: {exc}\n")
 
 
 if __name__ == "__main__":

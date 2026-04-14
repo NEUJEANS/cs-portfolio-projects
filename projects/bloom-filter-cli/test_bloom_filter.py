@@ -1,13 +1,14 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from bloom_filter import BloomFilter, benchmark_filter, load_filter, save_filter
+from bloom_filter import BloomFilter, CountingBloomFilter, benchmark_filter, load_filter, save_filter
 
 
 SCRIPT = ROOT / "bloom_filter.py"
@@ -62,6 +63,31 @@ class BloomFilterTests(unittest.TestCase):
             for child in tmp_dir.iterdir():
                 child.unlink()
             tmp_dir.rmdir()
+
+    def test_counting_filter_supports_remove_and_round_trip(self):
+        counting = CountingBloomFilter(capacity=30, error_rate=0.05, counter_bits=8)
+        counting.extend(["alpha", "beta", "gamma"])
+        self.assertTrue(counting.might_contain("beta"))
+        self.assertTrue(counting.remove("beta"))
+        self.assertFalse(counting.might_contain("beta"))
+        self.assertFalse(counting.remove("beta"))
+
+        payload = counting.to_dict()
+        restored = load_filter_json(payload)
+        self.assertEqual(restored.to_dict(), payload)
+        self.assertEqual(restored.variant, "counting")
+
+    def test_counting_filter_rejects_invalid_counter_shapes(self):
+        with self.assertRaises(ValueError):
+            CountingBloomFilter(capacity=10, error_rate=0.1, counter_bits=0)
+        with self.assertRaises(ValueError):
+            CountingBloomFilter(capacity=10, error_rate=0.1, counters=[1, 2, 3])
+
+    def test_counting_filter_detects_counter_overflow(self):
+        counting = CountingBloomFilter(capacity=10, error_rate=0.1, counter_bits=1)
+        counting.add("repeat-item")
+        with self.assertRaises(OverflowError):
+            counting.add("repeat-item")
 
     def test_cli_build_check_stats_and_benchmark(self):
         tmp_dir = Path(self._testMethodName)
@@ -131,11 +157,106 @@ class BloomFilterTests(unittest.TestCase):
                 child.unlink()
             tmp_dir.rmdir()
 
+    def test_cli_counting_build_remove_and_stats(self):
+        tmp_dir = Path(self._testMethodName)
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            items_file = tmp_dir / "items.txt"
+            filter_file = tmp_dir / "counting_filter.json"
+            items_file.write_text("alpha\nbeta\ngamma\n")
+
+            build_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "build-counting",
+                    "--input",
+                    str(items_file),
+                    "--output",
+                    str(filter_file),
+                    "--capacity",
+                    "10",
+                    "--error-rate",
+                    "0.05",
+                    "--counter-bits",
+                    "8",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            build_data = json.loads(build_result.stdout)
+            self.assertEqual(build_data["variant"], "counting")
+            self.assertEqual(build_data["inserted"], 3)
+
+            remove_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "remove", "--filter", str(filter_file), "beta", "missing"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            remove_data = json.loads(remove_result.stdout)
+            self.assertEqual(remove_data["results"][0]["item"], "beta")
+            self.assertTrue(remove_data["results"][0]["removed"])
+            self.assertFalse(remove_data["results"][1]["removed"])
+
+            stats_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "stats", "--filter", str(filter_file)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            stats_data = json.loads(stats_result.stdout)
+            self.assertEqual(stats_data["variant"], "counting")
+            self.assertEqual(stats_data["inserted_count"], 2)
+            self.assertGreaterEqual(stats_data["non_zero_counters"], 1)
+        finally:
+            for child in tmp_dir.iterdir():
+                child.unlink()
+            tmp_dir.rmdir()
+
+    def test_cli_remove_rejects_standard_filters_cleanly(self):
+        tmp_dir = Path(self._testMethodName)
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            items_file = tmp_dir / "items.txt"
+            filter_file = tmp_dir / "filter.json"
+            items_file.write_text("alpha\nbeta\n")
+            subprocess.run(
+                [sys.executable, str(SCRIPT), "build", "--input", str(items_file), "--output", str(filter_file), "--capacity", "10", "--error-rate", "0.05"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            remove_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "remove", "--filter", str(filter_file), "alpha"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(remove_result.returncode, 2)
+            self.assertIn("counting Bloom filter", remove_result.stderr)
+        finally:
+            for child in tmp_dir.iterdir():
+                child.unlink()
+            tmp_dir.rmdir()
+
     def test_invalid_constructor_arguments(self):
         with self.assertRaises(ValueError):
             BloomFilter(capacity=0, error_rate=0.1)
         with self.assertRaises(ValueError):
             BloomFilter(capacity=10, error_rate=1.5)
+
+
+def load_filter_json(payload: dict):
+    with tempfile.NamedTemporaryFile("w+", suffix=".json", delete=False) as handle:
+        tmp_path = Path(handle.name)
+        handle.write(json.dumps(payload))
+    try:
+        return load_filter(tmp_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 if __name__ == "__main__":
