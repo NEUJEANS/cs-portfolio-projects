@@ -1,7 +1,7 @@
 # flashcard-quiz-app
 
 ## Overview
-Load CSV flashcards and run a command-line study session with reproducible shuffling, focused deck limits, topic-tag filters, optional retry rounds, and persistent JSON study history.
+Load CSV flashcards and run a command-line study session with reproducible shuffling, focused deck limits, topic-tag filters, optional retry rounds, persistent JSON study history, and spaced-repetition recommendations.
 
 ## Stack
 - Python
@@ -17,7 +17,8 @@ Load CSV flashcards and run a command-line study session with reproducible shuff
 - weakest-tag summary based on missed questions in the current run
 - persistent JSON history via `--history-path` to track repeated misses over time
 - historical weakest-card summary via `--show-history-summary`
-- automated tests for validation, filtering, shuffle behavior, retry flow, and history persistence
+- study recommendations via `--show-recommendations` and `--recommend-limit`
+- automated tests for validation, filtering, shuffle behavior, retry flow, history persistence, and recommendation ranking
 
 ## CSV format
 ```csv
@@ -33,7 +34,7 @@ The `tags` column is optional. When present, separate multiple tags with commas.
 ```bash
 python3 flashcards.py cards.csv --seed 7 --limit 5 --retry-incorrect
 python3 flashcards.py cards.csv --tag algorithms --tag graphs --seed 3
-python3 flashcards.py cards.csv --history-path data/history.json --show-history-summary
+python3 flashcards.py cards.csv --history-path data/history.json --show-history-summary --show-recommendations
 ```
 
 Example session output:
@@ -47,6 +48,9 @@ Summary: 1 correct / 2 attempts across 2 unique cards
 Weakest tags: math
 History: 7 correct / 10 attempts across 4 sessions
 Historically weakest cards: 2+2 (3 misses), binary tree (2 misses)
+Recommendations:
+- 2+2: relearn now — fragile memory (3 misses, streak 0)
+- binary tree: review soon — needs reinforcement (2/4 correct overall)
 ```
 
 ## Test
@@ -59,7 +63,7 @@ A history file created with `--history-path` is plain JSON and stores aggregate 
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "sessions_run": 4,
   "total_attempts": 10,
   "total_correct": 7,
@@ -71,7 +75,10 @@ A history file created with `--history-path` is plain JSON and stores aggregate 
       "times_seen": 4,
       "times_correct": 1,
       "times_incorrect": 3,
-      "last_result": "incorrect"
+      "last_result": "incorrect",
+      "streak": 0,
+      "first_seen_at": "2026-04-14T18:00:00Z",
+      "last_seen_at": "2026-04-14T20:00:00Z"
     }
   }
 }
@@ -79,7 +86,15 @@ A history file created with `--history-path` is plain JSON and stores aggregate 
 
 Card history entries are keyed by `prompt + tab + answer` so similarly worded prompts with different answers do not overwrite each other.
 
+## Recommendation model
+The recommendation engine is intentionally lightweight and interview-friendly:
+- cards with recent misses or very low exposure are marked **relearn now**
+- low-accuracy cards are marked **review soon**
+- stable cards are marked **review later**
+- consistently correct cards with strong streaks are marked **space out**
+
+This keeps the project dependency-free while still demonstrating stateful study-planning logic.
+
 ## Future Improvements
 - add import/export support for JSON or Anki-style formats
-- add spaced-repetition scheduling recommendations
 - support merging history across multiple decks

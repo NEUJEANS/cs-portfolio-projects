@@ -1,13 +1,14 @@
-# Flashcard quiz app review pass 3 — 2026-04-14
+# Flashcard Quiz App Review Pass 3
 
 ## Focus
-Docs/test alignment and output clarity.
+Docs and persistence details.
 
 ## Findings
-1. README history JSON example needed to reflect the actual storage key format after the pass-2 fix.
-2. Persistent summary output was more useful with an explicit aggregate accuracy value.
+1. README needed to document the upgraded history schema and the new recommendation model.
+2. The project checklist still showed spaced-repetition recommendations as unfinished.
 
-## Fixes applied
-- Updated the README data-format section to show the composite history key and explain why it exists.
-- Included percentage accuracy in the printed history summary.
-- Re-ran the focused test suite after the doc/code tweaks.
+## Fixes Applied
+- documented `version: 2`, `streak`, `first_seen_at`, and `last_seen_at` in README
+- added recommendation examples and behavior notes to README
+- updated the project checklist to mark the recommendation slice complete
+- confirmed the test command in the README still matches the project layout

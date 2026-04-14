@@ -8,11 +8,13 @@ from unittest.mock import patch
 from flashcards import (
     Card,
     build_history_key,
+    build_recommendations,
     build_session,
     filter_cards,
     load_cards,
     load_history,
     main,
+    print_recommendations,
     quiz,
     run_quiz,
     summarize_history,
@@ -93,6 +95,7 @@ class FlashcardTests(unittest.TestCase):
             history = load_history(Path(tmp) / 'history.json')
         self.assertEqual(history['sessions_run'], 0)
         self.assertEqual(history['cards'], {})
+        self.assertEqual(history['version'], 2)
 
     def test_update_history_tracks_repeat_misses_and_summary(self):
         history = load_history(Path(tempfile.gettempdir()) / 'does-not-exist-history.json')
@@ -103,6 +106,7 @@ class FlashcardTests(unittest.TestCase):
                 {'prompt': '2+2', 'answer': '4', 'tags': ('math',), 'correct': True},
                 {'prompt': 'capital of France', 'answer': 'Paris', 'tags': ('geography',), 'correct': False},
             ],
+            now='2026-04-14T20:06:00Z',
         )
         summary = summarize_history(updated)
         self.assertEqual(updated['sessions_run'], 1)
@@ -111,6 +115,8 @@ class FlashcardTests(unittest.TestCase):
         card_key = build_history_key('2+2', '4')
         self.assertEqual(updated['cards'][card_key]['times_incorrect'], 1)
         self.assertEqual(updated['cards'][card_key]['times_correct'], 1)
+        self.assertEqual(updated['cards'][card_key]['last_seen_at'], '2026-04-14T20:06:00Z')
+        self.assertEqual(updated['cards'][card_key]['first_seen_at'], '2026-04-14T20:06:00Z')
         self.assertEqual(summary['weakest_cards'][0]['prompt'], 'capital of France')
         self.assertEqual(summary['weakest_cards'][1]['prompt'], '2+2')
 
@@ -121,9 +127,81 @@ class FlashcardTests(unittest.TestCase):
                 {'prompt': 'capital', 'answer': 'Paris', 'tags': ('geography',), 'correct': False},
                 {'prompt': 'capital', 'answer': 'Seoul', 'tags': ('geography',), 'correct': True},
             ],
+            now='2026-04-14T20:06:00Z',
         )
         self.assertIn(build_history_key('capital', 'Paris'), updated['cards'])
         self.assertIn(build_history_key('capital', 'Seoul'), updated['cards'])
+
+    def test_build_recommendations_prioritizes_fragile_cards(self):
+        history = {
+            'version': 2,
+            'sessions_run': 4,
+            'total_attempts': 10,
+            'total_correct': 7,
+            'cards': {
+                build_history_key('binary tree', 'node'): {
+                    'prompt': 'binary tree',
+                    'answer': 'node',
+                    'times_seen': 2,
+                    'times_correct': 0,
+                    'times_incorrect': 2,
+                    'last_result': 'incorrect',
+                    'streak': 0,
+                },
+                build_history_key('queue', 'fifo'): {
+                    'prompt': 'queue',
+                    'answer': 'fifo',
+                    'times_seen': 5,
+                    'times_correct': 4,
+                    'times_incorrect': 1,
+                    'last_result': 'correct',
+                    'streak': 2,
+                },
+                build_history_key('hash map', 'dict'): {
+                    'prompt': 'hash map',
+                    'answer': 'dict',
+                    'times_seen': 6,
+                    'times_correct': 6,
+                    'times_incorrect': 0,
+                    'last_result': 'correct',
+                    'streak': 4,
+                },
+            },
+        }
+        recommendations = build_recommendations(history, limit=3)
+        self.assertEqual(recommendations[0]['prompt'], 'binary tree')
+        self.assertEqual(recommendations[0]['action'], 'relearn now')
+        self.assertEqual(recommendations[1]['prompt'], 'queue')
+        self.assertEqual(recommendations[1]['action'], 'review later')
+        self.assertEqual(recommendations[-1]['prompt'], 'hash map')
+        self.assertEqual(recommendations[-1]['action'], 'space out')
+
+    def test_print_recommendations_handles_empty_history(self):
+        stdout = io.StringIO()
+        with patch('sys.stdout', stdout):
+            print_recommendations(load_history(Path(tempfile.gettempdir()) / 'does-not-exist-history.json'))
+        self.assertIn('Recommendations: no history available yet', stdout.getvalue())
+
+    def test_build_recommendations_marks_single_recent_success_for_review_soon(self):
+        history = {
+            'version': 2,
+            'sessions_run': 1,
+            'total_attempts': 1,
+            'total_correct': 1,
+            'cards': {
+                build_history_key('stack', 'lifo'): {
+                    'prompt': 'stack',
+                    'answer': 'lifo',
+                    'times_seen': 1,
+                    'times_correct': 1,
+                    'times_incorrect': 0,
+                    'last_result': 'correct',
+                    'streak': 1,
+                }
+            },
+        }
+        recommendations = build_recommendations(history, limit=1)
+        self.assertEqual(recommendations[0]['action'], 'review soon')
 
     def test_main_supports_tag_filter_and_reports_weakest_tags(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,7 +218,7 @@ class FlashcardTests(unittest.TestCase):
         self.assertIn('Weakest tags: math', output)
         self.assertIn('across 2 unique cards', output)
 
-    def test_main_persists_history_and_prints_history_summary(self):
+    def test_main_persists_history_and_prints_history_summary_and_recommendations(self):
         with tempfile.TemporaryDirectory() as tmp:
             cards_path = Path(tmp) / 'cards.csv'
             history_path = Path(tmp) / 'history.json'
@@ -152,15 +230,20 @@ class FlashcardTests(unittest.TestCase):
                     '--seed', '0',
                     '--history-path', str(history_path),
                     '--show-history-summary',
+                    '--show-recommendations',
+                    '--recommend-limit', '2',
                 ])
 
             history_data = json.loads(history_path.read_text(encoding='utf-8'))
             self.assertEqual(history_data['sessions_run'], 1)
             self.assertEqual(history_data['total_attempts'], 2)
             self.assertEqual(history_data['total_correct'], 1)
+            self.assertEqual(history_data['version'], 2)
             output = stdout.getvalue()
             self.assertIn('History: 1 correct / 2 attempts across 1 sessions (50% accuracy)', output)
             self.assertIn('Historically weakest cards:', output)
+            self.assertIn('Recommendations:', output)
+            self.assertIn('capital of France: relearn now', output)
 
     def test_main_exits_cleanly_for_invalid_csv(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -184,15 +267,25 @@ class FlashcardTests(unittest.TestCase):
         self.assertEqual(cm.exception.code, 2)
         self.assertIn('History file is not valid JSON', stderr.getvalue())
 
-    def test_main_exits_when_history_summary_requested_without_history_path(self):
+    def test_main_exits_when_history_output_requested_without_history_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'cards.csv'
             path.write_text('prompt,answer\n2+2,4\n', encoding='utf-8')
             stderr = io.StringIO()
             with patch('sys.stderr', stderr), self.assertRaises(SystemExit) as cm:
-                main([str(path), '--show-history-summary'])
+                main([str(path), '--show-recommendations'])
         self.assertEqual(cm.exception.code, 2)
-        self.assertIn('--show-history-summary requires --history-path', stderr.getvalue())
+        self.assertIn('--show-recommendations require --history-path', stderr.getvalue())
+
+    def test_main_exits_for_non_positive_recommend_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'cards.csv'
+            path.write_text('prompt,answer\n2+2,4\n', encoding='utf-8')
+            stderr = io.StringIO()
+            with patch('sys.stderr', stderr), self.assertRaises(SystemExit) as cm:
+                main([str(path), '--recommend-limit', '0'])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn('--recommend-limit must be a positive integer', stderr.getvalue())
 
 
 if __name__ == '__main__':

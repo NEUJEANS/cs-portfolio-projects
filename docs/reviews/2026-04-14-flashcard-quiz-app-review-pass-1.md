@@ -1,11 +1,13 @@
-# Flashcard quiz app review pass 1 — 2026-04-14
+# Flashcard Quiz App Review Pass 1
 
 ## Focus
-CLI behavior and persistence ergonomics.
+CLI/API surface for the new recommendation feature.
 
 ## Findings
-1. `--show-history-summary` could be requested without `--history-path`, which would make the flag silently useless.
+1. Added `--show-recommendations` but needed explicit validation for `--recommend-limit` and for missing `--history-path`.
+2. The first draft used a generic error message that was misleading when only one history-output flag was set.
 
-## Fixes applied
-- Added explicit validation so the CLI exits with a clear error when `--show-history-summary` is used without `--history-path`.
-- Added a regression test for that argument combination.
+## Fixes Applied
+- added `--recommend-limit` positive-integer validation
+- made missing-history error messages flag-specific
+- re-ran the unit suite after the parser changes

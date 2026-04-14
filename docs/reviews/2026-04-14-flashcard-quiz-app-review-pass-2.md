@@ -1,12 +1,14 @@
-# Flashcard quiz app review pass 2 — 2026-04-14
+# Flashcard Quiz App Review Pass 2
 
 ## Focus
-History data integrity.
+Recommendation quality and study-flow realism.
 
 ## Findings
-1. History was initially keyed only by prompt, so two cards with the same prompt and different answers could overwrite each other.
+1. Manual smoke testing showed that a card answered correctly once was still labeled `relearn now`, which was too aggressive.
+2. The heuristic needed a clearer distinction between recent failures and low-exposure successes.
 
-## Fixes applied
-- Switched persistent card identity to `prompt + tab + answer`.
-- Preserved human-readable `prompt` and `answer` fields inside each record.
-- Added a targeted test proving same-prompt/different-answer cards remain distinct.
+## Fixes Applied
+- changed recommendation logic so recent misses or zero-correct low-exposure cards become `relearn now`
+- moved first-time successes into `review soon`
+- added a focused unit test for the single-success case
+- repeated the smoke run to verify more intuitive output
