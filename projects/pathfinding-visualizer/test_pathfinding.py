@@ -29,17 +29,28 @@ class PathfindingTests(unittest.TestCase):
         self.assertEqual(result.path[-1], (2, 2))
         self.assertEqual(result.path_cost, 4)
 
-    def test_a_star_prefers_lower_cost_weighted_route(self):
+    def test_dijkstra_matches_astar_weighted_optimal_cost(self):
+        grid = parse_grid([
+            'S...',
+            '....',
+            '....',
+            '.W.E',
+        ])
+        dijkstra_result = shortest_path(grid, algorithm='dijkstra')
+        astar_result = shortest_path(grid, algorithm='astar')
+        self.assertEqual(dijkstra_result.path_cost, 6)
+        self.assertEqual(astar_result.path_cost, 6)
+        self.assertEqual(dijkstra_result.path[-1], astar_result.path[-1])
+        self.assertLess(astar_result.visited_nodes, dijkstra_result.visited_nodes)
+
+    def test_bfs_can_choose_higher_cost_route_on_weighted_map(self):
         grid = parse_grid([
             'SWWE',
             '....',
         ])
         bfs_result = shortest_path(grid, algorithm='bfs')
-        astar_result = shortest_path(grid, algorithm='astar')
         self.assertEqual(len(bfs_result.path) - 1, 3)
         self.assertEqual(bfs_result.path_cost, 7)
-        self.assertEqual(astar_result.path_cost, 5)
-        self.assertGreater(len(astar_result.path), len(bfs_result.path))
 
     def test_no_path_is_reported_cleanly(self):
         grid = parse_grid([
@@ -72,6 +83,22 @@ class PathfindingTests(unittest.TestCase):
         self.assertIn('algorithm: astar', completed.stdout)
         self.assertIn('path_found: yes', completed.stdout)
         self.assertIn('*', completed.stdout)
+
+    def test_cli_accepts_dijkstra_algorithm(self):
+        project_dir = Path(__file__).resolve().parent
+        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as handle:
+            handle.write('SWWE\n....\n')
+            map_path = handle.name
+
+        completed = subprocess.run(
+            [sys.executable, str(project_dir / 'pathfinding.py'), map_path, '--algorithm', 'dijkstra'],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn('algorithm: dijkstra', completed.stdout)
+        self.assertIn('path_cost: 5', completed.stdout)
 
 
 if __name__ == '__main__':

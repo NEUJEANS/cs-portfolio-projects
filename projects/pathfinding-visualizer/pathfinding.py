@@ -114,7 +114,7 @@ def heuristic(a: Coordinate, b: Coordinate) -> int:
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
-def a_star_search(grid: Sequence[str]) -> SearchResult:
+def weighted_shortest_path(grid: Sequence[str], algorithm: str) -> SearchResult:
     start, end = find_points(grid)
     frontier = [(0, 0, start)]
     prev = {start: None}
@@ -129,22 +129,33 @@ def a_star_search(grid: Sequence[str]) -> SearchResult:
 
         if cur == end:
             path = reconstruct_path(prev, end)
-            return SearchResult('astar', path, visited_nodes, path_cost(grid, path))
+            return SearchResult(algorithm, path, visited_nodes, path_cost(grid, path))
 
         for nxt in neighbors(grid, *cur):
             next_cost = current_cost + movement_cost(grid, nxt)
             if next_cost < best_cost.get(nxt, float('inf')):
                 best_cost[nxt] = next_cost
                 prev[nxt] = cur
-                priority = next_cost + heuristic(nxt, end)
+                heuristic_cost = heuristic(nxt, end) if algorithm == 'astar' else 0
+                priority = next_cost + heuristic_cost
                 heapq.heappush(frontier, (priority, next_cost, nxt))
 
-    return SearchResult('astar', None, visited_nodes, None)
+    return SearchResult(algorithm, None, visited_nodes, None)
+
+
+def dijkstra_search(grid: Sequence[str]) -> SearchResult:
+    return weighted_shortest_path(grid, algorithm='dijkstra')
+
+
+def a_star_search(grid: Sequence[str]) -> SearchResult:
+    return weighted_shortest_path(grid, algorithm='astar')
 
 
 def shortest_path(grid: Sequence[str], algorithm: str = 'bfs') -> SearchResult:
     if algorithm == 'bfs':
         return bfs_search(grid)
+    if algorithm == 'dijkstra':
+        return dijkstra_search(grid)
     if algorithm == 'astar':
         return a_star_search(grid)
     raise ValueError(f'unsupported algorithm: {algorithm}')
@@ -176,7 +187,7 @@ def format_result(grid: Sequence[str], result: SearchResult) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='ASCII pathfinding visualizer')
     parser.add_argument('mapfile', help='text file containing S=start, E=end, #=wall, .=floor, W=weighted tile')
-    parser.add_argument('--algorithm', choices=('bfs', 'astar'), default='bfs')
+    parser.add_argument('--algorithm', choices=('bfs', 'dijkstra', 'astar'), default='bfs')
     return parser
 
 
