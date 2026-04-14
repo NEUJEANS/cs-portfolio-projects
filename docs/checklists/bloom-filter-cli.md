@@ -12,5 +12,5 @@
 - [x] add counting Bloom filter variant for delete support
 
 ## Next ideas
-- [ ] add binary export format for larger filters
-- [ ] compare standard vs. counting memory overhead in a small benchmark note
+- [x] add binary export format for larger filters
+- [x] compare standard vs. counting memory overhead in a small benchmark note

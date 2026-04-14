@@ -1,13 +1,12 @@
-# Bloom Filter CLI Review Pass 2
+# bloom-filter-cli review pass 2 — 2026-04-14
 
 ## Focus
-CLI ergonomics and failure paths.
+Behavior consistency across JSON and binary artifacts.
 
-## Issues found
-1. `remove` on a standard Bloom filter would have produced a Python traceback instead of a clean CLI error.
-2. The CLI surface did not include dedicated commands for creating or mutating counting filters.
+## Findings
+1. The main loader needed to auto-detect binary artifacts so existing CLI commands could work unchanged.
+2. `remove` needed to preserve artifact type after mutating a counting filter.
 
-## Fixes applied
-- Added `build-counting` and `remove` subcommands for a full counting-filter workflow.
-- Updated `main()` to convert `ValueError` and `OverflowError` into clean CLI exit messages.
-- Added CLI tests covering counting build/remove/stats flows and the standard-filter rejection case.
+## Fixes made
+- Updated `load_filter` to detect the binary magic header automatically.
+- Updated `remove` to rewrite `.bf` artifacts in binary and JSON files in JSON.

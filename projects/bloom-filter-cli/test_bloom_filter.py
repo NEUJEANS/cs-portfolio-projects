@@ -8,7 +8,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from bloom_filter import BloomFilter, CountingBloomFilter, benchmark_filter, load_filter, save_filter
+from bloom_filter import (
+    BloomFilter,
+    CountingBloomFilter,
+    benchmark_filter,
+    compare_artifact_sizes,
+    load_filter,
+    load_filter_binary,
+    save_filter,
+    save_filter_binary,
+)
 
 
 SCRIPT = ROOT / "bloom_filter.py"
@@ -64,6 +73,20 @@ class BloomFilterTests(unittest.TestCase):
                 child.unlink()
             tmp_dir.rmdir()
 
+    def test_standard_binary_round_trip(self):
+        bloom = BloomFilter(capacity=40, error_rate=0.02)
+        bloom.extend(["alpha", "beta", "gamma", "delta"])
+        with tempfile.NamedTemporaryFile(suffix=".bf", delete=False) as handle:
+            target = Path(handle.name)
+        try:
+            save_filter_binary(target, bloom)
+            restored = load_filter_binary(target)
+            self.assertEqual(restored.to_dict(), bloom.to_dict())
+            self.assertTrue(load_filter(target).might_contain("alpha"))
+        finally:
+            if target.exists():
+                target.unlink()
+
     def test_counting_filter_supports_remove_and_round_trip(self):
         counting = CountingBloomFilter(capacity=30, error_rate=0.05, counter_bits=8)
         counting.extend(["alpha", "beta", "gamma"])
@@ -77,6 +100,20 @@ class BloomFilterTests(unittest.TestCase):
         self.assertEqual(restored.to_dict(), payload)
         self.assertEqual(restored.variant, "counting")
 
+    def test_counting_binary_round_trip(self):
+        counting = CountingBloomFilter(capacity=20, error_rate=0.05, counter_bits=12)
+        counting.extend(["apple", "banana", "banana", "carrot"])
+        with tempfile.NamedTemporaryFile(suffix=".bf", delete=False) as handle:
+            target = Path(handle.name)
+        try:
+            save_filter_binary(target, counting)
+            restored = load_filter_binary(target)
+            self.assertEqual(restored.to_dict(), counting.to_dict())
+            self.assertTrue(load_filter(target).might_contain("banana"))
+        finally:
+            if target.exists():
+                target.unlink()
+
     def test_counting_filter_rejects_invalid_counter_shapes(self):
         with self.assertRaises(ValueError):
             CountingBloomFilter(capacity=10, error_rate=0.1, counter_bits=0)
@@ -88,6 +125,12 @@ class BloomFilterTests(unittest.TestCase):
         counting.add("repeat-item")
         with self.assertRaises(OverflowError):
             counting.add("repeat-item")
+
+    def test_compare_artifact_sizes_reports_counting_overhead(self):
+        result = compare_artifact_sizes(capacity=100, error_rate=0.05, inserted_count=40, counter_bits=8)
+        self.assertGreater(result["standard"]["json_bytes"], result["standard"]["binary_bytes"])
+        self.assertGreater(result["counting"]["json_bytes"], result["counting"]["binary_bytes"])
+        self.assertGreater(result["binary_overhead_ratio_counting_vs_standard"], 1.0)
 
     def test_cli_build_check_stats_and_benchmark(self):
         tmp_dir = Path(self._testMethodName)
@@ -214,6 +257,78 @@ class BloomFilterTests(unittest.TestCase):
             for child in tmp_dir.iterdir():
                 child.unlink()
             tmp_dir.rmdir()
+
+    def test_cli_export_binary_and_inspect(self):
+        tmp_dir = Path(self._testMethodName)
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            items_file = tmp_dir / "items.txt"
+            filter_file = tmp_dir / "filter.json"
+            binary_file = tmp_dir / "filter.bf"
+            items_file.write_text("alpha\nbeta\ngamma\n")
+            subprocess.run(
+                [sys.executable, str(SCRIPT), "build", "--input", str(items_file), "--output", str(filter_file), "--capacity", "10", "--error-rate", "0.05"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            export_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "export-binary", "--filter", str(filter_file), "--output", str(binary_file)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            export_data = json.loads(export_result.stdout)
+            self.assertEqual(export_data["variant"], "standard")
+            self.assertTrue(binary_file.exists())
+
+            inspect_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "inspect-binary", "--filter", str(binary_file)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            inspect_data = json.loads(inspect_result.stdout)
+            self.assertEqual(inspect_data["filter"], str(binary_file))
+            self.assertEqual(inspect_data["inserted_count"], 3)
+
+            check_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", "--filter", str(binary_file), "alpha", "theta"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            check_data = json.loads(check_result.stdout)
+            self.assertTrue(check_data[0]["might_contain"])
+        finally:
+            for child in tmp_dir.iterdir():
+                child.unlink()
+            tmp_dir.rmdir()
+
+    def test_cli_compare_sizes(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "compare-sizes",
+                "--capacity",
+                "100",
+                "--error-rate",
+                "0.05",
+                "--inserted-count",
+                "40",
+                "--counter-bits",
+                "8",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        data = json.loads(result.stdout)
+        self.assertIn("standard", data)
+        self.assertIn("counting", data)
+        self.assertGreater(data["counting"]["binary_bytes"], data["standard"]["binary_bytes"])
 
     def test_cli_remove_rejects_standard_filters_cleanly(self):
         tmp_dir = Path(self._testMethodName)
