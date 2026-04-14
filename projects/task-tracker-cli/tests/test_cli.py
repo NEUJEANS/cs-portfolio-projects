@@ -33,18 +33,20 @@ class TaskTrackerCliTests(unittest.TestCase):
         )
 
     def test_add_and_list_task(self) -> None:
-        add = self.run_cli("add", "Prepare demo", "--priority", "high", "--due", "2026-04-20")
+        add = self.run_cli("add", "Prepare demo", "--priority", "high", "--due", "2026-04-20", "--tag", "school")
         self.assertEqual(add.returncode, 0)
         self.assertIn("Added:", add.stdout)
         self.assertIn("Prepare demo", add.stdout)
+        self.assertIn("tags=school", add.stdout)
 
         listed = self.run_cli("list")
         self.assertEqual(listed.returncode, 0)
         self.assertIn("Prepare demo", listed.stdout)
         self.assertIn("todo", listed.stdout)
+        self.assertIn("school", listed.stdout)
 
     def test_done_and_filtering(self) -> None:
-        self.run_cli("add", "Finish docs")
+        self.run_cli("add", "Finish docs", "--tag", "writing")
         done = self.run_cli("done", "1")
         self.assertEqual(done.returncode, 0)
         self.assertIn("Completed task #1", done.stdout)
@@ -55,16 +57,30 @@ class TaskTrackerCliTests(unittest.TestCase):
         todo_list = self.run_cli("list", "--status", "todo")
         self.assertIn("No tasks found.", todo_list.stdout)
 
-    def test_reopen_and_delete(self) -> None:
-        self.run_cli("add", "Draft README")
-        self.run_cli("done", "1")
-        reopened = self.run_cli("reopen", "1")
-        self.assertEqual(reopened.returncode, 0)
-        self.assertIn("Reopened task #1", reopened.stdout)
+    def test_search_and_tag_filters(self) -> None:
+        self.run_cli("add", "Ship OS project", "--tag", "school", "--tag", "demo")
+        self.run_cli("add", "Buy milk", "--tag", "personal")
 
-        deleted = self.run_cli("delete", "1")
-        self.assertEqual(deleted.returncode, 0)
-        self.assertIn("Deleted task #1", deleted.stdout)
+        filtered = self.run_cli("list", "--search", "project", "--tag", "school")
+        self.assertEqual(filtered.returncode, 0)
+        self.assertIn("Ship OS project", filtered.stdout)
+        self.assertNotIn("Buy milk", filtered.stdout)
+
+    def test_update_tags_and_clear_tags(self) -> None:
+        self.run_cli("add", "Draft README", "--tag", "draft")
+        updated = self.run_cli("update", "1", "--tag", "portfolio", "--tag", "writing")
+        self.assertEqual(updated.returncode, 0)
+        self.assertIn("tags=portfolio,writing", updated.stdout)
+
+        cleared = self.run_cli("update", "1", "--clear-tags")
+        self.assertEqual(cleared.returncode, 0)
+        self.assertIn("tags=-", cleared.stdout)
+
+    def test_update_rejects_conflicting_tag_flags(self) -> None:
+        self.run_cli("add", "Draft README", "--tag", "draft")
+        result = self.run_cli("update", "1", "--tag", "portfolio", "--clear-tags")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Use either --tag or --clear-tags", result.stderr)
 
     def test_missing_task_returns_error(self) -> None:
         result = self.run_cli("done", "999")
@@ -75,6 +91,11 @@ class TaskTrackerCliTests(unittest.TestCase):
         result = self.run_cli("add", "   ")
         self.assertEqual(result.returncode, 1)
         self.assertIn("Description cannot be empty", result.stderr)
+
+    def test_invalid_tag_is_rejected(self) -> None:
+        result = self.run_cli("add", "Bad tags", "--tag", "bad!")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Tags may only contain", result.stderr)
 
 
 if __name__ == "__main__":

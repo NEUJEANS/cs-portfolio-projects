@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Iterable
@@ -25,15 +25,24 @@ class Task:
     due_date: str | None
     created_at: str
     updated_at: str
+    tags: list[str] = field(default_factory=list)
 
     @classmethod
-    def create(cls, task_id: int, description: str, priority: str = "medium", due_date: str | None = None) -> "Task":
+    def create(
+        cls,
+        task_id: int,
+        description: str,
+        priority: str = "medium",
+        due_date: str | None = None,
+        tags: list[str] | None = None,
+    ) -> "Task":
         description = description.strip()
         if not description:
             raise TaskTrackerError("Description cannot be empty.")
 
         validate_priority(priority)
         normalized_due_date = normalize_due_date(due_date)
+        normalized_tags = normalize_tags(tags or [])
         timestamp = utc_now()
         return cls(
             id=task_id,
@@ -43,11 +52,14 @@ class Task:
             due_date=normalized_due_date,
             created_at=timestamp,
             updated_at=timestamp,
+            tags=normalized_tags,
         )
 
     @classmethod
     def from_dict(cls, payload: dict) -> "Task":
-        return cls(**payload)
+        data = dict(payload)
+        data.setdefault("tags", [])
+        return cls(**data)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -76,7 +88,14 @@ class TaskService:
     def __init__(self, storage: TaskStorage) -> None:
         self.storage = storage
 
-    def list_tasks(self, status: str | None = None, priority: str | None = None, sort_by: str = "id") -> list[Task]:
+    def list_tasks(
+        self,
+        status: str | None = None,
+        priority: str | None = None,
+        sort_by: str = "id",
+        search: str | None = None,
+        tags: list[str] | None = None,
+    ) -> list[Task]:
         tasks = self.storage.load()
         if status:
             validate_status(status)
@@ -84,12 +103,28 @@ class TaskService:
         if priority:
             validate_priority(priority)
             tasks = [task for task in tasks if task.priority == priority]
+        if search:
+            needle = search.strip().lower()
+            tasks = [
+                task
+                for task in tasks
+                if needle in task.description.lower() or any(needle in tag.lower() for tag in task.tags)
+            ]
+        normalized_tags = normalize_tags(tags or []) if tags else []
+        if normalized_tags:
+            tasks = [task for task in tasks if all(tag in task.tags for tag in normalized_tags)]
         return sorted(tasks, key=lambda task: sort_key(task, sort_by))
 
-    def add_task(self, description: str, priority: str = "medium", due_date: str | None = None) -> Task:
+    def add_task(
+        self,
+        description: str,
+        priority: str = "medium",
+        due_date: str | None = None,
+        tags: list[str] | None = None,
+    ) -> Task:
         tasks = self.storage.load()
         next_id = max((task.id for task in tasks), default=0) + 1
-        task = Task.create(next_id, description, priority=priority, due_date=due_date)
+        task = Task.create(next_id, description, priority=priority, due_date=due_date, tags=tags)
         tasks.append(task)
         self.storage.save(tasks)
         return task
@@ -101,6 +136,7 @@ class TaskService:
         priority: str | None = None,
         due_date: str | None = None,
         status: str | None = None,
+        tags: list[str] | None = None,
     ) -> Task:
         tasks = self.storage.load()
         task = find_task(tasks, task_id)
@@ -118,6 +154,8 @@ class TaskService:
         if status is not None:
             validate_status(status)
             task.status = status
+        if tags is not None:
+            task.tags = normalize_tags(tags)
 
         task.updated_at = utc_now()
         self.storage.save(tasks)
@@ -136,9 +174,21 @@ class TaskService:
 
     def summary(self) -> dict[str, int]:
         counts = {status: 0 for status in VALID_STATUSES}
+        overdue = 0
+        tagged = 0
+        unique_tags: set[str] = set()
+        today = date.today().strftime(ISO_DATE)
         for task in self.storage.load():
             counts[task.status] += 1
+            if task.status != "done" and task.due_date and task.due_date < today:
+                overdue += 1
+            if task.tags:
+                tagged += 1
+                unique_tags.update(task.tags)
         counts["total"] = sum(counts.values())
+        counts["overdue"] = overdue
+        counts["tagged"] = tagged
+        counts["unique_tags"] = len(unique_tags)
         return counts
 
 
@@ -160,6 +210,24 @@ def normalize_due_date(value: str | None) -> str | None:
         return date.fromisoformat(value).strftime(ISO_DATE)
     except ValueError as exc:
         raise TaskTrackerError("Due date must use YYYY-MM-DD format.") from exc
+
+
+def normalize_tags(tags: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_tag in tags:
+        for part in raw_tag.split(','):
+            tag = part.strip().lower().replace(' ', '-')
+            if not tag:
+                continue
+            if not all(ch.isalnum() or ch in {'-', '_'} for ch in tag):
+                raise TaskTrackerError(
+                    "Tags may only contain letters, numbers, hyphens, and underscores."
+                )
+            if tag not in seen:
+                seen.add(tag)
+                normalized.append(tag)
+    return normalized
 
 
 def validate_priority(priority: str) -> None:
