@@ -1,0 +1,205 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Iterable, List, Sequence
+
+
+@dataclass(frozen=True)
+class SketchConfig:
+    epsilon: float = 0.02
+    delta: float = 0.01
+    seed: int = 0
+
+    @property
+    def width(self) -> int:
+        return max(1, math.ceil(math.e / self.epsilon))
+
+    @property
+    def depth(self) -> int:
+        return max(1, math.ceil(math.log(1 / self.delta)))
+
+
+class CountMinSketch:
+    def __init__(self, epsilon: float = 0.02, delta: float = 0.01, seed: int = 0) -> None:
+        if epsilon <= 0 or delta <= 0 or delta >= 1:
+            raise ValueError('epsilon must be > 0 and delta must be in (0, 1)')
+        self.config = SketchConfig(epsilon=epsilon, delta=delta, seed=seed)
+        self.width = self.config.width
+        self.depth = self.config.depth
+        self.tables: List[List[int]] = [[0] * self.width for _ in range(self.depth)]
+        self.total_count = 0
+        self._observed: Counter[str] = Counter()
+
+    def _index_for(self, item: str, row: int) -> int:
+        payload = f'{self.config.seed}:{row}:{item}'.encode('utf-8')
+        digest = hashlib.blake2b(payload, digest_size=8).digest()
+        return int.from_bytes(digest, 'big') % self.width
+
+    def add(self, item: str, count: int = 1) -> None:
+        if count < 0:
+            raise ValueError('count must be non-negative')
+        if count == 0:
+            return
+        for row in range(self.depth):
+            self.tables[row][self._index_for(item, row)] += count
+        self.total_count += count
+        self._observed[item] += count
+
+    def estimate(self, item: str) -> int:
+        if self.total_count == 0:
+            return 0
+        return min(self.tables[row][self._index_for(item, row)] for row in range(self.depth))
+
+    def merge(self, other: 'CountMinSketch') -> None:
+        if self.width != other.width or self.depth != other.depth or self.config.seed != other.config.seed:
+            raise ValueError('sketches must share width, depth, and seed to merge')
+        for row in range(self.depth):
+            for column in range(self.width):
+                self.tables[row][column] += other.tables[row][column]
+        self.total_count += other.total_count
+        self._observed.update(other._observed)
+
+    def heavy_hitters(self, threshold: int) -> List[Dict[str, int]]:
+        if threshold < 0:
+            raise ValueError('threshold must be non-negative')
+        hitters = []
+        for item in sorted(self._observed):
+            estimate = self.estimate(item)
+            if estimate >= threshold:
+                hitters.append(
+                    {
+                        'item': item,
+                        'estimate': estimate,
+                        'exact_count': self._observed[item],
+                    }
+                )
+        hitters.sort(key=lambda entry: (-entry['estimate'], entry['item']))
+        return hitters
+
+    def error_bound(self) -> float:
+        return self.config.epsilon * self.total_count
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            'epsilon': self.config.epsilon,
+            'delta': self.config.delta,
+            'seed': self.config.seed,
+            'width': self.width,
+            'depth': self.depth,
+            'total_count': self.total_count,
+            'tables': self.tables,
+            'observed': dict(self._observed),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, object]) -> 'CountMinSketch':
+        sketch = cls(
+            epsilon=float(payload['epsilon']),
+            delta=float(payload['delta']),
+            seed=int(payload.get('seed', 0)),
+        )
+        sketch.tables = [list(map(int, row)) for row in payload['tables']]
+        if len(sketch.tables) != sketch.depth or any(len(row) != sketch.width for row in sketch.tables):
+            raise ValueError('serialized table shape does not match epsilon/delta-derived dimensions')
+        sketch.total_count = int(payload['total_count'])
+        sketch._observed = Counter({str(k): int(v) for k, v in dict(payload.get('observed', {})).items()})
+        return sketch
+
+
+def build_sketch(items: Iterable[str], epsilon: float, delta: float, seed: int = 0) -> CountMinSketch:
+    sketch = CountMinSketch(epsilon=epsilon, delta=delta, seed=seed)
+    for item in items:
+        if item:
+            sketch.add(item)
+    return sketch
+
+
+def load_tokens_from_text(text: str) -> List[str]:
+    return [token.strip() for token in text.split() if token.strip()]
+
+
+def load_tokens_from_file(path: Path) -> List[str]:
+    return load_tokens_from_text(path.read_text(encoding='utf-8'))
+
+
+def save_sketch(path: Path, sketch: CountMinSketch) -> None:
+    path.write_text(json.dumps(sketch.to_dict(), indent=2), encoding='utf-8')
+
+
+def load_sketch(path: Path) -> CountMinSketch:
+    return CountMinSketch.from_dict(json.loads(path.read_text(encoding='utf-8')))
+
+
+def create_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='Count-Min Sketch lab for approximate stream frequencies.')
+    parser.add_argument('--epsilon', type=float, default=0.02)
+    parser.add_argument('--delta', type=float, default=0.01)
+    parser.add_argument('--seed', type=int, default=0)
+
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    build_parser = subparsers.add_parser('build', help='Build a sketch from a text file of whitespace-separated tokens.')
+    build_parser.add_argument('input', type=Path)
+    build_parser.add_argument('--output', type=Path, required=True)
+
+    estimate_parser = subparsers.add_parser('estimate', help='Estimate one or more token frequencies.')
+    estimate_parser.add_argument('sketch', type=Path)
+    estimate_parser.add_argument('items', nargs='+')
+
+    hitters_parser = subparsers.add_parser('heavy-hitters', help='Report items whose estimated count passes a threshold.')
+    hitters_parser.add_argument('sketch', type=Path)
+    hitters_parser.add_argument('--threshold', type=int, required=True)
+
+    merge_parser = subparsers.add_parser('merge', help='Merge two compatible sketches.')
+    merge_parser.add_argument('left', type=Path)
+    merge_parser.add_argument('right', type=Path)
+    merge_parser.add_argument('--output', type=Path, required=True)
+
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = create_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == 'build':
+        sketch = build_sketch(load_tokens_from_file(args.input), epsilon=args.epsilon, delta=args.delta, seed=args.seed)
+        save_sketch(args.output, sketch)
+        print(json.dumps({'output': str(args.output), 'total_count': sketch.total_count, 'width': sketch.width, 'depth': sketch.depth}, indent=2))
+        return 0
+
+    if args.command == 'estimate':
+        sketch = load_sketch(args.sketch)
+        result = {
+            'total_count': sketch.total_count,
+            'error_bound': sketch.error_bound(),
+            'estimates': {item: sketch.estimate(item) for item in args.items},
+        }
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == 'heavy-hitters':
+        sketch = load_sketch(args.sketch)
+        print(json.dumps({'threshold': args.threshold, 'heavy_hitters': sketch.heavy_hitters(args.threshold)}, indent=2))
+        return 0
+
+    if args.command == 'merge':
+        left = load_sketch(args.left)
+        right = load_sketch(args.right)
+        left.merge(right)
+        save_sketch(args.output, left)
+        print(json.dumps({'output': str(args.output), 'total_count': left.total_count}, indent=2))
+        return 0
+
+    parser.error('Unknown command')
+    return 2
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

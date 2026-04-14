@@ -1,0 +1,69 @@
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from count_min_sketch_lab import CountMinSketch, build_sketch, load_sketch, save_sketch
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+SCRIPT = PROJECT_ROOT / 'count_min_sketch_lab.py'
+
+
+def test_estimates_do_not_underestimate_exact_counts():
+    sketch = build_sketch(['apple', 'banana', 'apple', 'carrot', 'apple', 'banana'], epsilon=0.05, delta=0.01)
+    assert sketch.estimate('apple') >= 3
+    assert sketch.estimate('banana') >= 2
+    assert sketch.estimate('missing') == 0
+
+
+def test_merge_combines_tables_and_observed_items():
+    left = build_sketch(['a', 'b', 'a'], epsilon=0.05, delta=0.01, seed=11)
+    right = build_sketch(['b', 'c'], epsilon=0.05, delta=0.01, seed=11)
+    left.merge(right)
+    assert left.total_count == 5
+    assert left.estimate('a') >= 2
+    assert left.estimate('b') >= 2
+    assert {entry['item'] for entry in left.heavy_hitters(2)} == {'a', 'b'}
+
+
+def test_merge_rejects_incompatible_sketches():
+    left = build_sketch(['a'], epsilon=0.05, delta=0.01, seed=1)
+    right = build_sketch(['a'], epsilon=0.02, delta=0.01, seed=1)
+    with pytest.raises(ValueError):
+        left.merge(right)
+
+
+def test_round_trip_json_serialization(tmp_path: Path):
+    sketch = build_sketch(['alpha', 'beta', 'alpha'], epsilon=0.05, delta=0.01, seed=3)
+    output = tmp_path / 'sketch.json'
+    save_sketch(output, sketch)
+    loaded = load_sketch(output)
+    assert loaded.total_count == 3
+    assert loaded.estimate('alpha') == sketch.estimate('alpha')
+    assert loaded.heavy_hitters(2)[0]['item'] == 'alpha'
+
+
+def test_cli_build_estimate_and_heavy_hitters(tmp_path: Path):
+    tokens = tmp_path / 'tokens.txt'
+    tokens.write_text('red blue red green red blue', encoding='utf-8')
+    sketch_file = tmp_path / 'cms.json'
+
+    subprocess.run([sys.executable, str(SCRIPT), '--epsilon', '0.05', '--delta', '0.01', 'build', str(tokens), '--output', str(sketch_file)], check=True)
+    estimate = subprocess.run([sys.executable, str(SCRIPT), 'estimate', str(sketch_file), 'red', 'blue'], check=True, capture_output=True, text=True)
+    payload = json.loads(estimate.stdout)
+    assert payload['estimates']['red'] >= 3
+    hitters = subprocess.run([sys.executable, str(SCRIPT), 'heavy-hitters', str(sketch_file), '--threshold', '2'], check=True, capture_output=True, text=True)
+    hitters_payload = json.loads(hitters.stdout)
+    assert hitters_payload['heavy_hitters'][0]['item'] == 'red'
+
+
+def test_error_bound_tracks_total_count_growth():
+    sketch = CountMinSketch(epsilon=0.1, delta=0.05)
+    for _ in range(10):
+        sketch.add('stream')
+    assert sketch.error_bound() == pytest.approx(1.0)
