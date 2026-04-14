@@ -35,11 +35,15 @@ class Store:
                 'url TEXT NOT NULL UNIQUE, '
                 'created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
                 'clicks INTEGER NOT NULL DEFAULT 0, '
-                'last_accessed_at TEXT'
+                'last_accessed_at TEXT, '
+                'expires_at TEXT, '
+                'deleted_at TEXT'
                 ')'
             )
             self._ensure_column(conn, 'clicks', 'INTEGER NOT NULL DEFAULT 0')
             self._ensure_column(conn, 'last_accessed_at', 'TEXT')
+            self._ensure_column(conn, 'expires_at', 'TEXT')
+            self._ensure_column(conn, 'deleted_at', 'TEXT')
             conn.commit()
 
     def _ensure_column(self, conn, column_name, definition):
@@ -54,10 +58,21 @@ class Store:
         seed = url if attempt == 0 else f'{url}:{attempt}'
         return hashlib.sha256(seed.encode('utf-8')).hexdigest()[:length]
 
-    def shorten(self, url, custom_code=None):
+    def _current_timestamp(self, conn):
+        return conn.execute('SELECT CURRENT_TIMESTAMP').fetchone()[0]
+
+    def _status_from_row(self, row, now):
+        if row['deleted_at'] is not None:
+            return 'deleted'
+        if row['expires_at'] is not None and row['expires_at'] <= now:
+            return 'expired'
+        return 'active'
+
+    def shorten(self, url, custom_code=None, expires_in_seconds=None):
         normalized_url = validate_url(url)
         if custom_code is not None:
             custom_code = validate_custom_code(custom_code)
+        expiry_seconds = validate_expiry_seconds(expires_in_seconds)
 
         with closing(self._connect()) as conn:
             existing_for_url = conn.execute(
@@ -77,10 +92,7 @@ class Store:
                 ).fetchone()
                 if existing_for_code and existing_for_code['url'] != normalized_url:
                     raise ValueError('custom code is already in use')
-                conn.execute(
-                    'INSERT INTO links(code, url) VALUES (?, ?)',
-                    (custom_code, normalized_url),
-                )
+                self._insert_link(conn, custom_code, normalized_url, expiry_seconds)
                 conn.commit()
                 return custom_code
 
@@ -89,22 +101,35 @@ class Store:
                 code = self._candidate_code(normalized_url, attempt)
                 row = conn.execute('SELECT url FROM links WHERE code = ?', (code,)).fetchone()
                 if row is None:
-                    conn.execute('INSERT INTO links(code, url) VALUES (?, ?)', (code, normalized_url))
+                    self._insert_link(conn, code, normalized_url, expiry_seconds)
                     conn.commit()
                     return code
                 if row['url'] == normalized_url:
                     return code
                 attempt += 1
 
+    def _insert_link(self, conn, code, url, expiry_seconds):
+        if expiry_seconds is None:
+            conn.execute('INSERT INTO links(code, url) VALUES (?, ?)', (code, url))
+            return
+        conn.execute(
+            "INSERT INTO links(code, url, expires_at) VALUES (?, ?, datetime(CURRENT_TIMESTAMP, ?))",
+            (code, url, f'+{expiry_seconds} seconds'),
+        )
+
     def resolve(self, code, record_click=False):
         with closing(self._connect()) as conn:
             row = conn.execute(
-                'SELECT code, url, clicks, created_at, last_accessed_at FROM links WHERE code = ?',
+                'SELECT code, url, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                'FROM links WHERE code = ?',
                 (code,),
             ).fetchone()
             if not row:
                 return None
-            if record_click:
+
+            current_time = self._current_timestamp(conn)
+            status = self._status_from_row(row, now=current_time)
+            if record_click and status == 'active':
                 conn.execute(
                     'UPDATE links '
                     'SET clicks = clicks + 1, last_accessed_at = CURRENT_TIMESTAMP '
@@ -113,29 +138,64 @@ class Store:
                 )
                 conn.commit()
                 row = conn.execute(
-                    'SELECT code, url, clicks, created_at, last_accessed_at FROM links WHERE code = ?',
+                    'SELECT code, url, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                    'FROM links WHERE code = ?',
                     (code,),
                 ).fetchone()
-            return dict(row)
+                current_time = self._current_timestamp(conn)
+                status = self._status_from_row(row, now=current_time)
+
+            payload = dict(row)
+            payload['status'] = status
+            return payload
+
+    def delete_link(self, code):
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                'SELECT code, url, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                'FROM links WHERE code = ?',
+                (code,),
+            ).fetchone()
+            if not row:
+                return None
+            if row['deleted_at'] is None:
+                conn.execute(
+                    'UPDATE links SET deleted_at = CURRENT_TIMESTAMP WHERE code = ?',
+                    (code,),
+                )
+                conn.commit()
+            return self.get_link_info(code)
 
     def stats(self):
         with closing(self._connect()) as conn:
             row = conn.execute(
-                'SELECT COUNT(*) AS link_count, COALESCE(SUM(clicks), 0) AS total_clicks FROM links'
+                'SELECT '
+                'COUNT(*) AS link_count, '
+                'COALESCE(SUM(clicks), 0) AS total_clicks, '
+                "SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END) AS deleted_count, "
+                "SUM(CASE WHEN deleted_at IS NULL AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS expired_count, "
+                "SUM(CASE WHEN deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) THEN 1 ELSE 0 END) AS active_count "
+                'FROM links'
             ).fetchone()
+            current_time = self._current_timestamp(conn)
             top_links = [
                 {
                     'code': link['code'],
                     'url': link['url'],
                     'clicks': link['clicks'],
+                    'status': self._status_from_row(link, now=current_time),
+                    'expires_at': link['expires_at'],
                 }
                 for link in conn.execute(
-                    'SELECT code, url, clicks FROM links '
+                    'SELECT code, url, clicks, expires_at, deleted_at FROM links '
                     'ORDER BY clicks DESC, code ASC LIMIT 5'
                 ).fetchall()
             ]
             return {
                 'link_count': row['link_count'],
+                'active_count': row['active_count'] or 0,
+                'expired_count': row['expired_count'] or 0,
+                'deleted_count': row['deleted_count'] or 0,
                 'total_clicks': row['total_clicks'],
                 'top_links': top_links,
             }
@@ -172,9 +232,19 @@ def validate_custom_code(code):
     return candidate
 
 
+def validate_expiry_seconds(value):
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError('expires_in_seconds must be an integer')
+    if value <= 0:
+        raise ValueError('expires_in_seconds must be greater than zero')
+    return value
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     store = None
-    server_version = 'UrlShortener/1.1'
+    server_version = 'UrlShortener/1.2'
 
     def _send_json(self, status_code, payload, headers=None):
         body = json.dumps(payload).encode('utf-8')
@@ -214,7 +284,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ValueError('JSON body must include url')
             normalized_url = validate_url(payload['url'])
             custom_code = payload.get('code')
-            code = self.store.shorten(normalized_url, custom_code=custom_code)
+            expires_in_seconds = payload.get('expires_in_seconds')
+            code = self.store.shorten(
+                normalized_url,
+                custom_code=custom_code,
+                expires_in_seconds=expires_in_seconds,
+            )
             info = self.store.get_link_info(code)
         except ValueError as exc:
             self._send_json(400, {'error': str(exc)})
@@ -226,6 +301,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             'short_url': f'http://{host}/{code}',
             'url': normalized_url,
             'clicks': info['clicks'],
+            'status': info['status'],
+            'expires_at': info['expires_at'],
         }
         self._send_json(201, body)
 
@@ -260,6 +337,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not info:
             self._send_json(404, {'error': 'short code not found'})
             return
+        if info['status'] == 'expired':
+            self._send_json(410, {'error': 'short code has expired', 'code': code, 'status': 'expired'})
+            return
+        if info['status'] == 'deleted':
+            self._send_json(410, {'error': 'short code has been deleted', 'code': code, 'status': 'deleted'})
+            return
         self.send_response(302)
         self.send_header('Location', info['url'])
         self.send_header('Content-Length', '0')
@@ -272,10 +355,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json(404, {'error': 'not found'})
 
     def do_DELETE(self):
-        if _request_path(self.path) == '/shorten':
+        request_path = _request_path(self.path)
+        if request_path == '/shorten':
             self._send_method_not_allowed('POST')
-        else:
-            self._send_json(404, {'error': 'not found'})
+            return
+        if request_path.startswith('/links/'):
+            code = request_path.removeprefix('/links/').strip('/')
+            if not code:
+                self._send_json(404, {'error': 'not found'})
+                return
+            info = self.store.delete_link(code)
+            if not info:
+                self._send_json(404, {'error': 'short code not found'})
+                return
+            self._send_json(200, {'deleted': True, 'link': info})
+            return
+        self._send_json(404, {'error': 'not found'})
 
     def log_message(self, format, *args):
         return

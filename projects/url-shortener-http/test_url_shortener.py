@@ -1,12 +1,19 @@
 import json
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-from url_shortener import Store, build_server, validate_custom_code, validate_url
+from url_shortener import (
+    Store,
+    build_server,
+    validate_custom_code,
+    validate_expiry_seconds,
+    validate_url,
+)
 
 
 class UrlShortenerStoreTests(unittest.TestCase):
@@ -19,6 +26,7 @@ class UrlShortenerStoreTests(unittest.TestCase):
             self.assertEqual(code_a, code_b)
             info = store.resolve(code_a)
             self.assertEqual(info['url'], 'https://example.com/docs')
+            self.assertEqual(info['status'], 'active')
             self.assertEqual(store.stats()['link_count'], 1)
 
     def test_store_handles_code_collision_by_retrying(self):
@@ -56,6 +64,7 @@ class UrlShortenerStoreTests(unittest.TestCase):
             stats = store.stats()
             self.assertEqual(stats['total_clicks'], 2)
             self.assertEqual(stats['top_links'][0]['code'], 'portfolio')
+            self.assertEqual(stats['active_count'], 1)
 
     def test_store_rejects_conflicting_custom_code_requests(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -68,6 +77,26 @@ class UrlShortenerStoreTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, 'already shortened'):
                 store.shorten('https://example.com/a', custom_code='beta')
+
+    def test_store_marks_expired_and_deleted_links_in_stateful_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'shortener.db'
+            store = Store(db)
+            expiring = store.shorten('https://example.com/expiring', custom_code='expiring', expires_in_seconds=1)
+            removed = store.shorten('https://example.com/remove-me', custom_code='remove-me')
+
+            time.sleep(1.2)
+            expired_info = store.get_link_info(expiring)
+            deleted_info = store.delete_link(removed)
+            stats = store.stats()
+
+            self.assertEqual(expired_info['status'], 'expired')
+            self.assertIsNotNone(expired_info['expires_at'])
+            self.assertEqual(deleted_info['status'], 'deleted')
+            self.assertIsNotNone(deleted_info['deleted_at'])
+            self.assertEqual(stats['expired_count'], 1)
+            self.assertEqual(stats['deleted_count'], 1)
+            self.assertEqual(stats['active_count'], 0)
 
 
 class UrlValidationTests(unittest.TestCase):
@@ -85,6 +114,12 @@ class UrlValidationTests(unittest.TestCase):
         for bad in ['', 'ab', 'with space', 'shorten', None]:
             with self.assertRaises(ValueError):
                 validate_custom_code(bad)
+
+    def test_validate_expiry_seconds_rejects_invalid_values(self):
+        self.assertEqual(validate_expiry_seconds(30), 30)
+        for bad in [0, -1, '60', False]:
+            with self.assertRaises(ValueError):
+                validate_expiry_seconds(bad)
 
 
 class UrlShortenerHttpTests(unittest.TestCase):
@@ -126,6 +161,7 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(payload['service'], 'url-shortener-http')
         self.assertEqual(payload['stats']['link_count'], 0)
         self.assertEqual(payload['stats']['total_clicks'], 0)
+        self.assertEqual(payload['stats']['active_count'], 0)
 
     def test_post_shorten_returns_created_payload_and_redirect_updates_stats(self):
         status, _, body = self._request(
@@ -137,6 +173,8 @@ class UrlShortenerHttpTests(unittest.TestCase):
         payload = json.loads(body.decode('utf-8'))
         self.assertEqual(payload['code'], 'coursework')
         self.assertEqual(payload['clicks'], 0)
+        self.assertEqual(payload['status'], 'active')
+        self.assertIsNone(payload['expires_at'])
         self.assertTrue(payload['short_url'].endswith('/coursework'))
 
         status, headers, body = self._request('/coursework?from=test')
@@ -148,6 +186,7 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         info = json.loads(body.decode('utf-8'))
         self.assertEqual(info['clicks'], 1)
+        self.assertEqual(info['status'], 'active')
         self.assertIsNotNone(info['last_accessed_at'])
 
         status, _, body = self._request('/stats')
@@ -155,6 +194,41 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(stats['total_clicks'], 1)
         self.assertEqual(stats['top_links'][0]['code'], 'coursework')
+
+    def test_expired_and_deleted_links_return_gone_and_metadata(self):
+        status, _, body = self._request(
+            '/shorten',
+            method='POST',
+            payload={'url': 'https://example.com/temp', 'code': 'temp123', 'expires_in_seconds': 1},
+        )
+        self.assertEqual(status, 201)
+        payload = json.loads(body.decode('utf-8'))
+        self.assertIsNotNone(payload['expires_at'])
+
+        time.sleep(1.2)
+        status, _, body = self._request('/temp123')
+        self.assertEqual(status, 410)
+        self.assertIn('expired', body.decode('utf-8'))
+
+        status, _, body = self._request('/links/temp123')
+        info = json.loads(body.decode('utf-8'))
+        self.assertEqual(status, 200)
+        self.assertEqual(info['status'], 'expired')
+
+        self._request(
+            '/shorten',
+            method='POST',
+            payload={'url': 'https://example.com/delete', 'code': 'delete-me'},
+        )
+        status, _, body = self._request('/links/delete-me', method='DELETE')
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode('utf-8'))
+        self.assertTrue(payload['deleted'])
+        self.assertEqual(payload['link']['status'], 'deleted')
+
+        status, _, body = self._request('/delete-me')
+        self.assertEqual(status, 410)
+        self.assertIn('deleted', body.decode('utf-8'))
 
     def test_post_shorten_rejects_invalid_json_invalid_urls_and_bad_custom_codes(self):
         status, _, body = self._request('/shorten', method='POST', raw_data=b'{bad json')
@@ -169,6 +243,14 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('3-32 chars', body.decode('utf-8'))
 
+        status, _, body = self._request(
+            '/shorten',
+            method='POST',
+            payload={'url': 'https://example.com', 'expires_in_seconds': 0},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn('greater than zero', body.decode('utf-8'))
+
     def test_route_specific_method_not_allowed_and_missing_codes(self):
         status, headers, body = self._request('/shorten')
         self.assertEqual(status, 405)
@@ -180,6 +262,10 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertIn('short code not found', body.decode('utf-8'))
 
         status, _, body = self._request('/links/missing-code')
+        self.assertEqual(status, 404)
+        self.assertIn('short code not found', body.decode('utf-8'))
+
+        status, _, body = self._request('/links/missing-code', method='DELETE')
         self.assertEqual(status, 404)
         self.assertIn('short code not found', body.decode('utf-8'))
 
