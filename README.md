@@ -51,6 +51,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `b-tree-index-lab`
 - [x] `lsm-tree-kv`
 - [x] `stack-vm-lab`
+- [x] `segment-tree-range-query-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.
