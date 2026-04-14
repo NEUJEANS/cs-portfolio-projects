@@ -1,0 +1,15 @@
+# file-organizer-cli Checklist
+
+- [x] review current scope and identify weakest areas
+- [x] do quick research on safer file move behavior
+- [x] refresh Node CLI / fs move patterns and self-test
+- [x] add dry-run support
+- [x] add collision-safe naming
+- [x] add recursive organization option
+- [x] add cross-device move fallback
+- [x] expand tests for edge cases
+- [x] improve README with stronger portfolio framing
+- [x] run tests
+- [x] complete 3 review passes and fix issues found
+- [x] run secret scan before push
+- [x] commit and push
