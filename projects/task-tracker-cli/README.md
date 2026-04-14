@@ -1,50 +1,35 @@
 # task-tracker-cli
 
-A polished Python command-line task tracker that demonstrates practical CS portfolio skills: CLI design, persistence, validation, sorting, metadata modeling, export workflows, and test coverage.
+A small but polished command-line task manager for portfolio use.
 
-## Why this project matters
-- demonstrates command-line UX with multiple subcommands
-- shows JSON-backed persistence and data modeling
-- includes validation for status, priority, due dates, and tag metadata
-- exports filtered task views to CSV or Markdown for reports and integrations
-- supports automated tests and review-driven iteration
-- leaves a clear extension path for packaging and richer terminal UX
+## Why it belongs in a CS portfolio
+- demonstrates CLI design with subcommands and validation
+- persists structured state to disk without external dependencies
+- includes filtered views, status transitions, summaries, and automated tests
+- leaves room for future upgrades like tags, due dates, or recurring tasks
 
 ## Features
-- add tasks with description, priority, optional due date, and repeatable tags
-- list tasks with filtering by status, priority, keyword search, and required tags
-- update task fields after creation, including replacing or clearing tags
-- move tasks into `in-progress`, `done`, or back to `todo`
-- print a summary report with overdue and tag coverage metrics
-- export filtered tasks to CSV or Markdown, either to stdout or a file
-- delete tasks cleanly
-- persist tasks to a local JSON file
+- add, rename, delete, and list tasks
+- mark tasks as `todo`, `in-progress`, or `done`
+- JSON persistence via `--db`
+- summary view for quick status counts
+- test suite covering happy paths and failure cases
 
-## Quick start
+## Run locally
 ```bash
-python3 -m task_tracker --help
-python3 -m task_tracker --db tasks.json add "Ship portfolio MVP" --priority high --due 2026-04-20 --tag school --tag demo
-python3 -m task_tracker --db tasks.json list --sort-by priority --tag demo
-python3 -m task_tracker --db tasks.json list --search portfolio --json
-python3 -m task_tracker --db tasks.json update 1 --tag school --tag backend
-python3 -m task_tracker --db tasks.json export --format csv --output tasks.csv
-python3 -m task_tracker --db tasks.json export --format markdown --status todo --tag demo
-python3 -m task_tracker --db tasks.json start 1
-python3 -m task_tracker --db tasks.json done 1
-python3 -m task_tracker --db tasks.json summary --json
+cd projects/task-tracker-cli
+python -m pip install -e .
+python -m pytest
+
+task-tracker --db demo.json add "Build portfolio project"
+task-tracker --db demo.json mark 1 in-progress
+task-tracker --db demo.json list
 ```
 
-## Development
+## Example
 ```bash
-python3 -m unittest discover -s tests -v
+task-tracker --db demo.json add "Study graphs"
+task-tracker --db demo.json add "Ship CLI"
+task-tracker --db demo.json mark 2 done
+task-tracker --db demo.json summary
 ```
-
-## Project structure
-- `src/task_tracker/` - packaged implementation used by tests and CLI entry points
-- `tests/` - unit and CLI smoke tests
-- `data/` - local JSON storage when running with the default path
-
-## Next extensions
-- colored terminal output
-- packaging for `pipx` installation
-- recurring tasks or reminders

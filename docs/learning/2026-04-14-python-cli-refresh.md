@@ -1,17 +1,20 @@
-# Python CLI / JSON Refresh
+# Python CLI refresh + self-test
 
 Date: 2026-04-14
+Project: task-tracker-cli
 
-## Refresher
-- `argparse.ArgumentParser()` + `add_subparsers(dest=...)` is the clean pattern for command-based CLIs.
-- `choices=` is useful for bounded inputs like status and priority.
-- JSON persistence should be wrapped behind a storage layer instead of mixing file I/O into command handlers.
-- Date validation is easier at the edge: accept `YYYY-MM-DD`, normalize once, store as strings.
+## Refresher focus
+- `argparse` subparsers for multi-command CLIs
+- `dataclass` for structured task records
+- simple JSON file persistence via `pathlib`
+- pytest fixtures with temporary directories
 
-## Self-test
-1. How should a multi-command CLI be organized?  
-   **Answer:** With subparsers and one handler per command.
-2. Where should JSON file reads/writes live?  
-   **Answer:** In a storage abstraction, not spread across CLI handlers.
-3. Why keep portfolio projects stdlib-first when possible?  
-   **Answer:** Easier setup, lower friction for reviewers, fewer environment issues.
+## Quick self-test
+1. How do you share a global `--db` option across subcommands?
+   - add it on the top-level parser before creating subparsers
+2. What is the simplest durable storage choice for a first CLI slice?
+   - a JSON file with explicit schema and tests
+3. How do you keep tests isolated from user state?
+   - use pytest `tmp_path` and pass `--db` explicitly
+4. When should the CLI exit non-zero?
+   - on invalid operations like referencing a missing task

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "task-tracker-cli"
+version = "0.1.0"
+description = "A portfolio-ready command-line task tracker with JSON persistence, filtering, and summaries."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "OpenClaw" }]
+dependencies = []
+
+[project.scripts]
+task-tracker = "task_tracker_cli.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
