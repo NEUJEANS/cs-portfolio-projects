@@ -16,7 +16,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- `c9ac9b8` — Add disk scheduler lab project
+- `8943c68` — Add disk scheduler lab project
 
 ## Next step
 - add LOOK/C-LOOK variants or request-arrival-time simulation to deepen the OS scheduling story
