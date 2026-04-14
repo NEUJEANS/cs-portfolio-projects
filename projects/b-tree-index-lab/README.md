@@ -13,6 +13,7 @@ A compact B-tree indexing project that demonstrates top-down node splitting, sor
 - insert/search with duplicate-key updates
 - sorted traversal of all key/value pairs
 - inclusive range queries for index-style lookups
+- nearest-key navigation with floor/ceil and neighbor lookups
 - deletion with predecessor/successor replacement and borrow/merge rebalancing
 - JSON CLI output for demos and scripting
 
@@ -21,6 +22,9 @@ A compact B-tree indexing project that demonstrates top-down node splitting, sor
 python3 btree_index.py --dataset sample_records.json dump
 python3 btree_index.py --dataset sample_records.json search 17
 python3 btree_index.py --dataset sample_records.json --json range 10 30
+python3 btree_index.py --dataset sample_records.json --json neighbors 16
+python3 btree_index.py --dataset sample_records.json --json floor 16
+python3 btree_index.py --dataset sample_records.json --json ceil 16
 python3 btree_index.py --dataset sample_records.json --json delete 17
 ```
 

@@ -1,11 +1,10 @@
 # b-tree-index-lab Checklist
 
-- [x] brief B-tree/indexing research recorded
-- [x] short Python data-structure refresh and self-test recorded
-- [x] scaffold project files and README
-- [x] implement configurable B-tree insertion, search, traversal, and stats
-- [x] add range-query and bulk-load style CLI support
-- [x] add automated tests for splits, duplicate updates, ordering, and CLI JSON output
-- [x] add deletion with predecessor/successor replacement plus borrow/merge rebalancing
-- [x] add CLI deletion output and regression tests for root shrinking and missing-key deletes
-- [ ] add on-disk page serialization in a future slice
+- [x] brief B-tree indexing research/refresh recorded
+- [x] short Python `bisect` and tree-navigation self-test recorded
+- [x] review current feature gaps against index-style workloads
+- [x] implement nearest-key navigation helpers (`floor`, `ceil`, `neighbors`)
+- [x] expose new commands in the CLI with JSON-friendly output
+- [x] add automated tests for exact hit, gap lookup, edge cases, and CLI output
+- [x] run at least 3 review passes and fix issues found
+- [ ] future slice: bulk loading from sorted records or on-disk page serialization

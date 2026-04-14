@@ -238,6 +238,38 @@ class BTreeIndex:
             if (start is None or item["key"] >= start) and (end is None or item["key"] <= end)
         ]
 
+    def floor_item(self, key: int) -> dict[str, str | int] | None:
+        return self._extreme_bound_item(key, want_floor=True)
+
+    def ceil_item(self, key: int) -> dict[str, str | int] | None:
+        return self._extreme_bound_item(key, want_floor=False)
+
+    def neighbors(self, key: int) -> dict[str, dict[str, str | int] | None]:
+        return {
+            "key": key,
+            "floor": self.floor_item(key),
+            "ceil": self.ceil_item(key),
+        }
+
+    def _extreme_bound_item(self, key: int, want_floor: bool) -> dict[str, str | int] | None:
+        node = self.root
+        candidate: dict[str, str | int] | None = None
+
+        while True:
+            index = bisect_left(node.keys, key)
+            if index < len(node.keys) and node.keys[index] == key:
+                return {"key": node.keys[index], "value": node.values[index]}
+
+            if want_floor and index > 0:
+                candidate = {"key": node.keys[index - 1], "value": node.values[index - 1]}
+            elif not want_floor and index < len(node.keys):
+                candidate = {"key": node.keys[index], "value": node.values[index]}
+
+            if node.leaf:
+                return candidate
+
+            node = node.children[index]
+
     def height(self) -> int:
         height = 1
         node = self.root
@@ -274,7 +306,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset", type=Path, help="JSON file of [{\"key\": int, \"value\": str}] records")
     parser.add_argument("--degree", type=int, default=2, help="Minimum B-tree degree (default: 2)")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
-    parser.add_argument("command", nargs="*", help="search KEY | range START END | delete KEY | stats | dump")
+    parser.add_argument("command", nargs="*", help="search KEY | range START END | floor KEY | ceil KEY | neighbors KEY | delete KEY | stats | dump")
     return parser
 
 
@@ -298,6 +330,21 @@ def _run_command(tree: BTreeIndex, command: Sequence[str]) -> dict[str, object]:
             raise ValueError("delete requires exactly 1 key")
         key = int(command[1])
         return {"key": key, "deleted": tree.delete(key), "items": tree.items(), "stats": tree.stats()}
+    if action == "floor":
+        if len(command) != 2:
+            raise ValueError("floor requires exactly 1 key")
+        key = int(command[1])
+        return {"key": key, "item": tree.floor_item(key)}
+    if action == "ceil":
+        if len(command) != 2:
+            raise ValueError("ceil requires exactly 1 key")
+        key = int(command[1])
+        return {"key": key, "item": tree.ceil_item(key)}
+    if action == "neighbors":
+        if len(command) != 2:
+            raise ValueError("neighbors requires exactly 1 key")
+        key = int(command[1])
+        return tree.neighbors(key)
     if action == "stats":
         return {"stats": tree.stats()}
     raise ValueError(f"unsupported command: {action}")

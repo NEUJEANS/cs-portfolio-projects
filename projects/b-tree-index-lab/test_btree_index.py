@@ -69,6 +69,32 @@ class BTreeIndexTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tree.range_query(9, 4)
 
+    def test_floor_and_ceil_return_exact_match_when_present(self) -> None:
+        tree = build_sample_tree()
+
+        self.assertEqual(tree.floor_item(12), {"key": 12, "value": "twelve"})
+        self.assertEqual(tree.ceil_item(12), {"key": 12, "value": "twelve"})
+
+    def test_floor_and_ceil_return_neighboring_keys_for_gaps(self) -> None:
+        tree = build_sample_tree()
+
+        self.assertEqual(tree.floor_item(13), {"key": 12, "value": "twelve"})
+        self.assertEqual(tree.ceil_item(13), {"key": 17, "value": "seventeen"})
+        self.assertEqual(
+            tree.neighbors(13),
+            {
+                "key": 13,
+                "floor": {"key": 12, "value": "twelve"},
+                "ceil": {"key": 17, "value": "seventeen"},
+            },
+        )
+
+    def test_floor_and_ceil_handle_out_of_range_keys(self) -> None:
+        tree = build_sample_tree()
+
+        self.assertIsNone(tree.floor_item(1))
+        self.assertIsNone(tree.ceil_item(99))
+
     def test_delete_leaf_key_updates_sorted_items_and_count(self) -> None:
         tree = build_sample_tree()
 
@@ -176,6 +202,58 @@ class BTreeIndexTests(unittest.TestCase):
                 {"key": 14, "value": "fourteen"},
             ],
         )
+
+    def test_cli_neighbors_command_reports_floor_and_ceil(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset = Path(temp_dir) / "records.json"
+            dataset.write_text(
+                json.dumps(
+                    [
+                        {"key": 9, "value": "nine"},
+                        {"key": 1, "value": "one"},
+                        {"key": 14, "value": "fourteen"},
+                        {"key": 3, "value": "three"},
+                    ]
+                )
+            )
+
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--dataset", str(dataset), "--json", "neighbors", "8"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["key"], 8)
+        self.assertEqual(payload["floor"], {"key": 3, "value": "three"})
+        self.assertEqual(payload["ceil"], {"key": 9, "value": "nine"})
+
+    def test_cli_floor_command_returns_null_when_no_lower_key_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset = Path(temp_dir) / "records.json"
+            dataset.write_text(
+                json.dumps(
+                    [
+                        {"key": 9, "value": "nine"},
+                        {"key": 1, "value": "one"},
+                        {"key": 14, "value": "fourteen"},
+                        {"key": 3, "value": "three"},
+                    ]
+                )
+            )
+
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--dataset", str(dataset), "--json", "floor", "0"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload, {"key": 0, "item": None})
 
 
 if __name__ == "__main__":
