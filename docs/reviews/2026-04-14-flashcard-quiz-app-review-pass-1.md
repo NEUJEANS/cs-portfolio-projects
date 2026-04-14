@@ -1,12 +1,11 @@
-# Flashcard Quiz App Review Pass 1
+# Flashcard quiz app review pass 1 — 2026-04-14
 
 ## Focus
-Data model and CSV parsing for tagged decks.
-
-## Checks
-- confirmed the optional `tags` column does not break old two-column decks
-- confirmed tags are normalized to lowercase and deduplicated
-- confirmed missing required fields still fail fast with a clear message
+CLI behavior and persistence ergonomics.
 
 ## Findings
-No code changes required after this pass.
+1. `--show-history-summary` could be requested without `--history-path`, which would make the flag silently useless.
+
+## Fixes applied
+- Added explicit validation so the CLI exits with a clear error when `--show-history-summary` is used without `--history-path`.
+- Added a regression test for that argument combination.

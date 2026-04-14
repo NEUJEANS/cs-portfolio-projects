@@ -1,12 +1,13 @@
-# Flashcard Quiz App Review Pass 3
+# Flashcard quiz app review pass 3 — 2026-04-14
 
 ## Focus
-Portfolio presentation quality and resumability.
-
-## Checks
-- updated README examples to document optional tags and focused study workflows
-- confirmed the project now demonstrates content modeling, filtering, and lightweight analytics instead of only Q&A prompting
-- confirmed checklist/research/learning notes leave the next persistent-history slice easy to resume
+Docs/test alignment and output clarity.
 
 ## Findings
-No code changes required after this pass.
+1. README history JSON example needed to reflect the actual storage key format after the pass-2 fix.
+2. Persistent summary output was more useful with an explicit aggregate accuracy value.
+
+## Fixes applied
+- Updated the README data-format section to show the composite history key and explain why it exists.
+- Included percentage accuracy in the printed history summary.
+- Re-ran the focused test suite after the doc/code tweaks.

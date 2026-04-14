@@ -1,12 +1,12 @@
-# Flashcard Quiz App Review Pass 2
+# Flashcard quiz app review pass 2 — 2026-04-14
 
 ## Focus
-CLI filter behavior and result-summary usefulness.
-
-## Checks
-- confirmed repeated `--tag` flags require all requested tags to match
-- confirmed unmatched tag filters exit cleanly instead of starting an empty session
-- confirmed weakest-tag reporting reflects missed-card topics
+History data integrity.
 
 ## Findings
-No code changes required after this pass.
+1. History was initially keyed only by prompt, so two cards with the same prompt and different answers could overwrite each other.
+
+## Fixes applied
+- Switched persistent card identity to `prompt + tab + answer`.
+- Preserved human-readable `prompt` and `answer` fields inside each record.
+- Added a targeted test proving same-prompt/different-answer cards remain distinct.
