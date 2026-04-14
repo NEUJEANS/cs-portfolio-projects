@@ -14,5 +14,5 @@
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
   - Result: passed with 0 verified and 0 unknown secrets
-- Commit: `e309aa6`
+- Commit: `6a29072`
 - Next step: add richer terminal formatting or bulk task actions so the CLI feels more demo-ready.
