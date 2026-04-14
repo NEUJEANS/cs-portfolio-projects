@@ -1,0 +1,9 @@
+[
+  {"label": "library", "x": 2, "y": 8},
+  {"label": "lab", "x": 6, "y": 7},
+  {"label": "cafe", "x": 8, "y": 9},
+  {"label": "gym", "x": 1, "y": 2},
+  {"label": "dorm", "x": 4, "y": 4},
+  {"label": "bus-stop", "x": 7, "y": 3},
+  {"label": "park", "x": 9, "y": 1}
+]
