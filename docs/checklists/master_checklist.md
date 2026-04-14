@@ -4,7 +4,8 @@
 - [x] research practical portfolio-worthy project categories
 - [x] refresh Python CLI/db/http/test patterns
 - [x] refresh Node fs/http/test patterns
-- [x] choose 15 projects with varied CS coverage
+- [x] choose an initial 15 projects with varied CS coverage
+- [x] extend the set with additional strong projects when useful
 
 ## Build Quality Bar for each project
 - [x] implementation complete

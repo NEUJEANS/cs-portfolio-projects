@@ -1,6 +1,6 @@
 # CS Portfolio Projects
 
-A curated set of 15 practical, GitHub-worthy computer science student projects built end-to-end.
+A curated set of practical, GitHub-worthy computer science student projects built end-to-end.
 
 ## Goals
 - show breadth across algorithms, systems, CLIs, web backends, file processing, and data persistence
@@ -13,7 +13,7 @@ A curated set of 15 practical, GitHub-worthy computer science student projects b
 - `docs/learning/` - language/tool refresh notes and self-test exercises
 - `docs/checklists/` - implementation checklists per batch/project
 - `docs/reviews/` - multi-pass review logs and fixes
-- `projects/` - the 15 finished projects
+- `projects/` - the finished projects
 
 ## Project List
 1. task-tracker-cli
@@ -31,3 +31,4 @@ A curated set of 15 practical, GitHub-worthy computer science student projects b
 13. static-site-generator
 14. github-repo-reporter
 15. file-organizer-cli
+16. huffman-compressor
