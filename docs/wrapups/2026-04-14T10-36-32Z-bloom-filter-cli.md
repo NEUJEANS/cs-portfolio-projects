@@ -1,0 +1,22 @@
+# Wrap-up — bloom-filter-cli
+
+- Timestamp: 2026-04-14T10:36:32Z
+- Project: bloom-filter-cli
+- What changed:
+  - added a new probabilistic data-structure portfolio project implementing a Bloom filter in Python
+  - added build/check/stats CLI flows with JSON save/load support
+  - added research, learning, checklist, and three review-pass notes
+  - added a sample input file and README usage docs
+- Tests run:
+  - 
+  - 
+  - smoke tests for , , and  against 
+- Reviews run:
+  - pass 1: persistence/output-path robustness
+  - pass 2: CLI input normalization
+  - pass 3: docs/sample usability audit
+- Secret scan:
+  - 
+- Implementation commit hash: d55d712
+- Next step:
+  - add benchmark mode to compare theoretical and observed false-positive rates on generated probe sets
