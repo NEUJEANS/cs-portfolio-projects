@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
+from calendar import monthrange
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from typing import Iterable
@@ -11,6 +12,7 @@ from typing import Iterable
 PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 VALID_PRIORITIES = tuple(PRIORITY_ORDER.keys())
 VALID_STATUSES = ("todo", "in-progress", "done")
+VALID_RECURRENCE = ("daily", "weekly", "monthly")
 ISO_DATE = "%Y-%m-%d"
 
 
@@ -28,6 +30,7 @@ class Task:
     created_at: str
     updated_at: str
     tags: list[str] = field(default_factory=list)
+    recurrence: str | None = None
 
     @classmethod
     def create(
@@ -37,6 +40,7 @@ class Task:
         priority: str = "medium",
         due_date: str | None = None,
         tags: list[str] | None = None,
+        recurrence: str | None = None,
     ) -> "Task":
         description = description.strip()
         if not description:
@@ -45,6 +49,9 @@ class Task:
         validate_priority(priority)
         normalized_due_date = normalize_due_date(due_date)
         normalized_tags = normalize_tags(tags or [])
+        normalized_recurrence = normalize_recurrence(recurrence)
+        if normalized_recurrence and normalized_due_date is None:
+            raise TaskTrackerError("Recurring tasks require a due date.")
         timestamp = utc_now()
         return cls(
             id=task_id,
@@ -55,12 +62,14 @@ class Task:
             created_at=timestamp,
             updated_at=timestamp,
             tags=normalized_tags,
+            recurrence=normalized_recurrence,
         )
 
     @classmethod
     def from_dict(cls, payload: dict) -> "Task":
         data = dict(payload)
         data.setdefault("tags", [])
+        data.setdefault("recurrence", None)
         return cls(**data)
 
     def to_dict(self) -> dict:
@@ -110,7 +119,9 @@ class TaskService:
             tasks = [
                 task
                 for task in tasks
-                if needle in task.description.lower() or any(needle in tag.lower() for tag in task.tags)
+                if needle in task.description.lower()
+                or any(needle in tag.lower() for tag in task.tags)
+                or (task.recurrence is not None and needle in task.recurrence)
             ]
         normalized_tags = normalize_tags(tags or []) if tags else []
         if normalized_tags:
@@ -123,10 +134,17 @@ class TaskService:
         priority: str = "medium",
         due_date: str | None = None,
         tags: list[str] | None = None,
+        recurrence: str | None = None,
     ) -> Task:
         tasks = self.storage.load()
-        next_id = max((task.id for task in tasks), default=0) + 1
-        task = Task.create(next_id, description, priority=priority, due_date=due_date, tags=tags)
+        task = Task.create(
+            self._next_id(tasks),
+            description,
+            priority=priority,
+            due_date=due_date,
+            tags=tags,
+            recurrence=recurrence,
+        )
         tasks.append(task)
         self.storage.save(tasks)
         return task
@@ -139,6 +157,7 @@ class TaskService:
         due_date: str | None = None,
         status: str | None = None,
         tags: list[str] | None = None,
+        recurrence: str | None = None,
     ) -> Task:
         tasks = self.storage.load()
         task = find_task(tasks, task_id)
@@ -158,14 +177,34 @@ class TaskService:
             task.status = status
         if tags is not None:
             task.tags = normalize_tags(tags)
+        if recurrence is not None:
+            task.recurrence = normalize_recurrence(recurrence)
+        if task.recurrence and task.due_date is None:
+            raise TaskTrackerError("Recurring tasks require a due date.")
 
         task.updated_at = utc_now()
         self.storage.save(tasks)
         return task
 
-    def set_status(self, task_id: int, status: str) -> Task:
+    def set_status(self, task_id: int, status: str) -> tuple[Task, Task | None]:
         validate_status(status)
-        return self.update_task(task_id, status=status)
+        tasks = self.storage.load()
+        task = find_task(tasks, task_id)
+        task.status = status
+        task.updated_at = utc_now()
+        spawned_task: Task | None = None
+        if status == "done" and task.recurrence and task.due_date:
+            spawned_task = Task.create(
+                self._next_id(tasks),
+                task.description,
+                priority=task.priority,
+                due_date=advance_due_date(task.due_date, task.recurrence),
+                tags=list(task.tags),
+                recurrence=task.recurrence,
+            )
+            tasks.append(spawned_task)
+        self.storage.save(tasks)
+        return task, spawned_task
 
     def delete_task(self, task_id: int) -> Task:
         tasks = self.storage.load()
@@ -178,6 +217,7 @@ class TaskService:
         counts = {status: 0 for status in VALID_STATUSES}
         overdue = 0
         tagged = 0
+        recurring = 0
         unique_tags: set[str] = set()
         today = date.today().strftime(ISO_DATE)
         for task in self.storage.load():
@@ -187,10 +227,13 @@ class TaskService:
             if task.tags:
                 tagged += 1
                 unique_tags.update(task.tags)
+            if task.recurrence:
+                recurring += 1
         counts["total"] = sum(counts.values())
         counts["overdue"] = overdue
         counts["tagged"] = tagged
         counts["unique_tags"] = len(unique_tags)
+        counts["recurring"] = recurring
         return counts
 
     def export_tasks(self, tasks: list[Task], output_format: str) -> str:
@@ -199,6 +242,10 @@ class TaskService:
         if output_format == "markdown":
             return render_markdown(tasks)
         raise TaskTrackerError("format must be one of: csv, markdown")
+
+    @staticmethod
+    def _next_id(tasks: list[Task]) -> int:
+        return max((task.id for task in tasks), default=0) + 1
 
 
 def find_task(tasks: list[Task], task_id: int) -> Task:
@@ -219,6 +266,28 @@ def normalize_due_date(value: str | None) -> str | None:
         return date.fromisoformat(value).strftime(ISO_DATE)
     except ValueError as exc:
         raise TaskTrackerError("Due date must use YYYY-MM-DD format.") from exc
+
+
+def normalize_recurrence(value: str | None) -> str | None:
+    if value in (None, "", "none"):
+        return None
+    if value not in VALID_RECURRENCE:
+        raise TaskTrackerError(f"Recurrence must be one of: {', '.join(VALID_RECURRENCE)}")
+    return value
+
+
+def advance_due_date(due_date: str, recurrence: str) -> str:
+    current = date.fromisoformat(due_date)
+    if recurrence == "daily":
+        return (current + timedelta(days=1)).strftime(ISO_DATE)
+    if recurrence == "weekly":
+        return (current + timedelta(days=7)).strftime(ISO_DATE)
+    if recurrence == "monthly":
+        year = current.year + (1 if current.month == 12 else 0)
+        month = 1 if current.month == 12 else current.month + 1
+        day = min(current.day, monthrange(year, month)[1])
+        return date(year, month, day).strftime(ISO_DATE)
+    raise TaskTrackerError(f"Recurrence must be one of: {', '.join(VALID_RECURRENCE)}")
 
 
 def normalize_tags(tags: list[str]) -> list[str]:
@@ -263,7 +332,7 @@ def render_csv(tasks: list[Task]) -> str:
     buffer = StringIO(newline="")
     writer = csv.DictWriter(
         buffer,
-        fieldnames=["id", "description", "status", "priority", "due_date", "tags", "created_at", "updated_at"],
+        fieldnames=["id", "description", "status", "priority", "due_date", "recurrence", "tags", "created_at", "updated_at"],
     )
     writer.writeheader()
     for task in tasks:
@@ -274,6 +343,7 @@ def render_csv(tasks: list[Task]) -> str:
                 "status": task.status,
                 "priority": task.priority,
                 "due_date": task.due_date or "",
+                "recurrence": task.recurrence or "",
                 "tags": ",".join(task.tags),
                 "created_at": task.created_at,
                 "updated_at": task.updated_at,
@@ -290,14 +360,14 @@ def render_markdown(tasks: list[Task]) -> str:
 
     lines.extend(
         [
-            "| ID | Description | Status | Priority | Due | Tags |",
-            "| --- | --- | --- | --- | --- | --- |",
+            "| ID | Description | Status | Priority | Due | Repeat | Tags |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for task in tasks:
         description = task.description.replace("|", "\\|")
         tags = ", ".join(task.tags) if task.tags else "-"
         lines.append(
-            f"| {task.id} | {description} | {task.status} | {task.priority} | {task.due_date or '-'} | {tags} |"
+            f"| {task.id} | {description} | {task.status} | {task.priority} | {task.due_date or '-'} | {task.recurrence or '-'} | {tags} |"
         )
     return "\n".join(lines) + "\n"

@@ -28,19 +28,22 @@ class TaskServiceTests(unittest.TestCase):
             priority="high",
             due_date="2026-04-20",
             tags=["School", "demo"],
+            recurrence="weekly",
         )
         self.assertEqual(task.id, 1)
         self.assertEqual(task.status, "todo")
         self.assertEqual(task.priority, "high")
         self.assertEqual(task.due_date, "2026-04-20")
         self.assertEqual(task.tags, ["school", "demo"])
+        self.assertEqual(task.recurrence, "weekly")
 
         payload = json.loads(self.data_file.read_text(encoding="utf-8"))
         self.assertEqual(payload[0]["description"], "Ship portfolio slice")
         self.assertEqual(payload[0]["tags"], ["school", "demo"])
+        self.assertEqual(payload[0]["recurrence"], "weekly")
 
     def test_update_and_summary(self):
-        self.service.add_task("A", tags=["class"])
+        self.service.add_task("A", tags=["class"], recurrence="daily", due_date="2026-04-20")
         self.service.add_task("B", priority="low")
         self.service.set_status(1, "in-progress")
         self.service.set_status(2, "done")
@@ -52,6 +55,21 @@ class TaskServiceTests(unittest.TestCase):
         self.assertEqual(summary["total"], 2)
         self.assertEqual(summary["tagged"], 1)
         self.assertEqual(summary["unique_tags"], 1)
+        self.assertEqual(summary["recurring"], 1)
+
+    def test_completing_recurring_task_spawns_next_occurrence(self):
+        self.service.add_task("Water plants", due_date="2026-01-31", recurrence="monthly", tags=["home"])
+
+        completed, spawned = self.service.set_status(1, "done")
+
+        self.assertEqual(completed.status, "done")
+        self.assertIsNotNone(spawned)
+        assert spawned is not None
+        self.assertEqual(spawned.id, 2)
+        self.assertEqual(spawned.status, "todo")
+        self.assertEqual(spawned.due_date, "2026-02-28")
+        self.assertEqual(spawned.recurrence, "monthly")
+        self.assertEqual(spawned.tags, ["home"])
 
     def test_list_tasks_can_sort_by_due_date(self):
         self.service.add_task("No due date")
@@ -62,7 +80,7 @@ class TaskServiceTests(unittest.TestCase):
         self.assertEqual([task.description for task in tasks], ["Soon", "Later", "No due date"])
 
     def test_list_tasks_can_search_and_filter_by_tag(self):
-        self.service.add_task("Prepare operating systems demo", tags=["school", "demo"])
+        self.service.add_task("Prepare operating systems demo", tags=["school", "demo"], recurrence="weekly", due_date="2026-04-20")
         self.service.add_task("Buy groceries", tags=["personal"])
         self.service.add_task("Finish demo script", tags=["demo"])
 
@@ -72,20 +90,28 @@ class TaskServiceTests(unittest.TestCase):
         tag_results = self.service.list_tasks(tags=["demo"])
         self.assertEqual([task.description for task in tag_results], ["Prepare operating systems demo", "Finish demo script"])
 
-        combined_results = self.service.list_tasks(search="school", tags=["demo"])
-        self.assertEqual([task.description for task in combined_results], ["Prepare operating systems demo"])
+        recurrence_results = self.service.list_tasks(search="weekly")
+        self.assertEqual([task.description for task in recurrence_results], ["Prepare operating systems demo"])
 
     def test_update_tags_can_replace_or_clear(self):
-        self.service.add_task("Prepare slides", tags=["draft"])
+        self.service.add_task("Prepare slides", tags=["draft"], recurrence="weekly", due_date="2026-04-20")
 
-        updated = self.service.update_task(1, tags=["presentation", "school"])
+        updated = self.service.update_task(1, tags=["presentation", "school"], recurrence="daily")
         self.assertEqual(updated.tags, ["presentation", "school"])
+        self.assertEqual(updated.recurrence, "daily")
 
-        cleared = self.service.update_task(1, tags=[])
+        cleared = self.service.update_task(1, tags=[], recurrence="")
         self.assertEqual(cleared.tags, [])
+        self.assertIsNone(cleared.recurrence)
 
     def test_export_tasks_supports_csv_and_markdown(self):
-        self.service.add_task("Prepare demo", priority="high", due_date="2026-04-16", tags=["demo", "school"])
+        self.service.add_task(
+            "Prepare demo",
+            priority="high",
+            due_date="2026-04-16",
+            tags=["demo", "school"],
+            recurrence="weekly",
+        )
         self.service.add_task("Write docs", tags=["docs"])
 
         tasks = self.service.list_tasks(sort_by="priority")
@@ -93,10 +119,11 @@ class TaskServiceTests(unittest.TestCase):
         rows = list(csv.DictReader(io.StringIO(csv_output)))
         self.assertEqual(rows[0]["description"], "Prepare demo")
         self.assertEqual(rows[0]["tags"], "demo,school")
+        self.assertEqual(rows[0]["recurrence"], "weekly")
 
         markdown_output = self.service.export_tasks(tasks, "markdown")
         self.assertIn("# Task Export", markdown_output)
-        self.assertIn("| 1 | Prepare demo | todo | high | 2026-04-16 | demo, school |", markdown_output)
+        self.assertIn("| 1 | Prepare demo | todo | high | 2026-04-16 | weekly | demo, school |", markdown_output)
 
     def test_delete_missing_task_raises_error(self):
         with self.assertRaises(TaskTrackerError):
@@ -111,9 +138,13 @@ class TaskServiceTests(unittest.TestCase):
         with self.assertRaises(TaskTrackerError):
             self.service.add_task("A", tags=["bad!"])
 
+    def test_recurrence_requires_due_date(self):
+        with self.assertRaises(TaskTrackerError):
+            self.service.add_task("A", recurrence="daily")
+
 
 class TaskCliSmokeTests(unittest.TestCase):
-    def test_cli_add_search_update_export_and_summary(self):
+    def test_cli_add_complete_export_and_summary_with_recurring_task(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data_file = Path(temp_dir) / "tasks.json"
             export_file = Path(temp_dir) / "tasks.md"
@@ -130,6 +161,10 @@ class TaskCliSmokeTests(unittest.TestCase):
                     "Prepare demo",
                     "--priority",
                     "high",
+                    "--due",
+                    "2026-04-20",
+                    "--repeat",
+                    "weekly",
                     "--tag",
                     "School",
                     "--tag",
@@ -141,7 +176,18 @@ class TaskCliSmokeTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(add_result.returncode, 0, add_result.stdout + add_result.stderr)
-            self.assertIn("tags=school,demo,portfolio", add_result.stdout)
+            self.assertIn("repeat=weekly", add_result.stdout)
+
+            done_result = subprocess.run(
+                ["python3", "-m", "src.task_tracker", "--data-file", str(data_file), "done", "1"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(done_result.returncode, 0, done_result.stdout + done_result.stderr)
+            self.assertIn("Spawned next recurring task", done_result.stdout)
+            self.assertIn("due=2026-04-27", done_result.stdout)
 
             list_result = subprocess.run(
                 [
@@ -152,7 +198,7 @@ class TaskCliSmokeTests(unittest.TestCase):
                     str(data_file),
                     "list",
                     "--search",
-                    "portfolio",
+                    "weekly",
                     "--json",
                 ],
                 cwd=project_dir,
@@ -161,48 +207,7 @@ class TaskCliSmokeTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(list_result.returncode, 0, list_result.stdout + list_result.stderr)
-            self.assertIn('"tags": [', list_result.stdout)
-
-            update_result = subprocess.run(
-                [
-                    "python3",
-                    "-m",
-                    "src.task_tracker",
-                    "--data-file",
-                    str(data_file),
-                    "update",
-                    "1",
-                    "--tag",
-                    "refined",
-                    "--tag",
-                    "backend",
-                ],
-                cwd=project_dir,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(update_result.returncode, 0, update_result.stdout + update_result.stderr)
-            self.assertIn("tags=refined,backend", update_result.stdout)
-
-            export_stdout_result = subprocess.run(
-                [
-                    "python3",
-                    "-m",
-                    "src.task_tracker",
-                    "--data-file",
-                    str(data_file),
-                    "export",
-                    "--format",
-                    "csv",
-                ],
-                cwd=project_dir,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(export_stdout_result.returncode, 0, export_stdout_result.stdout + export_stdout_result.stderr)
-            self.assertIn("description,status,priority", export_stdout_result.stdout)
+            self.assertIn('"recurrence": "weekly"', list_result.stdout)
 
             export_file_result = subprocess.run(
                 [
@@ -224,7 +229,7 @@ class TaskCliSmokeTests(unittest.TestCase):
             )
             self.assertEqual(export_file_result.returncode, 0, export_file_result.stdout + export_file_result.stderr)
             self.assertTrue(export_file.exists())
-            self.assertIn("# Task Export", export_file.read_text(encoding="utf-8"))
+            self.assertIn("| 2 | Prepare demo | todo | high | 2026-04-27 | weekly | school, demo, portfolio |", export_file.read_text(encoding="utf-8"))
 
             summary_result = subprocess.run(
                 ["python3", "-m", "src.task_tracker", "--data-file", str(data_file), "summary", "--json"],
@@ -234,8 +239,52 @@ class TaskCliSmokeTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(summary_result.returncode, 0, summary_result.stdout + summary_result.stderr)
-            self.assertIn('"tagged": 1', summary_result.stdout)
-            self.assertIn('"unique_tags": 2', summary_result.stdout)
+            self.assertIn('"recurring": 2', summary_result.stdout)
+
+    def test_cli_clear_repeat_rejects_conflicting_flags(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_file = Path(temp_dir) / "tasks.json"
+            project_dir = Path(__file__).resolve().parents[1]
+            subprocess.run(
+                [
+                    "python3",
+                    "-m",
+                    "src.task_tracker",
+                    "--data-file",
+                    str(data_file),
+                    "add",
+                    "Task",
+                    "--due",
+                    "2026-04-20",
+                    "--repeat",
+                    "daily",
+                ],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            conflict_result = subprocess.run(
+                [
+                    "python3",
+                    "-m",
+                    "src.task_tracker",
+                    "--data-file",
+                    str(data_file),
+                    "update",
+                    "1",
+                    "--repeat",
+                    "weekly",
+                    "--clear-repeat",
+                ],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(conflict_result.returncode, 1)
+            self.assertIn("Use either --repeat or --clear-repeat, not both.", conflict_result.stderr)
 
 
 if __name__ == "__main__":

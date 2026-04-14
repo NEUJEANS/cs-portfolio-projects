@@ -28,8 +28,26 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## 2026-04-14 vertical slice 3 — recurring task scheduling
+- [x] identify recurring tasks as the next highest-value upgrade for the project
+- [x] capture a short research note for a lightweight recurrence model
+- [x] do a short Python date/calendar refresh and self-test
+- [x] update checklist/docs for a resumable third slice
+- [x] add recurrence metadata to the task model and persistence layer
+- [x] support `--repeat` on add/update and `--clear-repeat` on update
+- [x] require due dates for recurring tasks
+- [x] auto-spawn the next occurrence when a recurring task is completed
+- [x] expose recurrence in list output, summary output, and exports
+- [x] refresh README examples to show the new workflow
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+
 ## Next improvements
-- [ ] recurring tasks and reminders
 - [ ] bulk import from CSV/Markdown checklists
 - [ ] richer TUI dashboard
 - [ ] SQLite-backed storage option
+- [ ] configurable reminder/export hooks

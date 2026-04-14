@@ -5,7 +5,15 @@ import json
 import sys
 from pathlib import Path
 
-from .store import Task, TaskService, TaskStorage, TaskTrackerError, VALID_PRIORITIES, VALID_STATUSES
+from .store import (
+    Task,
+    TaskService,
+    TaskStorage,
+    TaskTrackerError,
+    VALID_PRIORITIES,
+    VALID_RECURRENCE,
+    VALID_STATUSES,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--priority", default="medium", choices=VALID_PRIORITIES)
     add_parser.add_argument("--due")
     add_parser.add_argument("--tag", action="append", default=[], help="Attach a tag. Repeat or pass comma-separated values.")
+    add_parser.add_argument("--repeat", choices=VALID_RECURRENCE, help="Schedule the task to recur when completed.")
 
     list_parser = subparsers.add_parser("list", help="List tasks.")
     add_list_arguments(list_parser)
@@ -33,6 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--status", choices=VALID_STATUSES)
     update_parser.add_argument("--tag", action="append", default=None, help="Replace tags. Repeat or pass comma-separated values.")
     update_parser.add_argument("--clear-tags", action="store_true", help="Remove all tags from the task.")
+    update_parser.add_argument("--repeat", choices=VALID_RECURRENCE, help="Replace the task recurrence rule.")
+    update_parser.add_argument("--clear-repeat", action="store_true", help="Remove the recurrence rule from the task.")
 
     start_parser = subparsers.add_parser("start", help="Mark a task as in-progress.")
     start_parser.add_argument("id", type=int)
@@ -62,22 +73,31 @@ def add_list_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--status", choices=VALID_STATUSES)
     parser.add_argument("--priority", choices=VALID_PRIORITIES)
     parser.add_argument("--sort-by", default="id", choices=("id", "created_at", "updated_at", "due_date", "priority"))
-    parser.add_argument("--search", help="Filter by keyword in description or tags.")
+    parser.add_argument("--search", help="Filter by keyword in description, tags, or recurrence.")
     parser.add_argument("--tag", action="append", default=[], help="Require a tag. Repeat or pass comma-separated values.")
 
 
 def format_task(task: Task) -> str:
     due = task.due_date or "-"
     tags = ",".join(task.tags) if task.tags else "-"
-    return f"[{task.id}] {task.description} | status={task.status} | priority={task.priority} | due={due} | tags={tags}"
+    repeat = task.recurrence or "-"
+    return f"[{task.id}] {task.description} | status={task.status} | priority={task.priority} | due={due} | repeat={repeat} | tags={tags}"
 
 
 def render_table(tasks: list[Task]) -> str:
     if not tasks:
         return "No tasks found."
-    headers = ("ID", "Description", "Status", "Priority", "Due", "Tags")
+    headers = ("ID", "Description", "Status", "Priority", "Due", "Repeat", "Tags")
     rows = [headers] + [
-        (str(task.id), task.description, task.status, task.priority, task.due_date or "-", ", ".join(task.tags) or "-")
+        (
+            str(task.id),
+            task.description,
+            task.status,
+            task.priority,
+            task.due_date or "-",
+            task.recurrence or "-",
+            ", ".join(task.tags) or "-",
+        )
         for task in tasks
     ]
     widths = [max(len(row[index]) for row in rows) for index in range(len(headers))]
@@ -108,7 +128,7 @@ def _select_tasks(service: TaskService, args: argparse.Namespace) -> list[Task]:
 def _render_summary(payload: dict[str, int], as_json: bool) -> str:
     if as_json:
         return json.dumps(payload, indent=2)
-    ordered_keys = ["todo", "in-progress", "done", "total", "overdue", "tagged", "unique_tags"]
+    ordered_keys = ["todo", "in-progress", "done", "total", "overdue", "tagged", "unique_tags", "recurring"]
     return " | ".join(f"{key}: {payload[key]}" for key in ordered_keys)
 
 
@@ -119,7 +139,13 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "add":
-            task = service.add_task(args.description, priority=args.priority, due_date=args.due, tags=args.tag)
+            task = service.add_task(
+                args.description,
+                priority=args.priority,
+                due_date=args.due,
+                tags=args.tag,
+                recurrence=args.repeat,
+            )
             print(f"Added: {format_task(task)}")
             return 0
         if args.command == "list":
@@ -134,7 +160,15 @@ def run_cli(argv: list[str] | None = None) -> int:
                 raise TaskTrackerError("Use either --tag or --clear-tags, not both.")
             if args.clear_due and args.due is not None:
                 raise TaskTrackerError("Use either --due or --clear-due, not both.")
-            if all(value is None for value in [args.description, args.priority, args.due, args.status]) and not args.clear_tags and args.tag is None and not args.clear_due:
+            if args.clear_repeat and args.repeat is not None:
+                raise TaskTrackerError("Use either --repeat or --clear-repeat, not both.")
+            if (
+                all(value is None for value in [args.description, args.priority, args.due, args.status, args.repeat])
+                and not args.clear_tags
+                and args.tag is None
+                and not args.clear_due
+                and not args.clear_repeat
+            ):
                 raise TaskTrackerError("Provide at least one field to update.")
             task = service.update_task(
                 args.id,
@@ -143,19 +177,22 @@ def run_cli(argv: list[str] | None = None) -> int:
                 due_date="" if args.clear_due else args.due,
                 status=args.status,
                 tags=[] if args.clear_tags else args.tag,
+                recurrence="" if args.clear_repeat else args.repeat,
             )
             print(f"Updated: {format_task(task)}")
             return 0
         if args.command == "start":
-            task = service.set_status(args.id, "in-progress")
+            task, _ = service.set_status(args.id, "in-progress")
             print(f"Started: {format_task(task)}")
             return 0
         if args.command == "done":
-            task = service.set_status(_coalesce_task_id(args), "done")
+            task, spawned_task = service.set_status(_coalesce_task_id(args), "done")
             print(f"Completed task #{task.id}: {task.description}")
+            if spawned_task is not None:
+                print(f"Spawned next recurring task: {format_task(spawned_task)}")
             return 0
         if args.command == "reopen":
-            task = service.set_status(args.task_id, "todo")
+            task, _ = service.set_status(args.task_id, "todo")
             print(f"Reopened task #{task.id}: {task.description}")
             return 0
         if args.command == "delete":
