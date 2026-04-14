@@ -2,7 +2,7 @@
 
 - Timestamp: 2026-04-14T08:00:00Z
 - Project: `task-tracker-cli`
-- Commit: `ea37270`
+- Primary implementation commit: `35ea1ef`
 
 ## What changed
 - added an `export` command with shared filtering support
