@@ -1,12 +1,17 @@
-# 2026-04-14 Markdown Notes Search Review Pass 3
+# Markdown Notes Search Review Pass 3
 
-Focus: README/checklist alignment and portfolio framing.
+Date: 2026-04-14
 
-Findings:
-- README now matches implemented behavior: recursive search, front matter tags, ranked results, snippets, and JSON output.
-- Checklist and future-slice notes are consistent with the current code state.
-- No additional code fixes were needed after the final docs audit.
+## Checks
+- audited changed files for resumability and checklist completeness
+- confirmed research, learning, checklist, implementation, tests, and review artifacts were all present
+- confirmed project remains standard-library-only and easy to run
 
-Validation:
-- reviewed README examples against actual CLI flags
-- confirmed tests cover metadata parsing, ranking, recursion, snippets, and CLI output
+## Issue found
+- checklist still reflected the earlier slice and did not yet capture the new boolean-query work
+
+## Fix applied
+- updated the project checklist to mark vertical slice 2 and record the new remaining follow-up ideas
+
+## Result
+- the slice is documented cleanly and can be resumed from future cron runs

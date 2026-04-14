@@ -1,6 +1,6 @@
 # Markdown Notes Search Checklist
 
-Status: vertical slice 1 complete
+Status: vertical slice 2 complete
 Last updated: 2026-04-14
 
 ## Vertical slice 1
@@ -18,7 +18,22 @@ Last updated: 2026-04-14
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Vertical slice 2
+- [x] do brief research on lightweight boolean retrieval patterns
+- [x] do short parser/precedence refresh and self-test
+- [x] update checklist and docs for boolean query support
+- [x] implement phrase search with quoted terms
+- [x] implement boolean `AND` / `OR` / `NOT` queries with parentheses
+- [x] keep implicit `AND` between adjacent operands for ergonomic CLI use
+- [x] add automated coverage for phrase, precedence, grouping, and invalid queries
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+
 ## Next slice candidates
-- [ ] phrase/boolean query support
 - [ ] persistent inverted index for larger note vaults
 - [ ] TUI browsing mode with preview panes
+- [ ] heading-aware ranking and backlink-aware navigation

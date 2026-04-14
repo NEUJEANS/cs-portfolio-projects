@@ -1,13 +1,17 @@
-# 2026-04-14 Markdown Notes Search Review Pass 1
+# Markdown Notes Search Review Pass 1
 
-Focus: code audit for ranking and parsing logic.
+Date: 2026-04-14
 
-Findings:
-- Removed an unused regex constant left behind from an earlier draft.
-- Hardened `search_notes()` to return no results for blank queries and reject non-positive limits.
-- Confirmed result sorting is deterministic by score and relative path.
+## Checks
+- ran project unit tests
+- manually exercised phrase and boolean CLI queries
 
-Fixes applied:
-- deleted dead code
-- added validation for empty queries and invalid limits
-- added regression coverage for those cases
+## Issue found
+- pure negative queries like `NOT archived` could match valid notes but end up with a weak scoring path tied to the raw query string rather than the actual exclusion logic
+
+## Fix applied
+- added fallback scoring for negative-only boolean matches
+- added automated regression coverage for `NOT archived`
+
+## Result
+- boolean filter behavior is now stable for positive and negative-only queries

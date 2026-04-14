@@ -1,14 +1,17 @@
-# 2026-04-14 Markdown Notes Search Review Pass 2
+# Markdown Notes Search Review Pass 2
 
-Focus: CLI smoke test with nested notes and front matter.
+Date: 2026-04-14
 
-Finding:
-- Snippets initially included raw front matter lines, which made output noisy and less demo-friendly.
+## Checks
+- reviewed parser flow for precedence and implicit `AND`
+- verified README examples align with supported query syntax
+- re-ran unit tests after parser audit
 
-Fix applied:
-- strip front matter from the indexed/searchable body while still preserving front matter tags as metadata
-- added a regression test to ensure snippets exclude `tags:` metadata lines
+## Issue found
+- README had not yet documented operator precedence and implicit `AND`, which would make the feature harder to understand in portfolio review
 
-Validation:
-- ran project unit tests
-- ran a recursive CLI smoke test against a temporary nested note tree
+## Fix applied
+- expanded README query notes and examples to explain `NOT > AND > OR`, parentheses, phrases, and implicit `AND`
+
+## Result
+- code and docs now describe the same behavior clearly

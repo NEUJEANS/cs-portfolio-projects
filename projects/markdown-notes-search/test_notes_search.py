@@ -74,6 +74,51 @@ class NotesSearchTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 search_notes(notes, 'sql', limit=0)
 
+    def test_boolean_and_phrase_queries_filter_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text('distributed systems lecture notes with quorum reads', encoding='utf-8')
+            (root / 'databases.md').write_text('distributed databases and consensus patterns', encoding='utf-8')
+            (root / 'reading.md').write_text('systems design reading list', encoding='utf-8')
+
+            results = search_notes(index_notes(root), 'distributed AND systems')
+            phrase_results = search_notes(index_notes(root), '"systems design"')
+
+            self.assertEqual([result['path'] for result in results], ['systems.md'])
+            self.assertEqual([result['path'] for result in phrase_results], ['reading.md'])
+            self.assertIn('systems design', phrase_results[0]['snippet'].lower())
+
+    def test_boolean_parentheses_and_not_work_together(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'graphs.md').write_text('graph shortest path notes', encoding='utf-8')
+            (root / 'trees.md').write_text('tree traversal notes', encoding='utf-8')
+            (root / 'draft.md').write_text('graph draft and archived notes', encoding='utf-8')
+
+            results = search_notes(index_notes(root), '(graph OR tree) AND NOT archived')
+
+            self.assertEqual([result['path'] for result in results], ['graphs.md', 'trees.md'])
+
+    def test_invalid_boolean_query_raises_value_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'notes.md').write_text('hello world', encoding='utf-8')
+            notes = index_notes(root)
+
+            with self.assertRaises(ValueError):
+                search_notes(notes, 'graph AND (tree OR')
+
+    def test_negative_only_query_returns_non_excluded_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'active.md').write_text('systems notes', encoding='utf-8')
+            (root / 'archived.md').write_text('archived systems notes', encoding='utf-8')
+
+            results = search_notes(index_notes(root), 'NOT archived')
+
+            self.assertEqual([result['path'] for result in results], ['active.md'])
+            self.assertGreaterEqual(results[0]['score'], 1)
+
     def test_cli_json_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
