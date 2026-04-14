@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merkle tree manifest builder and diff tool for directories."""
+"""Merkle tree manifest builder, diff tool, and sync plan generator for directories."""
 
 from __future__ import annotations
 
@@ -76,7 +76,9 @@ def build_manifest(root: Path) -> dict:
     normalized_children = {
         key: sorted(set(value)) for key, value in directory_children.items()
     }
-    directories = build_directory_nodes(normalized_children, {record.path: record.sha256 for record in files})
+    directories = build_directory_nodes(
+        normalized_children, {record.path: record.sha256 for record in files}
+    )
 
     return {
         "root": str(root),
@@ -153,6 +155,75 @@ def summarize_diff(left: dict, right: dict) -> dict:
     }
 
 
+def build_copy_plan(source: dict, target: dict) -> dict:
+    source_files = {entry["path"]: entry for entry in source["files"]}
+    target_files = {entry["path"]: entry for entry in target["files"]}
+
+    mkdir_paths = collect_parent_directories(
+        sorted(path for path in source_files if path not in target_files)
+    )
+    copy_paths = sorted(path for path in source_files if path not in target_files)
+    update_paths = sorted(
+        path
+        for path in source_files.keys() & target_files.keys()
+        if source_files[path]["sha256"] != target_files[path]["sha256"]
+    )
+    delete_paths = sorted(path for path in target_files if path not in source_files)
+
+    operations: list[dict[str, object]] = []
+    for path in mkdir_paths:
+        operations.append({"op": "mkdir", "path": path})
+    for path in copy_paths:
+        operations.append(
+            {
+                "op": "copy",
+                "path": path,
+                "size": source_files[path]["size"],
+                "sha256": source_files[path]["sha256"],
+            }
+        )
+    for path in update_paths:
+        operations.append(
+            {
+                "op": "update",
+                "path": path,
+                "size": source_files[path]["size"],
+                "sha256": source_files[path]["sha256"],
+                "previous_sha256": target_files[path]["sha256"],
+            }
+        )
+    for path in delete_paths:
+        operations.append(
+            {
+                "op": "delete",
+                "path": path,
+                "size": target_files[path]["size"],
+                "sha256": target_files[path]["sha256"],
+            }
+        )
+
+    return {
+        "source_root": source["root"],
+        "target_root": target["root"],
+        "mkdir_count": len(mkdir_paths),
+        "copy_count": len(copy_paths),
+        "update_count": len(update_paths),
+        "delete_count": len(delete_paths),
+        "bytes_to_copy": sum(source_files[path]["size"] for path in copy_paths),
+        "bytes_to_update": sum(source_files[path]["size"] for path in update_paths),
+        "operations": operations,
+    }
+
+
+def collect_parent_directories(file_paths: list[str]) -> list[str]:
+    directories: set[str] = set()
+    for file_path in file_paths:
+        parts = file_path.split("/")[:-1]
+        for index in range(1, len(parts) + 1):
+            directories.add("/".join(parts[:index]))
+    return sorted(directories, key=lambda value: (value.count("/"), value))
+
+
 def print_human_diff(summary: dict) -> None:
     print(f"left:  {summary['left_root']}")
     print(f"right: {summary['right_root']}")
@@ -163,6 +234,34 @@ def print_human_diff(summary: dict) -> None:
         print(f"{label} ({len(values)}):")
         for value in values:
             print(f"  - {value}")
+
+
+def print_human_plan(plan: dict) -> None:
+    print(f"source: {plan['source_root']}")
+    print(f"target: {plan['target_root']}")
+    print(
+        "operations: "
+        f"mkdir={plan['mkdir_count']} copy={plan['copy_count']} "
+        f"update={plan['update_count']} delete={plan['delete_count']}"
+    )
+    print(
+        f"bytes scheduled: copy={plan['bytes_to_copy']} update={plan['bytes_to_update']}"
+    )
+    for operation in plan["operations"]:
+        label = operation["op"]
+        path = operation["path"]
+        if label == "mkdir":
+            print(f"  - mkdir {path}")
+            continue
+        details = []
+        if "size" in operation:
+            details.append(f"size={operation['size']}")
+        if "sha256" in operation:
+            details.append(f"sha256={operation['sha256'][:12]}")
+        if "previous_sha256" in operation:
+            details.append(f"prev={operation['previous_sha256'][:12]}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        print(f"  - {label} {path}{suffix}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -177,6 +276,13 @@ def build_parser() -> argparse.ArgumentParser:
     diff_cmd.add_argument("left", type=Path)
     diff_cmd.add_argument("right", type=Path)
     diff_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    plan_cmd = subparsers.add_parser(
+        "plan", help="build a copy/update/delete plan to sync a target with a source"
+    )
+    plan_cmd.add_argument("source", type=Path)
+    plan_cmd.add_argument("target", type=Path)
+    plan_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
     return parser
 
@@ -206,6 +312,14 @@ def main() -> int:
             print(json.dumps(summary, indent=2))
         else:
             print_human_diff(summary)
+        return 0
+
+    if args.command == "plan":
+        plan = build_copy_plan(resolve_manifest(args.source), resolve_manifest(args.target))
+        if args.json:
+            print(json.dumps(plan, indent=2))
+        else:
+            print_human_plan(plan)
         return 0
 
     parser.error("unknown command")

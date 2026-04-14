@@ -15,6 +15,7 @@ assert SPEC and SPEC.loader
 sys.modules[SPEC.name] = merkle_sync_lab
 SPEC.loader.exec_module(merkle_sync_lab)
 build_manifest = merkle_sync_lab.build_manifest
+build_copy_plan = merkle_sync_lab.build_copy_plan
 summarize_diff = merkle_sync_lab.summarize_diff
 
 
@@ -65,13 +66,46 @@ class MerkleSyncLabTests(unittest.TestCase):
 
             self.assertEqual(recorded_paths, ["app/main.py"])
 
-    def test_cli_build_and_diff_json(self) -> None:
-        with tempfile.TemporaryDirectory() as left_tmp, tempfile.TemporaryDirectory() as right_tmp, tempfile.TemporaryDirectory() as out_tmp:
-            left = Path(left_tmp)
-            right = Path(right_tmp)
+    def test_copy_plan_reports_directory_creation_copy_update_and_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp:
+            source = Path(source_tmp)
+            target = Path(target_tmp)
+            (source / "docs").mkdir()
+            (source / "docs" / "guide.txt").write_text("guide", encoding="utf-8")
+            (source / "same.txt").write_text("same", encoding="utf-8")
+            (source / "shared.txt").write_text("new value", encoding="utf-8")
+            (target / "same.txt").write_text("same", encoding="utf-8")
+            (target / "shared.txt").write_text("old value", encoding="utf-8")
+            (target / "stale.txt").write_text("remove me", encoding="utf-8")
+
+            plan = build_copy_plan(build_manifest(source), build_manifest(target))
+            operations = [(entry["op"], entry["path"]) for entry in plan["operations"]]
+
+            self.assertEqual(
+                operations,
+                [
+                    ("mkdir", "docs"),
+                    ("copy", "docs/guide.txt"),
+                    ("update", "shared.txt"),
+                    ("delete", "stale.txt"),
+                ],
+            )
+            self.assertEqual(plan["mkdir_count"], 1)
+            self.assertEqual(plan["copy_count"], 1)
+            self.assertEqual(plan["update_count"], 1)
+            self.assertEqual(plan["delete_count"], 1)
+            self.assertEqual(plan["bytes_to_copy"], len("guide"))
+            self.assertEqual(plan["bytes_to_update"], len("new value"))
+
+    def test_cli_build_diff_and_plan_json(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp, tempfile.TemporaryDirectory() as out_tmp:
+            source = Path(source_tmp)
+            target = Path(target_tmp)
             out = Path(out_tmp)
-            (left / "data.txt").write_text("same", encoding="utf-8")
-            (right / "data.txt").write_text("same", encoding="utf-8")
+            (source / "nested").mkdir()
+            (source / "nested" / "data.txt").write_text("same", encoding="utf-8")
+            (target / "nested").mkdir()
+            (target / "nested" / "data.txt").write_text("same", encoding="utf-8")
             manifest_path = out / "manifest.json"
 
             subprocess.run(
@@ -79,19 +113,37 @@ class MerkleSyncLabTests(unittest.TestCase):
                     "python3",
                     "projects/merkle-sync-lab/merkle_sync_lab.py",
                     "build",
-                    str(left),
+                    str(source),
                     "--output",
                     str(manifest_path),
                 ],
                 check=True,
             )
-            result = subprocess.run(
+            diff_result = subprocess.run(
                 [
                     "python3",
                     "projects/merkle-sync-lab/merkle_sync_lab.py",
                     "diff",
                     str(manifest_path),
-                    str(right),
+                    str(target),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            diff_payload = json.loads(diff_result.stdout)
+            self.assertTrue(diff_payload["is_identical"])
+            self.assertEqual(diff_payload["changed"], [])
+
+            (target / "nested" / "data.txt").write_text("changed", encoding="utf-8")
+            plan_result = subprocess.run(
+                [
+                    "python3",
+                    "projects/merkle-sync-lab/merkle_sync_lab.py",
+                    "plan",
+                    str(manifest_path),
+                    str(target),
                     "--json",
                 ],
                 check=True,
@@ -99,11 +151,13 @@ class MerkleSyncLabTests(unittest.TestCase):
                 text=True,
             )
 
-            payload = json.loads(result.stdout)
-            self.assertTrue(payload["is_identical"])
-            self.assertEqual(payload["added"], [])
-            self.assertEqual(payload["removed"], [])
-            self.assertEqual(payload["changed"], [])
+            payload = json.loads(plan_result.stdout)
+            self.assertEqual(payload["mkdir_count"], 0)
+            self.assertEqual(payload["copy_count"], 0)
+            self.assertEqual(payload["update_count"], 1)
+            self.assertEqual(payload["delete_count"], 0)
+            self.assertEqual(payload["operations"][0]["op"], "update")
+            self.assertEqual(payload["operations"][0]["path"], "nested/data.txt")
 
 
 if __name__ == "__main__":

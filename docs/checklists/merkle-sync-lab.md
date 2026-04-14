@@ -6,4 +6,5 @@
 - [x] implement deterministic file hashing and directory digest rollups
 - [x] add manifest export plus directory/manifest diff support
 - [x] add automated tests for stable manifests, diff behavior, and CLI JSON output
-- [ ] chunk-level proofs or copy-plan generation in a future slice
+- [x] add sync-plan generation with ordered mkdir/copy/update/delete operations
+- [ ] chunk-level proofs or plan execution in a future slice

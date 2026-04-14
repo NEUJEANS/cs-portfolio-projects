@@ -1,11 +1,12 @@
 # merkle-sync-lab
 
-A portfolio-ready systems project that builds Merkle-tree-style manifests for directories and diffs snapshots to explain what changed.
+A portfolio-ready systems project that builds Merkle-tree-style manifests for directories, explains what changed, and produces a sync plan to reconcile two snapshots.
 
 ## Why it is portfolio-worthy
 - demonstrates hierarchical hashing, a core idea behind Git, content-addressed storage, and distributed sync systems
 - turns a theoretical data structure into a practical file integrity and directory comparison tool
-- exposes both a human-readable CLI and JSON output for automation
+- exposes human-readable CLI output plus JSON output for automation and scripting
+- now includes a sync-planning layer that feels closer to a real backup or replication system
 - keeps the implementation dependency-free so interviewers can run it instantly
 
 ## Features
@@ -13,7 +14,8 @@ A portfolio-ready systems project that builds Merkle-tree-style manifests for di
 - build deterministic directory manifests with child digests rolled up into parent digests
 - diff two live directories, two manifests, or a manifest against a directory
 - report added, removed, and changed files plus changed directory subtrees
-- export manifest JSON for reproducible demos and follow-on tooling
+- generate an ordered sync plan with `mkdir`, `copy`, `update`, and `delete` operations
+- export manifest and plan JSON for reproducible demos and follow-on tooling
 
 ## Usage
 Build a manifest:
@@ -31,12 +33,35 @@ Compare a saved manifest against a fresh directory:
 python3 projects/merkle-sync-lab/merkle_sync_lab.py diff /tmp/merkle-manifest.json dir_b --json
 ```
 
+Generate a sync plan to make `target_dir` match `source_dir`:
+```bash
+python3 projects/merkle-sync-lab/merkle_sync_lab.py plan source_dir target_dir
+```
+
+Generate a machine-readable plan from a saved manifest:
+```bash
+python3 projects/merkle-sync-lab/merkle_sync_lab.py plan /tmp/merkle-manifest.json target_dir --json
+```
+
+## Example plan output
+```text
+source: /tmp/source
+target: /tmp/target
+operations: mkdir=1 copy=2 update=1 delete=1
+bytes scheduled: copy=84 update=31
+  - mkdir docs
+  - copy docs/guide.txt (size=42, sha256=0f8c1b6a3d7e)
+  - copy docs/index.txt (size=42, sha256=442af8d50f31)
+  - update config.json (size=31, sha256=87b442bcf1e4, prev=8a6f425d2b90)
+  - delete stale.log (size=128, sha256=1d2fe4cf9a1a)
+```
+
 ## Test
 ```bash
 python3 -m unittest projects/merkle-sync-lab/test_merkle_sync_lab.py
 ```
 
 ## Future improvements
-- support chunk-level Merkle trees for large-file partial sync demos
+- add chunk-level Merkle proofs for large-file partial sync demos
 - emit Graphviz views of changed directory subtrees
-- add rsync-style copy planning based on diff output
+- optionally execute the generated sync plan in a dry-run/apply workflow
