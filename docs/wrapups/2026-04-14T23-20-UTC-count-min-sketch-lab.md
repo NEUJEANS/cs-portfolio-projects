@@ -16,7 +16,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- `f7a25d2` — Add Count-Min Sketch memory benchmark slice
+- `3064926` — Add Count-Min Sketch memory benchmark slice
 
 ## Next step
 - implement conservative update mode and compare its overestimation behavior against the current baseline benchmark
