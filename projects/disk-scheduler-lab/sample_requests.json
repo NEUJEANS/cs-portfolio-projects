@@ -1,0 +1,6 @@
+{
+  "start": 50,
+  "max_cylinder": 199,
+  "direction": "up",
+  "requests": [82, 170, 43, 140, 24, 16, 190]
+}
