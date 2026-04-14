@@ -22,4 +22,5 @@
 - [x] Batch D complete
 - [x] Batch E complete
 - [x] Batch F complete
-- [ ] Batch G complete
+- [x] Batch G complete
+- [ ] Batch H complete
