@@ -15,6 +15,6 @@
 - [x] refresh README to reflect the stronger scope
 - [x] run full test pass
 - [x] complete 3 review passes and fix issues found
-- [ ] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
