@@ -1,0 +1,22 @@
+# Wrap-up: tfidf-search-lab
+
+- Timestamp: 2026-04-14T13:49:31Z
+- Project: tfidf-search-lab
+- What changed:
+  - added a new Python portfolio project that builds an inverted index over local text files and ranks search results with TF-IDF + cosine similarity
+  - added sample corpus files, README usage examples, and JSON/plain-text CLI modes
+  - added research, refresh notes, checklist, and three review-pass logs
+  - fixed a rebuild-state bug by resetting index state before rebuilding and covered it with a regression test
+- Tests run:
+  -             python3 -m unittest discover -s projects/tfidf-search-lab -p 'test_*.py'
+- Reviews run:
+  - docs/reviews/2026-04-14-tfidf-search-lab-review-pass-1.md
+  - docs/reviews/2026-04-14-tfidf-search-lab-review-pass-2.md
+  - docs/reviews/2026-04-14-tfidf-search-lab-review-pass-3.md
+- Secret scan:
+  - /home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail
+  - result: clean (0 verified, 0 unknown)
+- Commit hash:
+  - e0a1570
+- Next step:
+  - extend the search lab with snippet extraction or BM25, or move to another new CS portfolio project if broader coverage is preferred
