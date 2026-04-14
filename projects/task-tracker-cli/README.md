@@ -1,36 +1,45 @@
-# Task Tracker CLI
+# task-tracker-cli
 
-A Python command-line app for managing personal tasks with JSON persistence, due dates, priorities, status tracking, and summary output.
+A polished Python command-line task tracker that demonstrates practical CS portfolio skills: CLI design, persistence, validation, sorting, and test coverage.
+
+## Why this project matters
+- demonstrates command-line UX with multiple subcommands
+- shows JSON-backed persistence and data modeling
+- includes validation for status, priority, and due dates
+- supports automated tests and review-driven iteration
+- leaves a clear extension path for packaging, tags, and exports
 
 ## Features
-- add tasks with optional due dates and priorities
-- list tasks with status/priority filters and sort order
-- update task fields safely
-- move tasks through `todo -> in-progress -> done`
-- delete tasks by ID
-- print a quick summary of task counts by status
-- store data in a local JSON file
-- stdlib-only implementation
+- add tasks with description, priority, and optional due date
+- list tasks with filtering and sorting
+- update task fields after creation
+- move tasks into `in-progress`, `done`, or back to `todo`
+- print a summary report for portfolio demos
+- delete tasks cleanly
+- persist tasks to a local JSON file
 
 ## Quick start
 ```bash
-python3 -m src.task_tracker --data-file ./data/tasks.json add "Finish portfolio project" --priority high --due 2026-04-20
-python3 -m src.task_tracker --data-file ./data/tasks.json list --sort-by due_date
-python3 -m src.task_tracker --data-file ./data/tasks.json start 1
-python3 -m src.task_tracker --data-file ./data/tasks.json done 1
-python3 -m src.task_tracker --data-file ./data/tasks.json summary
+python3 -m task_tracker --help
+python3 -m task_tracker --db tasks.json add "Ship portfolio MVP" --priority high --due 2026-04-20
+python3 -m task_tracker --db tasks.json list --sort-by priority
+python3 -m task_tracker --db tasks.json start 1
+python3 -m task_tracker --db tasks.json done 1
+python3 -m task_tracker --db tasks.json summary
 ```
 
-## Commands
-- `add DESCRIPTION [--priority low|medium|high] [--due YYYY-MM-DD]`
-- `list [--status todo|in-progress|done] [--priority low|medium|high] [--sort-by created_at|updated_at|due_date|priority|id]`
-- `update ID [--description TEXT] [--priority ...] [--due YYYY-MM-DD] [--status ...]`
-- `start ID`
-- `done ID`
-- `delete ID`
-- `summary`
-
-## Testing
+## Development
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+## Project structure
+- `src/task_tracker/` - packaged implementation used by tests and CLI entry points
+- `tests/` - unit and CLI smoke tests
+- `data/` - local JSON storage when running with the default path
+
+## Next extensions
+- tags and text search
+- colored terminal output
+- CSV or Markdown export
+- packaging for `pipx` installation

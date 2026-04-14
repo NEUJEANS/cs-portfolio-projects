@@ -1,19 +1,18 @@
 # Task Tracker CLI Checklist
 
-Status: vertical slice 1 complete
-Last updated: 2026-04-14
+## Vertical slice: initial runnable project
+- [x] define portfolio-friendly scope for a polished CLI task tracker
+- [x] create project layout with source, tests, and README
+- [x] implement persistent storage using JSON
+- [x] support add/list/done/reopen/delete commands
+- [x] add automated CLI tests for happy paths and failures
+- [x] run test suite locally
+- [x] complete three review passes and record fixes
+- [x] run secret scan before push
+- [x] add wrap-up note for resumability
 
-## Vertical slice 1
-- [x] Pick project scope and persistence model
-- [x] Write short research note
-- [x] Write short language/tool refresh note
-- [x] Scaffold project folder structure
-- [x] Implement task model + validation
-- [x] Implement JSON storage layer
-- [x] Implement CLI commands
-- [x] Add project README with usage examples
-- [x] Add automated tests
-- [x] Run tests locally
-- [x] Perform 3 review passes and fix issues
-- [x] Run secret scan before push
-- [x] Commit, push, and add wrap-up
+## Next slice candidates
+- [ ] due dates and overdue highlighting
+- [ ] priorities and sorting
+- [ ] tags and keyword search
+- [ ] package metadata or pipx install flow
