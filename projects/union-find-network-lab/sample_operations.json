@@ -1,0 +1,8 @@
+[
+  {"op": "union", "args": ["api", "worker"]},
+  {"op": "union", "args": ["worker", "db"]},
+  {"op": "union", "args": ["db", "cache"]},
+  {"op": "union", "args": ["api", "cache"]},
+  {"op": "component", "args": ["api"]},
+  {"op": "stats"}
+]
