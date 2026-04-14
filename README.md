@@ -47,6 +47,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `dependency-graph-planner`
 - [x] `memory-allocator-simulator`
 - [x] `union-find-network-lab`
+- [x] `merkle-sync-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.
