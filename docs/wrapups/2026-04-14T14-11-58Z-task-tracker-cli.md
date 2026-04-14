@@ -1,0 +1,22 @@
+# Wrap-up: task-tracker-cli
+
+- Timestamp: 2026-04-14T14:11:58Z
+- Project: task-tracker-cli
+- What changed:
+  - added recurring task scheduling with `--repeat daily|weekly|monthly` and `--clear-repeat`
+  - made `done` automatically spawn the next occurrence for recurring tasks while preserving priority and tags
+  - exposed recurrence in list output, summary metrics, CSV/Markdown exports, README examples, and tests
+  - added research, refresh, checklist, and three review-pass notes for the slice
+- Tests run:
+  - `./.venv/bin/python -m pytest -q tests`
+- Reviews run:
+  - `docs/reviews/2026-04-14-task-tracker-cli-recurring-review-pass-1.md`
+  - `docs/reviews/2026-04-14-task-tracker-cli-recurring-review-pass-2.md`
+  - `docs/reviews/2026-04-14-task-tracker-cli-recurring-review-pass-3.md`
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+  - result: clean (0 verified, 0 unknown)
+- Commit hash:
+  - `ea2dc08`
+- Next step:
+  - add bulk import so recurring project plans or checklist files can seed tasks quickly
