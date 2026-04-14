@@ -1,0 +1,17 @@
+{
+  "available": {
+    "printer": 0,
+    "scanner": 0,
+    "tape": 1
+  },
+  "allocation": {
+    "P1": {"printer": 1},
+    "P2": {"scanner": 1},
+    "P3": {"tape": 1}
+  },
+  "request": {
+    "P1": {"scanner": 1},
+    "P2": {"printer": 1},
+    "P3": {"tape": 0}
+  }
+}
