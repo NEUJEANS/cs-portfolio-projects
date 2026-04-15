@@ -50,3 +50,13 @@
 - [x] expand tests for tokenizer modes, CLI mode flags, benchmark export metadata, and index round-trips
 - [x] update README usage, feature notes, and future roadmap
 - [x] complete at least 3 review passes and fix issues found
+
+## Identifier-normalization slice (2026-04-15 20:39 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the queued follow-up around code-mode identifier normalization
+- [x] do a quick tokenizer/keyword refresh and self-test the planned normalization rules
+- [x] add `--normalize-identifiers` support for `compare`, `corpus`, `build-index`, and `benchmark` in `code` mode
+- [x] persist normalization metadata in saved signature indexes so refresh/scan stay resumable
+- [x] expand tests for normalized tokenization, similarity changes, CLI validation, benchmark exports, and index round-trips
+- [x] update README usage, feature notes, and future roadmap
+- [x] complete at least 3 review passes and fix issues found

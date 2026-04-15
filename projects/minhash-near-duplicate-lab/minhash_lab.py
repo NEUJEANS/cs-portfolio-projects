@@ -4,6 +4,7 @@ import argparse
 import csv
 import hashlib
 import json
+import keyword
 import re
 import time
 from dataclasses import asdict, dataclass
@@ -15,7 +16,8 @@ from typing import Iterable
 MAX_HASH = (1 << 64) - 1
 TOKEN_RE = re.compile(r"[a-z0-9']+")
 CODE_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|//=|\*=|/=|%=|\+=|-=|\*\*|//|->|[{}()\[\].,:;+\-*/%<>=]")
-INDEX_VERSION = 2
+PYTHON_KEYWORDS = set(keyword.kwlist)
+INDEX_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ class SignatureIndex:
     glob_pattern: str
     shingle_size: int
     token_mode: str
+    normalize_identifiers: bool
     num_hashes: int
     bands: int
     seed: int
@@ -74,6 +77,7 @@ class SignatureIndex:
             "glob_pattern": self.glob_pattern,
             "shingle_size": self.shingle_size,
             "token_mode": self.token_mode,
+            "normalize_identifiers": self.normalize_identifiers,
             "num_hashes": self.num_hashes,
             "bands": self.bands,
             "seed": self.seed,
@@ -108,6 +112,7 @@ class SignatureIndex:
             glob_pattern=str(payload["glob_pattern"]),
             shingle_size=int(payload["shingle_size"]),
             token_mode=str(payload.get("token_mode", "word")),
+            normalize_identifiers=bool(payload.get("normalize_identifiers", False)),
             num_hashes=int(payload["num_hashes"]),
             bands=int(payload["bands"]),
             seed=int(payload["seed"]),
@@ -115,21 +120,30 @@ class SignatureIndex:
         )
 
 
-def normalize_text(text: str, *, token_mode: str = "word") -> list[str]:
+def _normalize_code_token(token: str, *, normalize_identifiers: bool) -> str:
+    lowered = token.lower()
+    if not normalize_identifiers:
+        return lowered
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", token) and lowered not in PYTHON_KEYWORDS:
+        return "<id>"
+    return lowered
+
+
+def normalize_text(text: str, *, token_mode: str = "word", normalize_identifiers: bool = False) -> list[str]:
     if token_mode == "word":
         return TOKEN_RE.findall(text.lower())
     if token_mode == "code":
-        return [token.lower() for token in CODE_TOKEN_RE.findall(text)]
+        return [_normalize_code_token(token, normalize_identifiers=normalize_identifiers) for token in CODE_TOKEN_RE.findall(text)]
     if token_mode == "char":
         compact = re.sub(r"\s+", " ", text.lower()).strip()
         return list(compact)
     raise ValueError("token mode must be one of: word, code, char")
 
 
-def build_shingles(text: str, size: int = 3, *, token_mode: str = "word") -> set[str]:
+def build_shingles(text: str, size: int = 3, *, token_mode: str = "word", normalize_identifiers: bool = False) -> set[str]:
     if size <= 0:
         raise ValueError("shingle size must be positive")
-    tokens = normalize_text(text, token_mode=token_mode)
+    tokens = normalize_text(text, token_mode=token_mode, normalize_identifiers=normalize_identifiers)
     if not tokens:
         return set()
     joiner = "" if token_mode == "char" else " "
@@ -205,9 +219,10 @@ def compare_texts(
     bands: int = 8,
     seed: int = 0,
     token_mode: str = "word",
+    normalize_identifiers: bool = False,
 ) -> SimilarityReport:
-    left_shingles = build_shingles(left_text, shingle_size, token_mode=token_mode)
-    right_shingles = build_shingles(right_text, shingle_size, token_mode=token_mode)
+    left_shingles = build_shingles(left_text, shingle_size, token_mode=token_mode, normalize_identifiers=normalize_identifiers)
+    right_shingles = build_shingles(right_text, shingle_size, token_mode=token_mode, normalize_identifiers=normalize_identifiers)
     left_signature = minhash_signature(left_shingles, num_hashes=num_hashes, seed=seed)
     right_signature = minhash_signature(right_shingles, num_hashes=num_hashes, seed=seed)
     return SimilarityReport(
@@ -279,6 +294,7 @@ def find_candidate_pairs(
     threshold: float = 0.5,
     seed: int = 0,
     token_mode: str = "word",
+    normalize_identifiers: bool = False,
 ) -> list[SimilarityReport]:
     if len(documents) < 2:
         return []
@@ -287,7 +303,10 @@ def find_candidate_pairs(
     if num_hashes % bands != 0:
         raise ValueError("signature length must be divisible by bands")
 
-    shingles_by_doc = {name: build_shingles(text, shingle_size, token_mode=token_mode) for name, text in documents.items()}
+    shingles_by_doc = {
+        name: build_shingles(text, shingle_size, token_mode=token_mode, normalize_identifiers=normalize_identifiers)
+        for name, text in documents.items()
+    }
     signatures = {
         name: minhash_signature(shingles, num_hashes=num_hashes, seed=seed)
         for name, shingles in shingles_by_doc.items()
@@ -318,10 +337,11 @@ def _indexed_document_from_text(
     *,
     shingle_size: int,
     token_mode: str,
+    normalize_identifiers: bool,
     num_hashes: int,
     seed: int,
 ) -> IndexedDocument:
-    shingles = sorted(build_shingles(text, shingle_size, token_mode=token_mode))
+    shingles = sorted(build_shingles(text, shingle_size, token_mode=token_mode, normalize_identifiers=normalize_identifiers))
     return IndexedDocument(
         path=str(path),
         signature=minhash_signature(set(shingles), num_hashes=num_hashes, seed=seed),
@@ -339,6 +359,7 @@ def build_signature_index(
     glob_pattern: str,
     shingle_size: int = 3,
     token_mode: str = "word",
+    normalize_identifiers: bool = False,
     num_hashes: int = 64,
     bands: int = 8,
     seed: int = 0,
@@ -349,6 +370,7 @@ def build_signature_index(
             path.read_text(encoding="utf-8"),
             shingle_size=shingle_size,
             token_mode=token_mode,
+            normalize_identifiers=normalize_identifiers,
             num_hashes=num_hashes,
             seed=seed,
         )
@@ -361,6 +383,7 @@ def build_signature_index(
         glob_pattern=glob_pattern,
         shingle_size=shingle_size,
         token_mode=token_mode,
+        normalize_identifiers=normalize_identifiers,
         num_hashes=num_hashes,
         bands=bands,
         seed=seed,
@@ -392,6 +415,7 @@ def refresh_signature_index(index: SignatureIndex, paths: Iterable[Path]) -> tup
                 text,
                 shingle_size=index.shingle_size,
                 token_mode=index.token_mode,
+                normalize_identifiers=index.normalize_identifiers,
                 num_hashes=index.num_hashes,
                 seed=index.seed,
             )
@@ -409,6 +433,7 @@ def refresh_signature_index(index: SignatureIndex, paths: Iterable[Path]) -> tup
         glob_pattern=index.glob_pattern,
         shingle_size=index.shingle_size,
         token_mode=index.token_mode,
+        normalize_identifiers=index.normalize_identifiers,
         num_hashes=index.num_hashes,
         bands=index.bands,
         seed=index.seed,
@@ -456,6 +481,7 @@ def benchmark_corpus(
     threshold: float = 0.5,
     seed: int = 0,
     token_mode: str = "word",
+    normalize_identifiers: bool = False,
 ) -> dict[str, object]:
     if len(documents) < 2:
         raise ValueError("benchmark requires at least two documents")
@@ -465,7 +491,10 @@ def benchmark_corpus(
         raise ValueError("threshold must be between 0 and 1")
 
     build_started = time.perf_counter()
-    shingles_by_doc = {name: build_shingles(text, shingle_size, token_mode=token_mode) for name, text in documents.items()}
+    shingles_by_doc = {
+        name: build_shingles(text, shingle_size, token_mode=token_mode, normalize_identifiers=normalize_identifiers)
+        for name, text in documents.items()
+    }
     signatures = {
         name: minhash_signature(shingles, num_hashes=num_hashes, seed=seed)
         for name, shingles in shingles_by_doc.items()
@@ -511,6 +540,7 @@ def benchmark_corpus(
         "documents_scanned": len(documents),
         "shingle_size": shingle_size,
         "token_mode": token_mode,
+        "normalize_identifiers": normalize_identifiers,
         "num_hashes": num_hashes,
         "bands": bands,
         "threshold": threshold,
@@ -542,6 +572,7 @@ def export_benchmark_report(payload: dict[str, object], output_path: Path) -> Pa
             ("documents_scanned", payload["documents_scanned"]),
             ("shingle_size", payload["shingle_size"]),
             ("token_mode", payload["token_mode"]),
+            ("normalize_identifiers", payload.get("normalize_identifiers", False)),
             ("num_hashes", payload["num_hashes"]),
             ("bands", payload["bands"]),
             ("threshold", payload["threshold"]),
@@ -571,6 +602,7 @@ def export_benchmark_report(payload: dict[str, object], output_path: Path) -> Pa
             f"- Documents scanned: {payload['documents_scanned']}",
             f"- Shingle size: {payload['shingle_size']}",
             f"- Token mode: {payload['token_mode']}",
+            f"- Normalize identifiers: {payload.get('normalize_identifiers', False)}",
             f"- Signature hashes: {payload['num_hashes']}",
             f"- Bands: {payload['bands']}",
             f"- Threshold: {payload['threshold']}",
@@ -645,6 +677,7 @@ def build_parser() -> argparse.ArgumentParser:
     for subparser in (compare_parser, corpus_parser, index_parser, benchmark_parser):
         subparser.add_argument("--shingle-size", type=int, default=3)
         subparser.add_argument("--token-mode", choices=["word", "code", "char"], default="word")
+        subparser.add_argument("--normalize-identifiers", action="store_true", help="collapse non-keyword identifiers in code mode")
         subparser.add_argument("--num-hashes", type=int, default=64)
         subparser.add_argument("--bands", type=int, default=8)
         subparser.add_argument("--seed", type=int, default=0)
@@ -709,6 +742,8 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "command", None) in {"compare", "corpus", "build-index", "benchmark"}:
         if args.num_hashes % args.bands != 0:
             parser.error("--num-hashes must be divisible by --bands")
+        if args.normalize_identifiers and args.token_mode != "code":
+            parser.error("--normalize-identifiers requires --token-mode code")
 
     if args.command == "compare":
         left = Path(args.left)
@@ -723,8 +758,18 @@ def main(argv: list[str] | None = None) -> int:
             bands=args.bands,
             seed=args.seed,
             token_mode=args.token_mode,
+            normalize_identifiers=args.normalize_identifiers,
         )
-        return _emit({"command": "compare", "bands": args.bands, "token_mode": args.token_mode, **report.to_dict()}, args.json)
+        return _emit(
+            {
+                "command": "compare",
+                "bands": args.bands,
+                "token_mode": args.token_mode,
+                "normalize_identifiers": args.normalize_identifiers,
+                **report.to_dict(),
+            },
+            args.json,
+        )
 
     if args.command == "corpus":
         root = Path(args.root)
@@ -737,6 +782,7 @@ def main(argv: list[str] | None = None) -> int:
             threshold=args.threshold,
             seed=args.seed,
             token_mode=args.token_mode,
+            normalize_identifiers=args.normalize_identifiers,
         )
         return _emit(
             {
@@ -746,6 +792,7 @@ def main(argv: list[str] | None = None) -> int:
                 "threshold": args.threshold,
                 "bands": args.bands,
                 "token_mode": args.token_mode,
+                "normalize_identifiers": args.normalize_identifiers,
                 "pairs": [report.to_dict() for report in reports],
             },
             args.json,
@@ -759,10 +806,11 @@ def main(argv: list[str] | None = None) -> int:
             root=root,
             glob_pattern=args.glob_pattern,
             shingle_size=args.shingle_size,
+            token_mode=args.token_mode,
+            normalize_identifiers=args.normalize_identifiers,
             num_hashes=args.num_hashes,
             bands=args.bands,
             seed=args.seed,
-            token_mode=args.token_mode,
         )
         output = Path(args.output)
         save_signature_index(index, output)
@@ -773,6 +821,7 @@ def main(argv: list[str] | None = None) -> int:
                 "documents_indexed": len(index.documents),
                 "bands": index.bands,
                 "token_mode": index.token_mode,
+                "normalize_identifiers": index.normalize_identifiers,
                 "num_hashes": index.num_hashes,
                 "shingle_size": index.shingle_size,
             },
@@ -785,7 +834,16 @@ def main(argv: list[str] | None = None) -> int:
         paths = _collect_paths(Path(index.root), index.glob_pattern)
         refreshed_index, stats = refresh_signature_index(index, paths)
         save_signature_index(refreshed_index, index_path)
-        return _emit({"command": "refresh-index", "index_path": str(index_path), "token_mode": index.token_mode, **stats}, args.json)
+        return _emit(
+            {
+                "command": "refresh-index",
+                "index_path": str(index_path),
+                "token_mode": index.token_mode,
+                "normalize_identifiers": index.normalize_identifiers,
+                **stats,
+            },
+            args.json,
+        )
 
     if args.command == "scan-index":
         index = load_signature_index(Path(args.index_path))
@@ -798,6 +856,7 @@ def main(argv: list[str] | None = None) -> int:
                 "threshold": args.threshold,
                 "bands": index.bands,
                 "token_mode": index.token_mode,
+                "normalize_identifiers": index.normalize_identifiers,
                 "pairs": [report.to_dict() for report in reports],
             },
             args.json,
@@ -814,6 +873,7 @@ def main(argv: list[str] | None = None) -> int:
             threshold=args.threshold,
             seed=args.seed,
             token_mode=args.token_mode,
+            normalize_identifiers=args.normalize_identifiers,
         )
         if args.output:
             output_path = export_benchmark_report(payload, Path(args.output))

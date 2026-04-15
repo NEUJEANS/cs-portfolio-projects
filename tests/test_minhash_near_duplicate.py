@@ -53,6 +53,16 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             ["if", "(", "score", ">=", "limit", ")", "{", "total"],
         )
 
+    def test_code_token_mode_can_normalize_non_keyword_identifiers(self) -> None:
+        self.assertEqual(
+            normalize_text(
+                "def total(values):\n    return values + offset\n",
+                token_mode="code",
+                normalize_identifiers=True,
+            )[:8],
+            ["def", "<id>", "(", "<id>", ")", ":", "return", "<id>"],
+        )
+
     def test_signature_is_deterministic_for_same_seed(self) -> None:
         shingles = {"a b", "b c", "c d"}
         self.assertEqual(minhash_signature(shingles, num_hashes=16, seed=7), minhash_signature(shingles, num_hashes=16, seed=7))
@@ -135,6 +145,7 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
                 glob_pattern="*.py",
                 shingle_size=3,
                 token_mode="code",
+                normalize_identifiers=True,
                 num_hashes=32,
                 bands=8,
                 seed=4,
@@ -143,6 +154,7 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             save_signature_index(index, index_path)
             loaded = load_signature_index(index_path)
             self.assertEqual(loaded.token_mode, "code")
+            self.assertTrue(loaded.normalize_identifiers)
             reports = find_candidate_pairs_from_index(loaded, threshold=0.2)
             self.assertEqual(len(reports), 1)
 
@@ -179,6 +191,33 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertNotEqual(after_docs[str(b_path)].content_sha256, before_docs[str(b_path)].content_sha256)
             self.assertIn(str(d_path), after_docs)
             self.assertNotIn(str(c_path), after_docs)
+
+    def test_code_identifier_normalization_increases_similarity_for_renamed_variables(self) -> None:
+        plain = compare_texts(
+            "def total(values):\n    current_total = sum(values)\n    return current_total\n",
+            "def total(items):\n    running_sum = sum(items)\n    return running_sum\n",
+            left_name="left.py",
+            right_name="right.py",
+            shingle_size=3,
+            num_hashes=64,
+            bands=8,
+            seed=13,
+            token_mode="code",
+        )
+        normalized = compare_texts(
+            "def total(values):\n    current_total = sum(values)\n    return current_total\n",
+            "def total(items):\n    running_sum = sum(items)\n    return running_sum\n",
+            left_name="left.py",
+            right_name="right.py",
+            shingle_size=3,
+            num_hashes=64,
+            bands=8,
+            seed=13,
+            token_mode="code",
+            normalize_identifiers=True,
+        )
+        self.assertLess(plain.exact_jaccard, normalized.exact_jaccard)
+        self.assertGreater(normalized.estimated_jaccard, plain.estimated_jaccard)
 
     def test_benchmark_reports_candidate_counts_and_timings(self) -> None:
         payload = benchmark_corpus(
@@ -227,6 +266,7 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
 
             self.assertIn("metric,value", csv_text)
             self.assertIn("candidate_pairs", csv_text)
+            self.assertIn("normalize_identifiers", csv_text)
             self.assertIn("# MinHash benchmark summary", md_text)
             self.assertIn("## Top LSH matches", md_text)
 
@@ -303,6 +343,37 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(payload["token_mode"], "code")
             self.assertGreater(payload["estimated_jaccard"], 0.3)
 
+    def test_cli_compare_can_normalize_identifiers_for_code_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            left = Path(tmpdir) / "left.py"
+            right = Path(tmpdir) / "right.py"
+            left.write_text("def total(values):\n    current_total = sum(values)\n    return current_total\n", encoding="utf-8")
+            right.write_text("def total(items):\n    running_sum = sum(items)\n    return running_sum\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "compare",
+                    str(left),
+                    str(right),
+                    "--token-mode",
+                    "code",
+                    "--normalize-identifiers",
+                    "--shingle-size",
+                    "3",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertTrue(payload["normalize_identifiers"])
+            self.assertGreater(payload["exact_jaccard"], 0.7)
+
     def test_cli_corpus_json_output_lists_pairs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -357,6 +428,7 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             build_payload = json.loads(build_completed.stdout)
             self.assertEqual(build_payload["command"], "build-index")
             self.assertEqual(build_payload["documents_indexed"], 3)
+            self.assertFalse(build_payload["normalize_identifiers"])
             self.assertTrue(index_path.exists())
 
             scan_completed = subprocess.run(
@@ -412,6 +484,7 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(payload["updated"], 1)
             self.assertEqual(payload["added"], 1)
             self.assertEqual(payload["removed"], 0)
+            self.assertFalse(payload["normalize_identifiers"])
 
     def test_cli_benchmark_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -510,6 +583,22 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["token_mode"], "char")
             self.assertIn("Token mode: char", output.read_text(encoding="utf-8"))
+
+    def test_cli_rejects_identifier_normalization_without_code_mode(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "corpus",
+                str(PROJECT_ROOT),
+                "--normalize-identifiers",
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("requires --token-mode code", completed.stderr)
 
     def test_cli_rejects_band_mismatch(self) -> None:
         completed = subprocess.run(
