@@ -6,6 +6,7 @@
 - [x] refresh Node fs/http/test patterns
 - [x] choose an initial 15 projects with varied CS coverage
 - [x] extend the set with additional strong projects when useful
+- [x] add a dynamic-routing networking project to strengthen distributed-systems coverage
 
 ## Build Quality Bar for each project
 - [x] implementation complete
