@@ -273,6 +273,41 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertFalse(payload["include_nil"])
         self.assertNotIn('label="NIL"', payload["dot"])
 
+    def test_benchmark_sequence_reports_valid_red_black_and_avl_metrics(self) -> None:
+        summary = module._benchmark_sequence([1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(summary["input_size"], 7)
+        self.assertIn("black_height", summary["red_black"])
+        self.assertGreaterEqual(summary["red_black"]["height"], 1)
+        self.assertGreaterEqual(summary["avl"]["height"], 1)
+        self.assertGreaterEqual(summary["red_black"]["rotation_count"], 0)
+        self.assertGreaterEqual(summary["avl"]["rotation_count"], 0)
+
+    def test_cli_benchmark_outputs_comparison_cases(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "benchmark", "--count", "9", "--seed", "11"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["count"], 9)
+        self.assertEqual(set(payload["cases"].keys()), {"ascending", "descending", "shuffled"})
+        self.assertIn("height_gap_avl_minus_red_black", payload["summary"])
+        self.assertIn("rotation_gap_avl_minus_red_black", payload["summary"])
+
+    def test_cli_benchmark_rejects_non_positive_count(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "benchmark", "--count", "0"],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("benchmark count must be positive", completed.stderr)
+
     def test_cli_select_reports_out_of_range_index(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "select", "9", "10", "20", "30", "15", "25", "5"],

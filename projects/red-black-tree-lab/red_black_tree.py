@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import random
+import statistics
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 RED = "red"
 BLACK = "black"
+_AVL_MODULE: object | None = None
 
 
 @dataclass
@@ -551,6 +557,59 @@ def build_tree(values: Iterable[int], *, trace_enabled: bool = False) -> RedBlac
     return tree
 
 
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _load_avl_module() -> object:
+    global _AVL_MODULE
+    if _AVL_MODULE is not None:
+        return _AVL_MODULE
+    module_path = _project_root() / "projects" / "avl-tree-lab" / "avl_tree_lab.py"
+    spec = importlib.util.spec_from_file_location("avl_tree_lab_for_red_black_benchmark", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load AVL tree module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault(spec.name, module)
+    spec.loader.exec_module(module)
+    _AVL_MODULE = module
+    return module
+
+
+def _rotation_count_from_red_black_trace(trace: list[dict[str, object]]) -> int:
+    return sum(1 for event in trace if event["event"] in {"rotate_left", "rotate_right"})
+
+
+def _rotation_count_from_avl_trace(events: list[str]) -> int:
+    return sum(1 for event in events if "rotation" in event)
+
+
+def _benchmark_sequence(sequence: list[int]) -> dict[str, object]:
+    rb_tree = build_tree(sequence, trace_enabled=True)
+    rb_valid, _, rb_errors = rb_tree.validate()
+    if not rb_valid:
+        raise ValueError(f"red-black tree benchmark built an invalid tree: {rb_errors}")
+
+    avl_module = _load_avl_module()
+    avl_tree = avl_module.build_tree(sequence, trace=True)
+    avl_validation = avl_tree.validate()
+    if not avl_validation["is_valid"]:
+        raise ValueError(f"AVL tree benchmark built an invalid tree: {avl_validation['issues']}")
+
+    return {
+        "input_size": len(sequence),
+        "red_black": {
+            "height": rb_tree.height(),
+            "rotation_count": _rotation_count_from_red_black_trace(rb_tree.trace),
+            "black_height": rb_tree.black_height(),
+        },
+        "avl": {
+            "height": avl_tree.height(),
+            "rotation_count": _rotation_count_from_avl_trace(avl_tree.events),
+        },
+    }
+
+
 def command_demo(args: argparse.Namespace) -> dict[str, object]:
     tree = build_tree([7, 3, 18, 10, 22, 8, 11, 26], trace_enabled=args.trace)
     payload = {"command": "demo", **tree.summary(include_trace=args.trace)}
@@ -624,6 +683,42 @@ def command_dot(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
+    if args.count <= 0:
+        raise ValueError("benchmark count must be positive")
+    ascending = list(range(args.start, args.start + args.count))
+    descending = list(reversed(ascending))
+    rng = random.Random(args.seed)
+    shuffled = ascending.copy()
+    rng.shuffle(shuffled)
+
+    cases = {
+        "ascending": _benchmark_sequence(ascending),
+        "descending": _benchmark_sequence(descending),
+        "shuffled": _benchmark_sequence(shuffled),
+    }
+
+    metrics = {
+        "red_black_height_mean": statistics.fmean(case["red_black"]["height"] for case in cases.values()),
+        "avl_height_mean": statistics.fmean(case["avl"]["height"] for case in cases.values()),
+        "red_black_rotation_mean": statistics.fmean(case["red_black"]["rotation_count"] for case in cases.values()),
+        "avl_rotation_mean": statistics.fmean(case["avl"]["rotation_count"] for case in cases.values()),
+    }
+    metrics["height_gap_avl_minus_red_black"] = metrics["avl_height_mean"] - metrics["red_black_height_mean"]
+    metrics["rotation_gap_avl_minus_red_black"] = (
+        metrics["avl_rotation_mean"] - metrics["red_black_rotation_mean"]
+    )
+
+    return {
+        "command": "benchmark",
+        "count": args.count,
+        "seed": args.seed,
+        "start": args.start,
+        "cases": cases,
+        "summary": metrics,
+    }
+
+
 def add_trace_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--trace", action="store_true", help="include rotation and fix-up events in the JSON output")
 
@@ -670,6 +765,15 @@ def main() -> None:
     dot_parser.add_argument("--no-nil", dest="include_nil", action="store_false", help="omit NIL leaf nodes from DOT output")
     dot_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     dot_parser.set_defaults(handler=command_dot, include_nil=True)
+
+    benchmark_parser = subparsers.add_parser(
+        "benchmark",
+        help="compare red-black and AVL insertion outcomes across ascending, descending, and shuffled inputs",
+    )
+    benchmark_parser.add_argument("--count", type=int, default=31, help="number of sequential integers to insert")
+    benchmark_parser.add_argument("--start", type=int, default=1, help="starting integer for the benchmark range")
+    benchmark_parser.add_argument("--seed", type=int, default=7, help="random seed for the shuffled benchmark case")
+    benchmark_parser.set_defaults(handler=command_benchmark)
 
     args = parser.parse_args()
     try:

@@ -19,7 +19,8 @@ A portfolio-friendly balanced tree lab that implements red-black tree insertion 
 - validation report for BST ordering, red-black invariants, parent pointers, and subtree-size consistency
 - optional trace mode that records insert/delete fix-up cases and rotations for explainable debugging demos
 - Graphviz DOT export for portfolio screenshots, blog posts, and balancing walkthrough diagrams
-- CLI commands for demo runs, custom builds, membership queries, rank queries, kth-smallest lookup, deletion checks, and DOT export
+- deterministic benchmark mode that compares red-black and AVL tree height/rotation trade-offs on ascending, descending, and shuffled insert orders
+- CLI commands for demo runs, custom builds, membership queries, rank queries, kth-smallest lookup, deletion checks, DOT export, and cross-tree benchmarking
 
 ## Usage
 
@@ -66,6 +67,12 @@ python3 projects/red-black-tree-lab/red_black_tree.py dot 20 10 30 5
 python3 projects/red-black-tree-lab/red_black_tree.py dot --no-nil 20 10 30 5
 ```
 
+Benchmark the red-black implementation against the repo's AVL tree lab on multiple insertion orders:
+
+```bash
+python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --seed 7
+```
+
 Include a trace of rotations and fix-up cases for portfolio walkthroughs:
 
 ```bash
@@ -77,6 +84,7 @@ python3 projects/red-black-tree-lab/red_black_tree.py demo --trace
 
 ```bash
 python3 -m unittest tests/test_red_black_tree_lab.py
+python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --seed 7
 ```
 
 ## Design notes
@@ -87,8 +95,9 @@ python3 -m unittest tests/test_red_black_tree_lab.py
 - Validation explicitly checks BST bounds, black-height consistency, parent pointers, and subtree-size consistency so augmentation bugs stay explainable.
 - Trace output names the repair cases that fired during insertion or deletion, making the balancing logic easier to narrate in a README, code review, or interview demo.
 - DOT export labels left/right child edges and can optionally render NIL leaves, which makes black-height explanations and deletion repair screenshots easier to present.
+- The benchmark command intentionally uses deterministic ascending, descending, and seeded shuffled sequences so the AVL-vs-red-black comparison is repeatable in README snippets, interviews, and CI runs.
 
 ## Future improvements
 - emit Graphviz diagrams after each insertion/deletion step
-- benchmark against AVL trees for height and rotation counts
+- extend the benchmark with CSV export for chart-ready artifacts across larger input sizes
 - add a compact trace-to-markdown explainer that turns raw events into a narrated balancing walkthrough
