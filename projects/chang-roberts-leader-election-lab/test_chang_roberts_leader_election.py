@@ -4,15 +4,19 @@ import sys
 import unittest
 from pathlib import Path
 
-from chang_roberts_leader_election import RingElectionSimulator
+from chang_roberts_leader_election import RingElectionSimulator, render_mermaid_sequence
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SCRIPT = PROJECT_DIR / "chang_roberts_leader_election.py"
 
 
-def run_cli(*args: str) -> dict:
+def run_cli_raw(*args: str) -> str:
     completed = subprocess.run([sys.executable, str(SCRIPT), *args], cwd=PROJECT_DIR, capture_output=True, check=True, text=True)
-    return json.loads(completed.stdout)
+    return completed.stdout
+
+
+def run_cli(*args: str) -> dict:
+    return json.loads(run_cli_raw(*args))
 
 
 class ChangRobertsLeaderElectionTests(unittest.TestCase):
@@ -42,6 +46,16 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "failed ids must belong to the ring"):
             simulator.simulate(initiator=5, failed=[42])
 
+    def test_mermaid_renderer_captures_election_and_announcement(self) -> None:
+        result = RingElectionSimulator([8, 3, 12, 6]).simulate(initiator=3)
+        diagram = render_mermaid_sequence(result)
+        self.assertIn("sequenceDiagram", diagram)
+        self.assertIn("participant P3 as 3", diagram)
+        self.assertIn("election #1", diagram)
+        self.assertIn("elect leader 12", diagram)
+        self.assertIn("leader 12 announces victory", diagram)
+        self.assertIn("announce #1: leader 12", diagram)
+
     def test_cli_outputs_expected_summary(self) -> None:
         result = run_cli("--ring", "8", "3", "12", "6", "--initiator", "3")
         self.assertEqual(result["leader"], 12)
@@ -53,6 +67,17 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertEqual(result["leader"], 10)
         self.assertEqual(result["failed"], [15])
         self.assertTrue(all(step["phase"] == "announce" for step in result["announcement_trace"]))
+
+    def test_cli_can_embed_visualization_in_json(self) -> None:
+        result = run_cli("--ring", "8", "3", "12", "6", "--initiator", "3", "--include-visualization")
+        self.assertIn("visualizations", result)
+        self.assertIn("mermaid_sequence", result["visualizations"])
+        self.assertIn("sequenceDiagram", result["visualizations"]["mermaid_sequence"])
+
+    def test_cli_visualization_only_mode(self) -> None:
+        output = run_cli_raw("--ring", "8", "3", "12", "6", "--initiator", "3", "--visualization-only", "mermaid")
+        self.assertIn("sequenceDiagram", output)
+        self.assertIn("elect leader 12", output)
 
 
 if __name__ == "__main__":

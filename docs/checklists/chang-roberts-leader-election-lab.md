@@ -4,6 +4,6 @@
 - [x] implement a runnable simulator and CLI
 - [x] cover happy-path and validation cases with tests
 - [x] include interview-ready README notes and usage examples
-- [ ] add visualization exports for traces
+- [x] add visualization exports for traces
 - [ ] add simultaneous multi-initiator scenarios
 - [ ] compare against an alternative ring-election algorithm

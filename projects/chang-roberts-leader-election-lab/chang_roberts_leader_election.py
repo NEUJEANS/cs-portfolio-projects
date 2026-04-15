@@ -101,12 +101,64 @@ class RingElectionSimulator:
         }
 
 
+def _participant_label(process_id: int) -> str:
+    return f"P{process_id}"
+
+
+def render_mermaid_sequence(result: dict[str, object]) -> str:
+    active_ring = result["active_ring"]
+    initiator = result["initiator"]
+    leader = result["leader"]
+    lines = ["sequenceDiagram"]
+    for process_id in active_ring:
+        lines.append(f"    participant {_participant_label(process_id)} as {process_id}")
+    lines.append(f"    Note over {_participant_label(initiator)}: initiator={initiator}")
+
+    for index, step in enumerate(result["trace"], start=1):
+        arrow = "->>"
+        if step["action"] == "replace":
+            detail = f"election #{index}: replace with {step['candidate']} (hop {step['hops']})"
+        elif step["action"] == "elect":
+            detail = f"election #{index}: elect leader {step['candidate']} (hop {step['hops']})"
+            arrow = "-->>"
+        else:
+            detail = f"election #{index}: forward {step['candidate']} (hop {step['hops']})"
+        lines.append(f"    {_participant_label(step['from'])}{arrow}{_participant_label(step['to'])}: {detail}")
+
+    if result["announcement_trace"]:
+        lines.append(f"    Note over {_participant_label(leader)}: leader {leader} announces victory")
+    for index, step in enumerate(result["announcement_trace"], start=1):
+        lines.append(
+            f"    {_participant_label(step['from'])}-->>{_participant_label(step['to'])}: announce #{index}: leader {step['leader']}"
+        )
+
+    return "\n".join(lines)
+
+
+def build_output(result: dict[str, object], include_visualization: bool) -> dict[str, object]:
+    if not include_visualization:
+        return result
+    enriched = dict(result)
+    enriched["visualizations"] = {"mermaid_sequence": render_mermaid_sequence(result)}
+    return enriched
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate Chang-Roberts leader election on a unidirectional ring")
     parser.add_argument("--ring", nargs="+", type=int, required=True, help="Process ids in ring order")
     parser.add_argument("--initiator", type=int, required=True, help="Active process id that starts the election")
     parser.add_argument("--failed", nargs="*", type=int, default=[], help="Optional failed process ids to skip")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON result")
+    parser.add_argument(
+        "--include-visualization",
+        action="store_true",
+        help="Include a Mermaid sequence diagram string in the JSON output",
+    )
+    parser.add_argument(
+        "--visualization-only",
+        choices=["mermaid"],
+        help="Print just the requested visualization format instead of JSON",
+    )
     return parser
 
 
@@ -114,7 +166,10 @@ def main() -> None:
     args = build_parser().parse_args()
     simulator = RingElectionSimulator(args.ring)
     result = simulator.simulate(initiator=args.initiator, failed=args.failed)
-    print(json.dumps(result, indent=2 if args.pretty else None, sort_keys=True))
+    if args.visualization_only == "mermaid":
+        print(render_mermaid_sequence(result))
+        return
+    print(json.dumps(build_output(result, include_visualization=args.include_visualization), indent=2 if args.pretty else None, sort_keys=True))
 
 
 if __name__ == "__main__":

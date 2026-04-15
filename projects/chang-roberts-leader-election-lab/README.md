@@ -1,12 +1,13 @@
 # Chang-Roberts Leader Election Lab
 
-A distributed-systems portfolio project that simulates the Chang-Roberts leader election algorithm on a unidirectional ring, including a post-election leader announcement phase and optional failed-node filtering.
+A distributed-systems portfolio project that simulates the Chang-Roberts leader election algorithm on a unidirectional ring, including a post-election leader announcement phase, optional failed-node filtering, and Mermaid trace export for presentation-friendly visualizations.
 
 ## Why this project is portfolio-worthy
 - demonstrates a classic distributed-systems election protocol in runnable code
 - makes message complexity tangible with a full step-by-step trace
-- shows how ring topology and initiator choice affect routing behavior
+- shows how ring ordering and initiator choice affect routing behavior
 - includes failure-aware simulation so you can discuss partial availability assumptions in interviews
+- exports Mermaid sequence diagrams that turn raw traces into slide-ready artifacts
 
 ## Features
 - deterministic ring-order simulation for Chang-Roberts elections
@@ -14,16 +15,31 @@ A distributed-systems portfolio project that simulates the Chang-Roberts leader 
 - post-election leader announcement trace for the surviving ring
 - failure filtering that removes inactive processes before the election starts
 - JSON CLI output suitable for demos, scripts, and future visualizations
-- unit + CLI coverage for core happy-path and validation scenarios
+- Mermaid sequence-diagram export for election + announcement flow review
+- unit + CLI coverage for core happy-path, validation, and visualization scenarios
 
 ## Project structure
-- `chang_roberts_leader_election.py` - simulator and CLI
+- `chang_roberts_leader_election.py` - simulator, CLI, and Mermaid renderer
 - `test_chang_roberts_leader_election.py` - unit and CLI coverage
 
 ## Usage
 ```bash
 python3 chang_roberts_leader_election.py --ring 8 3 12 6 --initiator 3 --pretty
-python3 chang_roberts_leader_election.py --ring 10 4 15 7 --initiator 4 --failed 15 --pretty
+python3 chang_roberts_leader_election.py --ring 10 4 15 7 --initiator 4 --failed 15 --include-visualization --pretty
+python3 chang_roberts_leader_election.py --ring 8 3 12 6 --initiator 3 --visualization-only mermaid
+```
+
+Example Mermaid output snippet:
+
+```mermaid
+sequenceDiagram
+    Note over P3: initiator=3
+    participant P8 as 8
+    participant P3 as 3
+    participant P12 as 12
+    participant P6 as 6
+    P3->>P12: election #1: replace with 12 (hop 1)
+    ...
 ```
 
 ## Testing
@@ -36,9 +52,10 @@ python3 -m unittest discover -s projects/chang-roberts-leader-election-lab -p 't
 - how ring ordering affects the observed trace even though the final leader stays the same
 - why Chang-Roberts has quadratic worst-case message complexity in the number of active nodes
 - what assumptions break when links are bidirectional, lossy, or nodes fail mid-election
+- how visualization export helps communicate algorithm state changes to non-specialists during demos
 
 ## Future improvements
-- add Mermaid or Graphviz timeline export for the message trace
 - support multi-initiator simultaneous elections for richer contention scenarios
 - compare Chang-Roberts against Hirschberg-Sinclair or bully-election baselines
 - inject mid-election failures and recovery events
+- export Graphviz or animation-friendly timeline formats alongside Mermaid

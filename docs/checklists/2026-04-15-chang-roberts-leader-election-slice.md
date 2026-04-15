@@ -5,4 +5,5 @@
 - [x] implement election + announcement simulation with JSON trace output
 - [x] add unit and CLI coverage
 - [x] document portfolio value, usage, and next-step extensions
-- [ ] add visualization export in a follow-up slice
+- [x] add Mermaid visualization export for election and announcement traces
+- [ ] consider Graphviz or animated timeline exports in a future slice
