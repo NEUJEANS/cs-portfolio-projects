@@ -27,7 +27,7 @@
 - [x] perform review pass 2 and fix issues
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 
 ## Next slice candidates
 - [ ] compare union-find throughput against BFS/DFS recomputation on the same workloads
