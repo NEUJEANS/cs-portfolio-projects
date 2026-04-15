@@ -60,6 +60,51 @@ class RedBlackTreeLabTests(unittest.TestCase):
         with self.assertRaises(IndexError):
             tree.select(7)
 
+    def test_delete_leaf_preserves_invariants(self) -> None:
+        tree = build_tree([20, 10, 30, 5, 15, 25, 35])
+        self.assertTrue(tree.delete(5))
+        valid, _, errors = tree.validate()
+        self.assertTrue(valid, errors)
+        self.assertEqual(tree.inorder(), [10, 15, 20, 25, 30, 35])
+        self.assertEqual(tree.size, 6)
+        self.assertEqual(tree.rank(20), 2)
+
+    def test_delete_node_with_one_child_preserves_invariants(self) -> None:
+        tree = build_tree([10, 5, 20, 15])
+        self.assertTrue(tree.delete(20))
+        valid, _, errors = tree.validate()
+        self.assertTrue(valid, errors)
+        self.assertEqual(tree.inorder(), [5, 10, 15])
+        self.assertEqual(tree.size, 3)
+
+    def test_delete_node_with_two_children_preserves_order_statistics(self) -> None:
+        tree = build_tree([20, 10, 30, 5, 15, 25, 35, 12, 18])
+        self.assertTrue(tree.delete(10))
+        valid, _, errors = tree.validate()
+        self.assertTrue(valid, errors)
+        self.assertEqual(tree.inorder(), [5, 12, 15, 18, 20, 25, 30, 35])
+        self.assertEqual(tree.select(3), 18)
+        self.assertEqual(tree.rank(20), 4)
+
+    def test_delete_missing_key_reports_false_without_mutation(self) -> None:
+        tree = build_tree([9, 4, 12])
+        self.assertFalse(tree.delete(7))
+        valid, _, errors = tree.validate()
+        self.assertTrue(valid, errors)
+        self.assertEqual(tree.inorder(), [4, 9, 12])
+        self.assertEqual(tree.size, 3)
+
+    def test_delete_sequence_to_empty_tree_stays_valid(self) -> None:
+        values = [41, 38, 31, 12, 19, 8]
+        tree = build_tree(values)
+        for value in [8, 12, 19, 31, 38, 41]:
+            self.assertTrue(tree.delete(value))
+            valid, _, errors = tree.validate()
+            self.assertTrue(valid, errors)
+        self.assertEqual(tree.inorder(), [])
+        self.assertEqual(tree.size, 0)
+        self.assertIsNone(tree.root)
+
     def test_summary_reports_validation_state(self) -> None:
         tree = build_tree([41, 38, 31, 12, 19, 8])
         summary = tree.summary()
@@ -134,6 +179,20 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertEqual(select_payload["command"], "select")
         self.assertEqual(select_payload["selected"], 25)
         self.assertTrue(select_payload["valid"], select_payload["errors"])
+
+    def test_cli_delete_command_reports_updated_tree(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "delete", "10", "20", "10", "30", "5", "15", "25", "35"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "delete")
+        self.assertTrue(payload["deleted"])
+        self.assertEqual(payload["inorder"], [5, 15, 20, 25, 30, 35])
+        self.assertTrue(payload["valid"], payload["errors"])
 
     def test_cli_select_reports_out_of_range_index(self) -> None:
         completed = subprocess.run(

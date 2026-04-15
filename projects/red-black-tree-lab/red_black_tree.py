@@ -49,6 +49,13 @@ class RedBlackTree:
         self._fix_insert(node)
         return True
 
+    def delete(self, key: int) -> bool:
+        target = self.find_node(key)
+        if target is None:
+            return False
+        self._delete_node(target)
+        return True
+
     def contains(self, key: int) -> bool:
         return self.find_node(key) is not None
 
@@ -174,6 +181,54 @@ class RedBlackTree:
             "errors": errors,
         }
 
+    def _delete_node(self, target: Node) -> None:
+        removed_color = target.color
+        replacement: Node | None
+        replacement_parent: Node | None
+        replacement_was_left = False
+
+        if target.left is None:
+            replacement = target.right
+            replacement_parent = target.parent
+            replacement_was_left = replacement_parent is not None and target == replacement_parent.left
+            self._transplant(target, target.right)
+            refresh_points = [replacement_parent]
+        elif target.right is None:
+            replacement = target.left
+            replacement_parent = target.parent
+            replacement_was_left = replacement_parent is not None and target == replacement_parent.left
+            self._transplant(target, target.left)
+            refresh_points = [replacement_parent]
+        else:
+            successor = self._minimum(target.right)
+            removed_color = successor.color
+            replacement = successor.right
+            if successor.parent == target:
+                replacement_parent = successor
+                replacement_was_left = False
+            else:
+                replacement_parent = successor.parent
+                replacement_was_left = replacement_parent is not None and successor == replacement_parent.left
+                self._transplant(successor, successor.right)
+                successor.right = target.right
+                assert successor.right is not None
+                successor.right.parent = successor
+            self._transplant(target, successor)
+            successor.left = target.left
+            assert successor.left is not None
+            successor.left.parent = successor
+            successor.color = target.color
+            self._refresh_size(successor)
+            refresh_points = [replacement_parent, successor]
+
+        self.size -= 1
+        for node in refresh_points:
+            self._refresh_upwards(node)
+        if removed_color == BLACK:
+            self._fix_delete(replacement, replacement_parent, replacement_was_left)
+        if self.root is not None:
+            self.root.color = BLACK
+
     def _rotate_left(self, pivot: Node) -> None:
         child = pivot.right
         if child is None:
@@ -251,10 +306,95 @@ class RedBlackTree:
             self.root.color = BLACK
         self._refresh_upwards(node)
 
+    def _fix_delete(self, node: Node | None, parent: Node | None, node_was_left: bool) -> None:
+        current = node
+        current_parent = parent
+        current_was_left = node_was_left
+
+        while current != self.root and self._color_of(current) == BLACK:
+            if current_parent is None:
+                break
+            is_left_child = current == current_parent.left if current is not None else current_was_left
+            if is_left_child:
+                sibling = current_parent.right
+                if self._color_of(sibling) == RED:
+                    assert sibling is not None
+                    sibling.color = BLACK
+                    current_parent.color = RED
+                    self._rotate_left(current_parent)
+                    sibling = current_parent.right
+                if self._color_of(self._left_of(sibling)) == BLACK and self._color_of(self._right_of(sibling)) == BLACK:
+                    if sibling is not None:
+                        sibling.color = RED
+                    current = current_parent
+                    current_parent = current.parent
+                    current_was_left = current_parent is not None and current == current_parent.left
+                else:
+                    if self._color_of(self._right_of(sibling)) == BLACK:
+                        if sibling is not None and sibling.left is not None:
+                            sibling.left.color = BLACK
+                        if sibling is not None:
+                            sibling.color = RED
+                            self._rotate_right(sibling)
+                        sibling = current_parent.right
+                    assert sibling is not None
+                    sibling.color = current_parent.color
+                    current_parent.color = BLACK
+                    if sibling.right is not None:
+                        sibling.right.color = BLACK
+                    self._rotate_left(current_parent)
+                    current = self.root
+                    current_parent = None
+            else:
+                sibling = current_parent.left
+                if self._color_of(sibling) == RED:
+                    assert sibling is not None
+                    sibling.color = BLACK
+                    current_parent.color = RED
+                    self._rotate_right(current_parent)
+                    sibling = current_parent.left
+                if self._color_of(self._left_of(sibling)) == BLACK and self._color_of(self._right_of(sibling)) == BLACK:
+                    if sibling is not None:
+                        sibling.color = RED
+                    current = current_parent
+                    current_parent = current.parent
+                    current_was_left = current_parent is not None and current == current_parent.left
+                else:
+                    if self._color_of(self._left_of(sibling)) == BLACK:
+                        if sibling is not None and sibling.right is not None:
+                            sibling.right.color = BLACK
+                        if sibling is not None:
+                            sibling.color = RED
+                            self._rotate_left(sibling)
+                        sibling = current_parent.left
+                    assert sibling is not None
+                    sibling.color = current_parent.color
+                    current_parent.color = BLACK
+                    if sibling.left is not None:
+                        sibling.left.color = BLACK
+                    self._rotate_right(current_parent)
+                    current = self.root
+                    current_parent = None
+        if current is not None:
+            current.color = BLACK
+        self._refresh_upwards(current if current is not None else current_parent)
+
     def _refresh_upwards(self, node: Node | None) -> None:
         while node is not None:
             self._refresh_size(node)
             node = node.parent
+
+    @staticmethod
+    def _color_of(node: Node | None) -> str:
+        return BLACK if node is None else node.color
+
+    @staticmethod
+    def _left_of(node: Node | None) -> Node | None:
+        return None if node is None else node.left
+
+    @staticmethod
+    def _right_of(node: Node | None) -> Node | None:
+        return None if node is None else node.right
 
     @staticmethod
     def _size(node: Node | None) -> int:
@@ -262,6 +402,23 @@ class RedBlackTree:
 
     def _refresh_size(self, node: Node) -> None:
         node.subtree_size = 1 + self._size(node.left) + self._size(node.right)
+
+    @staticmethod
+    def _minimum(node: Node) -> Node:
+        current = node
+        while current.left is not None:
+            current = current.left
+        return current
+
+    def _transplant(self, target: Node, replacement: Node | None) -> None:
+        if target.parent is None:
+            self.root = replacement
+        elif target == target.parent.left:
+            target.parent.left = replacement
+        else:
+            target.parent.right = replacement
+        if replacement is not None:
+            replacement.parent = target.parent
 
 
 def build_tree(values: Iterable[int]) -> RedBlackTree:
@@ -319,8 +476,20 @@ def command_select(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def command_delete(args: argparse.Namespace) -> dict[str, object]:
+    tree = build_tree(args.values)
+    deleted = tree.delete(args.query)
+    return {
+        "command": "delete",
+        "input": args.values,
+        "query": args.query,
+        "deleted": deleted,
+        **tree.summary(),
+    }
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Red-black tree insertion and validation lab")
+    parser = argparse.ArgumentParser(description="Red-black tree insertion, deletion, and validation lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     demo_parser = subparsers.add_parser("demo", help="run a bundled insertion demo")
@@ -344,6 +513,11 @@ def main() -> None:
     select_parser.add_argument("index", type=int, help="zero-based inorder index")
     select_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     select_parser.set_defaults(handler=command_select)
+
+    delete_parser = subparsers.add_parser("delete", help="build a tree, delete a key, and validate the result")
+    delete_parser.add_argument("query", type=int, help="integer to delete")
+    delete_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
+    delete_parser.set_defaults(handler=command_delete)
 
     args = parser.parse_args()
     try:
