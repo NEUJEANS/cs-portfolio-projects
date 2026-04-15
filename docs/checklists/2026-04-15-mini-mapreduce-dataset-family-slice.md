@@ -9,5 +9,5 @@
 - [x] extend the average-score plugin with multiple named dataset families for stronger portfolio demos
 - [x] extend project and repo-level tests for programmatic and CLI dataset-family flows
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider auto-discoverable plugin dataset-family metadata in a future slice
