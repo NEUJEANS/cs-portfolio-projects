@@ -1,0 +1,23 @@
+# Interval Tree Render Artifact Slice Wrap-up
+
+- Timestamp (UTC): 2026-04-15T10:23:00Z
+- Project: interval-tree-lab
+- What changed:
+  - added optional trace artifact export so the `trace` command can write `.dot` files directly and render `.svg`/`.png` artifacts when Graphviz `dot` is available
+  - kept the default inline JSON + DOT trace output intact for dependency-light demos and tests
+  - added CLI validation so non-default `--format` values are rejected unless `--output` is supplied
+  - updated the README with artifact-export usage plus notes about optional Graphviz rendering
+  - added a dated checklist and three review logs so the next cron run can resume cleanly
+- Tests run:
+  - `python3 -m unittest tests/test_interval_tree_lab.py`
+  - `python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-8:backup 6-10:deploy 15-23:analytics 17-19:alerts --output /tmp/interval-trace.dot --format dot`
+  - `python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-8:backup --format svg` (expected parser error path)
+- Reviews run:
+  - pass 1: correctness and CLI misuse validation
+  - pass 2: README clarity and portfolio framing
+  - pass 3: dependency handling, resumability, and regression coverage
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: `1ba6e25bdeb38caa6802809c0d4e27eb133fe8a1`
+- Next step:
+  - generate and check in one or two canonical rendered trace artifacts under `docs/artifacts/`, or add a benchmark export slice that emits CSV data for multiple interval/query workloads
