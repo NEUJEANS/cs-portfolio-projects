@@ -347,6 +347,12 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(len(payload["diffs"]), 1)
         self.assertIn("benchmark_generator", payload["diffs"][0]["changes"])
 
+        markdown = batch.to_markdown()
+        html_output = batch.to_html()
+        self.assertIn("## Adjacent diffs", markdown)
+        self.assertIn("plugin-average-score", markdown)
+        self.assertIn("<h2>Diff 1:", html_output)
+
     def test_cli_inspect_plugin_supports_csv_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             json_output = Path(tmpdir) / "plugin-inspection.json"
@@ -404,6 +410,35 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(payload["plugin_count"], 2)
             self.assertEqual(len(payload["diffs"]), 1)
             self.assertIn("name", payload["diffs"][0]["changed_fields"])
+
+    def test_cli_inspect_plugin_can_write_markdown_and_html_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_output = Path(tmpdir) / "plugin-diff-report.md"
+            html_output = Path(tmpdir) / "plugin-diff-report.html"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "inspect-plugin",
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_average_score.py"),
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_top_score.py"),
+                    "--diff",
+                    "--report-output",
+                    str(markdown_output),
+                    "--html-output",
+                    str(html_output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            markdown = markdown_output.read_text(encoding="utf-8")
+            html_payload = html_output.read_text(encoding="utf-8")
+            self.assertIn("## Adjacent diffs", markdown)
+            self.assertIn("plugin-average-score", markdown)
+            self.assertIn("<h2>Diff 1:", html_payload)
 
     def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
         completed = subprocess.run(

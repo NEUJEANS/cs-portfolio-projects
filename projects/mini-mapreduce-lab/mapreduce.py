@@ -121,6 +121,124 @@ class PluginInspectionBatch:
     def to_csv(self) -> str:
         return render_plugin_inspections_csv(self.plugins)
 
+    def to_markdown(self) -> str:
+        lines = [
+            "# Mini MapReduce plugin inspection",
+            "",
+            f"- Plugin count: `{len(self.plugins)}`",
+            f"- Diff count: `{len(self.diffs or [])}`",
+            "",
+            "## Plugin summary",
+            "",
+            "| Name | Plugin | Mapper | Reducer | Combiner | Benchmark generator | Dataset families |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for plugin in self.plugins:
+            dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
+            lines.append(
+                f"| `{plugin.name}` | `{plugin.plugin}` | `{plugin.mapper}` | `{plugin.reducer}` | `{plugin.combiner or '-'}` | `{plugin.benchmark_generator or '-'}` | `{dataset_families}` |"
+            )
+        if self.diffs:
+            lines.extend(["", "## Adjacent diffs", ""])
+            for index, diff in enumerate(self.diffs, start=1):
+                lines.append(f"### Diff {index}: `{diff.previous_plugin}` → `{diff.current_plugin}`")
+                if not diff.changed_fields:
+                    lines.append("- No contract changes detected.")
+                    lines.append("")
+                    continue
+                lines.append(f"- Changed fields: `{', '.join(diff.changed_fields)}`")
+                lines.append("")
+                lines.append("| Field | Previous | Current |")
+                lines.append("| --- | --- | --- |")
+                for field in diff.changed_fields:
+                    change = diff.changes[field]
+                    previous = json.dumps(change["previous"], sort_keys=True)
+                    current = json.dumps(change["current"], sort_keys=True)
+                    lines.append(f"| `{field}` | `{previous}` | `{current}` |")
+                lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
+
+    def to_html(self) -> str:
+        def esc(value: object) -> str:
+            return html.escape(str(value), quote=True)
+
+        plugin_rows = []
+        for plugin in self.plugins:
+            dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
+            plugin_rows.append(
+                "<tr>"
+                f"<td><code>{esc(plugin.name)}</code></td>"
+                f"<td><code>{esc(plugin.plugin)}</code></td>"
+                f"<td><code>{esc(plugin.mapper)}</code></td>"
+                f"<td><code>{esc(plugin.reducer)}</code></td>"
+                f"<td><code>{esc(plugin.combiner or '-')}</code></td>"
+                f"<td><code>{esc(plugin.benchmark_generator or '-')}</code></td>"
+                f"<td><code>{esc(dataset_families)}</code></td>"
+                "</tr>"
+            )
+
+        diff_sections = []
+        for index, diff in enumerate(self.diffs or [], start=1):
+            if not diff.changed_fields:
+                diff_sections.append(
+                    f"<section><h2>Diff {index}: <code>{esc(diff.previous_plugin)}</code> → <code>{esc(diff.current_plugin)}</code></h2><p>No contract changes detected.</p></section>"
+                )
+                continue
+            diff_rows = []
+            for field in diff.changed_fields:
+                change = diff.changes[field]
+                diff_rows.append(
+                    "<tr>"
+                    f"<td><code>{esc(field)}</code></td>"
+                    f"<td><code>{esc(json.dumps(change['previous'], sort_keys=True))}</code></td>"
+                    f"<td><code>{esc(json.dumps(change['current'], sort_keys=True))}</code></td>"
+                    "</tr>"
+                )
+            diff_sections.append(
+                "<section>"
+                f"<h2>Diff {index}: <code>{esc(diff.previous_plugin)}</code> → <code>{esc(diff.current_plugin)}</code></h2>"
+                f"<p><strong>Changed fields:</strong> <code>{esc(', '.join(diff.changed_fields))}</code></p>"
+                "<table><thead><tr><th>Field</th><th>Previous</th><th>Current</th></tr></thead>"
+                f"<tbody>{''.join(diff_rows)}</tbody></table>"
+                "</section>"
+            )
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin inspection</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1200px; padding: 0 1rem 3rem; line-height: 1.5; }}
+    code {{ font-family: 'SFMono-Regular', Consolas, monospace; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }}
+    th, td {{ border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }}
+    thead th {{ background: rgba(148, 163, 184, 0.14); }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 2rem; }}
+    .meta li {{ list-style: none; padding: 0.75rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.75rem; }}
+    section {{ margin-top: 2rem; }}
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin inspection</h1>
+  <ul class="meta">
+    <li><strong>Plugin count</strong><br><code>{esc(len(self.plugins))}</code></li>
+    <li><strong>Diff count</strong><br><code>{esc(len(self.diffs or []))}</code></li>
+  </ul>
+  <section>
+    <h2>Plugin summary</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Plugin</th><th>Mapper</th><th>Reducer</th><th>Combiner</th><th>Benchmark generator</th><th>Dataset families</th></tr></thead>
+      <tbody>{''.join(plugin_rows)}</tbody>
+    </table>
+  </section>
+  {''.join(diff_sections)}
+</body>
+</html>
+"""
+
 
 def render_plugin_inspections_csv(plugins: list[PluginInspection]) -> str:
     buffer = StringIO()
@@ -1066,6 +1184,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect_parser.add_argument("--output", help="optional output JSON path")
     inspect_parser.add_argument("--csv-output", help="optional plugin inspection CSV output path")
+    inspect_parser.add_argument("--report-output", help="optional Markdown inspection report path")
+    inspect_parser.add_argument("--html-output", help="optional HTML inspection report path")
     inspect_parser.add_argument(
         "--diff",
         action="store_true",
@@ -1129,10 +1249,14 @@ def main(argv: list[str] | None = None) -> int:
         rendered = result.plugins[0].to_json() if len(result.plugins) == 1 and not args.diff else result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
-        elif not args.csv_output:
+        elif not args.csv_output and not args.report_output and not args.html_output:
             print(rendered)
         if args.csv_output:
             Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
+        if args.report_output:
+            Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
+        if args.html_output:
+            Path(args.html_output).write_text(result.to_html(), encoding="utf-8")
         return 0
 
     if args.command == "benchmark":

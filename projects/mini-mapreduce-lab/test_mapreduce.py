@@ -189,6 +189,16 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(payload["diffs"][0]["changed_fields"], sorted(payload["diffs"][0]["changed_fields"]))
         self.assertIn("available_dataset_families", payload["diffs"][0]["changes"])
 
+        markdown = batch.to_markdown()
+        self.assertIn("## Adjacent diffs", markdown)
+        self.assertIn("plugin-average-score", markdown)
+        self.assertIn("`available_dataset_families`", markdown)
+
+        html_output = batch.to_html()
+        self.assertIn("<h2>Diff 1:", html_output)
+        self.assertIn("plugin-max-score", html_output)
+        self.assertIn("available_dataset_families", html_output)
+
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -298,6 +308,37 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(len(payload["diffs"]), 1)
             self.assertIn("name", payload["diffs"][0]["changed_fields"])
             self.assertEqual(payload["diffs"][0]["changes"]["benchmark_generator"]["current"], None)
+
+    def test_cli_inspect_plugin_can_emit_markdown_and_html_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report_output = Path(tmpdir) / "plugin-diff-report.md"
+            html_output = Path(tmpdir) / "plugin-diff-report.html"
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "inspect-plugin",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_average_score.py",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_top_score.py",
+                    "--diff",
+                    "--report-output",
+                    str(report_output),
+                    "--html-output",
+                    str(html_output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            markdown = report_output.read_text(encoding="utf-8")
+            html_payload = html_output.read_text(encoding="utf-8")
+            self.assertIn("## Adjacent diffs", markdown)
+            self.assertIn("plugin-average-score", markdown)
+            self.assertIn("<h2>Diff 1:", html_payload)
+            self.assertIn("plugin-max-score", html_payload)
 
     def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
         completed = subprocess.run(
