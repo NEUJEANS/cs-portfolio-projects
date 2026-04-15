@@ -154,6 +154,52 @@ class SuffixTree:
         steps.append(f"matched {pattern!r} with {len(node.suffix_starts)} suffix hits")
         return steps
 
+    def to_dot(self, *, show_suffix_starts: bool = False) -> str:
+        """Render the suffix tree as a Graphviz DOT graph."""
+        lines = [
+            "digraph suffix_tree {",
+            '  rankdir=LR;',
+            '  node [shape=circle, fontname="Helvetica"];',
+            '  edge [fontname="Helvetica"];',
+        ]
+        node_ids: Dict[int, str] = {}
+        counter = 0
+
+        def node_id(node: Node) -> str:
+            nonlocal counter
+            key = id(node)
+            if key not in node_ids:
+                node_ids[key] = f"n{counter}"
+                counter += 1
+            return node_ids[key]
+
+        def escape(value: str) -> str:
+            return value.replace("\\", "\\\\").replace('"', '\\"')
+
+        def walk(node: Node) -> None:
+            current = node_id(node)
+            if node is self.root:
+                label = "root"
+                if show_suffix_starts:
+                    suffixes = ", ".join(map(str, sorted(node.suffix_starts)))
+                    label = f"root\n[{suffixes}]"
+            elif show_suffix_starts:
+                suffixes = ", ".join(map(str, sorted(node.suffix_starts)))
+                label = f"[{suffixes}]"
+            else:
+                label = ""
+            shape = "doublecircle" if not node.children else "circle"
+            lines.append(f'  {current} [label="{escape(label)}", shape={shape}];')
+            for edge in sorted(node.children.values(), key=lambda current_edge: self.text[current_edge.start:current_edge.end]):
+                child = node_id(edge.child)
+                edge_label = self.text[edge.start:edge.end]
+                lines.append(f'  {current} -> {child} [label="{escape(edge_label)}"];')
+                walk(edge.child)
+
+        walk(self.root)
+        lines.append("}")
+        return "\n".join(lines)
+
     def _match_node(self, pattern: str) -> Optional[Node]:
         node = self.root
         consumed = 0
@@ -185,6 +231,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     explain_parser = subparsers.add_parser("explain", help="trace a pattern lookup")
     explain_parser.add_argument("pattern")
+
+    export_parser = subparsers.add_parser("export-dot", help="export the tree as Graphviz DOT")
+    export_parser.add_argument("--show-suffix-starts", action="store_true")
     return parser
 
 
@@ -204,6 +253,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     if args.command == "explain":
         for line in tree.explain_find(args.pattern):
             print(line)
+        return 0
+    if args.command == "export-dot":
+        print(tree.to_dot(show_suffix_starts=args.show_suffix_starts))
         return 0
     raise AssertionError(f"unknown command: {args.command}")
 

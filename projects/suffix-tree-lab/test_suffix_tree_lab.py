@@ -31,6 +31,19 @@ def test_edge_labels_are_compact_and_search_trace_explains_progress():
     assert steps[-1].startswith("matched 'ana'")
 
 
+def test_dot_export_is_graphviz_friendly_and_can_show_suffix_starts():
+    tree = SuffixTree("banana")
+    dot = tree.to_dot()
+    assert dot.startswith("digraph suffix_tree {")
+    assert 'rankdir=LR;' in dot
+    assert 'label="root"' in dot
+    assert 'label="banana$"' in dot
+
+    annotated = tree.to_dot(show_suffix_starts=True)
+    assert '[0, 1, 2, 3, 4, 5, 6]' in annotated
+    assert 'shape=doublecircle' in annotated
+
+
 def test_rejects_invalid_inputs():
     with pytest.raises(ValueError):
         SuffixTree("")
@@ -45,7 +58,7 @@ def test_rejects_invalid_inputs():
         tree.longest_repeated_substring(1)
 
 
-def test_cli_find_repeat_and_explain_commands():
+def test_cli_find_repeat_explain_and_export_commands():
     script = Path(__file__).with_name("suffix_tree_lab.py")
 
     result = subprocess.run(
@@ -74,3 +87,13 @@ def test_cli_find_repeat_and_explain_commands():
     )
     assert explain.returncode == 0
     assert "mismatch" in explain.stdout or "No outgoing edge" in explain.stdout
+
+    export = subprocess.run(
+        [sys.executable, str(script), "banana", "export-dot", "--show-suffix-starts"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert export.returncode == 0
+    assert export.stdout.startswith("digraph suffix_tree {")
+    assert '[0, 1, 2, 3, 4, 5, 6]' in export.stdout
