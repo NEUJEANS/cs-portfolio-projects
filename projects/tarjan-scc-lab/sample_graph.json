@@ -1,0 +1,15 @@
+{
+  "nodes": ["A", "B", "C", "D", "E", "F", "G", "H"],
+  "edges": [
+    {"from": "A", "to": "B"},
+    {"from": "B", "to": "C"},
+    {"from": "C", "to": "A"},
+    {"from": "C", "to": "D"},
+    {"from": "D", "to": "E"},
+    {"from": "E", "to": "D"},
+    {"from": "E", "to": "F"},
+    {"from": "F", "to": "G"},
+    {"from": "G", "to": "F"},
+    {"from": "G", "to": "H"}
+  ]
+}
