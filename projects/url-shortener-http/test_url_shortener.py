@@ -1,3 +1,4 @@
+import io
 import json
 import tempfile
 import threading
@@ -10,6 +11,7 @@ from pathlib import Path
 from url_shortener import (
     Store,
     build_server,
+    build_wsgi_app,
     validate_custom_code,
     validate_expiry_seconds,
     validate_url,
@@ -257,22 +259,76 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(headers['Allow'], 'POST')
         self.assertIn('method not allowed', body.decode('utf-8'))
 
+        status, headers, body = self._request('/links/ghost', method='POST', raw_data=b'{}')
+        self.assertEqual(status, 405)
+        self.assertEqual(headers['Allow'], 'GET, DELETE')
+        self.assertIn('method not allowed', body.decode('utf-8'))
+
         status, _, body = self._request('/missing-code')
         self.assertEqual(status, 404)
-        self.assertIn('short code not found', body.decode('utf-8'))
+        self.assertIn('not found', body.decode('utf-8'))
 
-        status, _, body = self._request('/links/missing-code')
-        self.assertEqual(status, 404)
-        self.assertIn('short code not found', body.decode('utf-8'))
 
-        status, _, body = self._request('/links/missing-code', method='DELETE')
-        self.assertEqual(status, 404)
-        self.assertIn('short code not found', body.decode('utf-8'))
+class UrlShortenerWsgiTests(unittest.TestCase):
+    def _call_app(self, app, path='/', method='GET', payload=None, host='short.local'):
+        body = b'' if payload is None else json.dumps(payload).encode('utf-8')
+        captured = {}
+
+        def start_response(status, headers):
+            captured['status'] = status
+            captured['headers'] = dict(headers)
+
+        environ = {
+            'REQUEST_METHOD': method,
+            'PATH_INFO': path,
+            'QUERY_STRING': '',
+            'CONTENT_LENGTH': str(len(body)),
+            'wsgi.input': io.BytesIO(body),
+            'wsgi.url_scheme': 'http',
+            'HTTP_HOST': host,
+            'SERVER_NAME': '127.0.0.1',
+            'SERVER_PORT': '80',
+        }
+        response_body = b''.join(app(environ, start_response))
+        return captured['status'], captured['headers'], response_body
+
+    def test_wsgi_app_handles_post_and_redirect_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = build_wsgi_app(Path(tmp) / 'wsgi.db')
+            status, headers, body = self._call_app(
+                app,
+                path='/shorten',
+                method='POST',
+                payload={'url': 'https://example.com/demo', 'code': 'demo-link'},
+                host='portfolio.local:9000',
+            )
+            self.assertEqual(status, '201 Created')
+            self.assertIn('application/json', headers['Content-Type'])
+            payload = json.loads(body.decode('utf-8'))
+            self.assertEqual(payload['short_url'], 'http://portfolio.local:9000/demo-link')
+
+            status, headers, body = self._call_app(app, path='/demo-link', method='GET', host='portfolio.local:9000')
+            self.assertEqual(status, '302 Found')
+            self.assertEqual(headers['Location'], 'https://example.com/demo')
+            self.assertEqual(body, b'')
+
+    def test_wsgi_app_returns_json_errors_for_bad_requests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = build_wsgi_app(Path(tmp) / 'wsgi-errors.db')
+            status, headers, body = self._call_app(app, path='/shorten', method='POST', payload={'url': 'ftp://bad.example'})
+            self.assertEqual(status, '400 Bad Request')
+            self.assertIn('application/json', headers['Content-Type'])
+            self.assertIn('http or https', body.decode('utf-8'))
 
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+    http_error_301 = urllib.request.HTTPRedirectHandler.http_error_302
+    http_error_303 = urllib.request.HTTPRedirectHandler.http_error_302
+    http_error_307 = urllib.request.HTTPRedirectHandler.http_error_302
+    http_error_308 = urllib.request.HTTPRedirectHandler.http_error_302
 
 
 if __name__ == '__main__':

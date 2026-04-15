@@ -242,138 +242,192 @@ def validate_expiry_seconds(value):
     return value
 
 
-class Handler(http.server.BaseHTTPRequestHandler):
-    store = None
-    server_version = 'UrlShortener/1.2'
+class UrlShortenerApp:
+    def __init__(self, store):
+        self.store = store
 
-    def _send_json(self, status_code, payload, headers=None):
-        body = json.dumps(payload).encode('utf-8')
-        self.send_response(status_code)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
+    def _json_bytes(self, payload):
+        return json.dumps(payload).encode('utf-8')
+
+    def _response(self, status_code, payload=None, headers=None, body=b''):
+        final_headers = {'Content-Length': str(len(body))}
+        if payload is not None:
+            body = self._json_bytes(payload)
+            final_headers['Content-Type'] = 'application/json; charset=utf-8'
+            final_headers['Content-Length'] = str(len(body))
         if headers:
-            for key, value in headers.items():
-                self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(body)
+            final_headers.update(headers)
+        return {'status': status_code, 'headers': final_headers, 'body': body}
 
-    def _send_method_not_allowed(self, allow):
-        self._send_json(405, {'error': 'method not allowed'}, {'Allow': allow})
-
-    def _read_json_body(self):
-        length = int(self.headers.get('Content-Length', '0'))
-        raw = self.rfile.read(length)
-        if not raw:
+    def _read_json_body(self, body_bytes):
+        if not body_bytes:
             raise ValueError('request body is required')
         try:
-            payload = json.loads(raw.decode('utf-8'))
+            payload = json.loads(body_bytes.decode('utf-8'))
         except json.JSONDecodeError as exc:
             raise ValueError('request body must be valid JSON') from exc
         if not isinstance(payload, dict):
             raise ValueError('JSON body must be an object')
         return payload
 
-    def do_POST(self):
-        request_path = _request_path(self.path)
-        if request_path != '/shorten':
-            self._send_json(404, {'error': 'not found'})
-            return
-        try:
-            payload = self._read_json_body()
-            if 'url' not in payload:
-                raise ValueError('JSON body must include url')
-            normalized_url = validate_url(payload['url'])
-            custom_code = payload.get('code')
-            expires_in_seconds = payload.get('expires_in_seconds')
-            code = self.store.shorten(
-                normalized_url,
-                custom_code=custom_code,
-                expires_in_seconds=expires_in_seconds,
+    def _short_url(self, base_url, code):
+        return f'{base_url.rstrip("/")}/{code}'
+
+    def handle_request(self, method, path, headers=None, body=b'', base_url='http://127.0.0.1:8000'):
+        headers = headers or {}
+        request_path = _request_path(path)
+
+        if method == 'POST' and request_path == '/shorten':
+            try:
+                payload = self._read_json_body(body)
+                if 'url' not in payload:
+                    raise ValueError('JSON body must include url')
+                normalized_url = validate_url(payload['url'])
+                code = self.store.shorten(
+                    normalized_url,
+                    custom_code=payload.get('code'),
+                    expires_in_seconds=payload.get('expires_in_seconds'),
+                )
+                info = self.store.get_link_info(code)
+            except ValueError as exc:
+                return self._response(400, {'error': str(exc)})
+            return self._response(
+                201,
+                {
+                    'code': code,
+                    'short_url': self._short_url(base_url, code),
+                    'url': normalized_url,
+                    'clicks': info['clicks'],
+                    'status': info['status'],
+                    'expires_at': info['expires_at'],
+                },
             )
-            info = self.store.get_link_info(code)
-        except ValueError as exc:
-            self._send_json(400, {'error': str(exc)})
-            return
 
-        host = self.headers.get('Host') or f'{self.server.server_name}:{self.server.server_port}'
-        body = {
-            'code': code,
-            'short_url': f'http://{host}/{code}',
-            'url': normalized_url,
-            'clicks': info['clicks'],
-            'status': info['status'],
-            'expires_at': info['expires_at'],
-        }
-        self._send_json(201, body)
-
-    def do_GET(self):
-        request_path = _request_path(self.path)
-        if request_path == '/':
-            self._send_json(200, {'service': 'url-shortener-http', 'stats': self.store.stats()})
-            return
-        if request_path == '/shorten':
-            self._send_method_not_allowed('POST')
-            return
-        if request_path == '/stats':
-            self._send_json(200, self.store.stats())
-            return
+        if method == 'GET' and request_path == '/':
+            return self._response(200, {'service': 'url-shortener-http', 'stats': self.store.stats()})
+        if request_path == '/shorten' and method in {'GET', 'PUT', 'DELETE'}:
+            return self._response(405, {'error': 'method not allowed'}, {'Allow': 'POST'})
+        if method == 'GET' and request_path == '/stats':
+            return self._response(200, self.store.stats())
         if request_path.startswith('/links/'):
             code = request_path.removeprefix('/links/').strip('/')
             if not code:
-                self._send_json(404, {'error': 'not found'})
-                return
-            info = self.store.get_link_info(code)
-            if not info:
-                self._send_json(404, {'error': 'short code not found'})
-                return
-            self._send_json(200, info)
-            return
+                return self._response(404, {'error': 'not found'})
+            if method == 'GET':
+                info = self.store.get_link_info(code)
+                if not info:
+                    return self._response(404, {'error': 'short code not found'})
+                return self._response(200, info)
+            if method == 'DELETE':
+                info = self.store.delete_link(code)
+                if not info:
+                    return self._response(404, {'error': 'short code not found'})
+                return self._response(200, {'deleted': True, 'link': info})
+            return self._response(405, {'error': 'method not allowed'}, {'Allow': 'GET, DELETE'})
+
+        if method != 'GET':
+            return self._response(404, {'error': 'not found'})
 
         code = request_path.lstrip('/')
         if not code:
-            self._send_json(404, {'error': 'not found'})
-            return
+            return self._response(404, {'error': 'not found'})
         info = self.store.resolve(code, record_click=True)
         if not info:
-            self._send_json(404, {'error': 'short code not found'})
-            return
+            return self._response(404, {'error': 'short code not found'})
         if info['status'] == 'expired':
-            self._send_json(410, {'error': 'short code has expired', 'code': code, 'status': 'expired'})
-            return
+            return self._response(410, {'error': 'short code has expired', 'code': code, 'status': 'expired'})
         if info['status'] == 'deleted':
-            self._send_json(410, {'error': 'short code has been deleted', 'code': code, 'status': 'deleted'})
-            return
-        self.send_response(302)
-        self.send_header('Location', info['url'])
-        self.send_header('Content-Length', '0')
+            return self._response(410, {'error': 'short code has been deleted', 'code': code, 'status': 'deleted'})
+        return self._response(302, headers={'Location': info['url']})
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    store = None
+    server_version = 'UrlShortener/1.3'
+
+    def _base_url(self):
+        host = self.headers.get('Host') or f'{self.server.server_name}:{self.server.server_port}'
+        return f'http://{host}'
+
+    def _write_response(self, response):
+        self.send_response(response['status'])
+        for key, value in response['headers'].items():
+            self.send_header(key, value)
         self.end_headers()
+        if response['body']:
+            self.wfile.write(response['body'])
+
+    def _dispatch(self, method):
+        length = int(self.headers.get('Content-Length', '0'))
+        body = self.rfile.read(length) if length else b''
+        app = UrlShortenerApp(self.store)
+        response = app.handle_request(
+            method,
+            self.path,
+            headers=dict(self.headers.items()),
+            body=body,
+            base_url=self._base_url(),
+        )
+        self._write_response(response)
+
+    def do_POST(self):
+        self._dispatch('POST')
+
+    def do_GET(self):
+        self._dispatch('GET')
 
     def do_PUT(self):
-        if _request_path(self.path) == '/shorten':
-            self._send_method_not_allowed('POST')
-        else:
-            self._send_json(404, {'error': 'not found'})
+        self._dispatch('PUT')
 
     def do_DELETE(self):
-        request_path = _request_path(self.path)
-        if request_path == '/shorten':
-            self._send_method_not_allowed('POST')
-            return
-        if request_path.startswith('/links/'):
-            code = request_path.removeprefix('/links/').strip('/')
-            if not code:
-                self._send_json(404, {'error': 'not found'})
-                return
-            info = self.store.delete_link(code)
-            if not info:
-                self._send_json(404, {'error': 'short code not found'})
-                return
-            self._send_json(200, {'deleted': True, 'link': info})
-            return
-        self._send_json(404, {'error': 'not found'})
+        self._dispatch('DELETE')
 
     def log_message(self, format, *args):
         return
+
+
+class WsgiUrlShortenerApp:
+    def __init__(self, store):
+        self.app = UrlShortenerApp(store)
+
+    def __call__(self, environ, start_response):
+        body_length = environ.get('CONTENT_LENGTH') or '0'
+        try:
+            length = int(body_length)
+        except ValueError:
+            length = 0
+        body = environ['wsgi.input'].read(length) if length else b''
+        scheme = environ.get('wsgi.url_scheme', 'http')
+        host = environ.get('HTTP_HOST') or environ.get('SERVER_NAME', '127.0.0.1')
+        port = environ.get('SERVER_PORT')
+        if port and ':' not in host and port not in {'80', '443'}:
+            host = f'{host}:{port}'
+        path = (environ.get('PATH_INFO') or '/') + (f"?{environ.get('QUERY_STRING')}" if environ.get('QUERY_STRING') else '')
+        response = self.app.handle_request(
+            environ.get('REQUEST_METHOD', 'GET'),
+            path,
+            body=body,
+            base_url=f'{scheme}://{host}',
+        )
+        status_line = f"{response['status']} {_http_status_phrase(response['status'])}"
+        start_response(status_line, list(response['headers'].items()))
+        return [response['body']]
+
+
+def _http_status_phrase(status_code):
+    return {
+        200: 'OK',
+        201: 'Created',
+        302: 'Found',
+        400: 'Bad Request',
+        404: 'Not Found',
+        405: 'Method Not Allowed',
+        410: 'Gone',
+    }.get(status_code, 'OK')
+
+
+def build_wsgi_app(db_path='shortener.db'):
+    return WsgiUrlShortenerApp(Store(db_path))
 
 
 def build_server(db_path, port=8000, host='127.0.0.1'):

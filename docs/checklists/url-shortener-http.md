@@ -42,7 +42,23 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Vertical slice 4 — WSGI deployability + Docker packaging
+- [x] confirm `url-shortener-http` still needed a deployable interface beyond the built-in HTTP server
+- [x] do brief research on WSGI entrypoints and container packaging expectations
+- [x] do short Python WSGI refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] refactor request handling into reusable application logic shared by HTTP and WSGI adapters
+- [x] add a `wsgi.py` deployment entrypoint and Gunicorn dependency metadata
+- [x] add Docker packaging for repeatable local/demo deployment
+- [x] expand tests to cover WSGI request handling and adapter parity
+- [x] run tests locally
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Future improvements
 - [x] expiration / deletion support
-- [ ] deployable WSGI/ASGI wrapper plus Docker packaging
+- [x] deployable WSGI/ASGI wrapper plus Docker packaging
 - [ ] admin/auth layer for multi-user management
