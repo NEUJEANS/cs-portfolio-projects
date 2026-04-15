@@ -9,4 +9,4 @@
 - [x] run targeted tests and capture results in review notes
 - [x] complete at least 3 review passes and fix findings
 - [x] run secret scan before push
-- [ ] commit, push, and append wrap-up note
+- [x] commit, push, and append wrap-up note
