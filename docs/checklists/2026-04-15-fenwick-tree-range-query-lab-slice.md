@@ -9,5 +9,5 @@
 - [x] review pass 2 logged
 - [x] review pass 3 logged
 - [x] secret scan executed
-- [ ] commit + push completed
-- [ ] wrap-up appended
+- [x] commit + push completed
+- [x] wrap-up appended
