@@ -17,7 +17,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- `d84f4a2` — Add WSGI and Docker deployment for url shortener
+- `47f5457` — Add WSGI and Docker deployment for url shortener
 
 ## Next step
 - add an admin/auth layer so portfolio users can manage links safely in a multi-user setting
