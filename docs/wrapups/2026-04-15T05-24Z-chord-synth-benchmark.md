@@ -1,0 +1,21 @@
+# Chord DHT synthetic benchmark slice — 2026-04-15T05:24Z
+
+- Project: `projects/chord-dht-lab`
+- What changed:
+  - added a `synth-benchmark` CLI that generates deterministic synthetic Chord rings and key workloads from a seed
+  - included generator metadata, generated nodes/keys, and benchmark summaries so broader experiments are reproducible
+  - updated README/checklist, added a short learning note, and recorded 3 review passes
+- Tests run:
+  - `python3 -m unittest tests/test_chord_dht_lab.py`
+  - `python3 -m py_compile projects/chord-dht-lab/chord_dht.py`
+  - `python3 projects/chord-dht-lab/chord_dht.py synth-benchmark --m-bits 9 --nodes 12 --keys 15 --seed 23 --start-nodes 4`
+- Reviews run:
+  - pass 1: test + smoke review, fixed missing positive `m_bits` validation
+  - pass 2: docs/checklist consistency audit
+  - pass 3: reproducibility audit with repeated synthetic benchmark runs
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+  - result: clean
+- Commit hash: `2a9d0b7`
+- Next step:
+  - add Graphviz export for ring topology and lookup/stabilization routes so the Chord lab has stronger visual artifacts
