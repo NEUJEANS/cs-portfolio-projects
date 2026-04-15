@@ -1,13 +1,14 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-from treap_order_statistics_lab import Treap, build_treap
+from treap_order_statistics_lab import Treap, benchmark_trees, build_treap
 
 SCRIPT = PROJECT_DIR / "treap_order_statistics_lab.py"
 
@@ -29,6 +30,15 @@ class TreapOrderStatisticsLabTests(unittest.TestCase):
         self.assertEqual(treap.rank(50), 4)
         self.assertEqual(treap.select(3), 40)
         self.assertEqual(treap.range_count(15, 65), 5)
+
+    def test_contains_with_stats_reports_comparisons(self) -> None:
+        treap = build_treap([40, 10, 60, 5, 20, 50, 70], seed=7)
+        found = treap.contains_with_stats(50)
+        missing = treap.contains_with_stats(99)
+        self.assertTrue(found["found"])
+        self.assertGreaterEqual(found["comparisons"], 1)
+        self.assertFalse(missing["found"])
+        self.assertGreaterEqual(missing["comparisons"], 1)
 
     def test_duplicates_are_rejected(self) -> None:
         treap = Treap(seed=1)
@@ -55,6 +65,21 @@ class TreapOrderStatisticsLabTests(unittest.TestCase):
         self.assertTrue(any("insert key=10" in event for event in treap.events))
         self.assertTrue(any("delete key=20" in event for event in treap.events))
 
+    def test_benchmark_summary_reports_cross_tree_comparison(self) -> None:
+        payload = benchmark_trees(count=15, start=1, build_seed=7, query_seed=13, queries=24)
+        self.assertEqual(set(payload["cases"].keys()), {"ascending", "descending", "shuffled"})
+        ascending = payload["cases"]["ascending"]
+        self.assertEqual(ascending["input_size"], 15)
+        self.assertEqual(ascending["query_count"], 24)
+        self.assertIn("treap", ascending)
+        self.assertIn("avl", ascending)
+        self.assertIn("red_black", ascending)
+        self.assertIn("splay", ascending)
+        self.assertIn("height_gap_treap_minus_avl", payload["summary"])
+        self.assertIn("lookup_gap_treap_minus_red_black", payload["summary"])
+        self.assertIn("Treap height stays close", payload["takeaway"])
+        self.assertIn("case,input_size,query_count,treap_height", payload["csv"])
+
     def test_cli_demo_outputs_valid_json(self) -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--seed", "5", "demo", "--trace"],
@@ -68,6 +93,78 @@ class TreapOrderStatisticsLabTests(unittest.TestCase):
         self.assertEqual(payload["rank_50"], 5)
         self.assertEqual(payload["select_3"], 20)
         self.assertTrue(payload["trace"])
+
+    def test_cli_benchmark_outputs_cross_tree_cases(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--seed",
+                "7",
+                "benchmark",
+                "--count",
+                "15",
+                "--queries",
+                "24",
+                "--query-seed",
+                "13",
+            ],
+            cwd=PROJECT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["count"], 15)
+        self.assertEqual(payload["query_count"], 24)
+        self.assertNotIn("csv", payload)
+        self.assertIn("shuffled", payload["cases"])
+        self.assertIn("red_black", payload["cases"]["shuffled"])
+        self.assertIn("lookup_gap_treap_minus_avl", payload["summary"])
+
+    def test_cli_benchmark_can_embed_and_write_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "artifacts" / "treap-benchmark.csv"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--seed",
+                    "7",
+                    "benchmark",
+                    "--count",
+                    "11",
+                    "--queries",
+                    "18",
+                    "--query-seed",
+                    "5",
+                    "--csv",
+                    "--csv-file",
+                    str(csv_path),
+                ],
+                cwd=PROJECT_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["csv_file"], str(csv_path))
+            self.assertIn("case,input_size,query_count,treap_height", payload["csv"])
+            self.assertTrue(csv_path.exists())
+            self.assertIn("ascending,11,18", csv_path.read_text(encoding="utf-8"))
+
+    def test_cli_benchmark_rejects_non_positive_count(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "benchmark", "--count", "0"],
+            cwd=PROJECT_DIR,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        payload = json.loads(result.stdout)
+        self.assertIn("benchmark count must be positive", payload["error"])
 
     def test_cli_error_is_reported_as_json(self) -> None:
         result = subprocess.run(

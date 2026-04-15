@@ -1,0 +1,4 @@
+case,input_size,query_count,treap_height,avl_height,red_black_height,splay_height_after_build,treap_mean_lookup_comparisons,avl_mean_lookup_comparisons,red_black_mean_lookup_comparisons,splay_mean_lookup_comparisons,splay_mean_lookup_rotations,avl_rotation_count,red_black_rotation_count,height_gap_treap_minus_avl,height_gap_treap_minus_red_black
+ascending,31,48,8,5,8,9,4.75,4.188,4.438,6.167,5.167,26,23,3,0
+descending,31,48,8,5,8,9,4.396,4.271,4.729,5.438,4.438,26,23,3,0
+shuffled,31,48,11,6,6,8,5.812,4.25,4.271,5.708,4.708,14,21,5,5

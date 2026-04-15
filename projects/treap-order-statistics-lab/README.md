@@ -15,7 +15,9 @@ A portfolio-friendly randomized balanced BST project that combines treap split/m
 - `contains`, `rank`, `select`, and inclusive `range-count` queries
 - validation for BST ordering, heap priorities, and stored subtree sizes
 - trace mode that logs inserted priorities and deletions
-- CLI commands for demo runs, custom builds, deletion, order-statistics queries, and validation
+- cross-project benchmark mode that compares treap height and successful lookup costs against this repo's AVL, red-black, and splay tree labs
+- chart-ready CSV export for recruiter-friendly artifacts and README plots
+- CLI commands for demo runs, custom builds, deletion, order-statistics queries, validation, and benchmarking
 
 ## Usage
 
@@ -61,6 +63,15 @@ Validate a built treap:
 python3 projects/treap-order-statistics-lab/treap_order_statistics_lab.py --seed 12 validate 40 10 60 5 20 50 70
 ```
 
+Benchmark treap behavior against the repo's AVL, red-black, and splay labs:
+
+```bash
+python3 projects/treap-order-statistics-lab/treap_order_statistics_lab.py --seed 7 benchmark --count 31 --queries 48 --query-seed 23
+python3 projects/treap-order-statistics-lab/treap_order_statistics_lab.py --seed 7 benchmark --count 31 --queries 48 --query-seed 23 --csv --csv-file artifacts/treap-vs-balanced-trees.csv
+```
+
+The included artifact `artifacts/treap-vs-balanced-trees.csv` captures one deterministic benchmark slice. In the current sample, the treap averages height `9.0` across ascending/descending/shuffled insert orders versus AVL `5.333` and red-black `7.333`, while mean successful lookup comparisons stay in the same ballpark (`4.986` for treap versus `4.236` AVL and `4.479` red-black).
+
 ## Test
 
 ```bash
@@ -76,5 +87,5 @@ python3 -m unittest projects/treap-order-statistics-lab/test_treap_order_statist
 
 ## Future improvements
 - add Graphviz or Mermaid export for split/merge traces
-- benchmark height and query latency against the repo's AVL, red-black, and splay tree labs
+- extend the benchmark from successful lookups to mixed insert/delete/query workloads over time
 - extend the node payload from keys to `(key, value)` pairs for map-style use cases

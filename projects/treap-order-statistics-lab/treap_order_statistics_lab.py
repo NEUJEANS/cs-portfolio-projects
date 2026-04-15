@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import importlib.util
+import io
 import json
 import random
+import statistics
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -38,6 +43,14 @@ class Treap:
         if node is not None:
             node.size = 1 + self._size(node.left) + self._size(node.right)
 
+    def height(self) -> int:
+        return self._height(self.root)
+
+    def _height(self, node: Optional[Node]) -> int:
+        if node is None:
+            return 0
+        return 1 + max(self._height(node.left), self._height(node.right))
+
     def contains(self, key: int) -> bool:
         node = self.root
         while node is not None:
@@ -45,6 +58,16 @@ class Treap:
                 return True
             node = node.left if key < node.key else node.right
         return False
+
+    def contains_with_stats(self, key: int) -> dict[str, int | bool]:
+        node = self.root
+        comparisons = 0
+        while node is not None:
+            comparisons += 1
+            if key == node.key:
+                return {"found": True, "comparisons": comparisons}
+            node = node.left if key < node.key else node.right
+        return {"found": False, "comparisons": comparisons}
 
     def _split(self, node: Optional[Node], key: int) -> tuple[Optional[Node], Optional[Node]]:
         if node is None:
@@ -215,6 +238,264 @@ def load_keys(path: Path) -> List[int]:
     return payload
 
 
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+_AVL_MODULE: object | None = None
+_RED_BLACK_MODULE: object | None = None
+_SPLAY_MODULE: object | None = None
+
+
+def _load_module(cache_name: str, module_path: Path, spec_name: str) -> object:
+    spec = importlib.util.spec_from_file_location(spec_name, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault(spec.name, module)
+    spec.loader.exec_module(module)
+    globals()[cache_name] = module
+    return module
+
+
+def _load_avl_module() -> object:
+    global _AVL_MODULE
+    if _AVL_MODULE is None:
+        _AVL_MODULE = _load_module(
+            "_AVL_MODULE",
+            _project_root() / "projects" / "avl-tree-lab" / "avl_tree_lab.py",
+            "avl_tree_lab_for_treap_benchmark",
+        )
+    return _AVL_MODULE
+
+
+def _load_red_black_module() -> object:
+    global _RED_BLACK_MODULE
+    if _RED_BLACK_MODULE is None:
+        _RED_BLACK_MODULE = _load_module(
+            "_RED_BLACK_MODULE",
+            _project_root() / "projects" / "red-black-tree-lab" / "red_black_tree.py",
+            "red_black_tree_lab_for_treap_benchmark",
+        )
+    return _RED_BLACK_MODULE
+
+
+def _load_splay_module() -> object:
+    global _SPLAY_MODULE
+    if _SPLAY_MODULE is None:
+        _SPLAY_MODULE = _load_module(
+            "_SPLAY_MODULE",
+            _project_root() / "projects" / "splay-tree-lab" / "splay_tree_lab.py",
+            "splay_tree_lab_for_treap_benchmark",
+        )
+    return _SPLAY_MODULE
+
+
+def _count_avl_lookup(tree: object, key: int) -> dict[str, int | bool]:
+    node = tree.root
+    comparisons = 0
+    while node is not None:
+        comparisons += 1
+        if key == node.key:
+            return {"found": True, "comparisons": comparisons}
+        node = node.left if key < node.key else node.right
+    return {"found": False, "comparisons": comparisons}
+
+
+def _count_red_black_lookup(tree: object, key: int) -> dict[str, int | bool]:
+    node = tree.root
+    comparisons = 0
+    while node is not None:
+        comparisons += 1
+        if key == node.key:
+            return {"found": True, "comparisons": comparisons}
+        node = node.left if key < node.key else node.right
+    return {"found": False, "comparisons": comparisons}
+
+
+def _splay_height(node: object | None) -> int:
+    if node is None:
+        return 0
+    return 1 + max(_splay_height(node.left), _splay_height(node.right))
+
+
+def _benchmark_case(sequence: list[int], queries: list[int], seed: int) -> dict[str, object]:
+    treap = build_treap(sequence, seed=seed)
+    treap_validation = treap.validate()
+    if not treap_validation["is_valid"]:
+        raise ValueError(f"treap benchmark built an invalid tree: {treap_validation['issues']}")
+
+    avl_module = _load_avl_module()
+    avl_tree = avl_module.build_tree(sequence, trace=True)
+    avl_validation = avl_tree.validate()
+    if not avl_validation["is_valid"]:
+        raise ValueError(f"AVL benchmark built an invalid tree: {avl_validation['issues']}")
+
+    red_black_module = _load_red_black_module()
+    rb_tree = red_black_module.build_tree(sequence, trace_enabled=True)
+    rb_valid, _, rb_errors = rb_tree.validate()
+    if not rb_valid:
+        raise ValueError(f"red-black benchmark built an invalid tree: {rb_errors}")
+
+    splay_module = _load_splay_module()
+    splay_tree = splay_module.SplayTree(sequence)
+
+    treap_query_stats = [treap.contains_with_stats(query) for query in queries]
+    avl_query_stats = [_count_avl_lookup(avl_tree, query) for query in queries]
+    rb_query_stats = [_count_red_black_lookup(rb_tree, query) for query in queries]
+
+    splay_before_comparisons = splay_tree.comparison_count
+    splay_before_rotations = splay_tree.rotation_count
+    splay_hits = [splay_tree.find(query) for query in queries]
+    splay_comparisons = splay_tree.comparison_count - splay_before_comparisons
+    splay_rotations = splay_tree.rotation_count - splay_before_rotations
+
+    treap_hits = [bool(entry["found"]) for entry in treap_query_stats]
+    avl_hits = [bool(entry["found"]) for entry in avl_query_stats]
+    rb_hits = [bool(entry["found"]) for entry in rb_query_stats]
+    if not (treap_hits == avl_hits == rb_hits == splay_hits):
+        raise ValueError("benchmark lookup results diverged across tree implementations")
+
+    return {
+        "input_size": len(sequence),
+        "query_count": len(queries),
+        "treap": {
+            "height": treap.height(),
+            "mean_lookup_comparisons": round(
+                statistics.fmean(int(entry["comparisons"]) for entry in treap_query_stats), 3
+            ),
+        },
+        "avl": {
+            "height": avl_tree.height(),
+            "rotation_count": sum(1 for event in avl_tree.events if "rotation" in event),
+            "mean_lookup_comparisons": round(
+                statistics.fmean(int(entry["comparisons"]) for entry in avl_query_stats), 3
+            ),
+        },
+        "red_black": {
+            "height": rb_tree.height(),
+            "black_height": rb_tree.black_height(),
+            "rotation_count": sum(
+                1 for event in rb_tree.trace if event["event"] in {"rotate_left", "rotate_right"}
+            ),
+            "mean_lookup_comparisons": round(
+                statistics.fmean(int(entry["comparisons"]) for entry in rb_query_stats), 3
+            ),
+        },
+        "splay": {
+            "height_after_build": _splay_height(splay_tree.root),
+            "comparisons_used": splay_comparisons,
+            "rotations_used": splay_rotations,
+            "mean_lookup_comparisons": round(splay_comparisons / len(queries), 3),
+            "mean_lookup_rotations": round(splay_rotations / len(queries), 3),
+            "root_after_queries": None if splay_tree.root is None else splay_tree.root.key,
+        },
+    }
+
+
+def _benchmark_rows(cases: dict[str, dict[str, object]]) -> list[dict[str, int | float | str]]:
+    rows: list[dict[str, int | float | str]] = []
+    for case_name, case in cases.items():
+        rows.append(
+            {
+                "case": case_name,
+                "input_size": int(case["input_size"]),
+                "query_count": int(case["query_count"]),
+                "treap_height": int(case["treap"]["height"]),
+                "avl_height": int(case["avl"]["height"]),
+                "red_black_height": int(case["red_black"]["height"]),
+                "splay_height_after_build": int(case["splay"]["height_after_build"]),
+                "treap_mean_lookup_comparisons": float(case["treap"]["mean_lookup_comparisons"]),
+                "avl_mean_lookup_comparisons": float(case["avl"]["mean_lookup_comparisons"]),
+                "red_black_mean_lookup_comparisons": float(case["red_black"]["mean_lookup_comparisons"]),
+                "splay_mean_lookup_comparisons": float(case["splay"]["mean_lookup_comparisons"]),
+                "splay_mean_lookup_rotations": float(case["splay"]["mean_lookup_rotations"]),
+                "avl_rotation_count": int(case["avl"]["rotation_count"]),
+                "red_black_rotation_count": int(case["red_black"]["rotation_count"]),
+                "height_gap_treap_minus_avl": int(case["treap"]["height"]) - int(case["avl"]["height"]),
+                "height_gap_treap_minus_red_black": int(case["treap"]["height"]) - int(case["red_black"]["height"]),
+            }
+        )
+    return rows
+
+
+def _benchmark_csv(rows: list[dict[str, int | float | str]]) -> str:
+    if not rows:
+        raise ValueError("benchmark rows cannot be empty")
+    fieldnames = list(rows[0].keys())
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def benchmark_trees(*, count: int, start: int, build_seed: int, query_seed: int, queries: int) -> dict[str, object]:
+    if count <= 0:
+        raise ValueError("benchmark count must be positive")
+    if queries <= 0:
+        raise ValueError("benchmark queries must be positive")
+
+    ascending = list(range(start, start + count))
+    descending = list(reversed(ascending))
+    shuffled = ascending.copy()
+    random.Random(build_seed).shuffle(shuffled)
+
+    query_rng = random.Random(query_seed)
+    workloads = {
+        "ascending": ascending,
+        "descending": descending,
+        "shuffled": shuffled,
+    }
+    cases = {
+        name: _benchmark_case(sequence, [query_rng.choice(ascending) for _ in range(queries)], seed=build_seed)
+        for name, sequence in workloads.items()
+    }
+    rows = _benchmark_rows(cases)
+    summary = {
+        "treap_height_mean": round(statistics.fmean(case["treap"]["height"] for case in cases.values()), 3),
+        "avl_height_mean": round(statistics.fmean(case["avl"]["height"] for case in cases.values()), 3),
+        "red_black_height_mean": round(statistics.fmean(case["red_black"]["height"] for case in cases.values()), 3),
+        "splay_height_after_build_mean": round(
+            statistics.fmean(case["splay"]["height_after_build"] for case in cases.values()), 3
+        ),
+        "treap_lookup_mean": round(
+            statistics.fmean(case["treap"]["mean_lookup_comparisons"] for case in cases.values()), 3
+        ),
+        "avl_lookup_mean": round(
+            statistics.fmean(case["avl"]["mean_lookup_comparisons"] for case in cases.values()), 3
+        ),
+        "red_black_lookup_mean": round(
+            statistics.fmean(case["red_black"]["mean_lookup_comparisons"] for case in cases.values()), 3
+        ),
+        "splay_lookup_mean": round(
+            statistics.fmean(case["splay"]["mean_lookup_comparisons"] for case in cases.values()), 3
+        ),
+    }
+    summary["height_gap_treap_minus_avl"] = round(summary["treap_height_mean"] - summary["avl_height_mean"], 3)
+    summary["height_gap_treap_minus_red_black"] = round(
+        summary["treap_height_mean"] - summary["red_black_height_mean"], 3
+    )
+    summary["lookup_gap_treap_minus_avl"] = round(summary["treap_lookup_mean"] - summary["avl_lookup_mean"], 3)
+    summary["lookup_gap_treap_minus_red_black"] = round(
+        summary["treap_lookup_mean"] - summary["red_black_lookup_mean"], 3
+    )
+    return {
+        "count": count,
+        "start": start,
+        "build_seed": build_seed,
+        "query_seed": query_seed,
+        "query_count": queries,
+        "cases": cases,
+        "summary": summary,
+        "takeaway": (
+            "Treap height stays close to AVL/red-black across deterministic insertion orders while preserving simple randomized split/merge logic; "
+            "splay can pay extra rotations during lookups because it adapts the tree on every access."
+        ),
+        "csv": _benchmark_csv(rows),
+    }
+
+
 def _print_json(payload: dict) -> None:
     print(json.dumps(payload, indent=2, sort_keys=True))
 
@@ -284,6 +565,25 @@ def command_validate(args: argparse.Namespace) -> None:
     _print_json(treap.validate())
 
 
+def command_benchmark(args: argparse.Namespace) -> None:
+    payload = benchmark_trees(
+        count=args.count,
+        start=args.start,
+        build_seed=args.seed,
+        query_seed=args.query_seed,
+        queries=args.queries,
+    )
+    if args.csv_file:
+        csv_path = Path(args.csv_file)
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text(payload["csv"], encoding="utf-8")
+        payload["csv_file"] = str(csv_path)
+    if not args.csv:
+        payload.pop("csv")
+    payload["command"] = "benchmark"
+    _print_json(payload)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Treap order-statistics lab")
     parser.add_argument("--seed", type=int, default=0, help="seed for deterministic priorities")
@@ -324,6 +624,18 @@ def build_parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate", help="validate a built treap")
     validate.add_argument("keys", nargs="+", type=int)
     validate.set_defaults(func=command_validate)
+
+    benchmark = subparsers.add_parser(
+        "benchmark",
+        help="compare treap build/query behavior against AVL, red-black, and splay tree labs",
+    )
+    benchmark.add_argument("--count", type=int, default=63, help="number of sequential integers to insert")
+    benchmark.add_argument("--start", type=int, default=1, help="starting integer for the benchmark range")
+    benchmark.add_argument("--queries", type=int, default=96, help="number of successful lookup queries per case")
+    benchmark.add_argument("--query-seed", type=int, default=19, help="seed for deterministic lookup workload")
+    benchmark.add_argument("--csv", action="store_true", help="include chart-ready CSV in the JSON output")
+    benchmark.add_argument("--csv-file", help="write chart-ready CSV to disk")
+    benchmark.set_defaults(func=command_benchmark)
     return parser
 
 
