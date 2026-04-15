@@ -12,5 +12,5 @@
   - review pass 3: tightened graph validation and edge-case coverage
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
-- Commit hash: `1d53b640722923a74096faedbf28f53f2d6e8048`
+- Primary implementation commit hash: `342f03d`
 - Next step: add a follow-up slice that reduces bipartite matching problems to max flow or exports a Graphviz visualization.
