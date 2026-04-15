@@ -11,3 +11,4 @@
 - [x] add Graphviz DOT export for solved flow and matching graphs
 - [x] add Dinic as an alternative solver and expose algorithm selection in the CLI
 - [x] add a reproducible benchmark command that compares Edmonds-Karp vs Dinic
+- [x] derive a minimum vertex cover from bipartite matching output via König's theorem

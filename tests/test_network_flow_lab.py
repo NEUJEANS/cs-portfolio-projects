@@ -25,6 +25,7 @@ load_bipartite_graph = module.load_bipartite_graph
 render_flow_dot = module.render_flow_dot
 render_matching_dot = module.render_matching_dot
 solve_max_flow = module.solve_max_flow
+derive_minimum_vertex_cover = module.derive_minimum_vertex_cover
 solve_bipartite_matching = module.solve_bipartite_matching
 
 
@@ -105,6 +106,18 @@ class NetworkFlowLabTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "capacity"):
                 load_graph(path)
 
+    def test_minimum_vertex_cover_matches_konig_theorem_construction(self) -> None:
+        edges = [("anna", "api"), ("anna", "compiler"), ("ben", "api"), ("chloe", "compiler")]
+        matches = [{"left": "anna", "right": "api"}, {"left": "chloe", "right": "compiler"}]
+
+        cover = derive_minimum_vertex_cover(["anna", "ben", "chloe"], ["api", "compiler"], edges, matches)
+
+        self.assertEqual(cover["left"], [])
+        self.assertEqual(cover["right"], ["api", "compiler"])
+        self.assertEqual(cover["size"], 2)
+        self.assertEqual(cover["reachable_from_unmatched_left"]["left"], ["anna", "ben", "chloe"])
+        self.assertTrue(cover["konig_theorem_check"])
+
     def test_bipartite_matching_returns_maximum_matching(self) -> None:
         left = ["anna", "ben", "chloe", "david"]
         right = ["api", "compiler", "database"]
@@ -124,6 +137,10 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertEqual(result["unmatched_right"], [])
         matches = {(item["left"], item["right"]) for item in result["matches"]}
         self.assertEqual(matches, {("anna", "api"), ("ben", "database"), ("chloe", "compiler")})
+        self.assertEqual(result["minimum_vertex_cover"]["left"], [])
+        self.assertEqual(result["minimum_vertex_cover"]["right"], ["api", "compiler", "database"])
+        self.assertEqual(result["minimum_vertex_cover"]["size"], 3)
+        self.assertTrue(result["minimum_vertex_cover"]["konig_theorem_check"])
         self.assertEqual(result["flow"]["max_flow"], 3)
         self.assertEqual(result["flow"]["algorithm"], "dinic")
 
@@ -194,6 +211,7 @@ class NetworkFlowLabTests(unittest.TestCase):
         dot = render_matching_dot(result, graph_name="tiny_matching")
         self.assertIn('digraph "tiny_matching"', dot)
         self.assertIn('"anna" -> "api" [color="forestgreen", penwidth=3, label="match"];', dot)
+        self.assertIn('"api" [peripheries=2];', dot)
         self.assertIn('"db" [fillcolor="moccasin"];', dot)
 
     def test_random_graph_generator_is_reproducible_and_connected(self) -> None:

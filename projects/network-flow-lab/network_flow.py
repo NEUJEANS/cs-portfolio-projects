@@ -51,6 +51,7 @@ class MatchingResult:
     matches: list[dict[str, str]]
     unmatched_left: list[str]
     unmatched_right: list[str]
+    minimum_vertex_cover: dict[str, Any]
     flow: dict[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
@@ -61,6 +62,7 @@ class MatchingResult:
             "match_count": len(self.matches),
             "unmatched_left": self.unmatched_left,
             "unmatched_right": self.unmatched_right,
+            "minimum_vertex_cover": self.minimum_vertex_cover,
             "flow": self.flow,
         }
 
@@ -155,6 +157,55 @@ def build_bipartite_matching_flow(
     return nodes, flow_edges, MATCH_SOURCE, MATCH_SINK
 
 
+def derive_minimum_vertex_cover(
+    left: list[str], right: list[str], edges: list[tuple[str, str]], matches: list[dict[str, str]]
+) -> dict[str, Any]:
+    left_nodes = sorted(left)
+    right_nodes = sorted(right)
+    edge_set = set(edges)
+    matched_left_to_right = {item["left"]: item["right"] for item in matches}
+    matched_right_to_left = {item["right"]: item["left"] for item in matches}
+    unmatched_left = sorted(node for node in left_nodes if node not in matched_left_to_right)
+
+    reachable_left: set[str] = set()
+    reachable_right: set[str] = set()
+    queue: deque[tuple[str, str]] = deque(("L", node) for node in unmatched_left)
+
+    while queue:
+        partition, node = queue.popleft()
+        if partition == "L":
+            if node in reachable_left:
+                continue
+            reachable_left.add(node)
+            for right_node in right_nodes:
+                if (node, right_node) not in edge_set:
+                    continue
+                if matched_left_to_right.get(node) == right_node:
+                    continue
+                if right_node not in reachable_right:
+                    queue.append(("R", right_node))
+        else:
+            if node in reachable_right:
+                continue
+            reachable_right.add(node)
+            matched_left = matched_right_to_left.get(node)
+            if matched_left is not None and matched_left not in reachable_left:
+                queue.append(("L", matched_left))
+
+    cover_left = sorted(node for node in left_nodes if node not in reachable_left)
+    cover_right = sorted(node for node in reachable_right)
+    return {
+        "left": cover_left,
+        "right": cover_right,
+        "size": len(cover_left) + len(cover_right),
+        "reachable_from_unmatched_left": {
+            "left": sorted(reachable_left),
+            "right": sorted(reachable_right),
+        },
+        "konig_theorem_check": len(matches) == len(cover_left) + len(cover_right),
+    }
+
+
 def solve_bipartite_matching(
     left: list[str], right: list[str], edges: list[tuple[str, str]], *, algorithm: str = DEFAULT_ALGORITHM
 ) -> MatchingResult:
@@ -172,12 +223,15 @@ def solve_bipartite_matching(
             matched_left.add(left_node)
             matched_right.add(right_node)
 
+    minimum_vertex_cover = derive_minimum_vertex_cover(left, right, edges, matches)
+
     return MatchingResult(
         left_partition=sorted(left),
         right_partition=sorted(right),
         matches=matches,
         unmatched_left=sorted(node for node in left if node not in matched_left),
         unmatched_right=sorted(node for node in right if node not in matched_right),
+        minimum_vertex_cover=minimum_vertex_cover,
         flow=flow_result.to_dict(),
     )
 
@@ -549,6 +603,8 @@ def render_flow_dot(flow_result: FlowResult, *, graph_name: str = "network_flow"
 
 def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "bipartite_matching") -> str:
     matched_pairs = {(item["left"], item["right"]) for item in matching_result.matches}
+    cover_left = set(matching_result.minimum_vertex_cover["left"])
+    cover_right = set(matching_result.minimum_vertex_cover["right"])
     flow = matching_result.flow
     flow_edges = {
         (item["source"], item["target"]): item for item in flow["edge_flows"]
@@ -560,6 +616,8 @@ def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "b
         attrs = []
         if node in matching_result.unmatched_left:
             attrs.append('fillcolor="mistyrose"')
+        if node in cover_left:
+            attrs.append('peripheries=2')
         lines.append(f'  "{node}" [{", ".join(attrs)}];' if attrs else f'  "{node}";')
 
     lines.append('  node [shape=box, style="filled", fillcolor="honeydew2"];')
@@ -567,6 +625,8 @@ def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "b
         attrs = []
         if node in matching_result.unmatched_right:
             attrs.append('fillcolor="moccasin"')
+        if node in cover_right:
+            attrs.append('peripheries=2')
         lines.append(f'  "{node}" [{", ".join(attrs)}];' if attrs else f'  "{node}";')
 
     for left_node in matching_result.left_partition:
