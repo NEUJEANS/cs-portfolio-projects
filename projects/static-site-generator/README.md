@@ -14,9 +14,10 @@ This project shows practical compiler-style text processing, file-system automat
 ## Features
 - converts Markdown files into standalone HTML pages
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
-- builds top navigation automatically from page metadata
+- builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
+- renders a focused Markdown subset: headings, paragraphs, bullet lists, links, inline code, bold, and italics
 - applies a clean shared HTML layout and inline stylesheet
-- sorts pages by explicit order for predictable portfolio presentation
+- sorts pages by explicit order and slug for predictable portfolio presentation
 - keeps output dependency-free and runnable locally
 
 ## Supported front matter
@@ -52,11 +53,11 @@ Then build the site:
 node sitegen.js content dist
 ```
 
-Generated files are written to `dist/`.
+Generated files are written to `dist/` and the CLI prints a short build summary.
 
 ## Test
 ```bash
-npm test
+node --test test_static_site_generator.js
 ```
 
 ## Example portfolio use cases
@@ -70,3 +71,4 @@ npm test
 - syntax highlighting and fenced code blocks
 - shared header/footer partials loaded from template files
 - asset copying pipeline for images and CSS files
+- incremental rebuilds or a watch mode for faster authoring

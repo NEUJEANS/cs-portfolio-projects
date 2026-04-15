@@ -1,12 +1,70 @@
-const fs = require('fs/promises');
+#!/usr/bin/env node
+const fs = require('fs');
 const path = require('path');
 
-function normalizeNewlines(value) {
-  return String(value).replace(/\r\n/g, '\n');
+function parseFrontMatter(source) {
+  const normalized = source.replace(/^\uFEFF/, '');
+  const trimmedStart = normalized.trimStart();
+  const match = trimmedStart.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) {
+    return { metadata: {}, body: normalized };
+  }
+
+  const rawMeta = match[1].trim();
+  const body = trimmedStart.slice(match[0].length);
+  const metadata = {};
+
+  for (const line of rawMeta.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const separator = line.indexOf(':');
+    if (separator === -1) {
+      throw new Error(`Invalid front matter line: ${line}`);
+    }
+
+    const key = line.slice(0, separator).trim();
+    const rawValue = line.slice(separator + 1).trim();
+    metadata[key] = parseFrontMatterValue(rawValue);
+  }
+
+  return { metadata, body };
 }
 
-function escapeHtml(value) {
-  return String(value)
+function parseFrontMatterValue(rawValue) {
+  if (!rawValue) return '';
+
+  if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
+    const inner = rawValue.slice(1, -1).trim();
+    if (!inner) return [];
+    return inner
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => stripQuotes(item));
+  }
+
+  if (/^(true|false)$/i.test(rawValue)) {
+    return rawValue.toLowerCase() === 'true';
+  }
+
+  if (/^-?\d+$/.test(rawValue)) {
+    return Number(rawValue);
+  }
+
+  return stripQuotes(rawValue);
+}
+
+function stripQuotes(value) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function escapeHtml(text) {
+  return String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -17,224 +75,268 @@ function escapeHtml(value) {
 function slugify(value) {
   return String(value)
     .toLowerCase()
-    .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'page';
 }
 
-function parseValue(raw) {
-  const value = raw.trim();
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  if (/^-?\d+$/.test(value)) return Number(value);
-  if (value.startsWith('[') && value.endsWith(']')) {
-    return value
-      .slice(1, -1)
-      .split(',')
-      .map(item => item.trim())
-      .filter(Boolean)
-      .map(item => item.replace(/^['"]|['"]$/g, ''));
-  }
-  return value.replace(/^['"]|['"]$/g, '');
-}
-
-function parseFrontMatter(source) {
-  const normalizedSource = normalizeNewlines(source);
-  if (!normalizedSource.startsWith('---\n')) {
-    return { data: {}, content: normalizedSource.trim() };
-  }
-
-  const end = normalizedSource.indexOf('\n---\n', 4);
-  if (end === -1) {
-    return { data: {}, content: normalizedSource.trim() };
-  }
-
-  const frontMatter = normalizedSource.slice(4, end).trim();
-  const content = normalizedSource.slice(end + 5).trim();
-  const data = {};
-
-  for (const line of frontMatter.split('\n')) {
-    if (!line.trim()) continue;
-    const colonIndex = line.indexOf(':');
-    if (colonIndex === -1) continue;
-    const key = line.slice(0, colonIndex).trim();
-    const value = line.slice(colonIndex + 1);
-    data[key] = parseValue(value);
-  }
-
-  return { data, content };
-}
-
-function sanitizeHref(href) {
-  const trimmed = href.trim();
-  if (/^(https?:\/\/|\/|\.\/|\.\.\/|#)/i.test(trimmed)) {
+function sanitizeHref(url) {
+  const trimmed = String(url).trim();
+  if (/^(https?:|mailto:|#|\/)/i.test(trimmed) || !trimmed.includes(':')) {
     return escapeHtml(trimmed);
   }
   return '#';
 }
 
-function renderInline(text) {
-  return escapeHtml(text)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, (_, label, href) => `<a href="${sanitizeHref(href)}">${label}</a>`);
-}
+function replaceMarkdownLinks(html) {
+  let result = '';
+  let index = 0;
 
-function markdownToHtml(md) {
-  const blocks = md
-    .split(/\n{2,}/)
-    .map(block => block.trim())
-    .filter(Boolean);
+  while (index < html.length) {
+    const labelStart = html.indexOf('[', index);
+    if (labelStart === -1) {
+      result += html.slice(index);
+      break;
+    }
 
-  return blocks
-    .map(block => {
-      const lines = block.split('\n');
-      if (lines.every(line => /^- /.test(line))) {
-        const items = lines
-          .map(line => `  <li>${renderInline(line.slice(2).trim())}</li>`)
-          .join('\n');
-        return `<ul>\n${items}\n</ul>`;
+    const labelEnd = html.indexOf(']', labelStart + 1);
+    const urlStart = html.indexOf('(', labelEnd + 1);
+    if (labelEnd === -1 || urlStart !== labelEnd + 1) {
+      result += html.slice(index, labelStart + 1);
+      index = labelStart + 1;
+      continue;
+    }
+
+    let depth = 0;
+    let urlEnd = -1;
+    for (let cursor = urlStart; cursor < html.length; cursor += 1) {
+      if (html[cursor] === '(') depth += 1;
+      if (html[cursor] === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          urlEnd = cursor;
+          break;
+        }
       }
+    }
 
-      if (block.startsWith('### ')) return `<h3>${renderInline(block.slice(4).trim())}</h3>`;
-      if (block.startsWith('## ')) return `<h2>${renderInline(block.slice(3).trim())}</h2>`;
-      if (block.startsWith('# ')) return `<h1>${renderInline(block.slice(2).trim())}</h1>`;
-      return `<p>${renderInline(block.replace(/\n/g, '<br />'))}</p>`;
-    })
-    .join('\n');
+    if (urlEnd === -1) {
+      result += html.slice(index, labelStart + 1);
+      index = labelStart + 1;
+      continue;
+    }
+
+    const label = html.slice(labelStart + 1, labelEnd);
+    const href = html.slice(urlStart + 1, urlEnd);
+    result += html.slice(index, labelStart);
+    result += `<a href="${sanitizeHref(href)}">${label}</a>`;
+    index = urlEnd + 1;
+  }
+
+  return result;
 }
 
-function humanizeTitle(filename) {
-  return filename
-    .replace(/\.md$/, '')
-    .replace(/[-_]+/g, ' ')
-    .replace(/\b\w/g, letter => letter.toUpperCase());
+function inlineMarkdown(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = replaceMarkdownLinks(html);
+  return html;
 }
 
-function normalizePages(pages) {
-  return [...pages].sort((a, b) => {
-    const orderA = Number.isFinite(a.order) ? a.order : Number.MAX_SAFE_INTEGER;
-    const orderB = Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER;
-    if (orderA !== orderB) return orderA - orderB;
-    return a.title.localeCompare(b.title);
-  });
+function markdownToHtml(markdown) {
+  const lines = markdown.replace(/\r/g, '').split('\n');
+  const parts = [];
+  let paragraph = [];
+  let listItems = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    parts.push(`<p>${inlineMarkdown(paragraph.join(' '))}</p>`);
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    parts.push(`<ul>${listItems.map((item) => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`);
+    listItems = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1].length;
+      parts.push(`<h${level}>${inlineMarkdown(heading[2].trim())}</h${level}>`);
+      continue;
+    }
+
+    const listMatch = /^[-*]\s+(.*)$/.exec(line);
+    if (listMatch) {
+      flushParagraph();
+      listItems.push(listMatch[1].trim());
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+
+  return parts.join('\n');
 }
 
-function renderNavigation(pages, currentOutputName) {
-  const links = normalizePages(pages)
-    .filter(page => page.nav !== false)
-    .map(page => {
-      const className = page.outputName === currentOutputName ? ' class="active"' : '';
-      return `<a${className} href="${page.outputName}">${escapeHtml(page.title)}</a>`;
-    })
-    .join('');
+function renderTemplate(page, navigation, contentHtml) {
+  const title = page.metadata.title || page.slug;
+  const description = page.metadata.description || '';
+  const tags = Array.isArray(page.metadata.tags) ? page.metadata.tags : [];
+  const navHtml = navigation.length
+    ? `<nav><ul>${navigation
+        .map((item) => {
+          const className = item.outputName === page.outputName ? ' class="active"' : '';
+          return `<li><a${className} href="${escapeHtml(item.outputName)}">${escapeHtml(item.title)}</a></li>`;
+        })
+        .join('')}</ul></nav>`
+    : '';
+  const tagsHtml = tags.length
+    ? `<p class="tags">${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</p>`
+    : '';
 
-  return `<nav>${links}</nav>`;
-}
-
-function renderTags(tags) {
-  if (!Array.isArray(tags) || tags.length === 0) return '';
-  const items = tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join('');
-  return `<div class="tags">${items}</div>`;
-}
-
-function renderPage(page, pages) {
-  const title = page.title || 'Untitled Page';
-  const description = page.description ? `<p class="description">${escapeHtml(page.description)}</p>` : '';
-  const tags = renderTags(page.tags);
-  const body = markdownToHtml(page.content);
-
-  return `<!doctype html>
+  return `<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${escapeHtml(title)}</title>
+    <meta name="description" content="${escapeHtml(description)}">
     <style>
-      :root { color-scheme: light; }
-      body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; color: #172033; }
-      header { background: #172033; color: white; padding: 2rem 1.5rem; }
-      header h1 { margin: 0 0 0.5rem; }
-      .description { margin: 0.75rem 0 0; max-width: 60ch; }
-      nav { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
-      nav a { color: #d8e7ff; text-decoration: none; font-weight: 600; }
-      nav a.active { text-decoration: underline; }
-      main { max-width: 800px; margin: 0 auto; padding: 1.5rem; }
-      article { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(23, 32, 51, 0.08); }
-      code { background: #eef3ff; padding: 0.1rem 0.35rem; border-radius: 4px; }
-      .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
-      .tags span { background: #eef3ff; color: #244585; padding: 0.3rem 0.6rem; border-radius: 999px; font-size: 0.9rem; }
-      ul { padding-left: 1.25rem; }
-      footer { max-width: 800px; margin: 0 auto; padding: 0 1.5rem 2rem; color: #5a6475; }
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; max-width: 860px; margin: 0 auto; padding: 2rem 1.25rem 3rem; line-height: 1.6; }
+      header { margin-bottom: 2rem; }
+      nav ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0; margin: 0 0 1rem; }
+      nav a { text-decoration: none; color: inherit; padding: 0.35rem 0.6rem; border: 1px solid #9994; border-radius: 999px; }
+      nav a.active { font-weight: 700; border-color: #2563eb; }
+      main { display: grid; gap: 1rem; }
+      code { background: #9992; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
+      .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      .tags span { font-size: 0.9rem; background: #9992; padding: 0.2rem 0.55rem; border-radius: 999px; }
+      footer { margin-top: 2rem; font-size: 0.9rem; color: #666; }
     </style>
   </head>
   <body>
     <header>
+      ${navHtml}
       <h1>${escapeHtml(title)}</h1>
-      ${description}
-      ${renderNavigation(pages, page.outputName)}
+      ${description ? `<p>${escapeHtml(description)}</p>` : ''}
+      ${tagsHtml}
     </header>
     <main>
-      <article>
-        ${tags}
-        ${body}
-      </article>
+      ${contentHtml}
     </main>
-    <footer>Generated by static-site-generator.</footer>
+    <footer>
+      Built with static-site-generator.
+    </footer>
   </body>
 </html>`;
 }
 
-async function loadPages(srcDir) {
-  const entries = await fs.readdir(srcDir, { withFileTypes: true });
-  const pages = [];
-
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
-    const filePath = path.join(srcDir, entry.name);
-    const raw = await fs.readFile(filePath, 'utf8');
-    const { data, content } = parseFrontMatter(raw);
-    const title = data.title || humanizeTitle(entry.name);
-    const outputName = data.slug ? `${slugify(data.slug)}.html` : entry.name.replace(/\.md$/, '.html');
-    pages.push({
-      ...data,
-      title,
-      content,
-      sourceName: entry.name,
-      outputName,
+function loadPages(contentDir) {
+  const entries = fs.readdirSync(contentDir, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => {
+      const sourcePath = path.join(contentDir, entry.name);
+      const raw = fs.readFileSync(sourcePath, 'utf8');
+      const { metadata, body } = parseFrontMatter(raw);
+      const baseName = path.basename(entry.name, '.md');
+      const slug = metadata.slug || slugify(metadata.title || baseName);
+      return {
+        sourcePath,
+        sourceName: entry.name,
+        slug,
+        outputName: `${slug}.html`,
+        metadata,
+        body,
+      };
+    })
+    .sort((left, right) => {
+      const leftOrder = Number.isFinite(left.metadata.order) ? left.metadata.order : Number.MAX_SAFE_INTEGER;
+      const rightOrder = Number.isFinite(right.metadata.order) ? right.metadata.order : Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return left.slug.localeCompare(right.slug);
     });
-  }
-
-  return normalizePages(pages);
 }
 
-async function build(srcDir, outDir) {
-  await fs.mkdir(outDir, { recursive: true });
-  const pages = await loadPages(srcDir);
-
-  for (const page of pages) {
-    const html = renderPage(page, pages);
-    await fs.writeFile(path.join(outDir, page.outputName), html);
+function buildSite(contentDir, outputDir) {
+  if (!fs.existsSync(contentDir)) {
+    throw new Error(`Content directory not found: ${contentDir}`);
   }
 
-  return pages.map(page => page.outputName);
+  const pages = loadPages(contentDir);
+  if (!pages.length) {
+    throw new Error(`No markdown files found in: ${contentDir}`);
+  }
+
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const navigation = pages
+    .filter((page) => page.metadata.nav !== false)
+    .map((page) => ({
+      title: page.metadata.title || page.slug,
+      outputName: page.outputName,
+      order: page.metadata.order,
+    }));
+
+  for (const page of pages) {
+    const contentHtml = markdownToHtml(page.body.trim());
+    const html = renderTemplate(page, navigation, contentHtml);
+    fs.writeFileSync(path.join(outputDir, page.outputName), html, 'utf8');
+  }
+
+  return pages.map((page) => ({
+    source: page.sourceName,
+    output: page.outputName,
+    title: page.metadata.title || page.slug,
+  }));
+}
+
+function main(argv) {
+  const [contentDir, outputDir] = argv;
+  if (!contentDir || !outputDir) {
+    console.error('Usage: node sitegen.js <content-dir> <output-dir>');
+    process.exitCode = 1;
+    return;
+  }
+
+  const pages = buildSite(path.resolve(contentDir), path.resolve(outputDir));
+  console.log(`Built ${pages.length} page(s):`);
+  for (const page of pages) {
+    console.log(`- ${page.title} -> ${page.output}`);
+  }
 }
 
 if (require.main === module) {
-  build(process.argv[2] || 'content', process.argv[3] || 'dist').catch(err => {
-    console.error(err);
-    process.exit(1);
-  });
+  main(process.argv.slice(2));
 }
 
 module.exports = {
-  build,
+  buildSite,
   escapeHtml,
   loadPages,
   markdownToHtml,
   parseFrontMatter,
-  renderPage,
-  humanizeTitle,
+  sanitizeHref,
   slugify,
+  replaceMarkdownLinks,
 };
