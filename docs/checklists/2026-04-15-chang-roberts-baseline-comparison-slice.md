@@ -10,5 +10,5 @@
 - [x] run tests
 - [x] perform three review passes and fix issues found
 - [x] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up with commit hash and next step
+- [x] commit and push
+- [x] append wrap-up with commit hash and next step
