@@ -14,7 +14,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- `1a68849ea00bdbb49e0be8595d954141db640127`
+- `1d1a460252c806a63cb58437ed55bb96bb99027b`
 
 ## Next step
 - strengthen `pathfinding-visualizer` further with batch benchmark maps or an export/report mode that compares algorithms across multiple scenarios in one run
