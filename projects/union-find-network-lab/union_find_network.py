@@ -489,6 +489,61 @@ def write_benchmark_series_csv(payload: Dict[str, object], output_path: Path) ->
             )
 
 
+def write_comparison_markdown(payload: Dict[str, object], output_path: Path) -> None:
+    if payload.get("mode") != "connectivity-comparison":
+        raise ValueError("Markdown export currently supports connectivity-comparison output only")
+
+    union_find = payload.get("union_find")
+    recompute = payload.get("recompute_baseline")
+    summary = payload.get("summary")
+    if not isinstance(union_find, dict) or not isinstance(recompute, dict) or not isinstance(summary, dict):
+        raise ValueError("connectivity-comparison payload must include union_find, recompute_baseline, and summary objects")
+
+    union_stats = union_find.get("stats") if isinstance(union_find.get("stats"), dict) else {}
+    baseline_stats = recompute.get("stats") if isinstance(recompute.get("stats"), dict) else {}
+    sample_edges = payload.get("input_edges") if isinstance(payload.get("input_edges"), list) else []
+    sample_pairs = []
+    for edge in sample_edges[:3]:
+        if isinstance(edge, list) and len(edge) == 2:
+            sample_pairs.append(f"`{edge[0]}->{edge[1]}`")
+
+    speedup = summary.get("speedup_vs_recompute", "n/a")
+    checkpoint_every = payload.get("checkpoint_every", "n/a")
+    edge_count = payload.get("edges_requested", "n/a")
+    node_count = payload.get("nodes_requested", "n/a")
+    union_eps = union_find.get("edges_per_second", "n/a")
+    baseline_eps = recompute.get("edges_per_second", "n/a")
+    sample_text = ", ".join(sample_pairs) if sample_pairs else "n/a"
+    markdown = f'''# Union-Find vs BFS recomputation summary
+
+> Reproducible connectivity-comparison artifact for `union-find-network-lab`.
+
+## Headline
+- Processed **{edge_count}** random edges across **{node_count}** nodes with checkpoints every **{checkpoint_every}** edges.
+- Union-find finished in **{union_find.get("elapsed_ms", "n/a")} ms** (**{union_eps} edges/s**) versus **{recompute.get("elapsed_ms", "n/a")} ms** (**{baseline_eps} edges/s**) for repeated BFS recomputation.
+- Measured speedup: **{speedup}x**.
+- Result parity: same component count = **{summary.get("same_component_count", False)}**, same largest component = **{summary.get("same_largest_component", False)}**.
+
+## Why it matters
+Union-find is a strong fit for **incremental connectivity** workloads because each new edge updates component state directly, while the baseline must walk the graph again after every insertion. This artifact shows the algorithmic advantage with the exact same random edge stream.
+
+## Result snapshot
+- Union-find components: **{union_stats.get("components", "n/a")}**
+- Union-find largest component: **{union_stats.get("largest_component", "n/a")}**
+- Union-find cycle edges: **{union_find.get("cycle_edges", "n/a")}**
+- Baseline components: **{baseline_stats.get("components", "n/a")}**
+- Baseline largest component: **{baseline_stats.get("largest_component", "n/a")}**
+- Baseline cycle edges: **{recompute.get("cycle_edges", "n/a")}**
+- Sample input edges: {sample_text}
+
+## Portfolio-ready takeaway
+For streaming network links, service-dependency updates, or social-graph edge ingestion, union-find preserves the same final connectivity answer while avoiding the repeated full-graph scans that make naive recomputation collapse at scale.
+'''
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(markdown, encoding="utf-8")
+
+
 def load_chart_source(chart_input: Path) -> Dict[str, object]:
     if not chart_input.exists():
         raise ValueError(f"chart input does not exist: {chart_input}")
@@ -514,8 +569,6 @@ def build_svg_chart(payload: Dict[str, object], title: str | None = None) -> str
     if mode == "connectivity-comparison":
         return _build_connectivity_comparison_svg(payload, title=title)
     raise ValueError("chart rendering currently supports benchmark-series, csv-import, and connectivity-comparison artifacts only")
-
-
 def write_svg_chart(payload: Dict[str, object], output_path: Path, title: str | None = None) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(build_svg_chart(payload, title=title), encoding="utf-8")
@@ -831,6 +884,7 @@ def maybe_write_report(
     output_csv: Path | None,
     output_chart: Path | None = None,
     chart_title: str | None = None,
+    output_markdown: Path | None = None,
 ) -> None:
     if output_json:
         write_json_report(payload, output_json)
@@ -838,6 +892,8 @@ def maybe_write_report(
         write_benchmark_series_csv(payload, output_csv)
     if output_chart:
         write_svg_chart(payload, output_chart, title=chart_title)
+    if output_markdown:
+        write_comparison_markdown(payload, output_markdown)
 
 
 def parse_benchmark_series(raw_value: str) -> List[int]:
@@ -873,6 +929,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-json", type=Path, help="Write JSON output to a file in addition to stdout")
     parser.add_argument("--output-csv", type=Path, help="Write benchmark-series output as CSV")
     parser.add_argument("--output-chart", type=Path, help="Write an SVG chart for benchmark-series, csv-import, or comparison output")
+    parser.add_argument("--output-markdown", type=Path, help="Write a Markdown summary for connectivity comparison output")
     parser.add_argument("--chart-title", help="Optional custom SVG chart title")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     parser.add_argument("command", nargs="*", help="Optional single command, e.g. union a b")
@@ -913,6 +970,8 @@ def main() -> int:
             raise ValueError("--output-csv requires --benchmark-series")
         if args.output_chart and not (args.edges_csv or args.benchmark_series or args.compare_recompute or args.chart_input):
             raise ValueError("--output-chart requires --edges-csv, --benchmark-series, --compare-recompute, or --chart-input")
+        if args.output_markdown and not (args.compare_recompute or args.chart_input):
+            raise ValueError("--output-markdown requires --compare-recompute or --chart-input")
         if args.chart_title and not args.output_chart:
             raise ValueError("--chart-title requires --output-chart")
 
@@ -943,12 +1002,17 @@ def main() -> int:
         else:
             result = _run_single_command(network, args.command)
 
-        maybe_write_report(result, args.output_json, args.output_csv, args.output_chart, args.chart_title)
+        maybe_write_report(result, args.output_json, args.output_csv, args.output_chart, args.chart_title, args.output_markdown)
     except ValueError as exc:
         parser.error(str(exc))
 
-    if args.output_chart and args.chart_input and not args.json:
-        print(json.dumps({"mode": result.get("mode"), "chart_output": str(args.output_chart)}, indent=2, sort_keys=True))
+    if (args.output_chart or args.output_markdown) and args.chart_input and not args.json:
+        response = {"mode": result.get("mode")}
+        if args.output_chart:
+            response["chart_output"] = str(args.output_chart)
+        if args.output_markdown:
+            response["markdown_output"] = str(args.output_markdown)
+        print(json.dumps(response, indent=2, sort_keys=True))
     elif args.json or args.script or args.edges_csv or args.benchmark or args.benchmark_series or args.compare_recompute or args.chart_input:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:

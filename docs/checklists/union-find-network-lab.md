@@ -46,8 +46,25 @@
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+## Markdown summary export slice (2026-04-15 15:31 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick `union-find-network-lab` again because the remaining story gap was a missing ready-to-embed Markdown summary for the comparison artifact
+- [x] skip external web research because this is a direct extension of the existing artifact pipeline
+- [x] do a short Markdown/report-structure refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add a Markdown exporter for `connectivity-comparison` artifacts
+- [x] add `--output-markdown` support for `--compare-recompute` and `--chart-input` workflows
+- [x] generate and commit a sample Markdown summary artifact
+- [x] refresh README usage/examples for the new export path
+- [x] expand automated coverage for Markdown helper and CLI export flows
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
 
 ## Next slice candidates
-- [ ] add a JSON/Markdown export that distills comparison results into a ready-to-embed README/blog snippet
 - [ ] add multi-series chart output so component-count and throughput curves can share one artifact
 - [ ] add a tiny README/chart refresh helper for static portfolio publishing
+

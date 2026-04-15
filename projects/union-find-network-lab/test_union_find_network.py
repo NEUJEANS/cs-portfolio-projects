@@ -23,6 +23,7 @@ from union_find_network import (  # noqa: E402
     run_csv_import,
     run_recompute_comparison,
     write_benchmark_series_csv,
+    write_comparison_markdown,
     write_json_report,
     write_svg_chart,
 )
@@ -298,7 +299,7 @@ class UnionFindNetworkTests(unittest.TestCase):
         self.assertIn("Union-Find", comparison_svg)
         self.assertIn("BFS recompute", comparison_svg)
 
-    def test_chart_source_loading_and_svg_export_cli(self):
+    def test_chart_source_loading_svg_and_markdown_export_cli(self):
         series = run_benchmark_series(nodes=24, edge_counts=[20, 40, 80], seed=13)
         comparison = run_recompute_comparison(nodes=20, edges=40, seed=13, checkpoint_every=10)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -308,6 +309,8 @@ class UnionFindNetworkTests(unittest.TestCase):
             svg_path = tmpdir_path / "benchmark.svg"
             comparison_json = tmpdir_path / "comparison.json"
             comparison_svg = tmpdir_path / "comparison.svg"
+            comparison_md = tmpdir_path / "comparison.md"
+            cli_comparison_md = tmpdir_path / "comparison-cli.md"
             write_json_report(series, json_path)
             write_benchmark_series_csv(series, csv_path)
             write_json_report(comparison, comparison_json)
@@ -330,6 +333,11 @@ class UnionFindNetworkTests(unittest.TestCase):
             self.assertIn("Rendered comparison", comparison_text)
             self.assertIn("Union-Find", comparison_text)
 
+            write_comparison_markdown(comparison_payload, comparison_md)
+            markdown_text = comparison_md.read_text(encoding="utf-8")
+            self.assertIn("Union-Find vs BFS recomputation summary", markdown_text)
+            self.assertIn("Measured speedup", markdown_text)
+
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -345,9 +353,29 @@ class UnionFindNetworkTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-        payload = json.loads(completed.stdout)
-        self.assertEqual(payload["mode"], "benchmark-series-csv")
-        self.assertEqual(payload["chart_output"], str(svg_path))
+
+            markdown_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "--chart-input",
+                    str(comparison_json),
+                    "--output-markdown",
+                    str(cli_comparison_md),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["mode"], "benchmark-series-csv")
+            self.assertEqual(payload["chart_output"], str(svg_path))
+            markdown_payload = json.loads(markdown_completed.stdout)
+            self.assertEqual(markdown_payload["mode"], "connectivity-comparison")
+            self.assertEqual(markdown_payload["markdown_output"], str(cli_comparison_md))
+            self.assertTrue(cli_comparison_md.exists())
+            self.assertIn("Portfolio-ready takeaway", cli_comparison_md.read_text(encoding="utf-8"))
 
     def test_parse_benchmark_series_validation(self):
         self.assertEqual(parse_benchmark_series("10, 20,30"), [10, 20, 30])
@@ -393,6 +421,14 @@ class UnionFindNetworkTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("--chart-title requires", completed.stderr)
+
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--output-markdown", str(Path(tmpdir) / "summary.md")],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("--output-markdown requires", completed.stderr)
 
             completed = subprocess.run(
                 [sys.executable, str(MODULE_PATH), "--compare-recompute", "--comparison-checkpoint-every", "-1"],
