@@ -2,7 +2,7 @@
 
 - Timestamp: 2026-04-15 02:38 UTC
 - Project: mini-mapreduce-lab
-- Commit: 9ec744919b0a29d1a839bbcd5f21d0618b9fcf9f
+- Commit: 8af27b3f6c62880f50d5037ed67811862e69c338
 
 ## What changed
 - added file-based plugin job support using `importlib` so the runner can execute custom mapper/reducer logic
