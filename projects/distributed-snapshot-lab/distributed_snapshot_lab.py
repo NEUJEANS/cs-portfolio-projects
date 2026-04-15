@@ -27,6 +27,7 @@ class Transfer:
 class SnapshotRecord:
     initiator: str
     balances: dict[str, int] = field(default_factory=dict)
+    process_statuses: dict[str, str] = field(default_factory=dict)
     channel_messages: dict[str, list[dict[str, object]]] = field(default_factory=dict)
     markers_seen: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
     closed_channels: set[str] = field(default_factory=set)
@@ -36,6 +37,7 @@ class SnapshotRecord:
         return {
             "initiator": self.initiator,
             "balances": dict(sorted(self.balances.items())),
+            "process_statuses": dict(sorted(self.process_statuses.items())),
             "channel_messages": {
                 channel: messages for channel, messages in sorted(self.channel_messages.items())
             },
@@ -55,6 +57,7 @@ class DistributedBank:
             raise ValueError("balances must be non-negative")
         self.processes = tuple(sorted(balances))
         self.balances = {process: balances[process] for process in self.processes}
+        self.process_statuses = {process: "up" for process in self.processes}
         self.in_flight: dict[str, deque[Transfer]] = {
             self.channel_name(sender, receiver): deque()
             for sender in self.processes
@@ -74,9 +77,30 @@ class DistributedBank:
             raise ValueError("channel names must use sender->receiver format")
         return sender, receiver
 
+    def fail_process(self, process: str, reason: str | None = None) -> None:
+        self._require_process(process)
+        if self.process_statuses[process] == "down":
+            raise ValueError(f"process {process} is already down")
+        self.process_statuses[process] = "down"
+        event = {"event": "fail", "process": process, "process_statuses": self.current_process_statuses()}
+        if reason:
+            event["reason"] = reason
+        self.timeline.append(event)
+
+    def recover_process(self, process: str, reason: str | None = None) -> None:
+        self._require_process(process)
+        if self.process_statuses[process] == "up":
+            raise ValueError(f"process {process} is already up")
+        self.process_statuses[process] = "up"
+        event = {"event": "recover", "process": process, "process_statuses": self.current_process_statuses()}
+        if reason:
+            event["reason"] = reason
+        self.timeline.append(event)
+
     def transfer(self, sender: str, receiver: str, amount: int, label: str) -> Transfer:
         self._require_process(sender)
         self._require_process(receiver)
+        self._require_process_up(sender)
         if sender == receiver:
             raise ValueError("sender and receiver must differ")
         if amount <= 0:
@@ -86,21 +110,41 @@ class DistributedBank:
         transfer = Transfer(sender=sender, receiver=receiver, amount=amount, label=label)
         self.balances[sender] -= amount
         self.in_flight[self.channel_name(sender, receiver)].append(transfer)
-        self.timeline.append({"event": "send", **transfer.to_dict(), "balances": self.current_balances()})
+        self.timeline.append(
+            {
+                "event": "send",
+                **transfer.to_dict(),
+                "balances": self.current_balances(),
+                "process_statuses": self.current_process_statuses(),
+            }
+        )
         return transfer
 
     def deliver(self, sender: str, receiver: str) -> Transfer:
+        self._require_process(sender)
+        self._require_process(receiver)
+        self._require_process_up(receiver)
         channel = self.channel_name(sender, receiver)
         queue = self.in_flight[channel]
         if not queue:
             raise ValueError(f"no in-flight transfer on channel {channel}")
         transfer = queue.popleft()
         self.balances[receiver] += transfer.amount
-        self.timeline.append({"event": "deliver", **transfer.to_dict(), "balances": self.current_balances()})
+        self.timeline.append(
+            {
+                "event": "deliver",
+                **transfer.to_dict(),
+                "balances": self.current_balances(),
+                "process_statuses": self.current_process_statuses(),
+            }
+        )
         return transfer
 
     def current_balances(self) -> dict[str, int]:
         return dict(sorted(self.balances.items()))
+
+    def current_process_statuses(self) -> dict[str, str]:
+        return dict(sorted(self.process_statuses.items()))
 
     def total_money(self) -> int:
         return sum(self.balances.values()) + sum(
@@ -111,6 +155,7 @@ class DistributedBank:
 
     def snapshot(self, initiator: str, marker_delay_overrides: dict[str, int] | None = None) -> dict[str, object]:
         self._require_process(initiator)
+        self._require_process_up(initiator)
         record = SnapshotRecord(initiator=initiator)
         marker_delay_overrides = marker_delay_overrides or {}
         self._validate_marker_delay_overrides(marker_delay_overrides)
@@ -131,6 +176,7 @@ class DistributedBank:
 
             if process not in record.balances:
                 record.balances[process] = self.balances[process]
+                record.process_statuses[process] = self.process_statuses[process]
                 if marker_sender is None:
                     closed = set()
                 else:
@@ -139,8 +185,10 @@ class DistributedBank:
                 record.closed_channels.update(closed)
                 if set(incoming_channels[process]) <= record.closed_channels:
                     record.completed_processes.add(process)
+                if self.process_statuses[process] != "up":
+                    continue
                 for target in self.processes:
-                    if target == process:
+                    if target == process or self.process_statuses[target] != "up":
                         continue
                     channel = self.channel_name(process, target)
                     delay = marker_delay_overrides.get(channel, 0)
@@ -161,6 +209,10 @@ class DistributedBank:
                 record.closed_channels.add(self.channel_name(marker_sender, process))
                 if set(incoming_channels[process]) <= record.closed_channels:
                     record.completed_processes.add(process)
+
+        for process in self.processes:
+            record.balances.setdefault(process, self.balances[process])
+            record.process_statuses.setdefault(process, self.process_statuses[process])
 
         channel_messages: dict[str, list[dict[str, object]]] = {}
         adjusted_balances = dict(record.balances)
@@ -196,6 +248,7 @@ class DistributedBank:
         return {
             "initiator": initiator,
             "balances": dict(sorted(record.balances.items())),
+            "process_statuses": dict(sorted(record.process_statuses.items())),
             "channel_messages": record.channel_messages,
             "markers": sorted(
                 marker_events,
@@ -231,6 +284,52 @@ class DistributedBank:
             "system_total": self.total_money(),
             "all_consistent": all(result["consistent"] for result in snapshots.values()),
             "timeline": list(self.timeline),
+            "process_statuses": self.current_process_statuses(),
+        }
+
+    def run_script(
+        self,
+        operations: Sequence[dict[str, object]],
+        marker_delay_overrides: dict[str, int] | None = None,
+    ) -> dict[str, object]:
+        snapshots: list[dict[str, object]] = []
+        for index, operation in enumerate(operations, start=1):
+            op = str(operation.get("op", "")).strip().lower()
+            if op == "send":
+                self.transfer(
+                    str(operation["sender"]),
+                    str(operation["receiver"]),
+                    int(operation["amount"]),
+                    str(operation["label"]),
+                )
+            elif op == "deliver":
+                self.deliver(str(operation["sender"]), str(operation["receiver"]))
+            elif op == "fail":
+                self.fail_process(str(operation["process"]), reason=_optional_text(operation.get("reason")))
+            elif op == "recover":
+                self.recover_process(str(operation["process"]), reason=_optional_text(operation.get("reason")))
+            elif op == "snapshot":
+                initiator = str(operation["initiator"])
+                snapshot_id = _optional_text(operation.get("snapshot_id")) or f"snapshot-{len(snapshots) + 1}"
+                result = self.snapshot(initiator, marker_delay_overrides=marker_delay_overrides)
+                result["snapshot_id"] = snapshot_id
+                result["step"] = index
+                snapshots.append(result)
+            else:
+                raise ValueError(f"unsupported script op: {op}")
+
+        return {
+            "operations": list(operations),
+            "snapshots": snapshots,
+            "balances": self.current_balances(),
+            "process_statuses": self.current_process_statuses(),
+            "in_flight": {
+                channel: [transfer.to_dict() for transfer in queue]
+                for channel, queue in sorted(self.in_flight.items())
+                if queue
+            },
+            "system_total": self.total_money(),
+            "timeline": list(self.timeline),
         }
 
     def _validate_marker_delay_overrides(self, marker_delay_overrides: dict[str, int]) -> None:
@@ -246,6 +345,18 @@ class DistributedBank:
     def _require_process(self, process: str) -> None:
         if process not in self.balances:
             raise ValueError(f"unknown process: {process}")
+
+    def _require_process_up(self, process: str) -> None:
+        self._require_process(process)
+        if self.process_statuses[process] != "up":
+            raise ValueError(f"process {process} is down")
+
+
+def _optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def parse_balances(raw: str) -> dict[str, int]:
@@ -298,6 +409,18 @@ def parse_scoped_marker_delay(raw: str) -> tuple[str, str, int]:
     return snapshot_id.strip(), channel, delay
 
 
+def parse_script(raw: str) -> list[dict[str, object]]:
+    payload = json.loads(raw)
+    if not isinstance(payload, list) or not payload:
+        raise ValueError("script must be a non-empty JSON array")
+    normalized: list[dict[str, object]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise ValueError("each script operation must be a JSON object")
+        normalized.append(item)
+    return normalized
+
+
 def _safe_mermaid_text(value: object) -> str:
     text = str(value)
     return text.replace("\n", " ").replace('"', "'")
@@ -322,6 +445,16 @@ def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
             label = _safe_mermaid_text(event["label"])
             amount = event["amount"]
             lines.append(f"    Note over {receiver}: apply {amount} from {sender} ({label})")
+        elif event.get("event") == "fail":
+            process = _safe_mermaid_text(event["process"])
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({_safe_mermaid_text(reason)})" if reason else ""
+            lines.append(f"    Note over {process}: FAIL{suffix}")
+        elif event.get("event") == "recover":
+            process = _safe_mermaid_text(event["process"])
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({_safe_mermaid_text(reason)})" if reason else ""
+            lines.append(f"    Note over {process}: RECOVER{suffix}")
 
     snapshot_label = _safe_mermaid_text(result.get("snapshot_id", "snapshot"))
     initiator = _safe_mermaid_text(result["initiator"])
@@ -338,6 +471,14 @@ def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
         for process, balance in sorted((result.get("balances") or {}).items())
     )
     lines.append(f"    Note over {','.join(ordered_processes)}: snapshot balances {balances}")
+
+    process_statuses = result.get("process_statuses") or {}
+    if process_statuses:
+        status_summary = ", ".join(
+            f"{process}={status}"
+            for process, status in sorted(process_statuses.items())
+        )
+        lines.append(f"    Note over {','.join(ordered_processes)}: process status {status_summary}")
 
     channel_messages = result.get("channel_messages") or {}
     if channel_messages:
@@ -367,6 +508,8 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--balances", required=True, help='JSON object like {"A": 10, "B": 10}')
     simulate.add_argument("--send", action="append", default=[], help="sender:receiver:amount:label")
     simulate.add_argument("--deliver", action="append", default=[], help="sender:receiver")
+    simulate.add_argument("--fail", action="append", default=[], help="process to mark down before the snapshot")
+    simulate.add_argument("--recover", action="append", default=[], help="process to recover before the snapshot")
     simulate.add_argument("--snapshot", required=True, help="process that initiates the snapshot")
     simulate.add_argument(
         "--marker-delay",
@@ -388,6 +531,8 @@ def build_parser() -> argparse.ArgumentParser:
     concurrent.add_argument("--balances", required=True, help='JSON object like {"A": 10, "B": 10}')
     concurrent.add_argument("--send", action="append", default=[], help="sender:receiver:amount:label")
     concurrent.add_argument("--deliver", action="append", default=[], help="sender:receiver")
+    concurrent.add_argument("--fail", action="append", default=[], help="process to mark down before capturing snapshots")
+    concurrent.add_argument("--recover", action="append", default=[], help="process to recover before capturing snapshots")
     concurrent.add_argument(
         "--snapshot",
         action="append",
@@ -402,6 +547,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="per-snapshot marker delay in snapshot_id:sender->receiver=delay format",
     )
 
+    script = subparsers.add_parser(
+        "script",
+        help="run a scripted sequence of send/deliver/fail/recover/snapshot operations",
+    )
+    script.add_argument("--balances", required=True, help='JSON object like {"A": 10, "B": 10}')
+    script.add_argument(
+        "--script",
+        required=True,
+        help="JSON array of operation objects such as send/deliver/fail/recover/snapshot",
+    )
+    script.add_argument(
+        "--marker-delay",
+        action="append",
+        default=[],
+        help="sender->receiver=delay values applied to script snapshot steps",
+    )
+
     return parser
 
 
@@ -410,12 +572,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     bank = DistributedBank(parse_balances(args.balances))
-    for raw in args.send:
+    for raw in getattr(args, "send", []):
         sender, receiver, amount, label = parse_transfer(raw)
         bank.transfer(sender, receiver, amount, label)
-    for raw in args.deliver:
+    for raw in getattr(args, "deliver", []):
         sender, receiver = raw.split(":", 1)
         bank.deliver(sender, receiver)
+    for process in getattr(args, "fail", []):
+        bank.fail_process(process)
+    for process in getattr(args, "recover", []):
+        bank.recover_process(process)
 
     if args.command == "simulate":
         marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
@@ -435,6 +601,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ValueError(f"marker delay references unknown snapshot id: {snapshot_id}")
             marker_delays[snapshot_id][channel] = delay
         result = bank.concurrent_snapshots(snapshot_initiators, marker_delay_overrides=dict(marker_delays))
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "script":
+        operations = parse_script(args.script)
+        marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
+        result = bank.run_script(operations, marker_delay_overrides=marker_delays)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
 

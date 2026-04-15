@@ -9,4 +9,5 @@
 - [x] run at least 3 review passes and record fixes
 - [x] add Mermaid visualization export for README/blog/interview demos
 - [x] support multiple concurrent snapshots with named snapshot IDs and isolated results
-- [ ] add failure/recovery scripting in a future slice
+- [x] add failure/recovery scripting with process liveness and scripted scenario playback
+- [ ] future slice: model explicit network partitions or link-level failures separately from process crashes

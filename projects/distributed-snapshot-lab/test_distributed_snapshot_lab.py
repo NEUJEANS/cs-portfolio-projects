@@ -9,6 +9,7 @@ from distributed_snapshot_lab import (
     parse_balances,
     parse_marker_delay,
     parse_scoped_marker_delay,
+    parse_script,
     parse_snapshot_spec,
     parse_snapshot_specs,
     parse_transfer,
@@ -73,6 +74,48 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "insufficient balance"):
             bank.transfer("A", "B", 3, "too-much")
 
+    def test_failed_receiver_blocks_delivery_until_recovery(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10})
+        bank.transfer("A", "B", 4, "salary")
+        bank.fail_process("B", reason="maintenance")
+
+        with self.assertRaisesRegex(ValueError, "process B is down"):
+            bank.deliver("A", "B")
+
+        bank.recover_process("B")
+        bank.deliver("A", "B")
+        self.assertEqual(bank.current_balances(), {"A": 6, "B": 14})
+        self.assertEqual(bank.total_money(), 20)
+
+    def test_send_to_failed_receiver_stays_queued_until_recovery(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10})
+        bank.fail_process("B")
+        bank.transfer("A", "B", 4, "queued")
+
+        self.assertEqual(bank.total_money(), 20)
+        self.assertEqual(len(bank.in_flight[bank.channel_name("A", "B")]), 1)
+        with self.assertRaisesRegex(ValueError, "process B is down"):
+            bank.deliver("A", "B")
+
+    def test_failed_process_cannot_send_or_start_snapshot(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10})
+        bank.fail_process("A")
+
+        with self.assertRaisesRegex(ValueError, "process A is down"):
+            bank.transfer("A", "B", 1, "oops")
+        with self.assertRaisesRegex(ValueError, "process A is down"):
+            bank.snapshot("A")
+
+    def test_snapshot_records_process_statuses(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        bank.transfer("A", "B", 3, "ab-1")
+        bank.fail_process("C", reason="reboot")
+
+        result = bank.snapshot("A", marker_delay_overrides={"A->B": 0, "C->B": 2})
+
+        self.assertEqual(result["process_statuses"], {"A": "up", "B": "up", "C": "down"})
+        self.assertTrue(result["consistent"])
+
     def test_parsers_validate_cli_inputs(self) -> None:
         self.assertEqual(parse_balances('{"A": 4, "B": 6}'), {"A": 4, "B": 6})
         self.assertEqual(parse_transfer("A:B:3:rent"), ("A", "B", 3, "rent"))
@@ -80,6 +123,10 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertEqual(parse_snapshot_spec("blue:A"), ("blue", "A"))
         self.assertEqual(parse_snapshot_specs(["blue:A", "green:C"]), {"blue": "A", "green": "C"})
         self.assertEqual(parse_scoped_marker_delay("blue:C->B=2"), ("blue", "C->B", 2))
+        self.assertEqual(
+            parse_script('[{"op": "fail", "process": "B"}, {"op": "snapshot", "initiator": "A"}]'),
+            [{"op": "fail", "process": "B"}, {"op": "snapshot", "initiator": "A"}],
+        )
 
     def test_cli_simulation_reports_consistent_snapshot(self) -> None:
         result = run_cli_json(
@@ -102,6 +149,27 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertEqual(result["snapshot_total"], 30)
         self.assertEqual(result["balances"], {"A": 7, "B": 13, "C": 8})
         self.assertEqual(result["channel_messages"]["C->B"][0]["amount"], 2)
+
+    def test_cli_simulation_supports_failure_and_recovery_flags(self) -> None:
+        result = run_cli_json(
+            "simulate",
+            "--balances",
+            '{"A": 10, "B": 10}',
+            "--send",
+            "A:B:4:salary",
+            "--fail",
+            "B",
+            "--recover",
+            "B",
+            "--deliver",
+            "A:B",
+            "--snapshot",
+            "A",
+        )
+
+        self.assertEqual(result["process_statuses"], {"A": "up", "B": "up"})
+        self.assertEqual(result["channel_messages"], {})
+        self.assertTrue(result["consistent"])
 
     def test_concurrent_snapshots_keep_named_results_separate(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10, "C": 10})
@@ -151,10 +219,40 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertEqual(result["snapshots"]["blue"]["channel_messages"]["C->B"][0]["amount"], 2)
         self.assertEqual(result["snapshots"]["green"]["channel_messages"]["A->B"][0]["amount"], 3)
 
-    def test_mermaid_render_contains_markers_balances_and_channel_state(self) -> None:
+    def test_script_runner_supports_failure_recovery_and_snapshot_steps(self) -> None:
+        result = run_cli_json(
+            "script",
+            "--balances",
+            '{"A": 10, "B": 10, "C": 10}',
+            "--marker-delay",
+            "C->B=2",
+            "--script",
+            json.dumps(
+                [
+                    {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                    {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                    {"op": "fail", "process": "B", "reason": "reboot"},
+                    {"op": "snapshot", "snapshot_id": "during-outage", "initiator": "A"},
+                    {"op": "recover", "process": "B"},
+                    {"op": "deliver", "sender": "A", "receiver": "B"},
+                    {"op": "deliver", "sender": "C", "receiver": "B"},
+                    {"op": "snapshot", "snapshot_id": "after-recovery", "initiator": "A"},
+                ]
+            ),
+        )
+
+        self.assertEqual([snap["snapshot_id"] for snap in result["snapshots"]], ["during-outage", "after-recovery"])
+        self.assertEqual(result["snapshots"][0]["process_statuses"]["B"], "down")
+        self.assertEqual(result["snapshots"][1]["process_statuses"]["B"], "up")
+        self.assertEqual(result["balances"], {"A": 7, "B": 15, "C": 8})
+        self.assertEqual(result["in_flight"], {})
+        self.assertEqual(result["system_total"], 30)
+
+    def test_mermaid_render_contains_markers_balances_statuses_and_channel_state(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10, "C": 10})
         bank.transfer("A", "B", 3, "ab-1")
         bank.transfer("C", "B", 2, "cb-1")
+        bank.fail_process("C", reason="maintenance")
         result = bank.snapshot("A", marker_delay_overrides={"A->B": 0, "C->B": 2})
         result["snapshot_id"] = "blue"
 
@@ -164,8 +262,10 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertIn("participant A", diagram)
         self.assertIn("A->>B: transfer 3 (ab-1)", diagram)
         self.assertIn("A-->>B: marker t=0", diagram)
+        self.assertIn("Note over C: FAIL (maintenance)", diagram)
         self.assertIn("Note over A: blue starts", diagram)
         self.assertIn("Note over A,B,C: snapshot balances A=7, B=13, C=8", diagram)
+        self.assertIn("Note over A,B,C: process status A=up, B=up, C=down", diagram)
         self.assertIn("Note over C,B: recorded in-flight on C->B 2 (cb-1)", diagram)
 
     def test_cli_mermaid_output_switches_format(self) -> None:

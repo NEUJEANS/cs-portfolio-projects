@@ -7,17 +7,19 @@ A small distributed-systems simulation that demonstrates the Chandy-Lamport dist
 - shows how consistent cuts can include in-transit messages instead of only local balances
 - gives you concrete interview material for markers, channel state, stable properties, and global-state debugging
 - exports Mermaid sequence diagrams so the execution is easy to present in a README, blog post, or interview follow-up
-- now supports named concurrent snapshots, which makes the lab feel closer to real distributed debugging tooling
+- supports named concurrent snapshots and scripted failure/recovery scenarios, so the lab feels closer to real distributed debugging tooling
 - stays small enough to understand end to end while still feeling like a real systems lab
 
 ## Features
 - process-local balances plus directed channels with queued in-flight transfers
 - transfer and delivery simulation that preserves total money across local state and channels
-- snapshot capture initiated by any process
+- process up/down state for lightweight crash/recovery scenarios
+- snapshot capture initiated by any live process
 - marker-delay controls to model different channel recording windows
 - named concurrent snapshots with isolated results per snapshot ID
+- scripted scenario playback with `send`, `deliver`, `fail`, `recover`, and `snapshot` steps
 - JSON CLI output that is easy to inspect or feed into follow-up tooling
-- Mermaid sequence-diagram export for presentation-ready visualization
+- Mermaid sequence-diagram export for presentation-ready visualization, including fail/recover notes
 - unit and CLI tests for core invariants and representative scenarios
 
 ## Project structure
@@ -64,14 +66,37 @@ python3 distributed_snapshot_lab.py concurrent \
   --marker-delay 'green:A->B=2'
 ```
 
-### Deliver a transfer before taking the snapshot
+### Model a simple outage before snapshot capture
 ```bash
 python3 distributed_snapshot_lab.py simulate \
-  --balances '{"A": 12, "B": 8}' \
-  --send A:B:4:salary \
-  --deliver A:B \
+  --balances '{"A": 10, "B": 10, "C": 10}' \
+  --send A:B:3:ab-1 \
+  --fail C \
   --snapshot A
 ```
+
+### Replay a scripted failure/recovery scenario
+```bash
+python3 distributed_snapshot_lab.py script \
+  --balances '{"A": 10, "B": 10, "C": 10}' \
+  --marker-delay 'C->B=2' \
+  --script '[
+    {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+    {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+    {"op": "fail", "process": "B", "reason": "reboot"},
+    {"op": "snapshot", "snapshot_id": "during-outage", "initiator": "A"},
+    {"op": "recover", "process": "B"},
+    {"op": "deliver", "sender": "A", "receiver": "B"},
+    {"op": "deliver", "sender": "C", "receiver": "B"},
+    {"op": "snapshot", "snapshot_id": "after-recovery", "initiator": "A"}
+  ]'
+```
+
+## Output notes
+- `process_statuses` reports which processes were `up` or `down` when the snapshot was recorded.
+- failed receivers block `deliver` until they recover, so queued channel state can survive across an outage.
+- failed processes cannot send new transfers or initiate snapshots in this lightweight model.
+- scripted runs return the final balances, remaining in-flight messages, full timeline, and every snapshot captured during the script.
 
 ## Testing
 ```bash
@@ -84,9 +109,10 @@ python3 -m unittest discover -s projects/distributed-snapshot-lab -p 'test_*.py'
 - why stable predicates and debugging tools care about consistent cuts
 - how total-money invariants help sanity-check the implementation
 - how concurrent snapshot IDs prevent one in-progress observation from polluting another
-- why lightweight visualization export makes distributed behavior easier to explain than raw JSON alone
+- how lightweight crash/recovery scripting reveals the difference between local liveness and global money conservation
+- why visualization export makes distributed behavior easier to explain than raw JSON alone
 
 ## Future improvements
-- add scripted failure/recovery scenarios alongside normal transfers
+- model link-level partitions separately from whole-process failures
 - export richer Mermaid notes for per-process recorded state transitions
 - generate markdown-ready assets automatically for project pages
