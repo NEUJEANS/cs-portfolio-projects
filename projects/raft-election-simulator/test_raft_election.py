@@ -62,6 +62,46 @@ class RaftElectionSimulatorTests(unittest.TestCase):
         self.assertEqual(summary["nodes"]["n1"]["role"], Role.FOLLOWER.value)
         self.assertTrue(any(event["event"] == "leader_stale" for event in summary["events"]))
 
+    def test_client_command_replicates_and_commits_on_majority(self):
+        simulator = RaftElectionSimulator(
+            ["n1", "n2", "n3", "n4", "n5"],
+            {"n1": 3, "n2": 5, "n3": 6, "n4": 7, "n5": 8},
+        )
+
+        simulator.run(4)
+        simulator.append_client_command("set x=1")
+        summary = simulator.summary()
+
+        for node in summary["nodes"].values():
+            self.assertEqual(node["commit_index"], 1)
+            self.assertEqual(node["log"], [{"term": 1, "command": "set x=1"}])
+        self.assertTrue(any(event["event"] == "commit_advanced" for event in summary["events"]))
+
+    def test_partitioned_followers_delay_commit_until_healed(self):
+        simulator = RaftElectionSimulator(
+            ["n1", "n2", "n3", "n4", "n5"],
+            {"n1": 3, "n2": 5, "n3": 6, "n4": 7, "n5": 8},
+        )
+
+        simulator.run(4)
+        simulator.isolate("n4")
+        simulator.isolate("n5")
+        simulator.append_client_command("set x=2")
+        summary = simulator.summary()
+
+        self.assertEqual(summary["nodes"]["n1"]["commit_index"], 1)
+        self.assertEqual(summary["nodes"]["n4"]["commit_index"], 0)
+        self.assertEqual(summary["nodes"]["n5"]["log"], [])
+
+        simulator.heal("n4")
+        simulator.heal("n5")
+        simulator.run(2)
+        healed_summary = simulator.summary()
+
+        self.assertEqual(healed_summary["nodes"]["n4"]["commit_index"], 1)
+        self.assertEqual(healed_summary["nodes"]["n5"]["commit_index"], 1)
+        self.assertTrue(any(event["event"] == "commit_replicated" for event in healed_summary["events"]))
+
     def test_cli_emits_json_summary(self):
         scenario = {
             "nodes": ["n1", "n2", "n3"],
@@ -104,6 +144,31 @@ class RaftElectionSimulatorTests(unittest.TestCase):
 
         self.assertEqual(summary["leaders"], ["n2"])
         self.assertGreaterEqual(len(summary["events"]), 10)
+
+    def test_run_scenario_supports_client_write_steps(self):
+        summary = run_scenario(
+            {
+                "nodes": ["n1", "n2", "n3"],
+                "election_timeouts": {"n1": 3, "n2": 5, "n3": 7},
+                "steps": [
+                    {"action": "run", "ticks": 4},
+                    {"action": "client-write", "command": "set theme=dark"},
+                ],
+            }
+        )
+
+        self.assertEqual(summary["nodes"]["n1"]["commit_index"], 1)
+        self.assertEqual(summary["nodes"]["n2"]["log"][0]["command"], "set theme=dark")
+
+    def test_run_scenario_validates_required_step_fields(self):
+        with self.assertRaisesRegex(ValueError, "missing fields: command"):
+            run_scenario(
+                {
+                    "nodes": ["n1", "n2", "n3"],
+                    "election_timeouts": {"n1": 3, "n2": 5, "n3": 7},
+                    "steps": [{"action": "client-write"}],
+                }
+            )
 
 
 if __name__ == "__main__":

@@ -9,7 +9,8 @@
   },
   "heartbeat_interval": 2,
   "steps": [
-    {"action": "run", "ticks": 8},
+    {"action": "run", "ticks": 4},
+    {"action": "client-write", "command": "set homepage-theme=dark"},
     {"action": "isolate", "node": "n1"},
     {"action": "run", "ticks": 8},
     {"action": "heal", "node": "n1"},
