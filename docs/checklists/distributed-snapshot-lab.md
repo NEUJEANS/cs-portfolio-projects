@@ -7,5 +7,6 @@
 - [x] add README usage examples and interview talking points
 - [x] add unit and CLI tests for invariants and in-flight message capture
 - [x] run at least 3 review passes and record fixes
-- [ ] add visualization/export support in a future slice
+- [x] add Mermaid visualization export for README/blog/interview demos
 - [ ] support multiple concurrent snapshots in a future slice
+- [ ] add failure/recovery scripting in a future slice

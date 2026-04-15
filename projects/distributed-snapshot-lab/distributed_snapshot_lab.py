@@ -121,7 +121,6 @@ class DistributedBank:
                 raise ValueError("marker delays cannot target self channels")
             if delay < 0:
                 raise ValueError("marker delay must be non-negative")
-        processes = set(self.processes)
         incoming_channels = {
             process: [self.channel_name(sender, process) for sender in self.processes if sender != process]
             for process in self.processes
@@ -246,6 +245,66 @@ def parse_marker_delay(raw: str) -> tuple[str, int]:
     return channel, delay
 
 
+def _safe_mermaid_text(value: object) -> str:
+    text = str(value)
+    return text.replace("\n", " ").replace('"', "'")
+
+
+def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
+    ordered_processes = list(sorted(set(str(process) for process in processes)))
+    lines = ["sequenceDiagram"]
+    for process in ordered_processes:
+        lines.append(f"    participant {process}")
+
+    for event in result.get("timeline", []):
+        if event.get("event") == "send":
+            sender = _safe_mermaid_text(event["sender"])
+            receiver = _safe_mermaid_text(event["receiver"])
+            label = _safe_mermaid_text(event["label"])
+            amount = event["amount"]
+            lines.append(f"    {sender}->>{receiver}: transfer {amount} ({label})")
+        elif event.get("event") == "deliver":
+            sender = _safe_mermaid_text(event["sender"])
+            receiver = _safe_mermaid_text(event["receiver"])
+            label = _safe_mermaid_text(event["label"])
+            amount = event["amount"]
+            lines.append(f"    Note over {receiver}: apply {amount} from {sender} ({label})")
+
+    initiator = _safe_mermaid_text(result["initiator"])
+    lines.append(f"    Note over {initiator}: snapshot starts")
+
+    for marker in result.get("markers", []):
+        sender = _safe_mermaid_text(marker["sender"])
+        receiver = _safe_mermaid_text(marker["receiver"])
+        time = marker["time"]
+        lines.append(f"    {sender}-->>{receiver}: marker t={time}")
+
+    balances = ", ".join(
+        f"{process}={balance}"
+        for process, balance in sorted((result.get("balances") or {}).items())
+    )
+    lines.append(f"    Note over {','.join(ordered_processes)}: snapshot balances {balances}")
+
+    channel_messages = result.get("channel_messages") or {}
+    if channel_messages:
+        for channel, messages in sorted(channel_messages.items()):
+            sender, receiver = channel.split("->", 1)
+            message_summary = ", ".join(
+                f"{message['amount']} ({_safe_mermaid_text(message['label'])})"
+                for message in messages
+            )
+            lines.append(
+                f"    Note over {_safe_mermaid_text(sender)},{_safe_mermaid_text(receiver)}: recorded in-flight on {channel} {message_summary}"
+            )
+    else:
+        lines.append("    Note over " + ",".join(ordered_processes) + ": no recorded in-flight channel messages")
+
+    lines.append(
+        f"    Note over {','.join(ordered_processes)}: consistent={result['consistent']} snapshot_total={result['snapshot_total']} system_total={result['system_total']}"
+    )
+    return "\n".join(lines) + "\n"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Distributed snapshot lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -260,6 +319,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="override marker arrival ordering with sender->receiver=delay; larger values keep that incoming channel recording longer",
+    )
+    simulate.add_argument(
+        "--output",
+        choices=("json", "mermaid"),
+        default="json",
+        help="render the result as JSON or as a Mermaid sequence diagram",
     )
 
     return parser
@@ -281,7 +346,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         bank.deliver(sender, receiver)
     marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
     result = bank.snapshot(args.snapshot, marker_delay_overrides=marker_delays)
-    print(json.dumps(result, indent=2, sort_keys=True))
+    if args.output == "mermaid":
+        print(render_mermaid(result, bank.processes), end="")
+    else:
+        print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 

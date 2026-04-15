@@ -4,22 +4,31 @@ import sys
 import unittest
 from pathlib import Path
 
-from distributed_snapshot_lab import DistributedBank, parse_balances, parse_marker_delay, parse_transfer
+from distributed_snapshot_lab import (
+    DistributedBank,
+    parse_balances,
+    parse_marker_delay,
+    parse_transfer,
+    render_mermaid,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SCRIPT = PROJECT_DIR / "distributed_snapshot_lab.py"
 
 
-def run_cli(*args: str) -> dict:
-    completed = subprocess.run(
+def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         cwd=PROJECT_DIR,
         check=True,
         capture_output=True,
         text=True,
     )
-    return json.loads(completed.stdout)
+
+
+def run_cli_json(*args: str) -> dict:
+    return json.loads(run_cli(*args).stdout)
 
 
 class DistributedSnapshotLabTests(unittest.TestCase):
@@ -67,7 +76,7 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertEqual(parse_marker_delay("C->B=2"), ("C->B", 2))
 
     def test_cli_simulation_reports_consistent_snapshot(self) -> None:
-        result = run_cli(
+        result = run_cli_json(
             "simulate",
             "--balances",
             '{"A": 10, "B": 10, "C": 10}',
@@ -88,6 +97,37 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertEqual(result["balances"], {"A": 7, "B": 13, "C": 8})
         self.assertEqual(result["channel_messages"]["C->B"][0]["amount"], 2)
 
+    def test_mermaid_render_contains_markers_balances_and_channel_state(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        bank.transfer("A", "B", 3, "ab-1")
+        bank.transfer("C", "B", 2, "cb-1")
+        result = bank.snapshot("A", marker_delay_overrides={"A->B": 0, "C->B": 2})
+
+        diagram = render_mermaid(result, bank.processes)
+
+        self.assertIn("sequenceDiagram", diagram)
+        self.assertIn("participant A", diagram)
+        self.assertIn("A->>B: transfer 3 (ab-1)", diagram)
+        self.assertIn("A-->>B: marker t=0", diagram)
+        self.assertIn("Note over A,B,C: snapshot balances A=7, B=13, C=8", diagram)
+        self.assertIn("Note over C,B: recorded in-flight on C->B 2 (cb-1)", diagram)
+
+    def test_cli_mermaid_output_switches_format(self) -> None:
+        completed = run_cli(
+            "simulate",
+            "--balances",
+            '{"A": 10, "B": 10}',
+            "--send",
+            "A:B:4:salary",
+            "--snapshot",
+            "A",
+            "--output",
+            "mermaid",
+        )
+
+        self.assertTrue(completed.stdout.startswith("sequenceDiagram\n"))
+        self.assertNotIn('"balances"', completed.stdout)
+        self.assertIn("snapshot starts", completed.stdout)
 
     def test_unknown_marker_delay_channel_is_rejected(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10})
