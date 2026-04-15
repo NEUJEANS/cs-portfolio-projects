@@ -5,4 +5,5 @@
 - [x] add JSON-driven CLI commands for demo, route, and join-preview workflows
 - [x] add README usage, design notes, and future ideas
 - [x] add unit tests for routing, key ownership, joins, and CLI behavior
-- [ ] consider a follow-up slice for stabilization, successor lists, or hop-count benchmarking
+- [x] add a hop-count benchmark that compares Chord finger routing against naive successor forwarding
+- [ ] consider a follow-up slice for stabilization, successor lists, or larger synthetic workload generation

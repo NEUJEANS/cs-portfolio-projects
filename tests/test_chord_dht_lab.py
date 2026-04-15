@@ -48,6 +48,37 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(result.route[0], "alpha")
         self.assertLessEqual(result.hop_count, len(ring.nodes))
 
+    def test_linear_lookup_matches_owner_with_possible_extra_hops(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        finger_result = ring.lookup("alpha", "compiler")
+        linear_result = ring.linear_lookup("alpha", "compiler")
+
+        self.assertEqual(linear_result.responsible_node, finger_result.responsible_node)
+        self.assertEqual(linear_result.responsible_node_id, finger_result.responsible_node_id)
+        self.assertGreaterEqual(linear_result.hop_count, finger_result.hop_count)
+        self.assertEqual(linear_result.route[0], "alpha")
+
+    def test_benchmark_summary_counts_cases_and_savings(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        benchmark = ring.benchmark_lookups(
+            ["compiler", "slides"], start_nodes=["alpha", "charlie", "alpha"]
+        )
+
+        self.assertEqual(benchmark["node_count"], 5)
+        self.assertEqual(len(benchmark["nodes"]), 5)
+        self.assertEqual(benchmark["start_nodes"], ["alpha", "charlie"])
+        self.assertEqual(benchmark["summary"]["case_count"], 4)
+        self.assertEqual(len(benchmark["cases"]), 4)
+        self.assertGreaterEqual(benchmark["summary"]["average_linear_hops"], benchmark["summary"]["average_chord_hops"])
+        self.assertEqual(
+            benchmark["summary"]["improved_cases"]
+            + benchmark["summary"]["tied_cases"]
+            + benchmark["summary"]["slower_cases"],
+            4,
+        )
+
     def test_join_report_identifies_only_moved_keys(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
         keys = ["report.pdf", "slides", "internship-notes", "compiler", "final-project"]
@@ -82,6 +113,7 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["command"], "demo")
         self.assertIn("finger_tables", payload)
         self.assertIn("lookup", payload)
+        self.assertIn("hop_benchmark", payload)
         self.assertEqual(payload["lookup"]["key"], "compiler")
         owners = {item["key"]: item["owner"] for item in payload["sample_assignments"]}
         self.assertEqual(payload["lookup"]["responsible_node"], owners["compiler"])
@@ -99,6 +131,31 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["command"], "route")
         self.assertEqual(payload["start_node"], "alpha")
         self.assertTrue(payload["route"])
+
+    def test_cli_benchmark_supports_filtered_start_nodes(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "benchmark",
+                str(RING_PATH),
+                "compiler",
+                "slides",
+                "--start-node",
+                "alpha",
+                "--start-node",
+                "charlie",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["start_nodes"], ["alpha", "charlie"])
+        self.assertEqual(payload["summary"]["case_count"], 4)
 
 
 if __name__ == "__main__":

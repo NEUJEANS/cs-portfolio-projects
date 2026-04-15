@@ -6,6 +6,7 @@ import json
 from bisect import bisect_left
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from statistics import mean
 from typing import Iterable
 
 
@@ -155,6 +156,93 @@ class ChordRing:
 
         raise RuntimeError("lookup exceeded safe hop limit")
 
+    def linear_lookup(self, start_node: str, key: str) -> LookupResult:
+        current = self.get_node(start_node)
+        key_id = self.hash_identifier(key)
+        route = [current.name]
+
+        for _ in range(len(self.nodes)):
+            if self.owns_identifier(current, key_id):
+                return LookupResult(
+                    key=key,
+                    key_id=key_id,
+                    start_node=start_node,
+                    responsible_node=current.name,
+                    responsible_node_id=current.node_id,
+                    hop_count=len(route) - 1,
+                    route=route,
+                )
+            current = self.successor_of_node(current)
+            route.append(current.name)
+
+        raise RuntimeError("linear lookup exceeded safe hop limit")
+
+    def benchmark_lookups(
+        self, keys: Iterable[str], start_nodes: Iterable[str] | None = None
+    ) -> dict[str, object]:
+        key_list = list(keys)
+        if not key_list:
+            raise ValueError("benchmark requires at least one key")
+
+        if start_nodes is None:
+            start_names = [node.name for node in self.nodes]
+        else:
+            start_names = list(dict.fromkeys(start_nodes))
+            if not start_names:
+                raise ValueError("benchmark requires at least one start node")
+            for name in start_names:
+                self.get_node(name)
+
+        cases: list[dict[str, object]] = []
+        chord_hops: list[int] = []
+        linear_hops: list[int] = []
+
+        for start_node in start_names:
+            for key in key_list:
+                finger_result = self.lookup(start_node, key)
+                linear_result = self.linear_lookup(start_node, key)
+                cases.append(
+                    {
+                        "start_node": start_node,
+                        "key": key,
+                        "key_id": finger_result.key_id,
+                        "responsible_node": finger_result.responsible_node,
+                        "chord_hops": finger_result.hop_count,
+                        "linear_hops": linear_result.hop_count,
+                        "hop_savings": linear_result.hop_count - finger_result.hop_count,
+                        "chord_route": finger_result.route,
+                        "linear_route": linear_result.route,
+                    }
+                )
+                chord_hops.append(finger_result.hop_count)
+                linear_hops.append(linear_result.hop_count)
+
+        improved_cases = sum(
+            1 for case in cases if int(case["hop_savings"]) > 0
+        )
+        tied_cases = sum(1 for case in cases if int(case["hop_savings"]) == 0)
+        slower_cases = len(cases) - improved_cases - tied_cases
+
+        return {
+            "m_bits": self.m_bits,
+            "node_count": len(self.nodes),
+            "nodes": self.list_nodes(),
+            "keys": key_list,
+            "start_nodes": start_names,
+            "cases": cases,
+            "summary": {
+                "case_count": len(cases),
+                "average_chord_hops": round(mean(chord_hops), 3),
+                "average_linear_hops": round(mean(linear_hops), 3),
+                "max_chord_hops": max(chord_hops),
+                "max_linear_hops": max(linear_hops),
+                "improved_cases": improved_cases,
+                "tied_cases": tied_cases,
+                "slower_cases": slower_cases,
+                "total_hop_savings": sum(linear_hops) - sum(chord_hops),
+            },
+        }
+
     def assign_keys(self, keys: Iterable[str]) -> list[dict[str, int | str]]:
         assignments: list[dict[str, int | str]] = []
         for key in keys:
@@ -222,6 +310,7 @@ def build_demo_payload() -> dict[str, object]:
         "sample_assignments": ring.assign_keys(sample_keys),
         "lookup": asdict(route),
         "join_preview": ring.join_report("foxtrot", sample_keys),
+        "hop_benchmark": ring.benchmark_lookups(sample_keys, start_nodes=["alpha", "charlie"]),
     }
 
 
@@ -253,6 +342,20 @@ def parse_args() -> argparse.Namespace:
     join_parser.add_argument("keys", nargs="+")
     join_parser.add_argument("--pretty", action="store_true")
 
+    benchmark_parser = subparsers.add_parser(
+        "benchmark", help="compare Chord finger-table routing against linear successor forwarding"
+    )
+    benchmark_parser.add_argument("ring_file", type=Path)
+    benchmark_parser.add_argument("keys", nargs="+")
+    benchmark_parser.add_argument(
+        "--start-node",
+        dest="start_nodes",
+        action="append",
+        default=None,
+        help="optional start node to benchmark; may be provided multiple times",
+    )
+    benchmark_parser.add_argument("--pretty", action="store_true")
+
     return parser.parse_args()
 
 
@@ -267,6 +370,12 @@ def main() -> None:
     elif args.command == "join":
         ring = load_ring(args.ring_file)
         payload = {"command": "join", **ring.join_report(args.new_node, args.keys)}
+    elif args.command == "benchmark":
+        ring = load_ring(args.ring_file)
+        payload = {
+            "command": "benchmark",
+            **ring.benchmark_lookups(args.keys, start_nodes=args.start_nodes),
+        }
     else:
         raise ValueError(f"unsupported command {args.command!r}")
 
