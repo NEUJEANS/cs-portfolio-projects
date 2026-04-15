@@ -7,4 +7,4 @@
 - [x] run focused tests for interval-tree lab
 - [x] perform 3 review passes and record fixes
 - [x] run secret scan before push
-- [ ] commit, push, and write wrap-up
+- [x] commit, push, and write wrap-up
