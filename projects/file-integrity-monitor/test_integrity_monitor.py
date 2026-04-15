@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -8,11 +9,14 @@ from pathlib import Path
 from integrity_monitor import (
     EXIT_CHANGES_FOUND,
     EXIT_OK,
+    EXIT_SIGNATURE_INVALID,
     build_manifest,
     diff_exit_code,
     diff_snapshots,
     format_text_report,
     should_include,
+    sign_manifest,
+    verify_manifest_signature,
 )
 
 SCRIPT = Path(__file__).with_name("integrity_monitor.py")
@@ -91,6 +95,13 @@ class IntegrityMonitorTests(unittest.TestCase):
         self.assertEqual(diff_exit_code(changed_diff, fail_on_changes=False), EXIT_OK)
         self.assertEqual(diff_exit_code(changed_diff, fail_on_changes=True), EXIT_CHANGES_FOUND)
 
+    def test_sign_manifest_and_verify_signature(self):
+        manifest = build_manifest(Path(__file__).parent)
+        signed = sign_manifest(manifest, "secret-key")
+        self.assertIn("signature", signed)
+        self.assertTrue(verify_manifest_signature(signed, "secret-key"))
+        self.assertFalse(verify_manifest_signature(signed, "wrong-key"))
+
     def test_cli_scan_output_and_diff_text_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -118,6 +129,7 @@ class IntegrityMonitorTests(unittest.TestCase):
             manifest = json.loads(scan.stdout)
             self.assertEqual(manifest["algorithm"], "sha256")
             self.assertEqual(manifest["file_count"], 1)
+            self.assertEqual(manifest["embedded_paths"], [])
             self.assertTrue(baseline_path.exists())
 
             (data_path / "alpha.txt").write_text("updated")
@@ -141,6 +153,167 @@ class IntegrityMonitorTests(unittest.TestCase):
             self.assertIn("changed: 1", diff.stdout)
             self.assertIn("added: 1", diff.stdout)
             self.assertIn("beta.txt", diff.stdout)
+
+    def test_cli_signed_baseline_verifies_and_diffs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_path = root / "baseline.json"
+            data_path = root / "data"
+            data_path.mkdir()
+            (data_path / "alpha.txt").write_text("alpha")
+
+            env = os.environ | {"INTEGRITY_SECRET": "super-secret"}
+            scan = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "scan",
+                    str(data_path),
+                    "--output",
+                    str(baseline_path),
+                    "--signing-key-env",
+                    "INTEGRITY_SECRET",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            manifest = json.loads(scan.stdout)
+            self.assertEqual(manifest["signature"]["algorithm"], "hmac-sha256")
+
+            verify = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "verify",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--signing-key-env",
+                    "INTEGRITY_SECRET",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn('"verified": true', verify.stdout)
+
+            diff = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "diff",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--signing-key-env",
+                    "INTEGRITY_SECRET",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn('"has_changes": false', diff.stdout)
+
+    def test_scan_and_diff_ignore_embedded_baseline_inside_target_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "alpha.txt").write_text("alpha")
+            baseline_path = root / "baseline.json"
+
+            scan = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "scan",
+                    str(root),
+                    "--output",
+                    str(baseline_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            manifest = json.loads(scan.stdout)
+            self.assertEqual(manifest["embedded_paths"], ["baseline.json"])
+
+            diff = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "diff",
+                    str(root),
+                    "--baseline",
+                    str(baseline_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn('"has_changes": false', diff.stdout)
+
+    def test_cli_signed_baseline_requires_valid_secret(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_path = root / "baseline.json"
+            data_path = root / "data"
+            data_path.mkdir()
+            (data_path / "alpha.txt").write_text("alpha")
+
+            env = os.environ | {"INTEGRITY_SECRET": "super-secret"}
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "scan",
+                    str(data_path),
+                    "--output",
+                    str(baseline_path),
+                    "--signing-key-env",
+                    "INTEGRITY_SECRET",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+
+            missing_secret = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "diff",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(missing_secret.returncode, 2)
+            self.assertIn("diff requires --signing-key-env", missing_secret.stderr)
+
+            wrong_secret_env = os.environ | {"WRONG_SECRET": "bad-secret"}
+            wrong_secret = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "verify",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--signing-key-env",
+                    "WRONG_SECRET",
+                ],
+                capture_output=True,
+                text=True,
+                env=wrong_secret_env,
+            )
+            self.assertEqual(wrong_secret.returncode, EXIT_SIGNATURE_INVALID)
+            self.assertIn('"verified": false', wrong_secret.stdout)
 
     def test_cli_fail_on_changes_returns_exit_code_1(self):
         with tempfile.TemporaryDirectory() as tmp:

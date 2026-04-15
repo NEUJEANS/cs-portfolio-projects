@@ -5,7 +5,7 @@ Snapshot a directory tree with hashing metadata, save a reusable baseline manife
 
 ## Why it is portfolio-worthy
 - demonstrates recursive filesystem traversal and content hashing
-- shows clean CLI design with reusable manifests and ignore patterns
+- shows clean CLI design with reusable manifests, ignore patterns, and tamper-evident signed baselines
 - includes automated tests that exercise both library and command-line usage
 - maps well to real-world integrity monitoring, deployment checks, and backup verification
 
@@ -17,6 +17,7 @@ Snapshot a directory tree with hashing metadata, save a reusable baseline manife
 - diff a current directory snapshot against a saved baseline
 - ignore temporary or generated files with repeatable glob patterns
 - emit either JSON for tooling or a readable text summary for humans
+- sign manifests with an HMAC secret and verify them before trusting a baseline
 - keep the core logic importable for reuse in other scripts
 
 ## Usage
@@ -54,6 +55,24 @@ python3 integrity_monitor.py diff ../task-tracker-cli \
   --fail-on-changes
 ```
 
+Create and verify a tamper-evident signed baseline:
+
+```bash
+export INTEGRITY_MONITOR_SECRET="replace-with-a-long-random-secret"
+python3 integrity_monitor.py scan ../task-tracker-cli \
+  --output signed-baseline.json \
+  --signing-key-env INTEGRITY_MONITOR_SECRET
+
+python3 integrity_monitor.py verify ../task-tracker-cli \
+  --baseline signed-baseline.json \
+  --signing-key-env INTEGRITY_MONITOR_SECRET
+
+python3 integrity_monitor.py diff ../task-tracker-cli \
+  --baseline signed-baseline.json \
+  --signing-key-env INTEGRITY_MONITOR_SECRET \
+  --format text
+```
+
 ## Test
 ```bash
 python3 -m unittest discover -s . -p "test_*.py"
@@ -61,5 +80,4 @@ python3 -m unittest discover -s . -p "test_*.py"
 
 ## Future Improvements
 - support directory-level include rules in addition to ignore globs
-- add exit codes for CI workflows when changes are detected
-- optionally sign manifests for tamper-evident verification
+- optionally rotate or load signing secrets from a dedicated secrets manager
