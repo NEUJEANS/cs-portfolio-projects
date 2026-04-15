@@ -462,6 +462,41 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertTrue(all(row["job"] == "plugin" for row in result.heatmap_rows))
         self.assertTrue(all(row["plugin"] for row in result.heatmap_rows))
 
+    def test_plugin_benchmark_uses_plugin_defined_generator(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "balanced",
+            records=24,
+            shard_size=6,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_average_score.py",
+        )
+
+        self.assertEqual(result.job, "plugin-average-score")
+        self.assertEqual(result.unique_keys, 12)
+        self.assertTrue(result.plugin.endswith("plugins_average_score.py"))
+        self.assertEqual(result.timings_ms[0]["map_records"], 24)
+
+    def test_plugin_benchmark_rejects_invalid_generator_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plugin = Path(tmpdir) / "bad_generator.py"
+            plugin.write_text(
+                "JOB_NAME = 'bad-generator'\n"
+                "def map_records(lines):\n"
+                "    for line in lines:\n"
+                "        if line.strip():\n"
+                "            yield 'x', 1\n"
+                "def reduce_key(key, values):\n"
+                "    return sum(values)\n"
+                "def benchmark_records(scenario, records, seed):\n"
+                "    return ['only-once']\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "exactly records lines"):
+                benchmark_job("plugin", "balanced", records=3, shard_size=1, reducers=[1], plugin_path=plugin)
+
     def test_cli_benchmark_runs_plugin_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "plugin-benchmark.json"

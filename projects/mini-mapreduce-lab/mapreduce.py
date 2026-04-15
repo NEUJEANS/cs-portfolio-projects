@@ -24,6 +24,7 @@ JSONValue = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
 KeyValue = tuple[str, JSONValue]
 Mapper = Callable[[Iterable[str]], Iterator[KeyValue]]
 Reducer = Callable[[str, list[JSONValue]], JSONValue]
+BenchmarkGenerator = Callable[[str, int, int], list[str]]
 
 
 def is_json_value(value: Any) -> bool:
@@ -447,6 +448,7 @@ class PluginJob:
     combiner: Reducer
     reducer: Reducer
     path: Path
+    benchmark_generator: BenchmarkGenerator | None = None
 
 
 BUILTIN_JOBS = ("wordcount", "json-group-count")
@@ -509,13 +511,23 @@ def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> Pl
     combiner = getattr(module, "combine_values", None)
     reducer = getattr(module, "reduce_key", None)
     name = getattr(module, "JOB_NAME", fallback_name)
+    benchmark_generator = getattr(module, "benchmark_records", None)
     if not callable(mapper):
         raise ValueError("plugin must define callable map_records(lines)")
     if combiner is not None and not callable(combiner):
         raise ValueError("plugin combine_values must be callable when provided")
     if not callable(reducer):
         raise ValueError("plugin must define callable reduce_key(key, values)")
-    return PluginJob(name=str(name), mapper=mapper, combiner=combiner or sum_reducer, reducer=reducer, path=origin)
+    if benchmark_generator is not None and not callable(benchmark_generator):
+        raise ValueError("plugin benchmark_records must be callable when provided")
+    return PluginJob(
+        name=str(name),
+        mapper=mapper,
+        combiner=combiner or sum_reducer,
+        reducer=reducer,
+        path=origin,
+        benchmark_generator=benchmark_generator,
+    )
 
 
 def load_plugin(plugin_ref: str | Path) -> PluginJob:
@@ -660,10 +672,17 @@ def execute_job(
     )
 
 
-def build_benchmark_lines(job: str, scenario: str, records: int, seed: int) -> list[str]:
+def build_benchmark_lines(job: str, scenario: str, records: int, seed: int, plugin: PluginJob | None = None) -> list[str]:
     if records <= 0:
         raise ValueError("records must be positive")
     rng = random.Random(seed)
+    if job == "plugin" and plugin is not None and plugin.benchmark_generator is not None:
+        plugin_lines = plugin.benchmark_generator(scenario, records, seed)
+        if not isinstance(plugin_lines, list) or not all(isinstance(line, str) for line in plugin_lines):
+            raise ValueError("plugin benchmark_records must return a list of strings")
+        if len(plugin_lines) != records:
+            raise ValueError("plugin benchmark_records must return exactly records lines")
+        return plugin_lines
     if job == "wordcount":
         if scenario == "balanced":
             keys = [f"key-{index:02d}" for index in range(24)]
@@ -697,7 +716,12 @@ def benchmark_job(
     if any(count <= 0 for count in reducers):
         raise ValueError("reducers must be positive")
 
-    lines = build_benchmark_lines(job, scenario, records, seed)
+    benchmark_plugin: PluginJob | None = None
+    if job == "plugin":
+        if plugin_path is None:
+            raise ValueError("plugin_path is required for plugin benchmarks")
+        benchmark_plugin = load_plugin(plugin_path)
+    lines = build_benchmark_lines(job, scenario, records, seed, benchmark_plugin)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", prefix="mini-mapreduce-benchmark-", delete=False) as handle:
         handle.write("\n".join(lines) + "\n")
         input_path = Path(handle.name)
@@ -708,11 +732,8 @@ def benchmark_job(
     if job == "wordcount":
         benchmark_mapper = map_wordcount
         benchmark_combiner = sum_reducer
-        benchmark_plugin = None
     elif job == "plugin":
-        if plugin_path is None:
-            raise ValueError("plugin_path is required for plugin benchmarks")
-        benchmark_plugin = load_plugin(plugin_path)
+        assert benchmark_plugin is not None
         benchmark_mapper = benchmark_plugin.mapper
         benchmark_combiner = benchmark_plugin.combiner
     else:

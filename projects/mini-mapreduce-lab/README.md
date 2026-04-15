@@ -22,6 +22,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional Markdown benchmark report export with timing tables and shard/reducer load summaries
 - optional standalone HTML benchmark report export with colorized shard/reducer heatmap tables and inline SVG charts for portfolio screenshots
 - JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
+- optional plugin-defined synthetic benchmark generators for domain-specific benchmark fixtures
 
 ## Usage
 
@@ -167,12 +168,13 @@ A plugin is a Python file with:
 - `map_records(lines)` → yields `(key, value)` pairs
 - `combine_values(key, values)` → optional shard-local combiner for non-sum jobs
 - `reduce_key(key, values)` → returns a JSON-serializable result for that key
+- `benchmark_records(scenario, records, seed)` → optional synthetic input generator for plugin benchmarks
 
 Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/plugins_top_score.py` or as a dotted module path like `demo_plugins.topscore` when the package is importable on `PYTHONPATH`.
 
 The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation.
 
-The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, and the reducer returns a float average. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
+The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, and the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
 
 ## Output shape
 
@@ -234,4 +236,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add multiple plugin dataset families (for example leaderboard updates vs rolling averages) instead of a single synthetic score stream
-- let plugins optionally define their own synthetic benchmark generators so the runner can benchmark domain-specific data shapes directly
+- add multiple plugin dataset families (for example leaderboard updates vs rolling averages) beyond the current balanced/skewed generator hooks
