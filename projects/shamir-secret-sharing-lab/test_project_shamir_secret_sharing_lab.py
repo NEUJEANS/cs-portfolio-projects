@@ -9,11 +9,14 @@ sys.path.insert(0, str(ROOT))
 
 from shamir_secret_sharing_lab import (
     Share,
+    attach_authentication,
+    build_bundle_payload,
     lagrange_interpolate_at_zero,
     load_shares,
     recover_secret,
     save_shares,
     split_secret,
+    verify_bundle_authentication,
 )
 
 SCRIPT = ROOT / "shamir_secret_sharing_lab.py"
@@ -44,11 +47,51 @@ class ShamirSecretSharingLabTests(unittest.TestCase):
             output = temp_dir / "shares.json"
             shares = split_secret(b"portfolio", threshold=2, total_shares=3)
             save_shares(output, threshold=2, shares=shares)
-            threshold, encoding, loaded = load_shares(output)
+            threshold, encoding, loaded, authentication, _ = load_shares(output)
             self.assertEqual(threshold, 2)
             self.assertEqual(encoding, "utf-8")
+            self.assertIsNone(authentication)
             self.assertEqual([share.x for share in loaded], [1, 2, 3])
             self.assertEqual(recover_secret(loaded[:2], threshold=2), b"portfolio")
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_authenticated_bundle_verifies_and_round_trips(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            output = temp_dir / "shares.json"
+            shares = split_secret(b"portfolio", threshold=3, total_shares=5)
+            save_shares(output, threshold=3, shares=shares, auth_passphrase="swordfish")
+            threshold, _, loaded, authentication, payload = load_shares(output)
+            self.assertEqual(threshold, 3)
+            self.assertIsNotNone(authentication)
+            verify_bundle_authentication(payload, "swordfish")
+            self.assertEqual(recover_secret([loaded[0], loaded[2], loaded[4]], threshold=3), b"portfolio")
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_authenticated_bundle_rejects_wrong_passphrase(self):
+        payload = attach_authentication(build_bundle_payload(2, split_secret(b"abc", threshold=2, total_shares=3)), "right-pass")
+        with self.assertRaisesRegex(ValueError, "authentication failed"):
+            verify_bundle_authentication(payload, "wrong-pass")
+
+    def test_load_rejects_mismatched_share_count_metadata(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            output = temp_dir / "shares.json"
+            shares = split_secret(b"portfolio", threshold=2, total_shares=3)
+            save_shares(output, threshold=2, shares=shares)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            payload["share_count"] = 99
+            output.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "share_count"):
+                load_shares(output)
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()
@@ -60,15 +103,29 @@ class ShamirSecretSharingLabTests(unittest.TestCase):
         try:
             output = temp_dir / "shares.json"
             split_result = subprocess.run(
-                [sys.executable, str(SCRIPT), "split", "--secret", "distributed trust", "--threshold", "3", "--shares", "5", "--output", str(output)],
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "split",
+                    "--secret",
+                    "distributed trust",
+                    "--threshold",
+                    "3",
+                    "--shares",
+                    "5",
+                    "--output",
+                    str(output),
+                    "--auth-passphrase",
+                    "demo-pass",
+                ],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            self.assertEqual(json.loads(split_result.stdout)["share_count"], 5)
+            self.assertTrue(json.loads(split_result.stdout)["authenticated"])
 
             inspect_result = subprocess.run(
-                [sys.executable, str(SCRIPT), "inspect", "--input", str(output)],
+                [sys.executable, str(SCRIPT), "inspect", "--input", str(output), "--auth-passphrase", "demo-pass"],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -76,14 +133,49 @@ class ShamirSecretSharingLabTests(unittest.TestCase):
             inspected = json.loads(inspect_result.stdout)
             self.assertEqual(inspected["threshold"], 3)
             self.assertEqual(inspected["share_ids"], [1, 2, 3, 4, 5])
+            self.assertTrue(inspected["authenticated"])
+            self.assertTrue(inspected["authentication_verified"])
 
             recover_result = subprocess.run(
-                [sys.executable, str(SCRIPT), "recover", "--input", str(output), "--use", "1", "3", "5"],
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "recover",
+                    "--input",
+                    str(output),
+                    "--use",
+                    "1",
+                    "3",
+                    "5",
+                    "--auth-passphrase",
+                    "demo-pass",
+                ],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            self.assertEqual(json.loads(recover_result.stdout)["secret"], "distributed trust")
+            recovered = json.loads(recover_result.stdout)
+            self.assertEqual(recovered["secret"], "distributed trust")
+            self.assertTrue(recovered["authenticated"])
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_authenticated_recover_requires_passphrase(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            output = temp_dir / "shares.json"
+            shares = split_secret(b"portfolio", threshold=2, total_shares=3)
+            save_shares(output, threshold=2, shares=shares, auth_passphrase="required-pass")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "recover", "--input", str(output), "--use", "1", "2"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("require --auth-passphrase", result.stderr)
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()
