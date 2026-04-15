@@ -11,6 +11,8 @@ sys.path.insert(0, str(MODULE_PATH.parent))
 
 from union_find_network import (  # noqa: E402
     UnionFindNetwork,
+    build_svg_chart,
+    load_chart_source,
     load_edges_from_csv,
     parse_benchmark_series,
     run_benchmark,
@@ -18,6 +20,7 @@ from union_find_network import (  # noqa: E402
     run_csv_import,
     write_benchmark_series_csv,
     write_json_report,
+    write_svg_chart,
 )
 
 
@@ -73,7 +76,7 @@ class UnionFindNetworkTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = Path(tmpdir) / "ops.json"
-            script_path.write_text(json.dumps(operations))
+            script_path.write_text(json.dumps(operations), encoding="utf-8")
             completed = subprocess.run(
                 [sys.executable, str(MODULE_PATH), "--script", str(script_path)],
                 check=True,
@@ -190,6 +193,74 @@ class UnionFindNetworkTests(unittest.TestCase):
         self.assertEqual(payload["runs"][-1]["edges_requested"], 80)
         self.assertIn("median_edges_per_second", payload["summary"])
 
+    def test_chart_rendering_from_benchmark_series_and_csv_import(self):
+        benchmark_series = {
+            "mode": "benchmark-series",
+            "summary": {"median_edges_per_second": 222.5},
+            "runs": [
+                {"edges_requested": 10, "edges_per_second": 100.0},
+                {"edges_requested": 20, "edges_per_second": 200.0},
+                {"edges_requested": 30, "edges_per_second": 300.0},
+            ],
+        }
+        benchmark_svg = build_svg_chart(benchmark_series, title="Benchmark demo")
+        self.assertIn("<svg", benchmark_svg)
+        self.assertIn("Benchmark demo", benchmark_svg)
+        self.assertIn("edges requested vs edges/second", benchmark_svg)
+
+        csv_import = {
+            "mode": "csv-import",
+            "cycle_edges": 1,
+            "snapshots": [
+                {"edge_index": 1, "stats": {"largest_component": 2}},
+                {"edge_index": 3, "stats": {"largest_component": 3}},
+                {"edge_index": 5, "stats": {"largest_component": 5}},
+            ],
+        }
+        import_svg = build_svg_chart(csv_import)
+        self.assertIn("component growth", import_svg)
+        self.assertIn("Largest component size", import_svg)
+
+    def test_chart_source_loading_and_svg_export_cli(self):
+        series = run_benchmark_series(nodes=24, edge_counts=[20, 40, 80], seed=13)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            json_path = tmpdir_path / "benchmark.json"
+            csv_path = tmpdir_path / "benchmark.csv"
+            svg_path = tmpdir_path / "benchmark.svg"
+            write_json_report(series, json_path)
+            write_benchmark_series_csv(series, csv_path)
+
+            json_payload = load_chart_source(json_path)
+            csv_payload = load_chart_source(csv_path)
+            self.assertEqual(json_payload["mode"], "benchmark-series")
+            self.assertEqual(csv_payload["mode"], "benchmark-series-csv")
+            self.assertEqual(len(csv_payload["runs"]), 3)
+
+            write_svg_chart(json_payload, svg_path, title="Rendered from JSON")
+            svg_text = svg_path.read_text(encoding="utf-8")
+            self.assertIn("Rendered from JSON", svg_text)
+            self.assertIn("<polyline", svg_text)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "--chart-input",
+                    str(csv_path),
+                    "--output-chart",
+                    str(svg_path),
+                    "--chart-title",
+                    "CLI SVG",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mode"], "benchmark-series-csv")
+        self.assertEqual(payload["chart_output"], str(svg_path))
+
     def test_parse_benchmark_series_validation(self):
         self.assertEqual(parse_benchmark_series("10, 20,30"), [10, 20, 30])
         with self.assertRaisesRegex(ValueError, "comma-separated list"):
@@ -218,21 +289,22 @@ class UnionFindNetworkTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "source,target"):
                 load_edges_from_csv(bad_csv)
 
-        completed = subprocess.run(
-            [sys.executable, str(MODULE_PATH), "--benchmark", "--script", str(MODULE_PATH)],
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("choose only one", completed.stderr)
+            chart_path = Path(tmpdir) / "chart.svg"
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--output-chart", str(chart_path)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("--output-chart requires", completed.stderr)
 
-        completed = subprocess.run(
-            [sys.executable, str(MODULE_PATH), "--output-csv", "bench.csv"],
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("requires --benchmark-series", completed.stderr)
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--chart-title", "Oops"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("--chart-title requires", completed.stderr)
 
 
 if __name__ == "__main__":

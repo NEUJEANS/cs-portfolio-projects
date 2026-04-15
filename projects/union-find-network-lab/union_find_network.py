@@ -7,7 +7,7 @@ import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -346,11 +346,221 @@ def write_benchmark_series_csv(payload: Dict[str, object], output_path: Path) ->
             )
 
 
-def maybe_write_report(payload: Dict[str, object], output_json: Path | None, output_csv: Path | None) -> None:
+def load_chart_source(chart_input: Path) -> Dict[str, object]:
+    if not chart_input.exists():
+        raise ValueError(f"chart input does not exist: {chart_input}")
+    suffix = chart_input.suffix.lower()
+    if suffix == ".json":
+        payload = json.loads(chart_input.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("chart JSON input must decode to an object")
+        return payload
+    if suffix == ".csv":
+        with chart_input.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        return {"mode": "benchmark-series-csv", "runs": rows, "source": str(chart_input)}
+    raise ValueError("chart input must be a .json or .csv artifact")
+
+
+def build_svg_chart(payload: Dict[str, object], title: str | None = None) -> str:
+    mode = payload.get("mode")
+    if mode in {"benchmark-series", "benchmark-series-csv"}:
+        return _build_benchmark_series_svg(payload, title=title)
+    if mode == "csv-import":
+        return _build_csv_import_svg(payload, title=title)
+    raise ValueError("chart rendering currently supports benchmark-series and csv-import artifacts only")
+
+
+def write_svg_chart(payload: Dict[str, object], output_path: Path, title: str | None = None) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(build_svg_chart(payload, title=title), encoding="utf-8")
+
+
+def _build_benchmark_series_svg(payload: Dict[str, object], title: str | None = None) -> str:
+    runs = payload.get("runs")
+    if not isinstance(runs, list) or not runs:
+        raise ValueError("benchmark-series chart input must include a non-empty runs list")
+
+    points: List[Tuple[float, float]] = []
+    labels: List[str] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            raise ValueError("benchmark-series runs must be objects")
+        edges = _coerce_float(run.get("edges_requested"), "edges_requested")
+        throughput = _coerce_float(run.get("edges_per_second"), "edges_per_second")
+        points.append((edges, throughput))
+        labels.append(str(int(edges)) if edges.is_integer() else f"{edges:g}")
+
+    chart_title = title or "Union-Find benchmark throughput"
+    subtitle = "edges requested vs edges/second"
+    y_label = "Edges / second"
+    polyline, circles, x_ticks, y_ticks = _render_xy_plot(points, labels, x_axis_label="Edges requested")
+    summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
+    footer = (
+        f"median throughput: {summary.get('median_edges_per_second', 'n/a')} edges/s"
+        if summary
+        else "reproducible benchmark-series artifact"
+    )
+    return _wrap_svg(chart_title, subtitle, y_label, polyline, circles, x_ticks, y_ticks, footer)
+
+
+def _build_csv_import_svg(payload: Dict[str, object], title: str | None = None) -> str:
+    snapshots = payload.get("snapshots")
+    if not isinstance(snapshots, list) or not snapshots:
+        raise ValueError("csv-import chart input must include non-empty snapshots")
+
+    points: List[Tuple[float, float]] = []
+    labels: List[str] = []
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict):
+            raise ValueError("csv-import snapshots must be objects")
+        stats = snapshot.get("stats")
+        if not isinstance(stats, dict):
+            raise ValueError("csv-import snapshots must include stats objects")
+        edge_index = _coerce_float(snapshot.get("edge_index"), "edge_index")
+        largest_component = _coerce_float(stats.get("largest_component"), "largest_component")
+        points.append((edge_index, largest_component))
+        labels.append(str(int(edge_index)) if edge_index.is_integer() else f"{edge_index:g}")
+
+    chart_title = title or "Union-Find component growth"
+    subtitle = "processed edges vs largest component size"
+    y_label = "Largest component size"
+    polyline, circles, x_ticks, y_ticks = _render_xy_plot(points, labels, x_axis_label="Edges processed")
+    footer = f"cycle edges detected: {payload.get('cycle_edges', 'n/a')}"
+    return _wrap_svg(chart_title, subtitle, y_label, polyline, circles, x_ticks, y_ticks, footer)
+
+
+def _render_xy_plot(
+    points: Sequence[Tuple[float, float]],
+    x_labels: Sequence[str],
+    *,
+    x_axis_label: str,
+) -> Tuple[str, str, str, str]:
+    if len(points) != len(x_labels):
+        raise ValueError("point and label counts must match")
+    if not points:
+        raise ValueError("chart rendering requires at least one point")
+
+    width = 960
+    height = 540
+    left = 90
+    right = 40
+    top = 90
+    bottom = 90
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+
+    x_values = [point[0] for point in points]
+    y_values = [point[1] for point in points]
+    min_x = min(x_values)
+    max_x = max(x_values)
+    min_y = 0.0
+    max_y = max(y_values)
+    if max_x == min_x:
+        max_x += 1.0
+    if max_y == min_y:
+        max_y += 1.0
+
+    def project_x(value: float) -> float:
+        return left + ((value - min_x) / (max_x - min_x)) * plot_width
+
+    def project_y(value: float) -> float:
+        return top + plot_height - ((value - min_y) / (max_y - min_y)) * plot_height
+
+    projected = [(project_x(x), project_y(y)) for x, y in points]
+    polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in projected)
+    circle_markup = "\n".join(
+        (
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="#2563eb" />'
+            f'<text x="{x:.1f}" y="{y - 12:.1f}" text-anchor="middle" '
+            f'font-size="12" fill="#1f2937">{_xml_escape(label)}</text>'
+        )
+        for (x, y), label in zip(projected, x_labels)
+    )
+
+    x_tick_markup = []
+    for (x, _), label in zip(projected, x_labels):
+        x_tick_markup.append(f'<line x1="{x:.1f}" y1="{top + plot_height:.1f}" x2="{x:.1f}" y2="{top + plot_height + 8:.1f}" stroke="#6b7280" stroke-width="1" />')
+        x_tick_markup.append(
+            f'<text x="{x:.1f}" y="{top + plot_height + 28:.1f}" text-anchor="middle" font-size="12" fill="#374151">{_xml_escape(label)}</text>'
+        )
+    x_tick_markup.append(
+        f'<text x="{left + plot_width / 2:.1f}" y="{height - 24:.1f}" text-anchor="middle" font-size="14" fill="#111827">{_xml_escape(x_axis_label)}</text>'
+    )
+
+    y_tick_markup = []
+    for step in range(5):
+        value = min_y + ((max_y - min_y) * step / 4)
+        y = project_y(value)
+        label = f"{value:.0f}" if max_y >= 10 else f"{value:.2f}".rstrip("0").rstrip(".")
+        y_tick_markup.append(
+            f'<line x1="{left:.1f}" y1="{y:.1f}" x2="{left + plot_width:.1f}" y2="{y:.1f}" stroke="#e5e7eb" stroke-width="1" />'
+        )
+        y_tick_markup.append(
+            f'<text x="{left - 12:.1f}" y="{y + 4:.1f}" text-anchor="end" font-size="12" fill="#374151">{_xml_escape(label)}</text>'
+        )
+
+    return polyline, circle_markup, "\n".join(x_tick_markup), "\n".join(y_tick_markup)
+
+
+def _wrap_svg(
+    title: str,
+    subtitle: str,
+    y_axis_label: str,
+    polyline: str,
+    circles: str,
+    x_ticks: str,
+    y_ticks: str,
+    footer: str,
+) -> str:
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title>{_xml_escape(title)}</title>
+  <desc>{_xml_escape(subtitle)}</desc>
+  <rect width="960" height="540" fill="#ffffff" />
+  <text x="90" y="42" font-size="26" font-weight="700" fill="#111827">{_xml_escape(title)}</text>
+  <text x="90" y="68" font-size="14" fill="#4b5563">{_xml_escape(subtitle)}</text>
+  <line x1="90" y1="90" x2="90" y2="450" stroke="#111827" stroke-width="2" />
+  <line x1="90" y1="450" x2="920" y2="450" stroke="#111827" stroke-width="2" />
+  {y_ticks}
+  <text x="24" y="270" font-size="14" fill="#111827" transform="rotate(-90 24 270)" text-anchor="middle">{_xml_escape(y_axis_label)}</text>
+  <polyline fill="none" stroke="#2563eb" stroke-width="3" points="{polyline}" />
+  {circles}
+  {x_ticks}
+  <text x="90" y="505" font-size="13" fill="#4b5563">{_xml_escape(footer)}</text>
+</svg>
+'''
+
+
+def _coerce_float(value: object, field_name: str) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"chart input field {field_name} must be numeric") from exc
+
+
+def _xml_escape(value: object) -> str:
+    text = str(value)
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def maybe_write_report(
+    payload: Dict[str, object],
+    output_json: Path | None,
+    output_csv: Path | None,
+    output_chart: Path | None = None,
+    chart_title: str | None = None,
+) -> None:
     if output_json:
         write_json_report(payload, output_json)
     if output_csv:
         write_benchmark_series_csv(payload, output_csv)
+    if output_chart:
+        write_svg_chart(payload, output_chart, title=chart_title)
 
 
 def parse_benchmark_series(raw_value: str) -> List[int]:
@@ -377,11 +587,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_benchmark_series,
         help="Comma-separated benchmark edge counts for a reproducible multi-run series, e.g. 1000,5000,10000",
     )
+    parser.add_argument("--chart-input", type=Path, help="Existing benchmark-series JSON/CSV or csv-import JSON artifact to render as SVG")
     parser.add_argument("--benchmark-nodes", type=int, default=1000, help="Number of nodes for benchmark mode")
     parser.add_argument("--benchmark-edges", type=int, default=5000, help="Number of random edges for benchmark mode")
     parser.add_argument("--benchmark-seed", type=int, default=7, help="Seed for reproducible benchmark mode")
     parser.add_argument("--output-json", type=Path, help="Write JSON output to a file in addition to stdout")
     parser.add_argument("--output-csv", type=Path, help="Write benchmark-series output as CSV")
+    parser.add_argument("--output-chart", type=Path, help="Write an SVG chart for benchmark-series or csv-import output")
+    parser.add_argument("--chart-title", help="Optional custom SVG chart title")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     parser.add_argument("command", nargs="*", help="Optional single command, e.g. union a b")
     return parser
@@ -400,11 +613,20 @@ def main() -> int:
     try:
         if args.snapshot_every < 0:
             raise ValueError("--snapshot-every must be zero or a positive integer")
-        enabled_modes = sum(bool(flag) for flag in (args.script, args.edges_csv, args.benchmark, args.benchmark_series))
+        enabled_modes = sum(
+            bool(flag)
+            for flag in (args.script, args.edges_csv, args.benchmark, args.benchmark_series, args.chart_input)
+        )
         if enabled_modes > 1:
-            raise ValueError("choose only one of --script, --edges-csv, --benchmark, or --benchmark-series")
+            raise ValueError(
+                "choose only one of --script, --edges-csv, --benchmark, --benchmark-series, or --chart-input"
+            )
         if args.output_csv and not args.benchmark_series:
             raise ValueError("--output-csv requires --benchmark-series")
+        if args.output_chart and not (args.edges_csv or args.benchmark_series or args.chart_input):
+            raise ValueError("--output-chart requires --edges-csv, --benchmark-series, or --chart-input")
+        if args.chart_title and not args.output_chart:
+            raise ValueError("--chart-title requires --output-chart")
 
         network = UnionFindNetwork()
 
@@ -421,14 +643,18 @@ def main() -> int:
             result = run_benchmark(args.benchmark_nodes, args.benchmark_edges, seed=args.benchmark_seed)
         elif args.benchmark_series:
             result = run_benchmark_series(args.benchmark_nodes, args.benchmark_series, seed=args.benchmark_seed)
+        elif args.chart_input:
+            result = load_chart_source(args.chart_input)
         else:
             result = _run_single_command(network, args.command)
 
-        maybe_write_report(result, args.output_json, args.output_csv)
+        maybe_write_report(result, args.output_json, args.output_csv, args.output_chart, args.chart_title)
     except ValueError as exc:
         parser.error(str(exc))
 
-    if args.json or args.script or args.edges_csv or args.benchmark or args.benchmark_series:
+    if args.output_chart and args.chart_input and not args.json:
+        print(json.dumps({"mode": result.get("mode"), "chart_output": str(args.output_chart)}, indent=2, sort_keys=True))
+    elif args.json or args.script or args.edges_csv or args.benchmark or args.benchmark_series or args.chart_input:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
         print(result)

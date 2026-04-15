@@ -2,5 +2,6 @@ source,target
 api,worker
 worker,db
 cache,cdn
-db,api
+db,cache
 cdn,edge
+api,edge
