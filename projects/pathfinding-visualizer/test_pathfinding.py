@@ -5,7 +5,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from pathfinding import MapError, format_result, parse_grid, shortest_path
+from pathfinding import MapError, compare_algorithms, format_comparison, format_result, parse_grid, shortest_path
 
 
 class PathfindingTests(unittest.TestCase):
@@ -51,6 +51,19 @@ class PathfindingTests(unittest.TestCase):
         bfs_result = shortest_path(grid, algorithm='bfs')
         self.assertEqual(len(bfs_result.path) - 1, 3)
         self.assertEqual(bfs_result.path_cost, 7)
+
+    def test_compare_algorithms_highlights_optimal_cost_match(self):
+        grid = parse_grid([
+            'SWWE',
+            '....',
+        ])
+        results = compare_algorithms(grid)
+        rendered = format_comparison(grid, results)
+        self.assertIn('comparison: bfs vs dijkstra vs astar', rendered)
+        self.assertIn('algorithm: bfs', rendered)
+        self.assertIn('optimal_cost_match: no', rendered)
+        self.assertEqual(results[1].path_cost, 5)
+        self.assertEqual(results[2].path_cost, 5)
 
     def test_no_path_is_reported_cleanly(self):
         grid = parse_grid([
@@ -99,6 +112,38 @@ class PathfindingTests(unittest.TestCase):
         )
         self.assertIn('algorithm: dijkstra', completed.stdout)
         self.assertIn('path_cost: 5', completed.stdout)
+
+    def test_cli_compare_prints_all_algorithms(self):
+        project_dir = Path(__file__).resolve().parent
+        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as handle:
+            handle.write('SWWE\n....\n')
+            map_path = handle.name
+
+        completed = subprocess.run(
+            [sys.executable, str(project_dir / 'pathfinding.py'), map_path, '--compare'],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn('comparison: bfs vs dijkstra vs astar', completed.stdout)
+        self.assertEqual(completed.stdout.count('algorithm: '), 3)
+        self.assertIn('optimal_cost_match: no', completed.stdout)
+
+    def test_cli_compare_returns_non_zero_when_all_algorithms_fail(self):
+        project_dir = Path(__file__).resolve().parent
+        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as handle:
+            handle.write('S#E\n###\n...\n')
+            map_path = handle.name
+
+        completed = subprocess.run(
+            [sys.executable, str(project_dir / 'pathfinding.py'), map_path, '--compare'],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(completed.stdout.count('path_found: no'), 3)
 
 
 if __name__ == '__main__':

@@ -29,3 +29,18 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-15 comparison-mode slice
+- [x] re-check repo sync state before editing
+- [x] do brief research on why admissible A* usually expands fewer nodes than Dijkstra
+- [x] do a short pathfinding refresher and self-test for compare-mode metrics
+- [x] add compare mode that runs BFS, Dijkstra, and A* on one map
+- [x] surface cost-optimal-match summaries so weighted-map tradeoffs are obvious
+- [x] update README examples for compare mode
+- [x] run focused tests for pathfinding-visualizer
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

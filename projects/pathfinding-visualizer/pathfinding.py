@@ -7,6 +7,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 Coordinate = Tuple[int, int]
 PASSABLE_TILES = {'.', 'S', 'E', 'W'}
 TILE_COSTS = {'.': 1, 'S': 1, 'E': 1, 'W': 3}
+COMPARE_ALGORITHMS = ('bfs', 'dijkstra', 'astar')
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,10 @@ def shortest_path(grid: Sequence[str], algorithm: str = 'bfs') -> SearchResult:
     raise ValueError(f'unsupported algorithm: {algorithm}')
 
 
+def compare_algorithms(grid: Sequence[str], algorithms: Sequence[str] = COMPARE_ALGORITHMS) -> List[SearchResult]:
+    return [shortest_path(grid, algorithm=algorithm) for algorithm in algorithms]
+
+
 def render_path(grid: Sequence[str], path: Optional[Sequence[Coordinate]]) -> List[str]:
     rendered = [list(row) for row in grid]
     if path:
@@ -184,10 +189,40 @@ def format_result(grid: Sequence[str], result: SearchResult) -> str:
     return '\n'.join(lines)
 
 
+def format_comparison(grid: Sequence[str], results: Sequence[SearchResult]) -> str:
+    successful = [result for result in results if result.path_cost is not None]
+    optimal_cost = min((result.path_cost for result in successful), default=None)
+
+    lines = ['comparison: bfs vs dijkstra vs astar']
+    for result in results:
+        lines.append(f'algorithm: {result.algorithm}')
+        lines.append(f'visited_nodes: {result.visited_nodes}')
+        if result.path is None:
+            lines.append('path_found: no')
+            lines.append('path_length: n/a')
+            lines.append('path_cost: n/a')
+            lines.append('optimal_cost_match: n/a')
+        else:
+            lines.append('path_found: yes')
+            lines.append(f'path_length: {len(result.path) - 1}')
+            lines.append(f'path_cost: {result.path_cost}')
+            lines.append(f"optimal_cost_match: {'yes' if result.path_cost == optimal_cost else 'no'}")
+        lines.append('')
+        lines.extend(render_path(grid, result.path))
+        lines.append('')
+
+    return '\n'.join(lines[:-1])
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='ASCII pathfinding visualizer')
     parser.add_argument('mapfile', help='text file containing S=start, E=end, #=wall, .=floor, W=weighted tile')
-    parser.add_argument('--algorithm', choices=('bfs', 'dijkstra', 'astar'), default='bfs')
+    parser.add_argument('--algorithm', choices=COMPARE_ALGORITHMS, default='bfs')
+    parser.add_argument(
+        '--compare',
+        action='store_true',
+        help='run BFS, Dijkstra, and A* on the same map and print a side-by-side textual comparison',
+    )
     return parser
 
 
@@ -198,11 +233,20 @@ def main(argv=None):
     try:
         with open(args.mapfile, 'r', encoding='utf-8') as handle:
             grid = parse_grid(handle.read().splitlines())
-        result = shortest_path(grid, algorithm=args.algorithm)
+        if args.compare:
+            results = compare_algorithms(grid)
+        else:
+            result = shortest_path(grid, algorithm=args.algorithm)
     except OSError as exc:
         parser.exit(2, f'file error: {exc}\n')
     except MapError as exc:
         parser.exit(2, f'map error: {exc}\n')
+
+    if args.compare:
+        print(format_comparison(grid, results))
+        if not any(result.path is not None for result in results):
+            raise SystemExit(1)
+        return
 
     print(format_result(grid, result))
     if result.path is None:
