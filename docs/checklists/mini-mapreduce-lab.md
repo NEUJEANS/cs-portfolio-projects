@@ -179,5 +179,5 @@
 - [x] extend project and repo-level tests for programmatic inspection and CLI JSON output
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider surfacing inspection metadata in benchmark CSV summaries in a future run
