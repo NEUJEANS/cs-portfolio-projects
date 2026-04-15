@@ -19,7 +19,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- Commit hash: `6a50c7a`
+- Commit hash: `1e649ad`
 
 ## Next step
 - add embedded SVG charts or plugin-specific benchmark scenarios so the HTML export becomes even stronger for portfolio case studies
