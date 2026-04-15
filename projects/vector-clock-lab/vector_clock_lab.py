@@ -155,7 +155,14 @@ class ReplicaStore:
                 survivors.append(existing)
         if not replaced:
             survivors.append(incoming)
-        self.data[key] = sorted(survivors, key=lambda version: (version.replica, version.value, json.dumps(version.clock.to_dict(), sort_keys=True)))
+        self.data[key] = sorted(
+            survivors,
+            key=lambda version: (
+                version.replica,
+                version.value,
+                json.dumps(version.clock.to_dict(), sort_keys=True),
+            ),
+        )
 
     def _validate_replica(self, replica: str) -> None:
         if replica not in self.replica_clocks:
@@ -165,6 +172,22 @@ class ReplicaStore:
     def _validate_key(key: str) -> None:
         if not key:
             raise ValueError("key must be non-empty")
+
+
+@dataclass(frozen=True)
+class PartitionWrite:
+    replica: str
+    value: str
+
+
+@dataclass(frozen=True)
+class PartitionScenario:
+    key: str
+    left_partition: tuple[str, ...]
+    right_partition: tuple[str, ...]
+    left_writes: tuple[PartitionWrite, ...]
+    right_writes: tuple[PartitionWrite, ...]
+    heal_replica: str | None = None
 
 
 def parse_clock(raw: str) -> VectorClock:
@@ -183,6 +206,107 @@ def parse_version(raw: str) -> VersionedValue:
         clock=parse_clock(json.dumps(payload["clock"])),
         replica=str(payload["replica"]),
     )
+
+
+def parse_partition_write(raw: str) -> PartitionWrite:
+    replica, separator, value = raw.partition(":")
+    if not separator or not replica or not value:
+        raise ValueError("partition writes must use replica:value format")
+    return PartitionWrite(replica=replica, value=value)
+
+
+def validate_partition_membership(
+    replicas: Iterable[str],
+    left_partition: Iterable[str],
+    right_partition: Iterable[str],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    replica_set = set(replicas)
+    left = tuple(left_partition)
+    right = tuple(right_partition)
+    if not left or not right:
+        raise ValueError("both partitions must contain at least one replica")
+    left_set = set(left)
+    right_set = set(right)
+    if left_set & right_set:
+        raise ValueError("partitions must be disjoint")
+    if left_set | right_set != replica_set:
+        raise ValueError("partitions must cover every replica exactly once")
+    return left, right
+
+
+def simulate_partition(store: ReplicaStore, scenario: PartitionScenario) -> dict[str, object]:
+    left_partition, right_partition = validate_partition_membership(
+        store.replicas,
+        scenario.left_partition,
+        scenario.right_partition,
+    )
+    if scenario.heal_replica is not None:
+        store._validate_replica(scenario.heal_replica)
+
+    timeline: list[dict[str, object]] = []
+    partition_lookup = {
+        replica: "left" for replica in left_partition
+    } | {replica: "right" for replica in right_partition}
+    partition_stores = {
+        "left": ReplicaStore(left_partition),
+        "right": ReplicaStore(right_partition),
+    }
+
+    def apply_partition_write(write: PartitionWrite) -> VersionedValue:
+        partition_name = partition_lookup.get(write.replica)
+        if partition_name is None:
+            raise ValueError(f"unknown replica: {write.replica}")
+        partition_store = partition_stores[partition_name]
+        version = partition_store.write(write.replica, scenario.key, write.value)
+        timeline.append(
+            {
+                "event": "write",
+                "partition": partition_name,
+                "replica": write.replica,
+                "version": version.to_dict(),
+            }
+        )
+        return version
+
+    for write in scenario.left_writes:
+        apply_partition_write(write)
+    for write in scenario.right_writes:
+        apply_partition_write(write)
+
+    versions_before_heal = sorted(
+        [
+            version.to_dict()
+            for version in partition_stores["left"].get_versions(scenario.key)
+            + partition_stores["right"].get_versions(scenario.key)
+        ],
+        key=lambda version: (version["replica"], version["value"], json.dumps(version["clock"], sort_keys=True)),
+    )
+    result: dict[str, object] = {
+        "key": scenario.key,
+        "partitions": {"left": list(left_partition), "right": list(right_partition)},
+        "partition_snapshots": {
+            name: partition_store.snapshot() for name, partition_store in partition_stores.items()
+        },
+        "timeline": timeline,
+        "conflict_detected": len(versions_before_heal) > 1,
+        "versions_before_heal": versions_before_heal,
+    }
+
+    if scenario.heal_replica is not None and versions_before_heal:
+        healed_versions = [parse_version(json.dumps(version)) for version in versions_before_heal]
+        for partition_store in partition_stores.values():
+            for replica, clock in partition_store.replica_clocks.items():
+                store.replica_clocks[replica] = store.replica_clocks[replica].merge(clock)
+        for target_replica in store.replicas:
+            for version in healed_versions:
+                store.replicate(target_replica, scenario.key, version)
+        result["snapshot_after_heal"] = store.snapshot()
+        if len(store.get_versions(scenario.key)) > 1:
+            merged = store.merge_conflicts(scenario.heal_replica, scenario.key)
+            result["merged"] = merged.to_dict()
+            result["snapshot_after_merge"] = store.snapshot()
+
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -214,6 +338,15 @@ def build_parser() -> argparse.ArgumentParser:
     replicate.add_argument("--key", required=True)
     replicate.add_argument("--version", required=True, help='JSON object with value, clock, replica')
 
+    partition = subparsers.add_parser("partition", help="simulate a network partition, heal, and optional conflict merge")
+    partition.add_argument("--replicas", nargs="+", required=True)
+    partition.add_argument("--key", required=True)
+    partition.add_argument("--left-partition", nargs="+", required=True)
+    partition.add_argument("--right-partition", nargs="+", required=True)
+    partition.add_argument("--left-write", action="append", default=[], help="replica:value write visible only on the left partition")
+    partition.add_argument("--right-write", action="append", default=[], help="replica:value write visible only on the right partition")
+    partition.add_argument("--heal-replica", help="replica that performs the deterministic merge after partitions heal")
+
     return parser
 
 
@@ -232,6 +365,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         version = parse_version(args.version)
         store.replicate(args.target_replica, args.key, version)
         result = store.snapshot()
+    elif args.command == "partition":
+        store = ReplicaStore(args.replicas)
+        scenario = PartitionScenario(
+            key=args.key,
+            left_partition=tuple(args.left_partition),
+            right_partition=tuple(args.right_partition),
+            left_writes=tuple(parse_partition_write(raw) for raw in args.left_write),
+            right_writes=tuple(parse_partition_write(raw) for raw in args.right_write),
+            heal_replica=args.heal_replica,
+        )
+        result = simulate_partition(store, scenario)
     else:
         store = ReplicaStore(args.replicas)
         left = store.write(args.left_replica, args.key, args.left_value)

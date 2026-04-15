@@ -4,7 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from vector_clock_lab import ReplicaStore, VectorClock
+from vector_clock_lab import PartitionScenario, PartitionWrite, ReplicaStore, VectorClock, simulate_partition
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -73,6 +73,42 @@ class VectorClockLabTests(unittest.TestCase):
         self.assertEqual(right.clock.compare(merged.clock), "before")
         self.assertEqual(merged.value, "draft-a | draft-b")
 
+    def test_partition_simulation_heals_and_merges_conflicts(self) -> None:
+        store = ReplicaStore(["a", "b", "c"])
+        result = simulate_partition(
+            store,
+            PartitionScenario(
+                key="profile",
+                left_partition=("a", "b"),
+                right_partition=("c",),
+                left_writes=(PartitionWrite("a", "draft-a"),),
+                right_writes=(PartitionWrite("c", "draft-c"),),
+                heal_replica="b",
+            ),
+        )
+
+        self.assertTrue(result["conflict_detected"])
+        self.assertEqual(len(result["versions_before_heal"]), 2)
+        self.assertEqual(result["merged"]["clock"], {"a": 1, "b": 1, "c": 1})
+        self.assertEqual(
+            result["snapshot_after_merge"]["data"]["profile"][0]["value"],
+            "draft-a | draft-c",
+        )
+
+    def test_partition_requires_full_disjoint_cover(self) -> None:
+        store = ReplicaStore(["a", "b", "c"])
+        with self.assertRaisesRegex(ValueError, "cover every replica exactly once"):
+            simulate_partition(
+                store,
+                PartitionScenario(
+                    key="profile",
+                    left_partition=("a",),
+                    right_partition=("b",),
+                    left_writes=(),
+                    right_writes=(),
+                ),
+            )
+
     def test_cli_compare_and_conflict_merge_flow(self) -> None:
         compare = run_cli("compare", '{"a": 1}', '{"a": 1, "b": 1}')
         self.assertEqual(compare["relation"], "before")
@@ -100,6 +136,36 @@ class VectorClockLabTests(unittest.TestCase):
         self.assertTrue(conflict["conflict"])
         self.assertEqual(conflict["merged"]["value"], "draft-a | draft-b")
         self.assertEqual(conflict["snapshot"]["data"]["essay"][0]["clock"], {"a": 1, "b": 1, "c": 1})
+
+    def test_cli_partition_flow_reports_versions_before_and_after_merge(self) -> None:
+        result = run_cli(
+            "partition",
+            "--replicas",
+            "a",
+            "b",
+            "c",
+            "--key",
+            "profile",
+            "--left-partition",
+            "a",
+            "b",
+            "--right-partition",
+            "c",
+            "--left-write",
+            "a:draft-a",
+            "--right-write",
+            "c:draft-c",
+            "--heal-replica",
+            "b",
+        )
+
+        self.assertTrue(result["conflict_detected"])
+        self.assertEqual(len(result["versions_before_heal"]), 2)
+        self.assertEqual(result["merged"]["replica"], "b")
+        self.assertEqual(
+            result["snapshot_after_merge"]["data"]["profile"][0]["clock"],
+            {"a": 1, "b": 1, "c": 1},
+        )
 
     def test_duplicate_replica_names_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "replica names must be unique"):
