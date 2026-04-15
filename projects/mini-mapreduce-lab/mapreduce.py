@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from io import StringIO
 import hashlib
 import html
 import importlib
@@ -38,20 +39,39 @@ class PluginInspection:
     benchmark_generator: str | None
     available_dataset_families: list[str] | None
 
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "plugin": self.plugin,
+            "mapper": self.mapper,
+            "reducer": self.reducer,
+            "combiner": self.combiner,
+            "benchmark_generator": self.benchmark_generator,
+            "available_dataset_families": self.available_dataset_families,
+        }
+
     def to_json(self) -> str:
-        return json.dumps(
-            {
-                "name": self.name,
-                "plugin": self.plugin,
-                "mapper": self.mapper,
-                "reducer": self.reducer,
-                "combiner": self.combiner,
-                "benchmark_generator": self.benchmark_generator,
-                "available_dataset_families": self.available_dataset_families,
-            },
-            indent=2,
-            sort_keys=True,
+        return json.dumps(self.as_dict(), indent=2, sort_keys=True)
+
+    def to_csv(self) -> str:
+        fieldnames = [
+            "name",
+            "plugin",
+            "mapper",
+            "reducer",
+            "combiner",
+            "benchmark_generator",
+            "available_dataset_families",
+        ]
+        row = self.as_dict()
+        row["available_dataset_families"] = (
+            ",".join(self.available_dataset_families) if self.available_dataset_families else None
         )
+        buffer = StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(row)
+        return buffer.getvalue()
 
 
 def is_json_value(value: Any) -> bool:
@@ -190,7 +210,6 @@ class BenchmarkResult:
             }
             rows.append(row)
 
-        from io import StringIO
         buffer = StringIO()
         writer = csv.DictWriter(buffer, fieldnames=fieldnames)
         writer.writeheader()
@@ -210,7 +229,6 @@ class BenchmarkResult:
             "records",
             "unique_keys",
         ]
-        from io import StringIO
         buffer = StringIO()
         writer = csv.DictWriter(buffer, fieldnames=fieldnames)
         writer.writeheader()
@@ -956,6 +974,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_parser = subparsers.add_parser("inspect-plugin", help="inspect plugin metadata and exported hooks")
     inspect_parser.add_argument("--plugin", required=True, help="plugin file path or importable Python module to inspect")
     inspect_parser.add_argument("--output", help="optional output JSON path")
+    inspect_parser.add_argument("--csv-output", help="optional plugin inspection CSV output path")
 
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
     benchmark_parser.add_argument("--job", choices=["wordcount", "plugin"], default="wordcount")
@@ -1012,8 +1031,10 @@ def main(argv: list[str] | None = None) -> int:
         rendered = result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
-        else:
+        elif not args.csv_output:
             print(rendered)
+        if args.csv_output:
+            Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
         return 0
 
     if args.command == "benchmark":

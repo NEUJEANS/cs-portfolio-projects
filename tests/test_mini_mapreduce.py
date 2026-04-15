@@ -21,6 +21,7 @@ spec.loader.exec_module(module)
 
 benchmark_job = module.benchmark_job
 execute_job = module.execute_job
+inspect_plugin = module.inspect_plugin
 load_plugin = module.load_plugin
 stable_partition = module.stable_partition
 
@@ -311,6 +312,50 @@ class MiniMapReduceRepoTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "exactly records lines"):
                 benchmark_job("plugin", "balanced", records=3, shard_size=1, reducers=[1], plugin_path=plugin)
+
+    def test_plugin_inspection_can_render_csv(self) -> None:
+        result = inspect_plugin(PROJECT_DIR / "plugins_average_score.py")
+
+        csv_rows = result.to_csv().strip().splitlines()
+        self.assertEqual(
+            csv_rows[0],
+            "name,plugin,mapper,reducer,combiner,benchmark_generator,available_dataset_families",
+        )
+        self.assertIn("plugin-average-score", csv_rows[1])
+        self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
+
+    def test_cli_inspect_plugin_supports_csv_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_output = Path(tmpdir) / "plugin-inspection.json"
+            csv_output = Path(tmpdir) / "plugin-inspection.csv"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "inspect-plugin",
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_average_score.py"),
+                    "--output",
+                    str(json_output),
+                    "--csv-output",
+                    str(csv_output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.stdout, "")
+            payload = json.loads(json_output.read_text(encoding="utf-8"))
+            csv_rows = csv_output.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(payload["name"], "plugin-average-score")
+            self.assertEqual(
+                csv_rows[0],
+                "name,plugin,mapper,reducer,combiner,benchmark_generator,available_dataset_families",
+            )
+            self.assertIn("plugin-average-score", csv_rows[1])
+            self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
 
     def test_cli_plugin_benchmark_writes_expected_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

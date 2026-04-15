@@ -192,5 +192,18 @@
 - [x] extend project and repo-level tests for plugin metadata rendering in CSV and JSON artifacts
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [x] surface a dedicated `inspect-plugin --csv-output` artifact in a future run
+
+## Inspect-plugin CSV artifact slice (2026-04-15 18:12 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python `csv.DictWriter` single-row export refresh and self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add `inspect-plugin --csv-output` for one-row plugin metadata snapshots
+- [x] extend project and repo-level tests for programmatic CSV rendering and CLI dual-output behavior
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
 - [ ] commit, push, and add wrap-up
-- [ ] consider a dedicated `inspect-plugin --csv-output` artifact in a future run
+- [ ] consider metadata diff tooling or multi-plugin inspection batches in a future run
