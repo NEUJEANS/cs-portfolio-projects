@@ -18,6 +18,8 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 Edge = module.Edge
+benchmark_algorithms = module.benchmark_algorithms
+generate_random_flow_graph = module.generate_random_flow_graph
 load_graph = module.load_graph
 load_bipartite_graph = module.load_bipartite_graph
 render_flow_dot = module.render_flow_dot
@@ -48,6 +50,25 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertGreaterEqual(len(result.augmenting_paths), 3)
         self.assertEqual(result.min_cut["source_side"], ["s", "v1", "v2", "v4"])
         self.assertEqual(result.min_cut["sink_side"], ["t", "v3"])
+        self.assertEqual(result.algorithm, "edmonds-karp")
+
+    def test_dinic_matches_edmonds_karp_on_same_graph(self) -> None:
+        nodes = ["s", "a", "b", "c", "t"]
+        edges = [
+            Edge("s", "a", 10),
+            Edge("s", "b", 8),
+            Edge("a", "b", 3),
+            Edge("a", "c", 5),
+            Edge("b", "c", 10),
+            Edge("a", "t", 4),
+            Edge("c", "t", 11),
+        ]
+        ek = solve_max_flow(nodes, edges, "s", "t", algorithm="edmonds-karp")
+        dinic = solve_max_flow(nodes, edges, "s", "t", algorithm="dinic")
+        self.assertEqual(dinic.max_flow, ek.max_flow)
+        self.assertEqual(dinic.min_cut, ek.min_cut)
+        self.assertEqual(dinic.algorithm, "dinic")
+        self.assertGreaterEqual(dinic.phases or 0, 1)
 
     def test_parallel_edges_are_aggregated(self) -> None:
         result = solve_max_flow(
@@ -96,7 +117,7 @@ class NetworkFlowLabTests(unittest.TestCase):
             ("david", "database"),
         ]
 
-        result = solve_bipartite_matching(left, right, edges).to_dict()
+        result = solve_bipartite_matching(left, right, edges, algorithm="dinic").to_dict()
 
         self.assertEqual(result["match_count"], 3)
         self.assertEqual(result["unmatched_left"], ["david"])
@@ -104,6 +125,7 @@ class NetworkFlowLabTests(unittest.TestCase):
         matches = {(item["left"], item["right"]) for item in result["matches"]}
         self.assertEqual(matches, {("anna", "api"), ("ben", "database"), ("chloe", "compiler")})
         self.assertEqual(result["flow"]["max_flow"], 3)
+        self.assertEqual(result["flow"]["algorithm"], "dinic")
 
     def test_load_bipartite_graph_rejects_cross_partition_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -174,6 +196,27 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('"anna" -> "api" [color="forestgreen", penwidth=3, label="match"];', dot)
         self.assertIn('"db" [fillcolor="moccasin"];', dot)
 
+    def test_random_graph_generator_is_reproducible_and_connected(self) -> None:
+        graph_a = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)
+        graph_b = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)
+        self.assertEqual(graph_a, graph_b)
+        nodes, edges, source, sink = graph_a
+        self.assertEqual(source, "n0")
+        self.assertEqual(sink, "n5")
+        edge_pairs = {(edge.source, edge.target) for edge in edges}
+        for i in range(len(nodes) - 1):
+            self.assertIn((f"n{i}", f"n{i+1}"), edge_pairs)
+
+    def test_benchmark_reports_matching_algorithms_and_speedup(self) -> None:
+        payload = benchmark_algorithms(node_count=12, edge_probability=0.3, trials=3, seed=11)
+        self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["algorithms"], ["edmonds-karp", "dinic"])
+        self.assertEqual(len(payload["trials"]), 3)
+        self.assertIn("speedup_ratio", payload["summary"])
+        self.assertGreater(payload["summary"]["dinic"]["mean_phases"], 0)
+        for trial in payload["trials"]:
+            self.assertEqual(trial["edmonds-karp"]["max_flow"], trial["dinic"]["max_flow"])
+
     def test_cli_demo_outputs_json_payload(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "demo"],
@@ -185,7 +228,22 @@ class NetworkFlowLabTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["command"], "demo")
         self.assertEqual(payload["max_flow"], 19)
+        self.assertEqual(payload["algorithm"], "edmonds-karp")
         self.assertTrue(payload["augmenting_paths"])
+
+    def test_cli_supports_dinic_for_demo(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "demo", "--algorithm", "dinic"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "demo")
+        self.assertEqual(payload["algorithm"], "dinic")
+        self.assertEqual(payload["max_flow"], 19)
+        self.assertGreaterEqual(payload["phases"], 1)
 
     def test_cli_match_demo_outputs_matching_payload(self) -> None:
         completed = subprocess.run(
@@ -218,6 +276,32 @@ class NetworkFlowLabTests(unittest.TestCase):
             dot = dot_path.read_text(encoding="utf-8")
             self.assertIn('digraph "sample_graph"', dot)
             self.assertIn('label="10/10"', dot)
+
+    def test_cli_benchmark_outputs_reproducible_summary(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "benchmark",
+                "--nodes",
+                "10",
+                "--edge-probability",
+                "0.25",
+                "--trials",
+                "2",
+                "--seed",
+                "5",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["generator"]["seed"], 5)
+        self.assertEqual(len(payload["trials"]), 2)
+        self.assertIn("speedup_ratio", payload["summary"])
 
 
 if __name__ == "__main__":

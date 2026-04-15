@@ -1,6 +1,6 @@
 # network-flow-lab
 
-A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp, records each augmenting path, reports the resulting min cut, and now includes a bipartite-matching helper built on the same flow engine plus Graphviz DOT export for explainable visuals.
+A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, and now ships a reproducible benchmark mode plus Graphviz DOT export for explainable visuals.
 
 ## Why it is interesting
 - demonstrates a classic graph algorithm used in routing, scheduling, and resource allocation
@@ -13,12 +13,14 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 ## Features
 - JSON graph input with named nodes and directed capacities
 - Edmonds-Karp max-flow solver with deterministic BFS traversal
+- Dinic max-flow solver with level-graph phases for side-by-side algorithm comparisons
 - step-by-step augmenting path log with bottleneck values
 - per-edge flow summary and min-cut partition output
 - bipartite-matching mode that reduces assignments to unit-capacity flow
+- reproducible benchmark mode that generates random DAGs and compares Edmonds-Karp vs Dinic
 - Graphviz DOT export for solved flow graphs and bipartite matchings
 - bundled sample flow graph and sample matching graph
-- unit tests for correctness, validation, CLI behavior, and DOT export
+- unit tests for correctness, validation, CLI behavior, algorithm parity, and benchmark behavior
 
 ## Usage
 
@@ -26,12 +28,14 @@ Run the bundled sample flow graph:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py demo --pretty
+python3 projects/network-flow-lab/network_flow.py demo --algorithm dinic --pretty
 ```
 
 Solve a custom flow graph:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py solve projects/network-flow-lab/sample_graph.json --pretty
+python3 projects/network-flow-lab/network_flow.py solve projects/network-flow-lab/sample_graph.json --algorithm dinic --pretty
 ```
 
 Export a DOT file for later rendering with Graphviz (the JSON response also includes a `dot_output` path when you use `--dot-out`):
@@ -52,6 +56,13 @@ Solve a custom bipartite-matching graph and export a DOT diagram:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --dot-out /tmp/matching.dot --pretty
+python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --algorithm dinic --pretty
+```
+
+Run a reproducible benchmark that compares Edmonds-Karp against Dinic on generated directed acyclic flow graphs. In this pure-Python lab, Dinic is included for trade-off analysis rather than a guaranteed speed win on every small benchmark:
+
+```bash
+python3 projects/network-flow-lab/network_flow.py benchmark --nodes 24 --edge-probability 0.18 --trials 5 --seed 42 --pretty
 ```
 
 Flow graph format:
@@ -92,13 +103,15 @@ python3 -m unittest tests/test_network_flow_lab.py
 ```
 
 ## Design notes
-- Each BFS finds the shortest augmenting path in edge count, which yields Edmonds-Karp's `O(V * E^2)` worst-case bound.
+- Edmonds-Karp uses BFS to find the shortest augmenting path in edge count, which yields the classic `O(V * E^2)` worst-case bound.
+- Dinic builds a BFS level graph, then pushes blocking flows with DFS-style traversal, which often reduces the amount of repeated path work in practice.
 - Reverse residual edges make it possible to reroute earlier decisions when a better later path is found.
 - The reported min cut comes from the nodes still reachable from the source in the final residual graph.
 - Maximum bipartite matching reduces cleanly to max flow by adding a super-source, a super-sink, and unit capacities on partition and compatibility edges.
+- The benchmark mode generates reproducible random DAG instances, verifies both algorithms return the same max-flow value, and summarizes elapsed time plus augmentation/phase counts.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
-- benchmark larger random graphs and compare with Dinic's algorithm
 - add weighted assignment or min-cost flow as a follow-up advanced slice
 - ship pre-rendered SVG examples in the docs for portfolio screenshots
+- expand the benchmark generator beyond DAGs to include denser residual-heavy stress cases

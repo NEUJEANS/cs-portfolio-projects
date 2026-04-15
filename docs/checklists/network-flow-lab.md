@@ -9,3 +9,5 @@
 - [x] log at least 3 review passes
 - [x] consider a follow-up slice for visualization or Dinic/min-cost-flow comparison
 - [x] add Graphviz DOT export for solved flow and matching graphs
+- [x] add Dinic as an alternative solver and expose algorithm selection in the CLI
+- [x] add a reproducible benchmark command that compares Edmonds-Karp vs Dinic
