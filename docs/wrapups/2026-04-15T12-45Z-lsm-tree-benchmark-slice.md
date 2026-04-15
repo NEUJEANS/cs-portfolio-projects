@@ -1,0 +1,23 @@
+# Wrap-up — lsm-tree-kv Bloom Filter Benchmark Slice
+
+- Timestamp: 2026-04-15T12:45:00Z
+- Project: `lsm-tree-kv`
+- What changed:
+  - added a `benchmark` CLI command that compares Bloom filter bits-per-key options in one run
+  - reported both observed false positives and the standard estimated false-positive rate
+  - normalized benchmark options for stable, deduplicated output
+  - updated README, checklist, research, learning, and review notes for resumability
+  - expanded tests to cover benchmark helpers and CLI output
+- Tests run:
+  - `python3 -m unittest discover -s projects/lsm-tree-kv -p 'test_*.py'`
+  - `python3 -m compileall projects/lsm-tree-kv`
+  - `python3 projects/lsm-tree-kv/lsm_tree_kv.py --dir /tmp/lsm-bench-demo benchmark --key-count 250 --miss-count 1200 --bits-per-key-options 4,8,12`
+- Reviews run:
+  - `docs/reviews/2026-04-15-lsm-tree-benchmark-review-pass-1.md`
+  - `docs/reviews/2026-04-15-lsm-tree-benchmark-review-pass-2.md`
+  - `docs/reviews/2026-04-15-lsm-tree-benchmark-review-pass-3.md`
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: `952706c` (implementation snapshot before final wrap-up metadata commit)
+- Next step:
+  - add a sparse index so successful Bloom-filter matches can avoid loading full SSTable JSON payloads
