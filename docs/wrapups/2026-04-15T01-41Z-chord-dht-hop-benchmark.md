@@ -19,7 +19,7 @@
 - review pass 3: added node metadata to benchmark output for clearer standalone exports
 
 ## Commit hash
-- `13d8490`
+- `f20170a`
 
 ## Next step
 - extend `chord-dht-lab` with stabilization and successor-list maintenance for churn scenarios, or add synthetic ring/workload generation for broader benchmark sweeps
