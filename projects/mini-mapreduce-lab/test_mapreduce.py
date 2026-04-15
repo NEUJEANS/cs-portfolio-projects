@@ -74,6 +74,41 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(result.output, {"alice": 11, "bob": 8})
             self.assertIsNotNone(result.plugin)
 
+    def test_plugin_job_supports_structured_combiner_values_and_float_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            source.write_text("Alice,5\nBob,8\nAlice,11\nBob,3\n", encoding="utf-8")
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=PROJECT_DIR / "plugins_average_score.py",
+            )
+
+            self.assertEqual(result.job, "plugin-average-score")
+            self.assertEqual(result.output, {"alice": 8.0, "bob": 5.5})
+            self.assertIsNotNone(result.plugin)
+
+    def test_plugin_job_rejects_non_json_serializable_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            plugin = Path(tmpdir) / "bad_plugin.py"
+            source.write_text("Alice,5\n", encoding="utf-8")
+            plugin.write_text(
+                "def map_records(lines):\n"
+                "    for line in lines:\n"
+                "        if line.strip():\n"
+                "            yield 'alice', {1, 2, 3}\n"
+                "def reduce_key(key, values):\n"
+                "    return values[0]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "JSON-serializable"):
+                execute_job("plugin", [source], shard_size=1, reducers=1, plugin_path=plugin)
+
     def test_load_plugin_supports_importable_module(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             package_dir = Path(tmpdir) / "demo_plugins"
@@ -198,6 +233,34 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["job"], "plugin-max-score")
             self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
             self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
+
+    def test_cli_runs_average_plugin_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            output = Path(tmpdir) / "avg-plugin.json"
+            source.write_text("Alice,4\nAlice,10\nBob,3\nBob,9\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "run",
+                    "plugin",
+                    str(source),
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_average_score.py",
+                    "--reducers",
+                    "2",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["job"], "plugin-average-score")
+            self.assertEqual(payload["output"], {"alice": 7.0, "bob": 6.0})
 
     def test_cli_runs_module_plugin_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

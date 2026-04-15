@@ -45,3 +45,15 @@
 - [x] update README and notes with module-based plugin usage
 - [x] run tests and 3 review passes
 - [ ] consider typed non-integer reducer outputs or plugin discovery registries in a future run
+
+## Typed plugin output slice (2026-04-15 07:09 UTC run)
+- [x] confirm repo sync before editing
+- [x] do brief research on JSON-safe reducer output shapes for lightweight MapReduce demos
+- [x] do short Python JSON/type-validation refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] extend plugin jobs to support JSON-serializable non-integer intermediate and final reducer outputs
+- [x] add an average-score example plugin that uses structured combiner state and float reducer output
+- [x] extend project and repo-level tests for structured plugin values, deterministic ordering, and JSON validation failures
+- [x] run tests and 3 review passes
+- [ ] consider CSV benchmark export or reducer heatmap visualization in a future run
+

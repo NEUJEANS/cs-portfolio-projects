@@ -9,15 +9,40 @@ import json
 import random
 import tempfile
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass
+from numbers import Number
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
-KeyValue = tuple[str, int]
+JSONScalar = str | int | float | bool | None
+JSONValue = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
+KeyValue = tuple[str, JSONValue]
 Mapper = Callable[[Iterable[str]], Iterator[KeyValue]]
-Reducer = Callable[[str, list[int]], int]
+Reducer = Callable[[str, list[JSONValue]], JSONValue]
+
+
+def is_json_value(value: Any) -> bool:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list):
+        return all(is_json_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(isinstance(key, str) and is_json_value(item) for key, item in value.items())
+    return False
+
+
+def normalize_json_value(value: Any, *, context: str) -> JSONValue:
+    if not is_json_value(value):
+        raise ValueError(f"{context} must return JSON-serializable values")
+    return value
+
+
+def order_output(output: dict[str, JSONValue]) -> dict[str, JSONValue]:
+    if all(isinstance(value, Number) and not isinstance(value, bool) for value in output.values()):
+        return dict(sorted(output.items(), key=lambda item: (-float(item[1]), item[0])))
+    return dict(sorted(output.items()))
 
 
 @dataclass(slots=True)
@@ -27,7 +52,7 @@ class JobResult:
     shard_count: int
     map_records: int
     unique_keys: int
-    output: dict[str, int | dict[str, int]]
+    output: dict[str, JSONValue]
     reducers: int
     reducer_stats: list[dict[str, int]]
     plugin: str | None = None
@@ -126,15 +151,18 @@ def map_json_group_count(lines: Iterable[str], field: str) -> Iterator[KeyValue]
         yield str(value), 1
 
 
-def sum_reducer(_key: str, values: list[int]) -> int:
-    return sum(values)
+def sum_reducer(_key: str, values: list[JSONValue]) -> int:
+    return sum(int(value) for value in values)
 
 
-def combine(mapped: Iterable[KeyValue], combiner_fn: Reducer = sum_reducer) -> dict[str, int]:
-    grouped: defaultdict[str, list[int]] = defaultdict(list)
+def combine(mapped: Iterable[KeyValue], combiner_fn: Reducer = sum_reducer) -> dict[str, JSONValue]:
+    grouped: defaultdict[str, list[JSONValue]] = defaultdict(list)
     for key, value in mapped:
         grouped[key].append(value)
-    return {key: combiner_fn(key, values) for key, values in grouped.items()}
+    combined: dict[str, JSONValue] = {}
+    for key, values in grouped.items():
+        combined[key] = normalize_json_value(combiner_fn(key, values), context="combiner")
+    return combined
 
 
 def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> PluginJob:
@@ -175,25 +203,27 @@ def load_plugin(plugin_ref: str | Path) -> PluginJob:
 
 
 def reduce_shards(
-    partials: Iterable[dict[str, int]],
+    partials: Iterable[dict[str, JSONValue]],
     reducers: int,
     reducer_fn: Reducer = sum_reducer,
-) -> tuple[dict[str, int], list[dict[str, int]]]:
+) -> tuple[dict[str, JSONValue], list[dict[str, int]]]:
     if reducers <= 0:
         raise ValueError("reducers must be positive")
-    buckets: list[defaultdict[str, list[int]]] = [defaultdict(list) for _ in range(reducers)]
+    buckets: list[defaultdict[str, list[JSONValue]]] = [defaultdict(list) for _ in range(reducers)]
     for partial in partials:
         for key, value in partial.items():
             buckets[stable_partition(key, reducers)][key].append(value)
 
-    reduced: dict[str, int] = {}
+    reduced: dict[str, JSONValue] = {}
     reducer_stats: list[dict[str, int]] = []
     for reducer_id, bucket in enumerate(buckets):
         reducer_records = 0
         for key, values in bucket.items():
-            reduced_value = reducer_fn(key, list(values))
-            reduced[key] = reduced_value
-            reducer_records += reduced_value
+            reduced[key] = normalize_json_value(reducer_fn(key, list(values)), context="reducer")
+            if all(isinstance(value, Number) and not isinstance(value, bool) for value in values):
+                reducer_records += sum(int(value) for value in values)
+            else:
+                reducer_records += len(values)
         reducer_stats.append(
             {
                 "reducer": reducer_id,
@@ -202,8 +232,7 @@ def reduce_shards(
             }
         )
 
-    ordered = dict(sorted(reduced.items(), key=lambda item: (-item[1], item[0])))
-    return ordered, reducer_stats
+    return order_output(reduced), reducer_stats
 
 
 def reducer_skew(reducer_stats: list[dict[str, int]]) -> float:
@@ -232,7 +261,7 @@ def execute_job(
     plugin_path: str | None = None,
 ) -> JobResult:
     lines = read_lines(inputs)
-    partials: list[dict[str, int]] = []
+    partials: list[dict[str, JSONValue]] = []
     map_records = 0
     plugin: PluginJob | None = None
 
@@ -259,7 +288,7 @@ def execute_job(
 
     shards = list(chunked(lines, shard_size)) or [[]]
     for shard in shards:
-        mapped = list(mapper(shard))
+        mapped = [(key, normalize_json_value(value, context="mapper")) for key, value in mapper(shard)]
         map_records += len(mapped)
         partials.append(combine(mapped, combiner_fn=combiner_fn))
 

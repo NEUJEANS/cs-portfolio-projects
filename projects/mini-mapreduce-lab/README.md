@@ -17,6 +17,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - reducer distribution stats so you can talk about key skew in interviews
 - synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts
 - machine-readable JSON output with shard and record statistics
+- JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
 
 ## Usage
 
@@ -90,11 +91,13 @@ A plugin is a Python file with:
 - `JOB_NAME = "human-readable-name"` (optional)
 - `map_records(lines)` → yields `(key, value)` pairs
 - `combine_values(key, values)` → optional shard-local combiner for non-sum jobs
-- `reduce_key(key, values)` → returns one integer result for that key
+- `reduce_key(key, values)` → returns a JSON-serializable result for that key
 
 Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/plugins_top_score.py` or as a dotted module path like `demo_plugins.topscore` when the package is importable on `PYTHONPATH`.
 
-The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation. This gives you a reusable pattern for portfolio demos like per-user peaks, per-endpoint latency maxima, or custom counters.
+The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation.
+
+The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, and the reducer returns a float average. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
 
 ## Output shape
 
@@ -105,7 +108,7 @@ The included `plugins_top_score.py` example parses `name,score` lines and keeps 
   "reducers": 2,
   "reducer_stats": [
     {
-      "records": 11,
+      "records": 1,
       "reducer": 0,
       "unique_keys": 1
     }
@@ -132,6 +135,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - why timing alone can mislead without reducer-distribution metrics beside it
 
 ## Future improvements
-- support typed reducer outputs beyond integers, not just scalar counts/maxima
 - export benchmark runs as CSV for charting in notebooks or slide decks
 - visualize reducer skew across shards over time
