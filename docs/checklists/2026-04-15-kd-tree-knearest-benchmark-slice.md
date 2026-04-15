@@ -12,4 +12,4 @@
 - [x] complete review pass 3 and fix issues found
 - [x] run secret scan
 - [ ] commit and push
-- [ ] append wrap-up
+- [x] append wrap-up
