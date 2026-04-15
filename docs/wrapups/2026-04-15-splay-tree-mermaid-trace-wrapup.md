@@ -18,6 +18,8 @@
   - `docs/reviews/2026-04-15-splay-tree-mermaid-trace-review-3.md`
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → clean
-- Commit hash: `3e99186`
+- Commit hashes:
+  - feature implementation: `3e99186`
+  - wrap-up/pushed tip at time of summary: `17ad36b`
 - Next step:
   - export per-step trace snapshots or animation-friendly artifacts so students can show the full splay sequence, not just before/after trees.
