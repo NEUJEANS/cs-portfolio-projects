@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -31,20 +32,33 @@ class RingElectionSimulator:
             raise ValueError("process ids must be non-negative")
         self.nodes = [Node(process_id=value) for value in raw_ids]
 
-    def simulate(self, initiator: int, failed: Iterable[int] | None = None) -> dict[str, object]:
+    def _validate_active_ring(self, failed: Iterable[int] | None = None) -> tuple[list[int], set[int], dict[int, int]]:
         failed_set = set(failed or [])
-        if failed_set and not failed_set.issubset({node.process_id for node in self.nodes}):
+        ring_ids = {node.process_id for node in self.nodes}
+        if failed_set and not failed_set.issubset(ring_ids):
             raise ValueError("failed ids must belong to the ring")
-        active_nodes = [node for node in self.nodes if node.process_id not in failed_set]
-        if len(active_nodes) < 2:
+        ordered_active = [node.process_id for node in self.nodes if node.process_id not in failed_set]
+        if len(ordered_active) < 2:
             raise ValueError("need at least two active nodes to run the election")
-        if initiator in failed_set:
-            raise ValueError("initiator must be active")
+        index_by_id = {process_id: index for index, process_id in enumerate(ordered_active)}
+        return ordered_active, failed_set, index_by_id
+
+    def _build_announcement_trace(self, ordered_active: list[int], index_by_id: dict[int, int], leader_id: int) -> list[dict[str, int | str]]:
+        announcement_trace: list[dict[str, int | str]] = []
+        current_id = leader_id
+        for _ in range(len(ordered_active) - 1):
+            next_id = ordered_active[(index_by_id[current_id] + 1) % len(ordered_active)]
+            announcement_trace.append({"from": current_id, "to": next_id, "leader": leader_id, "phase": "announce"})
+            current_id = next_id
+        return announcement_trace
+
+    def simulate(self, initiator: int, failed: Iterable[int] | None = None) -> dict[str, object]:
         if initiator not in {node.process_id for node in self.nodes}:
             raise ValueError("initiator must belong to the ring")
+        ordered_active, failed_set, index_by_id = self._validate_active_ring(failed)
+        if initiator in failed_set:
+            raise ValueError("initiator must be active")
 
-        ordered_active = [node.process_id for node in self.nodes if node.process_id not in failed_set]
-        index_by_id = {process_id: index for index, process_id in enumerate(ordered_active)}
         current_id = initiator
         message = ElectionMessage(candidate_id=initiator)
         trace: list[dict[str, int | str]] = []
@@ -61,7 +75,14 @@ class RingElectionSimulator:
                 action = "replace"
             elif incoming.candidate_id == next_id:
                 trace.append(
-                    {"from": current_id, "to": next_id, "candidate": incoming.candidate_id, "hops": incoming.hops, "action": "elect"}
+                    {
+                        "from": current_id,
+                        "to": next_id,
+                        "candidate": incoming.candidate_id,
+                        "hops": incoming.hops,
+                        "action": "elect",
+                        "round": message_count,
+                    }
                 )
                 leader_id = next_id
                 break
@@ -69,22 +90,24 @@ class RingElectionSimulator:
                 outgoing = incoming
 
             trace.append(
-                {"from": current_id, "to": next_id, "candidate": outgoing.candidate_id, "hops": outgoing.hops, "action": action}
+                {
+                    "from": current_id,
+                    "to": next_id,
+                    "candidate": outgoing.candidate_id,
+                    "hops": outgoing.hops,
+                    "action": action,
+                    "round": message_count,
+                }
             )
             current_id = next_id
             message = outgoing
 
-        leader_index = index_by_id[leader_id]
-        announcement_trace: list[dict[str, int | str]] = []
-        current_id = leader_id
-        for _ in range(len(ordered_active) - 1):
-            next_id = ordered_active[(index_by_id[current_id] + 1) % len(ordered_active)]
-            message_count += 1
-            announcement_trace.append({"from": current_id, "to": next_id, "leader": leader_id, "phase": "announce"})
-            current_id = next_id
+        announcement_trace = self._build_announcement_trace(ordered_active, index_by_id, leader_id)
+        message_count += len(announcement_trace)
 
         return {
             "algorithm": "chang-roberts",
+            "mode": "single-initiator",
             "ring_order": [node.process_id for node in self.nodes],
             "active_ring": ordered_active,
             "failed": sorted(failed_set),
@@ -96,8 +119,114 @@ class RingElectionSimulator:
             "election_messages": len(trace),
             "announcement_messages": len(announcement_trace),
             "max_id": max(ordered_active),
-            "leader_index": leader_index,
+            "leader_index": index_by_id[leader_id],
             "worst_case_bound": len(ordered_active) * len(ordered_active),
+        }
+
+    def simulate_multi_initiator(self, initiators: Iterable[int], failed: Iterable[int] | None = None) -> dict[str, object]:
+        ordered_active, failed_set, index_by_id = self._validate_active_ring(failed)
+        initiator_list = list(initiators)
+        if not initiator_list:
+            raise ValueError("at least one initiator is required")
+        if len(set(initiator_list)) != len(initiator_list):
+            raise ValueError("initiators must be unique")
+        ring_ids = {node.process_id for node in self.nodes}
+        if any(initiator not in ring_ids for initiator in initiator_list):
+            raise ValueError("every initiator must belong to the ring")
+        if any(initiator in failed_set for initiator in initiator_list):
+            raise ValueError("every initiator must be active")
+
+        pending_messages: dict[int, list[ElectionMessage]] = {
+            initiator: [ElectionMessage(candidate_id=initiator)] for initiator in sorted(initiator_list)
+        }
+        trace: list[dict[str, int | str]] = []
+        round_number = 0
+        election_deliveries = 0
+
+        while True:
+            round_number += 1
+            arrivals: dict[int, list[tuple[int, ElectionMessage]]] = defaultdict(list)
+            for current_id in sorted(pending_messages):
+                next_id = ordered_active[(index_by_id[current_id] + 1) % len(ordered_active)]
+                for message in pending_messages[current_id]:
+                    arrivals[next_id].append((current_id, message.forward()))
+
+            next_pending: dict[int, list[ElectionMessage]] = {}
+            elected_leader: int | None = None
+            elected_hops: int | None = None
+            elected_from: int | None = None
+
+            for receiver_id in ordered_active:
+                incoming_deliveries = arrivals.get(receiver_id, [])
+                if not incoming_deliveries:
+                    continue
+
+                delivered_candidates = []
+                for sender_id, incoming in sorted(incoming_deliveries, key=lambda item: (item[1].candidate_id, item[0])):
+                    election_deliveries += 1
+                    if incoming.candidate_id == receiver_id:
+                        trace.append(
+                            {
+                                "from": sender_id,
+                                "to": receiver_id,
+                                "candidate": incoming.candidate_id,
+                                "hops": incoming.hops,
+                                "action": "elect",
+                                "round": round_number,
+                            }
+                        )
+                        elected_leader = receiver_id
+                        elected_hops = incoming.hops
+                        elected_from = sender_id
+                        break
+
+                    replaced = incoming.candidate_id < receiver_id
+                    outgoing_candidate = receiver_id if replaced else incoming.candidate_id
+                    trace.append(
+                        {
+                            "from": sender_id,
+                            "to": receiver_id,
+                            "candidate": outgoing_candidate,
+                            "hops": incoming.hops,
+                            "action": "replace" if replaced else "forward",
+                            "round": round_number,
+                        }
+                    )
+                    delivered_candidates.append(outgoing_candidate)
+
+                if elected_leader is not None:
+                    break
+                if delivered_candidates:
+                    next_pending[receiver_id] = [ElectionMessage(candidate_id=max(delivered_candidates), hops=max(message.hops for _, message in incoming_deliveries))]
+
+            if elected_leader is not None:
+                leader_id = elected_leader
+                break
+
+            pending_messages = next_pending
+
+        announcement_trace = self._build_announcement_trace(ordered_active, index_by_id, leader_id)
+        rounds = max((step["round"] for step in trace), default=0)
+        return {
+            "algorithm": "chang-roberts",
+            "mode": "multi-initiator-lockstep",
+            "ring_order": [node.process_id for node in self.nodes],
+            "active_ring": ordered_active,
+            "failed": sorted(failed_set),
+            "initiators": sorted(initiator_list),
+            "leader": leader_id,
+            "trace": trace,
+            "announcement_trace": announcement_trace,
+            "message_count": election_deliveries + len(announcement_trace),
+            "election_messages": election_deliveries,
+            "announcement_messages": len(announcement_trace),
+            "max_id": max(ordered_active),
+            "leader_index": index_by_id[leader_id],
+            "worst_case_bound": len(ordered_active) * len(ordered_active),
+            "rounds": rounds,
+            "contention": {"simultaneous_initiators": len(initiator_list), "lockstep": True},
+            "elected_from": elected_from,
+            "elected_hops": elected_hops,
         }
 
 
@@ -107,22 +236,27 @@ def _participant_label(process_id: int) -> str:
 
 def render_mermaid_sequence(result: dict[str, object]) -> str:
     active_ring = result["active_ring"]
-    initiator = result["initiator"]
     leader = result["leader"]
     lines = ["sequenceDiagram"]
     for process_id in active_ring:
         lines.append(f"    participant {_participant_label(process_id)} as {process_id}")
-    lines.append(f"    Note over {_participant_label(initiator)}: initiator={initiator}")
+    if "initiators" in result:
+        initiators = ", ".join(str(value) for value in result["initiators"])
+        lines.append(f"    Note over {_participant_label(active_ring[0])}: initiators={initiators} (lockstep)")
+    else:
+        initiator = result["initiator"]
+        lines.append(f"    Note over {_participant_label(initiator)}: initiator={initiator}")
 
     for index, step in enumerate(result["trace"], start=1):
         arrow = "->>"
+        round_text = f"round {step['round']}, " if "round" in step else ""
         if step["action"] == "replace":
-            detail = f"election #{index}: replace with {step['candidate']} (hop {step['hops']})"
+            detail = f"election #{index}: {round_text}replace with {step['candidate']} (hop {step['hops']})"
         elif step["action"] == "elect":
-            detail = f"election #{index}: elect leader {step['candidate']} (hop {step['hops']})"
+            detail = f"election #{index}: {round_text}elect leader {step['candidate']} (hop {step['hops']})"
             arrow = "-->>"
         else:
-            detail = f"election #{index}: forward {step['candidate']} (hop {step['hops']})"
+            detail = f"election #{index}: {round_text}forward {step['candidate']} (hop {step['hops']})"
         lines.append(f"    {_participant_label(step['from'])}{arrow}{_participant_label(step['to'])}: {detail}")
 
     if result["announcement_trace"]:
@@ -146,7 +280,14 @@ def build_output(result: dict[str, object], include_visualization: bool) -> dict
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate Chang-Roberts leader election on a unidirectional ring")
     parser.add_argument("--ring", nargs="+", type=int, required=True, help="Process ids in ring order")
-    parser.add_argument("--initiator", type=int, required=True, help="Active process id that starts the election")
+    initiator_group = parser.add_mutually_exclusive_group(required=True)
+    initiator_group.add_argument("--initiator", type=int, help="Active process id that starts the election")
+    initiator_group.add_argument(
+        "--initiators",
+        nargs="+",
+        type=int,
+        help="Active process ids that begin simultaneously in lockstep rounds",
+    )
     parser.add_argument("--failed", nargs="*", type=int, default=[], help="Optional failed process ids to skip")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON result")
     parser.add_argument(
@@ -165,7 +306,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     simulator = RingElectionSimulator(args.ring)
-    result = simulator.simulate(initiator=args.initiator, failed=args.failed)
+    if args.initiators:
+        result = simulator.simulate_multi_initiator(initiators=args.initiators, failed=args.failed)
+    else:
+        result = simulator.simulate(initiator=args.initiator, failed=args.failed)
     if args.visualization_only == "mermaid":
         print(render_mermaid_sequence(result))
         return

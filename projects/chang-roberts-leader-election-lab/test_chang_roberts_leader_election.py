@@ -24,6 +24,7 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         result = RingElectionSimulator([4, 1, 7, 3]).simulate(initiator=1)
         self.assertEqual(result["leader"], 7)
         self.assertEqual(result["max_id"], 7)
+        self.assertEqual(result["mode"], "single-initiator")
         self.assertTrue(any(step["action"] == "replace" for step in result["trace"]))
 
     def test_skips_failed_nodes_and_elects_highest_active_id(self) -> None:
@@ -32,6 +33,20 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertEqual(result["leader"], 11)
         self.assertEqual(result["announcement_messages"], 2)
 
+    def test_multi_initiator_lockstep_elects_same_highest_process_id(self) -> None:
+        result = RingElectionSimulator([8, 3, 12, 6]).simulate_multi_initiator(initiators=[3, 6])
+        self.assertEqual(result["leader"], 12)
+        self.assertEqual(result["initiators"], [3, 6])
+        self.assertEqual(result["mode"], "multi-initiator-lockstep")
+        self.assertGreaterEqual(result["rounds"], 1)
+        self.assertTrue(any(step["round"] == 1 for step in result["trace"]))
+
+    def test_multi_initiator_can_skip_failed_nodes(self) -> None:
+        result = RingElectionSimulator([20, 4, 17, 9, 15]).simulate_multi_initiator(initiators=[4, 9], failed=[17])
+        self.assertEqual(result["active_ring"], [20, 4, 9, 15])
+        self.assertEqual(result["leader"], 20)
+        self.assertEqual(result["announcement_messages"], 3)
+
     def test_rejects_invalid_inputs(self) -> None:
         simulator = RingElectionSimulator([1, 2, 3])
         with self.assertRaisesRegex(ValueError, "initiator must belong to the ring"):
@@ -39,12 +54,14 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "need at least two active nodes"):
             simulator.simulate(initiator=1, failed=[2, 3])
 
-    def test_rejects_failed_initiator_and_unknown_failed_id(self) -> None:
+    def test_rejects_invalid_multi_initiator_inputs(self) -> None:
         simulator = RingElectionSimulator([5, 9, 2])
-        with self.assertRaisesRegex(ValueError, "initiator must be active"):
-            simulator.simulate(initiator=9, failed=[9])
-        with self.assertRaisesRegex(ValueError, "failed ids must belong to the ring"):
-            simulator.simulate(initiator=5, failed=[42])
+        with self.assertRaisesRegex(ValueError, "initiators must be unique"):
+            simulator.simulate_multi_initiator(initiators=[5, 5])
+        with self.assertRaisesRegex(ValueError, "every initiator must belong to the ring"):
+            simulator.simulate_multi_initiator(initiators=[5, 42])
+        with self.assertRaisesRegex(ValueError, "every initiator must be active"):
+            simulator.simulate_multi_initiator(initiators=[5, 9], failed=[9])
 
     def test_mermaid_renderer_captures_election_and_announcement(self) -> None:
         result = RingElectionSimulator([8, 3, 12, 6]).simulate(initiator=3)
@@ -55,6 +72,12 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertIn("elect leader 12", diagram)
         self.assertIn("leader 12 announces victory", diagram)
         self.assertIn("announce #1: leader 12", diagram)
+
+    def test_mermaid_renderer_mentions_multi_initiator_lockstep(self) -> None:
+        result = RingElectionSimulator([8, 3, 12, 6]).simulate_multi_initiator(initiators=[3, 6])
+        diagram = render_mermaid_sequence(result)
+        self.assertIn("initiators=3, 6 (lockstep)", diagram)
+        self.assertIn("round 1", diagram)
 
     def test_cli_outputs_expected_summary(self) -> None:
         result = run_cli("--ring", "8", "3", "12", "6", "--initiator", "3")
@@ -78,6 +101,13 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         output = run_cli_raw("--ring", "8", "3", "12", "6", "--initiator", "3", "--visualization-only", "mermaid")
         self.assertIn("sequenceDiagram", output)
         self.assertIn("elect leader 12", output)
+
+    def test_cli_supports_multi_initiator_mode(self) -> None:
+        result = run_cli("--ring", "8", "3", "12", "6", "--initiators", "3", "6", "--include-visualization")
+        self.assertEqual(result["leader"], 12)
+        self.assertEqual(result["initiators"], [3, 6])
+        self.assertEqual(result["mode"], "multi-initiator-lockstep")
+        self.assertIn("mermaid_sequence", result["visualizations"])
 
 
 if __name__ == "__main__":

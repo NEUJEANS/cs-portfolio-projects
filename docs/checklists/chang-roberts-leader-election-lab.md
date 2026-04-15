@@ -5,5 +5,6 @@
 - [x] cover happy-path and validation cases with tests
 - [x] include interview-ready README notes and usage examples
 - [x] add visualization exports for traces
-- [ ] add simultaneous multi-initiator scenarios
+- [x] add simultaneous multi-initiator scenarios
 - [ ] compare against an alternative ring-election algorithm
+- [ ] benchmark single-initiator vs multi-initiator contention traces
