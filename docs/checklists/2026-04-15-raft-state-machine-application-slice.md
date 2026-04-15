@@ -10,6 +10,6 @@
 - [x] run targeted tests
 - [x] review at least 3 times and fix issues found
 - [x] run full tests
-- [ ] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up note
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up note
