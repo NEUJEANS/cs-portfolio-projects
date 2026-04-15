@@ -18,6 +18,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - explicit stabilization-round simulation for join/failure repair of successor, predecessor, and finger metadata
 - configurable `fix_fingers` scheduling modes so stabilization can model one-slot, full-round, or seeded-random finger repair policies
 - side-by-side stabilization comparison mode so multiple repair schedules can be evaluated on the same join/failure scenario
+- Markdown/CSV export for stabilization comparison summaries so portfolio write-ups can reuse the results directly
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
@@ -128,6 +129,25 @@ python3 projects/chord-dht-lab/chord_dht.py compare-stabilize \
   --pretty
 ```
 
+Export a stabilization comparison summary as Markdown for portfolio notes:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py compare-stabilize-export \
+  projects/chord-dht-lab/ring.json \
+  --joined-node foxtrot \
+  --rounds 4
+```
+
+Export the same summary as CSV for charts or spreadsheets:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py compare-stabilize-export \
+  projects/chord-dht-lab/ring.json \
+  --joined-node foxtrot \
+  --rounds 4 \
+  --format csv
+```
+
 Compare alternative `fix_fingers` repair schedules:
 
 ```bash
@@ -197,4 +217,3 @@ python3 -m unittest tests/test_chord_dht_lab.py
 ## Future improvements
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
 - export benchmark summaries as CSV/Markdown tables for portfolio write-ups
-- render comparison summaries as Markdown tables or chart-friendly CSV for portfolio write-ups

@@ -236,6 +236,27 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(comparison["reports"]["random"]["finger_repair_seed"], 29)
         self.assertEqual(comparison["failed_nodes"], ["echo"])
 
+    def test_render_stabilization_comparison_markdown_contains_summary_table(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = ring.compare_stabilization_modes(joined_node="foxtrot", rounds=3, random_seed=17)
+        report = module.render_stabilization_comparison_markdown(comparison)
+
+        self.assertIn("# Chord stabilization comparison", report)
+        self.assertIn("- Scenario joined node: `foxtrot`", report)
+        self.assertIn("| Mode | Stabilized round | Final finger progress |", report)
+        self.assertIn("| `all` | 1 | 100.00% |", report)
+
+    def test_render_stabilization_comparison_csv_contains_machine_readable_rows(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = ring.compare_stabilization_modes(failed_nodes=["echo"], rounds=2, random_seed=29)
+        report = module.render_stabilization_comparison_csv(comparison)
+
+        self.assertIn("mode,stabilized_round,final_finger_progress_ratio", report)
+        self.assertIn("all,0,1.000000", report)
+        self.assertIn("random,0,1.000000", report)
+
     def test_synthetic_benchmark_payload_is_deterministic_and_unique(self) -> None:
         payload = module.build_synthetic_benchmark_payload(
             m_bits=8,
@@ -580,6 +601,52 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["benchmark"]["summary"]["case_count"], 36)
         self.assertEqual(len(payload["benchmark"]["start_nodes"]), 4)
         self.assertEqual(len(payload["benchmark"]["start_nodes"]), len(set(payload["benchmark"]["start_nodes"])))
+
+    def test_cli_compare_stabilize_export_outputs_markdown(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "compare-stabilize-export",
+                str(RING_PATH),
+                "--joined-node",
+                "foxtrot",
+                "--rounds",
+                "3",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("# Chord stabilization comparison", completed.stdout)
+        self.assertIn("| `all` | 1 | 100.00% |", completed.stdout)
+
+    def test_cli_compare_stabilize_export_outputs_csv(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "compare-stabilize-export",
+                str(RING_PATH),
+                "--failed-node",
+                "echo",
+                "--rounds",
+                "2",
+                "--format",
+                "csv",
+                "--random-seed",
+                "29",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("mode,stabilized_round,final_finger_progress_ratio", completed.stdout)
+        self.assertIn("all,0,1.000000", completed.stdout)
 
     def test_cli_graphviz_route_outputs_dot_payload(self) -> None:
         completed = subprocess.run(

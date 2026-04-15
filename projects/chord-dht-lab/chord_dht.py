@@ -867,6 +867,68 @@ def select_benchmark_start_nodes(
     raise ValueError(f"unsupported sample_mode {sample_mode!r}")
 
 
+def render_stabilization_comparison_markdown(comparison: dict[str, object]) -> str:
+    rows = comparison["comparison"]
+    summary = comparison["summary"]
+    reports = comparison["reports"]
+    lines = [
+        "# Chord stabilization comparison",
+        "",
+        f"- Scenario joined node: `{comparison['joined_node']}`" if comparison.get('joined_node') else f"- Scenario failed nodes: {', '.join(f'`{name}`' for name in comparison['failed_nodes']) or 'none'}",
+        f"- Rounds simulated: `{comparison['rounds_requested']}`",
+        f"- Random seed: `{comparison['random_seed']}`",
+        f"- Fastest mode(s): {', '.join(f'`{mode}`' for mode in summary['fastest_modes'])}",
+        f"- Fastest stabilized round: `{summary['fastest_stabilized_round']}`",
+        f"- Highest final finger progress mode: `{summary['highest_progress_mode']}` ({summary['highest_progress_ratio']:.2%})",
+        "",
+        "| Mode | Stabilized round | Final finger progress | Successor matches | Predecessor matches | Final finger matches |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        report = reports[row['mode']]
+        final = report['summary']
+        stabilized_round = row['stabilized_round'] if row['stabilized_round'] is not None else "not within budget"
+        lines.append(
+            f"| `{row['mode']}` | {stabilized_round} | {row['final_finger_progress_ratio']:.2%} | "
+            f"{final['final_successor_matches']}/{report['target_node_count']} | "
+            f"{final['final_predecessor_matches']}/{report['target_node_count']} | "
+            f"{final['final_finger_matches']}/{final['total_fingers']} |"
+        )
+    return "\n".join(lines)
+
+
+def render_stabilization_comparison_csv(comparison: dict[str, object]) -> str:
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "mode",
+        "stabilized_round",
+        "final_finger_progress_ratio",
+        "final_successor_matches",
+        "node_count",
+        "final_predecessor_matches",
+        "final_finger_matches",
+        "total_fingers",
+    ])
+    reports = comparison['reports']
+    for row in comparison['comparison']:
+        final = reports[row['mode']]['summary']
+        writer.writerow([
+            row['mode'],
+            row['stabilized_round'],
+            f"{row['final_finger_progress_ratio']:.6f}",
+            final['final_successor_matches'],
+            reports[row['mode']]['target_node_count'],
+            final['final_predecessor_matches'],
+            final['final_finger_matches'],
+            final['total_fingers'],
+        ])
+    return output.getvalue().strip()
+
+
 def build_demo_payload() -> dict[str, object]:
     ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
     sample_keys = ["report.pdf", "slides", "internship-notes", "compiler", "final-project"]
@@ -1105,6 +1167,49 @@ def parse_args() -> argparse.Namespace:
     )
     compare_stabilize_parser.add_argument("--pretty", action="store_true")
 
+    compare_export_parser = subparsers.add_parser(
+        "compare-stabilize-export",
+        help="render stabilization comparison summaries as Markdown or CSV for portfolio write-ups",
+    )
+    compare_export_parser.add_argument("ring_file", type=Path)
+    compare_export_parser.add_argument(
+        "--joined-node",
+        help="optional node that just joined and starts with stale self-pointing metadata",
+    )
+    compare_export_parser.add_argument(
+        "--failed-node",
+        dest="failed_nodes",
+        action="append",
+        default=[],
+        help="node to remove from the live ring before stabilization; may be provided multiple times",
+    )
+    compare_export_parser.add_argument(
+        "--rounds",
+        type=int,
+        default=3,
+        help="number of stabilization rounds to simulate for each mode",
+    )
+    compare_export_parser.add_argument(
+        "--mode",
+        dest="modes",
+        action="append",
+        default=None,
+        choices=list(SUPPORTED_FINGER_REPAIR_MODES),
+        help="stabilization mode to include; may be provided multiple times and defaults to all modes",
+    )
+    compare_export_parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=17,
+        help="seed to use for the random finger repair mode during comparison",
+    )
+    compare_export_parser.add_argument(
+        "--format",
+        choices=["markdown", "csv"],
+        default="markdown",
+        help="report format for the rendered comparison summary",
+    )
+
     synth_parser = subparsers.add_parser(
         "synth-benchmark",
         help="generate a deterministic synthetic ring/workload and benchmark lookup hops",
@@ -1240,6 +1345,22 @@ def main() -> None:
                 start_node_seed=args.start_node_seed,
             ),
         }
+    elif args.command == "compare-stabilize-export":
+        ring = load_ring(args.ring_file)
+        comparison = ring.compare_stabilization_modes(
+            joined_node=args.joined_node,
+            failed_nodes=args.failed_nodes,
+            rounds=args.rounds,
+            modes=args.modes,
+            random_seed=args.random_seed,
+        )
+        if args.format == "markdown":
+            print(render_stabilization_comparison_markdown(comparison))
+            return
+        if args.format == "csv":
+            print(render_stabilization_comparison_csv(comparison))
+            return
+        raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "graphviz":
         ring = load_ring(args.ring_file)
         payload = {

@@ -59,7 +59,7 @@
 - [x] export the ring and lookup or stabilization routes as Graphviz diagrams
 - [x] let synthetic benchmarks sample random subsets of start nodes instead of taking the first N sorted nodes
 - [x] add a side-by-side stabilization comparison command that runs multiple finger repair modes on the same scenario
-- [ ] export comparison summaries as Markdown/CSV for portfolio write-ups
+- [x] export comparison summaries as Markdown/CSV for portfolio write-ups
 - [ ] add a churn workload driver that chains multiple joins/failures and summarizes recovery over time
 
 ## Randomized benchmark start-node slice (2026-04-15 09:29 UTC run)
@@ -93,3 +93,19 @@
 - [ ] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Stabilization comparison export slice (2026-04-15 14:31 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current Chord lab for the weakest unfinished portfolio-reporting gap
+- [x] skip web research because Markdown/CSV summary export is a direct extension of the existing stabilization comparison payload
+- [x] do a short Python text-rendering/self-test while planning the slice
+- [x] update checklist/docs so the slice is resumable
+- [x] add Markdown and CSV export helpers for stabilization comparison summaries
+- [x] expose the export workflow via a dedicated CLI command
+- [x] extend automated coverage for helper rendering and CLI output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
