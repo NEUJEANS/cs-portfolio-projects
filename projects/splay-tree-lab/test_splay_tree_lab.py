@@ -50,6 +50,16 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertIn('n18 [label="18", penwidth=2, style="filled,bold", fillcolor="lightgoldenrod1"]', dot)
         self.assertIn('n7 -> n10;', dot)
 
+    def test_to_mermaid_marks_root_and_highlighted_keys(self) -> None:
+        tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
+        mermaid = tree.to_mermaid(highlight_keys=[7, 18, 99], title="demo")
+        self.assertIn("flowchart TD", mermaid)
+        self.assertIn("%% demo", mermaid)
+        self.assertIn('n18["18"]', mermaid)
+        self.assertIn("n12 --> n7", mermaid)
+        self.assertIn("class n18 root;", mermaid)
+        self.assertIn("class n7,n18 highlight;", mermaid)
+
     def test_delete_preserves_bst_order(self) -> None:
         tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
         deleted = tree.delete(10)
@@ -189,6 +199,8 @@ class SplayTreeCliTests(unittest.TestCase):
             snapshot = tmp_path / "splay.json"
             before_dot = tmp_path / "before.dot"
             after_dot = tmp_path / "after.dot"
+            before_mermaid = tmp_path / "before.mmd"
+            after_mermaid = tmp_path / "after.mmd"
             updated = tmp_path / "after.json"
             subprocess.run(
                 [
@@ -217,6 +229,10 @@ class SplayTreeCliTests(unittest.TestCase):
                     str(before_dot),
                     "--after-dot",
                     str(after_dot),
+                    "--before-mermaid",
+                    str(before_mermaid),
+                    "--after-mermaid",
+                    str(after_mermaid),
                     "7",
                     "18",
                     "99",
@@ -229,9 +245,14 @@ class SplayTreeCliTests(unittest.TestCase):
             self.assertEqual(len(payload["steps"]), 3)
             self.assertTrue(before_dot.exists())
             self.assertTrue(after_dot.exists())
+            self.assertTrue(before_mermaid.exists())
+            self.assertTrue(after_mermaid.exists())
             self.assertIn('label="before access trace"', before_dot.read_text())
             self.assertIn('label="after access trace"', after_dot.read_text())
             self.assertIn('fillcolor="lightgoldenrod1"', after_dot.read_text())
+            self.assertIn("flowchart TD", before_mermaid.read_text())
+            self.assertIn("class n18 root;", after_mermaid.read_text())
+            self.assertIn("class n7,n18 highlight;", after_mermaid.read_text())
             self.assertEqual(json.loads(updated.read_text())["size"], 7)
 
     def test_benchmark_cli(self) -> None:

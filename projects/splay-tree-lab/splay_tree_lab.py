@@ -369,6 +369,41 @@ class SplayTree:
         lines.append("}")
         return "\n".join(lines) + "\n"
 
+    def to_mermaid(self, *, highlight_keys: Iterable[int] | None = None, title: str | None = None) -> str:
+        highlight = set(highlight_keys or [])
+        lines = ["flowchart TD"]
+        if title:
+            lines.append(f"    %% {title}")
+        if self.root is None:
+            lines.append('    empty["(empty)"]')
+            return "\n".join(lines) + "\n"
+
+        visited: set[int] = set()
+
+        def node_id(key: int) -> str:
+            return f"n{key}"
+
+        def walk(node: Node) -> None:
+            if node.key in visited:
+                return
+            visited.add(node.key)
+            lines.append(f'    {node_id(node.key)}["{node.key}"]')
+            for child in (node.left, node.right):
+                if child is None:
+                    continue
+                lines.append(f"    {node_id(node.key)} --> {node_id(child.key)}")
+                walk(child)
+
+        walk(self.root)
+        lines.append("    classDef root stroke-width:4px;")
+        lines.append("    classDef highlight fill:#f6d365,stroke-width:3px;")
+        lines.append(f"    class {node_id(self.root.key)} root;")
+        if highlight:
+            highlight_nodes = ",".join(node_id(key) for key in sorted(highlight) if key in visited)
+            if highlight_nodes:
+                lines.append(f"    class {highlight_nodes} highlight;")
+        return "\n".join(lines) + "\n"
+
 
 def parse_values(path: Path) -> list[int]:
     values = []
@@ -540,6 +575,8 @@ def build_parser() -> argparse.ArgumentParser:
     trace_parser.add_argument("--output", type=Path)
     trace_parser.add_argument("--before-dot", type=Path)
     trace_parser.add_argument("--after-dot", type=Path)
+    trace_parser.add_argument("--before-mermaid", type=Path)
+    trace_parser.add_argument("--after-mermaid", type=Path)
     trace_parser.add_argument("keys", nargs="+", type=int)
 
     insert_parser = subparsers.add_parser("insert", help="insert a key into a snapshot")
@@ -602,11 +639,15 @@ def main(argv: list[str] | None = None) -> int:
             tree = load_tree(args.snapshot)
             if args.before_dot is not None:
                 save_text(args.before_dot, tree.to_dot(title="before access trace"))
+            if args.before_mermaid is not None:
+                save_text(args.before_mermaid, tree.to_mermaid(title="before access trace"))
             summary = tree.trace_access_sequence(args.keys)
             if args.output is not None:
                 save_tree(args.output, tree)
             if args.after_dot is not None:
                 save_text(args.after_dot, tree.to_dot(highlight_keys=args.keys, title="after access trace"))
+            if args.after_mermaid is not None:
+                save_text(args.after_mermaid, tree.to_mermaid(highlight_keys=args.keys, title="after access trace"))
             print(json.dumps(summary, indent=2))
             return 0
 
