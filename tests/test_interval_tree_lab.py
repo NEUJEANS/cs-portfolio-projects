@@ -1,9 +1,11 @@
 import importlib.util
 import json
 import pathlib
+import tempfile
 import subprocess
 import sys
 import unittest
+from unittest import mock
 
 MODULE_PATH = pathlib.Path("projects/interval-tree-lab/interval_tree_lab.py")
 spec = importlib.util.spec_from_file_location("interval_tree_lab", MODULE_PATH)
@@ -16,6 +18,7 @@ Interval = interval_tree_lab.Interval
 IntervalTree = interval_tree_lab.IntervalTree
 benchmark_overlap_queries = interval_tree_lab.benchmark_overlap_queries
 parse_interval_spec = interval_tree_lab.parse_interval_spec
+render_query_trace_artifact = interval_tree_lab.render_query_trace_artifact
 
 
 class IntervalTreeLabTests(unittest.TestCase):
@@ -188,6 +191,20 @@ class IntervalTreeLabTests(unittest.TestCase):
         self.assertIn('search right', dot)
         self.assertIn('label="overlap"', dot)
 
+    def test_render_query_trace_artifact_writes_dot_file(self) -> None:
+        dot = IntervalTree([Interval(1, 3, "a")]).export_query_trace_dot(Interval(2, 2, "q"))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = pathlib.Path(tmpdir) / "trace.dot"
+            written = render_query_trace_artifact(dot_text=dot, output_path=target, artifact_format="dot")
+            self.assertEqual(written, target)
+            self.assertEqual(target.read_text(encoding="utf-8"), dot)
+
+    def test_render_query_trace_artifact_requires_graphviz_for_svg(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch.object(interval_tree_lab.shutil, "which", return_value=None):
+            target = pathlib.Path(tmpdir) / "trace.svg"
+            with self.assertRaisesRegex(ValueError, "Graphviz 'dot' is required"):
+                render_query_trace_artifact(dot_text="digraph g {}", output_path=target, artifact_format="svg")
+
     def test_cli_trace_output_includes_dot_and_hits(self) -> None:
         completed = subprocess.run(
             [
@@ -213,6 +230,52 @@ class IntervalTreeLabTests(unittest.TestCase):
         )
         self.assertIn('digraph interval_tree_query_trace', payload["query_trace_dot"])
         self.assertIn('pruned: left.max_end < query.start', payload["query_trace_dot"])
+
+    def test_cli_trace_can_write_dot_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = pathlib.Path(tmpdir) / "trace.dot"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/interval-tree-lab/interval_tree_lab.py",
+                    "trace",
+                    "7-18",
+                    "0-3:warmup",
+                    "5-8:backup",
+                    "6-10:deploy",
+                    "15-23:analytics",
+                    "17-19:alerts",
+                    "--output",
+                    str(target),
+                    "--format",
+                    "dot",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["artifact"], {"path": str(target), "format": "dot"})
+            self.assertTrue(target.exists())
+            self.assertIn('digraph interval_tree_query_trace', target.read_text(encoding="utf-8"))
+
+    def test_cli_trace_rejects_format_without_output(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "projects/interval-tree-lab/interval_tree_lab.py",
+                "trace",
+                "7-18",
+                "0-3:warmup",
+                "5-8:backup",
+                "--format",
+                "svg",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--format only applies when --output is provided", completed.stderr)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import shutil
+import subprocess
 import time
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -486,11 +489,41 @@ def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def render_query_trace_artifact(*, dot_text: str, output_path: Path, artifact_format: str) -> Path:
+    artifact_format = artifact_format.lower()
+    if artifact_format not in {"dot", "svg", "png"}:
+        raise ValueError("--format must be dot, svg, or png")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if artifact_format == "dot":
+        output_path.write_text(dot_text, encoding="utf-8")
+        return output_path
+
+    dot_binary = shutil.which("dot")
+    if dot_binary is None:
+        raise ValueError("Graphviz 'dot' is required for svg/png trace rendering but was not found on PATH")
+
+    completed = subprocess.run(
+        [dot_binary, f"-T{artifact_format}", "-o", str(output_path)],
+        input=dot_text,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown Graphviz error"
+        raise ValueError(f"Graphviz rendering failed: {stderr}")
+    return output_path
+
+
 def command_trace(args: argparse.Namespace) -> dict[str, object]:
+    if not getattr(args, "output", None) and getattr(args, "format", "dot").lower() != "dot":
+        raise ValueError("--format only applies when --output is provided")
+
     tree = IntervalTree(load_intervals(args.intervals))
     query = parse_interval_spec(args.query)
     overlaps, stats = tree.find_overlaps_with_stats(query)
-    return {
+    payload = {
         "command": "trace",
         "input": args.intervals,
         "query": query.to_dict(),
@@ -499,6 +532,14 @@ def command_trace(args: argparse.Namespace) -> dict[str, object]:
         "query_trace_dot": tree.export_query_trace_dot(query),
         **tree.summary(),
     }
+    if getattr(args, "output", None):
+        output_path = render_query_trace_artifact(
+            dot_text=payload["query_trace_dot"],
+            output_path=Path(args.output),
+            artifact_format=args.format,
+        )
+        payload["artifact"] = {"path": str(output_path), "format": args.format.lower()}
+    return payload
 
 
 def main() -> None:
@@ -545,6 +586,12 @@ def main() -> None:
     )
     trace_parser.add_argument("query", help="query interval spec")
     trace_parser.add_argument("intervals", nargs="+", help="interval specs")
+    trace_parser.add_argument("--output", help="optional path to write a DOT/SVG/PNG artifact")
+    trace_parser.add_argument(
+        "--format",
+        default="dot",
+        help="artifact format when --output is used: dot, svg, or png (default: dot)",
+    )
     trace_parser.set_defaults(handler=command_trace)
 
     args = parser.parse_args()

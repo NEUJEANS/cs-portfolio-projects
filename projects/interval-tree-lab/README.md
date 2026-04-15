@@ -19,6 +19,7 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 - validation for BST ordering and `max_end` correctness
 - JSON CLI output for demo, build, overlap, point, insert, trace, and benchmark flows
 - Graphviz DOT query-trace export that highlights visited, pruned, and overlapping branches
+- optional trace artifact rendering to DOT, SVG, or PNG files for portfolio screenshots and README embeds
 
 ## Usage
 
@@ -64,6 +65,12 @@ Export a Graphviz DOT trace for one query (render later with Graphviz if desired
 python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-8:backup 6-10:deploy 15-23:analytics 17-19:alerts
 ```
 
+Write a trace artifact directly to disk for portfolio screenshots or docs (SVG/PNG requires `dot` from Graphviz on `PATH`):
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-8:backup 6-10:deploy 15-23:analytics 17-19:alerts --output docs/artifacts/interval-tree-trace.dot --format dot
+```
+
 ## Test
 
 ```bash
@@ -77,9 +84,10 @@ python3 -m unittest tests/test_interval_tree_lab.py
 - Bulk builds use median splitting on the sorted interval list to avoid obviously skewed demo trees.
 - Validation checks both BST ordering and `max_end` propagation so augmentation bugs are easy to catch.
 - The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan overlap results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
-- The `trace` command exports DOT text rather than images so the project stays dependency-light while still supporting screenshots, diagrams, and interview walk-throughs.
+- The `trace` command still emits DOT inline in JSON output, but can now also write DOT/SVG/PNG artifacts to disk when you want concrete portfolio assets.
+- SVG/PNG rendering is optional and only requires Graphviz `dot` when you explicitly ask for a rendered artifact.
 
 ## Future improvements
 - add deletion with metadata repair
-- add rendered SVG/PNG artifacts for a few canonical query traces
+- add canned example artifact files under `docs/artifacts/` for a couple of canonical trace scenarios
 - add CSV/plot export for benchmark runs across multiple workload sizes
