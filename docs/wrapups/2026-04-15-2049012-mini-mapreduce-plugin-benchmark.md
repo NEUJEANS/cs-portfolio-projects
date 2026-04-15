@@ -2,7 +2,7 @@
 
 - Timestamp: 2026-04-15T15:07:10Z
 - Project: `mini-mapreduce-lab`
-- Commit: `e2841d3`
+- Commit: `2049012`
 
 ## What changed
 - added `benchmark --job plugin --plugin ...` support so custom reducers can use the same benchmark/export pipeline as built-in wordcount
