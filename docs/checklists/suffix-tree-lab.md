@@ -1,5 +1,18 @@
 # Suffix Tree Lab Checklist
 
+## 2026-04-15 vertical slice: Mermaid export for documentation-friendly diagrams
+- [x] confirm repo branch/remote are synced before editing
+- [x] do brief export-format refresh / note GitHub-friendly Mermaid constraints
+- [x] add a resumable checklist entry for the Mermaid export slice
+- [x] implement Mermaid flowchart export with optional suffix-start annotations
+- [x] add or update automated tests for Mermaid export and CLI coverage
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
+
 ## 2026-04-15 vertical slice: compressed suffix tree baseline
 - [x] identify `suffix-tree-lab` as the next portfolio-worthy advanced strings project
 - [x] do brief concept refresh / note construction-vs-query tradeoffs

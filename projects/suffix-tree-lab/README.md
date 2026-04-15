@@ -12,6 +12,7 @@ This project demonstrates string indexing, edge splitting, compact tree represen
 - computes the longest repeated substring with configurable minimum occurrence count
 - provides an `explain` mode that traces how a pattern is matched through compressed edges
 - exports Graphviz DOT for quick rendering into SVG/PNG diagrams
+- exports Mermaid flowcharts for README-friendly visualization without Graphviz
 - optionally annotates exported nodes with suffix-start offsets for debugging and demos
 - benchmarks suffix-tree lookup against a naive suffix-array baseline, Python `str.find`, and regex-lookahead baselines
 - exports benchmark results as CSV so performance snapshots can be versioned in `artifacts/`
@@ -26,6 +27,8 @@ python3 suffix_tree_lab.py banana explain band
 python3 suffix_tree_lab.py banana export-dot > banana.dot
 dot -Tsvg banana.dot -o banana.svg
 python3 suffix_tree_lab.py banana export-dot --show-suffix-starts
+python3 suffix_tree_lab.py banana export-mermaid > banana.mmd
+python3 suffix_tree_lab.py banana export-mermaid --show-suffix-starts
 python3 suffix_tree_lab.py "banana bandana banana" benchmark --patterns ana,ban,na
 python3 suffix_tree_lab.py "banana bandana banana" benchmark --patterns ana,ban,na --csv --output ../../artifacts/suffix-tree-benchmark.csv
 ```
@@ -60,6 +63,15 @@ digraph suffix_tree {
 }
 ```
 
+```mermaid
+%% $ python3 suffix_tree_lab.py banana export-mermaid
+flowchart LR
+  classDef leaf stroke-width:2px
+  n0["root"]
+  n0 -->|"$"| n1
+  ...
+```
+
 ## Testing
 ```bash
 pytest -q test_suffix_tree_lab.py
@@ -70,6 +82,7 @@ pytest -q test_suffix_tree_lab.py
 - compresses shared prefixes into labeled edges instead of one-character trie edges
 - stores suffix start offsets below each node to support occurrence reporting
 - uses DOT as a zero-dependency interchange format so diagrams can be rendered externally with Graphviz
+- adds Mermaid export so repository docs and GitHub previews can show the structure without a Graphviz install
 - benchmark mode cross-checks suffix-tree match counts against suffix-array, Python, and regex baselines before recording timings
 - the suffix-array baseline uses a deliberately naive sorted-suffix implementation so students can discuss binary-search lookup versus heavier suffix-tree structure
 - exported CSV snapshots make it easy to discuss asymptotics versus real constant-factor tradeoffs in interviews
@@ -77,6 +90,6 @@ pytest -q test_suffix_tree_lab.py
 
 ## Future improvements
 - generalized suffix tree support for longest common substring across multiple texts
-- richer export options such as Mermaid output or rendered artifact generation during benchmarks
+- rendered artifact generation during benchmarks so DOT and Mermaid exports stay in sync with timing snapshots
 - add LCP-aware suffix-array searching to contrast the naive baseline with a more optimized indexed approach
 - a streaming input mode that persists the index to disk for larger corpora

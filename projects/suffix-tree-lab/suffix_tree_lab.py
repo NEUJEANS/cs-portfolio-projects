@@ -240,14 +240,7 @@ class SuffixTree:
                 )
         return results
 
-    def to_dot(self, *, show_suffix_starts: bool = False) -> str:
-        """Render the suffix tree as a Graphviz DOT graph."""
-        lines = [
-            "digraph suffix_tree {",
-            '  rankdir=LR;',
-            '  node [shape=circle, fontname="Helvetica"];',
-            '  edge [fontname="Helvetica"];',
-        ]
+    def _node_render_plan(self, *, show_suffix_starts: bool = False) -> List[Tuple[str, str, bool, List[Tuple[str, str]]]]:
         node_ids: Dict[int, str] = {}
         counter = 0
 
@@ -259,8 +252,7 @@ class SuffixTree:
                 counter += 1
             return node_ids[key]
 
-        def escape(value: str) -> str:
-            return value.replace("\\", "\\\\").replace('"', '\\"')
+        plan: List[Tuple[str, str, bool, List[Tuple[str, str]]]] = []
 
         def walk(node: Node) -> None:
             current = node_id(node)
@@ -274,16 +266,58 @@ class SuffixTree:
                 label = f"[{suffixes}]"
             else:
                 label = ""
-            shape = "doublecircle" if not node.children else "circle"
-            lines.append(f'  {current} [label="{escape(label)}", shape={shape}];')
+
+            children: List[Tuple[str, str]] = []
             for edge in sorted(node.children.values(), key=lambda current_edge: self.text[current_edge.start:current_edge.end]):
                 child = node_id(edge.child)
                 edge_label = self.text[edge.start:edge.end]
-                lines.append(f'  {current} -> {child} [label="{escape(edge_label)}"];')
+                children.append((child, edge_label))
+            plan.append((current, label, not node.children, children))
+            for edge in sorted(node.children.values(), key=lambda current_edge: self.text[current_edge.start:current_edge.end]):
                 walk(edge.child)
 
         walk(self.root)
+        return plan
+
+    def to_dot(self, *, show_suffix_starts: bool = False) -> str:
+        """Render the suffix tree as a Graphviz DOT graph."""
+        lines = [
+            "digraph suffix_tree {",
+            '  rankdir=LR;',
+            '  node [shape=circle, fontname="Helvetica"];',
+            '  edge [fontname="Helvetica"];',
+        ]
+
+        def escape(value: str) -> str:
+            return value.replace("\\", "\\\\").replace('"', '\\"')
+
+        for current, label, is_leaf, children in self._node_render_plan(show_suffix_starts=show_suffix_starts):
+            shape = "doublecircle" if is_leaf else "circle"
+            lines.append(f'  {current} [label="{escape(label)}", shape={shape}];')
+            for child, edge_label in children:
+                lines.append(f'  {current} -> {child} [label="{escape(edge_label)}"];')
+
         lines.append("}")
+        return "\n".join(lines)
+
+    def to_mermaid(self, *, show_suffix_starts: bool = False) -> str:
+        """Render the suffix tree as a Mermaid flowchart."""
+        lines = [
+            "flowchart LR",
+            "  classDef leaf stroke-width:2px",
+        ]
+
+        def escape(value: str) -> str:
+            return value.replace("\\", "\\\\").replace('"', "#quot;").replace("\n", "<br/>")
+
+        for current, label, is_leaf, children in self._node_render_plan(show_suffix_starts=show_suffix_starts):
+            node_label = escape(label)
+            lines.append(f'  {current}["{node_label}"]')
+            if is_leaf:
+                lines.append(f"  class {current} leaf")
+            for child, edge_label in children:
+                lines.append(f'  {current} -->|"{escape(edge_label)}"| {child}')
+
         return "\n".join(lines)
 
     def _match_node(self, pattern: str) -> Optional[Node]:
@@ -369,6 +403,9 @@ def build_parser() -> argparse.ArgumentParser:
     export_parser = subparsers.add_parser("export-dot", help="export the tree as Graphviz DOT")
     export_parser.add_argument("--show-suffix-starts", action="store_true")
 
+    mermaid_parser = subparsers.add_parser("export-mermaid", help="export the tree as a Mermaid flowchart")
+    mermaid_parser.add_argument("--show-suffix-starts", action="store_true")
+
     benchmark_parser = subparsers.add_parser(
         "benchmark", help="compare suffix-tree search against Python and regex baselines"
     )
@@ -403,6 +440,8 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         print("\n".join(lines))
     elif args.command == "export-dot":
         print(tree.to_dot(show_suffix_starts=args.show_suffix_starts))
+    elif args.command == "export-mermaid":
+        print(tree.to_mermaid(show_suffix_starts=args.show_suffix_starts))
     elif args.command == "benchmark":
         patterns = parse_patterns(args.patterns)
         results = tree.benchmark_search(patterns, iterations=args.iterations)

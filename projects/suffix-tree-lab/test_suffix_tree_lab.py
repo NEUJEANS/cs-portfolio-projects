@@ -45,6 +45,19 @@ def test_dot_export_is_graphviz_friendly_and_can_show_suffix_starts():
     assert 'shape=doublecircle' in annotated
 
 
+def test_mermaid_export_is_flowchart_friendly_and_can_show_suffix_starts():
+    tree = SuffixTree("banana")
+    mermaid = tree.to_mermaid()
+    assert mermaid.startswith("flowchart LR")
+    assert 'classDef leaf stroke-width:2px' in mermaid
+    assert 'n0["root"]' in mermaid
+    assert '-->|"banana$"| ' in mermaid
+
+    annotated = tree.to_mermaid(show_suffix_starts=True)
+    assert 'root<br/>[0, 1, 2, 3, 4, 5, 6]' in annotated
+    assert 'class n' in annotated
+
+
 def test_suffix_array_index_finds_patterns_with_binary_search_window():
     index = SuffixArrayIndex.build("banana bandana banana")
     assert index.find("ana") == [1, 3, 11, 16, 18]
@@ -140,6 +153,16 @@ def test_cli_find_repeat_explain_export_and_benchmark_commands(tmp_path: Path):
     assert export.returncode == 0
     assert export.stdout.startswith("digraph suffix_tree {")
     assert '[0, 1, 2, 3, 4, 5, 6]' in export.stdout
+
+    mermaid = subprocess.run(
+        [sys.executable, str(script), "banana", "export-mermaid", "--show-suffix-starts"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert mermaid.returncode == 0
+    assert mermaid.stdout.startswith("flowchart LR")
+    assert 'root<br/>[0, 1, 2, 3, 4, 5, 6]' in mermaid.stdout
 
     csv_path = tmp_path / "benchmark.csv"
     benchmark = subprocess.run(
