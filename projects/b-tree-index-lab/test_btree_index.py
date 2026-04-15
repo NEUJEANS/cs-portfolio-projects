@@ -136,6 +136,51 @@ class BTreeIndexTests(unittest.TestCase):
         self.assertEqual(tree.stats()["height"], 1)
         self.assertEqual(tree.stats()["items"], 1)
 
+    def test_serialization_round_trip_restores_items_and_stats(self) -> None:
+        tree = build_sample_tree()
+
+        restored = BTreeIndex.from_dict(tree.to_dict())
+
+        self.assertEqual(restored.items(), tree.items())
+        self.assertEqual(restored.stats(), tree.stats())
+        self.assertEqual(restored.search(17), "seventeen")
+
+    def test_load_rejects_invalid_serialized_tree(self) -> None:
+        payload = {
+            "minimum_degree": 2,
+            "item_count": 2,
+            "root": {
+                "leaf": False,
+                "keys": [10],
+                "values": ["ten"],
+                "children": [
+                    {"leaf": True, "keys": [5, 7], "values": ["five", "seven"]},
+                    {"leaf": True, "keys": [], "values": []},
+                ],
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            BTreeIndex.from_dict(payload)
+
+    def test_load_rejects_child_keys_that_cross_parent_separator_bounds(self) -> None:
+        payload = {
+            "minimum_degree": 2,
+            "item_count": 3,
+            "root": {
+                "leaf": False,
+                "keys": [10],
+                "values": ["ten"],
+                "children": [
+                    {"leaf": True, "keys": [5], "values": ["five"]},
+                    {"leaf": True, "keys": [8], "values": ["eight"]},
+                ],
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            BTreeIndex.from_dict(payload)
+
     def test_cli_range_command_outputs_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             dataset = Path(temp_dir) / "records.json"
@@ -254,6 +299,43 @@ class BTreeIndexTests(unittest.TestCase):
 
         payload = json.loads(completed.stdout)
         self.assertEqual(payload, {"key": 0, "item": None})
+
+    def test_cli_save_and_tree_file_search_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            dataset = temp_path / "records.json"
+            tree_file = temp_path / "tree.json"
+            dataset.write_text(
+                json.dumps(
+                    [
+                        {"key": 9, "value": "nine"},
+                        {"key": 1, "value": "one"},
+                        {"key": 14, "value": "fourteen"},
+                        {"key": 3, "value": "three"},
+                    ]
+                )
+            )
+
+            save_completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--dataset", str(dataset), "--json", "save", str(tree_file)],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+            search_completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--tree-file", str(tree_file), "--json", "search", "14"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+
+        save_payload = json.loads(save_completed.stdout)
+        search_payload = json.loads(search_completed.stdout)
+        self.assertEqual(save_payload["saved"], str(tree_file))
+        self.assertEqual(save_payload["stats"]["items"], 4)
+        self.assertEqual(search_payload, {"key": 14, "value": "fourteen"})
 
 
 if __name__ == "__main__":
