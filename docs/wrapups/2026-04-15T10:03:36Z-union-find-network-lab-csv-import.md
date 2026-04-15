@@ -2,7 +2,7 @@
 
 - Timestamp: 2026-04-15T10:03:36Z
 - Project: `union-find-network-lab`
-- Feature commit: 
+- Feature commit: `d6298a9e7f0a41a916a76d6e0c97f44041a00a8f`
 
 ## What changed
 - added CSV edge import with `source,target` validation and optional `--snapshot-every` checkpoints
