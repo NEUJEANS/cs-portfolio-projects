@@ -10,5 +10,5 @@
 - [x] extend project-level and repo-level tests for programmatic diffing plus CLI JSON diff artifacts
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider Markdown/HTML rendering for inspection diffs in a future run
