@@ -172,6 +172,48 @@ class IntervalTreeLabTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("--intervals must be positive", completed.stderr)
 
+    def test_export_query_trace_dot_marks_pruned_and_overlap_edges(self) -> None:
+        tree = IntervalTree(
+            [
+                Interval(0, 3, "warmup"),
+                Interval(5, 8, "backup"),
+                Interval(6, 10, "deploy"),
+                Interval(15, 23, "analytics"),
+                Interval(17, 19, "alerts"),
+            ]
+        )
+        dot = tree.export_query_trace_dot(Interval(7, 18, "query"))
+        self.assertIn('digraph interval_tree_query_trace', dot)
+        self.assertIn('pruned: left.max_end < query.start', dot)
+        self.assertIn('search right', dot)
+        self.assertIn('label="overlap"', dot)
+
+    def test_cli_trace_output_includes_dot_and_hits(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "projects/interval-tree-lab/interval_tree_lab.py",
+                "trace",
+                "7-18",
+                "0-3:warmup",
+                "5-8:backup",
+                "6-10:deploy",
+                "15-23:analytics",
+                "17-19:alerts",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "trace")
+        self.assertEqual(
+            [entry.get("label") for entry in payload["all_overlaps"]],
+            ["backup", "deploy", "analytics", "alerts"],
+        )
+        self.assertIn('digraph interval_tree_query_trace', payload["query_trace_dot"])
+        self.assertIn('pruned: left.max_end < query.start', payload["query_trace_dot"])
+
 
 if __name__ == "__main__":
     unittest.main()

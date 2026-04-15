@@ -17,7 +17,8 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 - per-query node-visit stats for making pruning behavior visible in JSON output
 - bundled `sample_intervals.json` artifact for quick inspection and demo data
 - validation for BST ordering and `max_end` correctness
-- JSON CLI output for demo, build, overlap, point, insert, and benchmark flows
+- JSON CLI output for demo, build, overlap, point, insert, trace, and benchmark flows
+- Graphviz DOT query-trace export that highlights visited, pruned, and overlapping branches
 
 ## Usage
 
@@ -57,6 +58,12 @@ Benchmark interval-tree pruning against a naive scan:
 python3 projects/interval-tree-lab/interval_tree_lab.py benchmark --intervals 800 --queries 400 --seed 11
 ```
 
+Export a Graphviz DOT trace for one query (render later with Graphviz if desired):
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-8:backup 6-10:deploy 15-23:analytics 17-19:alerts
+```
+
 ## Test
 
 ```bash
@@ -70,8 +77,9 @@ python3 -m unittest tests/test_interval_tree_lab.py
 - Bulk builds use median splitting on the sorted interval list to avoid obviously skewed demo trees.
 - Validation checks both BST ordering and `max_end` propagation so augmentation bugs are easy to catch.
 - The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan overlap results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
+- The `trace` command exports DOT text rather than images so the project stays dependency-light while still supporting screenshots, diagrams, and interview walk-throughs.
 
 ## Future improvements
 - add deletion with metadata repair
-- export Graphviz diagrams for query traces
+- add rendered SVG/PNG artifacts for a few canonical query traces
 - add CSV/plot export for benchmark runs across multiple workload sizes

@@ -138,6 +138,85 @@ class IntervalTree:
         walk(self.root, None, None)
         return len(errors) == 0, errors
 
+    def export_query_trace_dot(self, query: Interval) -> str:
+        lines = [
+            "digraph interval_tree_query_trace {",
+            '  rankdir="TB";',
+            '  node [shape=record, fontname="Helvetica"];',
+            '  edge [fontname="Helvetica"];',
+            f'  query [shape=note, style="filled", fillcolor="#eef2ff", label="query|[{query.start}, {query.end}]{_label_suffix(query.label)}"];',
+        ]
+        if self.root is None:
+            lines.append('  empty [label="empty tree"];')
+            lines.append('  query -> empty [style=dashed];')
+            lines.append("}")
+            return "\n".join(lines)
+
+        counter = 0
+
+        def walk(node: Node | None) -> tuple[str | None, int]:
+            nonlocal counter
+            if node is None:
+                return None, 0
+            node_id = f"node_{counter}"
+            counter += 1
+
+            overlap = node.interval.overlaps(query)
+            left_relevant = node.left is not None and node.left.max_end >= query.start
+            right_relevant = node.right is not None and node.interval.start <= query.end
+            pruned_left = node.left is not None and not left_relevant
+            pruned_right = node.right is not None and not right_relevant
+            was_visited = overlap or left_relevant or right_relevant or node is self.root
+            fill = "#dcfce7" if overlap else "#f8fafc"
+            penwidth = 2 if was_visited else 1
+
+            lines.append(
+                "  "
+                + f'{node_id} [style="filled", fillcolor="{fill}", penwidth={penwidth}, '
+                + 'label="'
+                + _dot_escape(
+                    f"[{node.interval.start}, {node.interval.end}]{_label_suffix(node.interval.label)}"
+                    + f"|max_end={node.max_end}"
+                )
+                + '"];'
+            )
+            if overlap:
+                lines.append(f'  query -> {node_id} [style=dashed, color="#16a34a", label="overlap"];')
+
+            left_id, left_visits = walk(node.left)
+            right_id, right_visits = walk(node.right)
+
+            if left_id is not None:
+                edge_style = "solid" if left_relevant else "dashed"
+                edge_color = "#2563eb" if left_relevant else "#94a3b8"
+                edge_label = "search left" if left_relevant else "pruned: left.max_end < query.start"
+                lines.append(
+                    f'  {node_id} -> {left_id} [color="{edge_color}", style="{edge_style}", label="{_dot_escape(edge_label)}"];'
+                )
+            if right_id is not None:
+                edge_style = "solid" if right_relevant else "dashed"
+                edge_color = "#2563eb" if right_relevant else "#94a3b8"
+                edge_label = "search right" if right_relevant else "pruned: node.start > query.end"
+                lines.append(
+                    f'  {node_id} -> {right_id} [color="{edge_color}", style="{edge_style}", label="{_dot_escape(edge_label)}"];'
+                )
+
+            nodes_visited = 1
+            if left_relevant:
+                nodes_visited += left_visits
+            if right_relevant:
+                nodes_visited += right_visits
+            if pruned_left or pruned_right:
+                lines.append(f'  {node_id} [xlabel="visited={nodes_visited}"];')
+            return node_id, nodes_visited
+
+        root_id, _ = walk(self.root)
+        lines.append('  root_anchor [shape=point, width=0.01, label=""];')
+        if root_id is not None:
+            lines.append(f"  root_anchor -> {root_id};")
+        lines.append("}")
+        return "\n".join(lines)
+
     def summary(self) -> dict[str, object]:
         valid, errors = self.validate()
         return {
@@ -192,6 +271,14 @@ class IntervalTree:
             float("-inf") if node.left is None else node.left.max_end,
             float("-inf") if node.right is None else node.right.max_end,
         )
+
+
+def _label_suffix(label: str | None) -> str:
+    return "" if label is None else f"\\n{label}"
+
+
+def _dot_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 def parse_interval_spec(spec: str) -> Interval:
@@ -325,6 +412,7 @@ def command_demo(_: argparse.Namespace) -> dict[str, object]:
         "any_overlap": None if any_overlap is None else any_overlap.to_dict(),
         "all_overlaps": [interval.to_dict() for interval in tree.find_overlaps(query)],
         "point_hits": [interval.to_dict() for interval in tree.find_point(point)],
+        "query_trace_dot": tree.export_query_trace_dot(query),
         **tree.summary(),
     }
 
@@ -398,6 +486,21 @@ def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def command_trace(args: argparse.Namespace) -> dict[str, object]:
+    tree = IntervalTree(load_intervals(args.intervals))
+    query = parse_interval_spec(args.query)
+    overlaps, stats = tree.find_overlaps_with_stats(query)
+    return {
+        "command": "trace",
+        "input": args.intervals,
+        "query": query.to_dict(),
+        "all_overlaps": [interval.to_dict() for interval in overlaps],
+        "query_stats": stats.to_dict(),
+        "query_trace_dot": tree.export_query_trace_dot(query),
+        **tree.summary(),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Interval tree lab for overlap and stabbing queries")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -435,6 +538,14 @@ def main() -> None:
     benchmark_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
     benchmark_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
     benchmark_parser.set_defaults(handler=command_benchmark)
+
+    trace_parser = subparsers.add_parser(
+        "trace",
+        help="export a Graphviz DOT trace showing which branches overlap search visits or prunes",
+    )
+    trace_parser.add_argument("query", help="query interval spec")
+    trace_parser.add_argument("intervals", nargs="+", help="interval specs")
+    trace_parser.set_defaults(handler=command_trace)
 
     args = parser.parse_args()
     try:
