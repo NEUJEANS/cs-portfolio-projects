@@ -19,7 +19,7 @@
 - [x] review pass 2
 - [x] review pass 3
 - [x] secret scan
-- [ ] commit, push, wrap-up
+- [x] commit, push, wrap-up
 
 ## Notes
 - Keep `random` mode reproducible by threading a single explicit seed through the comparison run.
