@@ -62,7 +62,7 @@ class RaftElectionSimulatorTests(unittest.TestCase):
         self.assertEqual(summary["nodes"]["n1"]["role"], Role.FOLLOWER.value)
         self.assertTrue(any(event["event"] == "leader_stale" for event in summary["events"]))
 
-    def test_client_command_replicates_and_commits_on_majority(self):
+    def test_client_command_replicates_commits_and_applies_state(self):
         simulator = RaftElectionSimulator(
             ["n1", "n2", "n3", "n4", "n5"],
             {"n1": 3, "n2": 5, "n3": 6, "n4": 7, "n5": 8},
@@ -74,8 +74,12 @@ class RaftElectionSimulatorTests(unittest.TestCase):
 
         for node in summary["nodes"].values():
             self.assertEqual(node["commit_index"], 1)
+            self.assertEqual(node["last_applied"], 1)
             self.assertEqual(node["log"], [{"term": 1, "command": "set x=1"}])
+            self.assertEqual(node["state_machine"], {"x": "1"})
+            self.assertEqual(node["applied_commands"], ["set x=1"])
         self.assertTrue(any(event["event"] == "commit_advanced" for event in summary["events"]))
+        self.assertTrue(any(event["event"] == "state_machine_applied" for event in summary["events"]))
 
     def test_partitioned_followers_delay_commit_until_healed(self):
         simulator = RaftElectionSimulator(
@@ -90,7 +94,9 @@ class RaftElectionSimulatorTests(unittest.TestCase):
         summary = simulator.summary()
 
         self.assertEqual(summary["nodes"]["n1"]["commit_index"], 1)
+        self.assertEqual(summary["nodes"]["n1"]["state_machine"], {"x": "2"})
         self.assertEqual(summary["nodes"]["n4"]["commit_index"], 0)
+        self.assertEqual(summary["nodes"]["n4"]["state_machine"], {})
         self.assertEqual(summary["nodes"]["n5"]["log"], [])
 
         simulator.heal("n4")
@@ -100,6 +106,8 @@ class RaftElectionSimulatorTests(unittest.TestCase):
 
         self.assertEqual(healed_summary["nodes"]["n4"]["commit_index"], 1)
         self.assertEqual(healed_summary["nodes"]["n5"]["commit_index"], 1)
+        self.assertEqual(healed_summary["nodes"]["n4"]["state_machine"], {"x": "2"})
+        self.assertEqual(healed_summary["nodes"]["n5"]["state_machine"], {"x": "2"})
         self.assertTrue(any(event["event"] == "commit_replicated" for event in healed_summary["events"]))
 
     def test_conflicting_follower_log_is_repaired_via_backtracking(self):
@@ -114,6 +122,9 @@ class RaftElectionSimulatorTests(unittest.TestCase):
         simulator.isolate("n3")
         simulator.nodes["n3"].log = [LogEntry(term=1, command="set x=1"), LogEntry(term=99, command="set rogue=999")]
         simulator.nodes["n3"].commit_index = 1
+        simulator.nodes["n3"].last_applied = 1
+        simulator.nodes["n3"].state_machine = {"x": "1"}
+        simulator.nodes["n3"].applied_commands = ["set x=1"]
 
         simulator.heal("n3")
         simulator.run(2)
@@ -127,7 +138,37 @@ class RaftElectionSimulatorTests(unittest.TestCase):
             ],
         )
         self.assertEqual(repaired_summary["nodes"]["n3"]["commit_index"], 2)
+        self.assertEqual(repaired_summary["nodes"]["n3"]["last_applied"], 2)
+        self.assertEqual(repaired_summary["nodes"]["n3"]["state_machine"], {"x": "1", "y": "2"})
         self.assertTrue(any(event["event"] == "append_rejected" for event in repaired_summary["events"]))
+
+    def test_force_log_applies_committed_entries_for_demo_state(self):
+        simulator = RaftElectionSimulator(
+            ["n1", "n2", "n3"],
+            {"n1": 3, "n2": 5, "n3": 7},
+        )
+
+        simulator.force_log(
+            "n2",
+            [
+                {"term": 1, "command": "set old=value"},
+                {"term": 1, "command": "set theme=dark"},
+            ],
+            commit_index=2,
+        )
+        simulator.force_log(
+            "n2",
+            [
+                {"term": 2, "command": "set theme=light"},
+                {"term": 2, "command": "noop manual-demo"},
+            ],
+            commit_index=2,
+        )
+        summary = simulator.summary()
+
+        self.assertEqual(summary["nodes"]["n2"]["last_applied"], 2)
+        self.assertEqual(summary["nodes"]["n2"]["state_machine"], {"theme": "light"})
+        self.assertEqual(summary["nodes"]["n2"]["applied_commands"], ["set theme=light", "noop manual-demo"])
 
     def test_cli_emits_json_summary(self):
         scenario = {
@@ -186,6 +227,7 @@ class RaftElectionSimulatorTests(unittest.TestCase):
 
         self.assertEqual(summary["nodes"]["n1"]["commit_index"], 1)
         self.assertEqual(summary["nodes"]["n2"]["log"][0]["command"], "set theme=dark")
+        self.assertEqual(summary["nodes"]["n3"]["state_machine"], {"theme": "dark"})
 
     def test_run_scenario_supports_force_log_conflict_demo(self):
         summary = run_scenario(
@@ -214,6 +256,7 @@ class RaftElectionSimulatorTests(unittest.TestCase):
 
         self.assertEqual(summary["nodes"]["n3"]["log"][-1]["command"], "set y=2")
         self.assertFalse(any(item["command"] == "set rogue=999" for item in summary["nodes"]["n3"]["log"]))
+        self.assertEqual(summary["nodes"]["n3"]["state_machine"], {"x": "1", "y": "2"})
         self.assertTrue(any(event["event"] == "append_rejected" for event in summary["events"]))
         self.assertTrue(any(event["event"] == "log_forced" for event in summary["events"]))
 

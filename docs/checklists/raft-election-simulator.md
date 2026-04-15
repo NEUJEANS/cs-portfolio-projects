@@ -7,4 +7,4 @@
 - [x] add focused tests for happy-path election, split-vote retry, recovery, CLI output, and commit-index behavior
 - [x] add log-replication and commit-index mechanics in a follow-up slice
 - [x] model prev-log-index / prev-log-term conflict repair with leader backtracking and follower suffix repair
-- [ ] track applied state-machine values derived from committed commands in a future slice
+- [x] track applied state-machine values derived from committed commands in a follow-up slice

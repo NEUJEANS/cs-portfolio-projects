@@ -36,6 +36,9 @@ class NodeState:
     votes_received: set[str] = field(default_factory=set)
     log: list[LogEntry] = field(default_factory=list)
     commit_index: int = 0
+    last_applied: int = 0
+    state_machine: dict[str, str] = field(default_factory=dict)
+    applied_commands: list[str] = field(default_factory=list)
 
     def reset_election_deadline(self, tick: int, timeout: int) -> None:
         self.election_deadline = tick + timeout
@@ -149,6 +152,10 @@ class RaftElectionSimulator:
         node = self.nodes[node_id]
         node.log = [LogEntry(term=int(entry["term"]), command=str(entry["command"])) for entry in entries]
         node.commit_index = min(commit_index if commit_index is not None else node.commit_index, len(node.log))
+        node.last_applied = 0
+        node.state_machine = {}
+        node.applied_commands = []
+        self.apply_committed_entries(node, actor=node.node_id)
         self.log(
             node_id,
             "log_forced",
@@ -269,13 +276,14 @@ class RaftElectionSimulator:
         if prev_index > 0 and follower.log[prev_index - 1].term != prev_term:
             return AppendAttemptResult(False, prev_index, prev_term, next_index)
 
-        leader_suffix = leader.log[next_index - 1 :]
         truncated_entries = 0
         index = next_index - 1
         while index < len(leader.log) and index < len(follower.log):
             if follower.log[index].term != leader.log[index].term or follower.log[index].command != leader.log[index].command:
                 truncated_entries = len(follower.log) - index
                 follower.log = follower.log[:index]
+                follower.commit_index = min(follower.commit_index, len(follower.log))
+                follower.last_applied = min(follower.last_applied, follower.commit_index)
                 break
             index += 1
 
@@ -296,6 +304,7 @@ class RaftElectionSimulator:
         if new_commit_index > leader.commit_index:
             leader.commit_index = new_commit_index
             self.log(leader.node_id, "commit_advanced", leader.current_term, commit_index=new_commit_index)
+        self.apply_committed_entries(leader, actor=leader.node_id)
         for node in self.nodes.values():
             if node is leader:
                 continue
@@ -305,6 +314,7 @@ class RaftElectionSimulator:
                 self.log(leader.node_id, "commit_replicated", leader.current_term, peer=node.node_id, commit_index=node.commit_index)
             else:
                 node.commit_index = min(node.commit_index, len(node.log))
+            self.apply_committed_entries(node, actor=leader.node_id)
 
     def append_client_command(self, command: str) -> None:
         leader = self.current_leader()
@@ -320,6 +330,32 @@ class RaftElectionSimulator:
         )
         self.broadcast_heartbeat(leader)
         leader.last_heartbeat_tick = self.tick
+
+    def apply_committed_entries(self, node: NodeState, actor: str) -> None:
+        while node.last_applied < node.commit_index:
+            entry = node.log[node.last_applied]
+            node.last_applied += 1
+            state_update = self.execute_state_machine_command(node, entry.command)
+            node.applied_commands.append(entry.command)
+            self.log(
+                actor,
+                "state_machine_applied",
+                node.current_term,
+                peer=node.node_id,
+                log_index=node.last_applied,
+                command=entry.command,
+                state_update=state_update,
+            )
+
+    def execute_state_machine_command(self, node: NodeState, command: str) -> dict[str, str]:
+        if command.startswith("set ") and "=" in command:
+            assignment = command[4:]
+            key, value = assignment.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            node.state_machine[key] = value
+            return {key: value}
+        return {"command": command}
 
     def current_leader(self) -> NodeState | None:
         leaders = [node for node in self.nodes.values() if node.role == Role.LEADER]

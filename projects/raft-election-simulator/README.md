@@ -1,6 +1,6 @@
 # raft-election-simulator
 
-A portfolio-friendly distributed systems lab that simulates Raft leader election, deterministic timeout-driven failover, heartbeat stabilization, and a lightweight log-replication / commit-index flow.
+A portfolio-friendly distributed systems lab that simulates Raft leader election, deterministic timeout-driven failover, heartbeat stabilization, lightweight log replication, and visible state-machine application after commit.
 
 ## Why it is interesting
 - demonstrates a core consensus-system building block instead of another CRUD app
@@ -10,8 +10,9 @@ A portfolio-friendly distributed systems lab that simulates Raft leader election
 
 ## Features
 - in-memory simulation of 3+ Raft nodes with per-node election timeouts
-- deterministic event log for election starts, votes, leader wins, heartbeats, append rejections, and commits
+- deterministic event log for election starts, votes, leader wins, heartbeats, append rejections, commits, and state-machine application
 - lightweight log replication from leader to followers with `nextIndex` / `matchIndex` tracking
+- per-node `commitIndex` / `lastApplied` tracking with visible state-machine convergence for committed `set key=value` commands
 - `prevLogIndex` / `prevLogTerm` conflict detection with follower suffix truncation and leader backtracking retries
 - network-isolation actions to trigger split votes, unavailable leaders, and delayed replication
 - timeout overrides for controlled retries in scripted experiments
@@ -64,9 +65,10 @@ python3 -m unittest projects/raft-election-simulator/test_raft_election.py
 - Followers and candidates step down when they see a higher term.
 - Leaders send periodic heartbeats to keep followers from timing out.
 - Commands become committed once a majority of logs contain the entry.
+- Nodes apply committed entries by advancing `lastApplied` toward `commitIndex`, which makes replicated state visible in the JSON summary.
 - The simulator intentionally keeps replication lightweight rather than modeling the full Raft log-matching protocol.
 
 ## Future improvements
-- model prev-log-index / prev-log-term conflict repair more faithfully
-- track applied state-machine values derived from committed commands
 - export timeline visualizations for presentations or blog posts
+- support richer command/state-machine semantics beyond simple teaching-oriented `set key=value` entries
+- surface per-node applied-state diffs in a more presentation-friendly timeline view
