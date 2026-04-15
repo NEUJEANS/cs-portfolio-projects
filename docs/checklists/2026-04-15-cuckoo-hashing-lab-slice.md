@@ -8,5 +8,5 @@
 - [x] update the project checklist and root progress list
 - [x] run the focused test suite and smoke checks
 - [x] perform at least 3 review passes and fix issues found
-- [ ] run a secret scan before push
-- [ ] commit, push, and append a wrap-up note
+- [x] run a secret scan before push
+- [x] commit, push, and append a wrap-up note
