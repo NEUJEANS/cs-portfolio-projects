@@ -11,7 +11,12 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from deadlock_detector import analyze_allocations, analyze_wait_for_graph
+from deadlock_detector import (
+    analyze_allocations,
+    analyze_banker_request,
+    analyze_banker_state,
+    analyze_wait_for_graph,
+)
 
 
 class DeadlockDetectorTests(unittest.TestCase):
@@ -83,6 +88,59 @@ class DeadlockDetectorTests(unittest.TestCase):
         self.assertEqual(result.blocking["P1"], {"scanner": 1})
         self.assertEqual(result.blocking["P2"], {"printer": 1})
 
+    def test_banker_safety_analysis_reports_safe_sequence(self) -> None:
+        result = analyze_banker_state(
+            {
+                "available": {"A": 3, "B": 3, "C": 2},
+                "allocation": {
+                    "P0": {"A": 0, "B": 1, "C": 0},
+                    "P1": {"A": 2, "B": 0, "C": 0},
+                    "P2": {"A": 3, "B": 0, "C": 2},
+                    "P3": {"A": 2, "B": 1, "C": 1},
+                    "P4": {"A": 0, "B": 0, "C": 2},
+                },
+                "max": {
+                    "P0": {"A": 7, "B": 5, "C": 3},
+                    "P1": {"A": 3, "B": 2, "C": 2},
+                    "P2": {"A": 9, "B": 0, "C": 2},
+                    "P3": {"A": 2, "B": 2, "C": 2},
+                    "P4": {"A": 4, "B": 3, "C": 3},
+                },
+            }
+        )
+
+        self.assertTrue(result.safe)
+        self.assertEqual(result.safe_sequence, ["P1", "P3", "P4", "P0", "P2"])
+        self.assertEqual(result.unfinished_processes, [])
+        self.assertEqual(result.need["P0"], {"A": 7, "B": 4, "C": 3})
+
+    def test_banker_request_rejects_unsafe_transition(self) -> None:
+        result = analyze_banker_request(
+            {
+                "available": {"A": 3, "B": 3, "C": 2},
+                "allocation": {
+                    "P0": {"A": 0, "B": 1, "C": 0},
+                    "P1": {"A": 2, "B": 0, "C": 0},
+                    "P2": {"A": 3, "B": 0, "C": 2},
+                    "P3": {"A": 2, "B": 1, "C": 1},
+                    "P4": {"A": 0, "B": 0, "C": 2},
+                },
+                "max": {
+                    "P0": {"A": 7, "B": 5, "C": 3},
+                    "P1": {"A": 3, "B": 2, "C": 2},
+                    "P2": {"A": 9, "B": 0, "C": 2},
+                    "P3": {"A": 2, "B": 2, "C": 2},
+                    "P4": {"A": 4, "B": 3, "C": 3},
+                },
+                "process": "P0",
+                "request": {"A": 0, "B": 0, "C": 2},
+            }
+        )
+
+        self.assertFalse(result.granted)
+        self.assertEqual(result.reason, "request would move the system into an unsafe state")
+        self.assertFalse(result.safe)
+
     def test_cli_outputs_json_for_wait_graph(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             payload = Path(tmpdir) / "graph.json"
@@ -114,6 +172,37 @@ class DeadlockDetectorTests(unittest.TestCase):
             result = json.loads(completed.stdout)
             self.assertTrue(result["deadlocked"])
             self.assertEqual(result["cycle"], ["P1", "P2", "P1"])
+
+    def test_cli_supports_banker_analysis(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload = Path(tmpdir) / "banker.json"
+            payload.write_text(
+                json.dumps(
+                    {
+                        "available": {"A": 1, "B": 1},
+                        "allocation": {"P1": {"A": 1, "B": 0}},
+                        "max": {"P1": {"A": 1, "B": 1}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    "projects/deadlock-detector-lab/deadlock_detector.py",
+                    "analyze-banker",
+                    str(payload),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            result = json.loads(completed.stdout)
+            self.assertTrue(result["safe"])
+            self.assertEqual(result["safe_sequence"], ["P1"])
 
     def test_cli_rejects_negative_resource_counts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
