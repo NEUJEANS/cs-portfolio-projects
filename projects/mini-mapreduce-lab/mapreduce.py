@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import html
 import importlib
 import importlib.util
 import json
@@ -218,6 +219,105 @@ class BenchmarkResult:
             lines.append("")
 
         return "\n".join(lines).rstrip() + "\n"
+
+    def to_html(self) -> str:
+        def esc(value: object) -> str:
+            return html.escape(str(value), quote=True)
+
+        timing_rows = "".join(
+            "<tr>"
+            f"<td>{esc(timing['reducers'])}</td>"
+            f"<td>{esc(timing['elapsed_ms'])}</td>"
+            f"<td>{esc(timing['shards'])}</td>"
+            f"<td>{esc(timing['map_records'])}</td>"
+            f"<td>{esc(timing['unique_keys'])}</td>"
+            f"<td>{esc(timing['max_reducer_records'])}</td>"
+            f"<td>{esc(timing['skew_ratio'])}</td>"
+            "</tr>"
+            for timing in self.timings_ms
+        )
+
+        section_parts = []
+        for reducer_count in self.reducers:
+            rows = [row for row in self.heatmap_rows if row["reducers"] == reducer_count]
+            if not rows:
+                continue
+            max_records = max(int(row["records"]) for row in rows)
+            shard_count = max(int(row["shard_index"]) for row in rows) + 1
+            per_reducer_totals = {reducer: 0 for reducer in range(reducer_count)}
+            for row in rows:
+                per_reducer_totals[int(row["reducer"])] += int(row["records"])
+            hottest = max(rows, key=lambda row: (int(row["records"]), -int(row["shard_index"]), -int(row["reducer"])))
+            coldest = min(rows, key=lambda row: (int(row["records"]), int(row["shard_index"]), int(row["reducer"])))
+            total_values = list(per_reducer_totals.values())
+            average = sum(total_values) / len(total_values) if total_values else 0
+            stddev = statistics.pstdev(total_values) if len(total_values) > 1 else 0.0
+
+            header_cells = "".join(f"<th>r{reducer}</th>" for reducer in range(reducer_count))
+            rows_by_shard = {index: {reducer: 0 for reducer in range(reducer_count)} for index in range(shard_count)}
+            for row in rows:
+                rows_by_shard[int(row["shard_index"])][int(row["reducer"])] = int(row["records"])
+
+            heatmap_rows = []
+            for shard_index in range(shard_count):
+                rendered_cells = []
+                for reducer in range(reducer_count):
+                    value = rows_by_shard[shard_index][reducer]
+                    ratio = (value / max_records) if max_records else 0
+                    alpha = 0.15 + (ratio * 0.75 if value else 0)
+                    style = f"background: rgba(37, 99, 235, {alpha:.3f});" if value else "background: rgba(148, 163, 184, 0.12);"
+                    rendered_cells.append(f"<td style='{style}'>{value}</td>")
+                heatmap_rows.append(f"<tr><th>s{shard_index}</th>{''.join(rendered_cells)}</tr>")
+
+            section_parts.append(
+                ""
+                f"<section><h2>Reducers = {esc(reducer_count)}</h2>"
+                f"<ul><li><strong>Hottest cell:</strong> shard <code>{esc(hottest['shard_index'])}</code> → reducer <code>{esc(hottest['reducer'])}</code> with <code>{esc(hottest['records'])}</code> records across <code>{esc(hottest['unique_keys'])}</code> keys</li>"
+                f"<li><strong>Coldest cell:</strong> shard <code>{esc(coldest['shard_index'])}</code> → reducer <code>{esc(coldest['reducer'])}</code> with <code>{esc(coldest['records'])}</code> records across <code>{esc(coldest['unique_keys'])}</code> keys</li>"
+                f"<li><strong>Reducer load stddev:</strong> <code>{stddev:.3f}</code> records (mean <code>{average:.3f}</code>)</li>"
+                f"<li><strong>Total records per reducer:</strong> {esc(', '.join(f'r{reducer}={per_reducer_totals[reducer]}' for reducer in range(reducer_count)))}</li></ul>"
+                f"<table><thead><tr><th>Shard</th>{header_cells}</tr></thead><tbody>{''.join(heatmap_rows)}</tbody></table></section>"
+            )
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce benchmark report ({esc(self.scenario)})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1100px; padding: 0 1rem 3rem; line-height: 1.5; }}
+    h1, h2 {{ line-height: 1.2; }}
+    code {{ font-family: 'SFMono-Regular', Consolas, monospace; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }}
+    th, td {{ border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: right; }}
+    th:first-child, td:first-child {{ text-align: left; }}
+    thead th {{ background: rgba(148, 163, 184, 0.14); }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 2rem; }}
+    .meta li {{ list-style: none; padding: 0.75rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.75rem; }}
+    ul.summary {{ padding-left: 1.2rem; }}
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce benchmark report ({esc(self.scenario)})</h1>
+  <ul class="meta">
+    <li><strong>Seed</strong><br><code>{esc(self.seed)}</code></li>
+    <li><strong>Total records</strong><br><code>{esc(self.total_records)}</code></li>
+    <li><strong>Shard size</strong><br><code>{esc(self.shard_size)}</code></li>
+    <li><strong>Reducer counts</strong><br><code>{esc(', '.join(str(value) for value in self.reducers))}</code></li>
+  </ul>
+  <h2>Timing summary</h2>
+  <table>
+    <thead>
+      <tr><th>Reducers</th><th>Elapsed (ms)</th><th>Shards</th><th>Map records</th><th>Unique keys</th><th>Max reducer records</th><th>Skew ratio</th></tr>
+    </thead>
+    <tbody>{timing_rows}</tbody>
+  </table>
+  {''.join(section_parts)}
+</body>
+</html>
+"""
 
 
 @dataclass(slots=True)
@@ -548,6 +648,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
     benchmark_parser.add_argument("--heatmap-output", help="optional shard-to-reducer heatmap CSV output path")
     benchmark_parser.add_argument("--report-output", help="optional Markdown benchmark report path")
+    benchmark_parser.add_argument("--html-output", help="optional HTML benchmark report path")
 
     return parser
 
@@ -603,6 +704,8 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.heatmap_output).write_text(result.heatmap_to_csv(), encoding="utf-8")
         if args.report_output:
             Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
+        if args.html_output:
+            Path(args.html_output).write_text(result.to_html(), encoding="utf-8")
         return 0
 
     parser.error("unsupported command")

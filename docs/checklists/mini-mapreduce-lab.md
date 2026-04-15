@@ -93,3 +93,17 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 - [ ] consider HTML chart artifact output in a future run
+
+
+## Benchmark HTML report slice (2026-04-15 11:19 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the benchmark-export follow-up was already scoped in the project README/checklist
+- [x] do a short Python `html.escape` and inline-heatmap rendering refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add standalone HTML benchmark report export with timing summary and colorized shard-to-reducer heatmap tables
+- [x] extend project and repo-level tests for programmatic HTML rendering and CLI file output
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider embedded SVG charts or plugin benchmark scenarios in a future run
