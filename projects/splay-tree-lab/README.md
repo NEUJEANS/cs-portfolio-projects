@@ -6,13 +6,14 @@ A portfolio-ready Python lab for splay trees: self-adjusting binary search trees
 - demonstrates amortized analysis in a concrete, runnable data structure
 - shows how access patterns can matter as much as worst-case big-O tables
 - gives you a compact lab to discuss zig, zig-zig, and zig-zag rotations in interviews
-- stays practical with snapshot files, CLI demos, and deterministic tests
+- stays practical with snapshot files, CLI demos, deterministic tests, and a cross-project benchmark against the red-black tree lab
 
 ## Features
 - build a splay tree snapshot from newline-delimited integers
 - run access sequences and inspect hit/miss, root movement, and rotation counts
 - insert and delete keys while keeping snapshots resumable
-- deterministic unit tests for tree behavior and CLI workflows
+- benchmark skewed hot-set lookups against the `red-black-tree-lab` baseline using deterministic comparison counts
+- deterministic unit tests for tree behavior, CLI workflows, and benchmark output
 
 ## Usage
 
@@ -46,13 +47,23 @@ Inspect the current summary:
 python3 splay_tree_lab.py show --snapshot artifacts/splay-pruned.json
 ```
 
+Compare hot-set and uniform-random workloads against the red-black tree lab:
+
+```bash
+python3 splay_tree_lab.py benchmark --size 255 --hot-set-size 8 --hot-queries 256 --random-queries 256 --seed 42
+```
+
 ## Test
 
 ```bash
 python3 -m unittest projects/splay-tree-lab/test_splay_tree_lab.py
 ```
 
+## Benchmark interpretation
+- the benchmark reports key-comparison counts instead of wall-clock time so the output stays deterministic and testable
+- positive `hotset_comparison_gap` means the splay tree used fewer comparisons than the red-black baseline on repeated hot-key accesses
+- uniform-random workloads may reduce or reverse the gap, which helps explain the trade-off between self-adjusting behavior and steadier balancing
+
 ## Future improvements
 - add split and join subcommands for a fuller self-adjusting-tree toolkit
 - export Graphviz or Mermaid diagrams for before/after access sequences
-- add a benchmark that compares skewed workloads against red-black or AVL trees

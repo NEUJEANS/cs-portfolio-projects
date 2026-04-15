@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from splay_tree_lab import SplayTree
+from splay_tree_lab import SplayTree, benchmark_trees
 
 
 class SplayTreeBehaviorTests(unittest.TestCase):
@@ -38,6 +38,15 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertTrue(deleted)
         self.assertEqual(tree.inorder(), [2, 4, 7, 12, 15, 18])
         self.assertEqual(tree.size, 6)
+
+    def test_benchmark_reports_hotset_advantage(self) -> None:
+        payload = benchmark_trees(size=63, hot_set_size=4, hot_queries=128, random_queries=128, seed=7)
+        self.assertEqual(payload["size"], 63)
+        self.assertEqual(payload["hot_set_size"], 4)
+        self.assertEqual(len(payload["hot_keys"]), 4)
+        self.assertGreater(payload["takeaway"]["hotset_comparison_gap"], 0)
+        self.assertIn("uniform_random", payload["workloads"])
+        self.assertIn("hotset", payload["workloads"])
 
 
 class SplayTreeCliTests(unittest.TestCase):
@@ -143,6 +152,31 @@ class SplayTreeCliTests(unittest.TestCase):
             delete_payload = json.loads(delete.stdout)
             self.assertTrue(delete_payload["deleted"])
             self.assertNotIn(4, delete_payload["values"])
+
+    def test_benchmark_cli(self) -> None:
+        benchmark = subprocess.run(
+            [
+                "python3",
+                str(PROJECT_DIR / "splay_tree_lab.py"),
+                "benchmark",
+                "--size",
+                "63",
+                "--hot-set-size",
+                "4",
+                "--hot-queries",
+                "128",
+                "--random-queries",
+                "128",
+                "--seed",
+                "7",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(benchmark.stdout)
+        self.assertEqual(payload["workloads"]["hotset"]["queries"], 128)
+        self.assertGreater(payload["takeaway"]["hotset_comparison_gap"], 0)
 
 
 if __name__ == "__main__":
