@@ -32,6 +32,24 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertGreaterEqual(summary["rotations_used"], 1)
         self.assertEqual(tree.root.key, 18)
 
+    def test_trace_access_sequence_includes_step_metrics(self) -> None:
+        tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
+        trace = tree.trace_access_sequence([7, 18, 99])
+        self.assertEqual(trace["hits"], 2)
+        self.assertEqual(trace["misses"], 1)
+        self.assertEqual([step["key"] for step in trace["steps"]], [7, 18, 99])
+        self.assertEqual(trace["steps"][0]["root_before"], 18)
+        self.assertEqual(trace["steps"][0]["root_after"], 7)
+        self.assertFalse(trace["steps"][-1]["found"])
+        self.assertGreaterEqual(trace["steps"][-1]["comparisons_used"], 1)
+
+    def test_to_dot_marks_root_and_highlighted_keys(self) -> None:
+        tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
+        dot = tree.to_dot(highlight_keys=[7, 18], title="demo")
+        self.assertIn('label="demo"', dot)
+        self.assertIn('n18 [label="18", penwidth=2, style="filled,bold", fillcolor="lightgoldenrod1"]', dot)
+        self.assertIn('n7 -> n10;', dot)
+
     def test_delete_preserves_bst_order(self) -> None:
         tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
         deleted = tree.delete(10)
@@ -164,6 +182,57 @@ class SplayTreeCliTests(unittest.TestCase):
             delete_payload = json.loads(delete.stdout)
             self.assertTrue(delete_payload["deleted"])
             self.assertNotIn(4, delete_payload["values"])
+
+    def test_trace_cli_exports_diagrams(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            snapshot = tmp_path / "splay.json"
+            before_dot = tmp_path / "before.dot"
+            after_dot = tmp_path / "after.dot"
+            updated = tmp_path / "after.json"
+            subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "build",
+                    "--input",
+                    str(PROJECT_DIR / "sample_values.txt"),
+                    "--output",
+                    str(snapshot),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            traced = subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "trace",
+                    "--snapshot",
+                    str(snapshot),
+                    "--output",
+                    str(updated),
+                    "--before-dot",
+                    str(before_dot),
+                    "--after-dot",
+                    str(after_dot),
+                    "7",
+                    "18",
+                    "99",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(traced.stdout)
+            self.assertEqual(len(payload["steps"]), 3)
+            self.assertTrue(before_dot.exists())
+            self.assertTrue(after_dot.exists())
+            self.assertIn('label="before access trace"', before_dot.read_text())
+            self.assertIn('label="after access trace"', after_dot.read_text())
+            self.assertIn('fillcolor="lightgoldenrod1"', after_dot.read_text())
+            self.assertEqual(json.loads(updated.read_text())["size"], 7)
 
     def test_benchmark_cli(self) -> None:
         benchmark = subprocess.run(

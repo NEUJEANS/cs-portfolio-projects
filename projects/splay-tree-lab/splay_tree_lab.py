@@ -26,6 +26,16 @@ class Node:
     parent: Node | None = None
 
 
+@dataclass
+class AccessTraceStep:
+    key: int
+    found: bool
+    root_before: int | None
+    root_after: int | None
+    rotations_used: int
+    comparisons_used: int
+
+
 class SplayTree:
     def __init__(self, values: Iterable[int] | None = None) -> None:
         self.root: Node | None = None
@@ -278,18 +288,32 @@ class SplayTree:
             tree.find(root_key)
         return tree
 
-    def access_sequence(self, keys: Iterable[int]) -> dict:
+    def trace_access_sequence(self, keys: Iterable[int]) -> dict:
         sequence = list(keys)
         before_root = self.root.key if self.root is not None else None
         rotations_before = self.rotation_count
         comparisons_before = self.comparison_count
         hits = 0
         misses = 0
+        steps: list[dict[str, int | bool | None]] = []
         for key in sequence:
-            if self.find(key):
+            step_root_before = self.root.key if self.root is not None else None
+            step_rotations_before = self.rotation_count
+            step_comparisons_before = self.comparison_count
+            found = self.find(key)
+            if found:
                 hits += 1
             else:
                 misses += 1
+            step = AccessTraceStep(
+                key=key,
+                found=found,
+                root_before=step_root_before,
+                root_after=self.root.key if self.root is not None else None,
+                rotations_used=self.rotation_count - step_rotations_before,
+                comparisons_used=self.comparison_count - step_comparisons_before,
+            )
+            steps.append(step.__dict__)
         return {
             "requested_keys": sequence,
             "hits": hits,
@@ -299,7 +323,51 @@ class SplayTree:
             "rotations_used": self.rotation_count - rotations_before,
             "comparisons_used": self.comparison_count - comparisons_before,
             "size": self.size,
+            "steps": steps,
         }
+
+    def access_sequence(self, keys: Iterable[int]) -> dict:
+        summary = self.trace_access_sequence(keys)
+        summary.pop("steps", None)
+        return summary
+
+    def to_dot(self, *, highlight_keys: Iterable[int] | None = None, title: str | None = None) -> str:
+        highlight = set(highlight_keys or [])
+        lines = ["digraph SplayTree {", "  rankdir=TB;", '  node [shape=circle, fontname="Helvetica"];']
+        if title:
+            lines.append(f'  labelloc="t"; label="{title}";')
+        if self.root is None:
+            lines.append('  empty [shape=plaintext, label="(empty)"];')
+            lines.append("}")
+            return "\n".join(lines) + "\n"
+
+        null_counter = 0
+
+        def walk(node: Node) -> None:
+            nonlocal null_counter
+            attrs = []
+            if node is self.root:
+                attrs.append('penwidth=2')
+            if node.key in highlight:
+                attrs.append('style="filled,bold"')
+                attrs.append('fillcolor="lightgoldenrod1"')
+            attr_text = ""
+            if attrs:
+                attr_text = ", " + ", ".join(attrs)
+            lines.append(f'  n{node.key} [label="{node.key}"{attr_text}];')
+            for side in ("left", "right"):
+                child = getattr(node, side)
+                if child is None:
+                    null_counter += 1
+                    lines.append(f'  null{null_counter} [shape=point];')
+                    lines.append(f'  n{node.key} -> null{null_counter} [style=dashed];')
+                else:
+                    lines.append(f'  n{node.key} -> n{child.key};')
+                    walk(child)
+
+        walk(self.root)
+        lines.append("}")
+        return "\n".join(lines) + "\n"
 
 
 def parse_values(path: Path) -> list[int]:
@@ -322,6 +390,11 @@ def load_tree(path: Path) -> SplayTree:
 def save_tree(path: Path, tree: SplayTree) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(tree.snapshot(), indent=2) + "\n")
+
+
+def save_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
 
 
 def load_red_black_tree_class() -> type:
@@ -459,6 +532,16 @@ def build_parser() -> argparse.ArgumentParser:
     access_parser.add_argument("--output", type=Path)
     access_parser.add_argument("keys", nargs="+", type=int)
 
+    trace_parser = subparsers.add_parser(
+        "trace",
+        help="run an access sequence and optionally export before/after Graphviz DOT diagrams",
+    )
+    trace_parser.add_argument("--snapshot", required=True, type=Path)
+    trace_parser.add_argument("--output", type=Path)
+    trace_parser.add_argument("--before-dot", type=Path)
+    trace_parser.add_argument("--after-dot", type=Path)
+    trace_parser.add_argument("keys", nargs="+", type=int)
+
     insert_parser = subparsers.add_parser("insert", help="insert a key into a snapshot")
     insert_parser.add_argument("--snapshot", required=True, type=Path)
     insert_parser.add_argument("--output", required=True, type=Path)
@@ -512,6 +595,18 @@ def main(argv: list[str] | None = None) -> int:
             summary = tree.access_sequence(args.keys)
             if args.output is not None:
                 save_tree(args.output, tree)
+            print(json.dumps(summary, indent=2))
+            return 0
+
+        if args.command == "trace":
+            tree = load_tree(args.snapshot)
+            if args.before_dot is not None:
+                save_text(args.before_dot, tree.to_dot(title="before access trace"))
+            summary = tree.trace_access_sequence(args.keys)
+            if args.output is not None:
+                save_tree(args.output, tree)
+            if args.after_dot is not None:
+                save_text(args.after_dot, tree.to_dot(highlight_keys=args.keys, title="after access trace"))
             print(json.dumps(summary, indent=2))
             return 0
 

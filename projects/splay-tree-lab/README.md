@@ -14,6 +14,7 @@ A portfolio-ready Python lab for splay trees: self-adjusting binary search trees
 - insert and delete keys while keeping snapshots resumable
 - split a tree around a pivot and join two disjoint sorted value sets into a new snapshot
 - benchmark skewed hot-set lookups against the `red-black-tree-lab` baseline using deterministic comparison counts
+- export Graphviz DOT diagrams before and after an access trace for easy portfolio visuals
 - deterministic unit tests for tree behavior, CLI workflows, and benchmark output
 
 ## Usage
@@ -28,6 +29,12 @@ Run an access sequence:
 
 ```bash
 python3 splay_tree_lab.py access --snapshot artifacts/splay.json --output artifacts/splay-hot.json 7 7 3 18 99
+```
+
+Run a traced access sequence and export before/after DOT diagrams:
+
+```bash
+python3 splay_tree_lab.py trace --snapshot artifacts/splay.json --output artifacts/splay-traced.json --before-dot artifacts/splay-before.dot --after-dot artifacts/splay-after.dot 7 18 99
 ```
 
 Insert a new key:
@@ -78,5 +85,5 @@ python3 -m unittest projects/splay-tree-lab/test_splay_tree_lab.py
 - uniform-random workloads may reduce or reverse the gap, which helps explain the trade-off between self-adjusting behavior and steadier balancing
 
 ## Future improvements
-- export Graphviz or Mermaid diagrams for before/after access sequences
 - add split/join snapshot artifact helpers that persist both sides directly for larger scripted demos
+- render trace animations or Mermaid exports directly from saved step data
