@@ -13,4 +13,4 @@
 - [x] add traceable insert/delete repair output for interview-friendly walkthroughs
 - [x] cover trace mode with direct API tests and CLI tests
 - [x] run at least 3 review passes and fix findings
-- [ ] add wrap-up note for this slice
+- [x] add wrap-up note for this slice
