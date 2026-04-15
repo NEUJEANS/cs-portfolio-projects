@@ -15,7 +15,8 @@ This project shows practical compiler-style text processing, file-system automat
 - converts Markdown files into standalone HTML pages
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
-- renders a focused Markdown subset: headings, paragraphs, bullet lists, links, inline code, bold, and italics
+- renders a focused Markdown subset: headings, paragraphs, bullet lists, links, images, inline code, bold, and italics
+- recursively copies non-Markdown assets into the output directory so screenshots, CSS files, and downloadable artifacts ship with the site
 - applies a clean shared HTML layout and inline stylesheet
 - sorts pages by explicit order and slug for predictable portfolio presentation
 - keeps output dependency-free and runnable locally
@@ -67,8 +68,7 @@ node --test test_static_site_generator.js
 - learning journal or technical blog prototype
 
 ## Future Improvements
-- nested directories and blog collections
+- nested directories and blog collections with relative page links
 - syntax highlighting and fenced code blocks
 - shared header/footer partials loaded from template files
-- asset copying pipeline for images and CSS files
 - incremental rebuilds or a watch mode for faster authoring

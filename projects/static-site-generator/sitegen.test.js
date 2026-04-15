@@ -1,29 +1,38 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs/promises');
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
 const {
-  markdownToHtml,
-  build,
-  parseFrontMatter,
+  buildSite,
+  copyStaticAssets,
   loadPages,
-  humanizeTitle,
+  markdownToHtml,
+  parseFrontMatter,
+  replaceMarkdownImages,
+  sanitizeHref,
   slugify,
+  walkContentEntries,
 } = require('./sitegen');
+
+function makeTempDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'sitegen-suite-'));
+}
 
 test('parseFrontMatter extracts metadata and body', () => {
   const parsed = parseFrontMatter(`---\r\ntitle: Portfolio\r\norder: 2\r\ntags: [node, markdown]\r\nnav: false\r\n---\r\n# Heading`);
-  assert.equal(parsed.data.title, 'Portfolio');
-  assert.equal(parsed.data.order, 2);
-  assert.deepEqual(parsed.data.tags, ['node', 'markdown']);
-  assert.equal(parsed.data.nav, false);
-  assert.equal(parsed.content, '# Heading');
+  assert.equal(parsed.metadata.title, 'Portfolio');
+  assert.equal(parsed.metadata.order, 2);
+  assert.deepEqual(parsed.metadata.tags, ['node', 'markdown']);
+  assert.equal(parsed.metadata.nav, false);
+  assert.equal(parsed.body, '# Heading');
 });
 
-test('markdownToHtml renders headings, lists, emphasis, code, and links', () => {
-  const html = markdownToHtml('# Title\n\n- one\n- two\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))');
+test('markdownToHtml renders headings, lists, emphasis, code, links, and images', () => {
+  const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))');
   assert.match(html, /<h1>Title<\/h1>/);
+  assert.match(html, /<img src="assets\/graph.png" alt="Diagram" loading="lazy">/);
   assert.match(html, /<ul>/);
   assert.match(html, /<strong>world<\/strong>/);
   assert.match(html, /<code>code<\/code>/);
@@ -31,53 +40,100 @@ test('markdownToHtml renders headings, lists, emphasis, code, and links', () => 
   assert.match(html, /<a href="#">bad<\/a>/);
 });
 
+test('replaceMarkdownImages sanitizes unsafe image URLs', () => {
+  const html = replaceMarkdownImages('![blocked](javascript:alert(1)) and ![ok](images/demo.png)');
+  assert.match(html, /<img src="#" alt="blocked" loading="lazy">/);
+  assert.match(html, /<img src="images\/demo.png" alt="ok" loading="lazy">/);
+});
+
 test('slugify normalizes custom output names', () => {
   assert.equal(slugify('My Project Page'), 'my-project-page');
   assert.equal(slugify('  C++ & Rust  '), 'c-rust');
 });
 
-test('humanizeTitle creates a readable fallback from filenames', () => {
-  assert.equal(humanizeTitle('about_me.md'), 'About Me');
-  assert.equal(humanizeTitle('systems-projects.md'), 'Systems Projects');
-});
+test('walkContentEntries and loadPages include nested content in stable order', () => {
+  const tmp = makeTempDir();
+  fs.mkdirSync(path.join(tmp, 'nested'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'nested', 'diagram.png'), 'fake-image', 'utf8');
+  fs.writeFileSync(path.join(tmp, 'b.md'), `---\ntitle: Beta\norder: 2\n---\nBody`, 'utf8');
+  fs.writeFileSync(path.join(tmp, 'nested', 'a.md'), `---\ntitle: Alpha\norder: 1\n---\nBody`, 'utf8');
+  fs.writeFileSync(path.join(tmp, 'c.md'), '# Gamma', 'utf8');
 
-test('loadPages sorts by order and title', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'sitegen-pages-'));
-  await fs.writeFile(path.join(tmp, 'b.md'), `---\ntitle: Beta\norder: 2\n---\nBody`);
-  await fs.writeFile(path.join(tmp, 'a.md'), `---\ntitle: Alpha\norder: 1\n---\nBody`);
-  await fs.writeFile(path.join(tmp, 'c.md'), '# Gamma');
-  const pages = await loadPages(tmp);
+  const entries = walkContentEntries(tmp).map((entry) => entry.relativePath);
+  assert.deepEqual(entries, ['b.md', 'c.md', path.join('nested', 'a.md'), path.join('nested', 'diagram.png')]);
+
+  const pages = loadPages(tmp);
   assert.deepEqual(
-    pages.map(page => page.title),
-    ['Alpha', 'Beta', 'C']
+    pages.map((page) => page.metadata.title || page.slug),
+    ['Alpha', 'Beta', 'c']
   );
 });
 
-test('build writes styled pages with navigation, descriptions, and tags', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'sitegen-build-'));
-  const src = path.join(tmp, 'content');
-  const out = path.join(tmp, 'dist');
-  await fs.mkdir(src);
+test('copyStaticAssets preserves nested asset paths', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(contentDir, 'index.md'), '# Home', 'utf8');
+  fs.writeFileSync(path.join(contentDir, 'assets', 'styles.css'), 'body { color: red; }', 'utf8');
 
-  await fs.writeFile(
-    path.join(src, 'index.md'),
-    `---\ntitle: Home\norder: 1\ndescription: Landing page\ntags: [portfolio, featured]\n---\n# Welcome\n\n- project one\n- project two`
+  const copied = copyStaticAssets(contentDir, outputDir);
+  assert.deepEqual(copied, [path.join('assets', 'styles.css')]);
+  assert.equal(fs.readFileSync(path.join(outputDir, 'assets', 'styles.css'), 'utf8'), 'body { color: red; }');
+});
+
+test('buildSite writes pages and copied assets', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'images'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Home
+order: 1
+description: Landing page
+nav: true
+---
+# Welcome
+
+![Hero](images/hero.png)
+
+See the [projects](student-projects.html).`,
+    'utf8'
   );
-  await fs.writeFile(
-    path.join(src, 'about.md'),
-    `---\ntitle: About\norder: 2\nslug: about-me\n---\nHello **there**`
+
+  fs.writeFileSync(
+    path.join(contentDir, 'projects.md'),
+    `---
+title: Student Projects
+order: 2
+slug: student-projects
+tags: [algorithms, systems]
+---
+# Projects
+- Pathfinding visualizer
+- Static site generator`,
+    'utf8'
   );
 
-  const outputs = await build(src, out);
-  assert.deepEqual(outputs, ['index.html', 'about-me.html']);
+  fs.writeFileSync(path.join(contentDir, 'images', 'hero.png'), 'png-data', 'utf8');
 
-  const home = await fs.readFile(path.join(out, 'index.html'), 'utf8');
-  const about = await fs.readFile(path.join(out, 'about-me.html'), 'utf8');
+  const result = buildSite(contentDir, outputDir);
+  assert.equal(result.pages.length, 2);
+  assert.deepEqual(result.assets, [path.join('images', 'hero.png')]);
 
-  assert.match(home, /Landing page/);
-  assert.match(home, /portfolio/);
-  assert.match(home, /href="about-me.html"/);
-  assert.match(home, /class="active" href="index.html"/);
-  assert.match(about, /<strong>there<\/strong>/);
-  assert.match(about, /href="index.html"/);
+  const homeHtml = fs.readFileSync(path.join(outputDir, 'home.html'), 'utf8');
+  const projectsHtml = fs.readFileSync(path.join(outputDir, 'student-projects.html'), 'utf8');
+
+  assert.match(homeHtml, /<a class="active" href="home.html">Home<\/a>/);
+  assert.match(homeHtml, /<img src="images\/hero.png" alt="Hero" loading="lazy">/);
+  assert.match(homeHtml, /href="student-projects.html"/);
+  assert.match(projectsHtml, /<span>algorithms<\/span><span>systems<\/span>/);
+  assert.equal(fs.readFileSync(path.join(outputDir, 'images', 'hero.png'), 'utf8'), 'png-data');
+});
+
+test('sanitizeHref still blocks unsafe protocols', () => {
+  assert.equal(sanitizeHref('https://example.com'), 'https://example.com');
+  assert.equal(sanitizeHref('student-projects.html'), 'student-projects.html');
+  assert.equal(sanitizeHref('javascript:alert(1)'), '#');
 });

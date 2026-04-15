@@ -87,6 +87,54 @@ function sanitizeHref(url) {
   return '#';
 }
 
+function replaceMarkdownImages(html) {
+  let result = '';
+  let index = 0;
+
+  while (index < html.length) {
+    const markerStart = html.indexOf('![', index);
+    if (markerStart === -1) {
+      result += html.slice(index);
+      break;
+    }
+
+    const altEnd = html.indexOf(']', markerStart + 2);
+    const urlStart = html.indexOf('(', altEnd + 1);
+    if (altEnd === -1 || urlStart !== altEnd + 1) {
+      result += html.slice(index, markerStart + 2);
+      index = markerStart + 2;
+      continue;
+    }
+
+    let depth = 0;
+    let urlEnd = -1;
+    for (let cursor = urlStart; cursor < html.length; cursor += 1) {
+      if (html[cursor] === '(') depth += 1;
+      if (html[cursor] === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          urlEnd = cursor;
+          break;
+        }
+      }
+    }
+
+    if (urlEnd === -1) {
+      result += html.slice(index, markerStart + 2);
+      index = markerStart + 2;
+      continue;
+    }
+
+    const alt = html.slice(markerStart + 2, altEnd);
+    const src = html.slice(urlStart + 1, urlEnd);
+    result += html.slice(index, markerStart);
+    result += `<img src="${sanitizeHref(src)}" alt="${alt}" loading="lazy">`;
+    index = urlEnd + 1;
+  }
+
+  return result;
+}
+
 function replaceMarkdownLinks(html) {
   let result = '';
   let index = 0;
@@ -96,6 +144,12 @@ function replaceMarkdownLinks(html) {
     if (labelStart === -1) {
       result += html.slice(index);
       break;
+    }
+
+    if (labelStart > 0 && html[labelStart - 1] === '!') {
+      result += html.slice(index, labelStart + 1);
+      index = labelStart + 1;
+      continue;
     }
 
     const labelEnd = html.indexOf(']', labelStart + 1);
@@ -140,6 +194,7 @@ function inlineMarkdown(text) {
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = replaceMarkdownImages(html);
   html = replaceMarkdownLinks(html);
   return html;
 }
@@ -228,6 +283,7 @@ function renderTemplate(page, navigation, contentHtml) {
       nav a { text-decoration: none; color: inherit; padding: 0.35rem 0.6rem; border: 1px solid #9994; border-radius: 999px; }
       nav a.active { font-weight: 700; border-color: #2563eb; }
       main { display: grid; gap: 1rem; }
+      img { max-width: 100%; height: auto; border-radius: 0.75rem; }
       code { background: #9992; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
       .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
       .tags span { font-size: 0.9rem; background: #9992; padding: 0.2rem 0.55rem; border-radius: 999px; }
@@ -251,19 +307,38 @@ function renderTemplate(page, navigation, contentHtml) {
 </html>`;
 }
 
+function walkContentEntries(contentDir, currentDir = contentDir) {
+  const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkContentEntries(contentDir, fullPath));
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+    files.push({
+      fullPath,
+      relativePath: path.relative(contentDir, fullPath),
+    });
+  }
+
+  return files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+}
+
 function loadPages(contentDir) {
-  const entries = fs.readdirSync(contentDir, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+  return walkContentEntries(contentDir)
+    .filter((entry) => entry.relativePath.endsWith('.md'))
     .map((entry) => {
-      const sourcePath = path.join(contentDir, entry.name);
-      const raw = fs.readFileSync(sourcePath, 'utf8');
+      const raw = fs.readFileSync(entry.fullPath, 'utf8');
       const { metadata, body } = parseFrontMatter(raw);
-      const baseName = path.basename(entry.name, '.md');
+      const baseName = path.basename(entry.relativePath, '.md');
       const slug = metadata.slug || slugify(metadata.title || baseName);
       return {
-        sourcePath,
-        sourceName: entry.name,
+        sourcePath: entry.fullPath,
+        sourceName: entry.relativePath,
         slug,
         outputName: `${slug}.html`,
         metadata,
@@ -276,6 +351,20 @@ function loadPages(contentDir) {
       if (leftOrder !== rightOrder) return leftOrder - rightOrder;
       return left.slug.localeCompare(right.slug);
     });
+}
+
+function copyStaticAssets(contentDir, outputDir) {
+  const copied = [];
+
+  for (const entry of walkContentEntries(contentDir)) {
+    if (entry.relativePath.endsWith('.md')) continue;
+    const destination = path.join(outputDir, entry.relativePath);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(entry.fullPath, destination);
+    copied.push(entry.relativePath);
+  }
+
+  return copied;
 }
 
 function buildSite(contentDir, outputDir) {
@@ -298,17 +387,22 @@ function buildSite(contentDir, outputDir) {
       order: page.metadata.order,
     }));
 
+  const assets = copyStaticAssets(contentDir, outputDir);
+
   for (const page of pages) {
     const contentHtml = markdownToHtml(page.body.trim());
     const html = renderTemplate(page, navigation, contentHtml);
     fs.writeFileSync(path.join(outputDir, page.outputName), html, 'utf8');
   }
 
-  return pages.map((page) => ({
-    source: page.sourceName,
-    output: page.outputName,
-    title: page.metadata.title || page.slug,
-  }));
+  return {
+    pages: pages.map((page) => ({
+      source: page.sourceName,
+      output: page.outputName,
+      title: page.metadata.title || page.slug,
+    })),
+    assets,
+  };
 }
 
 function main(argv) {
@@ -319,11 +413,12 @@ function main(argv) {
     return;
   }
 
-  const pages = buildSite(path.resolve(contentDir), path.resolve(outputDir));
-  console.log(`Built ${pages.length} page(s):`);
-  for (const page of pages) {
+  const result = buildSite(path.resolve(contentDir), path.resolve(outputDir));
+  console.log(`Built ${result.pages.length} page(s):`);
+  for (const page of result.pages) {
     console.log(`- ${page.title} -> ${page.output}`);
   }
+  console.log(`Copied ${result.assets.length} asset(s).`);
 }
 
 if (require.main === module) {
@@ -332,11 +427,14 @@ if (require.main === module) {
 
 module.exports = {
   buildSite,
+  copyStaticAssets,
   escapeHtml,
   loadPages,
   markdownToHtml,
   parseFrontMatter,
+  replaceMarkdownImages,
   sanitizeHref,
   slugify,
+  walkContentEntries,
   replaceMarkdownLinks,
 };

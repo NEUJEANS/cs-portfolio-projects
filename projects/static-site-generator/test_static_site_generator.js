@@ -92,8 +92,9 @@ Invisible in navigation but still rendered.`,
     'utf8'
   );
 
-  const pages = buildSite(contentDir, outputDir);
-  assert.equal(pages.length, 3);
+  const result = buildSite(contentDir, outputDir);
+  assert.equal(result.pages.length, 3);
+  assert.deepEqual(result.assets, []);
 
   const homeHtml = fs.readFileSync(path.join(outputDir, 'home.html'), 'utf8');
   const projectsHtml = fs.readFileSync(path.join(outputDir, 'student-projects.html'), 'utf8');
