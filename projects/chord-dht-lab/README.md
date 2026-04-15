@@ -19,7 +19,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - configurable `fix_fingers` scheduling modes so stabilization can model one-slot, full-round, or seeded-random finger repair policies
 - side-by-side stabilization comparison mode so multiple repair schedules can be evaluated on the same join/failure scenario
 - Markdown/CSV export for stabilization comparison summaries so portfolio write-ups can reuse the results directly
-- churn workload driver that chains joins/failures and summarizes stabilization step-by-step
+- churn workload driver that chains joins, failures, and recovery/rejoin events with stabilization summaries
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
@@ -168,7 +168,7 @@ python3 projects/chord-dht-lab/chord_dht.py stabilize \
   --pretty
 ```
 
-Run a resumable churn scenario that chains joins and failures:
+Run a resumable churn scenario that chains joins, failures, and recoveries:
 
 ```bash
 python3 projects/chord-dht-lab/chord_dht.py churn \
@@ -183,9 +183,12 @@ Event file format:
 ```json
 [
   {"action": "join", "node": "foxtrot", "rounds": 4},
-  {"action": "fail", "node": "charlie", "rounds": 3}
+  {"action": "fail", "node": "charlie", "rounds": 3},
+  {"action": "recover", "node": "charlie", "rounds": 3}
 ]
 ```
+
+`recover` is reserved for nodes that existed in the original baseline ring and are currently absent after a failure. New ad-hoc nodes should still use `join`.
 
 Export a Graphviz DOT diagram for a lookup route:
 
@@ -237,4 +240,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 ## Future improvements
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
 - export benchmark summaries as CSV/Markdown tables for portfolio write-ups
-- model recovery under node recovery/rejoin events in addition to joins/failures
+- export churn summaries as Markdown/CSV for portfolio write-ups or charts

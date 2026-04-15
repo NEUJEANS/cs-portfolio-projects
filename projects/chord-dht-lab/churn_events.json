@@ -1,5 +1,5 @@
 [
   {"action": "join", "node": "foxtrot", "rounds": 4},
   {"action": "fail", "node": "charlie", "rounds": 3},
-  {"action": "join", "node": "golf", "rounds": 2}
+  {"action": "recover", "node": "charlie", "rounds": 3}
 ]

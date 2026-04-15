@@ -61,7 +61,23 @@
 - [x] add a side-by-side stabilization comparison command that runs multiple finger repair modes on the same scenario
 - [x] export comparison summaries as Markdown/CSV for portfolio write-ups
 - [x] add a churn workload driver that chains multiple joins/failures and summarizes recovery over time
-- [ ] model explicit node recovery/rejoin events inside churn scenarios
+- [x] model explicit node recovery/rejoin events inside churn scenarios
+
+## Recovery churn slice (2026-04-15 19:42 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current churn simulator for the weakest unfinished scenario gap
+- [x] skip web research because recovery/rejoin events are a direct extension of the existing churn and stabilization model
+- [x] do a short Python state-transition self-check
+- [x] update checklist/docs so the slice is resumable
+- [x] add explicit `recover` churn events for original nodes that return after failure
+- [x] update sample event data, README usage, and CLI help for the new event type
+- [x] extend automated coverage for recovery success, validation errors, and CLI behavior
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
 
 ## Randomized benchmark start-node slice (2026-04-15 09:29 UTC run)
 - [x] confirm repo sync before editing

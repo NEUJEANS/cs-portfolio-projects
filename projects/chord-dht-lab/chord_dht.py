@@ -610,7 +610,7 @@ class ChordRing:
 
         for index, raw_event in enumerate(event_list, start=1):
             action = raw_event.get("action")
-            if action not in {"join", "fail"}:
+            if action not in {"join", "fail", "recover"}:
                 raise ValueError(f"unsupported churn action {action!r}")
             node_name = raw_event.get("node")
             if not isinstance(node_name, str) or not node_name:
@@ -628,7 +628,7 @@ class ChordRing:
                     finger_repair_seed=finger_repair_seed,
                 )
                 current_ring = current_ring.add_node(node_name)
-            else:
+            elif action == "fail":
                 report = current_ring.stabilization_report(
                     failed_nodes=[node_name],
                     rounds=event_rounds,
@@ -636,6 +636,20 @@ class ChordRing:
                     finger_repair_seed=finger_repair_seed,
                 )
                 current_ring = current_ring.without_nodes([node_name])
+            else:
+                if any(node.name == node_name for node in current_ring.nodes):
+                    raise ValueError(f"recover event requires node {node_name!r} to be absent from the current ring")
+                if not any(node.name == node_name for node in self.nodes):
+                    raise ValueError(
+                        f"recover event requires node {node_name!r} to exist in the original ring"
+                    )
+                report = current_ring.stabilization_report(
+                    joined_node=node_name,
+                    rounds=event_rounds,
+                    finger_repair_mode=finger_repair_mode,
+                    finger_repair_seed=finger_repair_seed,
+                )
+                current_ring = current_ring.add_node(node_name)
 
             stabilized_round = next(
                 (
@@ -1322,10 +1336,14 @@ def parse_args() -> argparse.Namespace:
 
     churn_parser = subparsers.add_parser(
         "churn",
-        help="simulate a sequence of join/fail events and summarize stabilization after each step",
+        help="simulate a sequence of join, fail, or recover events and summarize stabilization after each step",
     )
     churn_parser.add_argument("ring_file", type=Path)
-    churn_parser.add_argument("events_file", type=Path, help="JSON file containing churn events")
+    churn_parser.add_argument(
+        "events_file",
+        type=Path,
+        help="JSON file containing churn events (join, fail, or recover)",
+    )
     churn_parser.add_argument(
         "--rounds",
         type=int,

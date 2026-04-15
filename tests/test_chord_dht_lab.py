@@ -728,6 +728,38 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertNotIn("charlie", ending_names)
         self.assertEqual(report["summary"]["final_node_count"], len(ending_names))
 
+    def test_churn_report_supports_recovering_failed_original_nodes(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.churn_report(
+            [
+                {"action": "fail", "node": "charlie", "rounds": 2},
+                {"action": "recover", "node": "charlie", "rounds": 2},
+            ],
+            finger_repair_mode="all",
+        )
+
+        self.assertEqual(report["event_count"], 2)
+        self.assertEqual(report["summary"]["fully_stabilized_steps"], 2)
+        self.assertEqual(report["steps"][1]["action"], "recover")
+        self.assertEqual(report["steps"][1]["target_node_count"], 5)
+        self.assertEqual([node["name"] for node in report["ending_nodes"]], [node["name"] for node in ring.list_nodes()])
+
+    def test_churn_report_rejects_recover_for_unknown_or_live_nodes(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        with self.assertRaisesRegex(ValueError, "absent from the current ring"):
+            ring.churn_report([{"action": "recover", "node": "charlie", "rounds": 2}])
+
+        with self.assertRaisesRegex(ValueError, "original ring"):
+            ring.churn_report(
+                [
+                    {"action": "join", "node": "foxtrot", "rounds": 2},
+                    {"action": "fail", "node": "foxtrot", "rounds": 2},
+                    {"action": "recover", "node": "foxtrot", "rounds": 2},
+                ]
+            )
+
     def test_load_churn_events_rejects_non_list_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "bad_churn.json"
@@ -762,6 +794,41 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["steps"][0]["action"], "join")
         self.assertEqual(payload["steps"][1]["action"], "fail")
         self.assertEqual(payload["summary"]["final_node_count"], len(payload["ending_nodes"]))
+
+    def test_cli_churn_supports_recover_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            churn_path = Path(tmpdir) / "recover_churn.json"
+            churn_path.write_text(
+                json.dumps(
+                    [
+                        {"action": "fail", "node": "charlie", "rounds": 2},
+                        {"action": "recover", "node": "charlie", "rounds": 2},
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "churn",
+                    str(RING_PATH),
+                    str(churn_path),
+                    "--finger-repair-mode",
+                    "all",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "churn")
+        self.assertEqual(payload["event_count"], 2)
+        self.assertEqual([step["action"] for step in payload["steps"]], ["fail", "recover"])
+        self.assertEqual(payload["summary"]["fully_stabilized_steps"], 2)
 
 
 if __name__ == "__main__":
