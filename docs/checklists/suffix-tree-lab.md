@@ -41,3 +41,17 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-15 vertical slice: suffix-array benchmark baseline
+- [x] confirm repo branch/remote are synced before editing
+- [x] do brief research on suffix-array binary-search lookup tradeoffs for an educational baseline
+- [x] refresh suffix-array search constraints and add a quick self-test note
+- [x] extend the project checklist so the work is resumable
+- [x] implement a naive suffix-array index and include it in benchmark comparisons
+- [x] add or update automated tests for suffix-array lookups and benchmark validation
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

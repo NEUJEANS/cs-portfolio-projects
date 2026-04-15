@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from suffix_tree_lab import SuffixTree, benchmark_results_to_csv, parse_patterns
+from suffix_tree_lab import SuffixArrayIndex, SuffixTree, benchmark_results_to_csv, parse_patterns
 
 
 def test_contains_and_find_for_repeated_patterns():
@@ -45,14 +45,23 @@ def test_dot_export_is_graphviz_friendly_and_can_show_suffix_starts():
     assert 'shape=doublecircle' in annotated
 
 
+def test_suffix_array_index_finds_patterns_with_binary_search_window():
+    index = SuffixArrayIndex.build("banana bandana banana")
+    assert index.find("ana") == [1, 3, 11, 16, 18]
+    assert index.find("ban") == [0, 7, 15]
+    assert index.find("xyz") == []
+
+
+
 def test_benchmark_matches_baselines_and_csv_export_is_structured():
     tree = SuffixTree("banana bandana banana")
     results = tree.benchmark_search(["ana", "ban", "na"], iterations=3)
-    assert len(results) == 9
+    assert len(results) == 12
 
     grouped = {(result.method, result.pattern): result.matches for result in results}
     for pattern in ["ana", "ban", "na"]:
         expected = grouped[("suffix_tree", pattern)]
+        assert grouped[("suffix_array", pattern)] == expected
         assert grouped[("python_find", pattern)] == expected
         assert grouped[("regex_lookahead", pattern)] == expected
 

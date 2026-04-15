@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import re
 import time
+from bisect import bisect_left
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -30,6 +31,33 @@ class BenchmarkResult:
     avg_seconds: float
 
 
+@dataclass(frozen=True)
+class SuffixArrayIndex:
+    text: str
+    suffix_starts: List[int]
+
+    @classmethod
+    def build(cls, text: str) -> "SuffixArrayIndex":
+        return cls(text=text, suffix_starts=sorted(range(len(text)), key=lambda start: text[start:]))
+
+    def find(self, pattern: str) -> List[int]:
+        if not pattern:
+            raise ValueError("pattern must be non-empty")
+
+        left = bisect_left(self.suffix_starts, pattern, key=lambda start: self.text[start:])
+        matches: List[int] = []
+        for suffix_start in self.suffix_starts[left:]:
+            if self.text.startswith(pattern, suffix_start):
+                matches.append(suffix_start)
+                continue
+            if matches:
+                break
+            suffix = self.text[suffix_start:]
+            if suffix > pattern:
+                break
+        return sorted(matches)
+
+
 class SuffixTree:
     """Naive compressed suffix tree for a single string.
 
@@ -46,6 +74,7 @@ class SuffixTree:
         self.original_text = text
         self.text = text + sentinel
         self.root = Node()
+        self.suffix_array = SuffixArrayIndex.build(text)
         for start in range(len(self.text)):
             self._insert_suffix(start)
 
@@ -181,6 +210,7 @@ class SuffixTree:
         baseline_counts = {pattern: len(self.find(pattern)) for pattern in normalized}
         methods = {
             "suffix_tree": self.find,
+            "suffix_array": self.suffix_array.find,
             "python_find": lambda pattern: find_with_python(self.original_text, pattern),
             "regex_lookahead": lambda pattern: find_with_regex(self.original_text, pattern),
         }
