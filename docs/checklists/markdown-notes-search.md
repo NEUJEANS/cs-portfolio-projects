@@ -69,3 +69,19 @@ Last updated: 2026-04-14
 - [ ] TUI browsing mode with preview panes
 - [ ] richer posting-list style incremental index rather than storing full note bodies in cache
 - [ ] section-scoped retrieval with heading anchors and open-in-editor actions
+
+## Vertical slice 5 — section-scoped retrieval and anchor navigation
+- [x] identify markdown-notes-search as still worth another slice because results could rank a note correctly without showing the exact matching section to jump to
+- [x] do short heading-anchor and section-index refresh with self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add section extraction with deterministic heading anchors and duplicate-heading suffix handling
+- [x] expose best matching `path#anchor` section navigation metadata in search results and JSON output
+- [x] add optional plain-text section display for terminal workflows
+- [x] expand automated coverage for unique anchors, section-match ranking, and CLI JSON output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+

@@ -1,7 +1,7 @@
 # markdown-notes-search
 
 ## Overview
-Search Markdown notes by filename, inline tags, YAML-style front matter tags, headings, backlinks, and full-text matches. Results are ranked so stronger matches surface first, and each hit includes a contextual snippet for quick scanning. The CLI also supports quoted phrase queries, boolean filtering, backlink-aware navigation, and an optional persistent index file for larger note vaults.
+Search Markdown notes by filename, inline tags, YAML-style front matter tags, headings, backlinks, and full-text matches. Results are ranked so stronger matches surface first, and each hit includes a contextual snippet for quick scanning. The CLI also supports quoted phrase queries, boolean filtering, backlink-aware navigation, section-level anchor hints, and an optional persistent index file for larger note vaults.
 
 ## Why it is portfolio-worthy
 - demonstrates text indexing, lightweight information retrieval, query parsing, and CLI product design
@@ -28,7 +28,8 @@ Search Markdown notes by filename, inline tags, YAML-style front matter tags, he
 - optionally persist parsed note metadata in `.notes_search_index.json`
 - automatically refresh cached entries for changed files and drop deleted files from the index
 - parse `[[wikilinks]]` and standard Markdown links to populate backlinks
-- emit plain text or JSON output, with optional backlink display in the terminal
+- emit plain text or JSON output, with optional backlink and section-anchor display in the terminal
+- include best-match `path#anchor` metadata so other tools or editors can jump straight to the relevant heading
 - limit output for focused workflows
 
 ## Usage
@@ -40,13 +41,15 @@ python3 notes_search.py notes '(graph OR tree) AND NOT archived' --recursive
 python3 notes_search.py notes '"systems design" OR architecture' --recursive --json
 python3 notes_search.py notes graphs --recursive --index-file .notes_search_index.json
 python3 notes_search.py notes graphs --recursive --show-backlinks
+python3 notes_search.py notes "phi accrual" --recursive --show-sections
 python3 notes_search.py notes graphs --recursive --index-file .notes_search_index.json --rebuild-index
 ```
 
 ### Example output
 ```text
-school/algorithms/graphs.md (score=171) [#cli #graphs]
-  …Study #graphs and shortest path algorithms for the systems interview prep…
+school/systems/distributed.md (score=166) [#distributed #systems]
+  Failure Detection (#failure-detection): Heartbeat timeout and phi accrual notes…
+  section: school/systems/distributed.md#failure-detection
 ```
 
 ## Query notes
@@ -58,7 +61,7 @@ school/algorithms/graphs.md (score=171) [#cli #graphs]
 ## Backlink notes
 - wikilinks like `[[systems/design]]` and Markdown links like `[design](systems/design.md)` are normalized into note-to-note graph edges
 - inbound references become `backlinks` on each result and can be shown in text mode with `--show-backlinks`
-- JSON output includes both `headings` and `backlinks` so other tools can build richer note browsers on top
+- JSON output includes `headings`, `sections`, `section_match`, and `backlinks` so other tools can build richer note browsers on top
 
 ## Persistent index notes
 - pass `--index-file .notes_search_index.json` to enable a reusable JSON cache in the notes directory
@@ -73,6 +76,6 @@ python3 -m unittest discover -s . -p "test_*.py"
 ```
 
 ## Future Improvements
-- add heading-aware ranking and backlink-aware navigation
 - add a TUI browsing mode with preview panes
 - support richer incremental posting-list structures instead of whole-note JSON cache entries
+- add open-in-editor actions for section matches in common terminal/editor workflows

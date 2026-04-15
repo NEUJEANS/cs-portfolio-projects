@@ -106,6 +106,26 @@ class NotesSearchTests(unittest.TestCase):
 
             self.assertTrue((root / 'cache' / 'index.json').exists())
 
+
+    def test_section_indexing_builds_unique_heading_anchors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\nOverview\n## Failure Detection\nTimeout notes\n## Failure Detection\nPhi accrual',
+                encoding='utf-8',
+            )
+
+            notes = index_notes(root)
+
+            self.assertEqual(
+                notes[0]['sections'],
+                [
+                    {'level': 1, 'heading': 'Distributed Systems', 'anchor': 'distributed-systems', 'content': 'Overview'},
+                    {'level': 2, 'heading': 'Failure Detection', 'anchor': 'failure-detection', 'content': 'Timeout notes'},
+                    {'level': 2, 'heading': 'Failure Detection', 'anchor': 'failure-detection-1', 'content': 'Phi accrual'},
+                ],
+            )
+
     def test_search_notes_ranks_exact_tag_and_filename_matches_highest(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -167,6 +187,20 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(search_notes(notes, '   '), [])
             with self.assertRaises(ValueError):
                 search_notes(notes, 'sql', limit=0)
+
+
+    def test_search_results_include_best_matching_section_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\nOverview\n## Failure Detection\nHeartbeat timeout and phi accrual notes.',
+                encoding='utf-8',
+            )
+
+            result = search_notes(index_notes(root), 'phi accrual')[0]
+
+            self.assertEqual(result['section_match']['path_with_anchor'], 'systems.md#failure-detection')
+            self.assertIn('Failure Detection (#failure-detection)', result['snippet'])
 
     def test_boolean_and_phrase_queries_filter_results(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -253,6 +287,30 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(payload[0]['tags'], ['sql'])
             self.assertEqual(payload[0]['headings'], ['SQL'])
             self.assertIn('sql', payload[0]['snippet'].lower())
+
+
+    def test_cli_json_output_includes_section_match(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'db.md').write_text('# SQL\n## Covering Indexes\nIndex tuning for #sql search.', encoding='utf-8')
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'notes_search.py',
+                    str(root),
+                    'covering',
+                    '--json',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload[0]['section_match']['path_with_anchor'], 'db.md#covering-indexes')
+            self.assertEqual(payload[0]['sections'][1]['anchor'], 'covering-indexes')
 
     def test_default_index_filename_constant(self):
         self.assertEqual(DEFAULT_INDEX_FILENAME, '.notes_search_index.json')
