@@ -19,6 +19,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
+- optional seeded random sampling of benchmark start nodes so larger rings can be profiled without always biasing toward the first sorted nodes
 - JSON ring input for reproducible demos and unit tests
 
 ## Usage
@@ -61,6 +62,20 @@ python3 projects/chord-dht-lab/chord_dht.py synth-benchmark \
   --keys 32 \
   --seed 7 \
   --start-nodes 4 \
+  --pretty
+```
+
+Sample a seeded random subset of start nodes instead of always using the first sorted nodes:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py synth-benchmark \
+  --m-bits 10 \
+  --nodes 16 \
+  --keys 32 \
+  --seed 7 \
+  --start-nodes 4 \
+  --start-node-sample-mode random \
+  --start-node-seed 101 \
   --pretty
 ```
 
@@ -145,4 +160,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - generate larger synthetic rings and workloads directly from the CLI for broader benchmarking
 - simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
 - export the ring and lookup or stabilization routes as Graphviz diagrams
-- let synthetic benchmarks choose random subsets of start nodes instead of taking the first N sorted nodes
+- compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset

@@ -151,6 +151,25 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertTrue(report["summary"]["fully_stabilized"])
         self.assertEqual(len(report["target_nodes"]), 4)
 
+    def test_select_benchmark_start_nodes_supports_first_and_random_modes(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        first = module.select_benchmark_start_nodes(ring, 3, sample_mode="first")
+        random_selection = module.select_benchmark_start_nodes(ring, 3, sample_mode="random", seed=19)
+        repeated_random = module.select_benchmark_start_nodes(ring, 3, sample_mode="random", seed=19)
+
+        self.assertEqual(first, [node.name for node in ring.nodes[:3]])
+        self.assertEqual(random_selection, repeated_random)
+        self.assertEqual(len(random_selection), 3)
+        self.assertEqual(len(random_selection), len(set(random_selection)))
+        self.assertNotEqual(random_selection, first)
+
+    def test_select_benchmark_start_nodes_rejects_missing_seed_for_random_mode(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        with self.assertRaisesRegex(ValueError, "seed"):
+            module.select_benchmark_start_nodes(ring, 2, sample_mode="random")
+
     def test_synthetic_benchmark_payload_is_deterministic_and_unique(self) -> None:
         payload = module.build_synthetic_benchmark_payload(
             m_bits=8,
@@ -172,12 +191,42 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["keys"], repeated["keys"])
         self.assertEqual(payload["benchmark"]["summary"]["case_count"], 30)
         self.assertEqual(payload["generator"]["benchmark_start_node_count"], 3)
+        self.assertEqual(payload["generator"]["start_node_sample_mode"], "first")
+        self.assertEqual(payload["generator"]["start_node_seed"], 11)
         node_ids = [item["id"] for item in payload["ring"]["nodes"]]
         self.assertEqual(len(node_ids), len(set(node_ids)))
         self.assertGreaterEqual(
             payload["benchmark"]["summary"]["average_linear_hops"],
             payload["benchmark"]["summary"]["average_chord_hops"],
         )
+
+    def test_synthetic_benchmark_payload_supports_randomized_start_node_sampling(self) -> None:
+        payload = module.build_synthetic_benchmark_payload(
+            m_bits=9,
+            node_count=10,
+            key_count=8,
+            seed=17,
+            start_nodes=4,
+            start_node_sample_mode="random",
+            start_node_seed=91,
+        )
+        repeated = module.build_synthetic_benchmark_payload(
+            m_bits=9,
+            node_count=10,
+            key_count=8,
+            seed=17,
+            start_nodes=4,
+            start_node_sample_mode="random",
+            start_node_seed=91,
+        )
+
+        self.assertEqual(payload["benchmark"]["start_nodes"], repeated["benchmark"]["start_nodes"])
+        self.assertEqual(payload["generator"]["start_node_sample_mode"], "random")
+        self.assertEqual(payload["generator"]["start_node_seed"], 91)
+        self.assertEqual(payload["generator"]["benchmark_start_node_count"], 4)
+        self.assertEqual(payload["benchmark"]["summary"]["case_count"], 32)
+        self.assertEqual(len(payload["benchmark"]["start_nodes"]), 4)
+        self.assertEqual(len(payload["benchmark"]["start_nodes"]), len(set(payload["benchmark"]["start_nodes"])))
 
     def test_synthetic_benchmark_rejects_invalid_parameters(self) -> None:
         with self.assertRaisesRegex(ValueError, "m_bits"):
@@ -363,9 +412,47 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["command"], "synth-benchmark")
         self.assertEqual(payload["generator"]["seed"], 23)
         self.assertEqual(payload["generator"]["benchmark_start_node_count"], 4)
+        self.assertEqual(payload["generator"]["start_node_sample_mode"], "first")
+        self.assertEqual(payload["generator"]["start_node_seed"], 23)
         self.assertEqual(len(payload["ring"]["nodes"]), 12)
         self.assertEqual(len(payload["keys"]), 15)
         self.assertEqual(payload["benchmark"]["summary"]["case_count"], 60)
+
+    def test_cli_synth_benchmark_supports_random_start_node_sampling(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "synth-benchmark",
+                "--m-bits",
+                "9",
+                "--nodes",
+                "12",
+                "--keys",
+                "9",
+                "--seed",
+                "23",
+                "--start-nodes",
+                "4",
+                "--start-node-sample-mode",
+                "random",
+                "--start-node-seed",
+                "101",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "synth-benchmark")
+        self.assertEqual(payload["generator"]["start_node_sample_mode"], "random")
+        self.assertEqual(payload["generator"]["start_node_seed"], 101)
+        self.assertEqual(payload["generator"]["benchmark_start_node_count"], 4)
+        self.assertEqual(payload["benchmark"]["summary"]["case_count"], 36)
+        self.assertEqual(len(payload["benchmark"]["start_nodes"]), 4)
+        self.assertEqual(len(payload["benchmark"]["start_nodes"]), len(set(payload["benchmark"]["start_nodes"])))
 
     def test_cli_graphviz_route_outputs_dot_payload(self) -> None:
         completed = subprocess.run(

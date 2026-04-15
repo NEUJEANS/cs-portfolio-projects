@@ -57,4 +57,20 @@
 - [x] generate larger synthetic rings and workloads directly from the CLI for broader benchmarking
 - [ ] simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
 - [x] export the ring and lookup or stabilization routes as Graphviz diagrams
-- [ ] let synthetic benchmarks sample random subsets of start nodes instead of taking the first N sorted nodes
+- [x] let synthetic benchmarks sample random subsets of start nodes instead of taking the first N sorted nodes
+
+## Randomized benchmark start-node slice (2026-04-15 09:29 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current Chord lab for the weakest unfinished benchmark-selection gap
+- [x] skip web research because seeded random sampling is a direct extension of the existing deterministic synthetic benchmark design
+- [x] do a short Python randomness/reproducibility refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add seeded random start-node sampling for synthetic benchmarks while keeping the original ordered mode
+- [x] expose the selection mode and seed in CLI output for reproducibility
+- [x] extend automated coverage for helper logic, payload determinism, and CLI behavior
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up

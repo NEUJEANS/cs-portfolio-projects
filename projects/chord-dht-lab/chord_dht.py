@@ -698,6 +698,29 @@ class ChordRing:
         return value.replace("\\", r"\\").replace('"', r'\"').replace("\n", r"\n")
 
 
+def select_benchmark_start_nodes(
+    ring: ChordRing,
+    requested_count: int | None,
+    *,
+    sample_mode: str = "first",
+    seed: int | None = None,
+) -> list[str]:
+    if requested_count is None:
+        return [node.name for node in ring.nodes]
+    if requested_count <= 0:
+        raise ValueError("start_nodes must be positive when provided")
+
+    count = min(requested_count, len(ring.nodes))
+    node_names = [node.name for node in ring.nodes]
+    if sample_mode == "first":
+        return node_names[:count]
+    if sample_mode == "random":
+        if seed is None:
+            raise ValueError("random start-node sampling requires a seed")
+        return random.Random(seed).sample(node_names, count)
+    raise ValueError(f"unsupported sample_mode {sample_mode!r}")
+
+
 def build_demo_payload() -> dict[str, object]:
     ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
     sample_keys = ["report.pdf", "slides", "internship-notes", "compiler", "final-project"]
@@ -731,6 +754,8 @@ def build_synthetic_benchmark_payload(
     key_count: int,
     seed: int,
     start_nodes: int | None = None,
+    start_node_sample_mode: str = "first",
+    start_node_seed: int | None = None,
 ) -> dict[str, object]:
     if m_bits <= 0:
         raise ValueError("m_bits must be positive")
@@ -758,13 +783,12 @@ def build_synthetic_benchmark_payload(
 
     ring = ChordRing(m_bits, node_names)
     keys = [f"key-{index:03d}-{rng.randrange(1_000_000):06d}" for index in range(key_count)]
-
-    if start_nodes is None:
-        benchmark_starts = [node.name for node in ring.nodes]
-    else:
-        if start_nodes <= 0:
-            raise ValueError("start_nodes must be positive when provided")
-        benchmark_starts = [node.name for node in ring.nodes[: min(start_nodes, len(ring.nodes))]]
+    benchmark_starts = select_benchmark_start_nodes(
+        ring,
+        start_nodes,
+        sample_mode=start_node_sample_mode,
+        seed=start_node_seed if start_node_seed is not None else seed,
+    )
 
     benchmark = ring.benchmark_lookups(keys, start_nodes=benchmark_starts)
     return {
@@ -774,6 +798,8 @@ def build_synthetic_benchmark_payload(
             "node_count": node_count,
             "key_count": key_count,
             "benchmark_start_node_count": len(benchmark_starts),
+            "start_node_sample_mode": start_node_sample_mode,
+            "start_node_seed": (start_node_seed if start_node_seed is not None else seed),
         },
         "ring": {
             "m_bits": ring.m_bits,
@@ -886,6 +912,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="optional number of generated nodes to benchmark from; defaults to all nodes",
     )
+    synth_parser.add_argument(
+        "--start-node-sample-mode",
+        choices=["first", "random"],
+        default="first",
+        help="how to choose a subset of benchmark start nodes when --start-nodes is provided",
+    )
+    synth_parser.add_argument(
+        "--start-node-seed",
+        type=int,
+        default=None,
+        help="seed for random start-node sampling; defaults to --seed",
+    )
     synth_parser.add_argument("--pretty", action="store_true")
 
     graphviz_parser = subparsers.add_parser(
@@ -965,6 +1003,8 @@ def main() -> None:
                 key_count=args.keys,
                 seed=args.seed,
                 start_nodes=args.start_nodes,
+                start_node_sample_mode=args.start_node_sample_mode,
+                start_node_seed=args.start_node_seed,
             ),
         }
     elif args.command == "graphviz":
