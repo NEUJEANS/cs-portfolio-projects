@@ -167,12 +167,21 @@ def condensation_dag(graph: DirectedGraph, components: list[list[str]]) -> dict[
     }
 
 
-def condensation_dot(graph: DirectedGraph, components: list[list[str]]) -> str:
-    summaries, dag_edges = build_component_graph(graph, components)
-    levels = compute_component_levels(len(summaries), dag_edges)
+def _component_level_groups(levels: dict[int, int], summaries: list[dict[str, object]]) -> dict[int, list[str]]:
     level_groups: dict[int, list[str]] = {}
     for index, summary in enumerate(summaries):
         level_groups.setdefault(levels[index], []).append(summary['id'])
+    return level_groups
+
+
+def _mermaid_escape(text: str) -> str:
+    return text.replace('"', '&#34;')
+
+
+def condensation_dot(graph: DirectedGraph, components: list[list[str]]) -> str:
+    summaries, dag_edges = build_component_graph(graph, components)
+    levels = compute_component_levels(len(summaries), dag_edges)
+    level_groups = _component_level_groups(levels, summaries)
 
     lines = [
         'digraph condensation {',
@@ -193,6 +202,35 @@ def condensation_dot(graph: DirectedGraph, components: list[list[str]]) -> str:
         lines.append(f'  C{src} -> C{dst};')
 
     lines.append('}')
+    return "\n".join(lines)
+
+
+def condensation_mermaid(graph: DirectedGraph, components: list[list[str]]) -> str:
+    summaries, dag_edges = build_component_graph(graph, components)
+    levels = compute_component_levels(len(summaries), dag_edges)
+    level_groups = _component_level_groups(levels, summaries)
+    summary_by_id = {summary['id']: summary for summary in summaries}
+
+    lines = [
+        'flowchart LR',
+        '  classDef component fill:#EAF2FF,stroke:#4C78A8,stroke-width:1px,color:#0F172A;',
+    ]
+
+    for level in sorted(level_groups):
+        lines.append(f'  subgraph level_{level}["topology level {level}"]')
+        lines.append('    direction TB')
+        for component_id in level_groups[level]:
+            summary = summary_by_id[component_id]
+            label = f"{component_id}<br/>level={level} | size={summary['size']}<br/>" + ', '.join(summary['nodes'])
+            lines.append(f'    {component_id}["{_mermaid_escape(label)}"]')
+        lines.append('  end')
+
+    for summary in summaries:
+        lines.append(f'  class {summary["id"]} component;')
+
+    for src, dst in dag_edges:
+        lines.append(f'  C{src} --> C{dst}')
+
     return "\n".join(lines)
 
 
@@ -234,6 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser('scc', help='Print SCC summary as JSON')
     subparsers.add_parser('condensation', help='Print SCC condensation DAG as JSON')
     subparsers.add_parser('dot', help='Print the condensation DAG as Graphviz DOT')
+    subparsers.add_parser('mermaid', help='Print the condensation DAG as Mermaid flowchart markup')
     explain = subparsers.add_parser('explain', help='Print a concise text explanation')
     explain.add_argument('--limit', type=int, default=5, help='Maximum number of components to describe')
     return parser
@@ -253,6 +292,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == 'dot':
         print(condensation_dot(graph, components))
+        return 0
+    if args.command == 'mermaid':
+        print(condensation_mermaid(graph, components))
         return 0
     if args.command == 'explain':
         limit = max(1, args.limit)

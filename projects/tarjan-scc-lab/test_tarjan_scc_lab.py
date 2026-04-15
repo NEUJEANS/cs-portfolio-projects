@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tarjan_scc_lab import DirectedGraph, condensation_dag, condensation_dot, load_graph, main, summarize_components, tarjan_strongly_connected_components
+from tarjan_scc_lab import DirectedGraph, condensation_dag, condensation_dot, condensation_mermaid, load_graph, main, summarize_components, tarjan_strongly_connected_components
 
 
 FIXTURE_PATH = Path(__file__).with_name('sample_graph.json')
@@ -68,6 +68,32 @@ def test_condensation_dag_assigns_levels_by_longest_source_path():
         {'id': 'C3', 'nodes': ['F'], 'size': 1, 'topology_level': 2},
     ]
     assert dag['level_count'] == 3
+
+
+def test_condensation_mermaid_groups_components_by_topology_level():
+    graph = DirectedGraph({
+        'A': ('B',),
+        'B': ('A', 'C', 'E'),
+        'C': ('D',),
+        'D': ('C', 'F'),
+        'E': ('F',),
+        'F': (),
+    })
+    components = tarjan_strongly_connected_components(graph)
+    mermaid = condensation_mermaid(graph, components)
+    assert 'flowchart LR' in mermaid
+    assert 'subgraph level_1["topology level 1"]' in mermaid
+    assert 'C0["C0<br/>level=0 | size=2<br/>A, B"]' in mermaid
+    assert 'C1 --> C3' in mermaid
+    assert 'class C2 component;' in mermaid
+
+
+def test_condensation_mermaid_escapes_double_quotes_in_node_labels():
+    graph = DirectedGraph({'A"1': ('B',), 'B': ('A"1',)})
+    components = tarjan_strongly_connected_components(graph)
+    mermaid = condensation_mermaid(graph, components)
+    assert '&#34;' in mermaid
+    assert 'A"1' not in mermaid
 
 
 def test_condensation_dot_groups_components_by_topology_level():

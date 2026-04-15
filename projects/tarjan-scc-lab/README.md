@@ -20,6 +20,7 @@ cd projects/tarjan-scc-lab
 python3 tarjan_scc_lab.py sample_graph.json scc
 python3 tarjan_scc_lab.py sample_graph.json condensation
 python3 tarjan_scc_lab.py sample_graph.json dot > condensation.dot
+python3 tarjan_scc_lab.py sample_graph.json mermaid > condensation.mmd
 python3 tarjan_scc_lab.py sample_graph.json explain --limit 4
 ../../.venv/bin/python -m pytest -q test_tarjan_scc_lab.py
 ```
@@ -52,7 +53,7 @@ Edge list:
 Strongly connected components come up in dependency analysis, compiler passes, graph databases, package management, and distributed-systems reasoning. This project shows algorithm knowledge, clean interfaces, and the ability to turn theory into a reusable tool.
 
 ## Output details
-The SCC summary and condensation DAG now annotate each component with a `topology_level`, and the lab can export a Graphviz DOT view for portfolio screenshots:
+The SCC summary and condensation DAG now annotate each component with a `topology_level`, and the lab can export both Graphviz DOT and Mermaid views for portfolio screenshots or markdown-native demos:
 - level `0` means a source SCC in the condensation DAG
 - higher levels indicate longer downstream dependency distance from any source SCC
 - levels make it easier to explain build pipelines, dependency cycles, and call-graph collapse order in interviews
@@ -81,13 +82,29 @@ digraph condensation {
 }
 ```
 
+
+Mermaid export example:
+```mermaid
+flowchart LR
+  subgraph level_0["topology level 0"]
+    direction TB
+    C0["C0<br/>level=0 | size=3<br/>A, B, C"]
+  end
+  subgraph level_1["topology level 1"]
+    direction TB
+    C1["C1<br/>level=1 | size=2<br/>D, E"]
+  end
+  C0 --> C1
+```
+
+This makes it easy to paste the condensation view directly into GitHub-flavored markdown that supports Mermaid.
+
 You can render the DOT file with Graphviz if installed:
 ```bash
 dot -Tpng condensation.dot -o condensation.png
 ```
 
 ## Future improvements
-- emit Mermaid diagrams for environments where Graphviz is unavailable
-- add Kosaraju as a comparison implementation and benchmark both approaches
+- compare Tarjan and Kosaraju implementations with the same fixtures and benchmark output
 - stream very large graphs from edge lists instead of loading everything into memory first
 - annotate components with in-degree/out-degree summaries for easier bottleneck analysis
