@@ -34,3 +34,4 @@
 - [x] Batch O complete
 - [x] Batch P complete
 - [x] Batch Q complete
+- [x] Batch R complete
