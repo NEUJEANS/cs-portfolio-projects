@@ -113,14 +113,7 @@ class DistributedBank:
         self._require_process(initiator)
         record = SnapshotRecord(initiator=initiator)
         marker_delay_overrides = marker_delay_overrides or {}
-        for channel, delay in marker_delay_overrides.items():
-            sender, receiver = self.parse_channel_name(channel)
-            self._require_process(sender)
-            self._require_process(receiver)
-            if sender == receiver:
-                raise ValueError("marker delays cannot target self channels")
-            if delay < 0:
-                raise ValueError("marker delay must be non-negative")
+        self._validate_marker_delay_overrides(marker_delay_overrides)
         incoming_channels = {
             process: [self.channel_name(sender, process) for sender in self.processes if sender != process]
             for process in self.processes
@@ -215,6 +208,41 @@ class DistributedBank:
             "timeline": list(self.timeline),
         }
 
+    def concurrent_snapshots(
+        self,
+        snapshot_initiators: dict[str, str],
+        marker_delay_overrides: dict[str, dict[str, int]] | None = None,
+    ) -> dict[str, object]:
+        if not snapshot_initiators:
+            raise ValueError("snapshot_initiators must contain at least one snapshot")
+        marker_delay_overrides = marker_delay_overrides or {}
+        snapshots: dict[str, dict[str, object]] = {}
+        for snapshot_id, initiator in sorted(snapshot_initiators.items()):
+            if not snapshot_id.strip():
+                raise ValueError("snapshot ids must be non-empty")
+            self._require_process(initiator)
+            per_snapshot_overrides = marker_delay_overrides.get(snapshot_id, {})
+            result = self.snapshot(initiator, marker_delay_overrides=per_snapshot_overrides)
+            result["snapshot_id"] = snapshot_id
+            snapshots[snapshot_id] = result
+
+        return {
+            "snapshots": snapshots,
+            "system_total": self.total_money(),
+            "all_consistent": all(result["consistent"] for result in snapshots.values()),
+            "timeline": list(self.timeline),
+        }
+
+    def _validate_marker_delay_overrides(self, marker_delay_overrides: dict[str, int]) -> None:
+        for channel, delay in marker_delay_overrides.items():
+            sender, receiver = self.parse_channel_name(channel)
+            self._require_process(sender)
+            self._require_process(receiver)
+            if sender == receiver:
+                raise ValueError("marker delays cannot target self channels")
+            if delay < 0:
+                raise ValueError("marker delay must be non-negative")
+
     def _require_process(self, process: str) -> None:
         if process not in self.balances:
             raise ValueError(f"unknown process: {process}")
@@ -245,6 +273,31 @@ def parse_marker_delay(raw: str) -> tuple[str, int]:
     return channel, delay
 
 
+def parse_snapshot_spec(raw: str) -> tuple[str, str]:
+    snapshot_id, separator, initiator = raw.partition(":")
+    if not separator or not snapshot_id.strip() or not initiator.strip():
+        raise ValueError("snapshots must use snapshot_id:initiator format")
+    return snapshot_id.strip(), initiator.strip()
+
+
+def parse_snapshot_specs(raw_values: Sequence[str]) -> dict[str, str]:
+    snapshot_initiators: dict[str, str] = {}
+    for raw in raw_values:
+        snapshot_id, initiator = parse_snapshot_spec(raw)
+        if snapshot_id in snapshot_initiators:
+            raise ValueError(f"duplicate snapshot id: {snapshot_id}")
+        snapshot_initiators[snapshot_id] = initiator
+    return snapshot_initiators
+
+
+def parse_scoped_marker_delay(raw: str) -> tuple[str, str, int]:
+    snapshot_id, separator, remainder = raw.partition(":")
+    if not separator or not snapshot_id.strip():
+        raise ValueError("scoped marker delay must use snapshot_id:sender->receiver=delay format")
+    channel, delay = parse_marker_delay(remainder)
+    return snapshot_id.strip(), channel, delay
+
+
 def _safe_mermaid_text(value: object) -> str:
     text = str(value)
     return text.replace("\n", " ").replace('"', "'")
@@ -270,8 +323,9 @@ def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
             amount = event["amount"]
             lines.append(f"    Note over {receiver}: apply {amount} from {sender} ({label})")
 
+    snapshot_label = _safe_mermaid_text(result.get("snapshot_id", "snapshot"))
     initiator = _safe_mermaid_text(result["initiator"])
-    lines.append(f"    Note over {initiator}: snapshot starts")
+    lines.append(f"    Note over {initiator}: {snapshot_label} starts")
 
     for marker in result.get("markers", []):
         sender = _safe_mermaid_text(marker["sender"])
@@ -327,15 +381,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="render the result as JSON or as a Mermaid sequence diagram",
     )
 
+    concurrent = subparsers.add_parser(
+        "concurrent",
+        help="capture multiple named snapshots over the same simulated execution",
+    )
+    concurrent.add_argument("--balances", required=True, help='JSON object like {"A": 10, "B": 10}')
+    concurrent.add_argument("--send", action="append", default=[], help="sender:receiver:amount:label")
+    concurrent.add_argument("--deliver", action="append", default=[], help="sender:receiver")
+    concurrent.add_argument(
+        "--snapshot",
+        action="append",
+        required=True,
+        default=[],
+        help="named snapshot in snapshot_id:initiator format",
+    )
+    concurrent.add_argument(
+        "--marker-delay",
+        action="append",
+        default=[],
+        help="per-snapshot marker delay in snapshot_id:sender->receiver=delay format",
+    )
+
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-
-    if args.command != "simulate":
-        raise ValueError(f"unsupported command: {args.command}")
 
     bank = DistributedBank(parse_balances(args.balances))
     for raw in args.send:
@@ -344,13 +416,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     for raw in args.deliver:
         sender, receiver = raw.split(":", 1)
         bank.deliver(sender, receiver)
-    marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
-    result = bank.snapshot(args.snapshot, marker_delay_overrides=marker_delays)
-    if args.output == "mermaid":
-        print(render_mermaid(result, bank.processes), end="")
-    else:
+
+    if args.command == "simulate":
+        marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
+        result = bank.snapshot(args.snapshot, marker_delay_overrides=marker_delays)
+        if args.output == "mermaid":
+            print(render_mermaid(result, bank.processes), end="")
+        else:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "concurrent":
+        snapshot_initiators = parse_snapshot_specs(args.snapshot)
+        marker_delays: dict[str, dict[str, int]] = defaultdict(dict)
+        for raw in args.marker_delay:
+            snapshot_id, channel, delay = parse_scoped_marker_delay(raw)
+            if snapshot_id not in snapshot_initiators:
+                raise ValueError(f"marker delay references unknown snapshot id: {snapshot_id}")
+            marker_delays[snapshot_id][channel] = delay
+        result = bank.concurrent_snapshots(snapshot_initiators, marker_delay_overrides=dict(marker_delays))
         print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
+        return 0
+
+    raise ValueError(f"unsupported command: {args.command}")
 
 
 if __name__ == "__main__":

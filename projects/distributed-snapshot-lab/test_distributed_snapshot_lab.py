@@ -8,6 +8,9 @@ from distributed_snapshot_lab import (
     DistributedBank,
     parse_balances,
     parse_marker_delay,
+    parse_scoped_marker_delay,
+    parse_snapshot_spec,
+    parse_snapshot_specs,
     parse_transfer,
     render_mermaid,
 )
@@ -74,6 +77,9 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertEqual(parse_balances('{"A": 4, "B": 6}'), {"A": 4, "B": 6})
         self.assertEqual(parse_transfer("A:B:3:rent"), ("A", "B", 3, "rent"))
         self.assertEqual(parse_marker_delay("C->B=2"), ("C->B", 2))
+        self.assertEqual(parse_snapshot_spec("blue:A"), ("blue", "A"))
+        self.assertEqual(parse_snapshot_specs(["blue:A", "green:C"]), {"blue": "A", "green": "C"})
+        self.assertEqual(parse_scoped_marker_delay("blue:C->B=2"), ("blue", "C->B", 2))
 
     def test_cli_simulation_reports_consistent_snapshot(self) -> None:
         result = run_cli_json(
@@ -97,11 +103,60 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertEqual(result["balances"], {"A": 7, "B": 13, "C": 8})
         self.assertEqual(result["channel_messages"]["C->B"][0]["amount"], 2)
 
+    def test_concurrent_snapshots_keep_named_results_separate(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        bank.transfer("A", "B", 3, "ab-1")
+        bank.transfer("C", "B", 2, "cb-1")
+
+        result = bank.concurrent_snapshots(
+            {"blue": "A", "green": "C"},
+            marker_delay_overrides={
+                "blue": {"A->B": 0, "C->B": 2},
+                "green": {"C->B": 0, "A->B": 2},
+            },
+        )
+
+        self.assertTrue(result["all_consistent"])
+        self.assertEqual(result["snapshots"]["blue"]["channel_messages"]["C->B"][0]["label"], "cb-1")
+        self.assertEqual(result["snapshots"]["green"]["channel_messages"]["A->B"][0]["label"], "ab-1")
+        self.assertEqual(result["snapshots"]["blue"]["snapshot_id"], "blue")
+        self.assertEqual(result["snapshots"]["green"]["snapshot_id"], "green")
+
+    def test_cli_concurrent_snapshot_reports_multiple_snapshot_ids(self) -> None:
+        result = run_cli_json(
+            "concurrent",
+            "--balances",
+            '{"A": 10, "B": 10, "C": 10}',
+            "--send",
+            "A:B:3:ab-1",
+            "--send",
+            "C:B:2:cb-1",
+            "--snapshot",
+            "blue:A",
+            "--snapshot",
+            "green:C",
+            "--marker-delay",
+            "blue:A->B=0",
+            "--marker-delay",
+            "blue:C->B=2",
+            "--marker-delay",
+            "green:C->B=0",
+            "--marker-delay",
+            "green:A->B=2",
+        )
+
+        self.assertTrue(result["all_consistent"])
+        self.assertIn("blue", result["snapshots"])
+        self.assertIn("green", result["snapshots"])
+        self.assertEqual(result["snapshots"]["blue"]["channel_messages"]["C->B"][0]["amount"], 2)
+        self.assertEqual(result["snapshots"]["green"]["channel_messages"]["A->B"][0]["amount"], 3)
+
     def test_mermaid_render_contains_markers_balances_and_channel_state(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10, "C": 10})
         bank.transfer("A", "B", 3, "ab-1")
         bank.transfer("C", "B", 2, "cb-1")
         result = bank.snapshot("A", marker_delay_overrides={"A->B": 0, "C->B": 2})
+        result["snapshot_id"] = "blue"
 
         diagram = render_mermaid(result, bank.processes)
 
@@ -109,6 +164,7 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertIn("participant A", diagram)
         self.assertIn("A->>B: transfer 3 (ab-1)", diagram)
         self.assertIn("A-->>B: marker t=0", diagram)
+        self.assertIn("Note over A: blue starts", diagram)
         self.assertIn("Note over A,B,C: snapshot balances A=7, B=13, C=8", diagram)
         self.assertIn("Note over C,B: recorded in-flight on C->B 2 (cb-1)", diagram)
 
@@ -133,6 +189,36 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         bank = DistributedBank({"A": 10, "B": 10})
         with self.assertRaisesRegex(ValueError, "unknown process"):
             bank.snapshot("A", marker_delay_overrides={"A->C": 1})
+
+    def test_concurrent_snapshot_requires_non_empty_snapshot_ids(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10})
+        with self.assertRaisesRegex(ValueError, "non-empty"):
+            bank.concurrent_snapshots({"   ": "A"})
+
+    def test_duplicate_snapshot_ids_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "duplicate snapshot id"):
+            parse_snapshot_specs(["blue:A", "blue:C"])
+
+    def test_unknown_scoped_marker_delay_snapshot_is_rejected_by_cli(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "concurrent",
+                "--balances",
+                '{"A": 10, "B": 10}',
+                "--snapshot",
+                "blue:A",
+                "--marker-delay",
+                "green:A->B=1",
+            ],
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("unknown snapshot id", completed.stderr)
 
     def test_unknown_delivery_channel_fails(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10})

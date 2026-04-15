@@ -8,5 +8,5 @@
 - [x] add unit and CLI tests for invariants and in-flight message capture
 - [x] run at least 3 review passes and record fixes
 - [x] add Mermaid visualization export for README/blog/interview demos
-- [ ] support multiple concurrent snapshots in a future slice
+- [x] support multiple concurrent snapshots with named snapshot IDs and isolated results
 - [ ] add failure/recovery scripting in a future slice
