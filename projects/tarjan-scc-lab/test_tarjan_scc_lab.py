@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tarjan_scc_lab import DirectedGraph, condensation_dag, load_graph, main, summarize_components, tarjan_strongly_connected_components
+from tarjan_scc_lab import DirectedGraph, condensation_dag, condensation_dot, load_graph, main, summarize_components, tarjan_strongly_connected_components
 
 
 FIXTURE_PATH = Path(__file__).with_name('sample_graph.json')
@@ -70,6 +70,23 @@ def test_condensation_dag_assigns_levels_by_longest_source_path():
     assert dag['level_count'] == 3
 
 
+def test_condensation_dot_groups_components_by_topology_level():
+    graph = DirectedGraph({
+        'A': ('B',),
+        'B': ('A', 'C', 'E'),
+        'C': ('D',),
+        'D': ('C', 'F'),
+        'E': ('F',),
+        'F': (),
+    })
+    components = tarjan_strongly_connected_components(graph)
+    dot = condensation_dot(graph, components)
+    assert 'digraph condensation {' in dot
+    assert 'C0 [label="C0\\nlevel=0 | size=2\\nA, B"]' in dot
+    assert '{ rank=same; // topology level 1' in dot
+    assert 'C1; C2;' in dot
+    assert 'C1 -> C3;' in dot
+
 def test_summary_marks_acyclic_graph_when_all_components_are_singletons():
     graph = DirectedGraph({'A': ('B',), 'B': ('C',), 'C': ()})
     summary = summarize_components(graph, tarjan_strongly_connected_components(graph))
@@ -115,6 +132,17 @@ def test_cli_condensation_outputs_component_graph():
         {'from': 'C2', 'to': 'C3'},
     ]
 
+
+def test_cli_dot_outputs_graphviz_condensation_graph():
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name('tarjan_scc_lab.py')), str(FIXTURE_PATH), 'dot'],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert 'digraph condensation {' in result.stdout
+    assert 'C0 [label="C0\\nlevel=0 | size=3\\nA, B, C"]' in result.stdout
+    assert 'C0 -> C1;' in result.stdout
 
 def test_cli_explain_reports_requested_component_limit(capsys):
     exit_code = main([str(FIXTURE_PATH), 'explain', '--limit', '2'])

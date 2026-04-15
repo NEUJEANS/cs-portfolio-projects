@@ -19,6 +19,7 @@ A graph-algorithms portfolio project that finds strongly connected components in
 cd projects/tarjan-scc-lab
 python3 tarjan_scc_lab.py sample_graph.json scc
 python3 tarjan_scc_lab.py sample_graph.json condensation
+python3 tarjan_scc_lab.py sample_graph.json dot > condensation.dot
 python3 tarjan_scc_lab.py sample_graph.json explain --limit 4
 ../../.venv/bin/python -m pytest -q test_tarjan_scc_lab.py
 ```
@@ -51,7 +52,7 @@ Edge list:
 Strongly connected components come up in dependency analysis, compiler passes, graph databases, package management, and distributed-systems reasoning. This project shows algorithm knowledge, clean interfaces, and the ability to turn theory into a reusable tool.
 
 ## Output details
-The SCC summary and condensation DAG now annotate each component with a `topology_level`:
+The SCC summary and condensation DAG now annotate each component with a `topology_level`, and the lab can export a Graphviz DOT view for portfolio screenshots:
 - level `0` means a source SCC in the condensation DAG
 - higher levels indicate longer downstream dependency distance from any source SCC
 - levels make it easier to explain build pipelines, dependency cycles, and call-graph collapse order in interviews
@@ -69,8 +70,24 @@ Example condensation output excerpt:
 }
 ```
 
+Graphviz export example:
+```dot
+digraph condensation {
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#4C78A8"];
+  C0 [label="C0\nlevel=0 | size=3\nA, B, C"];
+  C1 [label="C1\nlevel=1 | size=2\nD, E"];
+  C0 -> C1;
+}
+```
+
+You can render the DOT file with Graphviz if installed:
+```bash
+dot -Tpng condensation.dot -o condensation.png
+```
+
 ## Future improvements
-- emit Graphviz or Mermaid diagrams for the condensation DAG
+- emit Mermaid diagrams for environments where Graphviz is unavailable
 - add Kosaraju as a comparison implementation and benchmark both approaches
 - stream very large graphs from edge lists instead of loading everything into memory first
 - annotate components with in-degree/out-degree summaries for easier bottleneck analysis

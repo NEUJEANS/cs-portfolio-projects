@@ -167,6 +167,35 @@ def condensation_dag(graph: DirectedGraph, components: list[list[str]]) -> dict[
     }
 
 
+def condensation_dot(graph: DirectedGraph, components: list[list[str]]) -> str:
+    summaries, dag_edges = build_component_graph(graph, components)
+    levels = compute_component_levels(len(summaries), dag_edges)
+    level_groups: dict[int, list[str]] = {}
+    for index, summary in enumerate(summaries):
+        level_groups.setdefault(levels[index], []).append(summary['id'])
+
+    lines = [
+        'digraph condensation {',
+        '  rankdir=LR;',
+        '  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#4C78A8"];',
+    ]
+    for index, summary in enumerate(summaries):
+        label = f"{summary['id']}\nlevel={levels[index]} | size={summary['size']}\n" + ", ".join(summary['nodes'])
+        lines.append(f'  {summary["id"]} [label={json.dumps(label)}];')
+
+    for level in sorted(level_groups):
+        members = '; '.join(level_groups[level])
+        lines.append(f'  {{ rank=same; // topology level {level}')
+        lines.append(f'    {members};')
+        lines.append('  }')
+
+    for src, dst in dag_edges:
+        lines.append(f'  C{src} -> C{dst};')
+
+    lines.append('}')
+    return "\n".join(lines)
+
+
 def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> dict[str, object]:
     summaries, dag_edges = build_component_graph(graph, components)
     levels = compute_component_levels(len(summaries), dag_edges)
@@ -204,6 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest='command', required=True)
     subparsers.add_parser('scc', help='Print SCC summary as JSON')
     subparsers.add_parser('condensation', help='Print SCC condensation DAG as JSON')
+    subparsers.add_parser('dot', help='Print the condensation DAG as Graphviz DOT')
     explain = subparsers.add_parser('explain', help='Print a concise text explanation')
     explain.add_argument('--limit', type=int, default=5, help='Maximum number of components to describe')
     return parser
@@ -220,6 +250,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == 'condensation':
         print(json.dumps(condensation_dag(graph, components), indent=2))
+        return 0
+    if args.command == 'dot':
+        print(condensation_dot(graph, components))
         return 0
     if args.command == 'explain':
         limit = max(1, args.limit)
