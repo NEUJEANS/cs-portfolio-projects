@@ -1,12 +1,13 @@
 # Tarjan SCC Lab
 
-A graph-algorithms portfolio project that finds strongly connected components in directed graphs and builds the condensation DAG.
+A graph-algorithms portfolio project that finds strongly connected components in directed graphs, builds the condensation DAG, and compares Tarjan vs. Kosaraju on the same fixtures.
 
 ## What it demonstrates
 - Tarjan's linear-time SCC algorithm with DFS discovery indexes and low-link values
 - parsing directed graphs from either adjacency-list or edge-list JSON
 - condensation DAG generation for reasoning about cycles at the component level
 - deterministic JSON/text CLI output suitable for demos, scripting, and interviews
+- side-by-side Tarjan vs. Kosaraju comparison with repeatable timing output
 - focused automated tests for algorithm correctness, input validation, and CLI behavior
 
 ## Files
@@ -21,6 +22,7 @@ python3 tarjan_scc_lab.py sample_graph.json scc
 python3 tarjan_scc_lab.py sample_graph.json condensation
 python3 tarjan_scc_lab.py sample_graph.json dot > condensation.dot
 python3 tarjan_scc_lab.py sample_graph.json mermaid > condensation.mmd
+python3 tarjan_scc_lab.py sample_graph.json compare --repeat 10
 python3 tarjan_scc_lab.py sample_graph.json explain --limit 4
 ../../.venv/bin/python -m pytest -q test_tarjan_scc_lab.py
 ```
@@ -104,7 +106,26 @@ You can render the DOT file with Graphviz if installed:
 dot -Tpng condensation.dot -o condensation.png
 ```
 
+## Tarjan vs. Kosaraju comparison
+
+The `compare` command runs both linear-time SCC algorithms against the same graph, checks whether they agree on the deterministic component ordering used by this project, and reports simple timing samples for interview talking points.
+
+Example output excerpt:
+```json
+{
+  "algorithms_match": true,
+  "repeat": 10,
+  "average_ms": {
+    "tarjan": 0.031251,
+    "kosaraju": 0.040812
+  },
+  "faster_algorithm": "tarjan | kosaraju | tie"
+}
+```
+
+This gives the project a stronger "theory plus evaluation" story: one implementation is enough to solve the problem, but comparing both shows awareness of alternative SCC strategies and the trade-off of Kosaraju's transpose/pass structure.
+
 ## Future improvements
-- compare Tarjan and Kosaraju implementations with the same fixtures and benchmark output
 - stream very large graphs from edge lists instead of loading everything into memory first
 - annotate components with in-degree/out-degree summaries for easier bottleneck analysis
+- export benchmark comparisons as CSV/markdown artifacts for portfolio screenshots

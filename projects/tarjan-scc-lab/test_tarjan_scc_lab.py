@@ -5,7 +5,19 @@ from pathlib import Path
 
 import pytest
 
-from tarjan_scc_lab import DirectedGraph, condensation_dag, condensation_dot, condensation_mermaid, load_graph, main, summarize_components, tarjan_strongly_connected_components
+from tarjan_scc_lab import (
+    DirectedGraph,
+    compare_algorithms,
+    condensation_dag,
+    condensation_dot,
+    condensation_mermaid,
+    kosaraju_strongly_connected_components,
+    load_graph,
+    main,
+    summarize_components,
+    tarjan_strongly_connected_components,
+    transpose_graph,
+)
 
 
 FIXTURE_PATH = Path(__file__).with_name('sample_graph.json')
@@ -16,6 +28,22 @@ def test_tarjan_finds_multi_node_components_before_singletons():
     components = tarjan_strongly_connected_components(graph)
     assert components[:3] == [['A', 'B', 'C'], ['D', 'E'], ['F', 'G']]
     assert components[3:] == [['H']]
+
+
+def test_kosaraju_matches_tarjan_component_ordering():
+    graph = load_graph(FIXTURE_PATH)
+    assert kosaraju_strongly_connected_components(graph) == tarjan_strongly_connected_components(graph)
+
+
+def test_transpose_graph_reverses_edges_and_keeps_singletons():
+    graph = DirectedGraph({'A': ('B',), 'B': ('C',), 'C': (), 'D': ('D',)})
+    transposed = transpose_graph(graph)
+    assert transposed.adjacency == {
+        'A': (),
+        'B': ('A',),
+        'C': ('B',),
+        'D': ('D',),
+    }
 
 
 def test_load_graph_accepts_adjacency_object_and_adds_missing_leaf_nodes(tmp_path: Path):
@@ -70,6 +98,20 @@ def test_condensation_dag_assigns_levels_by_longest_source_path():
     assert dag['level_count'] == 3
 
 
+def test_compare_algorithms_reports_matching_components_and_average_timings():
+    graph = load_graph(FIXTURE_PATH)
+    comparison = compare_algorithms(graph, repeat=2)
+    assert comparison['algorithms_match'] is True
+    assert comparison['component_count'] == 4
+    assert comparison['components'][0] == ['A', 'B', 'C']
+    assert comparison['repeat'] == 2
+    assert len(comparison['timings_ms']['tarjan']) == 2
+    assert len(comparison['timings_ms']['kosaraju']) == 2
+    assert comparison['average_ms']['tarjan'] >= 0
+    assert comparison['average_ms']['kosaraju'] >= 0
+    assert comparison['faster_algorithm'] in {'tarjan', 'kosaraju', 'tie'}
+
+
 def test_condensation_mermaid_groups_components_by_topology_level():
     graph = DirectedGraph({
         'A': ('B',),
@@ -112,6 +154,7 @@ def test_condensation_dot_groups_components_by_topology_level():
     assert '{ rank=same; // topology level 1' in dot
     assert 'C1; C2;' in dot
     assert 'C1 -> C3;' in dot
+
 
 def test_summary_marks_acyclic_graph_when_all_components_are_singletons():
     graph = DirectedGraph({'A': ('B',), 'B': ('C',), 'C': ()})
@@ -159,6 +202,20 @@ def test_cli_condensation_outputs_component_graph():
     ]
 
 
+def test_cli_compare_outputs_matching_algorithms_and_timings():
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name('tarjan_scc_lab.py')), str(FIXTURE_PATH), 'compare', '--repeat', '2'],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload['algorithms_match'] is True
+    assert payload['repeat'] == 2
+    assert len(payload['timings_ms']['tarjan']) == 2
+    assert len(payload['timings_ms']['kosaraju']) == 2
+
+
 def test_cli_dot_outputs_graphviz_condensation_graph():
     result = subprocess.run(
         [sys.executable, str(Path(__file__).with_name('tarjan_scc_lab.py')), str(FIXTURE_PATH), 'dot'],
@@ -169,6 +226,7 @@ def test_cli_dot_outputs_graphviz_condensation_graph():
     assert 'digraph condensation {' in result.stdout
     assert 'C0 [label="C0\\nlevel=0 | size=3\\nA, B, C"]' in result.stdout
     assert 'C0 -> C1;' in result.stdout
+
 
 def test_cli_explain_reports_requested_component_limit(capsys):
     exit_code = main([str(FIXTURE_PATH), 'explain', '--limit', '2'])

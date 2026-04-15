@@ -4,6 +4,7 @@ import sys
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,11 @@ def _normalize_node(value: object) -> str:
     if not text:
         raise ValueError('node identifiers must not be empty')
     return text
+
+
+def _sort_components(components: list[list[str]]) -> list[list[str]]:
+    components.sort(key=lambda component: (len(component) == 1, -len(component), component))
+    return components
 
 
 def load_graph(path: str | Path) -> DirectedGraph:
@@ -97,8 +103,92 @@ def tarjan_strongly_connected_components(graph: DirectedGraph) -> list[list[str]
         if node not in index_for:
             visit(node)
 
-    components.sort(key=lambda component: (len(component) == 1, -len(component), component))
-    return components
+    return _sort_components(components)
+
+
+def transpose_graph(graph: DirectedGraph) -> DirectedGraph:
+    transposed = {node: [] for node in graph.nodes}
+    for src, neighbors in graph.adjacency.items():
+        for dst in neighbors:
+            transposed.setdefault(dst, []).append(src)
+    normalized = {node: tuple(sorted(neighbors)) for node, neighbors in sorted(transposed.items())}
+    return DirectedGraph(normalized)
+
+
+def kosaraju_strongly_connected_components(graph: DirectedGraph) -> list[list[str]]:
+    visited: set[str] = set()
+    finish_order: list[str] = []
+
+    def dfs_finish(node: str) -> None:
+        visited.add(node)
+        for neighbor in graph.adjacency[node]:
+            if neighbor not in visited:
+                dfs_finish(neighbor)
+        finish_order.append(node)
+
+    for node in graph.nodes:
+        if node not in visited:
+            dfs_finish(node)
+
+    transposed = transpose_graph(graph)
+    visited.clear()
+    components: list[list[str]] = []
+
+    def dfs_collect(node: str, component: list[str]) -> None:
+        visited.add(node)
+        component.append(node)
+        for neighbor in transposed.adjacency[node]:
+            if neighbor not in visited:
+                dfs_collect(neighbor, component)
+
+    for node in reversed(finish_order):
+        if node in visited:
+            continue
+        component: list[str] = []
+        dfs_collect(node, component)
+        components.append(sorted(component))
+
+    return _sort_components(components)
+
+
+def compare_algorithms(graph: DirectedGraph, repeat: int = 5) -> dict[str, object]:
+    repeats = max(1, repeat)
+    tarjan_components = tarjan_strongly_connected_components(graph)
+    kosaraju_components = kosaraju_strongly_connected_components(graph)
+    algorithms_match = tarjan_components == kosaraju_components
+
+    tarjan_timings_ms: list[float] = []
+    kosaraju_timings_ms: list[float] = []
+    for _ in range(repeats):
+        started = perf_counter()
+        tarjan_strongly_connected_components(graph)
+        tarjan_timings_ms.append((perf_counter() - started) * 1000)
+
+        started = perf_counter()
+        kosaraju_strongly_connected_components(graph)
+        kosaraju_timings_ms.append((perf_counter() - started) * 1000)
+
+    return {
+        'node_count': len(graph.nodes),
+        'edge_count': graph.edge_count,
+        'repeat': repeats,
+        'algorithms_match': algorithms_match,
+        'component_count': len(tarjan_components),
+        'components': tarjan_components,
+        'timings_ms': {
+            'tarjan': tarjan_timings_ms,
+            'kosaraju': kosaraju_timings_ms,
+        },
+        'average_ms': {
+            'tarjan': round(sum(tarjan_timings_ms) / repeats, 6),
+            'kosaraju': round(sum(kosaraju_timings_ms) / repeats, 6),
+        },
+        'faster_algorithm': (
+            'tie'
+            if round(sum(tarjan_timings_ms), 12) == round(sum(kosaraju_timings_ms), 12)
+            else ('tarjan' if sum(tarjan_timings_ms) < sum(kosaraju_timings_ms) else 'kosaraju')
+        ),
+    }
 
 
 def build_component_graph(graph: DirectedGraph, components: list[list[str]]) -> tuple[list[dict[str, object]], list[tuple[int, int]]]:
@@ -266,13 +356,15 @@ def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> d
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Analyze strongly connected components with Tarjan's algorithm.")
+    parser = argparse.ArgumentParser(description="Analyze strongly connected components with Tarjan and Kosaraju workflows.")
     parser.add_argument('graph_path', help='Path to a JSON adjacency list or {nodes, edges} graph file')
     subparsers = parser.add_subparsers(dest='command', required=True)
     subparsers.add_parser('scc', help='Print SCC summary as JSON')
     subparsers.add_parser('condensation', help='Print SCC condensation DAG as JSON')
     subparsers.add_parser('dot', help='Print the condensation DAG as Graphviz DOT')
     subparsers.add_parser('mermaid', help='Print the condensation DAG as Mermaid flowchart markup')
+    compare = subparsers.add_parser('compare', help='Compare Tarjan and Kosaraju SCC results and timings')
+    compare.add_argument('--repeat', type=int, default=5, help='Number of timing runs to average per algorithm')
     explain = subparsers.add_parser('explain', help='Print a concise text explanation')
     explain.add_argument('--limit', type=int, default=5, help='Maximum number of components to describe')
     return parser
@@ -282,6 +374,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     graph = load_graph(args.graph_path)
+
+    if args.command == 'compare':
+        print(json.dumps(compare_algorithms(graph, repeat=args.repeat), indent=2))
+        return 0
+
     components = tarjan_strongly_connected_components(graph)
 
     if args.command == 'scc':

@@ -1,0 +1,40 @@
+{
+  "node_count": 8,
+  "edge_count": 10,
+  "repeat": 2,
+  "algorithms_match": true,
+  "component_count": 4,
+  "components": [
+    [
+      "A",
+      "B",
+      "C"
+    ],
+    [
+      "D",
+      "E"
+    ],
+    [
+      "F",
+      "G"
+    ],
+    [
+      "H"
+    ]
+  ],
+  "timings_ms": {
+    "tarjan": [
+      0.010299991117790341,
+      0.008927017915993929
+    ],
+    "kosaraju": [
+      0.01957800122909248,
+      0.01347600482404232
+    ]
+  },
+  "average_ms": {
+    "tarjan": 0.009614,
+    "kosaraju": 0.016527
+  },
+  "faster_algorithm": "tarjan"
+}
