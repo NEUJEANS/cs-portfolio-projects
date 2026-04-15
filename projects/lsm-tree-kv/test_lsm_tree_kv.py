@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from lsm_tree_kv import LSMTreeKV
+from lsm_tree_kv import LSMTreeKV, parse_bits_per_key_options, run_bloom_benchmark
 
 
 class LSMTreeKVTests(unittest.TestCase):
@@ -98,6 +98,33 @@ class LSMTreeKVTests(unittest.TestCase):
         stats = store.stats()
         self.assertEqual(stats["bloom_filter_count"], 1)
         self.assertGreaterEqual(stats["bloom_filter_bits"], 20)
+
+    def test_parse_bits_per_key_options_rejects_empty_or_invalid_values(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_bits_per_key_options("")
+        with self.assertRaises(ValueError):
+            parse_bits_per_key_options("4,0,8")
+
+    def test_parse_bits_per_key_options_sorts_and_deduplicates_values(self) -> None:
+        self.assertEqual(parse_bits_per_key_options("12,4,12,8"), [4, 8, 12])
+
+    def test_benchmark_reports_lower_estimated_false_positive_rate_for_more_bits(self) -> None:
+        report = run_bloom_benchmark(key_count=200, miss_count=800, bits_per_key_options=[4, 12])
+
+        self.assertEqual(report["recommended_bits_per_key"], 12)
+        self.assertEqual(len(report["results"]), 2)
+        low_bits, high_bits = report["results"]
+        self.assertEqual(low_bits["bits_per_key"], 4)
+        self.assertEqual(high_bits["bits_per_key"], 12)
+        self.assertGreater(low_bits["estimated_false_positive_rate"], high_bits["estimated_false_positive_rate"])
+
+    def test_benchmark_command_outputs_json_report(self) -> None:
+        result = self.run_cli("benchmark", "--key-count", "120", "--miss-count", "400", "--bits-per-key-options", "4,8")
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["key_count"], 120)
+        self.assertEqual(payload["miss_lookups"], 400)
+        self.assertEqual([item["bits_per_key"] for item in payload["results"]], [4, 8])
 
     def test_invalid_key_returns_error_code_from_cli(self) -> None:
         result = self.run_cli("set", "bad key", "value")

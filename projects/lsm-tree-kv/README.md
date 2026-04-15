@@ -8,6 +8,7 @@ A compact Python key-value store that demonstrates the core ideas behind an LSM 
 - keeps the implementation small enough to explain line-by-line during a project walkthrough
 - demonstrates durability and recovery behavior instead of being just an in-memory toy
 - now includes Bloom-filter-assisted reads, which makes the read path feel closer to a real storage engine
+- adds a benchmark command that compares Bloom filter densities so the tradeoff is measurable instead of hand-wavy
 - still leaves room for advanced follow-up work like sparse indexes and background compaction
 
 ## Stack
@@ -25,7 +26,8 @@ A compact Python key-value store that demonstrates the core ideas behind an LSM 
 - tombstone deletes that hide older values across reloads
 - manual compaction that merges many SSTables into one live snapshot
 - storage stats including WAL bytes, SSTable bytes, and Bloom filter footprint
-- CLI commands for `set`, `get`, `delete`, `list`, `stats`, `flush`, and `compact`
+- benchmark command that compares bits-per-key settings with observed and estimated false-positive rates
+- CLI commands for `set`, `get`, `delete`, `list`, `stats`, `flush`, `compact`, and `benchmark`
 
 ## Usage
 Set a key:
@@ -76,20 +78,27 @@ Show stats:
 python3 lsm_tree_kv.py --dir demo-data stats
 ```
 
+Compare Bloom filter tradeoffs:
+
+```bash
+python3 lsm_tree_kv.py --dir demo-data benchmark --key-count 500 --miss-count 2000 --bits-per-key-options 4,8,10,12
+```
+
 ## Test
 ```bash
 python3 -m unittest discover -s projects/lsm-tree-kv -p 'test_*.py'
 ```
 
-## What changed in the Bloom filter slice
+## What changed in the Bloom filter slices
 - every flushed or compacted SSTable now stores Bloom filter metadata
 - `get` checks `min_key` / `max_key` and the Bloom filter before loading the SSTable entries
 - `stats` reports Bloom filter counts and total bits across current SSTables
 - tests cover Bloom filter persistence and negative lookups that avoid loading SSTable contents
+- `benchmark` reports observed and estimated false-positive rates for multiple bits-per-key choices
 
 ## Future Improvements
 - add binary search plus sparse indexes so SSTable lookups avoid full JSON loads when Bloom filters pass
 - support value sizes large enough to justify block-based table layouts
 - add background compaction policies and leveled/tiered strategies
 - expose a small HTTP API for remote experiments
-- compare multiple bits-per-key settings with a benchmark harness and false-positive report
+- benchmark multiple SSTable shapes and compaction levels instead of only single-filter density choices

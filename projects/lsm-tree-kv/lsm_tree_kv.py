@@ -12,6 +12,7 @@ from typing import Iterable
 TOMBSTONE = "__TOMBSTONE__"
 DEFAULT_BLOOM_BITS_PER_KEY = 10
 MIN_BLOOM_FILTER_BITS = 64
+DEFAULT_BENCHMARK_BITS_PER_KEY = [4, 8, 10, 12]
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,10 @@ class BloomFilter:
             if not (self.bits & (1 << position)):
                 return False
         return True
+
+    def estimated_false_positive_rate(self, item_count: int) -> float:
+        item_count = max(1, int(item_count))
+        return (1 - math.exp((-self.hash_count * item_count) / self.bit_count)) ** self.hash_count
 
     def to_json(self) -> dict[str, int]:
         return {
@@ -281,6 +286,57 @@ class LSMTreeKV:
             raise ValueError("keys must be non-empty and contain no whitespace")
 
 
+def parse_bits_per_key_options(raw: str) -> list[int]:
+    values: list[int] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        value = int(chunk)
+        if value < 1:
+            raise ValueError("bits-per-key options must be positive integers")
+        values.append(value)
+    if not values:
+        raise ValueError("at least one bits-per-key option is required")
+    return sorted(dict.fromkeys(values))
+
+
+def run_bloom_benchmark(key_count: int, miss_count: int, bits_per_key_options: Iterable[int]) -> dict[str, object]:
+    key_count = max(1, int(key_count))
+    miss_count = max(1, int(miss_count))
+    options = [max(1, int(bits)) for bits in bits_per_key_options]
+    inserted_keys = [f"key-{index:06d}" for index in range(key_count)]
+    missing_keys = [f"missing-{index:06d}" for index in range(miss_count)]
+    results: list[dict[str, object]] = []
+
+    for bits_per_key in options:
+        bloom_filter = BloomFilter.for_capacity(key_count, bits_per_key=bits_per_key)
+        for key in inserted_keys:
+            bloom_filter.add(key)
+        false_positives = sum(1 for key in missing_keys if bloom_filter.might_contain(key))
+        results.append(
+            {
+                "bits_per_key": bits_per_key,
+                "hash_count": bloom_filter.hash_count,
+                "filter_bits": bloom_filter.bit_count,
+                "inserted_keys": key_count,
+                "miss_lookups": miss_count,
+                "observed_false_positives": false_positives,
+                "observed_false_positive_rate": false_positives / miss_count,
+                "estimated_false_positive_rate": bloom_filter.estimated_false_positive_rate(key_count),
+            }
+        )
+
+    best = min(results, key=lambda item: float(item["observed_false_positive_rate"]))
+    return {
+        "key_count": key_count,
+        "miss_lookups": miss_count,
+        "results": results,
+        "recommended_bits_per_key": best["bits_per_key"],
+        "note": "Higher bits-per-key usually reduce false positives at the cost of more filter memory.",
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Tiny LSM-tree inspired key-value store")
     parser.add_argument("--dir", required=True, help="storage directory")
@@ -303,6 +359,15 @@ def build_parser() -> argparse.ArgumentParser:
     delete_parser = subparsers.add_parser("delete", help="delete a key")
     delete_parser.add_argument("key")
 
+    benchmark_parser = subparsers.add_parser("benchmark", help="compare Bloom filter false positives across densities")
+    benchmark_parser.add_argument("--key-count", type=int, default=500, help="number of inserted keys to model")
+    benchmark_parser.add_argument("--miss-count", type=int, default=1000, help="number of negative lookups to probe")
+    benchmark_parser.add_argument(
+        "--bits-per-key-options",
+        default=",".join(str(value) for value in DEFAULT_BENCHMARK_BITS_PER_KEY),
+        help="comma-separated Bloom filter densities to compare",
+    )
+
     subparsers.add_parser("list", help="list live key/value pairs")
     subparsers.add_parser("stats", help="show store stats")
     subparsers.add_parser("flush", help="force a memtable flush")
@@ -313,6 +378,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "benchmark":
+        try:
+            report = run_bloom_benchmark(
+                key_count=args.key_count,
+                miss_count=args.miss_count,
+                bits_per_key_options=parse_bits_per_key_options(args.bits_per_key_options),
+            )
+        except ValueError as exc:
+            print(json.dumps({"status": "error", "error": str(exc)}))
+            return 2
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
 
     store = LSMTreeKV(
         args.dir,
