@@ -173,6 +173,16 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertGreaterEqual(result.timings_ms[0]["skew_ratio"], 1.0)
         self.assertIn("max_reducer_records", result.timings_ms[1])
 
+    def test_benchmark_wordcount_can_render_csv_rows(self) -> None:
+        result = benchmark_wordcount("balanced", records=120, shard_size=20, reducers=[1, 3], seed=5)
+
+        csv_output = result.to_csv().strip().splitlines()
+
+        self.assertEqual(csv_output[0], "scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+        self.assertEqual(len(csv_output), 3)
+        self.assertTrue(csv_output[1].startswith("balanced,5,120,20,1,"))
+        self.assertTrue(csv_output[2].startswith("balanced,5,120,20,3,"))
+
     def test_benchmark_wordcount_rejects_non_positive_shard_size(self) -> None:
         with self.assertRaisesRegex(ValueError, "shard_size must be positive"):
             benchmark_wordcount("balanced", records=50, shard_size=0, reducers=[1, 2])
@@ -339,6 +349,41 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["reducers"], [1, 3])
             self.assertEqual(len(payload["timings_ms"]), 2)
             self.assertEqual(payload["timings_ms"][0]["reducers"], 1)
+
+    def test_cli_benchmark_can_write_csv_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "benchmark.json"
+            csv_output = Path(tmpdir) / "benchmark.csv"
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "benchmark",
+                    "--scenario",
+                    "balanced",
+                    "--records",
+                    "120",
+                    "--shard-size",
+                    "20",
+                    "--reducers",
+                    "1",
+                    "3",
+                    "--output",
+                    str(output),
+                    "--csv-output",
+                    str(csv_output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            rows = csv_output.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(payload["reducers"], [1, 3])
+            self.assertEqual(rows[0], "scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+            self.assertEqual(len(rows), 3)
+            self.assertIn(",1,", rows[1])
+            self.assertIn(",3,", rows[2])
 
     def test_cli_requires_group_field_for_json_group_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

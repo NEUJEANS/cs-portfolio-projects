@@ -17,6 +17,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - reducer distribution stats so you can talk about key skew in interviews
 - synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts
 - machine-readable JSON output with shard and record statistics
+- optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
 - JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
 
 ## Usage
@@ -84,6 +85,17 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --output benchmark.json
 ```
 
+Write both JSON and CSV benchmark outputs for charts or slide-ready tables:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --scenario skewed \
+  --records 10000 \
+  --reducers 1 2 4 8 \
+  --output benchmark.json \
+  --csv-output benchmark.csv
+```
+
 ## Plugin contract
 
 A plugin is a Python file with:
@@ -135,5 +147,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - why timing alone can mislead without reducer-distribution metrics beside it
 
 ## Future improvements
-- export benchmark runs as CSV for charting in notebooks or slide decks
 - visualize reducer skew across shards over time
+- add heatmap-style shard-to-reducer export for richer skew storytelling

@@ -57,3 +57,14 @@
 - [x] run tests and 3 review passes
 - [ ] consider CSV benchmark export or reducer heatmap visualization in a future run
 
+
+## Benchmark CSV export slice (2026-04-15 07:19 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the existing project docs/tests already define the benchmark contract clearly
+- [x] do a short Python `csv` refresh and self-test by defining a deterministic header/row contract before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add optional benchmark CSV export alongside the existing JSON export
+- [x] extend project and repo-level tests for programmatic CSV rendering and CLI file output
+- [x] run tests and 3 review passes
+- [ ] consider shard-by-reducer heatmap export in a future run

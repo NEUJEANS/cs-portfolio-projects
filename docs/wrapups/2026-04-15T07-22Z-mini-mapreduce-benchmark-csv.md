@@ -1,0 +1,21 @@
+# Wrap-up - mini-mapreduce benchmark CSV export
+
+- timestamp: 2026-04-15T07:22:00Z
+- project: mini-mapreduce-lab
+- summary:
+  - added optional `--csv-output` support to the synthetic benchmark command
+  - added programmatic CSV rendering for benchmark results with a deterministic header/row schema
+  - updated README, project checklist, slice checklist, and 3 review-pass logs for resumability
+- tests:
+  - `python3 -m unittest projects/mini-mapreduce-lab/test_mapreduce.py tests/test_mini_mapreduce.py`
+  - `python3 projects/mini-mapreduce-lab/mapreduce.py benchmark --scenario skewed --records 120 --shard-size 20 --reducers 1 3 --output /tmp/mini-mapreduce-benchmark.json --csv-output /tmp/mini-mapreduce-benchmark.csv`
+- reviews:
+  - pass 1: caught and fixed misplaced `args.csv_output` access in the `run` branch
+  - pass 2: verified deterministic CSV schema and docs coverage
+  - pass 3: verified smoke output and repo-level integration coverage
+- secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+  - result: clean (0 verified, 0 unknown)
+- commit: 46f19a31126a75d85dc02e07a4eb41d1e84d3c3e
+- next step:
+  - consider shard-by-reducer heatmap export so benchmark storytelling goes beyond one aggregate skew ratio

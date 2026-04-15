@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import importlib
 import importlib.util
@@ -99,6 +100,38 @@ class BenchmarkResult:
             indent=2,
             sort_keys=True,
         )
+
+    def to_csv(self) -> str:
+        fieldnames = [
+            "scenario",
+            "seed",
+            "total_records",
+            "shard_size",
+            "reducers",
+            "elapsed_ms",
+            "shards",
+            "map_records",
+            "unique_keys",
+            "max_reducer_records",
+            "skew_ratio",
+        ]
+        rows: list[dict[str, object]] = []
+        for timing in self.timings_ms:
+            row = {
+                "scenario": self.scenario,
+                "seed": self.seed,
+                "total_records": self.total_records,
+                "shard_size": self.shard_size,
+                **timing,
+            }
+            rows.append(row)
+
+        from io import StringIO
+        buffer = StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+        return buffer.getvalue()
 
 
 @dataclass(slots=True)
@@ -391,6 +424,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--reducers", type=int, nargs="+", default=[1, 2, 4, 8], help="one or more reducer counts to compare")
     benchmark_parser.add_argument("--seed", type=int, default=42, help="seed for deterministic synthetic data generation")
     benchmark_parser.add_argument("--output", help="optional output JSON path")
+    benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
 
     return parser
 
@@ -440,6 +474,8 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
         else:
             print(rendered)
+        if args.csv_output:
+            Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
         return 0
 
     parser.error("unsupported command")
