@@ -1,0 +1,65 @@
+{
+  "edge_counts": [
+    1000,
+    5000,
+    10000
+  ],
+  "mode": "benchmark-series",
+  "nodes_requested": 1500,
+  "runs": [
+    {
+      "cycle_edges": 37,
+      "edges_per_second": 266405.449,
+      "edges_requested": 1000,
+      "elapsed_ms": 3.754,
+      "mode": "benchmark",
+      "nodes_requested": 1500,
+      "seed": 7,
+      "stats": {
+        "components": 131,
+        "cyclic_components": 3,
+        "largest_component": 714,
+        "nodes": 1094,
+        "successful_unions": 963
+      }
+    },
+    {
+      "cycle_edges": 3503,
+      "edges_per_second": 286702.278,
+      "edges_requested": 5000,
+      "elapsed_ms": 17.44,
+      "mode": "benchmark",
+      "nodes_requested": 1500,
+      "seed": 7,
+      "stats": {
+        "components": 1,
+        "cyclic_components": 1,
+        "largest_component": 1498,
+        "nodes": 1498,
+        "successful_unions": 1497
+      }
+    },
+    {
+      "cycle_edges": 8501,
+      "edges_per_second": 297706.215,
+      "edges_requested": 10000,
+      "elapsed_ms": 33.59,
+      "mode": "benchmark",
+      "nodes_requested": 1500,
+      "seed": 7,
+      "stats": {
+        "components": 1,
+        "cyclic_components": 1,
+        "largest_component": 1500,
+        "nodes": 1500,
+        "successful_unions": 1499
+      }
+    }
+  ],
+  "seed": 7,
+  "summary": {
+    "fastest_edges_per_second": 297706.215,
+    "median_edges_per_second": 286702.278,
+    "slowest_edges_per_second": 266405.449
+  }
+}

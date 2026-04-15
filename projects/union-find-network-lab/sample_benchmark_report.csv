@@ -1,0 +1,4 @@
+seed,nodes_requested,edges_requested,elapsed_ms,edges_per_second,cycle_edges,stats_nodes,stats_components,stats_largest_component,stats_cyclic_components,stats_successful_unions
+7,1500,1000,3.754,266405.449,37,1094,131,714,3,963
+7,1500,5000,17.44,286702.278,3503,1498,1,1498,1,1497
+7,1500,10000,33.59,297706.215,8501,1500,1,1500,1,1499

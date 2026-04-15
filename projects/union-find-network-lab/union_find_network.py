@@ -263,15 +263,125 @@ def run_benchmark(nodes: int, edges: int, seed: int = 7) -> Dict[str, object]:
     }
 
 
+def run_benchmark_series(nodes: int, edge_counts: List[int], seed: int = 7) -> Dict[str, object]:
+    if not edge_counts:
+        raise ValueError("benchmark series requires at least one edge count")
+    if any(edge_count < 1 for edge_count in edge_counts):
+        raise ValueError("benchmark series edge counts must all be at least 1")
+
+    runs = [run_benchmark(nodes=nodes, edges=edge_count, seed=seed) for edge_count in edge_counts]
+    throughput_values = [run["edges_per_second"] for run in runs if isinstance(run.get("edges_per_second"), (int, float))]
+
+    return {
+        "mode": "benchmark-series",
+        "seed": seed,
+        "nodes_requested": nodes,
+        "edge_counts": edge_counts,
+        "runs": runs,
+        "summary": {
+            "fastest_edges_per_second": max(throughput_values) if throughput_values else None,
+            "slowest_edges_per_second": min(throughput_values) if throughput_values else None,
+            "median_edges_per_second": _median(throughput_values),
+        },
+    }
+
+
+def _median(values: List[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[middle]
+    return round((ordered[middle - 1] + ordered[middle]) / 2, 3)
+
+
+def write_json_report(payload: Dict[str, object], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def write_benchmark_series_csv(payload: Dict[str, object], output_path: Path) -> None:
+    if payload.get("mode") != "benchmark-series":
+        raise ValueError("CSV export currently supports benchmark-series output only")
+    runs = payload.get("runs")
+    if not isinstance(runs, list):
+        raise ValueError("benchmark-series payload must include a runs list")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "seed",
+                "nodes_requested",
+                "edges_requested",
+                "elapsed_ms",
+                "edges_per_second",
+                "cycle_edges",
+                "stats_nodes",
+                "stats_components",
+                "stats_largest_component",
+                "stats_cyclic_components",
+                "stats_successful_unions",
+            ],
+        )
+        writer.writeheader()
+        for run in runs:
+            stats = run.get("stats", {}) if isinstance(run, dict) else {}
+            writer.writerow(
+                {
+                    "seed": run.get("seed") if isinstance(run, dict) else None,
+                    "nodes_requested": run.get("nodes_requested") if isinstance(run, dict) else None,
+                    "edges_requested": run.get("edges_requested") if isinstance(run, dict) else None,
+                    "elapsed_ms": run.get("elapsed_ms") if isinstance(run, dict) else None,
+                    "edges_per_second": run.get("edges_per_second") if isinstance(run, dict) else None,
+                    "cycle_edges": run.get("cycle_edges") if isinstance(run, dict) else None,
+                    "stats_nodes": stats.get("nodes") if isinstance(stats, dict) else None,
+                    "stats_components": stats.get("components") if isinstance(stats, dict) else None,
+                    "stats_largest_component": stats.get("largest_component") if isinstance(stats, dict) else None,
+                    "stats_cyclic_components": stats.get("cyclic_components") if isinstance(stats, dict) else None,
+                    "stats_successful_unions": stats.get("successful_unions") if isinstance(stats, dict) else None,
+                }
+            )
+
+
+def maybe_write_report(payload: Dict[str, object], output_json: Path | None, output_csv: Path | None) -> None:
+    if output_json:
+        write_json_report(payload, output_json)
+    if output_csv:
+        write_benchmark_series_csv(payload, output_csv)
+
+
+def parse_benchmark_series(raw_value: str) -> List[int]:
+    values = [part.strip() for part in raw_value.split(",") if part.strip()]
+    if not values:
+        raise ValueError("--benchmark-series must include at least one positive integer edge count")
+    try:
+        edge_counts = [int(value) for value in values]
+    except ValueError as exc:
+        raise ValueError("--benchmark-series must be a comma-separated list of integers") from exc
+    if any(edge_count < 1 for edge_count in edge_counts):
+        raise ValueError("--benchmark-series edge counts must all be positive integers")
+    return edge_counts
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Union-Find network lab")
     parser.add_argument("--script", type=Path, help="JSON file containing scripted operations")
     parser.add_argument("--edges-csv", type=Path, help="CSV file with source,target headers for bulk edge import")
     parser.add_argument("--snapshot-every", type=int, default=0, help="Record import snapshots every N CSV edges")
     parser.add_argument("--benchmark", action="store_true", help="Run a random union benchmark")
+    parser.add_argument(
+        "--benchmark-series",
+        type=parse_benchmark_series,
+        help="Comma-separated benchmark edge counts for a reproducible multi-run series, e.g. 1000,5000,10000",
+    )
     parser.add_argument("--benchmark-nodes", type=int, default=1000, help="Number of nodes for benchmark mode")
     parser.add_argument("--benchmark-edges", type=int, default=5000, help="Number of random edges for benchmark mode")
     parser.add_argument("--benchmark-seed", type=int, default=7, help="Seed for reproducible benchmark mode")
+    parser.add_argument("--output-json", type=Path, help="Write JSON output to a file in addition to stdout")
+    parser.add_argument("--output-csv", type=Path, help="Write benchmark-series output as CSV")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     parser.add_argument("command", nargs="*", help="Optional single command, e.g. union a b")
     return parser
@@ -290,9 +400,11 @@ def main() -> int:
     try:
         if args.snapshot_every < 0:
             raise ValueError("--snapshot-every must be zero or a positive integer")
-        enabled_modes = sum(bool(flag) for flag in (args.script, args.edges_csv, args.benchmark))
+        enabled_modes = sum(bool(flag) for flag in (args.script, args.edges_csv, args.benchmark, args.benchmark_series))
         if enabled_modes > 1:
-            raise ValueError("choose only one of --script, --edges-csv, or --benchmark")
+            raise ValueError("choose only one of --script, --edges-csv, --benchmark, or --benchmark-series")
+        if args.output_csv and not args.benchmark_series:
+            raise ValueError("--output-csv requires --benchmark-series")
 
         network = UnionFindNetwork()
 
@@ -307,12 +419,16 @@ def main() -> int:
             result = run_csv_import(args.edges_csv, snapshot_every=args.snapshot_every)
         elif args.benchmark:
             result = run_benchmark(args.benchmark_nodes, args.benchmark_edges, seed=args.benchmark_seed)
+        elif args.benchmark_series:
+            result = run_benchmark_series(args.benchmark_nodes, args.benchmark_series, seed=args.benchmark_seed)
         else:
             result = _run_single_command(network, args.command)
+
+        maybe_write_report(result, args.output_json, args.output_csv)
     except ValueError as exc:
         parser.error(str(exc))
 
-    if args.json or args.script or args.edges_csv or args.benchmark:
+    if args.json or args.script or args.edges_csv or args.benchmark or args.benchmark_series:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
         print(result)

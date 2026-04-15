@@ -9,7 +9,16 @@ from pathlib import Path
 MODULE_PATH = Path(__file__).with_name("union_find_network.py")
 sys.path.insert(0, str(MODULE_PATH.parent))
 
-from union_find_network import load_edges_from_csv, run_benchmark, run_csv_import, UnionFindNetwork  # noqa: E402
+from union_find_network import (  # noqa: E402
+    UnionFindNetwork,
+    load_edges_from_csv,
+    parse_benchmark_series,
+    run_benchmark,
+    run_benchmark_series,
+    run_csv_import,
+    write_benchmark_series_csv,
+    write_json_report,
+)
 
 
 class UnionFindNetworkTests(unittest.TestCase):
@@ -134,6 +143,60 @@ class UnionFindNetworkTests(unittest.TestCase):
         self.assertEqual(payload["stats"]["nodes"], result["stats"]["nodes"])
         self.assertEqual(payload["stats"]["successful_unions"], result["stats"]["successful_unions"])
 
+    def test_benchmark_series_and_export_helpers(self):
+        series = run_benchmark_series(nodes=24, edge_counts=[20, 40, 80], seed=13)
+        self.assertEqual(series["mode"], "benchmark-series")
+        self.assertEqual(series["edge_counts"], [20, 40, 80])
+        self.assertEqual(len(series["runs"]), 3)
+        self.assertIn("median_edges_per_second", series["summary"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "reports" / "union_find_benchmark.json"
+            csv_path = Path(tmpdir) / "reports" / "union_find_benchmark.csv"
+            write_json_report(series, json_path)
+            write_benchmark_series_csv(series, csv_path)
+
+            saved_json = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved_json["mode"], "benchmark-series")
+
+            with csv_path.open(encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(len(rows), 3)
+            self.assertEqual(rows[0]["seed"], "13")
+            self.assertEqual(rows[-1]["edges_requested"], "80")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "--benchmark-series",
+                    "20,40,80",
+                    "--benchmark-nodes",
+                    "24",
+                    "--benchmark-seed",
+                    "13",
+                    "--output-json",
+                    str(json_path),
+                    "--output-csv",
+                    str(csv_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mode"], "benchmark-series")
+        self.assertEqual(payload["edge_counts"], [20, 40, 80])
+        self.assertEqual(payload["runs"][-1]["edges_requested"], 80)
+        self.assertIn("median_edges_per_second", payload["summary"])
+
+    def test_parse_benchmark_series_validation(self):
+        self.assertEqual(parse_benchmark_series("10, 20,30"), [10, 20, 30])
+        with self.assertRaisesRegex(ValueError, "comma-separated list"):
+            parse_benchmark_series("ten,20")
+        with self.assertRaisesRegex(ValueError, "positive integers"):
+            parse_benchmark_series("0,20")
+
     def test_invalid_script_operation_raises(self):
         network = UnionFindNetwork()
         with self.assertRaisesRegex(ValueError, "unsupported operation"):
@@ -162,6 +225,14 @@ class UnionFindNetworkTests(unittest.TestCase):
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("choose only one", completed.stderr)
+
+        completed = subprocess.run(
+            [sys.executable, str(MODULE_PATH), "--output-csv", "bench.csv"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("requires --benchmark-series", completed.stderr)
 
 
 if __name__ == "__main__":
