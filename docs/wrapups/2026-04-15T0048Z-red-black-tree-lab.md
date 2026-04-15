@@ -16,7 +16,7 @@
 - review pass 3: test coverage / balancing behavior
 
 ## Commit hash
-- `53d7702`
+- `61f08ba`
 
 ## Next step
 - extend the lab with deletion and double-black repair cases, or add Graphviz snapshots for insertion steps
