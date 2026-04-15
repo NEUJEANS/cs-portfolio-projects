@@ -7,4 +7,5 @@
 - [x] add unit tests for correctness, edge cases, and CLI behavior
 - [x] add bipartite matching mode via max-flow reduction
 - [x] log at least 3 review passes
-- [ ] consider a follow-up slice for visualization or Dinic/min-cost-flow comparison
+- [x] consider a follow-up slice for visualization or Dinic/min-cost-flow comparison
+- [x] add Graphviz DOT export for solved flow and matching graphs

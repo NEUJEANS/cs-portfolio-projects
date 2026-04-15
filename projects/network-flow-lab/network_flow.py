@@ -265,6 +265,95 @@ def solve_max_flow(nodes: list[str], edges: list[Edge], source: str, sink: str) 
     )
 
 
+def render_flow_dot(flow_result: FlowResult, *, graph_name: str = "network_flow") -> str:
+    source_side = set(flow_result.min_cut["source_side"])
+    sink_side = set(flow_result.min_cut["sink_side"])
+    cut_edges = {
+        (item["source"], item["target"])
+        for item in flow_result.edge_flows
+        if item["source"] in source_side and item["target"] in sink_side
+    }
+
+    lines = [f'digraph "{graph_name}" {{', "  rankdir=LR;", '  node [shape=circle];']
+    for node in flow_result.min_cut["source_side"]:
+        attrs = ['style="filled"', 'fillcolor="lightblue"']
+        if node == flow_result.source:
+            attrs.append('peripheries=2')
+        lines.append(f'  "{node}" [{", ".join(attrs)}];')
+    for node in flow_result.min_cut["sink_side"]:
+        attrs = ['style="filled"', 'fillcolor="lightgoldenrod1"']
+        if node == flow_result.sink:
+            attrs.append('peripheries=2')
+        lines.append(f'  "{node}" [{", ".join(attrs)}];')
+
+    for edge in flow_result.edge_flows:
+        attrs = [f'label="{edge["flow"]}/{edge["capacity"]}"']
+        if (edge["source"], edge["target"]) in cut_edges:
+            attrs.extend(['color="crimson"', 'penwidth=2'])
+        elif edge["flow"] > 0:
+            attrs.extend(['color="navy"', 'penwidth=2'])
+        lines.append(f'  "{edge["source"]}" -> "{edge["target"]}" [{", ".join(attrs)}];')
+
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "bipartite_matching") -> str:
+    matched_pairs = {(item["left"], item["right"]) for item in matching_result.matches}
+    flow = matching_result.flow
+    flow_edges = {
+        (item["source"], item["target"]): item for item in flow["edge_flows"]
+    }
+
+    lines = [f'digraph "{graph_name}" {{', "  rankdir=LR;", '  graph [splines=true];']
+    lines.append('  node [shape=circle, style="filled", fillcolor="lightsteelblue1"];')
+    for node in matching_result.left_partition:
+        attrs = []
+        if node in matching_result.unmatched_left:
+            attrs.append('fillcolor="mistyrose"')
+        lines.append(f'  "{node}" [{", ".join(attrs)}];' if attrs else f'  "{node}";')
+
+    lines.append('  node [shape=box, style="filled", fillcolor="honeydew2"];')
+    for node in matching_result.right_partition:
+        attrs = []
+        if node in matching_result.unmatched_right:
+            attrs.append('fillcolor="moccasin"')
+        lines.append(f'  "{node}" [{", ".join(attrs)}];' if attrs else f'  "{node}";')
+
+    for left_node in matching_result.left_partition:
+        edge = flow_edges.get((MATCH_SOURCE, left_node))
+        if edge and edge["flow"] == 1:
+            lines.append(f'  "source" -> "{left_node}" [style="dashed", color="gray50", label="1"];')
+    for left_node, right_node in sorted(matched_pairs):
+        lines.append(
+            f'  "{left_node}" -> "{right_node}" [color="forestgreen", penwidth=3, label="match"];'
+        )
+    for edge_key, edge in sorted(flow_edges.items()):
+        source, target = edge_key
+        if source in {MATCH_SOURCE, MATCH_SINK} or target in {MATCH_SOURCE, MATCH_SINK}:
+            continue
+        if edge_key in matched_pairs:
+            continue
+        attrs = ['color="gray60"']
+        if edge["flow"] > 0:
+            attrs.extend(['color="navy"', 'penwidth=2', f'label="{edge["flow"]}/{edge["capacity"]}"'])
+        lines.append(f'  "{source}" -> "{target}" [{", ".join(attrs)}];')
+    for node in matching_result.right_partition:
+        edge = flow_edges.get((node, MATCH_SINK))
+        if edge and edge["flow"] == 1:
+            lines.append(f'  "{node}" -> "sink" [style="dashed", color="gray50", label="1"];')
+
+    lines.append('  "source" [shape=diamond, style="filled", fillcolor="white"];')
+    lines.append('  "sink" [shape=diamond, style="filled", fillcolor="white"];')
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def write_dot_output(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents + "\n", encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Solve max-flow graphs and bipartite matchings.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -272,16 +361,20 @@ def build_parser() -> argparse.ArgumentParser:
     solve_parser = subparsers.add_parser("solve", help="solve a graph JSON file")
     solve_parser.add_argument("graph", type=Path, help="path to graph JSON")
     solve_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    solve_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved flow graph")
 
     demo_parser = subparsers.add_parser("demo", help="run the bundled sample graph")
     demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample flow graph")
 
     match_parser = subparsers.add_parser("match", help="solve a bipartite matching JSON file")
     match_parser.add_argument("graph", type=Path, help="path to bipartite graph JSON")
     match_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    match_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved matching graph")
 
     match_demo_parser = subparsers.add_parser("match-demo", help="run the bundled matching sample")
     match_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    match_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample matching graph")
     return parser
 
 
@@ -289,25 +382,41 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "solve":
         graph_path = args.graph
         nodes, edges, source, sink = load_graph(graph_path)
-        result = solve_max_flow(nodes, edges, source, sink).to_dict()
-        return {"command": args.command, "graph": str(graph_path), **result}
+        flow_result = solve_max_flow(nodes, edges, source, sink)
+        payload = {"command": args.command, "graph": str(graph_path), **flow_result.to_dict()}
+        if args.dot_out:
+            write_dot_output(args.dot_out, render_flow_dot(flow_result, graph_name=graph_path.stem))
+            payload["dot_output"] = str(args.dot_out)
+        return payload
 
     if args.command == "demo":
         graph_path = Path(__file__).with_name("sample_graph.json")
         nodes, edges, source, sink = load_graph(graph_path)
-        result = solve_max_flow(nodes, edges, source, sink).to_dict()
-        return {"command": args.command, "graph": str(graph_path), **result}
+        flow_result = solve_max_flow(nodes, edges, source, sink)
+        payload = {"command": args.command, "graph": str(graph_path), **flow_result.to_dict()}
+        if args.dot_out:
+            write_dot_output(args.dot_out, render_flow_dot(flow_result, graph_name=graph_path.stem))
+            payload["dot_output"] = str(args.dot_out)
+        return payload
 
     if args.command == "match":
         graph_path = args.graph
         left, right, edges = load_bipartite_graph(graph_path)
-        result = solve_bipartite_matching(left, right, edges).to_dict()
-        return {"command": args.command, "graph": str(graph_path), **result}
+        matching_result = solve_bipartite_matching(left, right, edges)
+        payload = {"command": args.command, "graph": str(graph_path), **matching_result.to_dict()}
+        if args.dot_out:
+            write_dot_output(args.dot_out, render_matching_dot(matching_result, graph_name=graph_path.stem))
+            payload["dot_output"] = str(args.dot_out)
+        return payload
 
     graph_path = Path(__file__).with_name("sample_matching_graph.json")
     left, right, edges = load_bipartite_graph(graph_path)
-    result = solve_bipartite_matching(left, right, edges).to_dict()
-    return {"command": args.command, "graph": str(graph_path), **result}
+    matching_result = solve_bipartite_matching(left, right, edges)
+    payload = {"command": args.command, "graph": str(graph_path), **matching_result.to_dict()}
+    if args.dot_out:
+        write_dot_output(args.dot_out, render_matching_dot(matching_result, graph_name=graph_path.stem))
+        payload["dot_output"] = str(args.dot_out)
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:

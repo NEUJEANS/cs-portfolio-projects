@@ -20,6 +20,8 @@ spec.loader.exec_module(module)
 Edge = module.Edge
 load_graph = module.load_graph
 load_bipartite_graph = module.load_bipartite_graph
+render_flow_dot = module.render_flow_dot
+render_matching_dot = module.render_matching_dot
 solve_max_flow = module.solve_max_flow
 solve_bipartite_matching = module.solve_bipartite_matching
 
@@ -149,6 +151,29 @@ class NetworkFlowLabTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "reserved"):
                 load_bipartite_graph(reserved_path)
 
+    def test_render_flow_dot_marks_cut_edges_and_flow_labels(self) -> None:
+        result = solve_max_flow(
+            ["s", "a", "b", "t"],
+            [Edge("s", "a", 3), Edge("a", "t", 2), Edge("s", "b", 1), Edge("b", "t", 1)],
+            "s",
+            "t",
+        )
+        dot = render_flow_dot(result, graph_name="tiny_flow")
+        self.assertIn('digraph "tiny_flow"', dot)
+        self.assertIn('"a" -> "t" [label="2/2", color="crimson", penwidth=2];', dot)
+        self.assertIn('"s" [style="filled", fillcolor="lightblue", peripheries=2];', dot)
+
+    def test_render_matching_dot_highlights_matches(self) -> None:
+        result = solve_bipartite_matching(
+            ["anna", "ben"],
+            ["api", "db"],
+            [("anna", "api"), ("ben", "api")],
+        )
+        dot = render_matching_dot(result, graph_name="tiny_matching")
+        self.assertIn('digraph "tiny_matching"', dot)
+        self.assertIn('"anna" -> "api" [color="forestgreen", penwidth=3, label="match"];', dot)
+        self.assertIn('"db" [fillcolor="moccasin"];', dot)
+
     def test_cli_demo_outputs_json_payload(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "demo"],
@@ -175,6 +200,24 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertEqual(payload["match_count"], 3)
         self.assertEqual(payload["unmatched_left"], ["david"])
         self.assertIn("flow", payload)
+
+    def test_cli_can_write_dot_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dot_path = Path(tmpdir) / "flow.dot"
+            completed = subprocess.run(
+                ["python3", str(MODULE_PATH), "demo", "--dot-out", str(dot_path)],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "demo")
+            self.assertEqual(payload["dot_output"], str(dot_path))
+            self.assertTrue(dot_path.exists())
+            dot = dot_path.read_text(encoding="utf-8")
+            self.assertIn('digraph "sample_graph"', dot)
+            self.assertIn('label="10/10"', dot)
 
 
 if __name__ == "__main__":
