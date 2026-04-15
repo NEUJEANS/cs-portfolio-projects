@@ -9,5 +9,5 @@
 - [x] surface available dataset families in benchmark JSON/Markdown/HTML outputs and invalid-family errors
 - [x] extend project and repo-level tests for metadata rendering and validation failures
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider exposing plugin dataset-family metadata in CSV output or a dedicated inspect command later
