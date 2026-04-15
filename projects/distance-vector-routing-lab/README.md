@@ -12,7 +12,9 @@ A compact Python simulator for Bellman-Ford-style distance-vector routing, inclu
 - symmetric weighted-topology input via JSON
 - deterministic round-based convergence history
 - three advertisement modes: `classic`, `split-horizon`, and `poison-reverse`
-- link-removal event simulation to study reconvergence after failures
+- link-removal event simulation that can continue from the converged pre-failure state
+- classic count-to-infinity behavior vs split-horizon / poison-reverse mitigation
+- Markdown or Mermaid timeline export for per-round failure reconvergence artifacts
 - JSON output suitable for docs, screenshots, notebooks, or lightweight visualizers
 - validations for malformed or asymmetric topologies
 
@@ -33,13 +35,27 @@ python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate
   --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}'
 ```
 
-Remove a link and inspect reconvergence before vs after the event:
+Remove a link and inspect reconvergence before vs after the event. The `after.history` timeline starts from the already-converged routing tables, so classic mode can visibly count upward toward the infinity metric:
 
 ```bash
 python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate-failure \
-  --mode poison-reverse \
+  --mode classic \
   --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}' \
-  --remove-link B C
+  --remove-link B C \
+  --max-rounds 20
+```
+
+Export that same failure as a portfolio-friendly round-by-round timeline for destination `C`:
+
+```bash
+python3 projects/distance-vector-routing-lab/distance_vector_routing.py export-timeline \
+  --mode classic \
+  --format markdown \
+  --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}' \
+  --remove-link B C \
+  --destination C \
+  --routers A B \
+  --max-rounds 20
 ```
 
 ## Diagram export
@@ -86,7 +102,7 @@ Steady-state runs return mode/config metadata, the normalized topology snapshot,
 }
 ```
 
-Failure runs wrap two simulations so you can compare the stable network before the event and the final tables after the removed link.
+Failure runs wrap a stable pre-failure snapshot plus a reconvergence run that starts from those previously learned routes on the broken topology. That makes count-to-infinity behavior visible in classic mode instead of hiding it behind a fresh post-failure recomputation.
 
 ## Test
 
@@ -102,6 +118,6 @@ python3 -m unittest projects/distance-vector-routing-lab/test_distance_vector_ro
 - how failure-driven reconvergence reveals more systems understanding than a static shortest-path answer
 
 ## Future improvements
-- add topology import/export for Graphviz or Mermaid diagrams
-- render per-round advertisement traces to make loop behavior easier to visualize
+- render neighbor-to-neighbor advertisement messages explicitly, not only final per-round tables
+- add a built-in count-to-infinity sample scenario file plus checked-in timeline artifacts
 - compare convergence length across modes on larger benchmark scenarios

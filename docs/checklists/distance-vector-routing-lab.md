@@ -31,7 +31,24 @@
 - [ ] commit and push
 - [x] append wrap-up
 
+## 2026-04-15 count-to-infinity timeline slice
+- [x] brief research note captured
+- [x] short refresh and self-test captured
+- [x] add a resumable slice checklist entry
+- [x] make failure simulation continue from converged pre-failure routing tables
+- [x] expose count-to-infinity behavior for classic mode and mitigation for poison reverse
+- [x] add Markdown/Mermaid timeline export for a focused destination across routers
+- [x] document the new failure/timeline workflow in the project README
+- [x] add unit tests for reconvergence history and CLI timeline output
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [x] append wrap-up
+
 ## Future improvements
 - [x] add Graphviz or Mermaid export for topology and route snapshots
 - [ ] simulate periodic timers vs triggered updates explicitly
-- [ ] add count-to-infinity demo scenarios with per-round timeline artifacts
+- [x] add count-to-infinity demo scenarios with per-round timeline artifacts

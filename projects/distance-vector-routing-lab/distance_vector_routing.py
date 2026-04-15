@@ -128,6 +128,28 @@ def update_once(
     return next_tables, changed
 
 
+def run_rounds(
+    topology: Mapping[str, Mapping[str, int]],
+    initial_tables: Mapping[str, Mapping[str, Route]],
+    *,
+    mode: str,
+    infinity: int,
+    max_rounds: int,
+) -> tuple[dict[str, dict[str, Route]], list[RoundState], bool]:
+    tables = {router: dict(table) for router, table in initial_tables.items()}
+    history: list[RoundState] = [RoundState(round_index=0, changed=False, tables=tables)]
+    converged = False
+
+    for round_index in range(1, max_rounds + 1):
+        tables, changed = update_once(topology, tables, mode=mode, infinity=infinity)
+        history.append(RoundState(round_index=round_index, changed=changed, tables=tables))
+        if not changed:
+            converged = True
+            break
+
+    return tables, history, converged
+
+
 def run_simulation(
     topology: Mapping[str, Mapping[str, int]],
     *,
@@ -138,16 +160,13 @@ def run_simulation(
     if mode not in {"classic", "split-horizon", "poison-reverse"}:
         raise ValueError("mode must be classic, split-horizon, or poison-reverse")
     normalized = normalize_topology(topology)
-    tables = initialize_tables(normalized)
-    history: list[RoundState] = [RoundState(round_index=0, changed=False, tables=tables)]
-
-    converged = False
-    for round_index in range(1, max_rounds + 1):
-        tables, changed = update_once(normalized, tables, mode=mode, infinity=infinity)
-        history.append(RoundState(round_index=round_index, changed=changed, tables=tables))
-        if not changed:
-            converged = True
-            break
+    tables, history, converged = run_rounds(
+        normalized,
+        initialize_tables(normalized),
+        mode=mode,
+        infinity=infinity,
+        max_rounds=max_rounds,
+    )
 
     return {
         "mode": mode,
@@ -167,6 +186,54 @@ def remove_link(topology: Mapping[str, Mapping[str, int]], left: str, right: str
     normalized[left].pop(right)
     normalized[right].pop(left)
     return normalized
+
+
+def run_failure_simulation(
+    topology: Mapping[str, Mapping[str, int]],
+    left: str,
+    right: str,
+    *,
+    mode: str = "classic",
+    infinity: int = INFINITY,
+    max_rounds: int = 50,
+) -> dict[str, object]:
+    normalized = normalize_topology(topology)
+    before = run_simulation(normalized, mode=mode, infinity=infinity, max_rounds=max_rounds)
+    updated_topology = remove_link(normalized, left, right)
+    initial_tables = {
+        router: {
+            destination: Route(
+                destination=route["destination"],
+                cost=int(route["cost"]),
+                next_hop=route["next_hop"],
+            )
+            for destination, route in table.items()
+        }
+        for router, table in before["tables"].items()
+    }
+    after_tables, failure_history, converged = run_rounds(
+        updated_topology,
+        initial_tables,
+        mode=mode,
+        infinity=infinity,
+        max_rounds=max_rounds,
+    )
+    return {
+        "event": {"type": "remove-link", "left": left, "right": right},
+        "before": before,
+        "after": {
+            "mode": mode,
+            "infinity": infinity,
+            "topology": {
+                router: dict(sorted(neighbors.items())) for router, neighbors in sorted(updated_topology.items())
+            },
+            "converged": converged,
+            "rounds": len(failure_history) - 1,
+            "tables": serialize_tables(after_tables),
+            "history": [entry.to_dict() for entry in failure_history],
+            "starts_from_converged_before_failure": True,
+        },
+    }
 
 
 def serialize_table(table: Mapping[str, Route]) -> dict[str, dict[str, object]]:
@@ -255,6 +322,57 @@ def render_routes_diagram(simulation: Mapping[str, object], *, router: str | Non
     return "\n".join(lines)
 
 
+def render_failure_timeline(
+    failure_simulation: Mapping[str, object],
+    *,
+    destination: str,
+    diagram_format: str,
+    routers: Sequence[str] | None = None,
+) -> str:
+    after = failure_simulation.get("after")
+    if not isinstance(after, Mapping):
+        raise ValueError("failure simulation must include an 'after' mapping")
+    history = after.get("history")
+    if not isinstance(history, list) or not history:
+        raise ValueError("failure simulation 'after' payload must include non-empty history")
+
+    available_routers = sorted(history[0]["tables"])
+    selected_routers = available_routers if not routers else sorted(dict.fromkeys(routers))
+    for router in selected_routers:
+        if router not in history[0]["tables"]:
+            raise ValueError(f"router {router!r} is not present in the failure history")
+        if destination not in history[0]["tables"][router]:
+            raise ValueError(f"destination {destination!r} is not present in router {router!r}'s table")
+
+    if diagram_format == "mermaid":
+        lines = ["sequenceDiagram"]
+        for router in selected_routers:
+            lines.append(f"    participant {mermaid_id(router)} as {router}")
+        for step in history:
+            round_index = step["round"]
+            lines.append(f"    Note over {','.join(mermaid_id(router) for router in selected_routers)}: round {round_index}")
+            for router in selected_routers:
+                route = step["tables"][router][destination]
+                next_hop = route["next_hop"] if route["next_hop"] is not None else "unreachable"
+                lines.append(
+                    f"    Note over {mermaid_id(router)}: {destination} cost={route['cost']} via {next_hop}"
+                )
+        return "\n".join(lines)
+
+    lines = [
+        "| round | " + " | ".join(f"{router} → {destination}" for router in selected_routers) + " |",
+        "| --- | " + " | ".join("---" for _ in selected_routers) + " |",
+    ]
+    for step in history:
+        row = [str(step["round"])]
+        for router in selected_routers:
+            route = step["tables"][router][destination]
+            next_hop = route["next_hop"] if route["next_hop"] is not None else "unreachable"
+            row.append(f"cost={route['cost']}, via {next_hop}")
+        lines.append("| " + " | ".join(row) + " |")
+    return "\n".join(lines)
+
+
 def export_diagram(
     topology: Mapping[str, Mapping[str, int]],
     *,
@@ -318,6 +436,19 @@ def build_parser() -> argparse.ArgumentParser:
     diagram_parser.add_argument("--max-rounds", type=int, default=50)
     diagram_parser.add_argument("--router", help="limit route snapshots to one router")
 
+    timeline_parser = subparsers.add_parser(
+        "export-timeline",
+        help="render per-round failure reconvergence for one destination as Markdown or Mermaid",
+    )
+    timeline_parser.add_argument("--topology", required=True)
+    timeline_parser.add_argument("--remove-link", nargs=2, metavar=("LEFT", "RIGHT"), required=True)
+    timeline_parser.add_argument("--destination", required=True)
+    timeline_parser.add_argument("--routers", nargs="*", help="optional router subset to include in the timeline")
+    timeline_parser.add_argument("--mode", default="classic", choices=["classic", "split-horizon", "poison-reverse"])
+    timeline_parser.add_argument("--format", dest="timeline_format", default="markdown", choices=["markdown", "mermaid"])
+    timeline_parser.add_argument("--infinity", type=int, default=INFINITY)
+    timeline_parser.add_argument("--max-rounds", type=int, default=50)
+
     return parser
 
 
@@ -335,14 +466,16 @@ def cli(argv: Sequence[str] | None = None) -> int:
         payload: object = run_simulation(topology, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
     elif args.command == "simulate-failure":
         left, right = args.remove_link
-        updated_topology = remove_link(topology, left, right)
-        before = run_simulation(topology, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
-        after = run_simulation(updated_topology, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
-        payload = {
-            "event": {"type": "remove-link", "left": left, "right": right},
-            "before": before,
-            "after": after,
-        }
+        payload = run_failure_simulation(topology, left, right, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
+    elif args.command == "export-timeline":
+        left, right = args.remove_link
+        failure = run_failure_simulation(topology, left, right, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
+        payload = render_failure_timeline(
+            failure,
+            destination=args.destination,
+            diagram_format=args.timeline_format,
+            routers=args.routers,
+        )
     else:
         payload = export_diagram(
             topology,
