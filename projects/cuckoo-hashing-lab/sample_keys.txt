@@ -1,0 +1,6 @@
+user:1001,Ada Lovelace
+user:1002,Grace Hopper
+user:1003,Katherine Johnson
+user:1004,Donald Knuth
+user:1005,Edsger Dijkstra
+user:1006,Barbara Liskov
