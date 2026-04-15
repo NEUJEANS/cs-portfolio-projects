@@ -56,6 +56,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `hyperloglog-cardinality-lab`
 - [x] `mini-mapreduce-lab`
 - [x] `suffix-array-search-lab`
+- [x] `suffix-automaton-lab`
 - [x] `deadlock-detector-lab`
 - [x] `minhash-near-duplicate-lab`
 - [x] `count-min-sketch-lab`
