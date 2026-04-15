@@ -7,7 +7,16 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from count_min_sketch_lab import CountMinSketch, SpaceSavingSummary, benchmark_memory, build_sketch, load_sketch, save_sketch
+from count_min_sketch_lab import (
+    CountMinSketch,
+    SpaceSavingSummary,
+    benchmark_memory,
+    benchmark_series,
+    build_sketch,
+    load_sketch,
+    save_sketch,
+    write_benchmark_series_csv,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -250,3 +259,84 @@ def test_merge_rejects_different_top_k_capacity():
     right = build_sketch(['a'], epsilon=0.05, delta=0.01, seed=1, top_k_capacity=3)
     with pytest.raises(ValueError):
         left.merge(right)
+
+
+def test_benchmark_series_aggregates_repeated_runs():
+    payload = benchmark_series(
+        ['alpha'] * 6 + ['beta'] * 3 + ['gamma'],
+        epsilon=0.05,
+        delta=0.01,
+        seeds=[1, 2, 3],
+        sample_size=2,
+        conservative_update=True,
+        top_k_capacity=2,
+    )
+    assert payload['seeds'] == [1, 2, 3]
+    assert payload['summary']['run_count'] == 3
+    assert len(payload['runs']) == 3
+    assert payload['summary']['top_item_estimates'][0]['item'] == 'alpha'
+    assert payload['summary']['top_item_estimates'][0]['min_estimate'] >= payload['summary']['top_item_estimates'][0]['exact_count']
+
+
+def test_write_benchmark_series_csv_outputs_header_and_rows(tmp_path: Path):
+    payload = benchmark_series(
+        ['alpha'] * 4 + ['beta'] * 2,
+        epsilon=0.05,
+        delta=0.01,
+        seeds=[7, 8],
+        sample_size=2,
+    )
+    output = tmp_path / 'series.csv'
+    write_benchmark_series_csv(output, payload)
+    rows = output.read_text(encoding='utf-8').strip().splitlines()
+    assert rows[0].startswith('seed,item,exact_count,estimate,overestimate')
+    assert len(rows) == 1 + 2 * 2
+    assert rows[1].startswith('7,alpha,4,')
+
+
+def test_cli_benchmark_series_writes_json_and_csv(tmp_path: Path):
+    tokens = tmp_path / 'tokens.txt'
+    tokens.write_text('alpha beta alpha gamma alpha beta delta', encoding='utf-8')
+    output_json = tmp_path / 'series.json'
+    output_csv = tmp_path / 'series.csv'
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            '--epsilon',
+            '0.05',
+            '--delta',
+            '0.01',
+            '--conservative-update',
+            '--top-k-capacity',
+            '3',
+            'benchmark-series',
+            str(tokens),
+            '--sample-size',
+            '3',
+            '--seeds',
+            '2',
+            '5',
+            '8',
+            '--output-json',
+            str(output_json),
+            '--output-csv',
+            str(output_csv),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    stdout_payload = json.loads(result.stdout)
+    assert stdout_payload['run_count'] == 3
+    assert output_json.exists()
+    assert output_csv.exists()
+
+    payload = json.loads(output_json.read_text(encoding='utf-8'))
+    assert payload['seeds'] == [2, 5, 8]
+    assert payload['summary']['run_count'] == 3
+    assert payload['runs'][0]['top_item_estimates'][0]['item'] == 'alpha'
+    csv_lines = output_csv.read_text(encoding='utf-8').strip().splitlines()
+    assert csv_lines[0].startswith('seed,item,exact_count,estimate,overestimate')
+    assert any(line.startswith('2,alpha,3,') for line in csv_lines[1:])

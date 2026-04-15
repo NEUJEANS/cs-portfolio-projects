@@ -1,0 +1,423 @@
+{
+  "conservative_update": true,
+  "delta": 0.01,
+  "epsilon": 0.01,
+  "runs": [
+    {
+      "conservative_update": true,
+      "core_vs_exact_ratio": 22.0348,
+      "delta": 0.01,
+      "depth": 5,
+      "epsilon": 0.01,
+      "error_bound": 0.1,
+      "exact_counter_bytes": 517,
+      "full_vs_exact_ratio": 30.1663,
+      "seed": 0,
+      "sketch_core_bytes": 11392,
+      "sketch_full_bytes": 15596,
+      "stream_items": 10,
+      "top_item_estimates": [
+        {
+          "estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "overestimate": 0
+        }
+      ],
+      "top_k_candidates": [
+        {
+          "cms_estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "summary_error": 0,
+          "summary_estimate": 4
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "summary_error": 0,
+          "summary_estimate": 1
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "summary_error": 0,
+          "summary_estimate": 1
+        }
+      ],
+      "top_k_capacity": 5,
+      "unique_items": 5,
+      "width": 272
+    },
+    {
+      "conservative_update": true,
+      "core_vs_exact_ratio": 22.0348,
+      "delta": 0.01,
+      "depth": 5,
+      "epsilon": 0.01,
+      "error_bound": 0.1,
+      "exact_counter_bytes": 517,
+      "full_vs_exact_ratio": 29.7331,
+      "seed": 1,
+      "sketch_core_bytes": 11392,
+      "sketch_full_bytes": 15372,
+      "stream_items": 10,
+      "top_item_estimates": [
+        {
+          "estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "overestimate": 0
+        }
+      ],
+      "top_k_candidates": [
+        {
+          "cms_estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "summary_error": 0,
+          "summary_estimate": 4
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "summary_error": 0,
+          "summary_estimate": 1
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "summary_error": 0,
+          "summary_estimate": 1
+        }
+      ],
+      "top_k_capacity": 5,
+      "unique_items": 5,
+      "width": 272
+    },
+    {
+      "conservative_update": true,
+      "core_vs_exact_ratio": 22.0348,
+      "delta": 0.01,
+      "depth": 5,
+      "epsilon": 0.01,
+      "error_bound": 0.1,
+      "exact_counter_bytes": 517,
+      "full_vs_exact_ratio": 29.2998,
+      "seed": 2,
+      "sketch_core_bytes": 11392,
+      "sketch_full_bytes": 15148,
+      "stream_items": 10,
+      "top_item_estimates": [
+        {
+          "estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "overestimate": 0
+        }
+      ],
+      "top_k_candidates": [
+        {
+          "cms_estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "summary_error": 0,
+          "summary_estimate": 4
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "summary_error": 0,
+          "summary_estimate": 1
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "summary_error": 0,
+          "summary_estimate": 1
+        }
+      ],
+      "top_k_capacity": 5,
+      "unique_items": 5,
+      "width": 272
+    },
+    {
+      "conservative_update": true,
+      "core_vs_exact_ratio": 22.0348,
+      "delta": 0.01,
+      "depth": 5,
+      "epsilon": 0.01,
+      "error_bound": 0.1,
+      "exact_counter_bytes": 517,
+      "full_vs_exact_ratio": 28.9207,
+      "seed": 3,
+      "sketch_core_bytes": 11392,
+      "sketch_full_bytes": 14952,
+      "stream_items": 10,
+      "top_item_estimates": [
+        {
+          "estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "overestimate": 0
+        },
+        {
+          "estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "overestimate": 0
+        },
+        {
+          "estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "overestimate": 0
+        }
+      ],
+      "top_k_candidates": [
+        {
+          "cms_estimate": 4,
+          "exact_count": 4,
+          "item": "login",
+          "summary_error": 0,
+          "summary_estimate": 4
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "checkout",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 2,
+          "exact_count": 2,
+          "item": "view",
+          "summary_error": 0,
+          "summary_estimate": 2
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "click",
+          "summary_error": 0,
+          "summary_estimate": 1
+        },
+        {
+          "cms_estimate": 1,
+          "exact_count": 1,
+          "item": "search",
+          "summary_error": 0,
+          "summary_estimate": 1
+        }
+      ],
+      "top_k_capacity": 5,
+      "unique_items": 5,
+      "width": 272
+    }
+  ],
+  "sample_size": 5,
+  "seeds": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "stream_items": 10,
+  "summary": {
+    "core_vs_exact_ratio_mean": 22.0348,
+    "exact_counter_bytes": 517,
+    "full_vs_exact_ratio_mean": 29.53,
+    "run_count": 4,
+    "sketch_core_bytes_max": 11392,
+    "sketch_core_bytes_min": 11392,
+    "sketch_full_bytes_max": 15596,
+    "sketch_full_bytes_min": 14952,
+    "top_item_estimates": [
+      {
+        "exact_count": 4,
+        "item": "login",
+        "max_estimate": 4,
+        "max_overestimate": 0,
+        "mean_estimate": 4,
+        "mean_overestimate": 0,
+        "min_estimate": 4,
+        "min_overestimate": 0
+      },
+      {
+        "exact_count": 2,
+        "item": "view",
+        "max_estimate": 2,
+        "max_overestimate": 0,
+        "mean_estimate": 2,
+        "mean_overestimate": 0,
+        "min_estimate": 2,
+        "min_overestimate": 0
+      },
+      {
+        "exact_count": 2,
+        "item": "checkout",
+        "max_estimate": 2,
+        "max_overestimate": 0,
+        "mean_estimate": 2,
+        "mean_overestimate": 0,
+        "min_estimate": 2,
+        "min_overestimate": 0
+      },
+      {
+        "exact_count": 1,
+        "item": "click",
+        "max_estimate": 1,
+        "max_overestimate": 0,
+        "mean_estimate": 1,
+        "mean_overestimate": 0,
+        "min_estimate": 1,
+        "min_overestimate": 0
+      },
+      {
+        "exact_count": 1,
+        "item": "search",
+        "max_estimate": 1,
+        "max_overestimate": 0,
+        "mean_estimate": 1,
+        "mean_overestimate": 0,
+        "min_estimate": 1,
+        "min_overestimate": 0
+      }
+    ]
+  },
+  "top_k_capacity": 5,
+  "unique_items": 5
+}

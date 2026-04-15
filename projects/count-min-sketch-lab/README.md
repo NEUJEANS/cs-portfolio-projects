@@ -22,6 +22,7 @@ This lab demonstrates a classic streaming-data structure used when exact per-ite
 - merge compatible sketches
 - JSON save/load for resumable experiments
 - benchmark CLI for comparing sketch memory with an exact `Counter`
+- repeated benchmark-series export that writes resumable JSON/CSV experiment artifacts across multiple seeds
 
 ## Quickstart
 ```bash
@@ -35,6 +36,13 @@ python3 projects/count-min-sketch-lab/count_min_sketch_lab.py top-k cms.json --l
 python3 projects/count-min-sketch-lab/count_min_sketch_lab.py \
   --epsilon 0.01 --delta 0.01 --conservative-update --top-k-capacity 5 \
   benchmark-memory projects/count-min-sketch-lab/sample_stream.txt --sample-size 5
+
+python3 projects/count-min-sketch-lab/count_min_sketch_lab.py \
+  --epsilon 0.01 --delta 0.01 --conservative-update --top-k-capacity 5 \
+  benchmark-series projects/count-min-sketch-lab/sample_stream.txt \
+  --sample-size 5 --seeds 0 1 2 3 \
+  --output-json artifacts/count-min-sketch-benchmark-series.json \
+  --output-csv artifacts/count-min-sketch-benchmark-series.csv
 ```
 
 ## Run tests
@@ -52,6 +60,7 @@ python3 projects/count-min-sketch-lab/count_min_sketch_lab.py \
 - `merge()` supports distributed aggregation when sketches share the same shape, seed, update mode, and top-k configuration.
 - After merge, the demo reconstructs the retained top-k candidates from observed counts so the resumable candidate list remains trustworthy.
 - `benchmark-memory` reports both the core sketch table footprint and the full demo object footprint so the space trade-off stays honest.
+- `benchmark-series` repeats the measurement across hash seeds and emits chart-friendly artifacts so comparisons are resumable instead of one-off terminal snapshots.
 - Small streams with few unique keys can still favor an exact `Counter` in Python; the sketch becomes compelling as the key space grows or stricter memory caps matter.
 
 ## Interview talking points
@@ -64,5 +73,5 @@ python3 projects/count-min-sketch-lab/count_min_sketch_lab.py \
 
 ## Future improvements
 - ingest CSV columns or JSONL event fields directly
-- export benchmark runs as CSV/JSON for repeated experiment comparisons
+- compare CMS top-k candidates with exact top-k under different skew patterns
 - compare CMS top-k candidates with exact top-k under different skew patterns

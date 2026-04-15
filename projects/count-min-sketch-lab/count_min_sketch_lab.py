@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import statistics
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -376,6 +377,115 @@ def benchmark_memory(
     }
 
 
+def benchmark_series(
+    items: Sequence[str],
+    epsilon: float,
+    delta: float,
+    seeds: Sequence[int],
+    sample_size: int = 10,
+    conservative_update: bool = False,
+    top_k_capacity: int = 0,
+) -> Dict[str, Any]:
+    seed_values = [int(seed) for seed in seeds]
+    if not seed_values:
+        raise ValueError('at least one seed is required')
+
+    runs = [
+        benchmark_memory(
+            items,
+            epsilon=epsilon,
+            delta=delta,
+            seed=seed,
+            sample_size=sample_size,
+            conservative_update=conservative_update,
+            top_k_capacity=top_k_capacity,
+        )
+        for seed in seed_values
+    ]
+
+    exact_bytes = runs[0]['exact_counter_bytes']
+    core_sizes = [run['sketch_core_bytes'] for run in runs]
+    full_sizes = [run['sketch_full_bytes'] for run in runs]
+    core_ratios = [run['core_vs_exact_ratio'] for run in runs if run['core_vs_exact_ratio'] is not None]
+    full_ratios = [run['full_vs_exact_ratio'] for run in runs if run['full_vs_exact_ratio'] is not None]
+
+    item_stats: dict[str, dict[str, Any]] = {}
+    ordered_items: list[str] = []
+    for run in runs:
+        for entry in run['top_item_estimates']:
+            item = str(entry['item'])
+            if item not in item_stats:
+                item_stats[item] = {
+                    'item': item,
+                    'exact_count': int(entry['exact_count']),
+                    'estimates': [],
+                    'overestimates': [],
+                }
+                ordered_items.append(item)
+            item_stats[item]['estimates'].append(int(entry['estimate']))
+            item_stats[item]['overestimates'].append(int(entry['overestimate']))
+
+    top_item_summary = []
+    for item in ordered_items:
+        stats = item_stats[item]
+        estimates = stats['estimates']
+        overestimates = stats['overestimates']
+        top_item_summary.append(
+            {
+                'item': item,
+                'exact_count': stats['exact_count'],
+                'min_estimate': min(estimates),
+                'max_estimate': max(estimates),
+                'mean_estimate': round(statistics.mean(estimates), 4),
+                'min_overestimate': min(overestimates),
+                'max_overestimate': max(overestimates),
+                'mean_overestimate': round(statistics.mean(overestimates), 4),
+            }
+        )
+
+    return {
+        'stream_items': runs[0]['stream_items'],
+        'unique_items': runs[0]['unique_items'],
+        'epsilon': epsilon,
+        'delta': delta,
+        'sample_size': sample_size,
+        'conservative_update': conservative_update,
+        'top_k_capacity': top_k_capacity,
+        'seeds': seed_values,
+        'runs': runs,
+        'summary': {
+            'run_count': len(runs),
+            'exact_counter_bytes': exact_bytes,
+            'sketch_core_bytes_min': min(core_sizes),
+            'sketch_core_bytes_max': max(core_sizes),
+            'sketch_full_bytes_min': min(full_sizes),
+            'sketch_full_bytes_max': max(full_sizes),
+            'core_vs_exact_ratio_mean': round(statistics.mean(core_ratios), 4) if core_ratios else None,
+            'full_vs_exact_ratio_mean': round(statistics.mean(full_ratios), 4) if full_ratios else None,
+            'top_item_estimates': top_item_summary,
+        },
+    }
+
+
+def write_benchmark_series_csv(path: Path, payload: Dict[str, Any]) -> None:
+    lines = [
+        'seed,item,exact_count,estimate,overestimate,sketch_core_bytes,sketch_full_bytes,core_vs_exact_ratio,full_vs_exact_ratio'
+    ]
+    for run in payload['runs']:
+        seed = run['seed']
+        estimates = run['top_item_estimates']
+        if not estimates:
+            lines.append(
+                f"{seed},,0,0,0,{run['sketch_core_bytes']},{run['sketch_full_bytes']},{run['core_vs_exact_ratio']},{run['full_vs_exact_ratio']}"
+            )
+            continue
+        for entry in estimates:
+            lines.append(
+                f"{seed},{entry['item']},{entry['exact_count']},{entry['estimate']},{entry['overestimate']},{run['sketch_core_bytes']},{run['sketch_full_bytes']},{run['core_vs_exact_ratio']},{run['full_vs_exact_ratio']}"
+            )
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Count-Min Sketch lab for approximate stream frequencies.')
     parser.add_argument('--epsilon', type=float, default=0.02)
@@ -419,6 +529,13 @@ def create_parser() -> argparse.ArgumentParser:
     benchmark_parser = subparsers.add_parser('benchmark-memory', help='Compare Count-Min Sketch memory with an exact Counter for a token stream.')
     benchmark_parser.add_argument('input', type=Path)
     benchmark_parser.add_argument('--sample-size', type=int, default=10, help='How many top exact items to include in the estimate sample.')
+
+    series_parser = subparsers.add_parser('benchmark-series', help='Run repeated benchmark-memory experiments across multiple seeds and export JSON/CSV artifacts.')
+    series_parser.add_argument('input', type=Path)
+    series_parser.add_argument('--sample-size', type=int, default=10, help='How many top exact items to include in each run sample.')
+    series_parser.add_argument('--seeds', nargs='+', type=int, required=True, help='One or more hash seeds for repeated experiments.')
+    series_parser.add_argument('--output-json', type=Path, required=True, help='Where to write the repeated benchmark JSON payload.')
+    series_parser.add_argument('--output-csv', type=Path, help='Optional CSV export for quick charting/spreadsheet review.')
 
     return parser
 
@@ -522,6 +639,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             top_k_capacity=args.top_k_capacity,
         )
         print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == 'benchmark-series':
+        payload = benchmark_series(
+            load_tokens_from_file(args.input),
+            epsilon=args.epsilon,
+            delta=args.delta,
+            seeds=args.seeds,
+            sample_size=args.sample_size,
+            conservative_update=args.conservative_update,
+            top_k_capacity=args.top_k_capacity,
+        )
+        args.output_json.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
+        if args.output_csv is not None:
+            write_benchmark_series_csv(args.output_csv, payload)
+        print(
+            json.dumps(
+                {
+                    'output_json': str(args.output_json),
+                    'output_csv': str(args.output_csv) if args.output_csv is not None else None,
+                    'run_count': payload['summary']['run_count'],
+                    'seeds': payload['seeds'],
+                    'sample_size': payload['sample_size'],
+                },
+                indent=2,
+            )
+        )
         return 0
 
     parser.error('Unknown command')
