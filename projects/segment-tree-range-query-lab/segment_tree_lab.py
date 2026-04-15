@@ -17,7 +17,7 @@ class NodeValue:
 
 
 class SegmentTree:
-    """Segment tree with lazy propagation for range-add updates."""
+    """Segment tree with lazy propagation for range-add and range-set updates."""
 
     def __init__(self, values: Iterable[int]):
         self.values = list(values)
@@ -27,7 +27,8 @@ class SegmentTree:
         self.sum_tree = [0] * size
         self.min_tree = [0] * size
         self.max_tree = [0] * size
-        self.lazy = [0] * size
+        self.lazy_add = [0] * size
+        self.lazy_set: List[Optional[int]] = [None] * size
         self._build(1, 0, len(self.values) - 1)
 
     def _build(self, index: int, left: int, right: int) -> None:
@@ -49,20 +50,40 @@ class SegmentTree:
         self.min_tree[index] = min(self.min_tree[left_child], self.min_tree[right_child])
         self.max_tree[index] = max(self.max_tree[left_child], self.max_tree[right_child])
 
-    def _apply(self, index: int, left: int, right: int, delta: int) -> None:
+    def _apply_add(self, index: int, left: int, right: int, delta: int) -> None:
         self.sum_tree[index] += (right - left + 1) * delta
         self.min_tree[index] += delta
         self.max_tree[index] += delta
-        self.lazy[index] += delta
+        if self.lazy_set[index] is not None:
+            self.lazy_set[index] += delta
+        else:
+            self.lazy_add[index] += delta
+
+    def _apply_set(self, index: int, left: int, right: int, value: int) -> None:
+        self.sum_tree[index] = (right - left + 1) * value
+        self.min_tree[index] = value
+        self.max_tree[index] = value
+        self.lazy_set[index] = value
+        self.lazy_add[index] = 0
 
     def _push(self, index: int, left: int, right: int) -> None:
-        if self.lazy[index] == 0 or left == right:
+        if left == right:
+            self.lazy_set[index] = None
+            self.lazy_add[index] = 0
             return
         mid = (left + right) // 2
-        delta = self.lazy[index]
-        self._apply(index * 2, left, mid, delta)
-        self._apply(index * 2 + 1, mid + 1, right, delta)
-        self.lazy[index] = 0
+        left_child = index * 2
+        right_child = left_child + 1
+        pending_set = self.lazy_set[index]
+        if pending_set is not None:
+            self._apply_set(left_child, left, mid, pending_set)
+            self._apply_set(right_child, mid + 1, right, pending_set)
+            self.lazy_set[index] = None
+        pending_add = self.lazy_add[index]
+        if pending_add:
+            self._apply_add(left_child, left, mid, pending_add)
+            self._apply_add(right_child, mid + 1, right, pending_add)
+            self.lazy_add[index] = 0
 
     def range_add(self, query_left: int, query_right: int, delta: int) -> None:
         self._validate_range(query_left, query_right)
@@ -70,7 +91,7 @@ class SegmentTree:
 
     def _range_add(self, index: int, left: int, right: int, query_left: int, query_right: int, delta: int) -> None:
         if query_left <= left and right <= query_right:
-            self._apply(index, left, right, delta)
+            self._apply_add(index, left, right, delta)
             return
         self._push(index, left, right)
         mid = (left + right) // 2
@@ -80,11 +101,26 @@ class SegmentTree:
             self._range_add(index * 2 + 1, mid + 1, right, query_left, query_right, delta)
         self._pull(index)
 
+    def range_set(self, query_left: int, query_right: int, value: int) -> None:
+        self._validate_range(query_left, query_right)
+        self._range_set(1, 0, len(self.values) - 1, query_left, query_right, value)
+
+    def _range_set(self, index: int, left: int, right: int, query_left: int, query_right: int, value: int) -> None:
+        if query_left <= left and right <= query_right:
+            self._apply_set(index, left, right, value)
+            return
+        self._push(index, left, right)
+        mid = (left + right) // 2
+        if query_left <= mid:
+            self._range_set(index * 2, left, mid, query_left, query_right, value)
+        if query_right > mid:
+            self._range_set(index * 2 + 1, mid + 1, right, query_left, query_right, value)
+        self._pull(index)
+
     def point_set(self, position: int, value: int) -> None:
         if position < 0 or position >= len(self.values):
             raise IndexError("position out of range")
-        current = self.range_query(position, position).total
-        self.range_add(position, position, value - current)
+        self.range_set(position, position, value)
 
     def range_query(self, query_left: int, query_right: int) -> NodeValue:
         self._validate_range(query_left, query_right)
@@ -156,6 +192,12 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--right", type=int, required=True)
     update_parser.add_argument("--delta", type=int, required=True)
 
+    assign_parser = subparsers.add_parser("range-set", help="assign a value across a range")
+    assign_parser.add_argument("--numbers", required=True, help="comma-separated integers")
+    assign_parser.add_argument("--left", type=int, required=True)
+    assign_parser.add_argument("--right", type=int, required=True)
+    assign_parser.add_argument("--value", type=int, required=True)
+
     set_parser = subparsers.add_parser("point-set", help="set a single value")
     set_parser.add_argument("--numbers", required=True, help="comma-separated integers")
     set_parser.add_argument("--index", type=int, required=True)
@@ -169,11 +211,14 @@ def run_sample(as_json: bool = False) -> str:
     tree = SegmentTree(values)
     before = tree.explain_query(2, 6)
     tree.range_add(1, 4, 3)
-    after = tree.explain_query(2, 6)
+    after_range_add = tree.explain_query(2, 6)
+    tree.range_set(3, 5, 6)
+    after_range_set = tree.explain_query(2, 6)
     payload = {
         "input": values,
         "before": before,
-        "after_range_add": after,
+        "after_range_add": after_range_add,
+        "after_range_set": after_range_set,
         "updated_values": tree.materialize(),
     }
     if as_json:
@@ -183,7 +228,9 @@ def run_sample(as_json: bool = False) -> str:
         f"Input: {values}\n"
         f"Range [2, 6] before update: {before['result']}\n"
         f"Applied +3 to [1, 4]\n"
-        f"Range [2, 6] after update: {after['result']}\n"
+        f"Range [2, 6] after range-add: {after_range_add['result']}\n"
+        f"Assigned 6 to [3, 5]\n"
+        f"Range [2, 6] after range-set: {after_range_set['result']}\n"
         f"Updated values: {updated_values}"
     )
 
@@ -212,6 +259,23 @@ def main(argv: Optional[List[str]] = None) -> int:
                 {
                     "before": before,
                     "delta": args.delta,
+                    "after": after,
+                    "updated_values": tree.materialize(),
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "range-set":
+        before = tree.explain_query(args.left, args.right)
+        tree.range_set(args.left, args.right, args.value)
+        after = tree.explain_query(args.left, args.right)
+        print(
+            json.dumps(
+                {
+                    "before": before,
+                    "value": args.value,
                     "after": after,
                     "updated_values": tree.materialize(),
                 },
