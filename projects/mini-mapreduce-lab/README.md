@@ -20,7 +20,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
 - optional shard-to-reducer heatmap CSV export for slide-ready skew visualizations
 - optional Markdown benchmark report export with timing tables and shard/reducer load summaries
-- optional standalone HTML benchmark report export with colorized shard/reducer heatmap tables for portfolio screenshots
+- optional standalone HTML benchmark report export with colorized shard/reducer heatmap tables and inline SVG charts for portfolio screenshots
 - JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
 
 ## Usage
@@ -126,7 +126,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --report-output benchmark-report.md
 ```
 
-Write a standalone HTML report artifact you can open locally or publish with the repo's docs:
+Write a standalone HTML report artifact you can open locally or publish with the repo's docs. The page now includes inline SVG timing and reducer-load charts in addition to the heatmap table:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
@@ -212,8 +212,8 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - why timing alone can mislead without reducer-distribution metrics beside it
 - how shard-to-reducer heatmaps make hot-key skew visible in demos, write-ups, and interviews
 - how generated Markdown reports make benchmark evidence easier to reuse in READMEs, blogs, and portfolio case studies
-- how standalone HTML artifacts make systems benchmarks easier to present visually without a notebook stack
+- how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
 - add benchmark scenarios for custom plugin workloads instead of only wordcount
-- add embedded SVG bar charts or sparkline summaries inside the HTML report
+- add plugin-specific benchmark scenarios beyond built-in wordcount so the SVG report can compare custom jobs too

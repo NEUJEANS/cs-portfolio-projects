@@ -154,6 +154,102 @@ class BenchmarkResult:
         writer.writerows(self.heatmap_rows)
         return buffer.getvalue()
 
+    def _timing_svg(self) -> str:
+        width = 680
+        height = 240
+        margin_left = 56
+        margin_right = 24
+        margin_top = 24
+        margin_bottom = 48
+        chart_width = width - margin_left - margin_right
+        chart_height = height - margin_top - margin_bottom
+        max_elapsed = max((float(row["elapsed_ms"]) for row in self.timings_ms), default=0.0)
+        scale = chart_height / max_elapsed if max_elapsed else 0.0
+        bar_count = max(len(self.timings_ms), 1)
+        slot_width = chart_width / bar_count
+        bar_width = max(24.0, slot_width * 0.55)
+        bars: list[str] = []
+        labels: list[str] = []
+        y_ticks: list[str] = []
+        for tick in range(5):
+            tick_value = (max_elapsed / 4) * tick if max_elapsed else float(tick)
+            y = margin_top + chart_height - (tick_value * scale if max_elapsed else 0.0)
+            y_ticks.append(
+                f"<line x1='{margin_left}' y1='{y:.2f}' x2='{width - margin_right}' y2='{y:.2f}' stroke='rgba(148, 163, 184, 0.28)' stroke-dasharray='4 4' />"
+                f"<text x='{margin_left - 8}' y='{y + 4:.2f}' text-anchor='end' font-size='11' fill='#475569'>{tick_value:.2f}</text>"
+            )
+        for index, timing in enumerate(self.timings_ms):
+            elapsed = float(timing["elapsed_ms"])
+            bar_height = elapsed * scale if max_elapsed else 0.0
+            x = margin_left + (slot_width * index) + ((slot_width - bar_width) / 2)
+            y = margin_top + chart_height - bar_height
+            label_x = x + (bar_width / 2)
+            bars.append(
+                f"<rect x='{x:.2f}' y='{y:.2f}' width='{bar_width:.2f}' height='{bar_height:.2f}' rx='10' fill='#2563eb' />"
+                f"<text x='{label_x:.2f}' y='{y - 8:.2f}' text-anchor='middle' font-size='11' fill='#0f172a'>{elapsed:.3f} ms</text>"
+            )
+            labels.append(
+                f"<text x='{label_x:.2f}' y='{height - 20:.2f}' text-anchor='middle' font-size='11' fill='#475569'>r{timing['reducers']}</text>"
+            )
+        return (
+            f"<svg viewBox='0 0 {width} {height}' role='img' aria-label='Elapsed benchmark timing by reducer count'>"
+            f"<title>Elapsed benchmark timing by reducer count</title>"
+            f"<rect x='0' y='0' width='{width}' height='{height}' rx='16' fill='rgba(248, 250, 252, 0.92)' />"
+            f"{''.join(y_ticks)}"
+            f"<line x1='{margin_left}' y1='{margin_top + chart_height:.2f}' x2='{width - margin_right}' y2='{margin_top + chart_height:.2f}' stroke='#94a3b8' />"
+            f"{''.join(bars)}"
+            f"{''.join(labels)}"
+            "</svg>"
+        )
+
+    def _reducer_load_svg(self, reducer_count: int, totals: dict[int, int]) -> str:
+        width = 680
+        height = 220
+        margin_left = 56
+        margin_right = 24
+        margin_top = 24
+        margin_bottom = 48
+        chart_width = width - margin_left - margin_right
+        chart_height = height - margin_top - margin_bottom
+        max_total = max(totals.values(), default=0)
+        scale = chart_height / max_total if max_total else 0.0
+        bar_count = max(reducer_count, 1)
+        slot_width = chart_width / bar_count
+        bar_width = max(24.0, slot_width * 0.55)
+        bars: list[str] = []
+        labels: list[str] = []
+        y_ticks: list[str] = []
+        for tick in range(5):
+            tick_value = (max_total / 4) * tick if max_total else float(tick)
+            y = margin_top + chart_height - (tick_value * scale if max_total else 0.0)
+            y_ticks.append(
+                f"<line x1='{margin_left}' y1='{y:.2f}' x2='{width - margin_right}' y2='{y:.2f}' stroke='rgba(148, 163, 184, 0.28)' stroke-dasharray='4 4' />"
+                f"<text x='{margin_left - 8}' y='{y + 4:.2f}' text-anchor='end' font-size='11' fill='#475569'>{tick_value:.1f}</text>"
+            )
+        for reducer in range(reducer_count):
+            total = totals.get(reducer, 0)
+            bar_height = total * scale if max_total else 0.0
+            x = margin_left + (slot_width * reducer) + ((slot_width - bar_width) / 2)
+            y = margin_top + chart_height - bar_height
+            label_x = x + (bar_width / 2)
+            bars.append(
+                f"<rect x='{x:.2f}' y='{y:.2f}' width='{bar_width:.2f}' height='{bar_height:.2f}' rx='10' fill='#0f766e' />"
+                f"<text x='{label_x:.2f}' y='{y - 8:.2f}' text-anchor='middle' font-size='11' fill='#0f172a'>{total}</text>"
+            )
+            labels.append(
+                f"<text x='{label_x:.2f}' y='{height - 20:.2f}' text-anchor='middle' font-size='11' fill='#475569'>r{reducer}</text>"
+            )
+        return (
+            f"<svg viewBox='0 0 {width} {height}' role='img' aria-label='Reducer load totals for {reducer_count} reducers'>"
+            f"<title>Reducer load totals for {reducer_count} reducers</title>"
+            f"<rect x='0' y='0' width='{width}' height='{height}' rx='16' fill='rgba(248, 250, 252, 0.92)' />"
+            f"{''.join(y_ticks)}"
+            f"<line x1='{margin_left}' y1='{margin_top + chart_height:.2f}' x2='{width - margin_right}' y2='{margin_top + chart_height:.2f}' stroke='#94a3b8' />"
+            f"{''.join(bars)}"
+            f"{''.join(labels)}"
+            "</svg>"
+        )
+
     def to_markdown(self) -> str:
         lines = [
             f"# Mini MapReduce benchmark report ({self.scenario})",
@@ -237,6 +333,7 @@ class BenchmarkResult:
             for timing in self.timings_ms
         )
 
+        timing_chart = self._timing_svg()
         section_parts = []
         for reducer_count in self.reducers:
             rows = [row for row in self.heatmap_rows if row["reducers"] == reducer_count]
@@ -269,6 +366,7 @@ class BenchmarkResult:
                     rendered_cells.append(f"<td style='{style}'>{value}</td>")
                 heatmap_rows.append(f"<tr><th>s{shard_index}</th>{''.join(rendered_cells)}</tr>")
 
+            reducer_load_chart = self._reducer_load_svg(reducer_count, per_reducer_totals)
             section_parts.append(
                 ""
                 f"<section><h2>Reducers = {esc(reducer_count)}</h2>"
@@ -276,6 +374,7 @@ class BenchmarkResult:
                 f"<li><strong>Coldest cell:</strong> shard <code>{esc(coldest['shard_index'])}</code> → reducer <code>{esc(coldest['reducer'])}</code> with <code>{esc(coldest['records'])}</code> records across <code>{esc(coldest['unique_keys'])}</code> keys</li>"
                 f"<li><strong>Reducer load stddev:</strong> <code>{stddev:.3f}</code> records (mean <code>{average:.3f}</code>)</li>"
                 f"<li><strong>Total records per reducer:</strong> {esc(', '.join(f'r{reducer}={per_reducer_totals[reducer]}' for reducer in range(reducer_count)))}</li></ul>"
+                f"<div class='chart-card'><h3>Reducer load chart</h3>{reducer_load_chart}</div>"
                 f"<table><thead><tr><th>Shard</th>{header_cells}</tr></thead><tbody>{''.join(heatmap_rows)}</tbody></table></section>"
             )
 
@@ -296,6 +395,9 @@ class BenchmarkResult:
     thead th {{ background: rgba(148, 163, 184, 0.14); }}
     .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 2rem; }}
     .meta li {{ list-style: none; padding: 0.75rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.75rem; }}
+    .chart-card {{ margin: 1rem 0 1.5rem; padding: 1rem; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1rem; background: rgba(255, 255, 255, 0.45); }}
+    .chart-card h3 {{ margin-top: 0; margin-bottom: 0.75rem; }}
+    svg {{ width: 100%; height: auto; display: block; }}
     ul.summary {{ padding-left: 1.2rem; }}
   </style>
 </head>
@@ -308,6 +410,7 @@ class BenchmarkResult:
     <li><strong>Reducer counts</strong><br><code>{esc(', '.join(str(value) for value in self.reducers))}</code></li>
   </ul>
   <h2>Timing summary</h2>
+  <div class="chart-card"><h3>Elapsed timing chart</h3>{timing_chart}</div>
   <table>
     <thead>
       <tr><th>Reducers</th><th>Elapsed (ms)</th><th>Shards</th><th>Map records</th><th>Unique keys</th><th>Max reducer records</th><th>Skew ratio</th></tr>

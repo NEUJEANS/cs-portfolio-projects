@@ -106,4 +106,15 @@
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider embedded SVG charts or plugin benchmark scenarios in a future run
+- [x] consider embedded SVG charts or plugin benchmark scenarios in a future run
+
+## SVG chart HTML report slice (2026-04-15 13:29 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the existing benchmark artifact docs already scoped the charting follow-up clearly
+- [x] do a short SVG coordinate-scaling and `viewBox` refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add inline SVG timing and reducer-load charts to the standalone HTML report export
+- [x] extend project and repo-level tests for SVG rendering and CLI HTML output
+- [x] run tests and 3 review passes
+- [ ] consider plugin-specific benchmark scenarios in a future run

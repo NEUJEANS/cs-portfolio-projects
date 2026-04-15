@@ -205,6 +205,38 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertTrue(payload["heatmap_rows"])
             self.assertEqual(heatmap_rows[0], "scenario,seed,reducers,shard_index,reducer,records,unique_keys")
 
+    def test_cli_benchmark_html_report_contains_svg_charts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            html_output = Path(tmpdir) / "benchmark-report.html"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--scenario",
+                    "balanced",
+                    "--records",
+                    "120",
+                    "--shard-size",
+                    "20",
+                    "--reducers",
+                    "1",
+                    "3",
+                    "--html-output",
+                    str(html_output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            report = html_output.read_text(encoding="utf-8")
+            self.assertIn("Elapsed timing chart", report)
+            self.assertIn("Reducer load chart", report)
+            self.assertIn("Elapsed benchmark timing by reducer count", report)
+            self.assertIn("Reducer load totals for 3 reducers", report)
+            self.assertIn("<svg viewBox='0 0 680 240'", report)
+            self.assertIn("<svg viewBox='0 0 680 220'", report)
+
     def test_programmatic_api_rejects_non_positive_reducers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "words.txt"

@@ -215,6 +215,12 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("<h1>Mini MapReduce benchmark report (balanced)</h1>", report)
         self.assertIn("<h2>Reducers = 2</h2>", report)
         self.assertIn("<th>r0</th><th>r1</th>", report)
+        self.assertIn("Elapsed timing chart", report)
+        self.assertIn("Reducer load chart", report)
+        self.assertIn("Elapsed benchmark timing by reducer count", report)
+        self.assertIn("Reducer load totals for 2 reducers", report)
+        self.assertIn("<svg viewBox='0 0 680 240'", report)
+        self.assertIn("<svg viewBox='0 0 680 220'", report)
         self.assertIn("rgba(37, 99, 235,", report)
         self.assertIn("Reducer load stddev", report)
 
