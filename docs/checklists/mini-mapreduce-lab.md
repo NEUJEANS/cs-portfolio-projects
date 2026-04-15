@@ -219,5 +219,5 @@
 - [x] extend project and repo-level tests for programmatic batching plus CLI JSON/CSV batch artifacts
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider plugin metadata diff views once batch snapshots are stable
