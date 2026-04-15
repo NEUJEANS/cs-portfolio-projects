@@ -79,6 +79,13 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertIn("initiators=3, 6 (lockstep)", diagram)
         self.assertIn("round 1", diagram)
 
+    def test_contention_benchmark_compares_all_initiator_counts(self) -> None:
+        result = RingElectionSimulator([8, 3, 12, 6]).benchmark_contention()
+        self.assertEqual(result["mode"], "contention-benchmark")
+        self.assertEqual([row["initiator_count"] for row in result["rows"]], [1, 2, 3, 4])
+        self.assertEqual(result["summary"]["evaluated_combinations"], 15)
+        self.assertTrue(all(row["average_total_messages"] >= row["average_election_messages"] for row in result["rows"]))
+
     def test_cli_outputs_expected_summary(self) -> None:
         result = run_cli("--ring", "8", "3", "12", "6", "--initiator", "3")
         self.assertEqual(result["leader"], 12)
@@ -108,6 +115,12 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertEqual(result["initiators"], [3, 6])
         self.assertEqual(result["mode"], "multi-initiator-lockstep")
         self.assertIn("mermaid_sequence", result["visualizations"])
+
+    def test_cli_supports_contention_benchmark_mode(self) -> None:
+        result = run_cli("--ring", "8", "3", "12", "6", "--benchmark-contention")
+        self.assertEqual(result["mode"], "contention-benchmark")
+        self.assertEqual(result["summary"]["best_average_initiator_count"], 1)
+        self.assertEqual(result["summary"]["evaluated_combinations"], 15)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+initiator_count,combinations_evaluated,average_election_messages,average_total_messages,average_rounds,min_total_messages,max_total_messages,cheapest_initiators,most_expensive_initiators
+1,4,5.5,8.5,5.5,7,10,12,6
+2,6,9.17,12.17,4.67,10,15,6 12,6 8
+3,4,12.25,15.25,4.25,14,18,3 6 12,3 6 8
+4,1,15,18,4,18,18,3 6 8 12,3 6 8 12

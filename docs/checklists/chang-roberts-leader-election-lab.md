@@ -7,4 +7,4 @@
 - [x] add visualization exports for traces
 - [x] add simultaneous multi-initiator scenarios
 - [ ] compare against an alternative ring-election algorithm
-- [ ] benchmark single-initiator vs multi-initiator contention traces
+- [x] benchmark single-initiator vs multi-initiator contention traces

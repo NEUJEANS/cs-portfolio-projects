@@ -4,6 +4,8 @@ import argparse
 import json
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import combinations
+from statistics import mean
 from typing import Iterable
 
 
@@ -229,6 +231,62 @@ class RingElectionSimulator:
             "elected_hops": elected_hops,
         }
 
+    def benchmark_contention(self, failed: Iterable[int] | None = None) -> dict[str, object]:
+        ordered_active, failed_set, _ = self._validate_active_ring(failed)
+        samples: list[dict[str, object]] = []
+
+        for initiator_count in range(1, len(ordered_active) + 1):
+            combinations_for_count = list(combinations(ordered_active, initiator_count))
+            results = []
+            for initiators in combinations_for_count:
+                if initiator_count == 1:
+                    result = self.simulate(initiator=initiators[0], failed=failed_set)
+                else:
+                    result = self.simulate_multi_initiator(initiators=initiators, failed=failed_set)
+                results.append(result)
+
+            election_messages = [result["election_messages"] for result in results]
+            total_messages = [result["message_count"] for result in results]
+            rounds = [result.get("rounds", result["election_messages"]) for result in results]
+
+            def initiator_key(result: dict[str, object]) -> tuple[int, ...]:
+                if "initiators" in result:
+                    return tuple(result["initiators"])
+                return (result["initiator"],)
+
+            cheapest = min(results, key=lambda result: (result["message_count"], initiator_key(result)))
+            most_expensive = max(results, key=lambda result: (result["message_count"], initiator_key(result)))
+
+            samples.append(
+                {
+                    "initiator_count": initiator_count,
+                    "combinations_evaluated": len(combinations_for_count),
+                    "average_election_messages": round(mean(election_messages), 2),
+                    "average_total_messages": round(mean(total_messages), 2),
+                    "average_rounds": round(mean(rounds), 2),
+                    "min_total_messages": min(total_messages),
+                    "max_total_messages": max(total_messages),
+                    "cheapest_initiators": list(initiator_key(cheapest)),
+                    "most_expensive_initiators": list(initiator_key(most_expensive)),
+                }
+            )
+
+        best_average = min(samples, key=lambda sample: (sample["average_total_messages"], sample["initiator_count"]))
+        worst_average = max(samples, key=lambda sample: (sample["average_total_messages"], sample["initiator_count"]))
+        return {
+            "algorithm": "chang-roberts",
+            "mode": "contention-benchmark",
+            "ring_order": [node.process_id for node in self.nodes],
+            "active_ring": ordered_active,
+            "failed": sorted(failed_set),
+            "rows": samples,
+            "summary": {
+                "best_average_initiator_count": best_average["initiator_count"],
+                "worst_average_initiator_count": worst_average["initiator_count"],
+                "evaluated_combinations": sum(sample["combinations_evaluated"] for sample in samples),
+            },
+        }
+
 
 def _participant_label(process_id: int) -> str:
     return f"P{process_id}"
@@ -288,6 +346,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Active process ids that begin simultaneously in lockstep rounds",
     )
+    initiator_group.add_argument(
+        "--benchmark-contention",
+        action="store_true",
+        help="Benchmark all 1..n initiator combinations on the active ring",
+    )
     parser.add_argument("--failed", nargs="*", type=int, default=[], help="Optional failed process ids to skip")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON result")
     parser.add_argument(
@@ -306,11 +369,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     simulator = RingElectionSimulator(args.ring)
-    if args.initiators:
+    if args.benchmark_contention:
+        result = simulator.benchmark_contention(failed=args.failed)
+    elif args.initiators:
         result = simulator.simulate_multi_initiator(initiators=args.initiators, failed=args.failed)
     else:
         result = simulator.simulate(initiator=args.initiator, failed=args.failed)
     if args.visualization_only == "mermaid":
+        if result["mode"] == "contention-benchmark":
+            raise SystemExit("visualization-only is unavailable for contention benchmarks")
         print(render_mermaid_sequence(result))
         return
     print(json.dumps(build_output(result, include_visualization=args.include_visualization), indent=2 if args.pretty else None, sort_keys=True))

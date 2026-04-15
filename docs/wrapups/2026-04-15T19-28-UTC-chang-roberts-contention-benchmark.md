@@ -1,0 +1,23 @@
+# Wrap-up — Chang-Roberts contention benchmark slice
+
+- Timestamp: 2026-04-15 19:28 UTC
+- Project: `chang-roberts-leader-election-lab`
+- What changed:
+  - added `--benchmark-contention` mode to compare all 1..n initiator combinations on the active ring
+  - added benchmark summary fields for average/min/max message cost and cheapest/most-expensive initiator sets
+  - added CLI/unit coverage for contention benchmarking
+  - exported sample benchmark artifacts to `artifacts/chang-roberts-contention-benchmark.{json,csv}`
+  - updated the project checklist and README, plus added the missing project entry in the repo root README
+  - logged 3 explicit review passes under `docs/reviews/`
+- Tests run:
+  - `python -m unittest discover -s projects/chang-roberts-leader-election-lab -p 'test_*.py' -v`
+- Reviews run:
+  - `docs/reviews/2026-04-15-chang-roberts-contention-review-pass-1.md`
+  - `docs/reviews/2026-04-15-chang-roberts-contention-review-pass-2.md`
+  - `docs/reviews/2026-04-15-chang-roberts-contention-review-pass-3.md`
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+  - result: clean (0 verified, 0 unverified)
+- Commit hash: 795fa0d5360d342b393b6aea0c03d509047bace2
+- Next step:
+  - add a second election-algorithm baseline (for example Hirschberg-Sinclair) so this lab can compare protocol trade-offs instead of only varying initiator contention

@@ -1,0 +1,96 @@
+{
+  "active_ring": [
+    8,
+    3,
+    12,
+    6
+  ],
+  "algorithm": "chang-roberts",
+  "failed": [],
+  "mode": "contention-benchmark",
+  "ring_order": [
+    8,
+    3,
+    12,
+    6
+  ],
+  "rows": [
+    {
+      "average_election_messages": 5.5,
+      "average_rounds": 5.5,
+      "average_total_messages": 8.5,
+      "cheapest_initiators": [
+        12
+      ],
+      "combinations_evaluated": 4,
+      "initiator_count": 1,
+      "max_total_messages": 10,
+      "min_total_messages": 7,
+      "most_expensive_initiators": [
+        6
+      ]
+    },
+    {
+      "average_election_messages": 9.17,
+      "average_rounds": 4.67,
+      "average_total_messages": 12.17,
+      "cheapest_initiators": [
+        6,
+        12
+      ],
+      "combinations_evaluated": 6,
+      "initiator_count": 2,
+      "max_total_messages": 15,
+      "min_total_messages": 10,
+      "most_expensive_initiators": [
+        6,
+        8
+      ]
+    },
+    {
+      "average_election_messages": 12.25,
+      "average_rounds": 4.25,
+      "average_total_messages": 15.25,
+      "cheapest_initiators": [
+        3,
+        6,
+        12
+      ],
+      "combinations_evaluated": 4,
+      "initiator_count": 3,
+      "max_total_messages": 18,
+      "min_total_messages": 14,
+      "most_expensive_initiators": [
+        3,
+        6,
+        8
+      ]
+    },
+    {
+      "average_election_messages": 15,
+      "average_rounds": 4,
+      "average_total_messages": 18,
+      "cheapest_initiators": [
+        3,
+        6,
+        8,
+        12
+      ],
+      "combinations_evaluated": 1,
+      "initiator_count": 4,
+      "max_total_messages": 18,
+      "min_total_messages": 18,
+      "most_expensive_initiators": [
+        3,
+        6,
+        8,
+        12
+      ]
+    }
+  ],
+  "summary": {
+    "best_average_initiator_count": 1,
+    "evaluated_combinations": 15,
+    "worst_average_initiator_count": 4
+  }
+}
