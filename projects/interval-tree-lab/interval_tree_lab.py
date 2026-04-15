@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
+import time
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -37,6 +39,14 @@ class Node:
     right: Node | None = None
 
 
+@dataclass(frozen=True)
+class QueryStats:
+    nodes_visited: int
+
+    def to_dict(self) -> dict[str, int]:
+        return {"nodes_visited": self.nodes_visited}
+
+
 class IntervalTree:
     def __init__(self, intervals: Iterable[Interval] = ()) -> None:
         unique = sorted(set(intervals))
@@ -68,9 +78,15 @@ class IntervalTree:
         return None
 
     def find_overlaps(self, query: Interval) -> list[Interval]:
+        return self.find_overlaps_with_stats(query)[0]
+
+    def find_overlaps_with_stats(self, query: Interval) -> tuple[list[Interval], QueryStats]:
         results: list[Interval] = []
-        self._collect_overlaps(self.root, query, results)
-        return results
+        nodes_visited = self._collect_overlaps(self.root, query, results)
+        return results, QueryStats(nodes_visited=nodes_visited)
+
+    def naive_find_overlaps(self, query: Interval) -> list[Interval]:
+        return [interval for interval in self.inorder() if interval.overlaps(query)]
 
     def find_point(self, point: int) -> list[Interval]:
         return self.find_overlaps(Interval(point, point))
@@ -157,15 +173,17 @@ class IntervalTree:
             self._refresh(node)
         return inserted, node
 
-    def _collect_overlaps(self, node: Node | None, query: Interval, results: list[Interval]) -> None:
+    def _collect_overlaps(self, node: Node | None, query: Interval, results: list[Interval]) -> int:
         if node is None:
-            return
+            return 0
+        nodes_visited = 1
         if node.left is not None and node.left.max_end >= query.start:
-            self._collect_overlaps(node.left, query, results)
+            nodes_visited += self._collect_overlaps(node.left, query, results)
         if node.interval.overlaps(query):
             results.append(node.interval)
         if node.right is not None and node.interval.start <= query.end:
-            self._collect_overlaps(node.right, query, results)
+            nodes_visited += self._collect_overlaps(node.right, query, results)
+        return nodes_visited
 
     @staticmethod
     def _refresh(node: Node) -> None:
@@ -188,6 +206,101 @@ def load_intervals(args_specs: Iterable[str]) -> list[Interval]:
     return [parse_interval_spec(spec) for spec in args_specs]
 
 
+def generate_synthetic_intervals(
+    *,
+    count: int,
+    seed: int,
+    start_max: int,
+    width_max: int,
+) -> list[Interval]:
+    randomizer = random.Random(seed)
+    intervals: list[Interval] = []
+    for index in range(count):
+        start = randomizer.randint(0, start_max)
+        end = start + randomizer.randint(0, width_max)
+        intervals.append(Interval(start, end, f"interval-{index}"))
+    return intervals
+
+
+def benchmark_overlap_queries(
+    *,
+    interval_count: int,
+    query_count: int,
+    seed: int,
+    start_max: int,
+    width_max: int,
+    query_width_max: int,
+) -> dict[str, object]:
+    intervals = generate_synthetic_intervals(
+        count=interval_count,
+        seed=seed,
+        start_max=start_max,
+        width_max=width_max,
+    )
+    tree = IntervalTree(intervals)
+    randomizer = random.Random(seed + 1)
+
+    tree_elapsed_ns = 0
+    naive_elapsed_ns = 0
+    total_nodes_visited = 0
+    worst_nodes_visited = 0
+    all_matched = True
+    sample_query: Interval | None = None
+    sample_tree_hits: list[Interval] = []
+    sample_naive_hits: list[Interval] = []
+
+    for query_index in range(query_count):
+        query_start = randomizer.randint(0, start_max)
+        query_end = query_start + randomizer.randint(0, query_width_max)
+        query = Interval(query_start, query_end, f"query-{query_index}")
+
+        started = time.perf_counter_ns()
+        tree_hits, stats = tree.find_overlaps_with_stats(query)
+        tree_elapsed_ns += time.perf_counter_ns() - started
+
+        started = time.perf_counter_ns()
+        naive_hits = tree.naive_find_overlaps(query)
+        naive_elapsed_ns += time.perf_counter_ns() - started
+
+        total_nodes_visited += stats.nodes_visited
+        worst_nodes_visited = max(worst_nodes_visited, stats.nodes_visited)
+        if tree_hits != naive_hits:
+            all_matched = False
+        if sample_query is None:
+            sample_query = query
+            sample_tree_hits = tree_hits
+            sample_naive_hits = naive_hits
+
+    average_tree_ms = tree_elapsed_ns / query_count / 1_000_000 if query_count else 0.0
+    average_naive_ms = naive_elapsed_ns / query_count / 1_000_000 if query_count else 0.0
+    average_nodes_visited = total_nodes_visited / query_count if query_count else 0.0
+    valid, errors = tree.validate()
+
+    return {
+        "interval_count": tree.size,
+        "query_count": query_count,
+        "seed": seed,
+        "start_max": start_max,
+        "width_max": width_max,
+        "query_width_max": query_width_max,
+        "tree_height": tree.height(),
+        "root": None if tree.root is None else tree.root.interval.to_dict(),
+        "max_end": None if tree.root is None else tree.root.max_end,
+        "valid": valid,
+        "errors": errors,
+        "tree_average_ms": round(average_tree_ms, 6),
+        "naive_average_ms": round(average_naive_ms, 6),
+        "speedup_vs_naive": None if average_tree_ms == 0 else round(average_naive_ms / average_tree_ms, 3),
+        "average_nodes_visited": round(average_nodes_visited, 3),
+        "worst_nodes_visited": worst_nodes_visited,
+        "average_visit_ratio": None if tree.size == 0 else round(average_nodes_visited / tree.size, 3),
+        "same_results": all_matched,
+        "sample_query": None if sample_query is None else sample_query.to_dict(),
+        "sample_tree_hits": [interval.to_dict() for interval in sample_tree_hits],
+        "sample_naive_hits": [interval.to_dict() for interval in sample_naive_hits],
+    }
+
+
 def command_demo(_: argparse.Namespace) -> dict[str, object]:
     intervals = [
         Interval(0, 3, "warmup"),
@@ -204,11 +317,12 @@ def command_demo(_: argparse.Namespace) -> dict[str, object]:
     tree = IntervalTree(intervals)
     query = Interval(7, 18, "query")
     point = 26
+    any_overlap = tree.find_any_overlap(query)
     return {
         "command": "demo",
         "query": query.to_dict(),
         "point": point,
-        "any_overlap": None if tree.find_any_overlap(query) is None else tree.find_any_overlap(query).to_dict(),
+        "any_overlap": None if any_overlap is None else any_overlap.to_dict(),
         "all_overlaps": [interval.to_dict() for interval in tree.find_overlaps(query)],
         "point_hits": [interval.to_dict() for interval in tree.find_point(point)],
         **tree.summary(),
@@ -224,12 +338,14 @@ def command_overlap(args: argparse.Namespace) -> dict[str, object]:
     tree = IntervalTree(load_intervals(args.intervals))
     query = parse_interval_spec(args.query)
     any_overlap = tree.find_any_overlap(query)
+    overlaps, stats = tree.find_overlaps_with_stats(query)
     return {
         "command": "overlap",
         "input": args.intervals,
         "query": query.to_dict(),
         "any_overlap": None if any_overlap is None else any_overlap.to_dict(),
-        "all_overlaps": [interval.to_dict() for interval in tree.find_overlaps(query)],
+        "all_overlaps": [interval.to_dict() for interval in overlaps],
+        "query_stats": stats.to_dict(),
         **tree.summary(),
     }
 
@@ -258,6 +374,30 @@ def command_insert(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
+    if args.intervals <= 0:
+        raise ValueError("--intervals must be positive")
+    if args.queries <= 0:
+        raise ValueError("--queries must be positive")
+    if args.start_max < 0:
+        raise ValueError("--start-max must be non-negative")
+    if args.width_max < 0:
+        raise ValueError("--width-max must be non-negative")
+    if args.query_width_max < 0:
+        raise ValueError("--query-width-max must be non-negative")
+    return {
+        "command": "benchmark",
+        **benchmark_overlap_queries(
+            interval_count=args.intervals,
+            query_count=args.queries,
+            seed=args.seed,
+            start_max=args.start_max,
+            width_max=args.width_max,
+            query_width_max=args.query_width_max,
+        ),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Interval tree lab for overlap and stabbing queries")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -283,6 +423,18 @@ def main() -> None:
     insert_parser.add_argument("interval", help="interval to insert")
     insert_parser.add_argument("intervals", nargs="+", help="interval specs")
     insert_parser.set_defaults(handler=command_insert)
+
+    benchmark_parser = subparsers.add_parser(
+        "benchmark",
+        help="compare interval-tree overlap queries against naive scans on synthetic workloads",
+    )
+    benchmark_parser.add_argument("--intervals", type=int, default=500, help="number of synthetic intervals")
+    benchmark_parser.add_argument("--queries", type=int, default=250, help="number of synthetic queries")
+    benchmark_parser.add_argument("--seed", type=int, default=7, help="random seed for reproducibility")
+    benchmark_parser.add_argument("--start-max", type=int, default=5000, help="max generated interval/query start")
+    benchmark_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
+    benchmark_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
+    benchmark_parser.set_defaults(handler=command_benchmark)
 
     args = parser.parse_args()
     try:

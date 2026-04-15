@@ -13,9 +13,11 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 - balanced bulk build from sorted unique intervals for stable demos
 - incremental insert with `max_end` metadata refresh
 - find any overlap, find all overlaps, and point stabbing queries
+- reproducible synthetic benchmark that compares pruned interval-tree searches versus naive scans
+- per-query node-visit stats for making pruning behavior visible in JSON output
 - bundled `sample_intervals.json` artifact for quick inspection and demo data
 - validation for BST ordering and `max_end` correctness
-- JSON CLI output for demo, build, overlap, point, and insert flows
+- JSON CLI output for demo, build, overlap, point, insert, and benchmark flows
 
 ## Usage
 
@@ -49,6 +51,12 @@ Insert a new interval:
 python3 projects/interval-tree-lab/interval_tree_lab.py insert 8-12:patch 0-3:warmup 5-8:backup 15-23:analytics
 ```
 
+Benchmark interval-tree pruning against a naive scan:
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py benchmark --intervals 800 --queries 400 --seed 11
+```
+
 ## Test
 
 ```bash
@@ -61,8 +69,9 @@ python3 -m unittest tests/test_interval_tree_lab.py
 - Each node stores the maximum `end` value in its subtree. During overlap search, if the left subtree's `max_end` is below the query start, that entire subtree can be skipped.
 - Bulk builds use median splitting on the sorted interval list to avoid obviously skewed demo trees.
 - Validation checks both BST ordering and `max_end` propagation so augmentation bugs are easy to catch.
+- The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan overlap results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
 
 ## Future improvements
 - add deletion with metadata repair
 - export Graphviz diagrams for query traces
-- compare tree queries versus naive scans on synthetic workloads
+- add CSV/plot export for benchmark runs across multiple workload sizes
