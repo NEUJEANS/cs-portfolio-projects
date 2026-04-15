@@ -91,5 +91,5 @@
 - [x] extend project and repo-level tests for deterministic report rendering and CLI file output
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider HTML chart artifact output in a future run
