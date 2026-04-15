@@ -7,4 +7,4 @@
 - [x] persist token-mode metadata in signature indexes so scan/refresh reuse the correct representation
 - [x] expand automated tests for new modes, index round-trip behavior, and export metadata
 - [x] run at least 3 review passes and fix issues found
-- [ ] commit, push, and append wrap-up
+- [x] commit, push, and append wrap-up
