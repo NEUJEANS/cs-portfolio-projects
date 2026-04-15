@@ -60,3 +60,13 @@
 - [x] expand tests for normalized tokenization, similarity changes, CLI validation, benchmark exports, and index round-trips
 - [x] update README usage, feature notes, and future roadmap
 - [x] complete at least 3 review passes and fix issues found
+
+## Literal-normalization slice (2026-04-15 20:42 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the queued follow-up around code-mode literal normalization
+- [x] do a quick tokenizer refresh and self-test for number-token bucketing rules
+- [x] add `--normalize-literals` support for `compare`, `corpus`, `build-index`, and `benchmark` in `code` mode
+- [x] persist literal-normalization metadata in saved signature indexes so refresh/scan stay resumable
+- [x] expand tests for normalized tokenization, similarity changes, CLI validation, benchmark exports, and index round-trips
+- [x] update README usage, feature notes, and future roadmap
+- [x] complete at least 3 review passes and fix issues found
