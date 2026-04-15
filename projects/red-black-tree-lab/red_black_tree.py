@@ -199,6 +199,47 @@ class RedBlackTree:
             payload["trace"] = self.trace
         return payload
 
+    def to_dot(self, *, include_nil: bool = True) -> str:
+        lines = [
+            "digraph RedBlackTree {",
+            '  graph [rankdir=TB, nodesep=0.35, ranksep=0.45];',
+            '  node [shape=circle, style=filled, fontname="Helvetica", fontcolor=white, penwidth=1.2];',
+            '  edge [arrowsize=0.7];',
+        ]
+        if self.root is None:
+            lines.append('  empty [label="∅", shape=plaintext, fontcolor=black];')
+            lines.append("}")
+            return "\n".join(lines)
+
+        nil_counter = 0
+
+        def visit(node: Node, path: str) -> None:
+            nonlocal nil_counter
+            node_id = self._dot_node_id(path)
+            fill = "#d73a49" if node.color == RED else "#24292f"
+            lines.append(
+                f'  {node_id} [label="{node.key}\\nsize={node.subtree_size}", fillcolor="{fill}", tooltip="{node.color}"];'
+            )
+            for side, child in (("L", node.left), ("R", node.right)):
+                child_path = f"{path}{side}"
+                if child is None:
+                    if not include_nil:
+                        continue
+                    nil_counter += 1
+                    nil_id = f'nil_{nil_counter}_{child_path.lower()}'
+                    lines.append(
+                        f'  {nil_id} [label="NIL", shape=box, width=0.35, height=0.2, fontsize=10, fillcolor="#24292f"];'
+                    )
+                    lines.append(f'  {node_id} -> {nil_id} [label="{side}", color="#6a737d"];')
+                else:
+                    child_id = self._dot_node_id(child_path)
+                    lines.append(f'  {node_id} -> {child_id} [label="{side}", color="#6a737d"];')
+                    visit(child, child_path)
+
+        visit(self.root, "root")
+        lines.append("}")
+        return "\n".join(lines)
+
     def _delete_node(self, target: Node) -> None:
         removed_color = target.color
         replacement: Node | None
@@ -498,6 +539,10 @@ class RedBlackTree:
     def _node_key(node: Node | None) -> int | None:
         return None if node is None else node.key
 
+    @staticmethod
+    def _dot_node_id(path: str) -> str:
+        return f"node_{path.lower()}"
+
 
 def build_tree(values: Iterable[int], *, trace_enabled: bool = False) -> RedBlackTree:
     tree = RedBlackTree(trace_enabled=trace_enabled)
@@ -568,6 +613,17 @@ def command_delete(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def command_dot(args: argparse.Namespace) -> dict[str, object]:
+    tree = build_tree(args.values, trace_enabled=args.trace)
+    return {
+        "command": "dot",
+        "input": args.values,
+        "include_nil": args.include_nil,
+        "dot": tree.to_dot(include_nil=args.include_nil),
+        **tree.summary(include_trace=args.trace),
+    }
+
+
 def add_trace_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--trace", action="store_true", help="include rotation and fix-up events in the JSON output")
 
@@ -608,6 +664,12 @@ def main() -> None:
     delete_parser.add_argument("query", type=int, help="integer to delete")
     delete_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     delete_parser.set_defaults(handler=command_delete)
+
+    dot_parser = subparsers.add_parser("dot", help="build a tree and emit Graphviz DOT for visualization")
+    add_trace_flag(dot_parser)
+    dot_parser.add_argument("--no-nil", dest="include_nil", action="store_false", help="omit NIL leaf nodes from DOT output")
+    dot_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
+    dot_parser.set_defaults(handler=command_dot, include_nil=True)
 
     args = parser.parse_args()
     try:

@@ -136,6 +136,22 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertEqual(summary["root"]["subtree_size"], tree.size)
         self.assertEqual(summary["inorder"], [8, 12, 19, 31, 38, 41])
 
+    def test_to_dot_includes_colors_edges_and_nil_leaves(self) -> None:
+        tree = build_tree([20, 10, 30, 5])
+        dot = tree.to_dot()
+        self.assertIn('digraph RedBlackTree {', dot)
+        self.assertIn('label="20\\nsize=4"', dot)
+        self.assertIn('label="L"', dot)
+        self.assertIn('label="R"', dot)
+        self.assertIn('label="NIL"', dot)
+        self.assertIn('fillcolor="#24292f"', dot)
+        self.assertIn('fillcolor="#d73a49"', dot)
+
+    def test_to_dot_can_omit_nil_leaves(self) -> None:
+        tree = build_tree([20, 10, 30, 5])
+        dot = tree.to_dot(include_nil=False)
+        self.assertNotIn('label="NIL"', dot)
+
     def test_validate_catches_parent_pointer_corruption(self) -> None:
         tree = build_tree([10, 5, 15])
         tree.root.left.parent = None
@@ -229,6 +245,33 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertIn("trace", payload)
         self.assertTrue(any(event["event"] == "delete_case_two_children" for event in payload["trace"]))
         self.assertTrue(any(event["event"] == "delete_complete" for event in payload["trace"]))
+
+    def test_cli_dot_command_returns_graphviz_payload(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "dot", "20", "10", "30", "5"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "dot")
+        self.assertTrue(payload["include_nil"])
+        self.assertIn('digraph RedBlackTree {', payload["dot"])
+        self.assertIn('label="NIL"', payload["dot"])
+        self.assertTrue(payload["valid"], payload["errors"])
+
+    def test_cli_dot_command_can_omit_nil_leaves(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "dot", "--no-nil", "20", "10", "30", "5"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertFalse(payload["include_nil"])
+        self.assertNotIn('label="NIL"', payload["dot"])
 
     def test_cli_select_reports_out_of_range_index(self) -> None:
         completed = subprocess.run(

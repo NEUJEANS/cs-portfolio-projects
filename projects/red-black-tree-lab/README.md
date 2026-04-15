@@ -18,7 +18,8 @@ A portfolio-friendly balanced tree lab that implements red-black tree insertion 
 - inorder traversal, height, black-height, `rank`, `select`, delete, and search helpers
 - validation report for BST ordering, red-black invariants, parent pointers, and subtree-size consistency
 - optional trace mode that records insert/delete fix-up cases and rotations for explainable debugging demos
-- CLI commands for demo runs, custom builds, membership queries, rank queries, kth-smallest lookup, and deletion checks
+- Graphviz DOT export for portfolio screenshots, blog posts, and balancing walkthrough diagrams
+- CLI commands for demo runs, custom builds, membership queries, rank queries, kth-smallest lookup, deletion checks, and DOT export
 
 ## Usage
 
@@ -58,6 +59,13 @@ Delete a key and inspect the repaired tree:
 python3 projects/red-black-tree-lab/red_black_tree.py delete 10 20 10 30 5 15 25 35
 ```
 
+Export a Graphviz DOT diagram you can pipe into `dot -Tsvg` or paste into an online renderer:
+
+```bash
+python3 projects/red-black-tree-lab/red_black_tree.py dot 20 10 30 5
+python3 projects/red-black-tree-lab/red_black_tree.py dot --no-nil 20 10 30 5
+```
+
 Include a trace of rotations and fix-up cases for portfolio walkthroughs:
 
 ```bash
@@ -78,6 +86,7 @@ python3 -m unittest tests/test_red_black_tree_lab.py
 - Order-statistics support stores `subtree_size` on every node and refreshes it after path growth, transplants, and rotations.
 - Validation explicitly checks BST bounds, black-height consistency, parent pointers, and subtree-size consistency so augmentation bugs stay explainable.
 - Trace output names the repair cases that fired during insertion or deletion, making the balancing logic easier to narrate in a README, code review, or interview demo.
+- DOT export labels left/right child edges and can optionally render NIL leaves, which makes black-height explanations and deletion repair screenshots easier to present.
 
 ## Future improvements
 - emit Graphviz diagrams after each insertion/deletion step
