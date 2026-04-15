@@ -23,7 +23,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → clean
 
 ## Commit hash
-- implementation commit: `7794102`
+- implementation commit: `587fd34`
 
 ## Next step
 - expand the benchmark generator beyond DAGs so the project can compare solver behavior on denser residual-heavy stress cases and not just forward-only random graphs
