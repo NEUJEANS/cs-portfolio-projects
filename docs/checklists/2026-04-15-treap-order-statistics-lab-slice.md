@@ -10,7 +10,7 @@
 - [x] review pass 1
 - [x] review pass 2
 - [x] review pass 3
-- [ ] secret scan
-- [ ] commit
-- [ ] push
-- [ ] wrap-up markdown
+- [x] secret scan
+- [x] commit
+- [x] push
+- [x] wrap-up markdown
