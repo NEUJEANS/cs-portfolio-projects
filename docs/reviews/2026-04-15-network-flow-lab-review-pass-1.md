@@ -1,5 +1,11 @@
-# Review pass 1 - network-flow-lab
+# network-flow-lab review pass 1
 
-- Checked algorithm choice and output scope.
-- Issue found: a plain max-flow number would be too thin for portfolio value.
-- Fix applied: include augmenting path logs, edge flow summaries, and min-cut output.
+## Focus
+Algorithm/design review of the new bipartite-matching slice.
+
+## Findings
+1. Good reuse of the existing Edmonds-Karp solver instead of forking a separate matching engine.
+2. Risk found: bipartite input could reuse internal sentinel names like `__source__` / `__sink__`, which would collide with the reduction graph.
+
+## Fixes applied
+- added reserved-name validation in `load_bipartite_graph`

@@ -19,7 +19,9 @@ spec.loader.exec_module(module)
 
 Edge = module.Edge
 load_graph = module.load_graph
+load_bipartite_graph = module.load_bipartite_graph
 solve_max_flow = module.solve_max_flow
+solve_bipartite_matching = module.solve_bipartite_matching
 
 
 class NetworkFlowLabTests(unittest.TestCase):
@@ -80,6 +82,73 @@ class NetworkFlowLabTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "capacity"):
                 load_graph(path)
 
+    def test_bipartite_matching_returns_maximum_matching(self) -> None:
+        left = ["anna", "ben", "chloe", "david"]
+        right = ["api", "compiler", "database"]
+        edges = [
+            ("anna", "api"),
+            ("anna", "compiler"),
+            ("ben", "api"),
+            ("ben", "database"),
+            ("chloe", "compiler"),
+            ("david", "database"),
+        ]
+
+        result = solve_bipartite_matching(left, right, edges).to_dict()
+
+        self.assertEqual(result["match_count"], 3)
+        self.assertEqual(result["unmatched_left"], ["david"])
+        self.assertEqual(result["unmatched_right"], [])
+        matches = {(item["left"], item["right"]) for item in result["matches"]}
+        self.assertEqual(matches, {("anna", "api"), ("ben", "database"), ("chloe", "compiler")})
+        self.assertEqual(result["flow"]["max_flow"], 3)
+
+    def test_load_bipartite_graph_rejects_cross_partition_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "bad_matching.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "left": ["a"],
+                        "right": ["1"],
+                        "edges": [{"source": "1", "target": "a"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "left nodes"):
+                load_bipartite_graph(path)
+
+    def test_load_bipartite_graph_rejects_duplicate_or_reserved_nodes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            duplicate_path = Path(tmpdir) / "duplicate_matching.json"
+            duplicate_path.write_text(
+                json.dumps(
+                    {
+                        "left": ["a", "a"],
+                        "right": ["1"],
+                        "edges": [{"source": "a", "target": "1"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                load_bipartite_graph(duplicate_path)
+
+            reserved_path = Path(tmpdir) / "reserved_matching.json"
+            reserved_path.write_text(
+                json.dumps(
+                    {
+                        "left": ["__source__"],
+                        "right": ["1"],
+                        "edges": [{"source": "__source__", "target": "1"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "reserved"):
+                load_bipartite_graph(reserved_path)
+
     def test_cli_demo_outputs_json_payload(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "demo"],
@@ -92,6 +161,20 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertEqual(payload["command"], "demo")
         self.assertEqual(payload["max_flow"], 19)
         self.assertTrue(payload["augmenting_paths"])
+
+    def test_cli_match_demo_outputs_matching_payload(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "match-demo"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "match-demo")
+        self.assertEqual(payload["match_count"], 3)
+        self.assertEqual(payload["unmatched_left"], ["david"])
+        self.assertIn("flow", payload)
 
 
 if __name__ == "__main__":

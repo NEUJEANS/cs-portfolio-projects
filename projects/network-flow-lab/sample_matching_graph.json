@@ -1,0 +1,12 @@
+{
+  "left": ["anna", "ben", "chloe", "david"],
+  "right": ["api", "compiler", "database"],
+  "edges": [
+    {"source": "anna", "target": "api"},
+    {"source": "anna", "target": "compiler"},
+    {"source": "ben", "target": "api"},
+    {"source": "ben", "target": "database"},
+    {"source": "chloe", "target": "compiler"},
+    {"source": "david", "target": "database"}
+  ]
+}

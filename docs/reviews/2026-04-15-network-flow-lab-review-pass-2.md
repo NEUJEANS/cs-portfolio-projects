@@ -1,5 +1,12 @@
-# Review pass 2 - network-flow-lab
+# network-flow-lab review pass 2
 
-- Checked deterministic behavior and testability.
-- Issue found: traversal order could vary if neighbor iteration depended on insertion order.
-- Fix applied: BFS now iterates over sorted neighbors for stable outputs and reproducible tests.
+## Focus
+Input-validation and data-shape review.
+
+## Findings
+1. Matching partitions were required to be disjoint, but duplicate names inside a single partition were not rejected.
+2. Duplicate node names would produce ambiguous or inflated internal source/sink edges.
+
+## Fixes applied
+- added duplicate-node validation for left/right partitions
+- added regression tests for duplicate and reserved names

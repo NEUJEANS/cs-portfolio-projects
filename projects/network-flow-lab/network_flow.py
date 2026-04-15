@@ -35,6 +35,31 @@ class FlowResult:
         }
 
 
+@dataclass(frozen=True)
+class MatchingResult:
+    left_partition: list[str]
+    right_partition: list[str]
+    matches: list[dict[str, str]]
+    unmatched_left: list[str]
+    unmatched_right: list[str]
+    flow: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "left_partition": self.left_partition,
+            "right_partition": self.right_partition,
+            "matches": self.matches,
+            "match_count": len(self.matches),
+            "unmatched_left": self.unmatched_left,
+            "unmatched_right": self.unmatched_right,
+            "flow": self.flow,
+        }
+
+
+MATCH_SOURCE = "__source__"
+MATCH_SINK = "__sink__"
+
+
 def load_graph(path: Path) -> tuple[list[str], list[Edge], str, str]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     nodes = payload.get("nodes")
@@ -67,12 +92,91 @@ def load_graph(path: Path) -> tuple[list[str], list[Edge], str, str]:
     return [str(node) for node in nodes], edges, str(source), str(sink)
 
 
+def load_bipartite_graph(path: Path) -> tuple[list[str], list[str], list[tuple[str, str]]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    left = payload.get("left")
+    right = payload.get("right")
+    raw_edges = payload.get("edges")
+
+    if not isinstance(left, list) or not left:
+        raise ValueError("matching graph must include a non-empty 'left' list")
+    if not isinstance(right, list) or not right:
+        raise ValueError("matching graph must include a non-empty 'right' list")
+    if not isinstance(raw_edges, list):
+        raise ValueError("matching graph must include an 'edges' list")
+
+    left_nodes = [str(node) for node in left]
+    right_nodes = [str(node) for node in right]
+    if len(set(left_nodes)) != len(left_nodes) or len(set(right_nodes)) != len(right_nodes):
+        raise ValueError("left and right partitions must not contain duplicate node names")
+    reserved = {MATCH_SOURCE, MATCH_SINK}
+    if reserved & set(left_nodes + right_nodes):
+        raise ValueError("matching graphs may not use reserved internal node names")
+    left_set = set(left_nodes)
+    right_set = set(right_nodes)
+    if left_set & right_set:
+        raise ValueError("left and right partitions must be disjoint")
+
+    edges: list[tuple[str, str]] = []
+    seen_edges: set[tuple[str, str]] = set()
+    for item in raw_edges:
+        if not isinstance(item, dict):
+            raise ValueError("each matching edge must be an object")
+        source = str(item.get("source"))
+        target = str(item.get("target"))
+        if source not in left_set or target not in right_set:
+            raise ValueError("matching edges must point from left nodes to right nodes")
+        pair = (source, target)
+        if pair in seen_edges:
+            continue
+        seen_edges.add(pair)
+        edges.append(pair)
+    return left_nodes, right_nodes, edges
+
+
+def build_bipartite_matching_flow(
+    left: list[str], right: list[str], edges: list[tuple[str, str]]
+) -> tuple[list[str], list[Edge], str, str]:
+    nodes = [MATCH_SOURCE, *left, *right, MATCH_SINK]
+    flow_edges = [Edge(MATCH_SOURCE, node, 1) for node in left]
+    flow_edges.extend(Edge(source, target, 1) for source, target in edges)
+    flow_edges.extend(Edge(node, MATCH_SINK, 1) for node in right)
+    return nodes, flow_edges, MATCH_SOURCE, MATCH_SINK
+
+
+def solve_bipartite_matching(
+    left: list[str], right: list[str], edges: list[tuple[str, str]]
+) -> MatchingResult:
+    nodes, flow_edges, source, sink = build_bipartite_matching_flow(left, right, edges)
+    flow_result = solve_max_flow(nodes, flow_edges, source, sink)
+    matches: list[dict[str, str]] = []
+    matched_left: set[str] = set()
+    matched_right: set[str] = set()
+    edge_lookup = {(item["source"], item["target"]): item for item in flow_result.edge_flows}
+
+    for left_node, right_node in sorted(edges):
+        edge = edge_lookup.get((left_node, right_node))
+        if edge and edge["flow"] == 1:
+            matches.append({"left": left_node, "right": right_node})
+            matched_left.add(left_node)
+            matched_right.add(right_node)
+
+    return MatchingResult(
+        left_partition=sorted(left),
+        right_partition=sorted(right),
+        matches=matches,
+        unmatched_left=sorted(node for node in left if node not in matched_left),
+        unmatched_right=sorted(node for node in right if node not in matched_right),
+        flow=flow_result.to_dict(),
+    )
+
+
 def solve_max_flow(nodes: list[str], edges: list[Edge], source: str, sink: str) -> FlowResult:
     capacities: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     original_edges: list[tuple[str, str]] = []
     for edge in edges:
         capacities[edge.source][edge.target] += edge.capacity
-        capacities[edge.target]  # initialize reverse adjacency bucket
+        capacities[edge.target]
         original_edges.append((edge.source, edge.target))
 
     residual: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -118,9 +222,9 @@ def solve_max_flow(nodes: list[str], edges: list[Edge], source: str, sink: str) 
         path.reverse()
         bottleneck_int = int(bottleneck)
 
-        for left, right in zip(path, path[1:]):
-            residual[left][right] -= bottleneck_int
-            residual[right][left] += bottleneck_int
+        for left_node, right_node in zip(path, path[1:]):
+            residual[left_node][right_node] -= bottleneck_int
+            residual[right_node][left_node] += bottleneck_int
 
         max_flow += bottleneck_int
         augmenting_paths.append({"path": path, "bottleneck": bottleneck_int})
@@ -140,12 +244,14 @@ def solve_max_flow(nodes: list[str], edges: list[Edge], source: str, sink: str) 
     for edge in sorted(set(original_edges)):
         capacity = capacities[edge[0]][edge[1]]
         flow = capacity - residual[edge[0]][edge[1]]
-        edge_flows.append({
-            "source": edge[0],
-            "target": edge[1],
-            "capacity": capacity,
-            "flow": flow,
-        })
+        edge_flows.append(
+            {
+                "source": edge[0],
+                "target": edge[1],
+                "capacity": capacity,
+                "flow": flow,
+            }
+        )
 
     cut_source_side = sorted(reachable)
     cut_sink_side = sorted(node for node in nodes if node not in reachable)
@@ -160,7 +266,7 @@ def solve_max_flow(nodes: list[str], edges: list[Edge], source: str, sink: str) 
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Solve a max-flow graph with Edmonds-Karp.")
+    parser = argparse.ArgumentParser(description="Solve max-flow graphs and bipartite matchings.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     solve_parser = subparsers.add_parser("solve", help="solve a graph JSON file")
@@ -169,25 +275,46 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo_parser = subparsers.add_parser("demo", help="run the bundled sample graph")
     demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+
+    match_parser = subparsers.add_parser("match", help="solve a bipartite matching JSON file")
+    match_parser.add_argument("graph", type=Path, help="path to bipartite graph JSON")
+    match_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+
+    match_demo_parser = subparsers.add_parser("match-demo", help="run the bundled matching sample")
+    match_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     return parser
 
 
 def run_command(args: argparse.Namespace) -> dict[str, Any]:
-    graph_path = args.graph if args.command == "solve" else Path(__file__).with_name("sample_graph.json")
-    nodes, edges, source, sink = load_graph(graph_path)
-    result = solve_max_flow(nodes, edges, source, sink).to_dict()
-    return {
-        "command": args.command,
-        "graph": str(graph_path),
-        **result,
-    }
+    if args.command == "solve":
+        graph_path = args.graph
+        nodes, edges, source, sink = load_graph(graph_path)
+        result = solve_max_flow(nodes, edges, source, sink).to_dict()
+        return {"command": args.command, "graph": str(graph_path), **result}
+
+    if args.command == "demo":
+        graph_path = Path(__file__).with_name("sample_graph.json")
+        nodes, edges, source, sink = load_graph(graph_path)
+        result = solve_max_flow(nodes, edges, source, sink).to_dict()
+        return {"command": args.command, "graph": str(graph_path), **result}
+
+    if args.command == "match":
+        graph_path = args.graph
+        left, right, edges = load_bipartite_graph(graph_path)
+        result = solve_bipartite_matching(left, right, edges).to_dict()
+        return {"command": args.command, "graph": str(graph_path), **result}
+
+    graph_path = Path(__file__).with_name("sample_matching_graph.json")
+    left, right, edges = load_bipartite_graph(graph_path)
+    result = solve_bipartite_matching(left, right, edges).to_dict()
+    return {"command": args.command, "graph": str(graph_path), **result}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     payload = run_command(args)
-    if args.pretty:
+    if getattr(args, "pretty", False):
         print(json.dumps(payload, indent=2))
     else:
         print(json.dumps(payload))
