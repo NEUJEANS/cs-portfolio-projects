@@ -1,0 +1,21 @@
+# Interval Tree Deletion Slice Wrap-up
+
+- Timestamp: 2026-04-15 12:03 UTC
+- Primary implementation commit: 1a65beb9f8f1747047c80ff53a8232b75ad0cc47
+- What changed:
+  - added interval deletion support to the interval-tree lab with successor-based removal and `max_end` repair
+  - added a committed unittest module covering leaf, one-child, two-child, missing-interval, and CLI delete cases
+  - updated the README with delete usage plus corrected the test command and CLI feature summary
+  - recorded a resumable slice checklist and 3 review-pass notes
+- Tests run:
+  - `python3 -m unittest projects/interval-tree-lab/test_interval_tree_lab.py`
+  - `python3 projects/interval-tree-lab/interval_tree_lab.py delete 8-9:qa 0-3:warmup 5-8:backup 6-10:deploy 8-9:qa 15-23:analytics`
+- Reviews run:
+  - pass 1: deletion correctness / metadata refresh
+  - pass 2: CLI and README consistency
+  - pass 3: test coverage and runnable command verification
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+  - result: clean (0 verified, 0 unknown)
+- Next step:
+  - add canned trace artifact examples under `docs/artifacts/` or benchmark export plots so the project has stronger visual portfolio assets
