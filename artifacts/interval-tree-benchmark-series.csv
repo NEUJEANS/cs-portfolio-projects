@@ -1,0 +1,5 @@
+interval_count,query_count,seed,tree_height,tree_average_ms,naive_average_ms,speedup_vs_naive,average_nodes_visited,worst_nodes_visited,average_visit_ratio,same_results,valid
+100,250,17,7,0.001708,0.012863,7.53,7.012,13,0.07,true,true
+250,250,18,8,0.002117,0.031892,15.062,9.728,16,0.039,true,true
+500,250,19,9,0.002762,0.061785,22.371,13.728,24,0.027,true,true
+1000,250,20,10,0.003682,0.122219,33.194,19.696,36,0.02,true,true

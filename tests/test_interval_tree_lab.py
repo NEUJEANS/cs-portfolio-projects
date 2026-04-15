@@ -17,7 +17,9 @@ spec.loader.exec_module(interval_tree_lab)
 Interval = interval_tree_lab.Interval
 IntervalTree = interval_tree_lab.IntervalTree
 benchmark_overlap_queries = interval_tree_lab.benchmark_overlap_queries
+benchmark_overlap_series = interval_tree_lab.benchmark_overlap_series
 parse_interval_spec = interval_tree_lab.parse_interval_spec
+render_benchmark_series_csv = interval_tree_lab.render_benchmark_series_csv
 render_query_trace_artifact = interval_tree_lab.render_query_trace_artifact
 
 
@@ -175,6 +177,46 @@ class IntervalTreeLabTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("--intervals must be positive", completed.stderr)
 
+    def test_benchmark_series_rows_stay_valid(self) -> None:
+        rows = benchmark_overlap_series(
+            interval_counts=[8, 16],
+            query_count=6,
+            seed=13,
+            start_max=40,
+            width_max=5,
+            query_width_max=6,
+        )
+        self.assertEqual([row["interval_count"] for row in rows], [8, 16])
+        self.assertEqual([row["seed"] for row in rows], [13, 14])
+        self.assertTrue(all(row["same_results"] for row in rows))
+        self.assertTrue(all(row["valid"] for row in rows))
+
+    def test_render_benchmark_series_csv_has_expected_columns(self) -> None:
+        csv_text = render_benchmark_series_csv(
+            [
+                {
+                    "interval_count": 8,
+                    "query_count": 6,
+                    "seed": 13,
+                    "tree_height": 4,
+                    "tree_average_ms": 0.001,
+                    "naive_average_ms": 0.003,
+                    "speedup_vs_naive": 3.0,
+                    "average_nodes_visited": 2.5,
+                    "worst_nodes_visited": 4,
+                    "average_visit_ratio": 0.312,
+                    "same_results": True,
+                    "valid": True,
+                }
+            ]
+        )
+        lines = csv_text.strip().splitlines()
+        self.assertEqual(
+            lines[0],
+            "interval_count,query_count,seed,tree_height,tree_average_ms,naive_average_ms,speedup_vs_naive,average_nodes_visited,worst_nodes_visited,average_visit_ratio,same_results,valid",
+        )
+        self.assertEqual(lines[1], "8,6,13,4,0.001,0.003,3.0,2.5,4,0.312,true,true")
+
     def test_export_query_trace_dot_marks_pruned_and_overlap_edges(self) -> None:
         tree = IntervalTree(
             [
@@ -258,6 +300,48 @@ class IntervalTreeLabTests(unittest.TestCase):
             self.assertEqual(payload["artifact"], {"path": str(target), "format": "dot"})
             self.assertTrue(target.exists())
             self.assertIn('digraph interval_tree_query_trace', target.read_text(encoding="utf-8"))
+
+    def test_cli_benchmark_series_can_write_json_and_csv_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_target = pathlib.Path(tmpdir) / "interval-series.json"
+            csv_target = pathlib.Path(tmpdir) / "interval-series.csv"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/interval-tree-lab/interval_tree_lab.py",
+                    "benchmark-series",
+                    "--interval-counts",
+                    "8,16",
+                    "--queries",
+                    "6",
+                    "--seed",
+                    "13",
+                    "--start-max",
+                    "40",
+                    "--width-max",
+                    "5",
+                    "--query-width-max",
+                    "6",
+                    "--output-json",
+                    str(json_target),
+                    "--output-csv",
+                    str(csv_target),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "benchmark-series")
+            self.assertEqual(payload["interval_counts"], [8, 16])
+            self.assertEqual(payload["json_artifact"], str(json_target))
+            self.assertEqual(payload["csv_artifact"], str(csv_target))
+            self.assertEqual(len(payload["rows"]), 2)
+            self.assertTrue(json_target.exists())
+            self.assertTrue(csv_target.exists())
+            self.assertIn("interval_count,query_count,seed", csv_target.read_text(encoding="utf-8"))
+            stored_payload = json.loads(json_target.read_text(encoding="utf-8"))
+            self.assertEqual(stored_payload["interval_counts"], [8, 16])
 
     def test_cli_trace_rejects_format_without_output(self) -> None:
         completed = subprocess.run(

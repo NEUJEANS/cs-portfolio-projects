@@ -8,7 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 @dataclass(frozen=True, order=True)
@@ -429,6 +429,76 @@ def benchmark_overlap_queries(
     }
 
 
+def validate_benchmark_args(*, intervals: int, queries: int, start_max: int, width_max: int, query_width_max: int) -> None:
+    if intervals <= 0:
+        raise ValueError("--intervals must be positive")
+    if queries <= 0:
+        raise ValueError("--queries must be positive")
+    if start_max < 0:
+        raise ValueError("--start-max must be non-negative")
+    if width_max < 0:
+        raise ValueError("--width-max must be non-negative")
+    if query_width_max < 0:
+        raise ValueError("--query-width-max must be non-negative")
+
+
+def benchmark_overlap_series(
+    *,
+    interval_counts: Sequence[int],
+    query_count: int,
+    seed: int,
+    start_max: int,
+    width_max: int,
+    query_width_max: int,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for offset, interval_count in enumerate(interval_counts):
+        validate_benchmark_args(
+            intervals=interval_count,
+            queries=query_count,
+            start_max=start_max,
+            width_max=width_max,
+            query_width_max=query_width_max,
+        )
+        row = benchmark_overlap_queries(
+            interval_count=interval_count,
+            query_count=query_count,
+            seed=seed + offset,
+            start_max=start_max,
+            width_max=width_max,
+            query_width_max=query_width_max,
+        )
+        rows.append(row)
+    return rows
+
+
+def render_benchmark_series_csv(rows: Sequence[dict[str, object]]) -> str:
+    headers = [
+        "interval_count",
+        "query_count",
+        "seed",
+        "tree_height",
+        "tree_average_ms",
+        "naive_average_ms",
+        "speedup_vs_naive",
+        "average_nodes_visited",
+        "worst_nodes_visited",
+        "average_visit_ratio",
+        "same_results",
+        "valid",
+    ]
+    lines = [",".join(headers)]
+    for row in rows:
+        lines.append(
+            ",".join(
+                json.dumps(row.get(header)) if isinstance(row.get(header), bool) else str(row.get(header))
+                for header in headers
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+
 def command_demo(_: argparse.Namespace) -> dict[str, object]:
     intervals = [
         Interval(0, 3, "warmup"),
@@ -517,16 +587,13 @@ def command_delete(args: argparse.Namespace) -> dict[str, object]:
 
 
 def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
-    if args.intervals <= 0:
-        raise ValueError("--intervals must be positive")
-    if args.queries <= 0:
-        raise ValueError("--queries must be positive")
-    if args.start_max < 0:
-        raise ValueError("--start-max must be non-negative")
-    if args.width_max < 0:
-        raise ValueError("--width-max must be non-negative")
-    if args.query_width_max < 0:
-        raise ValueError("--query-width-max must be non-negative")
+    validate_benchmark_args(
+        intervals=args.intervals,
+        queries=args.queries,
+        start_max=args.start_max,
+        width_max=args.width_max,
+        query_width_max=args.query_width_max,
+    )
     return {
         "command": "benchmark",
         **benchmark_overlap_queries(
@@ -538,6 +605,43 @@ def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
             query_width_max=args.query_width_max,
         ),
     }
+
+
+def command_benchmark_series(args: argparse.Namespace) -> dict[str, object]:
+    interval_counts = [int(part.strip()) for part in args.interval_counts.split(",") if part.strip()]
+    if not interval_counts:
+        raise ValueError("--interval-counts must include at least one positive integer")
+
+    rows = benchmark_overlap_series(
+        interval_counts=interval_counts,
+        query_count=args.queries,
+        seed=args.seed,
+        start_max=args.start_max,
+        width_max=args.width_max,
+        query_width_max=args.query_width_max,
+    )
+    payload: dict[str, object] = {
+        "command": "benchmark-series",
+        "interval_counts": interval_counts,
+        "query_count": args.queries,
+        "seed": args.seed,
+        "start_max": args.start_max,
+        "width_max": args.width_max,
+        "query_width_max": args.query_width_max,
+        "rows": rows,
+    }
+
+    if args.output_json:
+        output_json = Path(args.output_json)
+        output_json.parent.mkdir(parents=True, exist_ok=True)
+        output_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        payload["json_artifact"] = str(output_json)
+    if args.output_csv:
+        output_csv = Path(args.output_csv)
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        output_csv.write_text(render_benchmark_series_csv(rows), encoding="utf-8")
+        payload["csv_artifact"] = str(output_csv)
+    return payload
 
 
 def render_query_trace_artifact(*, dot_text: str, output_path: Path, artifact_format: str) -> Path:
@@ -635,6 +739,24 @@ def main() -> None:
     benchmark_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
     benchmark_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
     benchmark_parser.set_defaults(handler=command_benchmark)
+
+    benchmark_series_parser = subparsers.add_parser(
+        "benchmark-series",
+        help="run the overlap benchmark across several interval counts and optionally write JSON/CSV artifacts",
+    )
+    benchmark_series_parser.add_argument(
+        "--interval-counts",
+        default="100,250,500,1000",
+        help="comma-separated interval counts to benchmark (default: 100,250,500,1000)",
+    )
+    benchmark_series_parser.add_argument("--queries", type=int, default=250, help="number of synthetic queries per run")
+    benchmark_series_parser.add_argument("--seed", type=int, default=7, help="base random seed for reproducibility")
+    benchmark_series_parser.add_argument("--start-max", type=int, default=5000, help="max generated interval/query start")
+    benchmark_series_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
+    benchmark_series_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
+    benchmark_series_parser.add_argument("--output-json", help="optional path to write the full JSON payload")
+    benchmark_series_parser.add_argument("--output-csv", help="optional path to write a compact CSV summary")
+    benchmark_series_parser.set_defaults(handler=command_benchmark_series)
 
     trace_parser = subparsers.add_parser(
         "trace",

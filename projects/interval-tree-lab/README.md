@@ -14,10 +14,11 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 - incremental insert and deletion with `max_end` metadata refresh
 - find any overlap, find all overlaps, and point stabbing queries
 - reproducible synthetic benchmark that compares pruned interval-tree searches versus naive scans
+- benchmark-series command that scales workloads across multiple interval counts and can write JSON/CSV artifacts for portfolio evidence
 - per-query node-visit stats for making pruning behavior visible in JSON output
 - bundled `sample_intervals.json` artifact for quick inspection and demo data
 - validation for BST ordering and `max_end` correctness
-- JSON CLI output for demo, build, overlap, point, insert, delete, trace, and benchmark flows
+- JSON CLI output for demo, build, overlap, point, insert, delete, trace, benchmark, and benchmark-series flows
 - Graphviz DOT query-trace export that highlights visited, pruned, and overlapping branches
 - optional trace artifact rendering to DOT, SVG, or PNG files for portfolio screenshots and README embeds
 
@@ -65,6 +66,12 @@ Benchmark interval-tree pruning against a naive scan:
 python3 projects/interval-tree-lab/interval_tree_lab.py benchmark --intervals 800 --queries 400 --seed 11
 ```
 
+Generate a portfolio-ready benchmark series with JSON and CSV artifacts:
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py benchmark-series --interval-counts 100,250,500,1000 --queries 250 --output-json artifacts/interval-tree-benchmark-series.json --output-csv artifacts/interval-tree-benchmark-series.csv
+```
+
 Export a Graphviz DOT trace for one query (render later with Graphviz if desired):
 
 ```bash
@@ -80,6 +87,7 @@ python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-
 ## Test
 
 ```bash
+./.venv/bin/python -m pytest -q tests/test_interval_tree_lab.py
 python3 -m unittest projects/interval-tree-lab/test_interval_tree_lab.py
 ```
 
@@ -90,6 +98,7 @@ python3 -m unittest projects/interval-tree-lab/test_interval_tree_lab.py
 - Bulk builds use median splitting on the sorted interval list to avoid obviously skewed demo trees.
 - Validation checks both BST ordering and `max_end` propagation so augmentation bugs are easy to catch.
 - The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan overlap results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
+- The `benchmark-series` command intentionally increments the seed per row so each interval count gets a reproducible but non-identical workload snapshot.
 - The `trace` command still emits DOT inline in JSON output, but can now also write DOT/SVG/PNG artifacts to disk when you want concrete portfolio assets.
 - SVG/PNG rendering is optional and only requires Graphviz `dot` when you explicitly ask for a rendered artifact.
 

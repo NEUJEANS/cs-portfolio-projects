@@ -1,0 +1,236 @@
+{
+  "command": "benchmark-series",
+  "interval_counts": [
+    100,
+    250,
+    500,
+    1000
+  ],
+  "query_count": 250,
+  "query_width_max": 60,
+  "rows": [
+    {
+      "average_nodes_visited": 7.012,
+      "average_visit_ratio": 0.07,
+      "errors": [],
+      "interval_count": 100,
+      "max_end": 4923,
+      "naive_average_ms": 0.012863,
+      "query_count": 250,
+      "query_width_max": 60,
+      "root": {
+        "end": 2745,
+        "label": "interval-40",
+        "start": 2745
+      },
+      "same_results": true,
+      "sample_naive_hits": [],
+      "sample_query": {
+        "end": 1491,
+        "label": "query-0",
+        "start": 1484
+      },
+      "sample_tree_hits": [],
+      "seed": 17,
+      "speedup_vs_naive": 7.53,
+      "start_max": 5000,
+      "tree_average_ms": 0.001708,
+      "tree_height": 7,
+      "valid": true,
+      "width_max": 40,
+      "worst_nodes_visited": 13
+    },
+    {
+      "average_nodes_visited": 9.728,
+      "average_visit_ratio": 0.039,
+      "errors": [],
+      "interval_count": 250,
+      "max_end": 5035,
+      "naive_average_ms": 0.031892,
+      "query_count": 250,
+      "query_width_max": 60,
+      "root": {
+        "end": 2593,
+        "label": "interval-99",
+        "start": 2583
+      },
+      "same_results": true,
+      "sample_naive_hits": [
+        {
+          "end": 377,
+          "label": "interval-246",
+          "start": 344
+        },
+        {
+          "end": 410,
+          "label": "interval-87",
+          "start": 374
+        }
+      ],
+      "sample_query": {
+        "end": 404,
+        "label": "query-0",
+        "start": 354
+      },
+      "sample_tree_hits": [
+        {
+          "end": 377,
+          "label": "interval-246",
+          "start": 344
+        },
+        {
+          "end": 410,
+          "label": "interval-87",
+          "start": 374
+        }
+      ],
+      "seed": 18,
+      "speedup_vs_naive": 15.062,
+      "start_max": 5000,
+      "tree_average_ms": 0.002117,
+      "tree_height": 8,
+      "valid": true,
+      "width_max": 40,
+      "worst_nodes_visited": 16
+    },
+    {
+      "average_nodes_visited": 13.728,
+      "average_visit_ratio": 0.027,
+      "errors": [],
+      "interval_count": 500,
+      "max_end": 5026,
+      "naive_average_ms": 0.061785,
+      "query_count": 250,
+      "query_width_max": 60,
+      "root": {
+        "end": 2575,
+        "label": "interval-47",
+        "start": 2549
+      },
+      "same_results": true,
+      "sample_naive_hits": [
+        {
+          "end": 1252,
+          "label": "interval-5",
+          "start": 1214
+        },
+        {
+          "end": 1262,
+          "label": "interval-249",
+          "start": 1239
+        },
+        {
+          "end": 1254,
+          "label": "interval-60",
+          "start": 1254
+        }
+      ],
+      "sample_query": {
+        "end": 1254,
+        "label": "query-0",
+        "start": 1238
+      },
+      "sample_tree_hits": [
+        {
+          "end": 1252,
+          "label": "interval-5",
+          "start": 1214
+        },
+        {
+          "end": 1262,
+          "label": "interval-249",
+          "start": 1239
+        },
+        {
+          "end": 1254,
+          "label": "interval-60",
+          "start": 1254
+        }
+      ],
+      "seed": 19,
+      "speedup_vs_naive": 22.371,
+      "start_max": 5000,
+      "tree_average_ms": 0.002762,
+      "tree_height": 9,
+      "valid": true,
+      "width_max": 40,
+      "worst_nodes_visited": 24
+    },
+    {
+      "average_nodes_visited": 19.696,
+      "average_visit_ratio": 0.02,
+      "errors": [],
+      "interval_count": 1000,
+      "max_end": 5013,
+      "naive_average_ms": 0.122219,
+      "query_count": 250,
+      "query_width_max": 60,
+      "root": {
+        "end": 2365,
+        "label": "interval-660",
+        "start": 2353
+      },
+      "same_results": true,
+      "sample_naive_hits": [
+        {
+          "end": 1377,
+          "label": "interval-20",
+          "start": 1338
+        },
+        {
+          "end": 1351,
+          "label": "interval-826",
+          "start": 1341
+        },
+        {
+          "end": 1373,
+          "label": "interval-32",
+          "start": 1348
+        },
+        {
+          "end": 1402,
+          "label": "interval-360",
+          "start": 1376
+        }
+      ],
+      "sample_query": {
+        "end": 1377,
+        "label": "query-0",
+        "start": 1351
+      },
+      "sample_tree_hits": [
+        {
+          "end": 1377,
+          "label": "interval-20",
+          "start": 1338
+        },
+        {
+          "end": 1351,
+          "label": "interval-826",
+          "start": 1341
+        },
+        {
+          "end": 1373,
+          "label": "interval-32",
+          "start": 1348
+        },
+        {
+          "end": 1402,
+          "label": "interval-360",
+          "start": 1376
+        }
+      ],
+      "seed": 20,
+      "speedup_vs_naive": 33.194,
+      "start_max": 5000,
+      "tree_average_ms": 0.003682,
+      "tree_height": 10,
+      "valid": true,
+      "width_max": 40,
+      "worst_nodes_visited": 36
+    }
+  ],
+  "seed": 17,
+  "start_max": 5000,
+  "width_max": 40
+}
