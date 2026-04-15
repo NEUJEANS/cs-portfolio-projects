@@ -10,6 +10,7 @@ This project demonstrates string indexing, edge splitting, compact tree represen
 - builds a compact edge-labeled suffix tree by inserting every suffix
 - supports substring existence checks and occurrence lookup
 - computes the longest repeated substring with configurable minimum occurrence count
+- computes the longest common substring shared by two texts via a naive generalized suffix tree
 - provides an `explain` mode that traces how a pattern is matched through compressed edges
 - exports Graphviz DOT for quick rendering into SVG/PNG diagrams
 - exports Mermaid flowcharts for README-friendly visualization without Graphviz
@@ -23,6 +24,7 @@ This project demonstrates string indexing, edge splitting, compact tree represen
 python3 suffix_tree_lab.py banana find ana
 python3 suffix_tree_lab.py banana repeat
 python3 suffix_tree_lab.py mississippi repeat --min-occurrences 3
+python3 suffix_tree_lab.py bananarama longest-common "panama banana"
 python3 suffix_tree_lab.py banana explain band
 python3 suffix_tree_lab.py banana export-dot > banana.dot
 dot -Tsvg banana.dot -o banana.svg
@@ -40,6 +42,11 @@ matches=[1, 3]
 
 $ python3 suffix_tree_lab.py banana repeat
 ana
+
+$ python3 suffix_tree_lab.py bananarama longest-common "panama banana"
+substring='banana'
+left_positions=[0]
+right_positions=[7]
 
 $ python3 suffix_tree_lab.py "banana bandana banana" benchmark --patterns ana,ban --iterations 50
 method           pattern  matches  total_seconds  avg_seconds
@@ -86,6 +93,7 @@ pytest -q test_suffix_tree_lab.py
 - benchmark mode cross-checks suffix-tree match counts against suffix-array, Python, and regex baselines before recording timings
 - the suffix-array baseline uses a deliberately naive sorted-suffix implementation so students can discuss binary-search lookup versus heavier suffix-tree structure
 - exported CSV snapshots make it easy to discuss asymptotics versus real constant-factor tradeoffs in interviews
+- generalized suffix tree mode uses distinct sentinels plus subtree source annotation to recover the longest common substring across two texts
 - favors readability and correctness over Ukkonen-level linear-time construction complexity
 
 ## Future improvements

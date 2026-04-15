@@ -6,7 +6,7 @@ import time
 from bisect import bisect_left
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 
 @dataclass
@@ -29,6 +29,13 @@ class BenchmarkResult:
     matches: int
     total_seconds: float
     avg_seconds: float
+
+
+@dataclass(frozen=True)
+class LongestCommonSubstringResult:
+    substring: str
+    left_positions: List[int]
+    right_positions: List[int]
 
 
 @dataclass(frozen=True)
@@ -69,6 +76,8 @@ class SuffixTree:
     def __init__(self, text: str, sentinel: str = "$") -> None:
         if not text:
             raise ValueError("text must be non-empty")
+        if len(sentinel) != 1:
+            raise ValueError("sentinel must be exactly one character")
         if sentinel in text:
             raise ValueError(f"sentinel {sentinel!r} must not appear in text")
         self.original_text = text
@@ -156,6 +165,9 @@ class SuffixTree:
 
         walk(self.root, "")
         return best
+
+    def longest_common_substring(self, other_text: str) -> LongestCommonSubstringResult:
+        return longest_common_substring_via_suffix_tree(self.original_text, other_text)
 
     def edge_labels(self) -> List[str]:
         labels: List[str] = []
@@ -338,6 +350,167 @@ class SuffixTree:
         return node
 
 
+class GeneralizedSuffixTree:
+    """Naive generalized suffix tree for a pair of strings.
+
+    This keeps the implementation close to the single-string lab while adding
+    enough subtree annotation to compute longest common substrings.
+    """
+
+    def __init__(self, left_text: str, right_text: str) -> None:
+        if not left_text:
+            raise ValueError("left_text must be non-empty")
+        if not right_text:
+            raise ValueError("right_text must be non-empty")
+
+        self.left_text = left_text
+        self.right_text = right_text
+        self.left_sentinel, self.right_sentinel = choose_unique_sentinels(left_text, right_text)
+        self.text = left_text + self.left_sentinel + right_text + self.right_sentinel
+        self.left_limit = len(left_text)
+        self.right_start = len(left_text) + 1
+        self.right_limit = self.right_start + len(right_text)
+        self.root = Node()
+        for start in range(len(self.text)):
+            self._insert_suffix(start)
+
+    def _insert_suffix(self, suffix_start: int) -> None:
+        node = self.root
+        node.suffix_starts.append(suffix_start)
+        index = suffix_start
+
+        while index < len(self.text):
+            char = self.text[index]
+            edge = node.children.get(char)
+            if edge is None:
+                leaf = Node(suffix_starts=[suffix_start])
+                node.children[char] = Edge(index, len(self.text), leaf)
+                return
+
+            match_len = self._edge_match_length(edge, index)
+            edge_length = edge.end - edge.start
+
+            if match_len == edge_length:
+                index += match_len
+                node = edge.child
+                node.suffix_starts.append(suffix_start)
+                continue
+
+            split = Node(suffix_starts=edge.child.suffix_starts.copy())
+            split.suffix_starts.append(suffix_start)
+
+            old_char = self.text[edge.start + match_len]
+            split.children[old_char] = Edge(edge.start + match_len, edge.end, edge.child)
+
+            new_leaf = Node(suffix_starts=[suffix_start])
+            new_char = self.text[index + match_len]
+            split.children[new_char] = Edge(index + match_len, len(self.text), new_leaf)
+
+            node.children[char] = Edge(edge.start, edge.start + match_len, split)
+            return
+
+    def _edge_match_length(self, edge: Edge, index: int) -> int:
+        matched = 0
+        while (
+            edge.start + matched < edge.end
+            and index + matched < len(self.text)
+            and self.text[edge.start + matched] == self.text[index + matched]
+        ):
+            matched += 1
+        return matched
+
+    def _source_and_offset(self, suffix_start: int) -> Optional[Tuple[int, int]]:
+        if suffix_start < self.left_limit:
+            return (0, suffix_start)
+        if self.right_start <= suffix_start < self.right_limit:
+            return (1, suffix_start - self.right_start)
+        return None
+
+    def longest_common_substring(self) -> LongestCommonSubstringResult:
+        best = ""
+        best_left_positions: List[int] = []
+        best_right_positions: List[int] = []
+
+        def walk(node: Node, path: str) -> Tuple[Set[int], List[int], List[int]]:
+            nonlocal best, best_left_positions, best_right_positions
+            sources: Set[int] = set()
+            left_positions: Set[int] = set()
+            right_positions: Set[int] = set()
+
+            for suffix_start in node.suffix_starts:
+                origin = self._source_and_offset(suffix_start)
+                if origin is None:
+                    continue
+                source_id, offset = origin
+                sources.add(source_id)
+                if source_id == 0:
+                    left_positions.add(offset)
+                else:
+                    right_positions.add(offset)
+
+            for edge in sorted(node.children.values(), key=lambda current_edge: self.text[current_edge.start:current_edge.end]):
+                label = self.text[edge.start:edge.end]
+                child_sources, child_left_positions, child_right_positions = walk(edge.child, path + label)
+                sources |= child_sources
+                left_positions.update(child_left_positions)
+                right_positions.update(child_right_positions)
+
+            candidate = sanitize_common_path(path, self.left_sentinel, self.right_sentinel)
+            candidate_left_positions = sorted(
+                position for position in left_positions if position + len(candidate) <= len(self.left_text)
+            )
+            candidate_right_positions = sorted(
+                position for position in right_positions if position + len(candidate) <= len(self.right_text)
+            )
+            if 0 in sources and 1 in sources and (
+                len(candidate) > len(best)
+                or (
+                    len(candidate) == len(best)
+                    and candidate
+                    and (candidate_left_positions, candidate_right_positions, candidate)
+                    < (best_left_positions, best_right_positions, best)
+                )
+            ):
+                best = candidate
+                best_left_positions = candidate_left_positions
+                best_right_positions = candidate_right_positions
+
+            return sources, sorted(left_positions), sorted(right_positions)
+
+        walk(self.root, "")
+        if not best:
+            return LongestCommonSubstringResult(substring="", left_positions=[], right_positions=[])
+        return LongestCommonSubstringResult(
+            substring=best,
+            left_positions=best_left_positions,
+            right_positions=best_right_positions,
+        )
+
+
+def sanitize_common_path(path: str, *sentinels: str) -> str:
+    candidate = path
+    for sentinel in sentinels:
+        marker = candidate.find(sentinel)
+        if marker != -1:
+            candidate = candidate[:marker]
+    return candidate
+
+
+def choose_unique_sentinels(*texts: str) -> Tuple[str, ...]:
+    pool = [chr(codepoint) for codepoint in range(0xE000, 0xE100)]
+    chosen: List[str] = []
+    for candidate in pool:
+        if all(candidate not in text for text in texts):
+            chosen.append(candidate)
+            if len(chosen) == len(texts):
+                return tuple(chosen)
+    raise ValueError("could not find enough unique sentinel characters")
+
+
+def longest_common_substring_via_suffix_tree(left_text: str, right_text: str) -> LongestCommonSubstringResult:
+    return GeneralizedSuffixTree(left_text, right_text).longest_common_substring()
+
+
 def find_with_python(text: str, pattern: str) -> List[int]:
     matches: List[int] = []
     start = 0
@@ -397,6 +570,9 @@ def build_parser() -> argparse.ArgumentParser:
     repeat_parser = subparsers.add_parser("repeat", help="show longest repeated substring")
     repeat_parser.add_argument("--min-occurrences", type=int, default=2)
 
+    common_parser = subparsers.add_parser("longest-common", help="show the longest common substring shared with another text")
+    common_parser.add_argument("other_text")
+
     explain_parser = subparsers.add_parser("explain", help="trace a pattern lookup")
     explain_parser.add_argument("pattern")
 
@@ -435,6 +611,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     elif args.command == "repeat":
         repeated = tree.longest_repeated_substring(min_occurrences=args.min_occurrences)
         print(repeated)
+    elif args.command == "longest-common":
+        result = tree.longest_common_substring(args.other_text)
+        print(f"substring={result.substring!r}")
+        print(f"left_positions={result.left_positions}")
+        print(f"right_positions={result.right_positions}")
     elif args.command == "explain":
         lines = tree.explain_find(args.pattern)
         print("\n".join(lines))

@@ -5,7 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from suffix_tree_lab import SuffixArrayIndex, SuffixTree, benchmark_results_to_csv, parse_patterns
+from suffix_tree_lab import (
+    GeneralizedSuffixTree,
+    SuffixArrayIndex,
+    SuffixTree,
+    benchmark_results_to_csv,
+    choose_unique_sentinels,
+    longest_common_substring_via_suffix_tree,
+    parse_patterns,
+    sanitize_common_path,
+)
 
 
 def test_contains_and_find_for_repeated_patterns():
@@ -21,6 +30,44 @@ def test_longest_repeated_substring_and_min_occurrences():
     tree = SuffixTree("mississippi")
     assert tree.longest_repeated_substring() == "issi"
     assert tree.longest_repeated_substring(min_occurrences=3) == "i"
+
+
+def test_longest_common_substring_uses_generalized_tree_annotations():
+    tree = SuffixTree("bananarama")
+    result = tree.longest_common_substring("panama banana")
+    assert result.substring == "banana"
+    assert result.left_positions == [0]
+    assert result.right_positions == [7]
+
+
+@pytest.mark.parametrize(
+    ("left_text", "right_text", "expected"),
+    [
+        ("mississippi", "sippican", "sippi"),
+        ("xabxac", "abcabxabcd", "abxa"),
+        ("abc", "xyz", ""),
+    ],
+)
+def test_longest_common_substring_via_suffix_tree_matches_known_pairs(left_text: str, right_text: str, expected: str):
+    result = longest_common_substring_via_suffix_tree(left_text, right_text)
+    assert result.substring == expected
+    if expected:
+        for position in result.left_positions:
+            assert left_text[position : position + len(expected)] == expected
+        for position in result.right_positions:
+            assert right_text[position : position + len(expected)] == expected
+
+
+def test_generalized_tree_rejects_empty_strings_and_chooses_safe_sentinels():
+    with pytest.raises(ValueError):
+        GeneralizedSuffixTree("", "abc")
+    with pytest.raises(ValueError):
+        GeneralizedSuffixTree("abc", "")
+
+    sentinels = choose_unique_sentinels("alpha", "beta")
+    assert len(sentinels) == 2
+    assert sentinels[0] != sentinels[1]
+    assert sanitize_common_path(f"alpha{sentinels[0]}beta", *sentinels) == "alpha"
 
 
 def test_edge_labels_are_compact_and_search_trace_explains_progress():
@@ -105,6 +152,8 @@ def test_rejects_invalid_inputs():
         SuffixTree("")
     with pytest.raises(ValueError):
         SuffixTree("abc$def")
+    with pytest.raises(ValueError):
+        SuffixTree("abc", sentinel="@@")
     tree = SuffixTree("abcabc")
     with pytest.raises(ValueError):
         tree.find("")
@@ -114,7 +163,7 @@ def test_rejects_invalid_inputs():
         tree.longest_repeated_substring(1)
 
 
-def test_cli_find_repeat_explain_export_and_benchmark_commands(tmp_path: Path):
+def test_cli_find_repeat_longest_common_explain_export_and_benchmark_commands(tmp_path: Path):
     script = Path(__file__).with_name("suffix_tree_lab.py")
 
     result = subprocess.run(
@@ -134,6 +183,17 @@ def test_cli_find_repeat_explain_export_and_benchmark_commands(tmp_path: Path):
     )
     assert repeat.returncode == 0
     assert repeat.stdout.strip() == "ana"
+
+    longest_common = subprocess.run(
+        [sys.executable, str(script), "bananarama", "longest-common", "panama banana"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert longest_common.returncode == 0
+    assert "substring='banana'" in longest_common.stdout
+    assert "left_positions=[0]" in longest_common.stdout
+    assert "right_positions=[7]" in longest_common.stdout
 
     explain = subprocess.run(
         [sys.executable, str(script), "banana", "explain", "band"],
