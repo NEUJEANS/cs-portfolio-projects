@@ -16,6 +16,6 @@
   - review pass 3: re-fetched remote status before push and verified the branch was still in sync
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
-- Commit hash: `10471f13ea81fee624473317b0b5752479714bff`
+- Commit hash: `ee5620b`
 - Next step:
   - extend churn scenarios with explicit recovery/rejoin events so the simulator can model nodes coming back after failure
