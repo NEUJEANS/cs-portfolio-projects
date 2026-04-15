@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from mapreduce import benchmark_job, execute_job, inspect_plugin, inspect_plugins, load_plugin, stable_partition
+from mapreduce import benchmark_job, diff_plugin_inspections, execute_job, inspect_plugin, inspect_plugins, load_plugin, stable_partition
 
 
 class MiniMapReduceTests(unittest.TestCase):
@@ -163,6 +163,32 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("plugin-average-score", csv_lines[1])
         self.assertIn("plugin-max-score", csv_lines[2])
 
+    def test_diff_plugin_inspections_reports_changed_metadata_fields(self) -> None:
+        diffs = diff_plugin_inspections([
+            inspect_plugin(PROJECT_DIR / "plugins_average_score.py"),
+            inspect_plugin(PROJECT_DIR / "plugins_top_score.py"),
+        ])
+
+        self.assertEqual(len(diffs), 1)
+        self.assertIn("name", diffs[0].changed_fields)
+        self.assertIn("benchmark_generator", diffs[0].changed_fields)
+        self.assertEqual(diffs[0].changes["benchmark_generator"]["current"], None)
+
+    def test_inspect_plugins_can_include_adjacent_diffs(self) -> None:
+        batch = inspect_plugins(
+            [
+                PROJECT_DIR / "plugins_average_score.py",
+                PROJECT_DIR / "plugins_top_score.py",
+            ],
+            include_diffs=True,
+        )
+
+        payload = batch.as_dict()
+        self.assertIn("diffs", payload)
+        self.assertEqual(len(payload["diffs"]), 1)
+        self.assertEqual(payload["diffs"][0]["changed_fields"], sorted(payload["diffs"][0]["changed_fields"]))
+        self.assertIn("available_dataset_families", payload["diffs"][0]["changes"])
+
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -245,6 +271,52 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(len(csv_lines), 3)
             self.assertIn("plugin-average-score", csv_lines[1])
             self.assertIn("plugin-max-score", csv_lines[2])
+
+    def test_cli_inspect_plugin_can_emit_diff_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-diff.json"
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "inspect-plugin",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_average_score.py",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_top_score.py",
+                    "--diff",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["plugin_count"], 2)
+            self.assertEqual(len(payload["diffs"]), 1)
+            self.assertIn("name", payload["diffs"][0]["changed_fields"])
+            self.assertEqual(payload["diffs"][0]["changes"]["benchmark_generator"]["current"], None)
+
+    def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                "projects/mini-mapreduce-lab/mapreduce.py",
+                "inspect-plugin",
+                "--plugin",
+                "projects/mini-mapreduce-lab/plugins_average_score.py",
+                "--diff",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parents[2],
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--diff requires at least two --plugin values", completed.stderr)
 
     def test_benchmark_wordcount_reports_skew_metrics(self) -> None:
         result = benchmark_job("wordcount", "skewed", records=200, shard_size=25, reducers=[1, 4], seed=7)

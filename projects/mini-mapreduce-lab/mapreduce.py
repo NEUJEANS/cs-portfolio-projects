@@ -39,6 +39,16 @@ PLUGIN_INSPECTION_FIELDNAMES = [
     "available_dataset_families",
 ]
 
+PLUGIN_INSPECTION_DIFF_FIELDS = [
+    "name",
+    "plugin",
+    "mapper",
+    "reducer",
+    "combiner",
+    "benchmark_generator",
+    "available_dataset_families",
+]
+
 
 @dataclass(slots=True)
 class PluginInspection:
@@ -76,14 +86,34 @@ class PluginInspection:
 
 
 @dataclass(slots=True)
-class PluginInspectionBatch:
-    plugins: list[PluginInspection]
+class PluginInspectionDiff:
+    previous_plugin: str
+    current_plugin: str
+    changed_fields: list[str]
+    changes: dict[str, dict[str, object | None]]
 
     def as_dict(self) -> dict[str, object]:
         return {
+            "previous_plugin": self.previous_plugin,
+            "current_plugin": self.current_plugin,
+            "changed_fields": self.changed_fields,
+            "changes": self.changes,
+        }
+
+
+@dataclass(slots=True)
+class PluginInspectionBatch:
+    plugins: list[PluginInspection]
+    diffs: list[PluginInspectionDiff] | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
             "plugin_count": len(self.plugins),
             "plugins": [plugin.as_dict() for plugin in self.plugins],
         }
+        if self.diffs is not None:
+            payload["diffs"] = [diff.as_dict() for diff in self.diffs]
+        return payload
 
     def to_json(self) -> str:
         return json.dumps(self.as_dict(), indent=2, sort_keys=True)
@@ -674,10 +704,34 @@ def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
     )
 
 
-def inspect_plugins(plugin_refs: list[str | Path]) -> PluginInspectionBatch:
+def diff_plugin_inspections(plugins: list[PluginInspection]) -> list[PluginInspectionDiff]:
+    diffs: list[PluginInspectionDiff] = []
+    for previous, current in zip(plugins, plugins[1:]):
+        previous_payload = previous.as_dict()
+        current_payload = current.as_dict()
+        changes: dict[str, dict[str, object | None]] = {}
+        for field in PLUGIN_INSPECTION_DIFF_FIELDS:
+            if previous_payload[field] != current_payload[field]:
+                changes[field] = {
+                    "previous": previous_payload[field],
+                    "current": current_payload[field],
+                }
+        diffs.append(
+            PluginInspectionDiff(
+                previous_plugin=previous.plugin,
+                current_plugin=current.plugin,
+                changed_fields=sorted(changes),
+                changes=changes,
+            )
+        )
+    return diffs
+
+
+def inspect_plugins(plugin_refs: list[str | Path], *, include_diffs: bool = False) -> PluginInspectionBatch:
     if not plugin_refs:
         raise ValueError("at least one plugin is required for inspection")
-    return PluginInspectionBatch(plugins=[inspect_plugin(plugin_ref) for plugin_ref in plugin_refs])
+    plugins = [inspect_plugin(plugin_ref) for plugin_ref in plugin_refs]
+    return PluginInspectionBatch(plugins=plugins, diffs=diff_plugin_inspections(plugins) if include_diffs else None)
 
 
 def load_plugin(plugin_ref: str | Path) -> PluginJob:
@@ -1012,6 +1066,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect_parser.add_argument("--output", help="optional output JSON path")
     inspect_parser.add_argument("--csv-output", help="optional plugin inspection CSV output path")
+    inspect_parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="include adjacent plugin metadata diffs in the JSON inspection payload when multiple plugins are provided",
+    )
 
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
     benchmark_parser.add_argument("--job", choices=["wordcount", "plugin"], default="wordcount")
@@ -1061,11 +1120,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "inspect-plugin":
+        if args.diff and len(args.plugin) < 2:
+            parser.error("--diff requires at least two --plugin values")
         try:
-            result = inspect_plugins(args.plugin)
+            result = inspect_plugins(args.plugin, include_diffs=args.diff)
         except ValueError as exc:
             parser.error(str(exc))
-        rendered = result.plugins[0].to_json() if len(result.plugins) == 1 else result.to_json()
+        rendered = result.plugins[0].to_json() if len(result.plugins) == 1 and not args.diff else result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
         elif not args.csv_output:

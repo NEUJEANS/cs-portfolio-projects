@@ -20,8 +20,10 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 benchmark_job = module.benchmark_job
+diff_plugin_inspections = module.diff_plugin_inspections
 execute_job = module.execute_job
 inspect_plugin = module.inspect_plugin
+inspect_plugins = module.inspect_plugins
 load_plugin = module.load_plugin
 stable_partition = module.stable_partition
 
@@ -324,6 +326,27 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertIn("plugin-average-score", csv_rows[1])
         self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
 
+    def test_plugin_inspection_diffs_capture_contract_changes(self) -> None:
+        diffs = diff_plugin_inspections([
+            inspect_plugin(PROJECT_DIR / "plugins_average_score.py"),
+            inspect_plugin(PROJECT_DIR / "plugins_top_score.py"),
+        ])
+
+        self.assertEqual(len(diffs), 1)
+        self.assertIn("name", diffs[0].changed_fields)
+        self.assertIn("available_dataset_families", diffs[0].changed_fields)
+
+    def test_inspect_plugins_can_include_diff_payload(self) -> None:
+        batch = inspect_plugins(
+            [PROJECT_DIR / "plugins_average_score.py", PROJECT_DIR / "plugins_top_score.py"],
+            include_diffs=True,
+        )
+
+        payload = batch.as_dict()
+        self.assertEqual(payload["plugin_count"], 2)
+        self.assertEqual(len(payload["diffs"]), 1)
+        self.assertIn("benchmark_generator", payload["diffs"][0]["changes"])
+
     def test_cli_inspect_plugin_supports_csv_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             json_output = Path(tmpdir) / "plugin-inspection.json"
@@ -356,6 +379,50 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             )
             self.assertIn("plugin-average-score", csv_rows[1])
             self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
+
+    def test_cli_inspect_plugin_can_emit_diff_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-diff.json"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "inspect-plugin",
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_average_score.py"),
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_top_score.py"),
+                    "--diff",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["plugin_count"], 2)
+            self.assertEqual(len(payload["diffs"]), 1)
+            self.assertIn("name", payload["diffs"][0]["changed_fields"])
+
+    def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "inspect-plugin",
+                "--plugin",
+                str(PROJECT_DIR / "plugins_average_score.py"),
+                "--diff",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--diff requires at least two --plugin values", completed.stderr)
 
     def test_cli_plugin_benchmark_writes_expected_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
