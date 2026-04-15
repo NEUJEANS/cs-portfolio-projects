@@ -28,6 +28,32 @@ Reducer = Callable[[str, list[JSONValue]], JSONValue]
 BenchmarkGenerator = Callable[..., list[str]]
 
 
+@dataclass(slots=True)
+class PluginInspection:
+    name: str
+    plugin: str
+    mapper: str
+    reducer: str
+    combiner: str | None
+    benchmark_generator: str | None
+    available_dataset_families: list[str] | None
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "name": self.name,
+                "plugin": self.plugin,
+                "mapper": self.mapper,
+                "reducer": self.reducer,
+                "combiner": self.combiner,
+                "benchmark_generator": self.benchmark_generator,
+                "available_dataset_families": self.available_dataset_families,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+
+
 def is_json_value(value: Any) -> bool:
     if value is None or isinstance(value, (str, int, float, bool)):
         return True
@@ -561,6 +587,31 @@ def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> Pl
     )
 
 
+def _callable_name(fn: Callable[..., Any] | None) -> str | None:
+    if fn is None:
+        return None
+    module = getattr(fn, "__module__", None) or "<unknown>"
+    if module.startswith("mini_mapreduce_plugin_"):
+        source = inspect.getsourcefile(fn)
+        if source:
+            module = Path(source).stem
+    qualname = getattr(fn, "__qualname__", getattr(fn, "__name__", fn.__class__.__name__))
+    return f"{module}.{qualname}"
+
+
+def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
+    plugin = load_plugin(plugin_ref)
+    return PluginInspection(
+        name=plugin.name,
+        plugin=str(plugin.path),
+        mapper=_callable_name(plugin.mapper) or "<unknown>",
+        reducer=_callable_name(plugin.reducer) or "<unknown>",
+        combiner=_callable_name(plugin.combiner),
+        benchmark_generator=_callable_name(plugin.benchmark_generator),
+        available_dataset_families=list(plugin.dataset_families) if plugin.dataset_families else None,
+    )
+
+
 def load_plugin(plugin_ref: str | Path) -> PluginJob:
     plugin_text = str(plugin_ref)
     candidate_path = Path(plugin_text)
@@ -879,6 +930,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--plugin", help="plugin file path or importable Python module with map_records/reduce_key")
     run_parser.add_argument("--output", help="optional output JSON path")
 
+    inspect_parser = subparsers.add_parser("inspect-plugin", help="inspect plugin metadata and exported hooks")
+    inspect_parser.add_argument("--plugin", required=True, help="plugin file path or importable Python module to inspect")
+    inspect_parser.add_argument("--output", help="optional output JSON path")
+
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
     benchmark_parser.add_argument("--job", choices=["wordcount", "plugin"], default="wordcount")
     benchmark_parser.add_argument("--scenario", choices=["balanced", "skewed"], default="skewed")
@@ -917,6 +972,18 @@ def main(argv: list[str] | None = None) -> int:
                 reducers=args.reducers,
                 plugin_path=args.plugin if args.plugin else None,
             )
+        except ValueError as exc:
+            parser.error(str(exc))
+        rendered = result.to_json()
+        if args.output:
+            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+        else:
+            print(rendered)
+        return 0
+
+    if args.command == "inspect-plugin":
+        try:
+            result = inspect_plugin(args.plugin)
         except ValueError as exc:
             parser.error(str(exc))
         rendered = result.to_json()

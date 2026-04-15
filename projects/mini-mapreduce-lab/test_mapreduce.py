@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from mapreduce import benchmark_job, execute_job, load_plugin, stable_partition
+from mapreduce import benchmark_job, execute_job, inspect_plugin, load_plugin, stable_partition
 
 
 class MiniMapReduceTests(unittest.TestCase):
@@ -136,6 +136,17 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(plugin.name, "module-max-score")
             self.assertTrue(str(plugin.path).endswith("topscore.py"))
 
+    def test_inspect_plugin_reports_callable_metadata_and_dataset_families(self) -> None:
+        inspection = inspect_plugin(PROJECT_DIR / "plugins_average_score.py")
+
+        self.assertEqual(inspection.name, "plugin-average-score")
+        self.assertTrue(inspection.plugin.endswith("plugins_average_score.py"))
+        self.assertEqual(inspection.available_dataset_families, ["default", "exam-cram", "project-week"])
+        self.assertTrue(inspection.mapper.endswith(".map_records"))
+        self.assertTrue(inspection.reducer.endswith(".reduce_key"))
+        self.assertTrue(inspection.combiner and inspection.combiner.endswith(".combine_values"))
+        self.assertTrue(inspection.benchmark_generator and inspection.benchmark_generator.endswith(".benchmark_records"))
+
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,6 +173,30 @@ class MiniMapReduceTests(unittest.TestCase):
 
             self.assertEqual(single.output, many.output)
             self.assertNotEqual(single.reducer_stats, many.reducer_stats)
+
+    def test_cli_inspect_plugin_writes_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-inspect.json"
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "inspect-plugin",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_average_score.py",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["name"], "plugin-average-score")
+            self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
+            self.assertTrue(payload["mapper"].endswith(".map_records"))
+            self.assertTrue(payload["benchmark_generator"].endswith(".benchmark_records"))
 
     def test_benchmark_wordcount_reports_skew_metrics(self) -> None:
         result = benchmark_job("wordcount", "skewed", records=200, shard_size=25, reducers=[1, 4], seed=7)

@@ -167,3 +167,17 @@
 - [x] extend project and repo-level tests for metadata rendering and invalid-family failures
 - [x] run tests and 3 review passes
 - [ ] consider exposing plugin dataset-family metadata in generated CSV summaries or a dedicated inspect subcommand in a future run
+
+
+## Plugin inspection command slice (2026-04-15 17:22 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python callable-introspection and JSON metadata refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add an `inspect-plugin` command that reports plugin hook names and supported dataset families as JSON
+- [x] extend project and repo-level tests for programmatic inspection and CLI JSON output
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider surfacing inspection metadata in benchmark CSV summaries in a future run

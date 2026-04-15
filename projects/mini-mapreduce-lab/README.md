@@ -25,6 +25,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional plugin-defined synthetic benchmark generators for domain-specific benchmark fixtures
 - dataset-family selection so benchmarks can simulate different plugin or wordcount workload shapes without changing the runner
 - plugin-advertised dataset-family metadata surfaced automatically in benchmark JSON/Markdown/HTML artifacts
+- plugin inspection command for surfacing exported hooks and dataset-family support before running benchmarks
 
 ## Usage
 
@@ -162,6 +163,13 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output plugin-benchmark-report.html
 ```
 
+Inspect a plugin before running it so portfolio reviewers can see which hooks and benchmark families it exports:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
+  --plugin projects/mini-mapreduce-lab/plugins_average_score.py
+```
+
 Switch benchmark dataset families to model different workload shapes. For example, the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
 
 ```bash
@@ -255,4 +263,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add richer built-in benchmark families for JSON/event workloads, not just wordcount-style text streams
-- consider surfacing plugin metadata in CSV summaries or a dedicated plugin inspection command
+- consider surfacing plugin metadata in CSV summaries alongside the dedicated plugin inspection command
