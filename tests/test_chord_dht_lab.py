@@ -130,6 +130,27 @@ class ChordDhtLabTests(unittest.TestCase):
             self.assertEqual(item["to"], after_ring.successor_for_id(item["key_id"]).name)
             self.assertNotEqual(item["from"], item["to"])
 
+    def test_stabilization_report_repairs_joined_node_over_multiple_rounds(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.stabilization_report(joined_node="foxtrot", rounds=8)
+
+        self.assertEqual(report["joined_node"], "foxtrot")
+        self.assertFalse(report["rounds"][0]["nodes"][-1]["successor_ok"])
+        self.assertEqual(report["rounds"][0]["nodes"][-1]["matching_fingers"], 0)
+        self.assertTrue(report["summary"]["fully_stabilized"])
+        self.assertEqual(report["summary"]["final_finger_matches"], report["summary"]["total_fingers"])
+
+    def test_stabilization_report_handles_failure_scenario(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.stabilization_report(failed_nodes=["echo"], rounds=8)
+
+        self.assertEqual(report["failed_nodes"], ["echo"])
+        self.assertEqual(report["target_node_count"], 4)
+        self.assertTrue(report["summary"]["fully_stabilized"])
+        self.assertEqual(len(report["target_nodes"]), 4)
+
     def test_load_ring_rejects_non_string_nodes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "bad_ring.json"
@@ -152,6 +173,7 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("successor_lists", payload)
         self.assertIn("lookup", payload)
         self.assertIn("resilience_preview", payload)
+        self.assertIn("stabilization_preview", payload)
         self.assertIn("hop_benchmark", payload)
         self.assertEqual(payload["lookup"]["key"], "compiler")
         owners = {item["key"]: item["owner"] for item in payload["sample_assignments"]}
@@ -223,6 +245,30 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["failed_nodes"], ["alpha", "echo"])
         self.assertEqual(payload["replica_count"], 3)
         self.assertEqual(payload["summary"]["case_count"], 2)
+
+    def test_cli_stabilize_supports_join_and_rounds(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "stabilize",
+                str(RING_PATH),
+                "--joined-node",
+                "foxtrot",
+                "--rounds",
+                "8",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "stabilize")
+        self.assertEqual(payload["joined_node"], "foxtrot")
+        self.assertEqual(payload["rounds_requested"], 8)
+        self.assertTrue(payload["summary"]["fully_stabilized"])
 
 
 if __name__ == "__main__":

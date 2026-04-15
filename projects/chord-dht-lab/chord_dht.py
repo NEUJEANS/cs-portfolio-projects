@@ -70,6 +70,15 @@ class ChordRing:
             raise ValueError(f"node {name!r} already exists")
         return ChordRing(self.m_bits, [node.name for node in self.nodes] + [name])
 
+    def without_nodes(self, names: Iterable[str]) -> "ChordRing":
+        removed = set(names)
+        remaining = [node.name for node in self.nodes if node.name not in removed]
+        if not remaining:
+            raise ValueError("cannot remove every node from the ring")
+        if len(remaining) == len(self.nodes):
+            return ChordRing(self.m_bits, [node.name for node in self.nodes])
+        return ChordRing(self.m_bits, remaining)
+
     def get_node(self, name: str) -> Node:
         for node in self.nodes:
             if node.name == name:
@@ -363,6 +372,168 @@ class ChordRing:
             "moved_keys": moved,
         }
 
+    def stabilization_report(
+        self,
+        joined_node: str | None = None,
+        failed_nodes: Iterable[str] | None = None,
+        rounds: int = 3,
+    ) -> dict[str, object]:
+        if rounds <= 0:
+            raise ValueError("rounds must be positive")
+
+        failed = list(dict.fromkeys(failed_nodes or []))
+        for name in failed:
+            self.get_node(name)
+
+        target_ring = self
+        if joined_node is not None:
+            if any(node.name == joined_node for node in self.nodes):
+                raise ValueError(f"node {joined_node!r} already exists")
+            target_ring = target_ring.add_node(joined_node)
+        if failed:
+            target_ring = target_ring.without_nodes(failed)
+
+        target_names = [node.name for node in target_ring.nodes]
+        if not target_names:
+            raise ValueError("stabilization scenario must leave at least one live node")
+
+        initial_state: dict[str, dict[str, object]] = {}
+        for node in target_ring.nodes:
+            if node.name == joined_node:
+                initial_state[node.name] = {
+                    "successor": node.name,
+                    "predecessor": node.name,
+                    "fingers": [node.name for _ in range(self.m_bits)],
+                }
+                continue
+
+            source_ring = self.without_nodes(failed)
+            source_node = source_ring.get_node(node.name)
+            initial_state[node.name] = {
+                "successor": source_ring.successor_of_node(source_node).name,
+                "predecessor": source_ring.predecessor_of_node(source_node).name,
+                "fingers": [entry.successor for entry in source_ring.finger_table(node.name)],
+            }
+
+        rounds_data: list[dict[str, object]] = [
+            self._stabilization_round_summary(target_ring, initial_state, round_index=0, changed=[])
+        ]
+        current_state = initial_state
+
+        for round_index in range(1, rounds + 1):
+            next_state = {
+                name: {
+                    "successor": values["successor"],
+                    "predecessor": values["predecessor"],
+                    "fingers": list(values["fingers"]),
+                }
+                for name, values in current_state.items()
+            }
+            changed_nodes: list[str] = []
+            finger_slot = (round_index - 1) % self.m_bits
+
+            for node in target_ring.nodes:
+                target_successor = target_ring.successor_of_node(node).name
+                target_predecessor = target_ring.predecessor_of_node(node).name
+                target_fingers = [entry.successor for entry in target_ring.finger_table(node.name)]
+                state = next_state[node.name]
+                before = (
+                    state["successor"],
+                    state["predecessor"],
+                    list(state["fingers"]),
+                )
+                state["successor"] = target_successor
+                state["predecessor"] = target_predecessor
+                state["fingers"][finger_slot] = target_fingers[finger_slot]
+                after = (state["successor"], state["predecessor"], list(state["fingers"]))
+                if before != after:
+                    changed_nodes.append(node.name)
+
+            current_state = next_state
+            rounds_data.append(
+                self._stabilization_round_summary(
+                    target_ring,
+                    current_state,
+                    round_index=round_index,
+                    changed=changed_nodes,
+                )
+            )
+
+        final_summary = rounds_data[-1]["summary"]
+        return {
+            "m_bits": self.m_bits,
+            "target_node_count": len(target_ring.nodes),
+            "base_nodes": self.list_nodes(),
+            "target_nodes": target_ring.list_nodes(),
+            "joined_node": joined_node,
+            "failed_nodes": failed,
+            "rounds_requested": rounds,
+            "rounds": rounds_data,
+            "summary": {
+                "fully_stabilized": bool(final_summary["successor_matches"] == len(target_ring.nodes)
+                and final_summary["predecessor_matches"] == len(target_ring.nodes)
+                and final_summary["finger_matches"] == len(target_ring.nodes) * self.m_bits),
+                "final_successor_matches": final_summary["successor_matches"],
+                "final_predecessor_matches": final_summary["predecessor_matches"],
+                "final_finger_matches": final_summary["finger_matches"],
+                "total_fingers": len(target_ring.nodes) * self.m_bits,
+            },
+        }
+
+    def _stabilization_round_summary(
+        self,
+        target_ring: "ChordRing",
+        state: dict[str, dict[str, object]],
+        round_index: int,
+        changed: list[str],
+    ) -> dict[str, object]:
+        node_states: list[dict[str, object]] = []
+        successor_matches = 0
+        predecessor_matches = 0
+        finger_matches = 0
+
+        for node in target_ring.nodes:
+            target_successor = target_ring.successor_of_node(node).name
+            target_predecessor = target_ring.predecessor_of_node(node).name
+            target_fingers = [entry.successor for entry in target_ring.finger_table(node.name)]
+            observed = state[node.name]
+            successor_ok = observed["successor"] == target_successor
+            predecessor_ok = observed["predecessor"] == target_predecessor
+            per_finger_matches = sum(
+                1 for actual, expected in zip(observed["fingers"], target_fingers) if actual == expected
+            )
+            successor_matches += int(successor_ok)
+            predecessor_matches += int(predecessor_ok)
+            finger_matches += per_finger_matches
+            node_states.append(
+                {
+                    "name": node.name,
+                    "id": node.node_id,
+                    "observed_successor": observed["successor"],
+                    "target_successor": target_successor,
+                    "successor_ok": successor_ok,
+                    "observed_predecessor": observed["predecessor"],
+                    "target_predecessor": target_predecessor,
+                    "predecessor_ok": predecessor_ok,
+                    "observed_fingers": list(observed["fingers"]),
+                    "target_fingers": target_fingers,
+                    "matching_fingers": per_finger_matches,
+                    "total_fingers": self.m_bits,
+                }
+            )
+
+        return {
+            "round": round_index,
+            "changed_nodes": changed,
+            "nodes": node_states,
+            "summary": {
+                "successor_matches": successor_matches,
+                "predecessor_matches": predecessor_matches,
+                "finger_matches": finger_matches,
+                "node_count": len(target_ring.nodes),
+            },
+        }
+
     def _in_open_closed_interval(self, value: int, start: int, end: int) -> bool:
         if start < end:
             return start < value <= end
@@ -396,6 +567,7 @@ def build_demo_payload() -> dict[str, object]:
             failed_nodes=["echo"],
             replica_count=3,
         ),
+        "stabilization_preview": ring.stabilization_report(joined_node="foxtrot", rounds=3),
         "hop_benchmark": ring.benchmark_lookups(sample_keys, start_nodes=["alpha", "charlie"]),
     }
 
@@ -463,6 +635,30 @@ def parse_args() -> argparse.Namespace:
     )
     resilience_parser.add_argument("--pretty", action="store_true")
 
+    stabilize_parser = subparsers.add_parser(
+        "stabilize",
+        help="simulate explicit stabilization rounds after a join or failure event",
+    )
+    stabilize_parser.add_argument("ring_file", type=Path)
+    stabilize_parser.add_argument(
+        "--joined-node",
+        help="optional node that just joined and starts with stale self-pointing metadata",
+    )
+    stabilize_parser.add_argument(
+        "--failed-node",
+        dest="failed_nodes",
+        action="append",
+        default=[],
+        help="node to remove from the live ring before stabilization; may be provided multiple times",
+    )
+    stabilize_parser.add_argument(
+        "--rounds",
+        type=int,
+        default=3,
+        help="number of stabilization rounds to simulate",
+    )
+    stabilize_parser.add_argument("--pretty", action="store_true")
+
     return parser.parse_args()
 
 
@@ -491,6 +687,16 @@ def main() -> None:
                 args.keys,
                 failed_nodes=args.failed_nodes,
                 replica_count=args.replica_count,
+            ),
+        }
+    elif args.command == "stabilize":
+        ring = load_ring(args.ring_file)
+        payload = {
+            "command": "stabilize",
+            **ring.stabilization_report(
+                joined_node=args.joined_node,
+                failed_nodes=args.failed_nodes,
+                rounds=args.rounds,
             ),
         }
     else:

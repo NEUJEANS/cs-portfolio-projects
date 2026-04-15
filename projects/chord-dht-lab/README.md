@@ -5,7 +5,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 ## Why it is interesting
 - demonstrates a classic peer-to-peer indexing design built on consistent hashing
 - shows how logarithmic routing emerges from finger tables instead of linear scans
-- produces interview-ready artifacts: node IDs, finger tables, successor lists, key placement, lookup hop traces, and benchmark summaries
+- produces interview-ready artifacts: node IDs, finger tables, successor lists, key placement, lookup hop traces, stabilization rounds, and benchmark summaries
 - makes node joins and replica-based failover tangible instead of leaving fault tolerance as a hand-wavy follow-up
 
 ## Features
@@ -15,6 +15,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - linear-successor baseline lookup for side-by-side hop-count comparison
 - key assignment report plus join preview showing moved keys
 - successor-list replica planning and failure simulation for degraded/unavailable key checks
+- explicit stabilization-round simulation for join/failure repair of successor, predecessor, and finger metadata
 - benchmark mode that summarizes hop savings across keys and start nodes
 - JSON ring input for reproducible demos and unit tests
 
@@ -61,6 +62,26 @@ python3 projects/chord-dht-lab/chord_dht.py resilience \
   --pretty
 ```
 
+Simulate stabilization rounds after a join:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py stabilize \
+  projects/chord-dht-lab/ring.json \
+  --joined-node foxtrot \
+  --rounds 8 \
+  --pretty
+```
+
+Simulate stabilization after a failure:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py stabilize \
+  projects/chord-dht-lab/ring.json \
+  --failed-node echo \
+  --rounds 8 \
+  --pretty
+```
+
 Ring format:
 
 ```json
@@ -82,9 +103,10 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - A successor list is the next few clockwise nodes after a given node; in production Chord systems it helps recovery when a primary successor fails.
 - The lookup implementation routes with the closest preceding finger when possible, then falls back to the immediate successor.
 - The resilience command models simple successor-replica failover: the primary owner is first, then consecutive successors act as backups.
+- The stabilize command starts from stale metadata after a join or failure event, repairs successor/predecessor links every round, and repairs one finger slot per round so convergence is easy to visualize.
 - The benchmark uses the same ring and key identifiers for both lookup strategies so hop-count differences stay attributable to routing logic rather than input drift.
 
 ## Future improvements
-- add explicit stabilization rounds that repair stale finger/successor state after joins or failures
-- export the ring and lookup routes as Graphviz diagrams
 - generate larger synthetic rings and workloads directly from the CLI for broader benchmarking
+- simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
+- export the ring and lookup or stabilization routes as Graphviz diagrams
