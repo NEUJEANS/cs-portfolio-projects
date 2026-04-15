@@ -206,6 +206,53 @@ class TaskServiceTests(unittest.TestCase):
         with self.assertRaises(TaskTrackerError):
             self.service.archive_completed_tasks()
 
+    def test_restore_archive_replays_completed_tasks_with_new_ids(self):
+        self.service.add_task("Prepare demo", tags=["demo"], recurrence="weekly", due_date="2026-04-20")
+        self.service.set_status(1, "done")
+        snapshot = self.service.archive_completed_tasks()
+
+        restored = self.service.restore_archive(snapshot.json_path)
+
+        self.assertEqual(len(restored), 1)
+        self.assertEqual(restored[0].id, 3)
+        self.assertEqual(restored[0].description, "Prepare demo")
+        self.assertEqual(restored[0].status, "done")
+        self.assertEqual(restored[0].tags, ["demo"])
+        self.assertEqual(restored[0].recurrence, "weekly")
+        self.assertEqual([task.id for task in self.service.list_tasks()], [2, 3])
+
+    def test_restore_archive_can_override_restored_status(self):
+        archive_file = Path(self.temp_dir.name) / "archive.json"
+        archive_file.write_text(
+            json.dumps(
+                {
+                    "created_at": "2026-04-15T21:30:00Z",
+                    "archived_count": 1,
+                    "archived_ids": [1],
+                    "tasks": [
+                        {
+                            "id": 1,
+                            "description": "Recover docs",
+                            "status": "done",
+                            "priority": "medium",
+                            "due_date": "2026-04-20",
+                            "recurrence": "weekly",
+                            "tags": ["docs"],
+                            "created_at": "2026-04-15T21:00:00Z",
+                            "updated_at": "2026-04-15T21:05:00Z"
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        restored = self.service.restore_archive(archive_file, status="todo")
+
+        self.assertEqual(restored[0].status, "todo")
+        self.assertEqual(restored[0].due_date, "2026-04-20")
+        self.assertEqual(restored[0].recurrence, "weekly")
+
     def test_delete_missing_task_raises_error(self):
         with self.assertRaises(TaskTrackerError):
             self.service.delete_task(99)

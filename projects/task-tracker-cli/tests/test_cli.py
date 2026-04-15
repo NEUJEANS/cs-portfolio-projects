@@ -106,12 +106,56 @@ def test_build_parser_supports_archive_keep() -> None:
     assert args.output_dir == "snapshots"
 
 
+def test_build_parser_supports_restore_status_override() -> None:
+    args = build_parser().parse_args(["restore", "archive.json", "--status", "todo"])
+    assert args.source == "archive.json"
+    assert args.status == "todo"
+
+
 def test_cli_archive_requires_completed_tasks(data_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert run_args(data_file, "add", "Prepare lab") == 0
     capsys.readouterr()
 
     assert run_args(data_file, "archive") == 1
     assert "No completed tasks are available to archive." in capsys.readouterr().err
+
+
+def test_cli_restore_replays_archived_tasks(data_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    archive_path = tmp_path / "completed.json"
+    archive_path.write_text(
+        json.dumps(
+            {
+                "created_at": "2026-04-15T21:30:00Z",
+                "archived_count": 1,
+                "archived_ids": [4],
+                "tasks": [
+                    {
+                        "id": 4,
+                        "description": "Recovered task",
+                        "status": "done",
+                        "priority": "high",
+                        "due_date": "2026-04-20",
+                        "recurrence": "weekly",
+                        "tags": ["demo", "portfolio"],
+                        "created_at": "2026-04-15T20:00:00Z",
+                        "updated_at": "2026-04-15T20:05:00Z"
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert run_args(data_file, "restore", str(archive_path), "--status", "todo") == 0
+    output = capsys.readouterr().out
+    assert "Restored 1 task(s)" in output
+    assert "status=todo" in output
+
+    assert run_args(data_file, "list", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["description"] == "Recovered task"
+    assert payload[0]["status"] == "todo"
+    assert payload[0]["tags"] == ["demo", "portfolio"]
 
 
 def test_packaged_entry_point_smoke(data_file: Path) -> None:

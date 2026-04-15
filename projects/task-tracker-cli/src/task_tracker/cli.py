@@ -63,6 +63,15 @@ def build_parser() -> argparse.ArgumentParser:
     archive_parser.add_argument("--output-dir", help="Archive destination directory. Defaults next to the data file.")
     archive_parser.add_argument("--keep", action="store_true", help="Keep completed tasks in the active store after archiving.")
 
+    restore_parser = subparsers.add_parser("restore", help="Restore tasks from an archive JSON snapshot.")
+    restore_parser.add_argument("source", help="Path to a JSON archive snapshot created by the archive command.")
+    restore_parser.add_argument(
+        "--status",
+        choices=("original", *VALID_STATUSES),
+        default="original",
+        help="Override restored task status. Defaults to the archived status.",
+    )
+
     summary_parser = subparsers.add_parser("summary", help="Print task summary counts.")
     summary_parser.add_argument("--json", action="store_true")
 
@@ -219,6 +228,12 @@ def run_cli(argv: list[str] | None = None) -> int:
                 print("Completed tasks were kept in the active store.")
             else:
                 print(f"Remaining active tasks: {len(snapshot.remaining_tasks)}")
+            return 0
+        if args.command == "restore":
+            restored = service.restore_archive(Path(args.source), status=args.status)
+            print(f"Restored {len(restored)} task(s) from {args.source}")
+            if restored:
+                print(f"Newest restored task: {format_task(restored[-1])}")
             return 0
         if args.command == "summary":
             print(_render_summary(service.summary(), args.json))

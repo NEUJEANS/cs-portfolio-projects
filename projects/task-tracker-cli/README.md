@@ -18,6 +18,7 @@ A polished command-line task tracker built with Python's standard library, with 
 - import tasks from CSV or JSON snapshots
 - export filtered task views as CSV or Markdown
 - archive completed tasks into dated JSON + Markdown snapshots
+- restore archived tasks back into the active store with new ids when needed
 - print summary statistics including overdue, tagged, and recurring counts
 
 ## Run
@@ -28,6 +29,7 @@ python3 -m src.task_tracker list --status todo --sort-by due_date
 python3 -m src.task_tracker start 1
 python3 -m src.task_tracker done 1
 python3 -m src.task_tracker archive
+python3 -m src.task_tracker restore data/archives/completed-2026-04-15T21-30-00Z.json --status todo
 python3 -m src.task_tracker export --format markdown --output tasks.md
 python3 -m src.task_tracker import sample_tasks.json --format json
 ```
@@ -48,6 +50,16 @@ Each archive run creates:
 - a Markdown snapshot that is easy to inspect in GitHub or attach to project notes
 
 Without `--keep`, archived completed tasks are removed from the active task store so the remaining list stays focused.
+
+## Restore workflow
+If you want to bring archived tasks back into the active store, replay a JSON snapshot:
+
+```bash
+python3 -m src.task_tracker restore data/archives/completed-2026-04-15T21-30-00Z.json
+python3 -m src.task_tracker restore data/archives/completed-2026-04-15T21-30-00Z.json --status todo
+```
+
+Restored tasks are appended with fresh ids so older snapshots stay immutable and replayable. Use `--status todo` when you want an archive to become a fresh working queue instead of staying marked done.
 
 ## Test
 ```bash

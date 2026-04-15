@@ -33,6 +33,13 @@ Build a portfolio-friendly command-line task manager that demonstrates:
 - [x] Cover archive flows with service + CLI tests
 - [x] Refresh README usage examples for the archive workflow
 
+## Current restore slice
+- [x] Add `restore` command for replaying JSON archive snapshots back into the active store
+- [x] Preserve archive immutability by assigning fresh ids to restored tasks
+- [x] Support optional `--status` override for replaying old work as a new todo queue
+- [x] Cover restore flows with service + CLI tests
+- [x] Refresh README usage examples for archive recovery
+
 ## Notes for next run
 - Richer terminal formatting is still the biggest presentation gap.
-- Bulk actions or archive restore would make repeated demo workflows stronger.
+- Bulk actions would make repeated demo workflows stronger.

@@ -108,6 +108,30 @@ class TaskService:
     def __init__(self, storage: TaskStorage) -> None:
         self.storage = storage
 
+    def restore_archive(self, source: Path, *, status: str | None = None) -> list[Task]:
+        restored_payload = parse_archive_snapshot(source)
+        tasks = self.storage.load()
+        next_id = self._next_id(tasks)
+        restored: list[Task] = []
+        target_status = "original" if status is None else normalize_restore_status(status)
+        for item in restored_payload:
+            task = Task.create(
+                next_id,
+                item["description"],
+                priority=item["priority"],
+                due_date=item["due_date"],
+                tags=item["tags"],
+                recurrence=item["recurrence"],
+            )
+            task.status = item["status"] if target_status == "original" else target_status
+            task.updated_at = utc_now()
+            restored.append(task)
+            tasks.append(task)
+            next_id += 1
+
+        self.storage.save(tasks)
+        return restored
+
     def list_tasks(
         self,
         status: str | None = None,
@@ -346,6 +370,13 @@ def normalize_recurrence(value: str | None) -> str | None:
     return value
 
 
+def normalize_restore_status(value: str) -> str:
+    if value == "original":
+        return value
+    validate_status(value)
+    return value
+
+
 def advance_due_date(due_date: str, recurrence: str) -> str:
     current = date.fromisoformat(due_date)
     if recurrence == "daily":
@@ -480,6 +511,59 @@ def parse_json_tasks(source: Path) -> list[dict[str, object]]:
         if not isinstance(item, dict):
             raise TaskTrackerError(f"{source.name} item {index}: each task must be an object.")
         normalized.append(_row_to_import_payload({str(key): "" if value is None else str(value) for key, value in item.items()}, source_name=source.name, row_number=index))
+    return normalized
+
+
+def parse_archive_snapshot(source: Path) -> list[dict[str, object]]:
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise TaskTrackerError(f"Archive snapshot was not found: {source}") from exc
+    except json.JSONDecodeError as exc:
+        raise TaskTrackerError(f"Archive snapshot is not valid JSON: {source}") from exc
+
+    if not isinstance(payload, dict):
+        raise TaskTrackerError("Archive snapshot must be a JSON object.")
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list):
+        raise TaskTrackerError("Archive snapshot must include a top-level 'tasks' list.")
+
+    normalized: list[dict[str, object]] = []
+    for index, item in enumerate(tasks, start=1):
+        if not isinstance(item, dict):
+            raise TaskTrackerError(f"{source.name} archived item {index}: each task must be an object.")
+
+        description = str(item.get("description") or "").strip()
+        if not description:
+            raise TaskTrackerError(f"{source.name} archived item {index}: description is required.")
+
+        status = str(item.get("status") or "todo").strip() or "todo"
+        validate_status(status)
+
+        priority = str(item.get("priority") or "medium").strip() or "medium"
+        validate_priority(priority)
+
+        due_date = normalize_due_date(str(item.get("due_date") or "").strip() or None)
+        recurrence = normalize_recurrence(str(item.get("recurrence") or item.get("repeat") or "").strip() or None)
+        if recurrence and due_date is None:
+            raise TaskTrackerError(f"{source.name} archived item {index}: recurring tasks require a due date.")
+
+        raw_tags = item.get("tags") or []
+        if isinstance(raw_tags, list):
+            tags = normalize_tags([str(tag) for tag in raw_tags])
+        else:
+            tags = normalize_tags([str(raw_tags)]) if raw_tags else []
+
+        normalized.append(
+            {
+                "description": description,
+                "status": status,
+                "priority": priority,
+                "due_date": due_date,
+                "recurrence": recurrence,
+                "tags": tags,
+            }
+        )
     return normalized
 
 
