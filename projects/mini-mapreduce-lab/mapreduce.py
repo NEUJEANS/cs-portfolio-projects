@@ -120,6 +120,10 @@ class BenchmarkResult:
     heatmap_rows: list[dict[str, int | str]]
     plugin: str | None = None
     available_dataset_families: list[str] | None = None
+    plugin_mapper: str | None = None
+    plugin_reducer: str | None = None
+    plugin_combiner: str | None = None
+    plugin_benchmark_generator: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(
@@ -136,6 +140,10 @@ class BenchmarkResult:
                 "timings_ms": self.timings_ms,
                 "heatmap_rows": self.heatmap_rows,
                 "available_dataset_families": self.available_dataset_families,
+                "plugin_mapper": self.plugin_mapper,
+                "plugin_reducer": self.plugin_reducer,
+                "plugin_combiner": self.plugin_combiner,
+                "plugin_benchmark_generator": self.plugin_benchmark_generator,
             },
             indent=2,
             sort_keys=True,
@@ -147,6 +155,11 @@ class BenchmarkResult:
             "plugin",
             "scenario",
             "dataset_family",
+            "available_dataset_families",
+            "plugin_mapper",
+            "plugin_reducer",
+            "plugin_combiner",
+            "plugin_benchmark_generator",
             "seed",
             "total_records",
             "shard_size",
@@ -165,6 +178,11 @@ class BenchmarkResult:
                 "plugin": self.plugin,
                 "scenario": self.scenario,
                 "dataset_family": self.dataset_family,
+                "available_dataset_families": ",".join(self.available_dataset_families) if self.available_dataset_families else None,
+                "plugin_mapper": self.plugin_mapper,
+                "plugin_reducer": self.plugin_reducer,
+                "plugin_combiner": self.plugin_combiner,
+                "plugin_benchmark_generator": self.plugin_benchmark_generator,
                 "seed": self.seed,
                 "total_records": self.total_records,
                 "shard_size": self.shard_size,
@@ -901,10 +919,15 @@ def benchmark_job(
     finally:
         input_path.unlink(missing_ok=True)
 
+    inspection = inspect_plugin(plugin_path) if benchmark_plugin and plugin_path is not None else None
     return BenchmarkResult(
         job=job if job != "plugin" or benchmark_plugin is None else benchmark_plugin.name,
         plugin=str(benchmark_plugin.path) if benchmark_plugin else None,
         available_dataset_families=(list(benchmark_plugin.dataset_families) if benchmark_plugin and benchmark_plugin.dataset_families else None),
+        plugin_mapper=inspection.mapper if inspection else None,
+        plugin_reducer=inspection.reducer if inspection else None,
+        plugin_combiner=inspection.combiner if inspection else None,
+        plugin_benchmark_generator=inspection.benchmark_generator if inspection else None,
         scenario=scenario,
         dataset_family=dataset_family,
         seed=seed,

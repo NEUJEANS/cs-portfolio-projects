@@ -26,6 +26,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - dataset-family selection so benchmarks can simulate different plugin or wordcount workload shapes without changing the runner
 - plugin-advertised dataset-family metadata surfaced automatically in benchmark JSON/Markdown/HTML artifacts
 - plugin inspection command for surfacing exported hooks and dataset-family support before running benchmarks
+- benchmark CSV summaries now carry plugin inspection metadata so spreadsheet artifacts stay self-describing without a separate JSON lookup
 
 ## Usage
 
@@ -263,4 +264,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add richer built-in benchmark families for JSON/event workloads, not just wordcount-style text streams
-- consider surfacing plugin metadata in CSV summaries alongside the dedicated plugin inspection command
+- add a dedicated CSV export for `inspect-plugin` when you want metadata snapshots without running a benchmark
