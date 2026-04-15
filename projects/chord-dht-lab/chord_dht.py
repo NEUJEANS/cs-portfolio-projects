@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import random
 from bisect import bisect_left
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -572,6 +573,66 @@ def build_demo_payload() -> dict[str, object]:
     }
 
 
+def build_synthetic_benchmark_payload(
+    m_bits: int,
+    node_count: int,
+    key_count: int,
+    seed: int,
+    start_nodes: int | None = None,
+) -> dict[str, object]:
+    if m_bits <= 0:
+        raise ValueError("m_bits must be positive")
+    if node_count <= 0:
+        raise ValueError("node_count must be positive")
+    if key_count <= 0:
+        raise ValueError("key_count must be positive")
+    ring_size = 2**m_bits
+    if node_count > ring_size:
+        raise ValueError("node_count cannot exceed the identifier ring size")
+
+    rng = random.Random(seed)
+    node_names: list[str] = []
+    used_ids: set[int] = set()
+    attempt = 0
+    while len(node_names) < node_count:
+        candidate = f"node-{attempt:03d}-{rng.randrange(1_000_000):06d}"
+        candidate_id = int(hashlib.sha1(candidate.encode("utf-8")).hexdigest(), 16) % ring_size
+        if candidate_id not in used_ids:
+            node_names.append(candidate)
+            used_ids.add(candidate_id)
+        attempt += 1
+        if attempt > node_count * 20 and len(node_names) < node_count:
+            raise ValueError("unable to generate enough unique node identifiers for the ring")
+
+    ring = ChordRing(m_bits, node_names)
+    keys = [f"key-{index:03d}-{rng.randrange(1_000_000):06d}" for index in range(key_count)]
+
+    if start_nodes is None:
+        benchmark_starts = [node.name for node in ring.nodes]
+    else:
+        if start_nodes <= 0:
+            raise ValueError("start_nodes must be positive when provided")
+        benchmark_starts = [node.name for node in ring.nodes[: min(start_nodes, len(ring.nodes))]]
+
+    benchmark = ring.benchmark_lookups(keys, start_nodes=benchmark_starts)
+    return {
+        "generator": {
+            "seed": seed,
+            "m_bits": m_bits,
+            "node_count": node_count,
+            "key_count": key_count,
+            "benchmark_start_node_count": len(benchmark_starts),
+        },
+        "ring": {
+            "m_bits": ring.m_bits,
+            "ring_size": ring.ring_size,
+            "nodes": ring.list_nodes(),
+        },
+        "keys": keys,
+        "benchmark": benchmark,
+    }
+
+
 def load_ring(path: Path) -> ChordRing:
     payload = json.loads(path.read_text(encoding="utf-8"))
     m_bits = payload["m_bits"]
@@ -659,6 +720,22 @@ def parse_args() -> argparse.Namespace:
     )
     stabilize_parser.add_argument("--pretty", action="store_true")
 
+    synth_parser = subparsers.add_parser(
+        "synth-benchmark",
+        help="generate a deterministic synthetic ring/workload and benchmark lookup hops",
+    )
+    synth_parser.add_argument("--m-bits", type=int, default=10, help="identifier width for the generated ring")
+    synth_parser.add_argument("--nodes", type=int, default=16, help="number of synthetic nodes to generate")
+    synth_parser.add_argument("--keys", type=int, default=32, help="number of synthetic keys to benchmark")
+    synth_parser.add_argument("--seed", type=int, default=7, help="random seed for reproducible generation")
+    synth_parser.add_argument(
+        "--start-nodes",
+        type=int,
+        default=None,
+        help="optional number of generated nodes to benchmark from; defaults to all nodes",
+    )
+    synth_parser.add_argument("--pretty", action="store_true")
+
     return parser.parse_args()
 
 
@@ -697,6 +774,17 @@ def main() -> None:
                 joined_node=args.joined_node,
                 failed_nodes=args.failed_nodes,
                 rounds=args.rounds,
+            ),
+        }
+    elif args.command == "synth-benchmark":
+        payload = {
+            "command": "synth-benchmark",
+            **build_synthetic_benchmark_payload(
+                m_bits=args.m_bits,
+                node_count=args.nodes,
+                key_count=args.keys,
+                seed=args.seed,
+                start_nodes=args.start_nodes,
             ),
         }
     else:

@@ -151,6 +151,42 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertTrue(report["summary"]["fully_stabilized"])
         self.assertEqual(len(report["target_nodes"]), 4)
 
+    def test_synthetic_benchmark_payload_is_deterministic_and_unique(self) -> None:
+        payload = module.build_synthetic_benchmark_payload(
+            m_bits=8,
+            node_count=8,
+            key_count=10,
+            seed=11,
+            start_nodes=3,
+        )
+
+        repeated = module.build_synthetic_benchmark_payload(
+            m_bits=8,
+            node_count=8,
+            key_count=10,
+            seed=11,
+            start_nodes=3,
+        )
+
+        self.assertEqual(payload["ring"]["nodes"], repeated["ring"]["nodes"])
+        self.assertEqual(payload["keys"], repeated["keys"])
+        self.assertEqual(payload["benchmark"]["summary"]["case_count"], 30)
+        self.assertEqual(payload["generator"]["benchmark_start_node_count"], 3)
+        node_ids = [item["id"] for item in payload["ring"]["nodes"]]
+        self.assertEqual(len(node_ids), len(set(node_ids)))
+        self.assertGreaterEqual(
+            payload["benchmark"]["summary"]["average_linear_hops"],
+            payload["benchmark"]["summary"]["average_chord_hops"],
+        )
+
+    def test_synthetic_benchmark_rejects_invalid_parameters(self) -> None:
+        with self.assertRaisesRegex(ValueError, "m_bits"):
+            module.build_synthetic_benchmark_payload(m_bits=0, node_count=4, key_count=4, seed=1)
+        with self.assertRaisesRegex(ValueError, "node_count"):
+            module.build_synthetic_benchmark_payload(m_bits=8, node_count=0, key_count=4, seed=1)
+        with self.assertRaisesRegex(ValueError, "key_count"):
+            module.build_synthetic_benchmark_payload(m_bits=8, node_count=4, key_count=0, seed=1)
+
     def test_load_ring_rejects_non_string_nodes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "bad_ring.json"
@@ -269,6 +305,37 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["joined_node"], "foxtrot")
         self.assertEqual(payload["rounds_requested"], 8)
         self.assertTrue(payload["summary"]["fully_stabilized"])
+
+    def test_cli_synth_benchmark_generates_reproducible_workload(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "synth-benchmark",
+                "--m-bits",
+                "9",
+                "--nodes",
+                "12",
+                "--keys",
+                "15",
+                "--seed",
+                "23",
+                "--start-nodes",
+                "4",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "synth-benchmark")
+        self.assertEqual(payload["generator"]["seed"], 23)
+        self.assertEqual(payload["generator"]["benchmark_start_node_count"], 4)
+        self.assertEqual(len(payload["ring"]["nodes"]), 12)
+        self.assertEqual(len(payload["keys"]), 15)
+        self.assertEqual(payload["benchmark"]["summary"]["case_count"], 60)
 
 
 if __name__ == "__main__":

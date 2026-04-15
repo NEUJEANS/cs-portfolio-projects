@@ -17,6 +17,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - successor-list replica planning and failure simulation for degraded/unavailable key checks
 - explicit stabilization-round simulation for join/failure repair of successor, predecessor, and finger metadata
 - benchmark mode that summarizes hop savings across keys and start nodes
+- deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
 - JSON ring input for reproducible demos and unit tests
 
 ## Usage
@@ -47,6 +48,18 @@ python3 projects/chord-dht-lab/chord_dht.py benchmark \
   compiler slides final-project \
   --start-node alpha \
   --start-node charlie \
+  --pretty
+```
+
+Generate a larger deterministic synthetic ring and workload for benchmark experiments:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py synth-benchmark \
+  --m-bits 10 \
+  --nodes 16 \
+  --keys 32 \
+  --seed 7 \
+  --start-nodes 4 \
   --pretty
 ```
 
@@ -110,3 +123,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - generate larger synthetic rings and workloads directly from the CLI for broader benchmarking
 - simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
 - export the ring and lookup or stabilization routes as Graphviz diagrams
+- let synthetic benchmarks choose random subsets of start nodes instead of taking the first N sorted nodes
