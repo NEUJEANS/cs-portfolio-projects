@@ -7,4 +7,5 @@
 - [x] add component summaries, cycle detection, and stats
 - [x] add scriptable CLI workflow and sample operations
 - [x] add automated tests for connectivity, cycles, stats, and CLI output
-- [ ] benchmark mode or CSV edge import in a future slice
+- [x] benchmark mode and CSV edge import for realistic datasets
+- [ ] export sample benchmark artifacts or time-series charts in a future slice

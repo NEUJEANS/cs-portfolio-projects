@@ -1,0 +1,6 @@
+source,target
+api,worker
+worker,db
+cache,cdn
+db,api
+cdn,edge

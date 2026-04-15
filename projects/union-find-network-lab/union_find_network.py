@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
@@ -170,9 +173,105 @@ class UnionFindNetwork:
         return results
 
 
+def load_edges_from_csv(csv_path: Path) -> List[Tuple[str, str]]:
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames is None:
+            raise ValueError("CSV edge file must include a header row")
+        normalized = {name.strip().lower(): name for name in reader.fieldnames}
+        missing = {"source", "target"} - set(normalized)
+        if missing:
+            raise ValueError("CSV edge file must contain source,target columns")
+
+        edges: List[Tuple[str, str]] = []
+        for index, row in enumerate(reader, start=2):
+            source = (row.get(normalized["source"]) or "").strip()
+            target = (row.get(normalized["target"]) or "").strip()
+            if not source or not target:
+                raise ValueError(f"CSV edge file row {index} must define non-empty source and target values")
+            edges.append((source, target))
+    return edges
+
+
+def run_csv_import(csv_path: Path, snapshot_every: int = 0) -> Dict[str, object]:
+    edges = load_edges_from_csv(csv_path)
+    network = UnionFindNetwork()
+    snapshots: List[Dict[str, object]] = []
+    cycle_edges = 0
+
+    for index, (source, target) in enumerate(edges, start=1):
+        result = network.union(source, target)
+        if result.created_cycle:
+            cycle_edges += 1
+        if snapshot_every > 0 and index % snapshot_every == 0:
+            snapshots.append(
+                {
+                    "edge_index": index,
+                    "edge": [source, target],
+                    "stats": network.stats(),
+                }
+            )
+
+    summary: Dict[str, object] = {
+        "mode": "csv-import",
+        "edge_file": str(csv_path),
+        "edges_processed": len(edges),
+        "cycle_edges": cycle_edges,
+        "stats": network.stats(),
+        "components": network.components(),
+    }
+    if snapshot_every > 0:
+        if not snapshots or snapshots[-1]["edge_index"] != len(edges):
+            snapshots.append(
+                {
+                    "edge_index": len(edges),
+                    "edge": list(edges[-1]) if edges else [],
+                    "stats": network.stats(),
+                }
+            )
+        summary["snapshots"] = snapshots
+    return summary
+
+
+def run_benchmark(nodes: int, edges: int, seed: int = 7) -> Dict[str, object]:
+    if nodes < 2:
+        raise ValueError("benchmark nodes must be at least 2")
+    if edges < 1:
+        raise ValueError("benchmark edges must be at least 1")
+
+    rng = random.Random(seed)
+    labels = [f"n{i}" for i in range(nodes)]
+    network = UnionFindNetwork()
+
+    started = time.perf_counter()
+    cycle_edges = 0
+    for _ in range(edges):
+        left, right = rng.sample(labels, 2)
+        result = network.union(left, right)
+        cycle_edges += 1 if result.created_cycle else 0
+    elapsed = time.perf_counter() - started
+
+    return {
+        "mode": "benchmark",
+        "seed": seed,
+        "nodes_requested": nodes,
+        "edges_requested": edges,
+        "elapsed_ms": round(elapsed * 1000, 3),
+        "edges_per_second": round(edges / elapsed, 3) if elapsed else None,
+        "cycle_edges": cycle_edges,
+        "stats": network.stats(),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Union-Find network lab")
     parser.add_argument("--script", type=Path, help="JSON file containing scripted operations")
+    parser.add_argument("--edges-csv", type=Path, help="CSV file with source,target headers for bulk edge import")
+    parser.add_argument("--snapshot-every", type=int, default=0, help="Record import snapshots every N CSV edges")
+    parser.add_argument("--benchmark", action="store_true", help="Run a random union benchmark")
+    parser.add_argument("--benchmark-nodes", type=int, default=1000, help="Number of nodes for benchmark mode")
+    parser.add_argument("--benchmark-edges", type=int, default=5000, help="Number of random edges for benchmark mode")
+    parser.add_argument("--benchmark-seed", type=int, default=7, help="Seed for reproducible benchmark mode")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     parser.add_argument("command", nargs="*", help="Optional single command, e.g. union a b")
     return parser
@@ -188,19 +287,32 @@ def _run_single_command(network: UnionFindNetwork, command: List[str]) -> Dict[s
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    network = UnionFindNetwork()
+    try:
+        if args.snapshot_every < 0:
+            raise ValueError("--snapshot-every must be zero or a positive integer")
+        enabled_modes = sum(bool(flag) for flag in (args.script, args.edges_csv, args.benchmark))
+        if enabled_modes > 1:
+            raise ValueError("choose only one of --script, --edges-csv, or --benchmark")
 
-    if args.script:
-        operations = json.loads(args.script.read_text())
-        result: Dict[str, object] = {
-            "results": network.run_script(operations),
-            "stats": network.stats(),
-            "components": network.components(),
-        }
-    else:
-        result = _run_single_command(network, args.command)
+        network = UnionFindNetwork()
 
-    if args.json or args.script:
+        if args.script:
+            operations = json.loads(args.script.read_text())
+            result: Dict[str, object] = {
+                "results": network.run_script(operations),
+                "stats": network.stats(),
+                "components": network.components(),
+            }
+        elif args.edges_csv:
+            result = run_csv_import(args.edges_csv, snapshot_every=args.snapshot_every)
+        elif args.benchmark:
+            result = run_benchmark(args.benchmark_nodes, args.benchmark_edges, seed=args.benchmark_seed)
+        else:
+            result = _run_single_command(network, args.command)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    if args.json or args.script or args.edges_csv or args.benchmark:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
         print(result)
