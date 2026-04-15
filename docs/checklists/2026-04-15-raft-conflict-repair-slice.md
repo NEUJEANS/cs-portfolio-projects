@@ -10,5 +10,5 @@
 - [x] run tests
 - [x] perform 3 review passes and fix issues found
 - [x] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up note
+- [x] commit and push
+- [x] append wrap-up note
