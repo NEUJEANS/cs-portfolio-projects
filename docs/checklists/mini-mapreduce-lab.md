@@ -36,3 +36,12 @@
 - [x] update README with plugin contract and CLI examples
 - [x] run tests and 3 review passes
 - [ ] consider package-based plugin discovery or non-integer aggregator outputs in a future run
+
+## Importable module plugin slice (2026-04-15 03:00 UTC run)
+- [x] confirm repo sync before editing
+- [x] refresh `importlib.import_module` loading flow and module-resolution constraints
+- [x] extend plugin loading so jobs can come from importable Python modules as well as file paths
+- [x] add programmatic and CLI tests for package/module plugin execution
+- [x] update README and notes with module-based plugin usage
+- [x] run tests and 3 review passes
+- [ ] consider typed non-integer reducer outputs or plugin discovery registries in a future run

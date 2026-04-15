@@ -12,7 +12,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - line-sharded execution over one or more input files
 - built-in `wordcount` job for text analytics
 - built-in `json-group-count` job for JSONL event aggregation
-- plugin job loading via `importlib` from a local Python file with `map_records` and `reduce_key`
+- plugin job loading via `importlib` from either a local Python file or an importable module/package path
 - stable SHA-256-based partitioner to simulate multiple reducer buckets reproducibly across processes
 - reducer distribution stats so you can talk about key skew in interviews
 - synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts
@@ -46,12 +46,21 @@ python3 projects/mini-mapreduce-lab/mapreduce.py run \
   --reducers 4
 ```
 
-Run a plugin job that keeps the maximum score per user:
+Run a file-based plugin job that keeps the maximum score per user:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py run \
   plugin scores.csv \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
+  --reducers 2
+```
+
+Run a module-based plugin from an importable package on `PYTHONPATH`:
+
+```bash
+PYTHONPATH=. python3 projects/mini-mapreduce-lab/mapreduce.py run \
+  plugin scores.csv \
+  --plugin demo_plugins.topscore \
   --reducers 2
 ```
 
@@ -82,6 +91,8 @@ A plugin is a Python file with:
 - `map_records(lines)` → yields `(key, value)` pairs
 - `combine_values(key, values)` → optional shard-local combiner for non-sum jobs
 - `reduce_key(key, values)` → returns one integer result for that key
+
+Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/plugins_top_score.py` or as a dotted module path like `demo_plugins.topscore` when the package is importable on `PYTHONPATH`.
 
 The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation. This gives you a reusable pattern for portfolio demos like per-user peaks, per-endpoint latency maxima, or custom counters.
 
@@ -121,6 +132,6 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - why timing alone can mislead without reducer-distribution metrics beside it
 
 ## Future improvements
-- support plugins packaged as reusable modules, not just file paths
+- support typed reducer outputs beyond integers, not just scalar counts/maxima
 - export benchmark runs as CSV for charting in notebooks or slide decks
 - visualize reducer skew across shards over time

@@ -74,6 +74,34 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(result.output, {"alice": 11, "bob": 8})
             self.assertIsNotNone(result.plugin)
 
+    def test_load_plugin_supports_importable_module(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            package_dir = Path(tmpdir) / "demo_plugins"
+            package_dir.mkdir()
+            (package_dir / "__init__.py").write_text("", encoding="utf-8")
+            (package_dir / "topscore.py").write_text(
+                "JOB_NAME = 'module-max-score'\n"
+                "def map_records(lines):\n"
+                "    for line in lines:\n"
+                "        if not line.strip():\n"
+                "            continue\n"
+                "        name, score = line.split(',')\n"
+                "        yield name.strip().lower(), int(score)\n"
+                "def combine_values(key, values):\n"
+                "    return max(values)\n"
+                "def reduce_key(key, values):\n"
+                "    return max(values)\n",
+                encoding="utf-8",
+            )
+            sys.path.insert(0, tmpdir)
+            self.addCleanup(lambda: sys.path.remove(tmpdir))
+
+            plugin = load_plugin("demo_plugins.topscore")
+
+            self.assertEqual(plugin.name, "module-max-score")
+            self.assertTrue(str(plugin.path).endswith("topscore.py"))
+
+
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             bad_plugin = Path(tmpdir) / "bad_plugin.py"
@@ -170,6 +198,54 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["job"], "plugin-max-score")
             self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
             self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
+
+    def test_cli_runs_module_plugin_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            output = Path(tmpdir) / "module-plugin.json"
+            package_dir = Path(tmpdir) / "demo_plugins"
+            package_dir.mkdir()
+            (package_dir / "__init__.py").write_text("", encoding="utf-8")
+            (package_dir / "topscore.py").write_text(
+                "JOB_NAME = 'module-max-score'\n"
+                "def map_records(lines):\n"
+                "    for line in lines:\n"
+                "        if not line.strip():\n"
+                "            continue\n"
+                "        name, score = line.split(',')\n"
+                "        yield name.strip().lower(), int(score)\n"
+                "def combine_values(key, values):\n"
+                "    return max(values)\n"
+                "def reduce_key(key, values):\n"
+                "    return max(values)\n",
+                encoding="utf-8",
+            )
+            source.write_text("Alice,4\nAlice,9\nBob,3\n", encoding="utf-8")
+
+            env = dict(**__import__('os').environ, PYTHONPATH=f"{tmpdir}:{__import__('os').environ.get('PYTHONPATH', '')}".rstrip(':'))
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "run",
+                    "plugin",
+                    str(source),
+                    "--plugin",
+                    "demo_plugins.topscore",
+                    "--reducers",
+                    "2",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+                env=env,
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["job"], "module-max-score")
+            self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
+            self.assertTrue(payload["plugin"].endswith("topscore.py"))
 
     def test_cli_benchmark_outputs_json_with_timings(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

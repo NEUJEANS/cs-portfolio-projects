@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import importlib.util
 import json
 import random
@@ -11,6 +12,7 @@ import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Callable, Iterable, Iterator
 
 KeyValue = tuple[str, int]
@@ -135,31 +137,41 @@ def combine(mapped: Iterable[KeyValue], combiner_fn: Reducer = sum_reducer) -> d
     return {key: combiner_fn(key, values) for key, values in grouped.items()}
 
 
-def load_plugin(plugin_path: Path) -> PluginJob:
-    resolved = plugin_path.resolve()
-    if not resolved.exists():
-        raise ValueError(f"plugin does not exist: {plugin_path}")
-
-    module_name = f"mini_mapreduce_plugin_{hashlib.sha256(str(resolved).encode('utf-8')).hexdigest()[:12]}"
-    spec = importlib.util.spec_from_file_location(module_name, resolved)
-    if spec is None or spec.loader is None:
-        raise ValueError(f"unable to load plugin module: {plugin_path}")
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
+def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> PluginJob:
     mapper = getattr(module, "map_records", None)
     combiner = getattr(module, "combine_values", None)
     reducer = getattr(module, "reduce_key", None)
-    name = getattr(module, "JOB_NAME", resolved.stem)
+    name = getattr(module, "JOB_NAME", fallback_name)
     if not callable(mapper):
         raise ValueError("plugin must define callable map_records(lines)")
     if combiner is not None and not callable(combiner):
         raise ValueError("plugin combine_values must be callable when provided")
     if not callable(reducer):
         raise ValueError("plugin must define callable reduce_key(key, values)")
+    return PluginJob(name=str(name), mapper=mapper, combiner=combiner or sum_reducer, reducer=reducer, path=origin)
 
-    return PluginJob(name=str(name), mapper=mapper, combiner=combiner or sum_reducer, reducer=reducer, path=resolved)
+
+def load_plugin(plugin_ref: str | Path) -> PluginJob:
+    plugin_text = str(plugin_ref)
+    candidate_path = Path(plugin_text)
+    if candidate_path.exists():
+        resolved = candidate_path.resolve()
+        module_name = f"mini_mapreduce_plugin_{hashlib.sha256(str(resolved).encode('utf-8')).hexdigest()[:12]}"
+        spec = importlib.util.spec_from_file_location(module_name, resolved)
+        if spec is None or spec.loader is None:
+            raise ValueError(f"unable to load plugin module: {plugin_text}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return build_plugin_job(module, resolved, resolved.stem)
+
+    try:
+        module = importlib.import_module(plugin_text)
+    except ModuleNotFoundError as exc:
+        raise ValueError(f"plugin does not exist or is not importable: {plugin_text}") from exc
+
+    module_file = getattr(module, "__file__", None)
+    origin = Path(module_file).resolve() if module_file else Path(f"<module:{plugin_text}>")
+    return build_plugin_job(module, origin, plugin_text.rsplit('.', 1)[-1])
 
 
 def reduce_shards(
@@ -217,7 +229,7 @@ def execute_job(
     shard_size: int,
     group_field: str | None = None,
     reducers: int = 1,
-    plugin_path: Path | None = None,
+    plugin_path: str | None = None,
 ) -> JobResult:
     lines = read_lines(inputs)
     partials: list[dict[str, int]] = []
@@ -340,7 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--shard-size", type=int, default=100, help="lines per shard")
     run_parser.add_argument("--reducers", type=int, default=1, help="number of reducer buckets to simulate")
     run_parser.add_argument("--group-field", help="JSON field to count for json-group-count")
-    run_parser.add_argument("--plugin", help="path to a Python plugin file with map_records/reduce_key")
+    run_parser.add_argument("--plugin", help="plugin file path or importable Python module with map_records/reduce_key")
     run_parser.add_argument("--output", help="optional output JSON path")
 
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic wordcount benchmark")
@@ -371,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
             shard_size=args.shard_size,
             group_field=args.group_field,
             reducers=args.reducers,
-            plugin_path=Path(args.plugin) if args.plugin else None,
+            plugin_path=args.plugin if args.plugin else None,
         )
         rendered = result.to_json()
         if args.output:
