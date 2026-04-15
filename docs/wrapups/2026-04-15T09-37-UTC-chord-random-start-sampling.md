@@ -16,7 +16,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- current commit: `d77dbe4`
+- feature commit: `3af4e6d`
 
 ## Next step
 - compare multiple random Chord benchmark samples and export an aggregate variance summary so the lab can discuss stability across starting positions, not just a single seeded subset
