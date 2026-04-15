@@ -10,8 +10,9 @@ A portfolio-friendly distributed systems lab that simulates Raft leader election
 
 ## Features
 - in-memory simulation of 3+ Raft nodes with per-node election timeouts
-- deterministic event log for election starts, votes, leader wins, heartbeats, and commits
-- lightweight log replication from leader to followers with commit-index tracking
+- deterministic event log for election starts, votes, leader wins, heartbeats, append rejections, and commits
+- lightweight log replication from leader to followers with `nextIndex` / `matchIndex` tracking
+- `prevLogIndex` / `prevLogTerm` conflict detection with follower suffix truncation and leader backtracking retries
 - network-isolation actions to trigger split votes, unavailable leaders, and delayed replication
 - timeout overrides for controlled retries in scripted experiments
 - JSON scenario input and machine-readable JSON summary output
@@ -50,6 +51,7 @@ Supported step actions:
 - `heal` - restore network access for a node
 - `set-timeout` - change a node's election timeout for later ticks
 - `client-write` - append a command to the current leader log and replicate it
+- `force-log` - inject a teaching/demo log directly onto a node to showcase repair behavior
 
 ## Test
 

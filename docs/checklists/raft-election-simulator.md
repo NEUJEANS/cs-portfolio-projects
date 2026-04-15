@@ -6,4 +6,5 @@
 - [x] support scripted scenarios with run, isolate, heal, timeout override, and client-write actions
 - [x] add focused tests for happy-path election, split-vote retry, recovery, CLI output, and commit-index behavior
 - [x] add log-replication and commit-index mechanics in a follow-up slice
-- [ ] model prev-log-index / prev-log-term conflict repair more faithfully in a future slice
+- [x] model prev-log-index / prev-log-term conflict repair with leader backtracking and follower suffix repair
+- [ ] track applied state-machine values derived from committed commands in a future slice

@@ -58,7 +58,7 @@ class NodeState:
         self.role = Role.LEADER
         self.last_heartbeat_tick = tick
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload["role"] = self.role.value
         payload["votes_received"] = sorted(self.votes_received)
@@ -82,6 +82,16 @@ class Event:
             "term": self.term,
             "details": self.details,
         }
+
+
+@dataclass
+class AppendAttemptResult:
+    success: bool
+    prev_index: int
+    prev_term: int
+    next_index: int
+    replicated_entries: int = 0
+    truncated_entries: int = 0
 
 
 class RaftElectionSimulator:
@@ -111,9 +121,16 @@ class RaftElectionSimulator:
         self.base_timeouts = dict(election_timeouts)
         self.events: list[Event] = []
         self.partitioned_nodes: set[str] = set()
+        self.replication_state: dict[str, dict[str, dict[str, int]]] = {}
 
     def log(self, node: str, event: str, term: int, **details: object) -> None:
         self.events.append(Event(self.tick, node, event, term, details))
+
+    def initialize_leader_replication_state(self, leader: NodeState) -> None:
+        self.replication_state[leader.node_id] = {
+            peer_id: {"next_index": len(leader.log) + 1, "match_index": 0}
+            for peer_id in leader.peers
+        }
 
     def apply_timeout_override(self, node_id: str, timeout: int) -> None:
         self.base_timeouts[node_id] = timeout
@@ -127,6 +144,18 @@ class RaftElectionSimulator:
     def heal(self, node_id: str) -> None:
         self.partitioned_nodes.discard(node_id)
         self.log(node_id, "healed", self.nodes[node_id].current_term)
+
+    def force_log(self, node_id: str, entries: list[dict[str, object]], commit_index: int | None = None) -> None:
+        node = self.nodes[node_id]
+        node.log = [LogEntry(term=int(entry["term"]), command=str(entry["command"])) for entry in entries]
+        node.commit_index = min(commit_index if commit_index is not None else node.commit_index, len(node.log))
+        self.log(
+            node_id,
+            "log_forced",
+            node.current_term,
+            log_length=len(node.log),
+            commit_index=node.commit_index,
+        )
 
     def tick_once(self) -> None:
         self.tick += 1
@@ -149,6 +178,7 @@ class RaftElectionSimulator:
             self.request_vote(node, self.nodes[peer_id])
         if self.has_majority(node):
             node.become_leader(self.tick)
+            self.initialize_leader_replication_state(node)
             self.log(node.node_id, "leader_elected", node.current_term, votes=sorted(node.votes_received))
             self.broadcast_heartbeat(node)
 
@@ -174,50 +204,98 @@ class RaftElectionSimulator:
     def broadcast_heartbeat(self, leader: NodeState) -> None:
         self.log(leader.node_id, "heartbeat_broadcast", leader.current_term)
         for peer_id in leader.peers:
-            self.receive_heartbeat(leader, self.nodes[peer_id])
+            self.replicate_to_follower(leader, self.nodes[peer_id])
             if leader.role != Role.LEADER:
                 return
         self.refresh_commit_indexes(leader)
 
-    def receive_heartbeat(self, leader: NodeState, follower: NodeState) -> None:
+    def replicate_to_follower(self, leader: NodeState, follower: NodeState) -> None:
         if leader.node_id in self.partitioned_nodes or follower.node_id in self.partitioned_nodes:
             self.log(leader.node_id, "heartbeat_blocked", leader.current_term, peer=follower.node_id)
             return
         if follower.current_term > leader.current_term:
             self.log(leader.node_id, "leader_stale", follower.current_term, peer=follower.node_id)
             leader.become_follower(follower.current_term, self.tick, self.base_timeouts[leader.node_id])
+            self.replication_state.pop(leader.node_id, None)
             return
-        follower.become_follower(leader.current_term, self.tick, self.base_timeouts[follower.node_id], leader_id=leader.node_id)
-        replicated_entries = self.replicate_log(leader, follower)
-        self.log(
-            leader.node_id,
-            "heartbeat_ack",
-            leader.current_term,
-            peer=follower.node_id,
-            replicated_entries=replicated_entries,
-            follower_log_length=len(follower.log),
-        )
 
-    def replicate_log(self, leader: NodeState, follower: NodeState) -> int:
-        shared_prefix = 0
-        max_prefix = min(len(leader.log), len(follower.log))
-        while shared_prefix < max_prefix and leader.log[shared_prefix] == follower.log[shared_prefix]:
-            shared_prefix += 1
-        new_entries = leader.log[shared_prefix:]
-        if new_entries or len(follower.log) != len(leader.log):
-            follower.log = [LogEntry(entry.term, entry.command) for entry in leader.log]
-        return len(new_entries)
+        follower.become_follower(leader.current_term, self.tick, self.base_timeouts[follower.node_id], leader_id=leader.node_id)
+        follower_state = self.replication_state.setdefault(
+            leader.node_id,
+            {peer_id: {"next_index": len(leader.log) + 1, "match_index": 0} for peer_id in leader.peers},
+        )[follower.node_id]
+
+        attempts = 0
+        while True:
+            attempts += 1
+            result = self.try_append_entries(leader, follower, follower_state["next_index"])
+            if result.success:
+                follower_state["match_index"] = len(follower.log)
+                follower_state["next_index"] = len(follower.log) + 1
+                self.log(
+                    leader.node_id,
+                    "heartbeat_ack",
+                    leader.current_term,
+                    peer=follower.node_id,
+                    replicated_entries=result.replicated_entries,
+                    truncated_entries=result.truncated_entries,
+                    follower_log_length=len(follower.log),
+                    attempts=attempts,
+                    next_index=follower_state["next_index"],
+                )
+                return
+
+            previous_next_index = follower_state["next_index"]
+            follower_state["next_index"] = max(1, follower_state["next_index"] - 1)
+            self.log(
+                leader.node_id,
+                "append_rejected",
+                leader.current_term,
+                peer=follower.node_id,
+                prev_log_index=result.prev_index,
+                prev_log_term=result.prev_term,
+                follower_log_length=len(follower.log),
+                next_index=previous_next_index,
+                retry_next_index=follower_state["next_index"],
+            )
+            if follower_state["next_index"] == previous_next_index:
+                return
+
+    def try_append_entries(self, leader: NodeState, follower: NodeState, next_index: int) -> AppendAttemptResult:
+        prev_index = next_index - 1
+        prev_term = leader.log[prev_index - 1].term if prev_index > 0 else 0
+        if prev_index > len(follower.log):
+            return AppendAttemptResult(False, prev_index, prev_term, next_index)
+        if prev_index > 0 and follower.log[prev_index - 1].term != prev_term:
+            return AppendAttemptResult(False, prev_index, prev_term, next_index)
+
+        leader_suffix = leader.log[next_index - 1 :]
+        truncated_entries = 0
+        index = next_index - 1
+        while index < len(leader.log) and index < len(follower.log):
+            if follower.log[index].term != leader.log[index].term or follower.log[index].command != leader.log[index].command:
+                truncated_entries = len(follower.log) - index
+                follower.log = follower.log[:index]
+                break
+            index += 1
+
+        replicated_entries = 0
+        append_start = len(follower.log)
+        for entry in leader.log[append_start:]:
+            follower.log.append(LogEntry(entry.term, entry.command))
+            replicated_entries += 1
+
+        return AppendAttemptResult(True, prev_index, prev_term, next_index, replicated_entries, truncated_entries)
 
     def refresh_commit_indexes(self, leader: NodeState) -> None:
-        replicated_lengths = sorted(len(node.log) for node in self.nodes.values())
-        majority_position = len(replicated_lengths) // 2
-        majority_length = replicated_lengths[majority_position]
+        follower_state = self.replication_state.get(leader.node_id, {})
+        replicated_indexes = [len(leader.log)] + [state["match_index"] for state in follower_state.values()]
+        majority_position = len(replicated_indexes) // 2
+        majority_length = sorted(replicated_indexes)[majority_position]
         new_commit_index = min(majority_length, len(leader.log))
         if new_commit_index > leader.commit_index:
             leader.commit_index = new_commit_index
             self.log(leader.node_id, "commit_advanced", leader.current_term, commit_index=new_commit_index)
-        for node in self.nodes.values():
-            node.commit_index = min(node.commit_index, len(node.log)) if node is not leader else leader.commit_index
         for node in self.nodes.values():
             if node is leader:
                 continue
@@ -225,6 +303,8 @@ class RaftElectionSimulator:
             if replicated_commit > node.commit_index:
                 node.commit_index = replicated_commit
                 self.log(leader.node_id, "commit_replicated", leader.current_term, peer=node.node_id, commit_index=node.commit_index)
+            else:
+                node.commit_index = min(node.commit_index, len(node.log))
 
     def append_client_command(self, command: str) -> None:
         leader = self.current_leader()
@@ -300,6 +380,9 @@ def run_scenario(config: dict[str, object]) -> dict[str, object]:
         elif action == "client-write":
             require_step_fields(step, "command")
             simulator.append_client_command(step["command"])
+        elif action == "force-log":
+            require_step_fields(step, "node", "entries")
+            simulator.force_log(step["node"], step["entries"], step.get("commit_index"))
         else:
             raise ValueError(f"unsupported action: {action}")
     return simulator.summary()
