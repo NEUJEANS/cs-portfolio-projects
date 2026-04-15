@@ -50,8 +50,27 @@ Edge list:
 ## Why this is portfolio-worthy
 Strongly connected components come up in dependency analysis, compiler passes, graph databases, package management, and distributed-systems reasoning. This project shows algorithm knowledge, clean interfaces, and the ability to turn theory into a reusable tool.
 
+## Output details
+The SCC summary and condensation DAG now annotate each component with a `topology_level`:
+- level `0` means a source SCC in the condensation DAG
+- higher levels indicate longer downstream dependency distance from any source SCC
+- levels make it easier to explain build pipelines, dependency cycles, and call-graph collapse order in interviews
+
+Example condensation output excerpt:
+```json
+{
+  "components": [
+    {"id": "C0", "nodes": ["A", "B", "C"], "size": 3, "topology_level": 0},
+    {"id": "C1", "nodes": ["D", "E"], "size": 2, "topology_level": 1}
+  ],
+  "edges": [{"from": "C0", "to": "C1"}],
+  "edge_count": 1,
+  "level_count": 2
+}
+```
+
 ## Future improvements
 - emit Graphviz or Mermaid diagrams for the condensation DAG
 - add Kosaraju as a comparison implementation and benchmark both approaches
 - stream very large graphs from edge lists instead of loading everything into memory first
-- annotate components with topological levels inside the condensation DAG
+- annotate components with in-degree/out-degree summaries for easier bottleneck analysis

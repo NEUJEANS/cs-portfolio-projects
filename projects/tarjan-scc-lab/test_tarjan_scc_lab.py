@@ -42,11 +42,32 @@ def test_condensation_dag_collapses_internal_component_edges():
     components = tarjan_strongly_connected_components(graph)
     dag = condensation_dag(graph, components)
     assert dag['components'] == [
-        {'id': 'C0', 'nodes': ['A', 'B'], 'size': 2},
-        {'id': 'C1', 'nodes': ['C', 'D'], 'size': 2},
+        {'id': 'C0', 'nodes': ['A', 'B'], 'size': 2, 'topology_level': 0},
+        {'id': 'C1', 'nodes': ['C', 'D'], 'size': 2, 'topology_level': 1},
     ]
     assert dag['edge_count'] == 1
+    assert dag['level_count'] == 2
     assert dag['edges'] == [{'from': 'C0', 'to': 'C1'}]
+
+
+def test_condensation_dag_assigns_levels_by_longest_source_path():
+    graph = DirectedGraph({
+        'A': ('B',),
+        'B': ('A', 'C', 'E'),
+        'C': ('D',),
+        'D': ('C', 'F'),
+        'E': ('F',),
+        'F': (),
+    })
+    components = tarjan_strongly_connected_components(graph)
+    dag = condensation_dag(graph, components)
+    assert dag['components'] == [
+        {'id': 'C0', 'nodes': ['A', 'B'], 'size': 2, 'topology_level': 0},
+        {'id': 'C1', 'nodes': ['C', 'D'], 'size': 2, 'topology_level': 1},
+        {'id': 'C2', 'nodes': ['E'], 'size': 1, 'topology_level': 1},
+        {'id': 'C3', 'nodes': ['F'], 'size': 1, 'topology_level': 2},
+    ]
+    assert dag['level_count'] == 3
 
 
 def test_summary_marks_acyclic_graph_when_all_components_are_singletons():
@@ -63,7 +84,9 @@ def test_summary_treats_singleton_self_loop_as_cyclic():
     summary = summarize_components(graph, tarjan_strongly_connected_components(graph))
     assert summary['acyclic'] is False
     assert summary['cyclic_component_count'] == 1
+    assert summary['condensation_level_count'] == 1
     assert summary['components'][0]['self_loop'] is True
+    assert summary['components'][0]['topology_level'] == 0
 
 
 def test_cli_scc_outputs_json_summary():
@@ -98,6 +121,7 @@ def test_cli_explain_reports_requested_component_limit(capsys):
     captured = capsys.readouterr()
     assert exit_code == 0
     assert '4 strongly connected components' in captured.out
-    assert 'C0: A, B, C' in captured.out
-    assert 'C1: D, E' in captured.out
+    assert 'Condensation DAG spans 4 topological level(s).' in captured.out
+    assert 'C0 (level 0): A, B, C' in captured.out
+    assert 'C1 (level 1): D, E' in captured.out
     assert 'C2:' not in captured.out

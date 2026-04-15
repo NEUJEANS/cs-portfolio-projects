@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -121,23 +122,54 @@ def build_component_graph(graph: DirectedGraph, components: list[list[str]]) -> 
     return summaries, sorted(dag_edges)
 
 
+def compute_component_levels(component_count: int, dag_edges: list[tuple[int, int]]) -> dict[int, int]:
+    incoming_counts = {index: 0 for index in range(component_count)}
+    outgoing: dict[int, list[int]] = {index: [] for index in range(component_count)}
+    for src, dst in dag_edges:
+        outgoing[src].append(dst)
+        incoming_counts[dst] += 1
+
+    frontier = deque(sorted(index for index, count in incoming_counts.items() if count == 0))
+    levels = {index: 0 for index in frontier}
+
+    while frontier:
+        current = frontier.popleft()
+        for neighbor in outgoing[current]:
+            levels[neighbor] = max(levels.get(neighbor, 0), levels[current] + 1)
+            incoming_counts[neighbor] -= 1
+            if incoming_counts[neighbor] == 0:
+                frontier.append(neighbor)
+
+    for index in range(component_count):
+        levels.setdefault(index, 0)
+    return levels
+
+
 def condensation_dag(graph: DirectedGraph, components: list[list[str]]) -> dict[str, object]:
     summaries, dag_edges = build_component_graph(graph, components)
+    levels = compute_component_levels(len(summaries), dag_edges)
     return {
         'components': [
-            {'id': summary['id'], 'nodes': summary['nodes'], 'size': summary['size']}
-            for summary in summaries
+            {
+                'id': summary['id'],
+                'nodes': summary['nodes'],
+                'size': summary['size'],
+                'topology_level': levels[index],
+            }
+            for index, summary in enumerate(summaries)
         ],
         'edges': [
             {'from': f'C{src}', 'to': f'C{dst}'}
             for src, dst in dag_edges
         ],
         'edge_count': len(dag_edges),
+        'level_count': (max(levels.values()) + 1) if levels else 0,
     }
 
 
 def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> dict[str, object]:
     summaries, dag_edges = build_component_graph(graph, components)
+    levels = compute_component_levels(len(summaries), dag_edges)
     sizes = sorted((summary['size'] for summary in summaries), reverse=True)
     source_components = {index for index, _ in dag_edges}
     sink_components = {index for _, index in dag_edges}
@@ -152,9 +184,16 @@ def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> d
         'source_component_count': len(components) - len(sink_components),
         'sink_component_count': len(components) - len(source_components),
         'condensation_edge_count': len(dag_edges),
+        'condensation_level_count': (max(levels.values()) + 1) if levels else 0,
         'components': [
-            {'id': summary['id'], 'size': summary['size'], 'nodes': summary['nodes'], 'self_loop': summary['self_loop']}
-            for summary in summaries
+            {
+                'id': summary['id'],
+                'size': summary['size'],
+                'nodes': summary['nodes'],
+                'self_loop': summary['self_loop'],
+                'topology_level': levels[index],
+            }
+            for index, summary in enumerate(summaries)
         ],
     }
 
@@ -184,12 +223,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == 'explain':
         limit = max(1, args.limit)
+        summary = summarize_components(graph, components)
         lines = [
             f"Graph has {len(graph.nodes)} nodes, {graph.edge_count} directed edges, and {len(components)} strongly connected components.",
             f"Largest component size: {max((len(component) for component in components), default=0)}.",
+            f"Condensation DAG spans {summary['condensation_level_count']} topological level(s).",
         ]
-        for index, component in enumerate(components[:limit]):
-            lines.append(f"C{index}: {', '.join(component)}")
+        for index, component_summary in enumerate(summary['components'][:limit]):
+            lines.append(
+                f"C{index} (level {component_summary['topology_level']}): {', '.join(component_summary['nodes'])}"
+            )
         print("\n".join(lines))
         return 0
     parser.error(f'unsupported command: {args.command}')
