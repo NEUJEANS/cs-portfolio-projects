@@ -17,7 +17,7 @@
 - [x] review pass 2
 - [x] review pass 3
 - [x] secret scan
-- [ ] commit, push, wrap-up
+- [x] commit, push, wrap-up
 
 ## Notes
 - `random` mode must stay reproducible, so it requires a seed.
