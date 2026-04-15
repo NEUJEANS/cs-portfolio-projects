@@ -297,6 +297,25 @@ def _collect_paths(root: Path, pattern: str) -> list[Path]:
     return sorted(path for path in root.rglob(pattern) if path.is_file())
 
 
+def _indexed_document_from_text(
+    path: Path,
+    text: str,
+    *,
+    shingle_size: int,
+    num_hashes: int,
+    seed: int,
+) -> IndexedDocument:
+    shingles = sorted(build_shingles(text, shingle_size))
+    return IndexedDocument(
+        path=str(path),
+        signature=minhash_signature(set(shingles), num_hashes=num_hashes, seed=seed),
+        shingles=shingles,
+        shingle_count=len(shingles),
+        byte_length=len(text.encode("utf-8")),
+        content_sha256=_sha256_text(text),
+    )
+
+
 def build_signature_index(
     paths: Iterable[Path],
     *,
@@ -307,20 +326,16 @@ def build_signature_index(
     bands: int = 8,
     seed: int = 0,
 ) -> SignatureIndex:
-    documents: list[IndexedDocument] = []
-    for path in paths:
-        text = path.read_text(encoding="utf-8")
-        shingles = sorted(build_shingles(text, shingle_size))
-        documents.append(
-            IndexedDocument(
-                path=str(path),
-                signature=minhash_signature(set(shingles), num_hashes=num_hashes, seed=seed),
-                shingles=shingles,
-                shingle_count=len(shingles),
-                byte_length=len(text.encode("utf-8")),
-                content_sha256=_sha256_text(text),
-            )
+    documents = [
+        _indexed_document_from_text(
+            path,
+            path.read_text(encoding="utf-8"),
+            shingle_size=shingle_size,
+            num_hashes=num_hashes,
+            seed=seed,
         )
+        for path in paths
+    ]
     return SignatureIndex(
         version=INDEX_VERSION,
         created_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
@@ -332,6 +347,60 @@ def build_signature_index(
         seed=seed,
         documents=documents,
     )
+
+
+def refresh_signature_index(index: SignatureIndex, paths: Iterable[Path]) -> tuple[SignatureIndex, dict[str, int]]:
+    existing_by_path = {document.path: document for document in index.documents}
+    refreshed_documents: list[IndexedDocument] = []
+    reused = 0
+    updated = 0
+    added = 0
+    seen_paths: set[str] = set()
+
+    for path in paths:
+        path_str = str(path)
+        seen_paths.add(path_str)
+        text = path.read_text(encoding="utf-8")
+        content_sha256 = _sha256_text(text)
+        previous = existing_by_path.get(path_str)
+        if previous is not None and previous.content_sha256 == content_sha256:
+            refreshed_documents.append(previous)
+            reused += 1
+            continue
+        refreshed_documents.append(
+            _indexed_document_from_text(
+                path,
+                text,
+                shingle_size=index.shingle_size,
+                num_hashes=index.num_hashes,
+                seed=index.seed,
+            )
+        )
+        if previous is None:
+            added += 1
+        else:
+            updated += 1
+
+    removed = sum(1 for path_str in existing_by_path if path_str not in seen_paths)
+    refreshed = SignatureIndex(
+        version=index.version,
+        created_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        root=index.root,
+        glob_pattern=index.glob_pattern,
+        shingle_size=index.shingle_size,
+        num_hashes=index.num_hashes,
+        bands=index.bands,
+        seed=index.seed,
+        documents=refreshed_documents,
+    )
+    stats = {
+        "documents_seen": len(seen_paths),
+        "reused": reused,
+        "updated": updated,
+        "added": added,
+        "removed": removed,
+    }
+    return refreshed, stats
 
 
 def save_signature_index(index: SignatureIndex, destination: Path) -> None:
@@ -440,6 +509,9 @@ def build_parser() -> argparse.ArgumentParser:
     index_parser.add_argument("output")
     index_parser.add_argument("--glob", default="*.txt", dest="glob_pattern")
 
+    refresh_index_parser = subparsers.add_parser("refresh-index", help="refresh a saved signature index and reuse unchanged documents")
+    refresh_index_parser.add_argument("index_path")
+
     scan_index_parser = subparsers.add_parser("scan-index", help="find candidate pairs from a saved signature index")
     scan_index_parser.add_argument("index_path")
     scan_index_parser.add_argument("--threshold", type=float, default=0.5)
@@ -456,6 +528,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--seed", type=int, default=0)
         subparser.add_argument("--json", action="store_true")
 
+    refresh_index_parser.add_argument("--json", action="store_true")
     scan_index_parser.add_argument("--json", action="store_true")
 
     return parser
@@ -473,6 +546,12 @@ def _emit(payload: dict[str, object], as_json: bool) -> int:
         return 0
     if command == "build-index":
         print(f"Indexed {payload['documents_indexed']} documents into {payload['output']}")
+        return 0
+    if command == "refresh-index":
+        print(
+            f"Refreshed {payload['documents_seen']} documents in {payload['index_path']} "
+            f"(reused={payload['reused']}, updated={payload['updated']}, added={payload['added']}, removed={payload['removed']})"
+        )
         return 0
     if command == "benchmark":
         print(f"Documents scanned: {payload['documents_scanned']}")
@@ -570,6 +649,14 @@ def main(argv: list[str] | None = None) -> int:
             },
             args.json,
         )
+
+    if args.command == "refresh-index":
+        index_path = Path(args.index_path)
+        index = load_signature_index(index_path)
+        paths = _collect_paths(Path(index.root), index.glob_pattern)
+        refreshed_index, stats = refresh_signature_index(index, paths)
+        save_signature_index(refreshed_index, index_path)
+        return _emit({"command": "refresh-index", "index_path": str(index_path), **stats}, args.json)
 
     if args.command == "scan-index":
         index = load_signature_index(Path(args.index_path))

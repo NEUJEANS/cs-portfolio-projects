@@ -16,6 +16,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - LSH-style banding to surface likely duplicate pairs without brute-force comparison of every pair
 - small-corpus fallback that still checks all pairs when banding would otherwise miss every candidate in tiny demos
 - persistent signature-index export for repeated scans without recomputing signatures every time
+- incremental index refresh that reuses stored signatures for unchanged files based on content hashes
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - CLI output in human-readable or JSON form
 - repository-level tests for API behavior and CLI workflows
@@ -61,6 +62,14 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py scan-index \
   --json
 ```
 
+Refresh an existing index after some files changed:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py refresh-index \
+  samples/minhash-index.json \
+  --json
+```
+
 Benchmark candidate reduction vs exact all-pairs scanning:
 
 ```bash
@@ -96,6 +105,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 - how MinHash compresses large shingle sets into signatures that approximate Jaccard similarity
 - why LSH banding reduces the number of candidate pairs you need to inspect exactly
 - why persisted signatures matter when you rerun scans across the same corpus repeatedly
+- how content hashes let incremental refresh skip unchanged documents while still keeping the index trustworthy
 - how recall and candidate-reduction trade off as you change shingle size, signature length, and band count
 
 ## Test
@@ -106,5 +116,5 @@ python3 -m unittest tests.test_minhash_near_duplicate
 
 ## Future improvements
 - add character-shingle and code-token modes for source-code deduplication demos
-- support incremental index refresh so unchanged files can reuse prior signatures directly
 - export benchmark runs as CSV/Markdown summaries for portfolio write-ups
+- add a dry-run corpus diff summary before refresh for very large indexes

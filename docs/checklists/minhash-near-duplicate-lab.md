@@ -20,4 +20,14 @@
 - [x] expand tests for index round-trips and new CLI flows
 - [x] update README with new usage examples and interview talking points
 - [x] complete at least 3 review passes and fix issues found
-- [ ] future slice: incremental index refresh for unchanged files and richer benchmark exports
+
+## Incremental refresh slice (2026-04-15 05:29 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the next unfinished MinHash follow-up around incremental index refresh
+- [x] do a quick Python refresh/self-test around dataclass reuse and content-hash based change detection
+- [x] implement `refresh-index` so unchanged documents reuse stored signatures while changed/new files are recomputed
+- [x] keep refresh resumable by preserving index metadata and safely dropping removed files on rebuild
+- [x] expand tests for refresh stats, reused signatures, and CLI refresh JSON output
+- [x] update README usage and talking points for repeated corpus rescans
+- [x] complete at least 3 review passes and fix issues found
+- [ ] future slice: export benchmark runs as CSV/Markdown summaries for portfolio write-ups

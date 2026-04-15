@@ -26,6 +26,7 @@ find_candidate_pairs = module.find_candidate_pairs
 find_candidate_pairs_from_index = module.find_candidate_pairs_from_index
 load_signature_index = module.load_signature_index
 minhash_signature = module.minhash_signature
+refresh_signature_index = module.refresh_signature_index
 save_signature_index = module.save_signature_index
 benchmark_corpus = module.benchmark_corpus
 
@@ -111,6 +112,40 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(len(reports), 1)
             self.assertTrue(reports[0].left.endswith("a.txt"))
             self.assertEqual(loaded.num_hashes, 32)
+
+    def test_refresh_signature_index_reuses_unchanged_docs_and_detects_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            a_path = root / "a.txt"
+            b_path = root / "b.txt"
+            c_path = root / "c.txt"
+            a_path.write_text("alpha beta gamma delta epsilon\n", encoding="utf-8")
+            b_path.write_text("alpha beta gamma delta zeta\n", encoding="utf-8")
+            c_path.write_text("operating systems scheduling disk arm movement\n", encoding="utf-8")
+            index = build_signature_index(
+                sorted(root.glob("*.txt")),
+                root=root,
+                glob_pattern="*.txt",
+                shingle_size=2,
+                num_hashes=32,
+                bands=8,
+                seed=5,
+            )
+
+            before_docs = {document.path: document for document in index.documents}
+            b_path.write_text("alpha beta gamma delta eta\n", encoding="utf-8")
+            c_path.unlink()
+            d_path = root / "d.txt"
+            d_path.write_text("distributed systems portfolio minhash demo\n", encoding="utf-8")
+
+            refreshed, stats = refresh_signature_index(index, sorted(root.glob("*.txt")))
+            after_docs = {document.path: document for document in refreshed.documents}
+
+            self.assertEqual(stats, {"documents_seen": 3, "reused": 1, "updated": 1, "added": 1, "removed": 1})
+            self.assertEqual(after_docs[str(a_path)], before_docs[str(a_path)])
+            self.assertNotEqual(after_docs[str(b_path)].content_sha256, before_docs[str(b_path)].content_sha256)
+            self.assertIn(str(d_path), after_docs)
+            self.assertNotIn(str(c_path), after_docs)
 
     def test_benchmark_reports_candidate_counts_and_timings(self) -> None:
         payload = benchmark_corpus(
@@ -234,6 +269,40 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(scan_payload["command"], "scan-index")
             self.assertEqual(scan_payload["documents_scanned"], 3)
             self.assertEqual(len(scan_payload["pairs"]), 1)
+
+    def test_cli_refresh_index_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "docs"
+            root.mkdir()
+            (root / "a.txt").write_text("alpha beta gamma delta epsilon\n", encoding="utf-8")
+            (root / "b.txt").write_text("alpha beta gamma delta zeta\n", encoding="utf-8")
+            index_path = Path(tmpdir) / "signatures.json"
+
+            subprocess.run(
+                ["python3", str(MODULE_PATH), "build-index", str(root), str(index_path), "--json"],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            (root / "b.txt").write_text("alpha beta gamma delta eta\n", encoding="utf-8")
+            (root / "c.txt").write_text("memory allocator slab freelist\n", encoding="utf-8")
+
+            refreshed = subprocess.run(
+                ["python3", str(MODULE_PATH), "refresh-index", str(index_path), "--json"],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(refreshed.stdout)
+            self.assertEqual(payload["command"], "refresh-index")
+            self.assertEqual(payload["documents_seen"], 3)
+            self.assertEqual(payload["reused"], 1)
+            self.assertEqual(payload["updated"], 1)
+            self.assertEqual(payload["added"], 1)
+            self.assertEqual(payload["removed"], 0)
 
     def test_cli_benchmark_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
