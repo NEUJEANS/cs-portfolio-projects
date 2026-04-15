@@ -1,6 +1,6 @@
 # B-Tree Index Lab
 
-A compact B-tree indexing project that demonstrates top-down node splitting, sorted traversal, range queries, deletion rebalancing, and serialized page snapshots.
+A compact B-tree indexing project that demonstrates top-down node splitting, sorted traversal, range queries, deletion rebalancing, serialized page snapshots, and build-time benchmarking for sorted bulk loads.
 
 ## Why it belongs in a CS portfolio
 - shows understanding of balanced multi-way search trees used by databases and filesystems
@@ -19,12 +19,14 @@ A compact B-tree indexing project that demonstrates top-down node splitting, sor
 - JSON CLI output for demos and scripting
 - append-oriented bulk loading for strictly sorted datasets
 - tree snapshot/save/load support for serialized page inspection
+- benchmark mode comparing generic inserts against sorted bulk loading on the same dataset
 
 ## Usage
 ```bash
 python3 btree_index.py --dataset sample_records.json dump
 python3 btree_index.py --dataset sample_records.json search 17
 python3 btree_index.py --dataset sorted_records.json --bulk-load --json stats
+python3 btree_index.py --dataset sorted_records.json --benchmark-repeats 10 --json benchmark-build
 python3 btree_index.py --dataset sample_records.json --json range 10 30
 python3 btree_index.py --dataset sample_records.json --json neighbors 16
 python3 btree_index.py --dataset sample_records.json --json floor 16
@@ -66,6 +68,6 @@ python3 -m unittest projects/b-tree-index-lab/test_btree_index.py
 ```
 
 ## Future improvements
-- benchmark bulk loading against generic inserts on larger synthetic datasets
+- export benchmark results as CSV/JSON artifacts for README charts
 - simple performance comparison against other ordered structures
 - optional fixed-size on-disk page encoding beyond JSON snapshots

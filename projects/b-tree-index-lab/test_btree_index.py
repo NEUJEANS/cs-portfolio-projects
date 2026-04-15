@@ -216,6 +216,44 @@ class BTreeIndexTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             BTreeIndex.from_dict(payload)
 
+    def test_benchmark_builds_reports_bulk_load_vs_insert_timings(self) -> None:
+        records = [
+            {"key": key, "value": f"value-{key}"}
+            for key in range(1, 41)
+        ]
+
+        benchmark = BTreeIndex.benchmark_builds(records, minimum_degree=3, repeats=2)
+
+        self.assertEqual(benchmark["dataset_items"], 40)
+        self.assertEqual(benchmark["minimum_degree"], 3)
+        self.assertEqual(benchmark["repeats"], 2)
+        self.assertEqual(len(benchmark["baseline_insert"]["runs_ms"]), 2)
+        self.assertEqual(len(benchmark["bulk_load"]["runs_ms"]), 2)
+        self.assertEqual(benchmark["baseline_insert"]["stats"]["items"], 40)
+        self.assertEqual(benchmark["bulk_load"]["stats"]["items"], 40)
+        self.assertGreater(benchmark["baseline_insert"]["avg_ms"], 0)
+        self.assertGreater(benchmark["bulk_load"]["avg_ms"], 0)
+        self.assertIsInstance(benchmark["speedup_vs_insert"], float)
+
+    def test_benchmark_builds_requires_sorted_unique_records_and_positive_repeats(self) -> None:
+        with self.assertRaises(ValueError):
+            BTreeIndex.benchmark_builds([
+                {"key": 2, "value": "two"},
+                {"key": 1, "value": "one"},
+            ])
+
+        with self.assertRaises(ValueError):
+            BTreeIndex.benchmark_builds([
+                {"key": 1, "value": "one"},
+                {"key": 1, "value": "duplicate"},
+            ])
+
+        with self.assertRaises(ValueError):
+            BTreeIndex.benchmark_builds([
+                {"key": 1, "value": "one"},
+                {"key": 2, "value": "two"},
+            ], repeats=0)
+
     def test_cli_bulk_load_flag_builds_from_sorted_dataset(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             dataset = Path(temp_dir) / "sorted_records.json"
@@ -242,6 +280,42 @@ class BTreeIndexTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["stats"]["items"], 5)
         self.assertGreaterEqual(payload["stats"]["height"], 2)
+
+    def test_cli_benchmark_build_command_returns_timing_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset = Path(temp_dir) / "sorted_records.json"
+            dataset.write_text(
+                json.dumps(
+                    [
+                        {"key": key, "value": f"value-{key}"}
+                        for key in range(2, 22, 2)
+                    ]
+                )
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--dataset",
+                    str(dataset),
+                    "--benchmark-repeats",
+                    "2",
+                    "--json",
+                    "benchmark-build",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+
+        payload = json.loads(completed.stdout)["benchmark"]
+        self.assertEqual(payload["dataset_items"], 10)
+        self.assertEqual(payload["repeats"], 2)
+        self.assertEqual(payload["baseline_insert"]["stats"]["items"], 10)
+        self.assertEqual(payload["bulk_load"]["stats"]["items"], 10)
+        self.assertIn("speedup_vs_insert", payload)
 
     def test_cli_bulk_load_requires_dataset(self) -> None:
         completed = subprocess.run(

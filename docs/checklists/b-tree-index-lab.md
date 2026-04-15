@@ -11,4 +11,5 @@
 - [x] implement append-oriented bulk loading for strictly sorted datasets
 - [x] expose a CLI switch for resumable sorted-dataset builds
 - [x] add regression tests for bulk loading success and failure paths
-- [ ] future slice: fixed-size page encoding or benchmark the bulk loader against generic inserts
+- [x] benchmark sorted bulk loading against generic inserts and expose the comparison in the CLI
+- [ ] future slice: fixed-size page encoding for more realistic on-disk pages
