@@ -27,6 +27,8 @@ render_matching_dot = module.render_matching_dot
 solve_max_flow = module.solve_max_flow
 derive_minimum_vertex_cover = module.derive_minimum_vertex_cover
 solve_bipartite_matching = module.solve_bipartite_matching
+build_flow_explanation = module.build_flow_explanation
+build_matching_explanation = module.build_matching_explanation
 
 
 class NetworkFlowLabTests(unittest.TestCase):
@@ -214,6 +216,46 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('"api" [peripheries=2];', dot)
         self.assertIn('"db" [fillcolor="moccasin"];', dot)
 
+    def test_flow_explanation_matches_min_cut_certificate(self) -> None:
+        result = solve_max_flow(
+            ["s", "a", "b", "t"],
+            [Edge("s", "a", 3), Edge("a", "t", 2), Edge("s", "b", 1), Edge("b", "t", 1)],
+            "s",
+            "t",
+        )
+        explanation = build_flow_explanation(result)
+        self.assertEqual(explanation["min_cut_capacity"], result.max_flow)
+        self.assertTrue(explanation["max_flow_equals_min_cut_capacity"])
+        self.assertTrue(explanation["cut_edges"])
+        self.assertEqual(
+            sum(edge["capacity"] for edge in explanation["cut_edges"]),
+            result.max_flow,
+        )
+        self.assertTrue(all(edge["saturated"] for edge in explanation["cut_edges"]))
+
+    def test_matching_explanation_reports_konig_certificate(self) -> None:
+        result = solve_bipartite_matching(
+            ["anna", "ben", "chloe", "david"],
+            ["api", "compiler", "database"],
+            [
+                ("anna", "api"),
+                ("anna", "compiler"),
+                ("ben", "api"),
+                ("ben", "database"),
+                ("chloe", "compiler"),
+                ("david", "database"),
+            ],
+            algorithm="dinic",
+        )
+        explanation = build_matching_explanation(result)
+        self.assertEqual(explanation["match_count"], 3)
+        self.assertEqual(explanation["minimum_vertex_cover_size"], 3)
+        self.assertTrue(explanation["konig_theorem_check"])
+        self.assertEqual(
+            {(item["side"], item["node"]) for item in explanation["cover_vertices"]},
+            {("right", "api"), ("right", "compiler"), ("right", "database")},
+        )
+
     def test_random_graph_generator_is_reproducible_and_connected(self) -> None:
         graph_a = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)
         graph_b = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)
@@ -276,6 +318,30 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertEqual(payload["match_count"], 3)
         self.assertEqual(payload["unmatched_left"], ["david"])
         self.assertIn("flow", payload)
+
+    def test_cli_demo_can_emit_explanation_payload(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "demo", "--explain"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertIn("explanation", payload)
+        self.assertTrue(payload["explanation"]["max_flow_equals_min_cut_capacity"])
+
+    def test_cli_match_demo_can_emit_explanation_payload(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "match-demo", "--explain"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertIn("explanation", payload)
+        self.assertTrue(payload["explanation"]["konig_theorem_check"])
 
     def test_cli_can_write_dot_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

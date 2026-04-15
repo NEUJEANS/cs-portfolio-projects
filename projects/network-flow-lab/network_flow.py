@@ -67,6 +67,58 @@ class MatchingResult:
         }
 
 
+def build_flow_explanation(flow_result: FlowResult) -> dict[str, Any]:
+    source_side = set(flow_result.min_cut["source_side"])
+    sink_side = set(flow_result.min_cut["sink_side"])
+    cut_edges = [
+        edge
+        for edge in flow_result.edge_flows
+        if edge["source"] in source_side and edge["target"] in sink_side
+    ]
+    cut_capacity = sum(edge["capacity"] for edge in cut_edges)
+    return {
+        "algorithm": flow_result.algorithm,
+        "max_flow": flow_result.max_flow,
+        "min_cut_capacity": cut_capacity,
+        "max_flow_equals_min_cut_capacity": flow_result.max_flow == cut_capacity,
+        "source_side": flow_result.min_cut["source_side"],
+        "sink_side": flow_result.min_cut["sink_side"],
+        "cut_edges": [
+            {
+                "source": edge["source"],
+                "target": edge["target"],
+                "flow": edge["flow"],
+                "capacity": edge["capacity"],
+                "saturated": edge["flow"] == edge["capacity"],
+            }
+            for edge in cut_edges
+        ],
+        "augmenting_path_count": len(flow_result.augmenting_paths),
+        "narrative": [
+            f"The final residual search reaches {len(flow_result.min_cut['source_side'])} node(s) on the source side and leaves {len(flow_result.min_cut['sink_side'])} node(s) on the sink side.",
+            f"Edges that cross that partition have total capacity {cut_capacity}, which {'matches' if flow_result.max_flow == cut_capacity else 'does not match'} the computed max flow of {flow_result.max_flow}.",
+            "Every source-to-sink residual path is blocked once those cut edges are saturated, giving a concrete max-flow/min-cut certificate.",
+        ],
+    }
+
+
+def build_matching_explanation(matching_result: MatchingResult) -> dict[str, Any]:
+    cover = matching_result.minimum_vertex_cover
+    return {
+        "match_count": len(matching_result.matches),
+        "minimum_vertex_cover_size": cover["size"],
+        "konig_theorem_check": cover["konig_theorem_check"],
+        "cover_vertices": [{"side": "left", "node": node} for node in cover["left"]]
+        + [{"side": "right", "node": node} for node in cover["right"]],
+        "reachable_from_unmatched_left": cover["reachable_from_unmatched_left"],
+        "narrative": [
+            f"The matching contains {len(matching_result.matches)} edge(s), and the recovered minimum vertex cover contains {cover['size']} vertex/vertices.",
+            "Unmatched left vertices seed alternating-path reachability; left vertices not reached and right vertices that are reached form the minimum cover.",
+            f"König's theorem check is {'satisfied' if cover['konig_theorem_check'] else 'not satisfied'}, so the cover size matches the matching size.",
+        ],
+    }
+
+
 MATCH_SOURCE = "__source__"
 MATCH_SINK = "__sink__"
 DEFAULT_ALGORITHM = "edmonds-karp"
@@ -663,6 +715,14 @@ def write_dot_output(path: Path, contents: str) -> None:
     path.write_text(contents + "\n", encoding="utf-8")
 
 
+def add_explain_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="include a compact proof-style explanation of the computed result",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Solve max-flow graphs and bipartite matchings.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -672,22 +732,26 @@ def build_parser() -> argparse.ArgumentParser:
     solve_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     solve_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     solve_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved flow graph")
+    add_explain_argument(solve_parser)
 
     demo_parser = subparsers.add_parser("demo", help="run the bundled sample graph")
     demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     demo_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample flow graph")
+    add_explain_argument(demo_parser)
 
     match_parser = subparsers.add_parser("match", help="solve a bipartite matching JSON file")
     match_parser.add_argument("graph", type=Path, help="path to bipartite graph JSON")
     match_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     match_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     match_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved matching graph")
+    add_explain_argument(match_parser)
 
     match_demo_parser = subparsers.add_parser("match-demo", help="run the bundled matching sample")
     match_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     match_demo_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     match_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample matching graph")
+    add_explain_argument(match_demo_parser)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
     benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated DAG")
@@ -706,6 +770,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         nodes, edges, source, sink = load_graph(graph_path)
         flow_result = solve_max_flow(nodes, edges, source, sink, algorithm=args.algorithm)
         payload = {"command": args.command, "graph": str(graph_path), **flow_result.to_dict()}
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_flow_explanation(flow_result)
         if args.dot_out:
             write_dot_output(args.dot_out, render_flow_dot(flow_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)
@@ -716,6 +782,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         nodes, edges, source, sink = load_graph(graph_path)
         flow_result = solve_max_flow(nodes, edges, source, sink, algorithm=args.algorithm)
         payload = {"command": args.command, "graph": str(graph_path), **flow_result.to_dict()}
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_flow_explanation(flow_result)
         if args.dot_out:
             write_dot_output(args.dot_out, render_flow_dot(flow_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)
@@ -726,6 +794,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         left, right, edges = load_bipartite_graph(graph_path)
         matching_result = solve_bipartite_matching(left, right, edges, algorithm=args.algorithm)
         payload = {"command": args.command, "graph": str(graph_path), **matching_result.to_dict()}
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_matching_explanation(matching_result)
         if args.dot_out:
             write_dot_output(args.dot_out, render_matching_dot(matching_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)
@@ -736,6 +806,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         left, right, edges = load_bipartite_graph(graph_path)
         matching_result = solve_bipartite_matching(left, right, edges, algorithm=args.algorithm)
         payload = {"command": args.command, "graph": str(graph_path), **matching_result.to_dict()}
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_matching_explanation(matching_result)
         if args.dot_out:
             write_dot_output(args.dot_out, render_matching_dot(matching_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)

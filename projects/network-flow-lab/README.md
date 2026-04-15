@@ -1,6 +1,6 @@
 # network-flow-lab
 
-A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, and now ships a reproducible benchmark mode, a bipartite minimum-vertex-cover explainer via König's theorem, plus Graphviz DOT export for explainable visuals.
+A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, and now ships a reproducible benchmark mode, a bipartite minimum-vertex-cover explainer via König's theorem, Graphviz DOT export for explainable visuals, plus an optional proof view that narrates why the reported cut/cover certifies correctness.
 
 ## Why it is interesting
 - demonstrates a classic graph algorithm used in routing, scheduling, and resource allocation
@@ -21,6 +21,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - minimum vertex cover recovery for bipartite graphs using alternating paths after the matching is found
 - reproducible benchmark mode that generates random DAGs and compares Edmonds-Karp vs Dinic
 - Graphviz DOT export for solved flow graphs and bipartite matchings
+- optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - bundled sample flow graph and sample matching graph
 - unit tests for correctness, validation, CLI behavior, algorithm parity, and benchmark behavior
 
@@ -31,6 +32,7 @@ Run the bundled sample flow graph:
 ```bash
 python3 projects/network-flow-lab/network_flow.py demo --pretty
 python3 projects/network-flow-lab/network_flow.py demo --algorithm dinic --pretty
+python3 projects/network-flow-lab/network_flow.py demo --explain --pretty
 ```
 
 Solve a custom flow graph:
@@ -52,6 +54,7 @@ Run the bundled bipartite-matching demo:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py match-demo --pretty
+python3 projects/network-flow-lab/network_flow.py match-demo --explain --pretty
 ```
 
 Solve a custom bipartite-matching graph and export a DOT diagram. The JSON output includes `minimum_vertex_cover`, and the DOT output double-outlines cover vertices:
@@ -109,13 +112,15 @@ python3 -m unittest tests/test_network_flow_lab.py
 - Dinic builds a BFS level graph, then pushes blocking flows with DFS-style traversal, which often reduces the amount of repeated path work in practice.
 - Reverse residual edges make it possible to reroute earlier decisions when a better later path is found.
 - The reported min cut comes from the nodes still reachable from the source in the final residual graph.
+- `--explain` turns that residual reachability into a compact certificate by summing the cut edges and checking that their capacity equals the computed max flow.
 - Maximum bipartite matching reduces cleanly to max flow by adding a super-source, a super-sink, and unit capacities on partition and compatibility edges.
 - Once a maximum matching is known, the lab derives a minimum vertex cover by alternating-path reachability from unmatched left-side vertices, giving a constructive König's theorem witness.
+- In matching mode, `--explain` surfaces the alternating-path reachability sets and the recovered cover vertices so the proof can be demoed without reading code.
 - The benchmark mode generates reproducible random DAG instances, verifies both algorithms return the same max-flow value, and summarizes elapsed time plus augmentation/phase counts.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
 - add weighted assignment or min-cost flow as a follow-up advanced slice
-- export a compact "proof view" that narrates why each minimum-cover vertex appears
+- export standalone Markdown/SVG proof artifacts built on top of the new `--explain` payload
 - ship pre-rendered SVG examples in the docs for portfolio screenshots
 - expand the benchmark generator beyond DAGs to include denser residual-heavy stress cases
