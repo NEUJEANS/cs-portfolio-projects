@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .store import (
     ISO_DATE,
+    BulkOperationResult,
     Task,
     TaskService,
     TaskStorage,
@@ -105,6 +106,12 @@ def build_parser() -> argparse.ArgumentParser:
     delete_parser = subparsers.add_parser("delete", help="Delete a task.")
     delete_parser.add_argument("id", nargs="?", type=int)
     delete_parser.add_argument("task_id", nargs="?", type=int)
+
+    bulk_parser = subparsers.add_parser("bulk", help="Apply one action to every task matching a filter.")
+    bulk_parser.add_argument("action", choices=("start", "done", "reopen", "delete"))
+    add_list_arguments(bulk_parser)
+    bulk_parser.add_argument("--json", action="store_true", help="Render the bulk-operation summary as JSON.")
+    bulk_parser.add_argument("--yes", action="store_true", help="Required for destructive bulk deletes.")
 
     archive_parser = subparsers.add_parser("archive", help="Archive completed tasks into dated snapshots.")
     archive_parser.add_argument("--output-dir", help="Archive destination directory. Defaults next to the data file.")
@@ -249,6 +256,38 @@ def _select_tasks(service: TaskService, args: argparse.Namespace) -> list[Task]:
     )
 
 
+def _render_bulk_result(result: BulkOperationResult, *, as_json: bool, context: RenderContext) -> str:
+    if as_json:
+        return json.dumps(
+            {
+                "action": result.action,
+                "matched": len(result.matched_tasks),
+                "updated": len(result.updated_tasks),
+                "deleted": len(result.deleted_tasks),
+                "spawned": len(result.spawned_tasks),
+                "matched_ids": [task.id for task in result.matched_tasks],
+                "spawned_ids": [task.id for task in result.spawned_tasks],
+            },
+            indent=2,
+        )
+
+    lines = [
+        f"Bulk action: {result.action}",
+        f"Matched tasks: {len(result.matched_tasks)}",
+    ]
+    if result.updated_tasks:
+        lines.append(f"Updated tasks: {len(result.updated_tasks)}")
+    if result.deleted_tasks:
+        lines.append(context.color.apply(f"Deleted tasks: {len(result.deleted_tasks)}", ANSI_RED, ANSI_BOLD))
+    if result.spawned_tasks:
+        lines.append(f"Spawned recurring tasks: {len(result.spawned_tasks)}")
+    lines.append("Task ids: " + ", ".join(str(task.id) for task in result.matched_tasks))
+    if result.spawned_tasks:
+        lines.append("Spawned ids: " + ", ".join(str(task.id) for task in result.spawned_tasks))
+    return "\n".join(lines)
+
+
+
 def _render_summary(payload: dict[str, int], as_json: bool, context: RenderContext) -> str:
     if as_json:
         return json.dumps(payload, indent=2)
@@ -334,6 +373,21 @@ def run_cli(argv: list[str] | None = None) -> int:
         if args.command == "delete":
             task = service.delete_task(_coalesce_task_id(args))
             print(f"Deleted task #{task.id}: {task.description}")
+            return 0
+        if args.command == "bulk":
+            has_filter = any([args.status, args.priority, args.search, args.tag])
+            if not has_filter:
+                raise TaskTrackerError("Bulk operations require at least one filter (--status, --priority, --search, or --tag).")
+            if args.action == "delete" and not args.yes:
+                raise TaskTrackerError("Bulk delete requires --yes.")
+            result = service.bulk_update(
+                action=args.action,
+                status=args.status,
+                priority=args.priority,
+                search=args.search,
+                tags=args.tag,
+            )
+            print(_render_bulk_result(result, as_json=args.json, context=context))
             return 0
         if args.command == "archive":
             snapshot = service.archive_completed_tasks(

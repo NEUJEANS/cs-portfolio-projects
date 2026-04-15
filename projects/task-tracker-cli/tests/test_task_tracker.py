@@ -149,6 +149,34 @@ class TaskServiceTests(unittest.TestCase):
         with self.assertRaises(TaskTrackerError):
             self.service.import_tasks(csv_file, "csv")
 
+    def test_bulk_done_updates_matching_tasks_and_spawns_recurring_follow_up(self):
+        self.service.add_task("Prepare systems demo", tags=["school", "demo"], due_date="2026-04-20", recurrence="weekly")
+        self.service.add_task("Prepare graphics demo", tags=["school", "demo"])
+        self.service.add_task("Buy groceries", tags=["personal"])
+
+        result = self.service.bulk_update(action="done", tags=["demo"])
+
+        self.assertEqual([task.id for task in result.matched_tasks], [1, 2])
+        self.assertEqual([task.id for task in result.updated_tasks], [1, 2])
+        self.assertEqual([task.id for task in result.spawned_tasks], [4])
+        self.assertEqual(result.spawned_tasks[0].due_date, "2026-04-27")
+        statuses = {task.id: task.status for task in self.service.list_tasks()}
+        self.assertEqual(statuses[1], "done")
+        self.assertEqual(statuses[2], "done")
+        self.assertEqual(statuses[3], "todo")
+        self.assertEqual(statuses[4], "todo")
+
+    def test_bulk_delete_prunes_matching_tasks(self):
+        self.service.add_task("Archive old notes", tags=["docs"])
+        self.service.add_task("Delete stale draft", tags=["docs", "stale"])
+        self.service.add_task("Keep active task", tags=["active"])
+
+        result = self.service.bulk_update(action="delete", tags=["docs"])
+
+        self.assertEqual([task.id for task in result.deleted_tasks], [1, 2])
+        remaining = self.service.list_tasks()
+        self.assertEqual([task.id for task in remaining], [3])
+
     def test_export_tasks_supports_csv_and_markdown(self):
         self.service.add_task(
             "Prepare demo",

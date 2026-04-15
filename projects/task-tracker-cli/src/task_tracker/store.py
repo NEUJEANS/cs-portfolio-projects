@@ -85,6 +85,15 @@ class ArchiveSnapshot:
     created_at: str
 
 
+@dataclass(slots=True)
+class BulkOperationResult:
+    action: str
+    matched_tasks: list[Task]
+    updated_tasks: list[Task]
+    deleted_tasks: list[Task]
+    spawned_tasks: list[Task]
+
+
 class TaskStorage:
     def __init__(self, data_file: Path) -> None:
         self.data_file = data_file
@@ -160,6 +169,82 @@ class TaskService:
         if normalized_tags:
             tasks = [task for task in tasks if all(tag in task.tags for tag in normalized_tags)]
         return sorted(tasks, key=lambda task: sort_key(task, sort_by))
+
+    def bulk_update(
+        self,
+        *,
+        action: str,
+        status: str | None = None,
+        priority: str | None = None,
+        search: str | None = None,
+        tags: list[str] | None = None,
+    ) -> BulkOperationResult:
+        if action not in {"start", "done", "reopen", "delete"}:
+            raise TaskTrackerError("bulk action must be one of: start, done, reopen, delete")
+
+        tasks = self.storage.load()
+        matched_ids = {
+            task.id
+            for task in self.list_tasks(
+                status=status,
+                priority=priority,
+                search=search,
+                tags=tags,
+            )
+        }
+        matched_tasks = [task for task in tasks if task.id in matched_ids]
+        if not matched_tasks:
+            raise TaskTrackerError("No tasks matched the requested bulk filters.")
+
+        updated_tasks: list[Task] = []
+        deleted_tasks: list[Task] = []
+        spawned_tasks: list[Task] = []
+        target_status = {
+            "start": "in-progress",
+            "done": "done",
+            "reopen": "todo",
+        }.get(action)
+
+        if action == "delete":
+            deleted_ids = {task.id for task in matched_tasks}
+            remaining_tasks = [task for task in tasks if task.id not in deleted_ids]
+            self.storage.save(remaining_tasks)
+            return BulkOperationResult(
+                action=action,
+                matched_tasks=matched_tasks,
+                updated_tasks=[],
+                deleted_tasks=matched_tasks,
+                spawned_tasks=[],
+            )
+
+        assert target_status is not None
+        next_id = self._next_id(tasks)
+        timestamp = utc_now()
+        for task in matched_tasks:
+            task.status = target_status
+            task.updated_at = timestamp
+            updated_tasks.append(task)
+            if target_status == "done" and task.recurrence and task.due_date:
+                spawned_task = Task.create(
+                    next_id,
+                    task.description,
+                    priority=task.priority,
+                    due_date=advance_due_date(task.due_date, task.recurrence),
+                    tags=list(task.tags),
+                    recurrence=task.recurrence,
+                )
+                spawned_tasks.append(spawned_task)
+                tasks.append(spawned_task)
+                next_id += 1
+
+        self.storage.save(tasks)
+        return BulkOperationResult(
+            action=action,
+            matched_tasks=matched_tasks,
+            updated_tasks=updated_tasks,
+            deleted_tasks=deleted_tasks,
+            spawned_tasks=spawned_tasks,
+        )
 
     def add_task(
         self,

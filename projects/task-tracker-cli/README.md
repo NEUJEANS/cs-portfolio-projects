@@ -15,6 +15,7 @@ A polished command-line task tracker built with Python's standard library, with 
 - emphasize statuses, priorities, and urgent due dates in terminal-friendly task tables with optional ANSI colors
 - update fields without rewriting the full task
 - mark tasks in progress, done, or reopened
+- apply bulk actions to filtered task slices for inbox cleanup and weekly review workflows
 - automatically spawn the next task instance for recurring work
 - import tasks from CSV or JSON snapshots
 - export filtered task views as CSV or Markdown
@@ -30,6 +31,7 @@ python3 -m src.task_tracker list --status todo --sort-by due_date
 python3 -m src.task_tracker --color always summary
 python3 -m src.task_tracker start 1
 python3 -m src.task_tracker done 1
+python3 -m src.task_tracker bulk done --tag school --status todo
 python3 -m src.task_tracker archive
 python3 -m src.task_tracker restore data/archives/completed-2026-04-15T21-30-00Z.json --status todo
 python3 -m src.task_tracker export --format markdown --output tasks.md
@@ -75,6 +77,6 @@ python3 -m pytest tests -q
 - keeps human-friendly ANSI styling optional so JSON/export flows stay automation-safe
 
 ## Next upgrades
-- bulk task actions (complete/delete/archive by filter)
 - saved views or dashboard presets for common task slices
 - optional archive restore command for replaying old completed work into the active store
+- richer bulk archive flows that can snapshot a filtered subset before pruning it

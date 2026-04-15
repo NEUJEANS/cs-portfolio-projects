@@ -144,6 +144,12 @@ def test_build_parser_supports_archive_keep() -> None:
     assert args.output_dir == "snapshots"
 
 
+def test_build_parser_supports_bulk_delete_confirmation() -> None:
+    args = build_parser().parse_args(["bulk", "delete", "--tag", "docs", "--yes"])
+    assert args.action == "delete"
+    assert args.yes is True
+
+
 def test_build_parser_supports_restore_status_override() -> None:
     args = build_parser().parse_args(["restore", "archive.json", "--status", "todo"])
     assert args.source == "archive.json"
@@ -156,6 +162,31 @@ def test_cli_archive_requires_completed_tasks(data_file: Path, capsys: pytest.Ca
 
     assert run_args(data_file, "archive") == 1
     assert "No completed tasks are available to archive." in capsys.readouterr().err
+
+
+def test_cli_bulk_done_and_delete(data_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert run_args(data_file, "add", "Prepare demo", "--tag", "demo", "--due", "2026-04-20", "--repeat", "weekly") == 0
+    assert run_args(data_file, "add", "Write demo script", "--tag", "demo") == 0
+    assert run_args(data_file, "add", "Keep separate", "--tag", "other") == 0
+    capsys.readouterr()
+
+    assert run_args(data_file, "bulk", "done", "--tag", "demo") == 0
+    output = capsys.readouterr().out
+    assert "Bulk action: done" in output
+    assert "Matched tasks: 2" in output
+    assert "Spawned recurring tasks: 1" in output
+
+    assert run_args(data_file, "bulk", "delete", "--yes") == 1
+    assert "Bulk operations require at least one filter" in capsys.readouterr().err
+
+    assert run_args(data_file, "bulk", "delete", "--tag", "other") == 1
+    assert "Bulk delete requires --yes." in capsys.readouterr().err
+
+    assert run_args(data_file, "bulk", "delete", "--tag", "other", "--yes", "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["action"] == "delete"
+    assert payload["deleted"] == 1
+    assert payload["matched_ids"] == [3]
 
 
 def test_cli_restore_replays_archived_tasks(data_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
