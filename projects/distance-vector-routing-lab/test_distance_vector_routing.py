@@ -8,7 +8,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 MODULE_PATH = PROJECT_DIR / "distance_vector_routing.py"
 sys.path.insert(0, str(PROJECT_DIR))
 
-from distance_vector_routing import remove_link, run_simulation
+from distance_vector_routing import export_diagram, remove_link, run_simulation
 
 
 SQUARE_TOPOLOGY = {
@@ -89,6 +89,42 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("topology must be symmetric", completed.stderr)
+
+    def test_export_topology_mermaid_contains_weighted_links(self):
+        diagram = export_diagram(SQUARE_TOPOLOGY, snapshot="topology", diagram_format="mermaid", mode="classic", infinity=16, max_rounds=20, router=None)
+        self.assertIn("graph LR", diagram)
+        self.assertIn("A <-->|1| B", diagram)
+        self.assertIn("C <-->|1| D", diagram)
+
+    def test_export_routes_dot_contains_router_cluster_and_next_hop(self):
+        diagram = export_diagram(SQUARE_TOPOLOGY, snapshot="routes", diagram_format="dot", mode="classic", infinity=16, max_rounds=20, router="A")
+        self.assertIn("digraph DistanceVectorRoutes", diagram)
+        self.assertIn('label="Router A"', diagram)
+        self.assertIn('A::C', diagram)
+        self.assertIn('via B', diagram)
+
+    def test_export_diagram_cli_supports_mermaid_route_snapshot(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "export-diagram",
+                "--topology",
+                json.dumps(SQUARE_TOPOLOGY),
+                "--snapshot",
+                "routes",
+                "--format",
+                "mermaid",
+                "--router",
+                "D",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("flowchart TD", completed.stdout)
+        self.assertIn("cost=3", completed.stdout)
+        self.assertIn("via C", completed.stdout)
 
 
 if __name__ == "__main__":

@@ -16,7 +16,22 @@
 - [x] commit and push
 - [x] append wrap-up
 
+## 2026-04-15 diagram export slice
+- [x] brief research note skipped because existing project context and networking knowledge were sufficient for this slice
+- [x] short refresh and CLI self-test captured
+- [x] add a resumable slice checklist entry
+- [x] implement Graphviz and Mermaid export for topology and route snapshots
+- [x] document diagram export usage in the project README
+- [x] add unit tests for direct export helpers and CLI diagram output
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
+
 ## Future improvements
-- [ ] add Graphviz or Mermaid export for topology and route snapshots
+- [x] add Graphviz or Mermaid export for topology and route snapshots
 - [ ] simulate periodic timers vs triggered updates explicitly
 - [ ] add count-to-infinity demo scenarios with per-round timeline artifacts

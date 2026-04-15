@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Mapping, MutableMapping, Sequence
 
 INFINITY = 16
 
@@ -60,16 +60,14 @@ def normalize_topology(topology: Mapping[str, Mapping[str, int]]) -> dict[str, d
 def initialize_tables(topology: Mapping[str, Mapping[str, int]]) -> dict[str, dict[str, Route]]:
     tables: dict[str, dict[str, Route]] = {}
     for router, neighbors in topology.items():
-        table: dict[str, Route] = {
-            router: Route(destination=router, cost=0, next_hop=router)
-        }
+        table: dict[str, Route] = {router: Route(destination=router, cost=0, next_hop=router)}
         for neighbor, cost in sorted(neighbors.items()):
             table[neighbor] = Route(destination=neighbor, cost=cost, next_hop=neighbor)
         tables[router] = table
     return tables
 
 
-def advertised_cost(route: Route, *, sender: str, recipient: str, mode: str, infinity: int) -> int | None:
+def advertised_cost(route: Route, *, recipient: str, mode: str, infinity: int) -> int | None:
     if route.destination == recipient:
         return route.cost
     if mode == "split-horizon" and route.next_hop == recipient:
@@ -97,9 +95,7 @@ def update_once(
 
     for router in sorted(topology):
         current = tables[router]
-        new_table: dict[str, Route] = {
-            router: Route(destination=router, cost=0, next_hop=router)
-        }
+        new_table: dict[str, Route] = {router: Route(destination=router, cost=0, next_hop=router)}
         for destination in all_destinations:
             if destination == router:
                 continue
@@ -113,7 +109,6 @@ def update_once(
                     continue
                 advertised = advertised_cost(
                     neighbor_route,
-                    sender=neighbor,
                     recipient=router,
                     mode=mode,
                     infinity=infinity,
@@ -182,6 +177,100 @@ def serialize_tables(tables: Mapping[str, Mapping[str, Route]]) -> dict[str, dic
     return {router: serialize_table(table) for router, table in sorted(tables.items())}
 
 
+def mermaid_id(label: str) -> str:
+    return "".join(character if character.isalnum() else "_" for character in label)
+
+
+def quote_dot(label: str) -> str:
+    return '"' + label.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def render_topology_diagram(topology: Mapping[str, Mapping[str, int]], *, diagram_format: str) -> str:
+    normalized = normalize_topology(topology)
+    edges: list[tuple[str, str, int]] = []
+    for left, neighbors in sorted(normalized.items()):
+        for right, cost in sorted(neighbors.items()):
+            if left < right:
+                edges.append((left, right, cost))
+
+    if diagram_format == "mermaid":
+        lines = ["graph LR"]
+        for router in sorted(normalized):
+            lines.append(f"    {mermaid_id(router)}[{router}]")
+        for left, right, cost in edges:
+            lines.append(f"    {mermaid_id(left)} <-->|{cost}| {mermaid_id(right)}")
+        return "\n".join(lines)
+
+    lines = ["graph DistanceVectorTopology {", "  rankdir=LR;"]
+    for router in sorted(normalized):
+        lines.append(f"  {quote_dot(router)} [shape=circle];")
+    for left, right, cost in edges:
+        lines.append(f"  {quote_dot(left)} -- {quote_dot(right)} [label={quote_dot(str(cost))}];")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def render_routes_diagram(simulation: Mapping[str, object], *, router: str | None, diagram_format: str) -> str:
+    tables = simulation["tables"]
+    if not isinstance(tables, dict):
+        raise ValueError("simulation tables payload must be a mapping")
+    routers = sorted(tables)
+    if router is not None and router not in tables:
+        raise ValueError(f"router {router!r} is not present in the routing tables")
+
+    selected = [router] if router is not None else routers
+
+    if diagram_format == "mermaid":
+        lines = ["flowchart TD"]
+        for origin in selected:
+            root = f"{mermaid_id(origin)}_root"
+            lines.append(f"    {root}(({origin}))")
+            origin_table = tables[origin]
+            for destination, route in sorted(origin_table.items()):
+                if destination == origin:
+                    continue
+                node_id = f"{mermaid_id(origin)}_{mermaid_id(destination)}"
+                state = "unreachable" if route["next_hop"] is None else f"via {route['next_hop']}"
+                lines.append(f'    {node_id}["{destination}\\ncost={route["cost"]}\\n{state}"]')
+                lines.append(f"    {root} --> {node_id}")
+        return "\n".join(lines)
+
+    lines = ["digraph DistanceVectorRoutes {", "  rankdir=LR;"]
+    for origin in selected:
+        lines.append(f"  subgraph cluster_{mermaid_id(origin)} {{")
+        lines.append(f"    label={quote_dot(f'Router {origin}')};")
+        root = quote_dot(f"{origin}::root")
+        lines.append(f"    {root} [label={quote_dot(origin)}, shape=doublecircle];")
+        origin_table = tables[origin]
+        for destination, route in sorted(origin_table.items()):
+            if destination == origin:
+                continue
+            node_name = quote_dot(f"{origin}::{destination}")
+            state = "unreachable" if route["next_hop"] is None else f"via {route['next_hop']}"
+            label = f"{destination}\\ncost={route['cost']}\\n{state}"
+            lines.append(f"    {node_name} [label={quote_dot(label)}, shape=box];")
+            lines.append(f"    {root} -> {node_name};")
+        lines.append("  }")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def export_diagram(
+    topology: Mapping[str, Mapping[str, int]],
+    *,
+    snapshot: str,
+    diagram_format: str,
+    mode: str,
+    infinity: int,
+    max_rounds: int,
+    router: str | None,
+) -> str:
+    if snapshot == "topology":
+        return render_topology_diagram(topology, diagram_format=diagram_format)
+    simulation = run_simulation(topology, mode=mode, infinity=infinity, max_rounds=max_rounds)
+    return render_routes_diagram(simulation, router=router, diagram_format=diagram_format)
+
+
 def parse_topology(raw: str) -> dict[str, dict[str, int]]:
     try:
         payload = json.loads(raw)
@@ -220,6 +309,15 @@ def build_parser() -> argparse.ArgumentParser:
     failure_parser.add_argument("--infinity", type=int, default=INFINITY)
     failure_parser.add_argument("--max-rounds", type=int, default=50)
 
+    diagram_parser = subparsers.add_parser("export-diagram", help="render topology or routing tables as Mermaid or Graphviz")
+    diagram_parser.add_argument("--topology", required=True)
+    diagram_parser.add_argument("--snapshot", default="topology", choices=["topology", "routes"])
+    diagram_parser.add_argument("--format", dest="diagram_format", default="mermaid", choices=["mermaid", "dot"])
+    diagram_parser.add_argument("--mode", default="classic", choices=["classic", "split-horizon", "poison-reverse"])
+    diagram_parser.add_argument("--infinity", type=int, default=INFINITY)
+    diagram_parser.add_argument("--max-rounds", type=int, default=50)
+    diagram_parser.add_argument("--router", help="limit route snapshots to one router")
+
     return parser
 
 
@@ -227,15 +325,15 @@ def cli(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.infinity <= 0:
+    if getattr(args, "infinity", INFINITY) <= 0:
         parser.error("--infinity must be positive")
-    if args.max_rounds <= 0:
+    if getattr(args, "max_rounds", 1) <= 0:
         parser.error("--max-rounds must be positive")
 
     topology = parse_topology(args.topology)
     if args.command == "simulate":
-        payload = run_simulation(topology, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
-    else:
+        payload: object = run_simulation(topology, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
+    elif args.command == "simulate-failure":
         left, right = args.remove_link
         updated_topology = remove_link(topology, left, right)
         before = run_simulation(topology, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
@@ -245,8 +343,21 @@ def cli(argv: Sequence[str] | None = None) -> int:
             "before": before,
             "after": after,
         }
+    else:
+        payload = export_diagram(
+            topology,
+            snapshot=args.snapshot,
+            diagram_format=args.diagram_format,
+            mode=args.mode,
+            infinity=args.infinity,
+            max_rounds=args.max_rounds,
+            router=args.router,
+        )
 
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    if isinstance(payload, str):
+        print(payload)
+    else:
+        print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 

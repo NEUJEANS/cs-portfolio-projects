@@ -42,6 +42,29 @@ python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate
   --remove-link B C
 ```
 
+## Diagram export
+
+Render the input topology as Mermaid for markdown-native docs:
+
+```bash
+python3 projects/distance-vector-routing-lab/distance_vector_routing.py export-diagram \
+  --topology '{"A":{"B":1,"D":4},"B":{"A":1,"C":2},"C":{"B":2,"D":1},"D":{"A":4,"C":1}}' \
+  --snapshot topology \
+  --format mermaid
+```
+
+Render the final routing table from one router as Graphviz DOT:
+
+```bash
+python3 projects/distance-vector-routing-lab/distance_vector_routing.py export-diagram \
+  --topology '{"A":{"B":1,"D":4},"B":{"A":1,"C":2},"C":{"B":2,"D":1},"D":{"A":4,"C":1}}' \
+  --snapshot routes \
+  --format dot \
+  --router A
+```
+
+Use Mermaid when you want diagrams that render directly in GitHub markdown, and DOT when you want a richer graph-rendering pipeline later.
+
 ## Output shape
 
 Steady-state runs return mode/config metadata, the normalized topology snapshot, final routing tables, and full round history:
