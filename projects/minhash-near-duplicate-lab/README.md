@@ -10,13 +10,14 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - now supports persisted signature indexes and benchmark runs for repeated demos
 
 ## Features
-- token normalization and word-shingle generation
+- token normalization with `word`, `code`, and `char` shingle modes
 - exact Jaccard similarity for ground-truth comparisons
 - deterministic MinHash signature generation with configurable signature length
 - LSH-style banding to surface likely duplicate pairs without brute-force comparison of every pair
 - small-corpus fallback that still checks all pairs when banding would otherwise miss every candidate in tiny demos
 - persistent signature-index export for repeated scans without recomputing signatures every time
 - incremental index refresh that reuses stored signatures for unchanged files based on content hashes
+- persisted indexes record token mode metadata so repeated scans stay compatible with the original shingling strategy
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - benchmark export support for JSON, CSV, or Markdown portfolio summaries
 - CLI output in human-readable or JSON form
@@ -32,6 +33,16 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py compare \
   --shingle-size 3 \
   --num-hashes 64 \
   --bands 8
+```
+
+Compare two code snippets using code-token shingles instead of plain word tokenization:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py compare \
+  samples/a.py samples/b.py \
+  --token-mode code \
+  --shingle-size 4 \
+  --json
 ```
 
 Scan a corpus of `.txt` files for likely duplicates:
@@ -98,6 +109,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 {
   "command": "benchmark",
   "documents_scanned": 12,
+  "token_mode": "word",
   "all_pairs": 66,
   "candidate_pairs": 9,
   "exact_pairs_above_threshold": 4,
@@ -113,6 +125,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 ```
 
 ## Interview talking points
+- why word, code-token, and character shingles each highlight different kinds of near-duplicate structure
 - why k-shingles preserve local ordering better than simple bag-of-words counts
 - how MinHash compresses large shingle sets into signatures that approximate Jaccard similarity
 - why LSH banding reduces the number of candidate pairs you need to inspect exactly
@@ -128,5 +141,6 @@ python3 -m unittest tests.test_minhash_near_duplicate
 ```
 
 ## Future improvements
-- add character-shingle and code-token modes for source-code deduplication demos
+- add optional identifier normalization for code-token mode so renamed variables collapse more aggressively
+- add mixed-language corpus presets for Markdown + code notebook demos
 - add a dry-run corpus diff summary before refresh for very large indexes

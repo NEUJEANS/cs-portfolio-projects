@@ -27,6 +27,7 @@ find_candidate_pairs = module.find_candidate_pairs
 find_candidate_pairs_from_index = module.find_candidate_pairs_from_index
 load_signature_index = module.load_signature_index
 minhash_signature = module.minhash_signature
+normalize_text = module.normalize_text
 refresh_signature_index = module.refresh_signature_index
 save_signature_index = module.save_signature_index
 benchmark_corpus = module.benchmark_corpus
@@ -42,6 +43,15 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
 
     def test_short_text_falls_back_to_single_shingle(self) -> None:
         self.assertEqual(build_shingles("distributed", size=3), {"distributed"})
+
+    def test_char_token_mode_builds_character_shingles(self) -> None:
+        self.assertEqual(build_shingles("A B C D", size=3, token_mode="char"), {"a b", " b ", "b c", " c ", "c d"})
+
+    def test_code_token_mode_splits_operators_and_identifiers(self) -> None:
+        self.assertEqual(
+            normalize_text("if (score >= limit) { total += score; }", token_mode="code")[:8],
+            ["if", "(", "score", ">=", "limit", ")", "{", "total"],
+        )
 
     def test_signature_is_deterministic_for_same_seed(self) -> None:
         shingles = {"a b", "b c", "c d"}
@@ -113,6 +123,28 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(len(reports), 1)
             self.assertTrue(reports[0].left.endswith("a.txt"))
             self.assertEqual(loaded.num_hashes, 32)
+
+    def test_code_token_mode_round_trips_in_signature_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "a.py").write_text("def total(values):\n    return sum(values)\n", encoding="utf-8")
+            (root / "b.py").write_text("def total(items):\n    return sum(items)\n", encoding="utf-8")
+            index = build_signature_index(
+                sorted(root.glob("*.py")),
+                root=root,
+                glob_pattern="*.py",
+                shingle_size=3,
+                token_mode="code",
+                num_hashes=32,
+                bands=8,
+                seed=4,
+            )
+            index_path = root / "code-index.json"
+            save_signature_index(index, index_path)
+            loaded = load_signature_index(index_path)
+            self.assertEqual(loaded.token_mode, "code")
+            reports = find_candidate_pairs_from_index(loaded, threshold=0.2)
+            self.assertEqual(len(reports), 1)
 
     def test_refresh_signature_index_reuses_unchanged_docs_and_detects_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -240,6 +272,36 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(payload["command"], "compare")
             self.assertIn("estimated_jaccard", payload)
             self.assertEqual(payload["bands"], 8)
+
+    def test_cli_compare_supports_code_token_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            left = Path(tmpdir) / "left.py"
+            right = Path(tmpdir) / "right.py"
+            left.write_text("def total(values):\n    return sum(values)\n", encoding="utf-8")
+            right.write_text("def total(items):\n    return sum(items)\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "compare",
+                    str(left),
+                    str(right),
+                    "--token-mode",
+                    "code",
+                    "--shingle-size",
+                    "3",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["token_mode"], "code")
+            self.assertGreater(payload["estimated_jaccard"], 0.3)
 
     def test_cli_corpus_json_output_lists_pairs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -414,6 +476,40 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(payload["output"], str(output))
             self.assertTrue(output.exists())
             self.assertIn("# MinHash benchmark summary", output.read_text(encoding="utf-8"))
+
+    def test_cli_benchmark_char_mode_includes_token_mode_in_export(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            output = root / "benchmark-summary.md"
+            (root / "a.txt").write_text("abcdefg hijklmn\n", encoding="utf-8")
+            (root / "b.txt").write_text("abcxefg hijklmn\n", encoding="utf-8")
+            (root / "c.txt").write_text("operating systems memory allocator\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    str(root),
+                    "--token-mode",
+                    "char",
+                    "--shingle-size",
+                    "4",
+                    "--threshold",
+                    "0.2",
+                    "--output",
+                    str(output),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["token_mode"], "char")
+            self.assertIn("Token mode: char", output.read_text(encoding="utf-8"))
 
     def test_cli_rejects_band_mismatch(self) -> None:
         completed = subprocess.run(
