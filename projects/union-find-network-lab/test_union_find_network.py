@@ -253,15 +253,17 @@ class UnionFindNetworkTests(unittest.TestCase):
             "mode": "benchmark-series",
             "summary": {"median_edges_per_second": 222.5},
             "runs": [
-                {"edges_requested": 10, "edges_per_second": 100.0},
-                {"edges_requested": 20, "edges_per_second": 200.0},
-                {"edges_requested": 30, "edges_per_second": 300.0},
+                {"edges_requested": 10, "edges_per_second": 100.0, "stats": {"largest_component": 4}},
+                {"edges_requested": 20, "edges_per_second": 200.0, "stats": {"largest_component": 8}},
+                {"edges_requested": 30, "edges_per_second": 300.0, "stats": {"largest_component": 12}},
             ],
         }
         benchmark_svg = build_svg_chart(benchmark_series, title="Benchmark demo")
         self.assertIn("<svg", benchmark_svg)
         self.assertIn("Benchmark demo", benchmark_svg)
-        self.assertIn("edges requested vs edges/second", benchmark_svg)
+        self.assertIn("largest connected component", benchmark_svg)
+        self.assertIn("Largest component size", benchmark_svg)
+        self.assertIn("Throughput", benchmark_svg)
 
         csv_import = {
             "mode": "csv-import",
@@ -299,7 +301,7 @@ class UnionFindNetworkTests(unittest.TestCase):
         self.assertIn("Union-Find", comparison_svg)
         self.assertIn("BFS recompute", comparison_svg)
 
-    def test_chart_source_loading_svg_and_markdown_export_cli(self):
+    def test_refresh_artifacts_helper_and_chart_source_loading(self):
         series = run_benchmark_series(nodes=24, edge_counts=[20, 40, 80], seed=13)
         comparison = run_recompute_comparison(nodes=20, edges=40, seed=13, checkpoint_every=10)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -318,6 +320,21 @@ class UnionFindNetworkTests(unittest.TestCase):
             json_payload = load_chart_source(json_path)
             csv_payload = load_chart_source(csv_path)
             comparison_payload = load_chart_source(comparison_json)
+
+            helper_dir = tmpdir_path / "helper"
+            helper_dir.mkdir()
+            helper_cli = helper_dir / "union_find_network.py"
+            helper_refresh = helper_dir / "refresh_artifacts.py"
+            helper_cli.write_text(MODULE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+            helper_refresh.write_text((MODULE_PATH.parent / "refresh_artifacts.py").read_text(encoding="utf-8"), encoding="utf-8")
+            benchmark_fixture = helper_dir / "sample_benchmark_report.json"
+            comparison_fixture = helper_dir / "sample_recompute_comparison.json"
+            benchmark_fixture.write_text(json.dumps(series, indent=2), encoding="utf-8")
+            comparison_fixture.write_text(json.dumps(comparison, indent=2), encoding="utf-8")
+            subprocess.run([sys.executable, str(helper_refresh)], check=True, cwd=MODULE_PATH.parent.parent.parent)
+            self.assertTrue((helper_dir / "sample_benchmark_report.svg").exists())
+            self.assertTrue((helper_dir / "sample_recompute_comparison.svg").exists())
+            self.assertTrue((helper_dir / "sample_recompute_summary.md").exists())
             self.assertEqual(json_payload["mode"], "benchmark-series")
             self.assertEqual(csv_payload["mode"], "benchmark-series-csv")
             self.assertEqual(len(csv_payload["runs"]), 3)

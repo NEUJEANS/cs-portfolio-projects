@@ -579,27 +579,40 @@ def _build_benchmark_series_svg(payload: Dict[str, object], title: str | None = 
     if not isinstance(runs, list) or not runs:
         raise ValueError("benchmark-series chart input must include a non-empty runs list")
 
-    points: List[Tuple[float, float]] = []
-    labels: List[str] = []
+    throughput_points: List[Tuple[float, float]] = []
+    largest_component_points: List[Tuple[float, float]] = []
     for run in runs:
         if not isinstance(run, dict):
             raise ValueError("benchmark-series runs must be objects")
         edges = _coerce_float(run.get("edges_requested"), "edges_requested")
         throughput = _coerce_float(run.get("edges_per_second"), "edges_per_second")
-        points.append((edges, throughput))
-        labels.append(str(int(edges)) if edges.is_integer() else f"{edges:g}")
+        largest_component = _coerce_nested_float(
+            run,
+            primary_path=("stats", "largest_component"),
+            fallback_key="stats_largest_component",
+            field_name="largest_component",
+        )
+        throughput_points.append((edges, throughput))
+        largest_component_points.append((edges, largest_component))
 
-    chart_title = title or "Union-Find benchmark throughput"
-    subtitle = "edges requested vs edges/second"
-    y_label = "Edges / second"
-    polyline, circles, x_ticks, y_ticks = _render_xy_plot(points, labels, x_axis_label="Edges requested")
+    chart_title = title or "Union-Find benchmark throughput + graph growth"
+    subtitle = "edges requested vs throughput and largest connected component"
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
     footer = (
-        f"median throughput: {summary.get('median_edges_per_second', 'n/a')} edges/s"
+        f"median throughput: {summary.get('median_edges_per_second', 'n/a')} edges/s; includes largest-component trend"
         if summary
-        else "reproducible benchmark-series artifact"
+        else "reproducible benchmark-series artifact with dual-axis portfolio chart"
     )
-    return _wrap_svg(chart_title, subtitle, y_label, polyline, circles, x_ticks, y_ticks, footer)
+    return _wrap_dual_axis_svg(
+        chart_title=chart_title,
+        subtitle=subtitle,
+        x_axis_label="Edges requested",
+        left_axis_label="Edges / second",
+        right_axis_label="Largest component size",
+        left_series={"name": "Throughput", "color": "#2563eb", "points": throughput_points},
+        right_series={"name": "Largest component", "color": "#7c3aed", "points": largest_component_points},
+        footer=footer,
+    )
 
 
 def _build_csv_import_svg(payload: Dict[str, object], title: str | None = None) -> str:
@@ -833,6 +846,117 @@ def _wrap_multi_series_svg(
 '''
 
 
+def _wrap_dual_axis_svg(
+    *,
+    chart_title: str,
+    subtitle: str,
+    x_axis_label: str,
+    left_axis_label: str,
+    right_axis_label: str,
+    left_series: Dict[str, object],
+    right_series: Dict[str, object],
+    footer: str,
+) -> str:
+    width = 960
+    height = 540
+    left = 90
+    right = 90
+    top = 90
+    bottom = 90
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+
+    left_points = left_series.get("points")
+    right_points = right_series.get("points")
+    if not isinstance(left_points, list) or not left_points:
+        raise ValueError("dual-axis chart requires a non-empty left series")
+    if not isinstance(right_points, list) or not right_points:
+        raise ValueError("dual-axis chart requires a non-empty right series")
+
+    all_x = [point[0] for point in [*left_points, *right_points]]
+    min_x = min(all_x)
+    max_x = max(all_x)
+    if max_x == min_x:
+        max_x += 1.0
+
+    left_max = max(point[1] for point in left_points)
+    right_max = max(point[1] for point in right_points)
+    if left_max == 0:
+        left_max = 1.0
+    if right_max == 0:
+        right_max = 1.0
+
+    def project_x(value: float) -> float:
+        return left + ((value - min_x) / (max_x - min_x)) * plot_width
+
+    def project_left_y(value: float) -> float:
+        return top + plot_height - (value / left_max) * plot_height
+
+    def project_right_y(value: float) -> float:
+        return top + plot_height - (value / right_max) * plot_height
+
+    x_tick_values: List[float] = []
+    for value in [point[0] for point in left_points]:
+        if value not in x_tick_values:
+            x_tick_values.append(value)
+
+    x_ticks = []
+    for value in x_tick_values:
+        x = project_x(value)
+        label = str(int(value)) if float(value).is_integer() else f"{value:g}"
+        x_ticks.append(f'<line x1="{x:.1f}" y1="{top + plot_height:.1f}" x2="{x:.1f}" y2="{top + plot_height + 8:.1f}" stroke="#6b7280" stroke-width="1" />')
+        x_ticks.append(f'<text x="{x:.1f}" y="{top + plot_height + 28:.1f}" text-anchor="middle" font-size="12" fill="#374151">{_xml_escape(label)}</text>')
+    x_ticks.append(f'<text x="{left + plot_width / 2:.1f}" y="{height - 24:.1f}" text-anchor="middle" font-size="14" fill="#111827">{_xml_escape(x_axis_label)}</text>')
+
+    left_ticks = []
+    right_ticks = []
+    for step in range(5):
+        left_value = left_max * step / 4
+        y = project_left_y(left_value)
+        left_label = f"{left_value:.0f}" if left_max >= 10 else f"{left_value:.2f}".rstrip("0").rstrip(".")
+        left_ticks.append(f'<line x1="{left:.1f}" y1="{y:.1f}" x2="{left + plot_width:.1f}" y2="{y:.1f}" stroke="#e5e7eb" stroke-width="1" />')
+        left_ticks.append(f'<text x="{left - 12:.1f}" y="{y + 4:.1f}" text-anchor="end" font-size="12" fill="#2563eb">{_xml_escape(left_label)}</text>')
+        right_value = right_max * step / 4
+        right_label = f"{right_value:.0f}" if right_max >= 10 else f"{right_value:.2f}".rstrip("0").rstrip(".")
+        right_ticks.append(f'<text x="{left + plot_width + 12:.1f}" y="{y + 4:.1f}" text-anchor="start" font-size="12" fill="#7c3aed">{_xml_escape(right_label)}</text>')
+
+    def render_series(points: List[Tuple[float, float]], color: str, projector: object) -> str:
+        projected = [(project_x(x), projector(y)) for x, y in points]  # type: ignore[misc]
+        polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in projected)
+        circles = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="{_xml_escape(color)}" />' for x, y in projected)
+        return f'<polyline fill="none" stroke="{_xml_escape(color)}" stroke-width="3" points="{polyline}" />{circles}'
+
+    left_color = str(left_series.get("color", "#2563eb"))
+    right_color = str(right_series.get("color", "#7c3aed"))
+    legend = [
+        f'<rect x="640" y="82" width="14" height="14" fill="{_xml_escape(left_color)}" rx="2" />',
+        f'<text x="662" y="94" font-size="13" fill="#1f2937">{_xml_escape(left_series.get("name", "Left series"))}</text>',
+        f'<rect x="640" y="104" width="14" height="14" fill="{_xml_escape(right_color)}" rx="2" />',
+        f'<text x="662" y="116" font-size="13" fill="#1f2937">{_xml_escape(right_series.get("name", "Right series"))}</text>',
+    ]
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title>{_xml_escape(chart_title)}</title>
+  <desc>{_xml_escape(subtitle)}</desc>
+  <rect width="960" height="540" fill="#ffffff" />
+  <text x="90" y="42" font-size="26" font-weight="700" fill="#111827">{_xml_escape(chart_title)}</text>
+  <text x="90" y="68" font-size="14" fill="#4b5563">{_xml_escape(subtitle)}</text>
+  <line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_height}" stroke="#111827" stroke-width="2" />
+  <line x1="{left + plot_width}" y1="{top}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="#111827" stroke-width="2" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="#111827" stroke-width="2" />
+  {' '.join(left_ticks)}
+  {' '.join(right_ticks)}
+  <text x="24" y="270" font-size="14" fill="#2563eb" transform="rotate(-90 24 270)" text-anchor="middle">{_xml_escape(left_axis_label)}</text>
+  <text x="936" y="270" font-size="14" fill="#7c3aed" transform="rotate(90 936 270)" text-anchor="middle">{_xml_escape(right_axis_label)}</text>
+  {render_series(left_points, left_color, project_left_y)}
+  {render_series(right_points, right_color, project_right_y)}
+  {' '.join(x_ticks)}
+  {' '.join(legend)}
+  <text x="90" y="505" font-size="13" fill="#4b5563">{_xml_escape(footer)}</text>
+</svg>
+'''
+
+
 def _wrap_svg(
     title: str,
     subtitle: str,
@@ -866,6 +990,19 @@ def _coerce_float(value: object, field_name: str) -> float:
         return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError) as exc:
         raise ValueError(f"chart input field {field_name} must be numeric") from exc
+
+
+def _coerce_nested_float(
+    row: Dict[str, object],
+    *,
+    primary_path: Tuple[str, str],
+    fallback_key: str,
+    field_name: str,
+) -> float:
+    nested = row.get(primary_path[0])
+    if isinstance(nested, dict) and primary_path[1] in nested:
+        return _coerce_float(nested.get(primary_path[1]), field_name)
+    return _coerce_float(row.get(fallback_key), field_name)
 
 
 def _xml_escape(value: object) -> str:

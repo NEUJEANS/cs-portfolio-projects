@@ -103,6 +103,13 @@ python3 projects/union-find-network-lab/union_find_network.py \
 
 Use this to regenerate charts from checked-in artifacts without rerunning the benchmark itself.
 
+### Refresh committed sample artifacts
+```bash
+python3 projects/union-find-network-lab/refresh_artifacts.py
+```
+
+This re-renders the committed benchmark/comparison SVGs and refreshes the Markdown comparison summary for README/static-site workflows.
+
 ### Export a Markdown portfolio summary from the comparison artifact
 ```bash
 python3 projects/union-find-network-lab/union_find_network.py \

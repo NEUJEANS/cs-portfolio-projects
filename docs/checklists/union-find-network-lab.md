@@ -64,7 +64,24 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Dual-axis benchmark artifact slice (2026-04-15 15:51 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick `union-find-network-lab` again because the remaining portfolio gap was a missing combined benchmark story for throughput plus graph growth
+- [x] skip external web research because this is a direct extension of the existing artifact/export workflow
+- [x] do a short SVG/dual-axis chart refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add dual-axis benchmark chart output combining throughput and largest-component growth
+- [x] keep chart re-rendering compatible with committed CSV and JSON artifacts
+- [x] add a tiny sample-artifact refresh helper for static portfolio publishing
+- [x] refresh README examples and committed sample artifacts
+- [x] expand automated coverage for benchmark chart rendering and helper workflow
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+
 ## Next slice candidates
-- [ ] add multi-series chart output so component-count and throughput curves can share one artifact
-- [ ] add a tiny README/chart refresh helper for static portfolio publishing
+- [ ] add auto-generated README snippets or static-site includes that pull headline metrics directly from the committed artifacts
 
