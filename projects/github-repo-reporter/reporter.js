@@ -1,4 +1,6 @@
+const fs = require('fs/promises');
 const https = require('https');
+const path = require('path');
 
 const DEFAULT_USER_AGENT = 'cs-portfolio-projects';
 
@@ -117,7 +119,7 @@ function normalizeRepo(repo) {
     watchers: repo.watchers_count,
     openIssues: repo.open_issues_count,
     language: repo.language,
-    topics: repo.topics || [],
+    topics: Array.isArray(repo.topics) ? [...new Set(repo.topics.filter(Boolean))] : [],
     isFork: repo.fork,
     archived: repo.archived,
     updatedAt: repo.updated_at,
@@ -135,29 +137,59 @@ function applyRepoFilters(repos, options = {}) {
   });
 }
 
+function countBy(items, getKeys) {
+  return items.reduce((acc, item) => {
+    const keys = getKeys(item);
+    for (const key of keys) {
+      acc[key] = (acc[key] || 0) + 1;
+    }
+    return acc;
+  }, {});
+}
+
+function sortObjectCounts(counts) {
+  return Object.fromEntries(
+    Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  );
+}
+
 function summarize(repos, options = {}) {
   const topN = Number.isInteger(options.topN) && options.topN > 0 ? options.topN : 5;
   const safeRepos = Array.isArray(repos) ? repos : [];
   const totalStars = safeRepos.reduce((sum, repo) => sum + repo.stars, 0);
-  const languageCounts = safeRepos.reduce((acc, repo) => {
-    const key = repo.language || 'Unknown';
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
+  const totalForks = safeRepos.reduce((sum, repo) => sum + repo.forks, 0);
+  const totalWatchers = safeRepos.reduce((sum, repo) => sum + repo.watchers, 0);
+  const totalOpenIssues = safeRepos.reduce((sum, repo) => sum + repo.openIssues, 0);
+  const totalSizeKb = safeRepos.reduce((sum, repo) => sum + repo.sizeKb, 0);
+
+  const languageCounts = sortObjectCounts(countBy(safeRepos, repo => [repo.language || 'Unknown']));
+  const topicCounts = sortObjectCounts(countBy(safeRepos, repo => repo.topics));
 
   const mostRecentPush = safeRepos
     .filter(repo => repo.pushedAt)
     .sort((a, b) => new Date(b.pushedAt) - new Date(a.pushedAt))[0] || null;
 
+  const topStarred = [...safeRepos].sort((a, b) => b.stars - a.stars || a.name.localeCompare(b.name)).slice(0, topN);
+  const recentlyUpdated = [...safeRepos].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, topN);
+  const topTopics = Object.entries(topicCounts)
+    .slice(0, topN)
+    .map(([topic, count]) => ({ topic, count }));
+
   return {
     count: safeRepos.length,
     totalStars,
     averageStars: safeRepos.length ? Number((totalStars / safeRepos.length).toFixed(2)) : 0,
-    topStarred: [...safeRepos].sort((a, b) => b.stars - a.stars || a.name.localeCompare(b.name)).slice(0, topN),
-    recentlyUpdated: [...safeRepos].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, topN),
-    languages: Object.fromEntries(
-      Object.entries(languageCounts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    ),
+    totalForks,
+    averageForks: safeRepos.length ? Number((totalForks / safeRepos.length).toFixed(2)) : 0,
+    totalWatchers,
+    totalOpenIssues,
+    totalSizeKb,
+    totalSizeMb: Number((totalSizeKb / 1024).toFixed(2)),
+    topStarred,
+    recentlyUpdated,
+    languages: languageCounts,
+    topics: topicCounts,
+    topTopics,
     forkCount: safeRepos.filter(repo => repo.isFork).length,
     archivedCount: safeRepos.filter(repo => repo.archived).length,
     mostRecentPush
@@ -176,13 +208,27 @@ function formatTextSummary(summary) {
     `Repositories: ${summary.count}`,
     `Total stars: ${summary.totalStars}`,
     `Average stars/repo: ${summary.averageStars}`,
-    `Forks included: ${summary.forkCount}`,
-    `Archived included: ${summary.archivedCount}`,
+    `Total forks across result set: ${summary.totalForks}`,
+    `Average forks/repo: ${summary.averageForks}`,
+    `Total watchers across result set: ${summary.totalWatchers}`,
+    `Total open issues across result set: ${summary.totalOpenIssues}`,
+    `Estimated code size: ${summary.totalSizeMb} MB (${summary.totalSizeKb} KB)`,
+    `Fork repos included: ${summary.forkCount}`,
+    `Archived repos included: ${summary.archivedCount}`,
     'Languages:'
   ];
 
   for (const [language, count] of Object.entries(summary.languages)) {
     lines.push(`- ${language}: ${count}`);
+  }
+
+  lines.push('Top topics:');
+  if (summary.topTopics.length) {
+    for (const topic of summary.topTopics) {
+      lines.push(`- ${topic.topic}: ${topic.count}`);
+    }
+  } else {
+    lines.push('- none');
   }
 
   lines.push('Top starred:');
@@ -202,6 +248,10 @@ function formatMarkdownSummary(summary) {
     .map(([language, count]) => `| ${language} | ${count} |`)
     .join('\n') || '| None | 0 |';
 
+  const topicRows = summary.topTopics
+    .map(topic => `| ${topic.topic} | ${topic.count} |`)
+    .join('\n') || '| None | 0 |';
+
   const topRows = summary.topStarred
     .map(repo => `| [${repo.fullName}](${repo.url}) | ${repo.stars} | ${repo.language || 'Unknown'} | ${repo.updatedAt} |`)
     .join('\n') || '| None | 0 | Unknown | n/a |';
@@ -212,6 +262,11 @@ function formatMarkdownSummary(summary) {
     `- Repositories: **${summary.count}**`,
     `- Total stars: **${summary.totalStars}**`,
     `- Average stars per repo: **${summary.averageStars}**`,
+    `- Total forks across result set: **${summary.totalForks}**`,
+    `- Average forks per repo: **${summary.averageForks}**`,
+    `- Total watchers across result set: **${summary.totalWatchers}**`,
+    `- Total open issues across result set: **${summary.totalOpenIssues}**`,
+    `- Estimated code size: **${summary.totalSizeMb} MB** (${summary.totalSizeKb} KB)`,
     `- Fork repos included in result set: **${summary.forkCount}**`,
     `- Archived repos included in result set: **${summary.archivedCount}**`,
     summary.mostRecentPush
@@ -224,12 +279,36 @@ function formatMarkdownSummary(summary) {
     '| --- | ---: |',
     languageRows,
     '',
+    '## Top Topics',
+    '',
+    '| Topic | Repositories |',
+    '| --- | ---: |',
+    topicRows,
+    '',
     '## Top Starred',
     '',
     '| Repository | Stars | Language | Updated |',
     '| --- | ---: | --- | --- |',
     topRows
   ].join('\n');
+}
+
+async function writeOutputIfRequested(output, outPath) {
+  if (!outPath) {
+    return;
+  }
+
+  const resolved = path.resolve(outPath);
+  await fs.mkdir(path.dirname(resolved), { recursive: true });
+  await fs.writeFile(resolved, output, 'utf8');
+}
+
+function requireArgValue(args, index, flag) {
+  const value = args[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`${flag} requires a value`);
+  }
+  return value;
 }
 
 function parseArgs(argv) {
@@ -242,7 +321,8 @@ function parseArgs(argv) {
     perPage: 100,
     sort: 'updated',
     direction: 'desc',
-    subjectType: 'user'
+    subjectType: 'user',
+    outPath: null
   };
 
   let subject = null;
@@ -261,22 +341,30 @@ function parseArgs(argv) {
     } else if (arg === '--org') {
       options.subjectType = 'org';
     } else if (arg === '--format') {
-      options.format = args[++index];
+      options.format = requireArgValue(args, index, '--format');
+      index += 1;
     } else if (arg === '--language') {
-      options.language = args[++index];
+      options.language = requireArgValue(args, index, '--language');
+      index += 1;
     } else if (arg === '--top') {
-      options.topN = Number.parseInt(args[++index], 10);
+      options.topN = Number.parseInt(requireArgValue(args, index, '--top'), 10);
+      index += 1;
     } else if (arg === '--sort') {
-      options.sort = args[++index];
+      options.sort = requireArgValue(args, index, '--sort');
+      index += 1;
     } else if (arg === '--direction') {
-      options.direction = args[++index];
+      options.direction = requireArgValue(args, index, '--direction');
+      index += 1;
+    } else if (arg === '--out') {
+      options.outPath = requireArgValue(args, index, '--out');
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
 
   if (!subject) {
-    throw new Error('usage: node reporter.js <username-or-org> [--org] [--format json|text|markdown] [--language <name>] [--top <n>] [--include-forks] [--include-archived]');
+    throw new Error('usage: node reporter.js <username-or-org> [--org] [--format json|text|markdown] [--language <name>] [--top <n>] [--include-forks] [--include-archived] [--out <file>]');
   }
 
   if (!['json', 'text', 'markdown'].includes(options.format)) {
@@ -287,6 +375,14 @@ function parseArgs(argv) {
     throw new Error('--top must be a positive integer');
   }
 
+  if (!['created', 'updated', 'pushed', 'full_name'].includes(options.sort)) {
+    throw new Error('--sort must be one of: created, updated, pushed, full_name');
+  }
+
+  if (!['asc', 'desc'].includes(options.direction)) {
+    throw new Error('--direction must be one of: asc, desc');
+  }
+
   return { subject, options };
 }
 
@@ -294,7 +390,9 @@ async function main() {
   const { subject, options } = parseArgs(process.argv);
   const repos = await fetchRepos(subject, options);
   const summary = summarize(repos, options);
-  console.log(formatSummary(summary, options));
+  const output = formatSummary(summary, options);
+  await writeOutputIfRequested(output, options.outPath);
+  console.log(output);
 }
 
 if (require.main === module) {
@@ -316,5 +414,7 @@ module.exports = {
   normalizeRepo,
   parseArgs,
   parseLinkHeader,
-  summarize
+  requireArgValue,
+  summarize,
+  writeOutputIfRequested
 };
