@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-from notes_search import DEFAULT_INDEX_FILENAME, INDEX_VERSION, index_notes, search_notes
+from notes_search import DEFAULT_INDEX_FILENAME, INDEX_VERSION, build_editor_command, index_notes, search_notes
 
 
 class NotesSearchTests(unittest.TestCase):
@@ -120,9 +120,9 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(
                 notes[0]['sections'],
                 [
-                    {'level': 1, 'heading': 'Distributed Systems', 'anchor': 'distributed-systems', 'content': 'Overview'},
-                    {'level': 2, 'heading': 'Failure Detection', 'anchor': 'failure-detection', 'content': 'Timeout notes'},
-                    {'level': 2, 'heading': 'Failure Detection', 'anchor': 'failure-detection-1', 'content': 'Phi accrual'},
+                    {'level': 1, 'heading': 'Distributed Systems', 'anchor': 'distributed-systems', 'start_line': 1, 'content': 'Overview'},
+                    {'level': 2, 'heading': 'Failure Detection', 'anchor': 'failure-detection', 'start_line': 3, 'content': 'Timeout notes'},
+                    {'level': 2, 'heading': 'Failure Detection', 'anchor': 'failure-detection-1', 'start_line': 5, 'content': 'Phi accrual'},
                 ],
             )
 
@@ -200,6 +200,7 @@ class NotesSearchTests(unittest.TestCase):
             result = search_notes(index_notes(root), 'phi accrual')[0]
 
             self.assertEqual(result['section_match']['path_with_anchor'], 'systems.md#failure-detection')
+            self.assertEqual(result['section_match']['line_number'], 3)
             self.assertIn('Failure Detection (#failure-detection)', result['snippet'])
 
     def test_boolean_and_phrase_queries_filter_results(self):
@@ -312,9 +313,57 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(payload[0]['section_match']['path_with_anchor'], 'db.md#covering-indexes')
             self.assertEqual(payload[0]['sections'][1]['anchor'], 'covering-indexes')
 
+    def test_build_editor_command_uses_line_aware_presets(self):
+        note = {
+            'path': 'systems.md',
+            'section_match': {'path': 'systems.md', 'path_with_anchor': 'systems.md#failure-detection', 'line_number': 12},
+        }
+
+        vscode_command = build_editor_command(note, editor='code --reuse-window', base_directory='/tmp/notes')
+        vim_command = build_editor_command(note, editor='vim', base_directory='/tmp/notes')
+
+        self.assertEqual(vscode_command[:2], ['code', '--reuse-window'])
+        self.assertEqual(vscode_command[2], '--goto')
+        self.assertTrue(vscode_command[3].endswith('/tmp/notes/systems.md:12'))
+        self.assertEqual(vim_command[0], 'vim')
+        self.assertEqual(vim_command[1], '+12')
+        self.assertTrue(vim_command[2].endswith('/tmp/notes/systems.md'))
+
+    def test_cli_json_output_includes_editor_command_and_line_number(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\nOverview\n## Failure Detection\nHeartbeat timeout and phi accrual notes.',
+                encoding='utf-8',
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'notes_search.py',
+                    str(root),
+                    'phi accrual',
+                    '--json',
+                    '--editor',
+                    'code',
+                ],
+                cwd=Path(__file__).resolve().parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload[0]['section_match']['line_number'], 3)
+            self.assertEqual(payload[0]['open_command'][0], 'code')
+            self.assertEqual(payload[0]['open_command'][1], '--goto')
+            self.assertTrue(payload[0]['open_command'][2].endswith('systems.md:3'))
+
     def test_default_index_filename_constant(self):
         self.assertEqual(DEFAULT_INDEX_FILENAME, '.notes_search_index.json')
 
 
 if __name__ == '__main__':
     unittest.main()
+

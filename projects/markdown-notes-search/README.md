@@ -1,7 +1,7 @@
 # markdown-notes-search
 
 ## Overview
-Search Markdown notes by filename, inline tags, YAML-style front matter tags, headings, backlinks, and full-text matches. Results are ranked so stronger matches surface first, and each hit includes a contextual snippet for quick scanning. The CLI also supports quoted phrase queries, boolean filtering, backlink-aware navigation, section-level anchor hints, and an optional persistent index file for larger note vaults.
+Search Markdown notes by filename, inline tags, YAML-style front matter tags, headings, backlinks, and full-text matches. Results are ranked so stronger matches surface first, and each hit includes a contextual snippet for quick scanning. The CLI also supports quoted phrase queries, boolean filtering, backlink-aware navigation, section-level anchor hints, generated editor jump commands, and an optional persistent index file for larger note vaults.
 
 ## Why it is portfolio-worthy
 - demonstrates text indexing, lightweight information retrieval, query parsing, and CLI product design
@@ -29,7 +29,7 @@ Search Markdown notes by filename, inline tags, YAML-style front matter tags, he
 - automatically refresh cached entries for changed files and drop deleted files from the index
 - parse `[[wikilinks]]` and standard Markdown links to populate backlinks
 - emit plain text or JSON output, with optional backlink and section-anchor display in the terminal
-- include best-match `path#anchor` metadata so other tools or editors can jump straight to the relevant heading
+- include best-match `path#anchor` metadata, section line numbers, and generated editor commands so other tools or editors can jump straight to the relevant heading
 - limit output for focused workflows
 
 ## Usage
@@ -42,6 +42,7 @@ python3 notes_search.py notes '"systems design" OR architecture' --recursive --j
 python3 notes_search.py notes graphs --recursive --index-file .notes_search_index.json
 python3 notes_search.py notes graphs --recursive --show-backlinks
 python3 notes_search.py notes "phi accrual" --recursive --show-sections
+python3 notes_search.py notes "phi accrual" --recursive --show-sections --show-open-command --editor "code --reuse-window"
 python3 notes_search.py notes graphs --recursive --index-file .notes_search_index.json --rebuild-index
 ```
 
@@ -49,7 +50,7 @@ python3 notes_search.py notes graphs --recursive --index-file .notes_search_inde
 ```text
 school/systems/distributed.md (score=166) [#distributed #systems]
   Failure Detection (#failure-detection): Heartbeat timeout and phi accrual notes…
-  section: school/systems/distributed.md#failure-detection
+  section: school/systems/distributed.md#failure-detection:7
 ```
 
 ## Query notes
@@ -75,7 +76,13 @@ school/systems/distributed.md (score=166) [#distributed #systems]
 python3 -m unittest discover -s . -p "test_*.py"
 ```
 
+## Editor jump notes
+- pass `--show-open-command` to print a ready-to-run editor command beside each text result
+- use `--editor "code --reuse-window"` (or `vim`, `nvim`, `nano`, `subl`, etc.) to generate editor-specific jump commands
+- pass `--open-result` to launch the top result immediately in the configured editor
+- JSON output includes `section_match.line_number` and `open_command` for shell scripts or TUI wrappers
+
 ## Future Improvements
 - add a TUI browsing mode with preview panes
 - support richer incremental posting-list structures instead of whole-note JSON cache entries
-- add open-in-editor actions for section matches in common terminal/editor workflows
+- add multi-result interactive selection instead of opening only the top hit

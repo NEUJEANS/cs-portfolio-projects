@@ -1,6 +1,9 @@
 import argparse
 import json
+import os
 import re
+import shlex
+import subprocess
 from pathlib import Path
 
 TAG_RE = re.compile(r'(?<!\w)#([A-Za-z0-9_-]+)')
@@ -83,7 +86,7 @@ def extract_sections(text):
     slug_counts = {}
     lines = text.splitlines()
 
-    for line in lines:
+    for line_number, line in enumerate(lines, start=1):
         match = HEADING_RE.match(line.strip())
         if match:
             level = len(match.group(1))
@@ -95,6 +98,7 @@ def extract_sections(text):
                 'level': level,
                 'heading': heading,
                 'anchor': anchor,
+                'start_line': line_number,
                 'lines': [],
             }
             sections.append(section)
@@ -487,7 +491,9 @@ def search_notes(notes, query, limit=None):
             result['section_match'] = {
                 'heading': best_section['heading'],
                 'anchor': best_section['anchor'],
+                'path': note['path'],
                 'path_with_anchor': f"{note['path']}#{best_section['anchor']}",
+                'line_number': best_section.get('start_line'),
             }
         results.append(result)
 
@@ -497,7 +503,35 @@ def search_notes(notes, query, limit=None):
     return results
 
 
-def format_result(note, show_backlinks=False, show_section_match=False):
+def build_editor_command(note, editor=None, base_directory=None):
+    editor_value = editor or os.environ.get('VISUAL') or os.environ.get('EDITOR') or 'vi'
+    parts = shlex.split(editor_value)
+    if not parts:
+        raise ValueError('editor command must not be empty')
+
+    target = note.get('section_match') or {}
+    line_number = target.get('line_number')
+    relative_path = target.get('path') or note['path']
+    resolved_path = Path(base_directory, relative_path).resolve() if base_directory else Path(relative_path).resolve()
+    editor_name = Path(parts[0]).name.lower()
+
+    if line_number:
+        if editor_name in {'code', 'code-insiders', 'codium', 'cursor', 'windsurf'}:
+            return [*parts, '--goto', f'{resolved_path}:{line_number}']
+        if editor_name in {'subl', 'sublime_text'}:
+            return [*parts, f'{resolved_path}:{line_number}']
+        if editor_name in {'vim', 'nvim', 'vi', 'nano', 'less', 'more'}:
+            return [*parts, f'+{line_number}', str(resolved_path)]
+    return [*parts, str(resolved_path)]
+
+
+def open_result_in_editor(note, editor=None, base_directory=None):
+    command = build_editor_command(note, editor=editor, base_directory=base_directory)
+    subprocess.Popen(command)
+    return command
+
+
+def format_result(note, show_backlinks=False, show_section_match=False, show_open_command=False, editor=None, base_directory=None):
     tags = f" [{' '.join('#' + tag for tag in note['tags'])}]" if note['tags'] else ''
     snippet = f"\n  {note['snippet']}" if note.get('snippet') else ''
     backlinks = ''
@@ -505,8 +539,14 @@ def format_result(note, show_backlinks=False, show_section_match=False):
         backlinks = f"\n  backlinks: {', '.join(note['backlinks'])}"
     section = ''
     if show_section_match and note.get('section_match'):
-        section = f"\n  section: {note['section_match']['path_with_anchor']}"
-    return f"{note['path']} (score={note['score']}){tags}{snippet}{section}{backlinks}"
+        line_number = note['section_match'].get('line_number')
+        line_suffix = f':{line_number}' if line_number else ''
+        section = f"\n  section: {note['section_match']['path_with_anchor']}{line_suffix}"
+    open_command = ''
+    if show_open_command:
+        command = build_editor_command(note, editor=editor, base_directory=base_directory)
+        open_command = f"\n  open: {' '.join(shlex.quote(part) for part in command)}"
+    return f"{note['path']} (score={note['score']}){tags}{snippet}{section}{backlinks}{open_command}"
 
 
 def main(argv=None):
@@ -518,6 +558,9 @@ def main(argv=None):
     parser.add_argument('--json', action='store_true', help='emit machine-readable JSON')
     parser.add_argument('--show-backlinks', action='store_true', help='include backlink references in plain-text output')
     parser.add_argument('--show-sections', action='store_true', help='include the best matching section anchor in plain-text output')
+    parser.add_argument('--show-open-command', action='store_true', help='include an editor command for each plain-text result')
+    parser.add_argument('--editor', default=None, help='editor command to use for generated open commands or --open-result')
+    parser.add_argument('--open-result', action='store_true', help='launch the top result in an editor after printing results')
     parser.add_argument(
         '--index-file',
         default=None,
@@ -546,6 +589,7 @@ def main(argv=None):
                 'score': note['score'],
                 'snippet': note['snippet'],
                 'section_match': note.get('section_match'),
+                'open_command': build_editor_command(note, editor=args.editor, base_directory=args.directory),
             }
             for note in results
         ]
@@ -553,7 +597,19 @@ def main(argv=None):
         return
 
     for note in results:
-        print(format_result(note, show_backlinks=args.show_backlinks, show_section_match=args.show_sections))
+        print(
+            format_result(
+                note,
+                show_backlinks=args.show_backlinks,
+                show_section_match=args.show_sections,
+                show_open_command=args.show_open_command,
+                editor=args.editor,
+                base_directory=args.directory,
+            )
+        )
+
+    if args.open_result and results:
+        open_result_in_editor(results[0], editor=args.editor, base_directory=args.directory)
 
 
 if __name__ == '__main__':

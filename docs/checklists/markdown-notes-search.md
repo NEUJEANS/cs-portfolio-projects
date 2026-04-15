@@ -85,3 +85,20 @@ Last updated: 2026-04-14
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+
+
+## Vertical slice 6 — editor jump commands
+- [x] identify markdown-notes-search as still worth another slice because section anchors were exposed but terminal workflows still lacked a practical editor jump action
+- [x] do brief research on CLI editor command patterns and line-aware jump conventions
+- [x] do short Python `shlex` / subprocess refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add section line metadata so search results can point editors at the matching heading
+- [x] add generated editor open commands for common editors plus CLI flags to print or launch them
+- [x] expose editor commands and line metadata in JSON output for automation
+- [x] expand automated coverage for line metadata, editor command generation, and CLI JSON output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
