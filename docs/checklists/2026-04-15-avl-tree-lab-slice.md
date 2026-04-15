@@ -7,5 +7,5 @@
 - [x] run tests and inspect CLI output
 - [x] perform three review passes and capture fixes
 - [x] run secret scan
-- [ ] commit and push
-- [ ] write wrap-up note with commit hash and next step
+- [x] commit and push
+- [x] write wrap-up note with commit hash and next step
