@@ -48,6 +48,18 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertIn("uniform_random", payload["workloads"])
         self.assertIn("hotset", payload["workloads"])
 
+    def test_split_returns_values_around_missing_pivot(self) -> None:
+        tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
+        result = tree.split(11)
+        self.assertFalse(result.found)
+        self.assertEqual(result.left, [2, 4, 7, 10])
+        self.assertEqual(result.right, [12, 15, 18])
+
+    def test_join_from_values_rebuilds_valid_tree(self) -> None:
+        tree = SplayTree.join_from_values([1, 3, 5], [8, 13, 21])
+        self.assertEqual(tree.inorder(), [1, 3, 5, 8, 13, 21])
+        self.assertEqual(tree.size, 6)
+
 
 class SplayTreeCliTests(unittest.TestCase):
     def test_build_and_access_cli(self) -> None:
@@ -177,6 +189,86 @@ class SplayTreeCliTests(unittest.TestCase):
         payload = json.loads(benchmark.stdout)
         self.assertEqual(payload["workloads"]["hotset"]["queries"], 128)
         self.assertGreater(payload["takeaway"]["hotset_comparison_gap"], 0)
+
+    def test_split_and_join_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            snapshot = tmp_path / "splay.json"
+            subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "build",
+                    "--input",
+                    str(PROJECT_DIR / "sample_values.txt"),
+                    "--output",
+                    str(snapshot),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            split = subprocess.run(
+                ["python3", str(PROJECT_DIR / "splay_tree_lab.py"), "split", "--snapshot", str(snapshot), "11"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            split_payload = json.loads(split.stdout)
+            self.assertEqual(split_payload["left"], [2, 4, 7, 10])
+            self.assertEqual(split_payload["right"], [12, 15, 18])
+
+            left_input = tmp_path / "left.txt"
+            right_input = tmp_path / "right.txt"
+            joined_snapshot = tmp_path / "joined.json"
+            left_input.write_text("1\n3\n5\n")
+            right_input.write_text("8\n13\n21\n")
+            join = subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "join",
+                    "--left-input",
+                    str(left_input),
+                    "--right-input",
+                    str(right_input),
+                    "--output",
+                    str(joined_snapshot),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            join_payload = json.loads(join.stdout)
+            self.assertEqual(join_payload["values"], [1, 3, 5, 8, 13, 21])
+            self.assertEqual(json.loads(joined_snapshot.read_text())["size"], 6)
+
+    def test_join_cli_rejects_overlapping_ranges(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            left_input = tmp_path / "left.txt"
+            right_input = tmp_path / "right.txt"
+            joined_snapshot = tmp_path / "joined.json"
+            left_input.write_text("1\n5\n9\n")
+            right_input.write_text("4\n8\n12\n")
+            join = subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "join",
+                    "--left-input",
+                    str(left_input),
+                    "--right-input",
+                    str(right_input),
+                    "--output",
+                    str(joined_snapshot),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(join.returncode, 2)
+            self.assertIn("left values must all be smaller", join.stderr)
 
 
 if __name__ == "__main__":

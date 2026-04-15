@@ -11,6 +11,14 @@ from typing import Iterable
 
 
 @dataclass
+class SplitResult:
+    pivot: int
+    found: bool
+    left: list[int]
+    right: list[int]
+
+
+@dataclass
 class Node:
     key: int
     left: Node | None = None
@@ -143,6 +151,84 @@ class SplayTree:
         self.root = self._join(left, right)
         self.size -= 1
         return True
+
+    def split(self, pivot: int) -> SplitResult:
+        if self.root is None:
+            return SplitResult(pivot=pivot, found=False, left=[], right=[])
+        found = self.find(pivot)
+        assert self.root is not None
+        if found:
+            left_root = self.root.left
+            right_root = self.root.right
+            if left_root is not None:
+                left_root.parent = None
+            if right_root is not None:
+                right_root.parent = None
+            self.root.left = None
+            self.root.right = None
+            return SplitResult(
+                pivot=pivot,
+                found=True,
+                left=SplayTree._inorder_from(left_root),
+                right=SplayTree._inorder_from(right_root),
+            )
+
+        root = self.root
+        if root.key < pivot:
+            left_root = root
+            right_root = root.right
+            left_root.right = None
+            if right_root is not None:
+                right_root.parent = None
+            return SplitResult(
+                pivot=pivot,
+                found=False,
+                left=SplayTree._inorder_from(left_root),
+                right=SplayTree._inorder_from(right_root),
+            )
+
+        right_root = root
+        left_root = root.left
+        right_root.left = None
+        if left_root is not None:
+            left_root.parent = None
+        return SplitResult(
+            pivot=pivot,
+            found=False,
+            left=SplayTree._inorder_from(left_root),
+            right=SplayTree._inorder_from(right_root),
+        )
+
+    @classmethod
+    def join_from_values(cls, left_values: Iterable[int], right_values: Iterable[int]) -> "SplayTree":
+        left_tree = cls(left_values)
+        right_tree = cls(right_values)
+        if left_tree.root is not None and right_tree.root is not None:
+            left_max = left_tree.inorder()[-1]
+            right_min = right_tree.inorder()[0]
+            if left_max >= right_min:
+                raise ValueError("left values must all be smaller than right values")
+        tree = cls()
+        tree.root = tree._join(left_tree.root, right_tree.root)
+        tree.size = len(tree.inorder())
+        tree.rotation_count = left_tree.rotation_count + right_tree.rotation_count + tree.rotation_count
+        tree.splay_steps = left_tree.splay_steps + right_tree.splay_steps + tree.splay_steps
+        tree.comparison_count = left_tree.comparison_count + right_tree.comparison_count + tree.comparison_count
+        return tree
+
+    @staticmethod
+    def _inorder_from(node: Node | None) -> list[int]:
+        items: list[int] = []
+
+        def walk(current: Node | None) -> None:
+            if current is None:
+                return
+            walk(current.left)
+            items.append(current.key)
+            walk(current.right)
+
+        walk(node)
+        return items
 
     def _join(self, left: Node | None, right: Node | None) -> Node | None:
         if left is None:
@@ -383,6 +469,15 @@ def build_parser() -> argparse.ArgumentParser:
     delete_parser.add_argument("--output", required=True, type=Path)
     delete_parser.add_argument("key", type=int)
 
+    split_parser = subparsers.add_parser("split", help="split a snapshot into values below and above a pivot")
+    split_parser.add_argument("--snapshot", required=True, type=Path)
+    split_parser.add_argument("pivot", type=int)
+
+    join_parser = subparsers.add_parser("join", help="join two sorted disjoint value sets into a single snapshot")
+    join_parser.add_argument("--left-input", required=True, type=Path)
+    join_parser.add_argument("--right-input", required=True, type=Path)
+    join_parser.add_argument("--output", required=True, type=Path)
+
     show_parser = subparsers.add_parser("show", help="show current snapshot summary")
     show_parser.add_argument("--snapshot", required=True, type=Path)
 
@@ -405,49 +500,63 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "build":
-        tree = SplayTree(parse_values(args.input))
-        save_tree(args.output, tree)
-        print(json.dumps(tree.snapshot(), indent=2))
-        return 0
-
-    if args.command == "access":
-        tree = load_tree(args.snapshot)
-        summary = tree.access_sequence(args.keys)
-        if args.output is not None:
+    try:
+        if args.command == "build":
+            tree = SplayTree(parse_values(args.input))
             save_tree(args.output, tree)
-        print(json.dumps(summary, indent=2))
-        return 0
+            print(json.dumps(tree.snapshot(), indent=2))
+            return 0
 
-    if args.command == "insert":
-        tree = load_tree(args.snapshot)
-        inserted = tree.insert(args.key)
-        save_tree(args.output, tree)
-        print(json.dumps({"inserted": inserted, **tree.snapshot()}, indent=2))
-        return 0
+        if args.command == "access":
+            tree = load_tree(args.snapshot)
+            summary = tree.access_sequence(args.keys)
+            if args.output is not None:
+                save_tree(args.output, tree)
+            print(json.dumps(summary, indent=2))
+            return 0
 
-    if args.command == "delete":
-        tree = load_tree(args.snapshot)
-        deleted = tree.delete(args.key)
-        save_tree(args.output, tree)
-        print(json.dumps({"deleted": deleted, **tree.snapshot()}, indent=2))
-        return 0
+        if args.command == "insert":
+            tree = load_tree(args.snapshot)
+            inserted = tree.insert(args.key)
+            save_tree(args.output, tree)
+            print(json.dumps({"inserted": inserted, **tree.snapshot()}, indent=2))
+            return 0
 
-    if args.command == "show":
-        tree = load_tree(args.snapshot)
-        print(json.dumps(tree.snapshot(), indent=2))
-        return 0
+        if args.command == "delete":
+            tree = load_tree(args.snapshot)
+            deleted = tree.delete(args.key)
+            save_tree(args.output, tree)
+            print(json.dumps({"deleted": deleted, **tree.snapshot()}, indent=2))
+            return 0
 
-    if args.command == "benchmark":
-        payload = benchmark_trees(
-            size=args.size,
-            hot_set_size=args.hot_set_size,
-            hot_queries=args.hot_queries,
-            random_queries=args.random_queries,
-            seed=args.seed,
-        )
-        print(json.dumps(payload, indent=2))
-        return 0
+        if args.command == "split":
+            tree = load_tree(args.snapshot)
+            print(json.dumps(tree.split(args.pivot).__dict__, indent=2))
+            return 0
+
+        if args.command == "join":
+            tree = SplayTree.join_from_values(parse_values(args.left_input), parse_values(args.right_input))
+            save_tree(args.output, tree)
+            print(json.dumps(tree.snapshot(), indent=2))
+            return 0
+
+        if args.command == "show":
+            tree = load_tree(args.snapshot)
+            print(json.dumps(tree.snapshot(), indent=2))
+            return 0
+
+        if args.command == "benchmark":
+            payload = benchmark_trees(
+                size=args.size,
+                hot_set_size=args.hot_set_size,
+                hot_queries=args.hot_queries,
+                random_queries=args.random_queries,
+                seed=args.seed,
+            )
+            print(json.dumps(payload, indent=2))
+            return 0
+    except ValueError as exc:
+        parser.exit(2, f"error: {exc}\n")
 
     parser.error("unknown command")
     return 2

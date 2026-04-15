@@ -7,6 +7,6 @@
 - [x] add deterministic tests for insert/access/delete and CLI paths
 - [x] run tests
 - [x] complete at least 3 review passes and fix issues found
-- [ ] add split/join subcommands
+- [x] add split/join subcommands
 - [x] add benchmark comparison against another balanced BST lab
 - [ ] add visualization export for before/after access sequences

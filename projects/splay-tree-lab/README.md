@@ -12,6 +12,7 @@ A portfolio-ready Python lab for splay trees: self-adjusting binary search trees
 - build a splay tree snapshot from newline-delimited integers
 - run access sequences and inspect hit/miss, root movement, and rotation counts
 - insert and delete keys while keeping snapshots resumable
+- split a tree around a pivot and join two disjoint sorted value sets into a new snapshot
 - benchmark skewed hot-set lookups against the `red-black-tree-lab` baseline using deterministic comparison counts
 - deterministic unit tests for tree behavior, CLI workflows, and benchmark output
 
@@ -41,6 +42,18 @@ Delete a key:
 python3 splay_tree_lab.py delete --snapshot artifacts/splay-grown.json --output artifacts/splay-pruned.json 3
 ```
 
+Split the current tree around a pivot (left side is `< pivot`, right side is `> pivot` when present):
+
+```bash
+python3 splay_tree_lab.py split --snapshot artifacts/splay-pruned.json 11
+```
+
+Join two sorted, disjoint value sets into a new tree snapshot:
+
+```bash
+python3 splay_tree_lab.py join --left-input left_values.txt --right-input right_values.txt --output artifacts/splay-joined.json
+```
+
 Inspect the current summary:
 
 ```bash
@@ -65,5 +78,5 @@ python3 -m unittest projects/splay-tree-lab/test_splay_tree_lab.py
 - uniform-random workloads may reduce or reverse the gap, which helps explain the trade-off between self-adjusting behavior and steadier balancing
 
 ## Future improvements
-- add split and join subcommands for a fuller self-adjusting-tree toolkit
 - export Graphviz or Mermaid diagrams for before/after access sequences
+- add split/join snapshot artifact helpers that persist both sides directly for larger scripted demos
