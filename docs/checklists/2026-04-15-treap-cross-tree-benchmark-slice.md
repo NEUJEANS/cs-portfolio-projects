@@ -14,5 +14,5 @@
 - [x] review pass 3
 - [x] secret scan
 - [x] commit
-- [ ] push
+- [x] push
 - [x] wrap-up markdown

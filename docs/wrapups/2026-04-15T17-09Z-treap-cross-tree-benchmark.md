@@ -2,7 +2,7 @@
 
 - timestamp: 2026-04-15T17:09Z
 - project: `treap-order-statistics-lab`
-- commit: `e444376`
+- commit: `0e8747d`
 
 ## What changed
 - added a `benchmark` CLI command to compare treap build/query behavior with the repo's AVL, red-black, and splay tree labs
