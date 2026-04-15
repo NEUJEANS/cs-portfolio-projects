@@ -10,4 +10,4 @@
 - [x] Update project docs/examples to advertise the new workflow.
 - [x] Run the project test suite.
 - [x] Review at least 3 times, fix issues, then run a secret scan before push.
-- [ ] Commit, push, and add a wrap-up note.
+- [x] Commit, push, and add a wrap-up note.
