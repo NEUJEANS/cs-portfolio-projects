@@ -62,7 +62,7 @@
 - [x] perform review pass 2 and fix issues
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 
 ## Next slice candidates
 - [ ] add multi-series chart output so component-count and throughput curves can share one artifact
