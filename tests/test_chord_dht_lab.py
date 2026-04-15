@@ -706,5 +706,63 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn('finger repair: random (seed=17)', payload["dot"])
 
 
+    def test_churn_report_chains_join_and_failure_events(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.churn_report(
+            [
+                {"action": "join", "node": "foxtrot", "rounds": 4},
+                {"action": "fail", "node": "charlie", "rounds": 3},
+            ],
+            rounds=2,
+        )
+
+        self.assertEqual(report["event_count"], 2)
+        self.assertEqual(report["steps"][0]["action"], "join")
+        self.assertEqual(report["steps"][0]["node"], "foxtrot")
+        self.assertEqual(report["steps"][0]["rounds_requested"], 4)
+        self.assertEqual(report["steps"][1]["action"], "fail")
+        self.assertEqual(report["steps"][1]["node"], "charlie")
+        ending_names = [node["name"] for node in report["ending_nodes"]]
+        self.assertIn("foxtrot", ending_names)
+        self.assertNotIn("charlie", ending_names)
+        self.assertEqual(report["summary"]["final_node_count"], len(ending_names))
+
+    def test_load_churn_events_rejects_non_list_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "bad_churn.json"
+            path.write_text(json.dumps({"action": "join", "node": "foxtrot"}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "JSON list"):
+                module.load_churn_events(path)
+
+    def test_cli_churn_outputs_event_summary(self) -> None:
+        churn_path = PROJECT_ROOT / "projects" / "chord-dht-lab" / "churn_events.json"
+
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "churn",
+                str(RING_PATH),
+                str(churn_path),
+                "--finger-repair-mode",
+                "all",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "churn")
+        self.assertEqual(payload["events_file"], str(churn_path))
+        self.assertEqual(payload["event_count"], 3)
+        self.assertEqual(payload["finger_repair_mode"], "all")
+        self.assertEqual(payload["steps"][0]["action"], "join")
+        self.assertEqual(payload["steps"][1]["action"], "fail")
+        self.assertEqual(payload["summary"]["final_node_count"], len(payload["ending_nodes"]))
+
+
 if __name__ == "__main__":
     unittest.main()

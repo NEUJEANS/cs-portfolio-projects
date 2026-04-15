@@ -1,0 +1,21 @@
+# Chord DHT churn workload slice
+
+- Timestamp: 2026-04-15 14:45 UTC
+- Project: `projects/chord-dht-lab`
+- What changed:
+  - added a `churn` CLI workflow that chains join/fail events and records per-step stabilization outcomes
+  - added `projects/chord-dht-lab/churn_events.json` as a reproducible sample workload
+  - updated README usage and checklist coverage for the new distributed-systems slice
+  - extended tests for churn reporting, event-file validation, and CLI behavior
+- Tests run:
+  - `python3 -m unittest tests/test_chord_dht_lab.py`
+  - `python3 projects/chord-dht-lab/chord_dht.py churn projects/chord-dht-lab/ring.json projects/chord-dht-lab/churn_events.json --finger-repair-mode all`
+- Reviews run:
+  - review pass 1: inspected git diff for API/README/checklist consistency
+  - review pass 2: exercised the churn CLI on the sample workload and checked stabilization summaries
+  - review pass 3: re-fetched remote status before push and verified the branch was still in sync
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: `10471f13ea81fee624473317b0b5752479714bff`
+- Next step:
+  - extend churn scenarios with explicit recovery/rejoin events so the simulator can model nodes coming back after failure

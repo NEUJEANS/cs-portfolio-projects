@@ -591,6 +591,104 @@ class ChordRing:
             return value > start or value < end
         return value != start
 
+    def churn_report(
+        self,
+        events: Iterable[dict[str, object]],
+        *,
+        rounds: int = 3,
+        finger_repair_mode: FingerRepairMode = "single",
+        finger_repair_seed: int | None = None,
+    ) -> dict[str, object]:
+        event_list = list(events)
+        if not event_list:
+            raise ValueError("churn report requires at least one event")
+
+        current_ring = self
+        steps: list[dict[str, object]] = []
+        fully_stabilized_steps = 0
+        stabilized_rounds: list[int] = []
+
+        for index, raw_event in enumerate(event_list, start=1):
+            action = raw_event.get("action")
+            if action not in {"join", "fail"}:
+                raise ValueError(f"unsupported churn action {action!r}")
+            node_name = raw_event.get("node")
+            if not isinstance(node_name, str) or not node_name:
+                raise ValueError("each churn event requires a non-empty string node")
+            event_rounds = int(raw_event.get("rounds", rounds))
+            if event_rounds <= 0:
+                raise ValueError("event rounds must be positive")
+
+            before_nodes = current_ring.list_nodes()
+            if action == "join":
+                report = current_ring.stabilization_report(
+                    joined_node=node_name,
+                    rounds=event_rounds,
+                    finger_repair_mode=finger_repair_mode,
+                    finger_repair_seed=finger_repair_seed,
+                )
+                current_ring = current_ring.add_node(node_name)
+            else:
+                report = current_ring.stabilization_report(
+                    failed_nodes=[node_name],
+                    rounds=event_rounds,
+                    finger_repair_mode=finger_repair_mode,
+                    finger_repair_seed=finger_repair_seed,
+                )
+                current_ring = current_ring.without_nodes([node_name])
+
+            stabilized_round = next(
+                (
+                    round_data["round"]
+                    for round_data in report["rounds"]
+                    if round_data["summary"]["successor_matches"] == report["target_node_count"]
+                    and round_data["summary"]["predecessor_matches"] == report["target_node_count"]
+                    and round_data["summary"]["finger_matches"] == report["summary"]["total_fingers"]
+                ),
+                None,
+            )
+            if report["summary"]["fully_stabilized"]:
+                fully_stabilized_steps += 1
+            if stabilized_round is not None:
+                stabilized_rounds.append(int(stabilized_round))
+
+            steps.append(
+                {
+                    "step": index,
+                    "action": action,
+                    "node": node_name,
+                    "rounds_requested": event_rounds,
+                    "before_nodes": before_nodes,
+                    "after_nodes": current_ring.list_nodes(),
+                    "target_node_count": report["target_node_count"],
+                    "fully_stabilized": report["summary"]["fully_stabilized"],
+                    "stabilized_round": stabilized_round,
+                    "final_successor_matches": report["summary"]["final_successor_matches"],
+                    "final_predecessor_matches": report["summary"]["final_predecessor_matches"],
+                    "final_finger_matches": report["summary"]["final_finger_matches"],
+                    "total_fingers": report["summary"]["total_fingers"],
+                    "report": report,
+                }
+            )
+
+        return {
+            "m_bits": self.m_bits,
+            "starting_nodes": self.list_nodes(),
+            "ending_nodes": current_ring.list_nodes(),
+            "event_count": len(steps),
+            "rounds_default": rounds,
+            "finger_repair_mode": finger_repair_mode,
+            "finger_repair_seed": finger_repair_seed,
+            "steps": steps,
+            "summary": {
+                "fully_stabilized_steps": fully_stabilized_steps,
+                "partially_stabilized_steps": len(steps) - fully_stabilized_steps,
+                "max_stabilized_round": max(stabilized_rounds) if stabilized_rounds else None,
+                "average_stabilized_round": round(mean(stabilized_rounds), 3) if stabilized_rounds else None,
+                "final_node_count": len(current_ring.nodes),
+            },
+        }
+
     def compare_stabilization_modes(
         self,
         *,
@@ -1030,6 +1128,18 @@ def build_synthetic_benchmark_payload(
     }
 
 
+def load_churn_events(path: Path) -> list[dict[str, object]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("churn events file must contain a JSON list")
+    normalized: list[dict[str, object]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"churn event #{index} must be a JSON object")
+        normalized.append(dict(item))
+    return normalized
+
+
 def load_ring(path: Path) -> ChordRing:
     payload = json.loads(path.read_text(encoding="utf-8"))
     m_bits = payload["m_bits"]
@@ -1210,6 +1320,32 @@ def parse_args() -> argparse.Namespace:
         help="report format for the rendered comparison summary",
     )
 
+    churn_parser = subparsers.add_parser(
+        "churn",
+        help="simulate a sequence of join/fail events and summarize stabilization after each step",
+    )
+    churn_parser.add_argument("ring_file", type=Path)
+    churn_parser.add_argument("events_file", type=Path, help="JSON file containing churn events")
+    churn_parser.add_argument(
+        "--rounds",
+        type=int,
+        default=3,
+        help="default number of stabilization rounds to simulate after each event",
+    )
+    churn_parser.add_argument(
+        "--finger-repair-mode",
+        choices=["single", "all", "random"],
+        default="single",
+        help="finger repair policy to use for each churn step",
+    )
+    churn_parser.add_argument(
+        "--finger-repair-seed",
+        type=int,
+        default=None,
+        help="seed for random finger repair mode; required when random mode is used",
+    )
+    churn_parser.add_argument("--pretty", action="store_true")
+
     synth_parser = subparsers.add_parser(
         "synth-benchmark",
         help="generate a deterministic synthetic ring/workload and benchmark lookup hops",
@@ -1343,6 +1479,18 @@ def main() -> None:
                 start_nodes=args.start_nodes,
                 start_node_sample_mode=args.start_node_sample_mode,
                 start_node_seed=args.start_node_seed,
+            ),
+        }
+    elif args.command == "churn":
+        ring = load_ring(args.ring_file)
+        payload = {
+            "command": "churn",
+            "events_file": str(args.events_file),
+            **ring.churn_report(
+                load_churn_events(args.events_file),
+                rounds=args.rounds,
+                finger_repair_mode=args.finger_repair_mode,
+                finger_repair_seed=args.finger_repair_seed,
             ),
         }
     elif args.command == "compare-stabilize-export":

@@ -19,6 +19,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - configurable `fix_fingers` scheduling modes so stabilization can model one-slot, full-round, or seeded-random finger repair policies
 - side-by-side stabilization comparison mode so multiple repair schedules can be evaluated on the same join/failure scenario
 - Markdown/CSV export for stabilization comparison summaries so portfolio write-ups can reuse the results directly
+- churn workload driver that chains joins/failures and summarizes stabilization step-by-step
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
@@ -167,6 +168,25 @@ python3 projects/chord-dht-lab/chord_dht.py stabilize \
   --pretty
 ```
 
+Run a resumable churn scenario that chains joins and failures:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py churn \
+  projects/chord-dht-lab/ring.json \
+  projects/chord-dht-lab/churn_events.json \
+  --finger-repair-mode all \
+  --pretty
+```
+
+Event file format:
+
+```json
+[
+  {"action": "join", "node": "foxtrot", "rounds": 4},
+  {"action": "fail", "node": "charlie", "rounds": 3}
+]
+```
+
 Export a Graphviz DOT diagram for a lookup route:
 
 ```bash
@@ -217,3 +237,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 ## Future improvements
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
 - export benchmark summaries as CSV/Markdown tables for portfolio write-ups
+- model recovery under node recovery/rejoin events in addition to joins/failures

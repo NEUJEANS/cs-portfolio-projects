@@ -60,7 +60,8 @@
 - [x] let synthetic benchmarks sample random subsets of start nodes instead of taking the first N sorted nodes
 - [x] add a side-by-side stabilization comparison command that runs multiple finger repair modes on the same scenario
 - [x] export comparison summaries as Markdown/CSV for portfolio write-ups
-- [ ] add a churn workload driver that chains multiple joins/failures and summarizes recovery over time
+- [x] add a churn workload driver that chains multiple joins/failures and summarizes recovery over time
+- [ ] model explicit node recovery/rejoin events inside churn scenarios
 
 ## Randomized benchmark start-node slice (2026-04-15 09:29 UTC run)
 - [x] confirm repo sync before editing
@@ -88,9 +89,9 @@
 - [x] expose the new repair-mode controls in the CLI and stabilization Graphviz export
 - [x] extend automated coverage for deterministic repair scheduling and CLI behavior
 - [x] run tests locally
-- [ ] perform review pass 1 and fix issues
-- [ ] perform review pass 2 and fix issues
-- [ ] perform review pass 3 and fix issues
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
@@ -109,3 +110,19 @@
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Churn workload slice (2026-04-15 14:41 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current Chord lab for the weakest unfinished distributed-systems scenario gap
+- [x] skip web research because a churn driver is a direct extension of the existing stabilization simulator and current checklist
+- [x] do a short Python JSON/CLI validation self-check while planning the slice
+- [x] update checklist/docs so the slice is resumable
+- [x] add a churn workload driver that chains join/fail events with per-step stabilization summaries
+- [x] add a sample churn events JSON file for reproducible demos
+- [x] extend automated coverage for churn helpers and CLI output
+- [x] run tests locally
+- [ ] perform review pass 1 and fix issues
+- [ ] perform review pass 2 and fix issues
+- [ ] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
