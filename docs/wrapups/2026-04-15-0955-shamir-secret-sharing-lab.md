@@ -15,6 +15,6 @@
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 - Commit hash:
-  - PENDING_FINAL_COMMIT_HASH
+  - fde3cb6
 - Next step:
   - extend the lab with authenticated shares or binary-file secret support so the project feels even more production-adjacent
