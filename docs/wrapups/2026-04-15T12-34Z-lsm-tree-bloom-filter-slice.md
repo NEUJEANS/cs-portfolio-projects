@@ -18,6 +18,6 @@
   - `docs/reviews/2026-04-15-lsm-tree-bloom-filter-review-pass-3.md`
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
-- Commit hash: `25268f2`
+- Commit hash: `55ce61a` (implementation snapshot before final wrap-up metadata sync)
 - Next step:
   - add sparse index metadata or a small benchmark harness to quantify the Bloom-filter win and explain the false-positive tradeoff
