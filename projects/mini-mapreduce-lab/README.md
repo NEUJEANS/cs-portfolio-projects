@@ -18,6 +18,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts
 - machine-readable JSON output with shard and record statistics
 - optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
+- optional shard-to-reducer heatmap CSV export for slide-ready skew visualizations
 - JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
 
 ## Usage
@@ -96,6 +97,19 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --csv-output benchmark.csv
 ```
 
+Write an additional shard-to-reducer heatmap CSV you can turn into a spreadsheet heatmap:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --scenario skewed \
+  --records 10000 \
+  --shard-size 250 \
+  --reducers 2 4 8 \
+  --output benchmark.json \
+  --csv-output benchmark.csv \
+  --heatmap-output benchmark-heatmap.csv
+```
+
 ## Plugin contract
 
 A plugin is a Python file with:
@@ -112,6 +126,8 @@ The included `plugins_top_score.py` example parses `name,score` lines and keeps 
 The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, and the reducer returns a float average. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
 
 ## Output shape
+
+`run` mode still emits a compact per-job JSON payload:
 
 ```json
 {
@@ -132,6 +148,24 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
+`benchmark` mode now also includes `heatmap_rows`, where each row captures one shard/reducer cell:
+
+```json
+{
+  "heatmap_rows": [
+    {
+      "scenario": "skewed",
+      "seed": 42,
+      "reducers": 4,
+      "shard_index": 0,
+      "reducer": 2,
+      "records": 187,
+      "unique_keys": 3
+    }
+  ]
+}
+```
+
 ## Test
 
 ```bash
@@ -145,7 +179,8 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how deterministic benchmark fixtures make systems demos reproducible
 - why plugin-based jobs make a systems lab look extensible instead of hard-coded
 - why timing alone can mislead without reducer-distribution metrics beside it
+- how shard-to-reducer heatmaps make hot-key skew visible in demos, write-ups, and interviews
 
 ## Future improvements
-- visualize reducer skew across shards over time
-- add heatmap-style shard-to-reducer export for richer skew storytelling
+- generate Markdown/HTML chart artifacts directly from benchmark and heatmap exports
+- add benchmark scenarios for custom plugin workloads instead of only wordcount

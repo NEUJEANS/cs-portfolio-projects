@@ -108,6 +108,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             [(row["reducers"], row["map_records"], row["unique_keys"]) for row in first.timings_ms],
             [(row["reducers"], row["map_records"], row["unique_keys"]) for row in second.timings_ms],
         )
+        self.assertEqual(first.heatmap_rows, second.heatmap_rows)
 
     def test_benchmark_rejects_non_positive_shard_size(self) -> None:
         with self.assertRaisesRegex(ValueError, "shard_size must be positive"):
@@ -167,9 +168,10 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(payload["job"], "plugin-max-score")
             self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
 
-    def test_cli_benchmark_writes_timing_payload(self) -> None:
+    def test_cli_benchmark_writes_timing_and_heatmap_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "benchmark.json"
+            heatmap_output = Path(tmpdir) / "benchmark-heatmap.csv"
             subprocess.run(
                 [
                     "python3",
@@ -187,16 +189,21 @@ class MiniMapReduceRepoTests(unittest.TestCase):
                     "4",
                     "--output",
                     str(output),
+                    "--heatmap-output",
+                    str(heatmap_output),
                 ],
                 check=True,
                 cwd=PROJECT_ROOT,
             )
 
             payload = json.loads(output.read_text(encoding="utf-8"))
+            heatmap_rows = heatmap_output.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(payload["scenario"], "skewed")
             self.assertEqual(payload["reducers"], [1, 2, 4])
             self.assertEqual(len(payload["timings_ms"]), 3)
             self.assertIn("skew_ratio", payload["timings_ms"][2])
+            self.assertTrue(payload["heatmap_rows"])
+            self.assertEqual(heatmap_rows[0], "scenario,seed,reducers,shard_index,reducer,records,unique_keys")
 
     def test_programmatic_api_rejects_non_positive_reducers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

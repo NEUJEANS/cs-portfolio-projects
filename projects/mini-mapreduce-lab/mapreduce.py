@@ -85,6 +85,7 @@ class BenchmarkResult:
     shard_size: int
     reducers: list[int]
     timings_ms: list[dict[str, int | float]]
+    heatmap_rows: list[dict[str, int | str]]
 
     def to_json(self) -> str:
         return json.dumps(
@@ -96,6 +97,7 @@ class BenchmarkResult:
                 "shard_size": self.shard_size,
                 "reducers": self.reducers,
                 "timings_ms": self.timings_ms,
+                "heatmap_rows": self.heatmap_rows,
             },
             indent=2,
             sort_keys=True,
@@ -131,6 +133,23 @@ class BenchmarkResult:
         writer = csv.DictWriter(buffer, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+        return buffer.getvalue()
+
+    def heatmap_to_csv(self) -> str:
+        fieldnames = [
+            "scenario",
+            "seed",
+            "reducers",
+            "shard_index",
+            "reducer",
+            "records",
+            "unique_keys",
+        ]
+        from io import StringIO
+        buffer = StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(self.heatmap_rows)
         return buffer.getvalue()
 
 
@@ -233,6 +252,21 @@ def load_plugin(plugin_ref: str | Path) -> PluginJob:
     module_file = getattr(module, "__file__", None)
     origin = Path(module_file).resolve() if module_file else Path(f"<module:{plugin_text}>")
     return build_plugin_job(module, origin, plugin_text.rsplit('.', 1)[-1])
+
+
+def summarize_value_records(value: JSONValue) -> int:
+    if isinstance(value, Number) and not isinstance(value, bool):
+        return int(value)
+    return 1
+
+
+def summarize_partial_by_reducer(partial: dict[str, JSONValue], reducers: int) -> list[dict[str, int]]:
+    summary = [{"reducer": reducer_id, "unique_keys": 0, "records": 0} for reducer_id in range(reducers)]
+    for key, value in partial.items():
+        reducer_id = stable_partition(key, reducers)
+        summary[reducer_id]["unique_keys"] += 1
+        summary[reducer_id]["records"] += summarize_value_records(value)
+    return summary
 
 
 def reduce_shards(
@@ -372,6 +406,12 @@ def benchmark_wordcount(
         input_path = Path(handle.name)
 
     timings: list[dict[str, int | float]] = []
+    heatmap_rows: list[dict[str, int | str]] = []
+    benchmark_shards = list(chunked(lines, shard_size)) or [[]]
+    benchmark_partials = [
+        combine([(key, normalize_json_value(value, context="mapper")) for key, value in map_wordcount(shard)])
+        for shard in benchmark_shards
+    ]
     unique_keys = 0
     try:
         for reducer_count in reducers:
@@ -390,6 +430,19 @@ def benchmark_wordcount(
                     "skew_ratio": round(reducer_skew(result.reducer_stats), 3),
                 }
             )
+            for shard_index, partial in enumerate(benchmark_partials):
+                for summary in summarize_partial_by_reducer(partial, reducer_count):
+                    heatmap_rows.append(
+                        {
+                            "scenario": scenario,
+                            "seed": seed,
+                            "reducers": reducer_count,
+                            "shard_index": shard_index,
+                            "reducer": summary["reducer"],
+                            "records": summary["records"],
+                            "unique_keys": summary["unique_keys"],
+                        }
+                    )
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -401,6 +454,7 @@ def benchmark_wordcount(
         shard_size=shard_size,
         reducers=reducers,
         timings_ms=timings,
+        heatmap_rows=heatmap_rows,
     )
 
 
@@ -425,6 +479,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--seed", type=int, default=42, help="seed for deterministic synthetic data generation")
     benchmark_parser.add_argument("--output", help="optional output JSON path")
     benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
+    benchmark_parser.add_argument("--heatmap-output", help="optional shard-to-reducer heatmap CSV output path")
 
     return parser
 
@@ -476,6 +531,8 @@ def main(argv: list[str] | None = None) -> int:
             print(rendered)
         if args.csv_output:
             Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
+        if args.heatmap_output:
+            Path(args.heatmap_output).write_text(result.heatmap_to_csv(), encoding="utf-8")
         return 0
 
     parser.error("unsupported command")

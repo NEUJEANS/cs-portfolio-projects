@@ -67,4 +67,16 @@
 - [x] add optional benchmark CSV export alongside the existing JSON export
 - [x] extend project and repo-level tests for programmatic CSV rendering and CLI file output
 - [x] run tests and 3 review passes
-- [ ] consider shard-by-reducer heatmap export in a future run
+- [x] consider shard-by-reducer heatmap export in a future run
+
+## Benchmark heatmap export slice (2026-04-15 09:19 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the reducer-skew follow-up was already scoped in the project notes
+- [x] do a short Python `csv.DictWriter` and shard-summary refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add shard-to-reducer heatmap export rows for benchmark runs
+- [x] include heatmap data in the benchmark JSON payload and optional CSV file output
+- [x] extend project and repo-level tests for deterministic heatmap rendering and CLI file output
+- [x] run tests and 3 review passes
+- [ ] consider HTML/Markdown chart generation from heatmap rows in a future run
