@@ -125,6 +125,101 @@ class RingElectionSimulator:
             "worst_case_bound": len(ordered_active) * len(ordered_active),
         }
 
+    def simulate_le_lann(self, initiator: int, failed: Iterable[int] | None = None) -> dict[str, object]:
+        if initiator not in {node.process_id for node in self.nodes}:
+            raise ValueError("initiator must belong to the ring")
+        ordered_active, failed_set, index_by_id = self._validate_active_ring(failed)
+        if initiator in failed_set:
+            raise ValueError("initiator must be active")
+
+        trace: list[dict[str, int | str]] = []
+        start_index = index_by_id[initiator]
+        candidate_schedule = ordered_active[start_index:] + ordered_active[:start_index]
+        round_number = 0
+
+        for candidate_id in candidate_schedule:
+            current_id = candidate_id
+            for hop in range(1, len(ordered_active) + 1):
+                round_number += 1
+                next_id = ordered_active[(index_by_id[current_id] + 1) % len(ordered_active)]
+                trace.append(
+                    {
+                        "from": current_id,
+                        "to": next_id,
+                        "candidate": candidate_id,
+                        "hops": hop,
+                        "action": "forward",
+                        "round": round_number,
+                        "note": "baseline circulate all ids",
+                    }
+                )
+                current_id = next_id
+
+        leader_id = max(candidate_schedule)
+        round_number += 1
+        trace.append(
+            {
+                "from": initiator,
+                "to": ordered_active[(start_index + 1) % len(ordered_active)],
+                "candidate": leader_id,
+                "hops": len(ordered_active),
+                "action": "elect",
+                "round": round_number,
+                "note": "highest observed id completes full-ring circulation",
+            }
+        )
+        announcement_trace = self._build_announcement_trace(ordered_active, index_by_id, leader_id)
+        return {
+            "algorithm": "le-lann",
+            "mode": "single-initiator-baseline",
+            "ring_order": [node.process_id for node in self.nodes],
+            "active_ring": ordered_active,
+            "failed": sorted(failed_set),
+            "initiator": initiator,
+            "leader": leader_id,
+            "trace": trace,
+            "announcement_trace": announcement_trace,
+            "message_count": len(trace) + len(announcement_trace),
+            "election_messages": len(trace),
+            "announcement_messages": len(announcement_trace),
+            "max_id": max(ordered_active),
+            "leader_index": index_by_id[leader_id],
+            "worst_case_bound": len(ordered_active) * len(ordered_active),
+        }
+
+    def compare_single_initiator_algorithms(self, initiator: int, failed: Iterable[int] | None = None) -> dict[str, object]:
+        chang_roberts = self.simulate(initiator=initiator, failed=failed)
+        le_lann = self.simulate_le_lann(initiator=initiator, failed=failed)
+        if chang_roberts["leader"] != le_lann["leader"]:
+            raise AssertionError("single-initiator ring election algorithms disagreed on the leader")
+        election_delta = le_lann["election_messages"] - chang_roberts["election_messages"]
+        total_delta = le_lann["message_count"] - chang_roberts["message_count"]
+        ratio = None
+        if le_lann["election_messages"]:
+            ratio = round(chang_roberts["election_messages"] / le_lann["election_messages"], 4)
+        return {
+            "mode": "single-initiator-comparison",
+            "ring_order": chang_roberts["ring_order"],
+            "active_ring": chang_roberts["active_ring"],
+            "failed": chang_roberts["failed"],
+            "initiator": initiator,
+            "leader": chang_roberts["leader"],
+            "algorithms": {
+                "chang_roberts": chang_roberts,
+                "le_lann": le_lann,
+            },
+            "summary": {
+                "same_leader": True,
+                "chang_roberts_election_messages": chang_roberts["election_messages"],
+                "le_lann_election_messages": le_lann["election_messages"],
+                "chang_roberts_total_messages": chang_roberts["message_count"],
+                "le_lann_total_messages": le_lann["message_count"],
+                "election_message_reduction": election_delta,
+                "total_message_reduction": total_delta,
+                "chang_roberts_vs_le_lann_election_ratio": ratio,
+            },
+        }
+
     def simulate_multi_initiator(self, initiators: Iterable[int], failed: Iterable[int] | None = None) -> dict[str, object]:
         ordered_active, failed_set, index_by_id = self._validate_active_ring(failed)
         initiator_list = list(initiators)
@@ -315,6 +410,8 @@ def render_mermaid_sequence(result: dict[str, object]) -> str:
             arrow = "-->>"
         else:
             detail = f"election #{index}: {round_text}forward {step['candidate']} (hop {step['hops']})"
+            if step.get("note"):
+                detail = f"{detail} [{step['note']}]"
         lines.append(f"    {_participant_label(step['from'])}{arrow}{_participant_label(step['to'])}: {detail}")
 
     if result["announcement_trace"]:
@@ -331,6 +428,12 @@ def build_output(result: dict[str, object], include_visualization: bool) -> dict
     if not include_visualization:
         return result
     enriched = dict(result)
+    if result["mode"] == "single-initiator-comparison":
+        enriched["visualizations"] = {
+            "chang_roberts_mermaid_sequence": render_mermaid_sequence(result["algorithms"]["chang_roberts"]),
+            "le_lann_mermaid_sequence": render_mermaid_sequence(result["algorithms"]["le_lann"]),
+        }
+        return enriched
     enriched["visualizations"] = {"mermaid_sequence": render_mermaid_sequence(result)}
     return enriched
 
@@ -350,6 +453,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--benchmark-contention",
         action="store_true",
         help="Benchmark all 1..n initiator combinations on the active ring",
+    )
+    initiator_group.add_argument(
+        "--compare-baseline",
+        type=int,
+        metavar="INITIATOR",
+        help="Compare Chang-Roberts with a Le Lann baseline for one initiator",
     )
     parser.add_argument("--failed", nargs="*", type=int, default=[], help="Optional failed process ids to skip")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON result")
@@ -373,11 +482,13 @@ def main() -> None:
         result = simulator.benchmark_contention(failed=args.failed)
     elif args.initiators:
         result = simulator.simulate_multi_initiator(initiators=args.initiators, failed=args.failed)
+    elif args.compare_baseline is not None:
+        result = simulator.compare_single_initiator_algorithms(initiator=args.compare_baseline, failed=args.failed)
     else:
         result = simulator.simulate(initiator=args.initiator, failed=args.failed)
     if args.visualization_only == "mermaid":
-        if result["mode"] == "contention-benchmark":
-            raise SystemExit("visualization-only is unavailable for contention benchmarks")
+        if result["mode"] in {"contention-benchmark", "single-initiator-comparison"}:
+            raise SystemExit("visualization-only is unavailable for this mode; use --include-visualization instead")
         print(render_mermaid_sequence(result))
         return
     print(json.dumps(build_output(result, include_visualization=args.include_visualization), indent=2 if args.pretty else None, sort_keys=True))

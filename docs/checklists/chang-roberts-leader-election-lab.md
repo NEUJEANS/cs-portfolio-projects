@@ -6,5 +6,5 @@
 - [x] include interview-ready README notes and usage examples
 - [x] add visualization exports for traces
 - [x] add simultaneous multi-initiator scenarios
-- [ ] compare against an alternative ring-election algorithm
+- [x] compare against an alternative ring-election algorithm
 - [x] benchmark single-initiator vs multi-initiator contention traces

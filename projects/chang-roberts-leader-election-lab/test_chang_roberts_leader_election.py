@@ -27,6 +27,22 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertEqual(result["mode"], "single-initiator")
         self.assertTrue(any(step["action"] == "replace" for step in result["trace"]))
 
+    def test_le_lann_baseline_matches_leader_and_uses_more_messages(self) -> None:
+        simulator = RingElectionSimulator([8, 3, 12, 6])
+        chang_roberts = simulator.simulate(initiator=3)
+        le_lann = simulator.simulate_le_lann(initiator=3)
+        self.assertEqual(le_lann["leader"], chang_roberts["leader"])
+        self.assertEqual(le_lann["algorithm"], "le-lann")
+        self.assertGreater(le_lann["election_messages"], chang_roberts["election_messages"])
+        self.assertTrue(all(step["action"] in {"forward", "elect"} for step in le_lann["trace"]))
+
+    def test_single_initiator_comparison_summary_reports_reduction(self) -> None:
+        result = RingElectionSimulator([8, 3, 12, 6]).compare_single_initiator_algorithms(initiator=3)
+        self.assertEqual(result["mode"], "single-initiator-comparison")
+        self.assertTrue(result["summary"]["same_leader"])
+        self.assertGreater(result["summary"]["election_message_reduction"], 0)
+        self.assertLess(result["summary"]["chang_roberts_vs_le_lann_election_ratio"], 1)
+
     def test_skips_failed_nodes_and_elects_highest_active_id(self) -> None:
         result = RingElectionSimulator([9, 2, 14, 5, 11]).simulate(initiator=2, failed=[14, 5])
         self.assertEqual(result["active_ring"], [9, 2, 11])
@@ -72,6 +88,12 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertIn("elect leader 12", diagram)
         self.assertIn("leader 12 announces victory", diagram)
         self.assertIn("announce #1: leader 12", diagram)
+
+    def test_mermaid_renderer_mentions_baseline_note(self) -> None:
+        result = RingElectionSimulator([8, 3, 12, 6]).simulate_le_lann(initiator=3)
+        diagram = render_mermaid_sequence(result)
+        self.assertIn("baseline circulate all ids", diagram)
+        self.assertIn("elect leader 12", diagram)
 
     def test_mermaid_renderer_mentions_multi_initiator_lockstep(self) -> None:
         result = RingElectionSimulator([8, 3, 12, 6]).simulate_multi_initiator(initiators=[3, 6])
@@ -121,6 +143,13 @@ class ChangRobertsLeaderElectionTests(unittest.TestCase):
         self.assertEqual(result["mode"], "contention-benchmark")
         self.assertEqual(result["summary"]["best_average_initiator_count"], 1)
         self.assertEqual(result["summary"]["evaluated_combinations"], 15)
+
+    def test_cli_supports_baseline_comparison_mode(self) -> None:
+        result = run_cli("--ring", "8", "3", "12", "6", "--compare-baseline", "3", "--include-visualization")
+        self.assertEqual(result["mode"], "single-initiator-comparison")
+        self.assertTrue(result["summary"]["same_leader"])
+        self.assertIn("chang_roberts_mermaid_sequence", result["visualizations"])
+        self.assertIn("le_lann_mermaid_sequence", result["visualizations"])
 
 
 if __name__ == "__main__":
