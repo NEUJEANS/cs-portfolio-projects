@@ -6,7 +6,8 @@
 - [x] implement deterministic insertion with fix-up cases
 - [x] expose search, inorder traversal, height, black-height, and validation helpers
 - [x] add CLI commands for demo/build/contains
+- [x] add order-statistics augmentation with subtree sizes plus `rank`/`select` commands
 - [x] document algorithm choices and usage in README
-- [x] add unit tests for rotations via insertion outcomes, invariants, duplicates, and CLI output
+- [x] add unit tests for rotations via insertion outcomes, invariants, duplicates, metadata validation, and CLI output
 - [x] run at least 3 review passes and fix findings
 - [x] add wrap-up note for this slice

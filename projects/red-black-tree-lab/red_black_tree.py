@@ -16,6 +16,7 @@ class Node:
     left: Node | None = None
     right: Node | None = None
     parent: Node | None = None
+    subtree_size: int = 1
 
 
 class RedBlackTree:
@@ -26,8 +27,10 @@ class RedBlackTree:
     def insert(self, key: int) -> bool:
         parent: Node | None = None
         current = self.root
+        path: list[Node] = []
         while current is not None:
             parent = current
+            path.append(current)
             if key == current.key:
                 return False
             current = current.left if key < current.key else current.right
@@ -41,6 +44,8 @@ class RedBlackTree:
             parent.right = node
 
         self.size += 1
+        for ancestor in path:
+            ancestor.subtree_size += 1
         self._fix_insert(node)
         return True
 
@@ -76,6 +81,33 @@ class RedBlackTree:
 
         return visit(self.root)
 
+    def rank(self, key: int) -> int:
+        rank = 0
+        current = self.root
+        while current is not None:
+            if key <= current.key:
+                current = current.left
+            else:
+                rank += 1 + self._size(current.left)
+                current = current.right
+        return rank
+
+    def select(self, index: int) -> int:
+        if index < 0 or index >= self.size:
+            raise IndexError(f"index {index} is out of range for tree size {self.size}")
+        current = self.root
+        remaining = index
+        while current is not None:
+            left_size = self._size(current.left)
+            if remaining < left_size:
+                current = current.left
+            elif remaining == left_size:
+                return current.key
+            else:
+                remaining -= left_size + 1
+                current = current.right
+        raise RuntimeError("select reached an unexpected empty path")
+
     def black_height(self) -> int:
         valid, black_height, _ = self.validate()
         if not valid:
@@ -92,9 +124,9 @@ class RedBlackTree:
             lower: int | None,
             upper: int | None,
             expected_parent: Node | None,
-        ) -> tuple[bool, int]:
+        ) -> tuple[bool, int, int]:
             if node is None:
-                return True, 1
+                return True, 1, 0
             if node.parent is not expected_parent:
                 expected = None if expected_parent is None else expected_parent.key
                 actual = None if node.parent is None else node.parent.key
@@ -109,16 +141,23 @@ class RedBlackTree:
                 for child in (node.left, node.right):
                     if child is not None and child.color == RED:
                         errors.append(f"red node {node.key} has red child {child.key}")
-            left_valid, left_black_height = walk(node.left, lower, node.key, node)
-            right_valid, right_black_height = walk(node.right, node.key, upper, node)
+            left_valid, left_black_height, left_size = walk(node.left, lower, node.key, node)
+            right_valid, right_black_height, right_size = walk(node.right, node.key, upper, node)
             if left_black_height != right_black_height:
                 errors.append(
                     f"black-height mismatch at {node.key}: left={left_black_height}, right={right_black_height}"
                 )
+            expected_subtree_size = 1 + left_size + right_size
+            if node.subtree_size != expected_subtree_size:
+                errors.append(
+                    f"subtree_size mismatch at {node.key}: expected {expected_subtree_size}, got {node.subtree_size}"
+                )
             current_black_height = left_black_height + (1 if node.color == BLACK else 0)
-            return left_valid and right_valid, current_black_height
+            return left_valid and right_valid, current_black_height, expected_subtree_size
 
-        _, black_height = walk(self.root, None, None, None)
+        _, black_height, computed_size = walk(self.root, None, None, None)
+        if computed_size != self.size:
+            errors.append(f"tree size mismatch: expected {computed_size}, got {self.size}")
         return len(errors) == 0, black_height, errors
 
     def summary(self) -> dict[str, object]:
@@ -127,7 +166,9 @@ class RedBlackTree:
             "size": self.size,
             "height": self.height(),
             "black_height": black_height,
-            "root": None if self.root is None else {"key": self.root.key, "color": self.root.color},
+            "root": None
+            if self.root is None
+            else {"key": self.root.key, "color": self.root.color, "subtree_size": self.root.subtree_size},
             "inorder": self.inorder(),
             "valid": valid,
             "errors": errors,
@@ -149,6 +190,8 @@ class RedBlackTree:
             pivot.parent.right = child
         child.left = pivot
         pivot.parent = child
+        self._refresh_size(pivot)
+        self._refresh_size(child)
 
     def _rotate_right(self, pivot: Node) -> None:
         child = pivot.left
@@ -166,6 +209,8 @@ class RedBlackTree:
             pivot.parent.left = child
         child.right = pivot
         pivot.parent = child
+        self._refresh_size(pivot)
+        self._refresh_size(child)
 
     def _fix_insert(self, node: Node) -> None:
         while node.parent is not None and node.parent.color == RED:
@@ -204,6 +249,19 @@ class RedBlackTree:
                 self._rotate_left(grandparent)
         if self.root is not None:
             self.root.color = BLACK
+        self._refresh_upwards(node)
+
+    def _refresh_upwards(self, node: Node | None) -> None:
+        while node is not None:
+            self._refresh_size(node)
+            node = node.parent
+
+    @staticmethod
+    def _size(node: Node | None) -> int:
+        return 0 if node is None else node.subtree_size
+
+    def _refresh_size(self, node: Node) -> None:
+        node.subtree_size = 1 + self._size(node.left) + self._size(node.right)
 
 
 def build_tree(values: Iterable[int]) -> RedBlackTree:
@@ -217,6 +275,8 @@ def command_demo(_: argparse.Namespace) -> dict[str, object]:
     tree = build_tree([7, 3, 18, 10, 22, 8, 11, 26])
     payload = {"command": "demo", **tree.summary()}
     payload["contains"] = {"8": tree.contains(8), "15": tree.contains(15)}
+    payload["rank"] = {"8": tree.rank(8), "15": tree.rank(15)}
+    payload["select"] = {"0": tree.select(0), "3": tree.select(3)}
     return payload
 
 
@@ -232,6 +292,29 @@ def command_contains(args: argparse.Namespace) -> dict[str, object]:
         "input": args.values,
         "query": args.query,
         "found": tree.contains(args.query),
+        **tree.summary(),
+    }
+
+
+def command_rank(args: argparse.Namespace) -> dict[str, object]:
+    tree = build_tree(args.values)
+    return {
+        "command": "rank",
+        "input": args.values,
+        "query": args.query,
+        "rank": tree.rank(args.query),
+        **tree.summary(),
+    }
+
+
+def command_select(args: argparse.Namespace) -> dict[str, object]:
+    tree = build_tree(args.values)
+    selected = tree.select(args.index)
+    return {
+        "command": "select",
+        "input": args.values,
+        "index": args.index,
+        "selected": selected,
         **tree.summary(),
     }
 
@@ -252,8 +335,21 @@ def main() -> None:
     contains_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     contains_parser.set_defaults(handler=command_contains)
 
+    rank_parser = subparsers.add_parser("rank", help="count how many inserted keys are smaller than the query")
+    rank_parser.add_argument("query", type=int, help="integer to rank")
+    rank_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
+    rank_parser.set_defaults(handler=command_rank)
+
+    select_parser = subparsers.add_parser("select", help="return the zero-based kth smallest key")
+    select_parser.add_argument("index", type=int, help="zero-based inorder index")
+    select_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
+    select_parser.set_defaults(handler=command_select)
+
     args = parser.parse_args()
-    payload = args.handler(args)
+    try:
+        payload = args.handler(args)
+    except IndexError as error:
+        parser.error(str(error))
     print(json.dumps(payload, indent=2, sort_keys=True))
 
 
