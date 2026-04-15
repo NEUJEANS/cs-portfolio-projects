@@ -29,7 +29,7 @@
 - [x] complete review pass 3 and fix issues
 - [x] run secret scan
 - [ ] commit and push
-- [ ] append wrap-up
+- [x] append wrap-up
 
 ## Future improvements
 - [x] add Graphviz or Mermaid export for topology and route snapshots

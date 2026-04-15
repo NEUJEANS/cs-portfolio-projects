@@ -1,0 +1,21 @@
+# Distance vector routing diagram export wrap-up
+
+- Timestamp: 2026-04-15T17:48:00Z
+- Project: `distance-vector-routing-lab`
+- Feature commit: `b2eec38`
+- What changed:
+  - added `export-diagram` CLI support for Mermaid and Graphviz DOT output
+  - added topology snapshots and final route snapshots with optional `--router` focus
+  - documented diagram export examples in the README
+  - added test coverage for export helpers and CLI output
+- Tests run:
+  - `python3 -m unittest projects/distance-vector-routing-lab/test_distance_vector_routing.py`
+- Reviews run:
+  - pass 1: clarified unreachable route labeling
+  - pass 2: added focused `--router` output for cleaner demos
+  - pass 3: added README usage examples and CLI coverage
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+  - result: clean
+- Next step:
+  - simulate periodic timers vs triggered updates explicitly, or add count-to-infinity timeline artifacts
