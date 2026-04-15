@@ -17,12 +17,14 @@ A compact B-tree indexing project that demonstrates top-down node splitting, sor
 - nearest-key navigation with floor/ceil and neighbor lookups
 - deletion with predecessor/successor replacement and borrow/merge rebalancing
 - JSON CLI output for demos and scripting
+- append-oriented bulk loading for strictly sorted datasets
 - tree snapshot/save/load support for serialized page inspection
 
 ## Usage
 ```bash
 python3 btree_index.py --dataset sample_records.json dump
 python3 btree_index.py --dataset sample_records.json search 17
+python3 btree_index.py --dataset sorted_records.json --bulk-load --json stats
 python3 btree_index.py --dataset sample_records.json --json range 10 30
 python3 btree_index.py --dataset sample_records.json --json neighbors 16
 python3 btree_index.py --dataset sample_records.json --json floor 16
@@ -64,6 +66,6 @@ python3 -m unittest projects/b-tree-index-lab/test_btree_index.py
 ```
 
 ## Future improvements
-- bulk loading from already sorted data
+- benchmark bulk loading against generic inserts on larger synthetic datasets
 - simple performance comparison against other ordered structures
 - optional fixed-size on-disk page encoding beyond JSON snapshots

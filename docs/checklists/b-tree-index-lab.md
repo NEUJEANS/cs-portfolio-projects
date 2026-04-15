@@ -8,4 +8,7 @@
 - [x] add automated tests for exact hit, gap lookup, edge cases, and CLI output
 - [x] implement serialized tree snapshot/save/load support for page-level inspection
 - [x] run at least 3 review passes and fix issues found
-- [ ] future slice: bulk loading from sorted records or fixed-size page encoding
+- [x] implement append-oriented bulk loading for strictly sorted datasets
+- [x] expose a CLI switch for resumable sorted-dataset builds
+- [x] add regression tests for bulk loading success and failure paths
+- [ ] future slice: fixed-size page encoding or benchmark the bulk loader against generic inserts

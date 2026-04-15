@@ -50,6 +50,41 @@ class BTreeIndexTests(unittest.TestCase):
         self.assertEqual(tree.search(12), "TWELVE")
         self.assertEqual(tree.stats()["items"], before)
 
+    def test_bulk_load_sorted_builds_searchable_tree(self) -> None:
+        records = [
+            {"key": 1, "value": "one"},
+            {"key": 3, "value": "three"},
+            {"key": 5, "value": "five"},
+            {"key": 7, "value": "seven"},
+            {"key": 9, "value": "nine"},
+            {"key": 11, "value": "eleven"},
+            {"key": 13, "value": "thirteen"},
+        ]
+
+        tree = BTreeIndex.bulk_load_sorted(records, minimum_degree=2)
+
+        self.assertEqual(tree.items(), records)
+        self.assertEqual(tree.search(11), "eleven")
+        self.assertEqual(tree.stats()["items"], len(records))
+        self.assertGreaterEqual(tree.stats()["height"], 2)
+
+    def test_bulk_load_sorted_rejects_duplicate_or_unsorted_keys(self) -> None:
+        with self.assertRaises(ValueError):
+            BTreeIndex.bulk_load_sorted(
+                [
+                    {"key": 1, "value": "one"},
+                    {"key": 1, "value": "duplicate"},
+                ]
+            )
+
+        with self.assertRaises(ValueError):
+            BTreeIndex.bulk_load_sorted(
+                [
+                    {"key": 2, "value": "two"},
+                    {"key": 1, "value": "one"},
+                ]
+            )
+
     def test_range_query_returns_inclusive_sorted_window(self) -> None:
         tree = build_sample_tree()
 
@@ -180,6 +215,44 @@ class BTreeIndexTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             BTreeIndex.from_dict(payload)
+
+    def test_cli_bulk_load_flag_builds_from_sorted_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset = Path(temp_dir) / "sorted_records.json"
+            dataset.write_text(
+                json.dumps(
+                    [
+                        {"key": 2, "value": "two"},
+                        {"key": 4, "value": "four"},
+                        {"key": 6, "value": "six"},
+                        {"key": 8, "value": "eight"},
+                        {"key": 10, "value": "ten"},
+                    ]
+                )
+            )
+
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--dataset", str(dataset), "--bulk-load", "--json", "stats"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["stats"]["items"], 5)
+        self.assertGreaterEqual(payload["stats"]["height"], 2)
+
+    def test_cli_bulk_load_requires_dataset(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "--bulk-load", "stats"],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_DIR,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--bulk-load requires --dataset", completed.stderr)
 
     def test_cli_range_command_outputs_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
