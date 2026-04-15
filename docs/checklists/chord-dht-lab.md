@@ -55,7 +55,7 @@
 
 ## Next slice candidates
 - [x] generate larger synthetic rings and workloads directly from the CLI for broader benchmarking
-- [ ] simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
+- [x] simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
 - [x] export the ring and lookup or stabilization routes as Graphviz diagrams
 - [x] let synthetic benchmarks sample random subsets of start nodes instead of taking the first N sorted nodes
 
@@ -74,3 +74,19 @@
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Stabilization finger-repair modes slice (2026-04-15 11:49 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current Chord lab for the weakest unfinished stabilization gap
+- [x] skip web research because configurable `fix_fingers` repair policies are a direct extension of the existing stabilization simulator
+- [x] do a short Python state-update/randomness self-check while planning the slice
+- [x] update checklist/docs so the slice is resumable
+- [x] add configurable stabilization finger repair modes (`single`, `all`, `random`) with seeded random support
+- [x] expose the new repair-mode controls in the CLI and stabilization Graphviz export
+- [x] extend automated coverage for deterministic repair scheduling and CLI behavior
+- [x] run tests locally
+- [ ] perform review pass 1 and fix issues
+- [ ] perform review pass 2 and fix issues
+- [ ] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up

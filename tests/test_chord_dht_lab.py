@@ -151,6 +151,43 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertTrue(report["summary"]["fully_stabilized"])
         self.assertEqual(len(report["target_nodes"]), 4)
 
+    def test_stabilization_report_all_mode_repairs_every_finger_in_one_round(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.stabilization_report(joined_node="foxtrot", rounds=1, finger_repair_mode="all")
+
+        self.assertEqual(report["finger_repair_mode"], "all")
+        self.assertEqual(report["rounds"][1]["repaired_finger_slots"], list(range(ring.m_bits)))
+        self.assertEqual(report["summary"]["final_finger_matches"], report["summary"]["total_fingers"])
+        self.assertTrue(report["summary"]["fully_stabilized"])
+
+    def test_stabilization_report_random_mode_is_seeded_and_requires_seed(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        with self.assertRaisesRegex(ValueError, "seed"):
+            ring.stabilization_report(joined_node="foxtrot", rounds=2, finger_repair_mode="random")
+
+        report = ring.stabilization_report(
+            joined_node="foxtrot",
+            rounds=3,
+            finger_repair_mode="random",
+            finger_repair_seed=29,
+        )
+        repeated = ring.stabilization_report(
+            joined_node="foxtrot",
+            rounds=3,
+            finger_repair_mode="random",
+            finger_repair_seed=29,
+        )
+
+        self.assertEqual(report["finger_repair_mode"], "random")
+        self.assertEqual(report["finger_repair_seed"], 29)
+        self.assertEqual(
+            [round_data["repaired_finger_slots"] for round_data in report["rounds"]],
+            [round_data["repaired_finger_slots"] for round_data in repeated["rounds"]],
+        )
+        self.assertTrue(all(len(round_data["repaired_finger_slots"]) == 1 for round_data in report["rounds"][1:]))
+
     def test_select_benchmark_start_nodes_supports_first_and_random_modes(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
 
@@ -385,6 +422,32 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["rounds_requested"], 8)
         self.assertTrue(payload["summary"]["fully_stabilized"])
 
+    def test_cli_stabilize_supports_all_finger_repair_mode(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "stabilize",
+                str(RING_PATH),
+                "--joined-node",
+                "foxtrot",
+                "--rounds",
+                "1",
+                "--finger-repair-mode",
+                "all",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "stabilize")
+        self.assertEqual(payload["finger_repair_mode"], "all")
+        self.assertEqual(payload["rounds"][1]["repaired_finger_slots"], list(range(payload["m_bits"])))
+        self.assertTrue(payload["summary"]["fully_stabilized"])
+
     def test_cli_synth_benchmark_generates_reproducible_workload(self) -> None:
         completed = subprocess.run(
             [
@@ -479,6 +542,37 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "route")
         self.assertIn("digraph chord_route", payload["dot"])
         self.assertIn('"key:compiler"', payload["dot"])
+
+    def test_cli_graphviz_stabilize_supports_random_finger_repair_mode(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "graphviz",
+                str(RING_PATH),
+                "--mode",
+                "stabilize",
+                "--joined-node",
+                "foxtrot",
+                "--rounds",
+                "2",
+                "--finger-repair-mode",
+                "random",
+                "--finger-repair-seed",
+                "17",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "graphviz")
+        self.assertEqual(payload["mode"], "stabilize")
+        self.assertIn("digraph chord_stabilization", payload["dot"])
+        self.assertIn('repair=', payload["dot"])
+        self.assertIn('finger repair: random (seed=17)', payload["dot"])
 
 
 if __name__ == "__main__":

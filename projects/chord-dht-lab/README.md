@@ -16,6 +16,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - key assignment report plus join preview showing moved keys
 - successor-list replica planning and failure simulation for degraded/unavailable key checks
 - explicit stabilization-round simulation for join/failure repair of successor, predecessor, and finger metadata
+- configurable `fix_fingers` scheduling modes so stabilization can model one-slot, full-round, or seeded-random finger repair policies
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
@@ -98,6 +99,7 @@ python3 projects/chord-dht-lab/chord_dht.py stabilize \
   projects/chord-dht-lab/ring.json \
   --joined-node foxtrot \
   --rounds 8 \
+  --finger-repair-mode single \
   --pretty
 ```
 
@@ -108,6 +110,25 @@ python3 projects/chord-dht-lab/chord_dht.py stabilize \
   projects/chord-dht-lab/ring.json \
   --failed-node echo \
   --rounds 8 \
+  --pretty
+```
+
+Compare alternative `fix_fingers` repair schedules:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py stabilize \
+  projects/chord-dht-lab/ring.json \
+  --joined-node foxtrot \
+  --rounds 3 \
+  --finger-repair-mode all \
+  --pretty
+
+python3 projects/chord-dht-lab/chord_dht.py stabilize \
+  projects/chord-dht-lab/ring.json \
+  --joined-node foxtrot \
+  --rounds 4 \
+  --finger-repair-mode random \
+  --finger-repair-seed 17 \
   --pretty
 ```
 
@@ -128,7 +149,9 @@ python3 projects/chord-dht-lab/chord_dht.py graphviz \
   projects/chord-dht-lab/ring.json \
   --mode stabilize \
   --joined-node foxtrot \
-  --rounds 4
+  --rounds 4 \
+  --finger-repair-mode random \
+  --finger-repair-seed 17
 ```
 
 Ring format:
@@ -152,12 +175,11 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - A successor list is the next few clockwise nodes after a given node; in production Chord systems it helps recovery when a primary successor fails.
 - The lookup implementation routes with the closest preceding finger when possible, then falls back to the immediate successor.
 - The resilience command models simple successor-replica failover: the primary owner is first, then consecutive successors act as backups.
-- The stabilize command starts from stale metadata after a join or failure event, repairs successor/predecessor links every round, and repairs one finger slot per round so convergence is easy to visualize.
+- The stabilize command starts from stale metadata after a join or failure event, repairs successor/predecessor links every round, and can repair one finger slot in order, one seeded-random slot (seed required for reproducibility), or all finger slots per round.
 - The graphviz command emits plain DOT text so diagrams can be rendered with Graphviz locally or pasted into online DOT viewers.
 - The benchmark uses the same ring and key identifiers for both lookup strategies so hop-count differences stay attributable to routing logic rather than input drift.
 
 ## Future improvements
-- generate larger synthetic rings and workloads directly from the CLI for broader benchmarking
-- simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
-- export the ring and lookup or stabilization routes as Graphviz diagrams
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
+- add a side-by-side stabilization comparison command that runs multiple finger repair modes on the same join/failure scenario
+- export benchmark summaries as CSV/Markdown tables for portfolio write-ups

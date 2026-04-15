@@ -8,7 +8,7 @@ from bisect import bisect_left
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from statistics import mean
-from typing import Iterable
+from typing import Iterable, Literal
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,9 @@ class LookupResult:
     responsible_node_id: int
     hop_count: int
     route: list[str]
+
+
+FingerRepairMode = Literal["single", "all", "random"]
 
 
 class ChordRing:
@@ -378,9 +381,15 @@ class ChordRing:
         joined_node: str | None = None,
         failed_nodes: Iterable[str] | None = None,
         rounds: int = 3,
+        finger_repair_mode: FingerRepairMode = "single",
+        finger_repair_seed: int | None = None,
     ) -> dict[str, object]:
         if rounds <= 0:
             raise ValueError("rounds must be positive")
+        if finger_repair_mode not in {"single", "all", "random"}:
+            raise ValueError(f"unsupported finger_repair_mode {finger_repair_mode!r}")
+        if finger_repair_mode == "random" and finger_repair_seed is None:
+            raise ValueError("random finger repair mode requires a seed")
 
         failed = list(dict.fromkeys(failed_nodes or []))
         for name in failed:
@@ -417,9 +426,18 @@ class ChordRing:
             }
 
         rounds_data: list[dict[str, object]] = [
-            self._stabilization_round_summary(target_ring, initial_state, round_index=0, changed=[])
+            self._stabilization_round_summary(
+                target_ring,
+                initial_state,
+                round_index=0,
+                changed=[],
+                repaired_finger_slots=[],
+            )
         ]
         current_state = initial_state
+        random_finger_order = list(range(self.m_bits))
+        if finger_repair_mode == "random":
+            random.Random(finger_repair_seed).shuffle(random_finger_order)
 
         for round_index in range(1, rounds + 1):
             next_state = {
@@ -431,7 +449,11 @@ class ChordRing:
                 for name, values in current_state.items()
             }
             changed_nodes: list[str] = []
-            finger_slot = (round_index - 1) % self.m_bits
+            repaired_finger_slots = self._finger_slots_for_round(
+                round_index,
+                finger_repair_mode=finger_repair_mode,
+                random_finger_order=random_finger_order,
+            )
 
             for node in target_ring.nodes:
                 target_successor = target_ring.successor_of_node(node).name
@@ -445,7 +467,8 @@ class ChordRing:
                 )
                 state["successor"] = target_successor
                 state["predecessor"] = target_predecessor
-                state["fingers"][finger_slot] = target_fingers[finger_slot]
+                for finger_slot in repaired_finger_slots:
+                    state["fingers"][finger_slot] = target_fingers[finger_slot]
                 after = (state["successor"], state["predecessor"], list(state["fingers"]))
                 if before != after:
                     changed_nodes.append(node.name)
@@ -457,6 +480,7 @@ class ChordRing:
                     current_state,
                     round_index=round_index,
                     changed=changed_nodes,
+                    repaired_finger_slots=repaired_finger_slots,
                 )
             )
 
@@ -470,6 +494,8 @@ class ChordRing:
             "failed_nodes": failed,
             "rounds_requested": rounds,
             "rounds": rounds_data,
+            "finger_repair_mode": finger_repair_mode,
+            "finger_repair_seed": finger_repair_seed,
             "summary": {
                 "fully_stabilized": bool(final_summary["successor_matches"] == len(target_ring.nodes)
                 and final_summary["predecessor_matches"] == len(target_ring.nodes)
@@ -481,12 +507,26 @@ class ChordRing:
             },
         }
 
+    def _finger_slots_for_round(
+        self,
+        round_index: int,
+        *,
+        finger_repair_mode: FingerRepairMode,
+        random_finger_order: list[int],
+    ) -> list[int]:
+        if finger_repair_mode == "all":
+            return list(range(self.m_bits))
+        if finger_repair_mode == "random":
+            return [random_finger_order[(round_index - 1) % self.m_bits]]
+        return [(round_index - 1) % self.m_bits]
+
     def _stabilization_round_summary(
         self,
         target_ring: "ChordRing",
         state: dict[str, dict[str, object]],
         round_index: int,
         changed: list[str],
+        repaired_finger_slots: list[int],
     ) -> dict[str, object]:
         node_states: list[dict[str, object]] = []
         successor_matches = 0
@@ -526,6 +566,7 @@ class ChordRing:
         return {
             "round": round_index,
             "changed_nodes": changed,
+            "repaired_finger_slots": repaired_finger_slots,
             "nodes": node_states,
             "summary": {
                 "successor_matches": successor_matches,
@@ -557,6 +598,8 @@ class ChordRing:
         joined_node: str | None = None,
         failed_nodes: Iterable[str] | None = None,
         rounds: int = 3,
+        finger_repair_mode: FingerRepairMode = "single",
+        finger_repair_seed: int | None = None,
     ) -> str:
         if mode == "ring":
             return self._ring_graphviz()
@@ -569,6 +612,8 @@ class ChordRing:
                 joined_node=joined_node,
                 failed_nodes=failed_nodes,
                 rounds=rounds,
+                finger_repair_mode=finger_repair_mode,
+                finger_repair_seed=finger_repair_seed,
             )
         raise ValueError(f"unsupported graph export mode {mode!r}")
 
@@ -642,25 +687,34 @@ class ChordRing:
         joined_node: str | None = None,
         failed_nodes: Iterable[str] | None = None,
         rounds: int = 3,
+        finger_repair_mode: FingerRepairMode = "single",
+        finger_repair_seed: int | None = None,
     ) -> str:
         report = self.stabilization_report(
             joined_node=joined_node,
             failed_nodes=failed_nodes,
             rounds=rounds,
+            finger_repair_mode=finger_repair_mode,
+            finger_repair_seed=finger_repair_seed,
         )
         failed = set(report["failed_nodes"])
+        mode_suffix = finger_repair_mode
+        if finger_repair_mode == "random":
+            mode_suffix = f"{finger_repair_mode} (seed={finger_repair_seed})"
         lines = [
             "digraph chord_stabilization {",
             "  rankdir=LR;",
-            '  graph [label="Chord stabilization progression", labelloc=t, fontsize=20];',
+            f'  graph [label="Chord stabilization progression | finger repair: {self._dot_label(mode_suffix)}", labelloc=t, fontsize=20];',
             '  node [shape=record, style="rounded,filled", fillcolor="#f8fafc", color="#334155"];',
             '  edge [color="#64748b", penwidth=1.1];',
         ]
         for round_data in report["rounds"]:
             round_index = round_data["round"]
             summary = round_data["summary"]
+            repaired = round_data["repaired_finger_slots"]
+            repaired_label = "all" if len(repaired) == self.m_bits else ", ".join(str(slot) for slot in repaired) or "none"
             lines.append(f'  subgraph cluster_round_{round_index} {{')
-            lines.append(f'    label="round {round_index}";')
+            lines.append(f'    label="round {round_index} | repair={self._dot_label(repaired_label)}";')
             lines.append('    color="#cbd5e1";')
             for node_state in round_data["nodes"]:
                 name = node_state["name"]
@@ -896,6 +950,18 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="number of stabilization rounds to simulate",
     )
+    stabilize_parser.add_argument(
+        "--finger-repair-mode",
+        choices=["single", "all", "random"],
+        default="single",
+        help="how each stabilization round repairs finger entries: one slot in order, all slots, or one seeded-random slot",
+    )
+    stabilize_parser.add_argument(
+        "--finger-repair-seed",
+        type=int,
+        default=None,
+        help="seed for --finger-repair-mode random; required when random mode is used",
+    )
     stabilize_parser.add_argument("--pretty", action="store_true")
 
     synth_parser = subparsers.add_parser(
@@ -953,6 +1019,18 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="number of stabilization rounds to export when mode=stabilize",
     )
+    graphviz_parser.add_argument(
+        "--finger-repair-mode",
+        choices=["single", "all", "random"],
+        default="single",
+        help="finger repair policy for stabilization graph exports when mode=stabilize",
+    )
+    graphviz_parser.add_argument(
+        "--finger-repair-seed",
+        type=int,
+        default=None,
+        help="seed for random finger repair mode when mode=stabilize",
+    )
 
     return parser.parse_args()
 
@@ -992,6 +1070,8 @@ def main() -> None:
                 joined_node=args.joined_node,
                 failed_nodes=args.failed_nodes,
                 rounds=args.rounds,
+                finger_repair_mode=args.finger_repair_mode,
+                finger_repair_seed=args.finger_repair_seed,
             ),
         }
     elif args.command == "synth-benchmark":
@@ -1019,6 +1099,8 @@ def main() -> None:
                 joined_node=args.joined_node,
                 failed_nodes=args.failed_nodes,
                 rounds=args.rounds,
+                finger_repair_mode=args.finger_repair_mode,
+                finger_repair_seed=args.finger_repair_seed,
             ),
         }
     else:
