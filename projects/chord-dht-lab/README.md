@@ -20,6 +20,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - side-by-side stabilization comparison mode so multiple repair schedules can be evaluated on the same join/failure scenario
 - Markdown/CSV export for stabilization comparison summaries so portfolio write-ups can reuse the results directly
 - churn workload driver that chains joins, failures, and recovery/rejoin events with stabilization summaries
+- Markdown/CSV export for churn summaries so portfolio write-ups and charts can reuse multi-event recovery results directly
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
@@ -190,6 +191,23 @@ Event file format:
 
 `recover` is reserved for nodes that existed in the original baseline ring and are currently absent after a failure. New ad-hoc nodes should still use `join`.
 
+Export a churn summary as Markdown for portfolio notes:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py churn-export \
+  projects/chord-dht-lab/ring.json \
+  projects/chord-dht-lab/churn_events.json
+```
+
+Export the same churn summary as CSV for charts or spreadsheets:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py churn-export \
+  projects/chord-dht-lab/ring.json \
+  projects/chord-dht-lab/churn_events.json \
+  --format csv
+```
+
 Export a Graphviz DOT diagram for a lookup route:
 
 ```bash
@@ -240,4 +258,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 ## Future improvements
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
 - export benchmark summaries as CSV/Markdown tables for portfolio write-ups
-- export churn summaries as Markdown/CSV for portfolio write-ups or charts
+- compare multiple churn event files side by side to show workload sensitivity across different recovery patterns

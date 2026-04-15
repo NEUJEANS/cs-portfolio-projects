@@ -62,6 +62,7 @@
 - [x] export comparison summaries as Markdown/CSV for portfolio write-ups
 - [x] add a churn workload driver that chains multiple joins/failures and summarizes recovery over time
 - [x] model explicit node recovery/rejoin events inside churn scenarios
+- [x] export churn summaries as Markdown/CSV for portfolio write-ups or charts
 
 ## Recovery churn slice (2026-04-15 19:42 UTC run)
 - [x] confirm repo sync before editing
@@ -142,3 +143,19 @@
 - [ ] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Churn export slice (2026-04-15 19:52 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current churn tooling for the weakest unfinished portfolio-reporting gap
+- [x] skip web research because churn Markdown/CSV export is a direct extension of the existing churn report structure
+- [x] do a short Python text/csv rendering self-check
+- [x] update checklist/docs so the slice is resumable
+- [x] add Markdown and CSV export helpers for churn summaries
+- [x] expose the export workflow via a dedicated CLI command
+- [x] extend automated coverage for helper rendering and CLI output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up

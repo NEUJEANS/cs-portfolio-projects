@@ -1041,6 +1041,79 @@ def render_stabilization_comparison_csv(comparison: dict[str, object]) -> str:
     return output.getvalue().strip()
 
 
+def render_churn_report_markdown(report: dict[str, object]) -> str:
+    summary = report['summary']
+    starting_nodes = ', '.join(f"`{node['name']}`" for node in report['starting_nodes'])
+    ending_nodes = ', '.join(f"`{node['name']}`" for node in report['ending_nodes'])
+    lines = [
+        "# Chord churn summary",
+        "",
+        f"- Events processed: `{report['event_count']}`",
+        f"- Default rounds per event: `{report['rounds_default']}`",
+        f"- Finger repair mode: `{report['finger_repair_mode']}`",
+        f"- Finger repair seed: `{report['finger_repair_seed']}`" if report.get('finger_repair_seed') is not None else "- Finger repair seed: `none`",
+        f"- Starting nodes: {starting_nodes}",
+        f"- Ending nodes: {ending_nodes}",
+        f"- Fully stabilized steps: `{summary['fully_stabilized_steps']}`",
+        f"- Partially stabilized steps: `{summary['partially_stabilized_steps']}`",
+        f"- Max stabilized round: `{summary['max_stabilized_round']}`",
+        f"- Average stabilized round: `{summary['average_stabilized_round']}`",
+        f"- Final node count: `{summary['final_node_count']}`",
+        "",
+        "| Step | Action | Node | Rounds | Stabilized round | Final finger progress | Final successor matches | Final predecessor matches |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for step in report['steps']:
+        stabilized_round = step['stabilized_round'] if step['stabilized_round'] is not None else "not within budget"
+        progress_ratio = step['final_finger_matches'] / max(step['total_fingers'], 1)
+        lines.append(
+            f"| {step['step']} | `{step['action']}` | `{step['node']}` | {step['rounds_requested']} | {stabilized_round} | {progress_ratio:.2%} | {step['final_successor_matches']}/{step['target_node_count']} | {step['final_predecessor_matches']}/{step['target_node_count']} |"
+        )
+    return "\n".join(lines)
+
+
+def render_churn_report_csv(report: dict[str, object]) -> str:
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "step",
+        "action",
+        "node",
+        "rounds_requested",
+        "finger_repair_mode",
+        "stabilized_round",
+        "fully_stabilized",
+        "final_finger_progress_ratio",
+        "final_successor_matches",
+        "target_node_count",
+        "final_predecessor_matches",
+        "final_finger_matches",
+        "total_fingers",
+        "ending_node_count",
+    ])
+    for step in report['steps']:
+        writer.writerow([
+            step['step'],
+            step['action'],
+            step['node'],
+            step['rounds_requested'],
+            report['finger_repair_mode'],
+            step['stabilized_round'],
+            str(step['fully_stabilized']).lower(),
+            f"{step['final_finger_matches'] / max(step['total_fingers'], 1):.6f}",
+            step['final_successor_matches'],
+            step['target_node_count'],
+            step['final_predecessor_matches'],
+            step['final_finger_matches'],
+            step['total_fingers'],
+            len(step['after_nodes']),
+        ])
+    return output.getvalue().strip()
+
+
 def build_demo_payload() -> dict[str, object]:
     ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
     sample_keys = ["report.pdf", "slides", "internship-notes", "compiler", "final-project"]
@@ -1364,6 +1437,32 @@ def parse_args() -> argparse.Namespace:
     )
     churn_parser.add_argument("--pretty", action="store_true")
 
+    churn_export_parser = subparsers.add_parser(
+        "churn-export",
+        help="render a churn summary as Markdown or CSV for portfolio notes",
+    )
+    churn_export_parser.add_argument("ring_file", type=Path)
+    churn_export_parser.add_argument("events_file", type=Path)
+    churn_export_parser.add_argument("--rounds", type=int, default=3)
+    churn_export_parser.add_argument(
+        "--finger-repair-mode",
+        choices=["single", "all", "random"],
+        default="single",
+        help="finger repair policy to use for each churn step",
+    )
+    churn_export_parser.add_argument(
+        "--finger-repair-seed",
+        type=int,
+        default=None,
+        help="seed for random finger repair mode; required when random mode is used",
+    )
+    churn_export_parser.add_argument(
+        "--format",
+        choices=["markdown", "csv"],
+        default="markdown",
+        help="report format for the rendered churn summary",
+    )
+
     synth_parser = subparsers.add_parser(
         "synth-benchmark",
         help="generate a deterministic synthetic ring/workload and benchmark lookup hops",
@@ -1525,6 +1624,21 @@ def main() -> None:
             return
         if args.format == "csv":
             print(render_stabilization_comparison_csv(comparison))
+            return
+        raise ValueError(f"unsupported export format {args.format!r}")
+    elif args.command == "churn-export":
+        ring = load_ring(args.ring_file)
+        report = ring.churn_report(
+            load_churn_events(args.events_file),
+            rounds=args.rounds,
+            finger_repair_mode=args.finger_repair_mode,
+            finger_repair_seed=args.finger_repair_seed,
+        )
+        if args.format == "markdown":
+            print(render_churn_report_markdown(report))
+            return
+        if args.format == "csv":
+            print(render_churn_report_csv(report))
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "graphviz":

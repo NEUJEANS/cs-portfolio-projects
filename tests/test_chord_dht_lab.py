@@ -767,6 +767,38 @@ class ChordDhtLabTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "JSON list"):
                 module.load_churn_events(path)
 
+    def test_render_churn_report_markdown_contains_step_table(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.churn_report(
+            [
+                {"action": "join", "node": "foxtrot", "rounds": 4},
+                {"action": "fail", "node": "charlie", "rounds": 3},
+            ],
+            finger_repair_mode="all",
+        )
+        rendered = module.render_churn_report_markdown(report)
+
+        self.assertIn("# Chord churn summary", rendered)
+        self.assertIn("- Starting nodes: `alpha`, `charlie`, `delta`, `echo`, `bravo`", rendered)
+        self.assertIn("| Step | Action | Node | Rounds | Stabilized round |", rendered)
+        self.assertIn("| 1 | `join` | `foxtrot` | 4 | 1 | 100.00% | 6/6 | 6/6 |", rendered)
+
+    def test_render_churn_report_csv_contains_machine_readable_rows(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.churn_report(
+            [
+                {"action": "fail", "node": "charlie", "rounds": 2},
+                {"action": "recover", "node": "charlie", "rounds": 2},
+            ],
+            finger_repair_mode="all",
+        )
+        rendered = module.render_churn_report_csv(report)
+
+        self.assertIn("step,action,node,rounds_requested,finger_repair_mode,stabilized_round,fully_stabilized", rendered)
+        self.assertIn("1,fail,charlie,2,all,0,true,1.000000,4,4,4,32,32,4", rendered)
+
     def test_cli_churn_outputs_event_summary(self) -> None:
         churn_path = PROJECT_ROOT / "projects" / "chord-dht-lab" / "churn_events.json"
 
@@ -794,6 +826,50 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["steps"][0]["action"], "join")
         self.assertEqual(payload["steps"][1]["action"], "fail")
         self.assertEqual(payload["summary"]["final_node_count"], len(payload["ending_nodes"]))
+
+    def test_cli_churn_export_outputs_markdown(self) -> None:
+        churn_path = PROJECT_ROOT / "projects" / "chord-dht-lab" / "churn_events.json"
+
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "churn-export",
+                str(RING_PATH),
+                str(churn_path),
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("# Chord churn summary", completed.stdout)
+        self.assertIn("| Step | Action | Node | Rounds | Stabilized round |", completed.stdout)
+
+    def test_cli_churn_export_outputs_csv(self) -> None:
+        churn_path = PROJECT_ROOT / "projects" / "chord-dht-lab" / "churn_events.json"
+
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "churn-export",
+                str(RING_PATH),
+                str(churn_path),
+                "--format",
+                "csv",
+                "--finger-repair-mode",
+                "all",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("step,action,node,rounds_requested,finger_repair_mode,stabilized_round,fully_stabilized", completed.stdout)
+        self.assertIn("1,join,foxtrot,4,all,1,true,1.000000", completed.stdout)
 
     def test_cli_churn_supports_recover_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
