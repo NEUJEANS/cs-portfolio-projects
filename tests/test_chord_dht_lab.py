@@ -194,6 +194,35 @@ class ChordDhtLabTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "nodes"):
                 module.load_ring(path)
 
+    def test_graphviz_ring_export_contains_successor_edges(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        dot = ring.export_graphviz("ring")
+
+        self.assertIn("digraph chord_ring", dot)
+        self.assertIn('"alpha" -> "charlie" [label="successor"]', dot)
+        self.assertIn('"echo" -> "bravo" [label="successor"]', dot)
+
+    def test_graphviz_route_export_marks_key_and_hops(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        dot = ring.export_graphviz("route", start_node="alpha", key="compiler")
+
+        self.assertIn("digraph chord_route", dot)
+        self.assertIn('"key:compiler"', dot)
+        self.assertIn('label="hop 1"', dot)
+        self.assertIn('label="maps to"', dot)
+
+    def test_graphviz_stabilization_export_contains_round_clusters(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        dot = ring.export_graphviz("stabilize", joined_node="foxtrot", rounds=3)
+
+        self.assertIn("digraph chord_stabilization", dot)
+        self.assertIn("subgraph cluster_round_0", dot)
+        self.assertIn('"r0:foxtrot"', dot)
+        self.assertIn('"r3:summary"', dot)
+
     def test_cli_demo_outputs_expected_shape(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "demo"],
@@ -210,6 +239,7 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("lookup", payload)
         self.assertIn("resilience_preview", payload)
         self.assertIn("stabilization_preview", payload)
+        self.assertIn("graphviz_preview", payload)
         self.assertIn("hop_benchmark", payload)
         self.assertEqual(payload["lookup"]["key"], "compiler")
         owners = {item["key"]: item["owner"] for item in payload["sample_assignments"]}
@@ -336,6 +366,32 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(len(payload["ring"]["nodes"]), 12)
         self.assertEqual(len(payload["keys"]), 15)
         self.assertEqual(payload["benchmark"]["summary"]["case_count"], 60)
+
+    def test_cli_graphviz_route_outputs_dot_payload(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "graphviz",
+                str(RING_PATH),
+                "--mode",
+                "route",
+                "--start-node",
+                "alpha",
+                "--key",
+                "compiler",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "graphviz")
+        self.assertEqual(payload["mode"], "route")
+        self.assertIn("digraph chord_route", payload["dot"])
+        self.assertIn('"key:compiler"', payload["dot"])
 
 
 if __name__ == "__main__":

@@ -37,8 +37,24 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Graphviz export slice (2026-04-15 06:49 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current Chord lab for the weakest unfinished visualization/documentation gap
+- [x] skip web research because Graphviz DOT export is a direct fit for the existing CLI and data model
+- [x] do a short Python string-formatting/CLI output self-check while planning the slice
+- [x] update checklist/docs so the slice is resumable
+- [x] add Graphviz DOT export for the ring, lookup route, and stabilization progression
+- [x] expose graphviz output in the demo payload and a dedicated CLI command
+- [x] extend automated coverage for DOT exports and CLI output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Next slice candidates
 - [x] generate larger synthetic rings and workloads directly from the CLI for broader benchmarking
 - [ ] simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
-- [ ] export the ring and lookup or stabilization routes as Graphviz diagrams
+- [x] export the ring and lookup or stabilization routes as Graphviz diagrams
 - [ ] let synthetic benchmarks sample random subsets of start nodes instead of taking the first N sorted nodes

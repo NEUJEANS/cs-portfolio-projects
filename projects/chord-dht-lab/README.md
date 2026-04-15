@@ -16,6 +16,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - key assignment report plus join preview showing moved keys
 - successor-list replica planning and failure simulation for degraded/unavailable key checks
 - explicit stabilization-round simulation for join/failure repair of successor, predecessor, and finger metadata
+- Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
 - JSON ring input for reproducible demos and unit tests
@@ -95,6 +96,26 @@ python3 projects/chord-dht-lab/chord_dht.py stabilize \
   --pretty
 ```
 
+Export a Graphviz DOT diagram for a lookup route:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py graphviz \
+  projects/chord-dht-lab/ring.json \
+  --mode route \
+  --start-node alpha \
+  --key compiler
+```
+
+Export a stabilization progression diagram:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py graphviz \
+  projects/chord-dht-lab/ring.json \
+  --mode stabilize \
+  --joined-node foxtrot \
+  --rounds 4
+```
+
 Ring format:
 
 ```json
@@ -117,6 +138,7 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - The lookup implementation routes with the closest preceding finger when possible, then falls back to the immediate successor.
 - The resilience command models simple successor-replica failover: the primary owner is first, then consecutive successors act as backups.
 - The stabilize command starts from stale metadata after a join or failure event, repairs successor/predecessor links every round, and repairs one finger slot per round so convergence is easy to visualize.
+- The graphviz command emits plain DOT text so diagrams can be rendered with Graphviz locally or pasted into online DOT viewers.
 - The benchmark uses the same ring and key identifiers for both lookup strategies so hop-count differences stay attributable to routing logic rather than input drift.
 
 ## Future improvements

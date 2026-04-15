@@ -549,6 +549,154 @@ class ChordRing:
             return value > start or value < end
         return value != start
 
+    def export_graphviz(
+        self,
+        mode: str,
+        start_node: str | None = None,
+        key: str | None = None,
+        joined_node: str | None = None,
+        failed_nodes: Iterable[str] | None = None,
+        rounds: int = 3,
+    ) -> str:
+        if mode == "ring":
+            return self._ring_graphviz()
+        if mode == "route":
+            if start_node is None or key is None:
+                raise ValueError("route graph export requires start_node and key")
+            return self._route_graphviz(start_node, key)
+        if mode == "stabilize":
+            return self._stabilization_graphviz(
+                joined_node=joined_node,
+                failed_nodes=failed_nodes,
+                rounds=rounds,
+            )
+        raise ValueError(f"unsupported graph export mode {mode!r}")
+
+    def _ring_graphviz(self) -> str:
+        lines = [
+            "digraph chord_ring {",
+            "  rankdir=LR;",
+            '  graph [label="Chord ring topology", labelloc=t, fontsize=20];',
+            '  node [shape=record, style="rounded,filled", fillcolor="#eef6ff", color="#3b82f6"];',
+            '  edge [color="#475569", penwidth=1.4];',
+        ]
+        for node in self.nodes:
+            lines.append(
+                f'  "{node.name}" [label="{{{node.name}|id={node.node_id}}}"];'
+            )
+        for node in self.nodes:
+            successor = self.successor_of_node(node)
+            lines.append(f'  "{node.name}" -> "{successor.name}" [label="successor"];')
+        lines.append("}")
+        return "\\n".join(lines)
+
+    def _route_graphviz(self, start_node: str, key: str) -> str:
+        result = self.lookup(start_node, key)
+        owner = self.get_node(result.responsible_node)
+        key_id = result.key_id
+        lines = [
+            "digraph chord_route {",
+            "  rankdir=LR;",
+            f'  graph [label="Chord lookup route for {self._dot_label(key)} (id={key_id})", labelloc=t, fontsize=20];',
+            '  node [shape=record, style="rounded,filled", fillcolor="#eef6ff", color="#3b82f6"];',
+            '  edge [color="#94a3b8", penwidth=1.2];',
+        ]
+        route_pairs = {(result.route[index], result.route[index + 1]) for index in range(len(result.route) - 1)}
+        route_nodes = set(result.route)
+        for node in self.nodes:
+            extras = []
+            if node.name == result.start_node:
+                extras.append("start")
+            if node.name == owner.name:
+                extras.append("owner")
+            if node.name in route_nodes:
+                extras.append("route")
+            suffix = f'\\n({", ".join(extras)})' if extras else ""
+            fill = '#dbeafe' if node.name in route_nodes else '#eef6ff'
+            if node.name == owner.name:
+                fill = '#dcfce7'
+            lines.append(
+                f'  "{node.name}" [label="{{{node.name}|id={node.node_id}{suffix}}}", fillcolor="{fill}"];'
+            )
+        lines.append(f'  "key:{key}" [shape=note, fillcolor="#fff7ed", color="#f97316", label="{self._dot_label(key)}\\nid={key_id}"];')
+        lines.append(f'  "key:{key}" -> "{owner.name}" [color="#f97316", penwidth=2.2, label="maps to"];')
+        for node in self.nodes:
+            successor = self.successor_of_node(node)
+            if (node.name, successor.name) in route_pairs:
+                lines.append(
+                    f'  "{node.name}" -> "{successor.name}" [color="#94a3b8", style=dashed, label="ring"];'
+                )
+            else:
+                lines.append(f'  "{node.name}" -> "{successor.name}" [color="#cbd5e1", style=dashed];')
+        for index in range(len(result.route) - 1):
+            source = result.route[index]
+            target = result.route[index + 1]
+            lines.append(
+                f'  "{source}" -> "{target}" [color="#dc2626", penwidth=2.6, label="hop {index + 1}"];'
+            )
+        lines.append("}")
+        return "\\n".join(lines)
+
+    def _stabilization_graphviz(
+        self,
+        joined_node: str | None = None,
+        failed_nodes: Iterable[str] | None = None,
+        rounds: int = 3,
+    ) -> str:
+        report = self.stabilization_report(
+            joined_node=joined_node,
+            failed_nodes=failed_nodes,
+            rounds=rounds,
+        )
+        failed = set(report["failed_nodes"])
+        lines = [
+            "digraph chord_stabilization {",
+            "  rankdir=LR;",
+            '  graph [label="Chord stabilization progression", labelloc=t, fontsize=20];',
+            '  node [shape=record, style="rounded,filled", fillcolor="#f8fafc", color="#334155"];',
+            '  edge [color="#64748b", penwidth=1.1];',
+        ]
+        for round_data in report["rounds"]:
+            round_index = round_data["round"]
+            summary = round_data["summary"]
+            lines.append(f'  subgraph cluster_round_{round_index} {{')
+            lines.append(f'    label="round {round_index}";')
+            lines.append('    color="#cbd5e1";')
+            for node_state in round_data["nodes"]:
+                name = node_state["name"]
+                fill = '#fef3c7' if name == joined_node else '#f8fafc'
+                if name in failed:
+                    fill = '#fee2e2'
+                if node_state["successor_ok"] and node_state["predecessor_ok"] and node_state["matching_fingers"] == node_state["total_fingers"]:
+                    fill = '#dcfce7'
+                label = (
+                    f"{{{name}|succ={node_state['observed_successor']}|pred={node_state['observed_predecessor']}|"
+                    f"fingers={node_state['matching_fingers']}/{node_state['total_fingers']}}}"
+                )
+                lines.append(
+                    f'    "r{round_index}:{name}" [label="{label}", fillcolor="{fill}"];'
+                )
+            lines.append(
+                f'    "r{round_index}:summary" [shape=note, fillcolor="#e0f2fe", color="#0284c7", '
+                f'label="matched succ/pred: {summary["successor_matches"]}/{summary["node_count"]} / {summary["predecessor_matches"]}/{summary["node_count"]}\\nfingers: {summary["finger_matches"]}/{summary["node_count"] * self.m_bits}"];'
+            )
+            lines.append("  }")
+        for round_data in report["rounds"][:-1]:
+            next_round = round_data["round"] + 1
+            for node_state in round_data["nodes"]:
+                name = node_state["name"]
+                lines.append(f'  "r{round_data["round"]}:{name}" -> "r{next_round}:{name}";')
+            changed = report["rounds"][next_round]["changed_nodes"]
+            label = ", ".join(changed) if changed else "no metadata changes"
+            lines.append(
+                f'  "r{round_data["round"]}:summary" -> "r{next_round}:summary" [label="changed: {self._dot_label(label)}"];'
+            )
+        lines.append("}")
+        return "\n".join(lines)
+
+    def _dot_label(self, value: str) -> str:
+        return value.replace("\\", r"\\").replace('"', r'\"').replace("\n", r"\n")
+
 
 def build_demo_payload() -> dict[str, object]:
     ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
@@ -569,6 +717,10 @@ def build_demo_payload() -> dict[str, object]:
             replica_count=3,
         ),
         "stabilization_preview": ring.stabilization_report(joined_node="foxtrot", rounds=3),
+        "graphviz_preview": {
+            "ring_dot": ring.export_graphviz("ring"),
+            "route_dot": ring.export_graphviz("route", start_node="alpha", key="compiler"),
+        },
         "hop_benchmark": ring.benchmark_lookups(sample_keys, start_nodes=["alpha", "charlie"]),
     }
 
@@ -736,6 +888,34 @@ def parse_args() -> argparse.Namespace:
     )
     synth_parser.add_argument("--pretty", action="store_true")
 
+    graphviz_parser = subparsers.add_parser(
+        "graphviz",
+        help="export Graphviz DOT for the ring, a lookup route, or stabilization rounds",
+    )
+    graphviz_parser.add_argument("ring_file", type=Path)
+    graphviz_parser.add_argument(
+        "--mode",
+        choices=["ring", "route", "stabilize"],
+        default="ring",
+        help="what to export as DOT",
+    )
+    graphviz_parser.add_argument("--start-node", help="start node for route mode")
+    graphviz_parser.add_argument("--key", help="lookup key for route mode")
+    graphviz_parser.add_argument("--joined-node", help="joined node for stabilization mode")
+    graphviz_parser.add_argument(
+        "--failed-node",
+        dest="failed_nodes",
+        action="append",
+        default=[],
+        help="failed node for stabilization mode; may be provided multiple times",
+    )
+    graphviz_parser.add_argument(
+        "--rounds",
+        type=int,
+        default=3,
+        help="number of stabilization rounds to export when mode=stabilize",
+    )
+
     return parser.parse_args()
 
 
@@ -785,6 +965,20 @@ def main() -> None:
                 key_count=args.keys,
                 seed=args.seed,
                 start_nodes=args.start_nodes,
+            ),
+        }
+    elif args.command == "graphviz":
+        ring = load_ring(args.ring_file)
+        payload = {
+            "command": "graphviz",
+            "mode": args.mode,
+            "dot": ring.export_graphviz(
+                args.mode,
+                start_node=args.start_node,
+                key=args.key,
+                joined_node=args.joined_node,
+                failed_nodes=args.failed_nodes,
+                rounds=args.rounds,
             ),
         }
     else:
