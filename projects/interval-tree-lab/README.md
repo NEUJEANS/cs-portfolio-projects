@@ -11,13 +11,13 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 ## Features
 - immutable interval model with optional labels
 - balanced bulk build from sorted unique intervals for stable demos
-- incremental insert with `max_end` metadata refresh
+- incremental insert and deletion with `max_end` metadata refresh
 - find any overlap, find all overlaps, and point stabbing queries
 - reproducible synthetic benchmark that compares pruned interval-tree searches versus naive scans
 - per-query node-visit stats for making pruning behavior visible in JSON output
 - bundled `sample_intervals.json` artifact for quick inspection and demo data
 - validation for BST ordering and `max_end` correctness
-- JSON CLI output for demo, build, overlap, point, insert, trace, and benchmark flows
+- JSON CLI output for demo, build, overlap, point, insert, delete, trace, and benchmark flows
 - Graphviz DOT query-trace export that highlights visited, pruned, and overlapping branches
 - optional trace artifact rendering to DOT, SVG, or PNG files for portfolio screenshots and README embeds
 
@@ -53,6 +53,12 @@ Insert a new interval:
 python3 projects/interval-tree-lab/interval_tree_lab.py insert 8-12:patch 0-3:warmup 5-8:backup 15-23:analytics
 ```
 
+Delete an interval and repair the augmented metadata:
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py delete 8-12:patch 0-3:warmup 5-8:backup 8-12:patch 15-23:analytics
+```
+
 Benchmark interval-tree pruning against a naive scan:
 
 ```bash
@@ -74,7 +80,7 @@ python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-
 ## Test
 
 ```bash
-python3 -m unittest tests/test_interval_tree_lab.py
+python3 -m unittest projects/interval-tree-lab/test_interval_tree_lab.py
 ```
 
 ## Design notes
@@ -88,6 +94,6 @@ python3 -m unittest tests/test_interval_tree_lab.py
 - SVG/PNG rendering is optional and only requires Graphviz `dot` when you explicitly ask for a rendered artifact.
 
 ## Future improvements
-- add deletion with metadata repair
 - add canned example artifact files under `docs/artifacts/` for a couple of canonical trace scenarios
+- add range-update or interval-assignment variants for scheduling-heavy demonstrations
 - add CSV/plot export for benchmark runs across multiple workload sizes

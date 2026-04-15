@@ -66,6 +66,12 @@ class IntervalTree:
             self.size += 1
         return inserted
 
+    def delete(self, interval: Interval) -> bool:
+        deleted, self.root = self._delete(self.root, interval)
+        if deleted:
+            self.size -= 1
+        return deleted
+
     def overlaps_any(self, query: Interval) -> bool:
         return self.find_any_overlap(query) is not None
 
@@ -254,6 +260,38 @@ class IntervalTree:
         if inserted:
             self._refresh(node)
         return inserted, node
+
+    def _delete(self, node: Node | None, interval: Interval) -> tuple[bool, Node | None]:
+        if node is None:
+            return False, None
+        if interval < node.interval:
+            deleted, node.left = self._delete(node.left, interval)
+            if deleted:
+                self._refresh(node)
+            return deleted, node
+        if interval > node.interval:
+            deleted, node.right = self._delete(node.right, interval)
+            if deleted:
+                self._refresh(node)
+            return deleted, node
+
+        if node.left is None:
+            return True, node.right
+        if node.right is None:
+            return True, node.left
+
+        successor, new_right = self._pop_min(node.right)
+        node.interval = successor.interval
+        node.right = new_right
+        self._refresh(node)
+        return True, node
+
+    def _pop_min(self, node: Node) -> tuple[Node, Node | None]:
+        if node.left is None:
+            return node, node.right
+        successor, node.left = self._pop_min(node.left)
+        self._refresh(node)
+        return successor, node
 
     def _collect_overlaps(self, node: Node | None, query: Interval, results: list[Interval]) -> int:
         if node is None:
@@ -465,6 +503,19 @@ def command_insert(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def command_delete(args: argparse.Namespace) -> dict[str, object]:
+    tree = IntervalTree(load_intervals(args.intervals))
+    interval = parse_interval_spec(args.interval)
+    deleted = tree.delete(interval)
+    return {
+        "command": "delete",
+        "input": args.intervals,
+        "interval": interval.to_dict(),
+        "deleted": deleted,
+        **tree.summary(),
+    }
+
+
 def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
     if args.intervals <= 0:
         raise ValueError("--intervals must be positive")
@@ -567,6 +618,11 @@ def main() -> None:
     insert_parser.add_argument("interval", help="interval to insert")
     insert_parser.add_argument("intervals", nargs="+", help="interval specs")
     insert_parser.set_defaults(handler=command_insert)
+
+    delete_parser = subparsers.add_parser("delete", help="delete one interval from a built tree")
+    delete_parser.add_argument("interval", help="interval to delete")
+    delete_parser.add_argument("intervals", nargs="+", help="interval specs")
+    delete_parser.set_defaults(handler=command_delete)
 
     benchmark_parser = subparsers.add_parser(
         "benchmark",
