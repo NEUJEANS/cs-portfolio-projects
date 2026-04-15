@@ -59,6 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     delete_parser.add_argument("id", nargs="?", type=int)
     delete_parser.add_argument("task_id", nargs="?", type=int)
 
+    archive_parser = subparsers.add_parser("archive", help="Archive completed tasks into dated snapshots.")
+    archive_parser.add_argument("--output-dir", help="Archive destination directory. Defaults next to the data file.")
+    archive_parser.add_argument("--keep", action="store_true", help="Keep completed tasks in the active store after archiving.")
+
     summary_parser = subparsers.add_parser("summary", help="Print task summary counts.")
     summary_parser.add_argument("--json", action="store_true")
 
@@ -202,6 +206,19 @@ def run_cli(argv: list[str] | None = None) -> int:
         if args.command == "delete":
             task = service.delete_task(_coalesce_task_id(args))
             print(f"Deleted task #{task.id}: {task.description}")
+            return 0
+        if args.command == "archive":
+            snapshot = service.archive_completed_tasks(
+                Path(args.output_dir) if args.output_dir else None,
+                keep=args.keep,
+            )
+            print(f"Archived {len(snapshot.archived_tasks)} completed task(s) at {snapshot.created_at}")
+            print(f"JSON snapshot: {snapshot.json_path}")
+            print(f"Markdown snapshot: {snapshot.markdown_path}")
+            if args.keep:
+                print("Completed tasks were kept in the active store.")
+            else:
+                print(f"Remaining active tasks: {len(snapshot.remaining_tasks)}")
             return 0
         if args.command == "summary":
             print(_render_summary(service.summary(), args.json))

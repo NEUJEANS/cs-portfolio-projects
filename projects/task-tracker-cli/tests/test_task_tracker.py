@@ -170,6 +170,42 @@ class TaskServiceTests(unittest.TestCase):
         self.assertIn("# Task Export", markdown_output)
         self.assertIn("| 1 | Prepare demo | todo | high | 2026-04-16 | weekly | demo, school |", markdown_output)
 
+    def test_archive_completed_tasks_writes_snapshot_and_prunes_store(self):
+        self.service.add_task("Prepare demo", tags=["demo"])
+        self.service.add_task("Ship docs", tags=["docs"])
+        self.service.set_status(2, "done")
+
+        archive_dir = Path(self.temp_dir.name) / "archives"
+        snapshot = self.service.archive_completed_tasks(archive_dir)
+
+        self.assertEqual([task.id for task in snapshot.archived_tasks], [2])
+        self.assertTrue(snapshot.json_path.exists())
+        self.assertTrue(snapshot.markdown_path.exists())
+
+        json_payload = json.loads(snapshot.json_path.read_text(encoding="utf-8"))
+        self.assertEqual(json_payload["archived_ids"], [2])
+        self.assertEqual(json_payload["tasks"][0]["description"], "Ship docs")
+        self.assertIn("# Completed Task Archive", snapshot.markdown_path.read_text(encoding="utf-8"))
+
+        remaining = self.service.list_tasks()
+        self.assertEqual([task.id for task in remaining], [1])
+        self.assertEqual([task.id for task in snapshot.remaining_tasks], [1])
+
+    def test_archive_keep_preserves_active_store(self):
+        self.service.add_task("Prepare demo")
+        self.service.set_status(1, "done")
+
+        snapshot = self.service.archive_completed_tasks(keep=True)
+
+        self.assertEqual(len(snapshot.archived_tasks), 1)
+        self.assertEqual(len(self.service.list_tasks()), 1)
+        self.assertEqual(self.service.list_tasks()[0].status, "done")
+
+    def test_archive_requires_completed_tasks(self):
+        self.service.add_task("Prepare demo")
+        with self.assertRaises(TaskTrackerError):
+            self.service.archive_completed_tasks()
+
     def test_delete_missing_task_raises_error(self):
         with self.assertRaises(TaskTrackerError):
             self.service.delete_task(99)
@@ -189,10 +225,11 @@ class TaskServiceTests(unittest.TestCase):
 
 
 class TaskCliSmokeTests(unittest.TestCase):
-    def test_cli_add_complete_export_and_summary_with_recurring_task(self):
+    def test_cli_add_complete_export_archive_and_summary_with_recurring_task(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data_file = Path(temp_dir) / "tasks.json"
             export_file = Path(temp_dir) / "tasks.md"
+            archive_dir = Path(temp_dir) / "archives"
             project_dir = Path(__file__).resolve().parents[1]
 
             add_result = subprocess.run(
@@ -234,6 +271,28 @@ class TaskCliSmokeTests(unittest.TestCase):
             self.assertIn("Spawned next recurring task", done_result.stdout)
             self.assertIn("due=2026-04-27", done_result.stdout)
 
+            archive_result = subprocess.run(
+                [
+                    "python3",
+                    "-m",
+                    "src.task_tracker",
+                    "--data-file",
+                    str(data_file),
+                    "archive",
+                    "--output-dir",
+                    str(archive_dir),
+                ],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(archive_result.returncode, 0, archive_result.stdout + archive_result.stderr)
+            self.assertIn("Archived 1 completed task(s)", archive_result.stdout)
+            self.assertIn("Remaining active tasks: 1", archive_result.stdout)
+            self.assertTrue(list(archive_dir.glob("completed-*.json")))
+            self.assertTrue(list(archive_dir.glob("completed-*.md")))
+
             list_result = subprocess.run(
                 [
                     "python3",
@@ -252,7 +311,10 @@ class TaskCliSmokeTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(list_result.returncode, 0, list_result.stdout + list_result.stderr)
-            self.assertIn('"recurrence": "weekly"', list_result.stdout)
+            payload = json.loads(list_result.stdout)
+            self.assertEqual(len(payload), 1)
+            self.assertEqual(payload[0]["status"], "todo")
+            self.assertEqual(payload[0]["recurrence"], "weekly")
 
             export_file_result = subprocess.run(
                 [
@@ -284,7 +346,8 @@ class TaskCliSmokeTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(summary_result.returncode, 0, summary_result.stdout + summary_result.stderr)
-            self.assertIn('"recurring": 2', summary_result.stdout)
+            self.assertIn('"recurring": 1', summary_result.stdout)
+            self.assertIn('"done": 0', summary_result.stdout)
 
     def test_cli_clear_repeat_rejects_conflicting_flags(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -330,6 +393,44 @@ class TaskCliSmokeTests(unittest.TestCase):
             )
             self.assertEqual(conflict_result.returncode, 1)
             self.assertIn("Use either --repeat or --clear-repeat, not both.", conflict_result.stderr)
+
+    def test_cli_archive_keep_retains_completed_tasks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_file = Path(temp_dir) / "tasks.json"
+            project_dir = Path(__file__).resolve().parents[1]
+            subprocess.run(
+                ["python3", "-m", "src.task_tracker", "--data-file", str(data_file), "add", "Task"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            subprocess.run(
+                ["python3", "-m", "src.task_tracker", "--data-file", str(data_file), "done", "1"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            archive_result = subprocess.run(
+                ["python3", "-m", "src.task_tracker", "--data-file", str(data_file), "archive", "--keep"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(archive_result.returncode, 0, archive_result.stdout + archive_result.stderr)
+            self.assertIn("Completed tasks were kept in the active store.", archive_result.stdout)
+
+            list_result = subprocess.run(
+                ["python3", "-m", "src.task_tracker", "--data-file", str(data_file), "list", "--json"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertIn('"status": "done"', list_result.stdout)
 
 
 if __name__ == "__main__":

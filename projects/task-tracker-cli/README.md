@@ -1,41 +1,65 @@
 # Task Tracker CLI
 
-A small but polished command-line task tracker built with Python's standard library.
+A polished command-line task tracker built with Python's standard library, with enough workflow depth to feel like a real daily-driver utility instead of a toy CRUD demo.
 
 ## Why it belongs in a CS portfolio
 - demonstrates CLI design with `argparse`
 - shows persistent local storage with atomic JSON writes
-- separates data model, business logic, and presentation
-- includes automated tests for core flows
+- models task metadata like priority, due dates, tags, and recurrence
+- supports import/export and archive flows for lifecycle management
+- separates data model, business logic, and presentation with automated tests
 
 ## Features
-- add tasks
-- list all, open-only, or completed tasks
-- mark tasks done
-- delete tasks
-- print summary statistics
+- add tasks with priority, due date, tags, and recurrence rules
+- list tasks with filters, search, sorting, table output, or JSON output
+- update fields without rewriting the full task
+- mark tasks in progress, done, or reopened
+- automatically spawn the next task instance for recurring work
 - import tasks from CSV or JSON snapshots
 - export filtered task views as CSV or Markdown
+- archive completed tasks into dated JSON + Markdown snapshots
+- print summary statistics including overdue, tagged, and recurring counts
 
 ## Run
 ```bash
 python3 -m src.task_tracker --help
-python3 -m src.task_tracker add "Finish systems assignment"
-python3 -m src.task_tracker list --status todo
+python3 -m src.task_tracker add "Finish systems assignment" --priority high --due 2026-04-20 --tag school --tag systems
+python3 -m src.task_tracker list --status todo --sort-by due_date
+python3 -m src.task_tracker start 1
 python3 -m src.task_tracker done 1
-python3 -m src.task_tracker summary
-python3 -m src.task_tracker export --format csv --output tasks.csv
+python3 -m src.task_tracker archive
+python3 -m src.task_tracker export --format markdown --output tasks.md
 python3 -m src.task_tracker import sample_tasks.json --format json
 ```
 
 By default, data is stored in `data/tasks.json` under the current working directory. You can override the path with `--data-file`.
 
-## Test
+## Archive workflow
+Archiving writes dated snapshots under `data/archives/` by default:
+
 ```bash
-.venv/bin/pytest tests -q
+python3 -m src.task_tracker archive
+python3 -m src.task_tracker archive --output-dir backups/task-archives
+python3 -m src.task_tracker archive --keep
 ```
 
+Each archive run creates:
+- a JSON snapshot with archive metadata and the completed tasks
+- a Markdown snapshot that is easy to inspect in GitHub or attach to project notes
+
+Without `--keep`, archived completed tasks are removed from the active task store so the remaining list stays focused.
+
+## Test
+```bash
+python3 -m pytest tests -q
+```
+
+## Implementation notes
+- keeps parsing, validation, persistence, and CLI rendering separate so tests can hit each layer cleanly
+- normalizes tags and validates recurrence/due-date relationships before data is saved
+- archives use timestamped filenames to make repeated snapshots resumable and conflict-free
+
 ## Next upgrades
-- richer terminal formatting
-- bulk task actions (complete/delete by filter)
-- archive completed tasks into dated snapshots
+- richer terminal formatting for summaries and table emphasis
+- bulk task actions (complete/delete/archive by filter)
+- optional archive restore command for replaying old completed work into the active store

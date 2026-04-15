@@ -22,8 +22,17 @@ Build a portfolio-friendly command-line task manager that demonstrates:
 - [x] Add task editing / renaming
 - [x] Add due dates / priorities
 - [x] Add import/export support
+- [x] Add completed-task archive snapshots
 - [ ] Add richer terminal formatting
+
+## Current archive slice
+- [x] Add `archive` command with default archive directory near the data store
+- [x] Write timestamped JSON and Markdown archive snapshots
+- [x] Prune completed tasks from the active store by default
+- [x] Support `--keep` mode for non-destructive archiving
+- [x] Cover archive flows with service + CLI tests
+- [x] Refresh README usage examples for the archive workflow
 
 ## Notes for next run
 - Richer terminal formatting is still the biggest presentation gap.
-- Bulk actions or archiving would make repeated demo workflows stronger.
+- Bulk actions or archive restore would make repeated demo workflows stronger.

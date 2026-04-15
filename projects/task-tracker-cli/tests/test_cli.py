@@ -100,6 +100,20 @@ def test_build_parser_supports_clear_due() -> None:
     assert args.clear_due is True
 
 
+def test_build_parser_supports_archive_keep() -> None:
+    args = build_parser().parse_args(["archive", "--keep", "--output-dir", "snapshots"])
+    assert args.keep is True
+    assert args.output_dir == "snapshots"
+
+
+def test_cli_archive_requires_completed_tasks(data_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert run_args(data_file, "add", "Prepare lab") == 0
+    capsys.readouterr()
+
+    assert run_args(data_file, "archive") == 1
+    assert "No completed tasks are available to archive." in capsys.readouterr().err
+
+
 def test_packaged_entry_point_smoke(data_file: Path) -> None:
     project_dir = Path(__file__).resolve().parents[1]
     command = [sys.executable, "-m", "task_tracker", "--data-file", str(data_file), "add", "Prepare demo"]

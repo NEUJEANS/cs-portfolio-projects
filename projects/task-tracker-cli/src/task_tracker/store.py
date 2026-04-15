@@ -76,6 +76,15 @@ class Task:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class ArchiveSnapshot:
+    archived_tasks: list[Task]
+    remaining_tasks: list[Task]
+    json_path: Path
+    markdown_path: Path
+    created_at: str
+
+
 class TaskStorage:
     def __init__(self, data_file: Path) -> None:
         self.data_file = data_file
@@ -205,6 +214,38 @@ class TaskService:
             tasks.append(spawned_task)
         self.storage.save(tasks)
         return task, spawned_task
+
+    def archive_completed_tasks(self, archive_dir: Path | None = None, *, keep: bool = False) -> ArchiveSnapshot:
+        tasks = self.storage.load()
+        archived_tasks = sorted((task for task in tasks if task.status == "done"), key=lambda task: task.id)
+        if not archived_tasks:
+            raise TaskTrackerError("No completed tasks are available to archive.")
+
+        created_at = utc_now()
+        archive_root = archive_dir or self.storage.data_file.parent / "archives"
+        archive_root.mkdir(parents=True, exist_ok=True)
+        stamp = created_at.replace(":", "-")
+        json_path = archive_root / f"completed-{stamp}.json"
+        markdown_path = archive_root / f"completed-{stamp}.md"
+        json_payload = {
+            "created_at": created_at,
+            "archived_count": len(archived_tasks),
+            "archived_ids": [task.id for task in archived_tasks],
+            "tasks": [task.to_dict() for task in archived_tasks],
+        }
+        json_path.write_text(json.dumps(json_payload, indent=2) + "\n", encoding="utf-8")
+        markdown_path.write_text(render_archive_markdown(archived_tasks, created_at), encoding="utf-8")
+
+        remaining_tasks = tasks if keep else [task for task in tasks if task.status != "done"]
+        if not keep:
+            self.storage.save(remaining_tasks)
+        return ArchiveSnapshot(
+            archived_tasks=archived_tasks,
+            remaining_tasks=list(remaining_tasks),
+            json_path=json_path,
+            markdown_path=markdown_path,
+            created_at=created_at,
+        )
 
     def delete_task(self, task_id: int) -> Task:
         tasks = self.storage.load()
@@ -454,6 +495,29 @@ def render_markdown(tasks: list[Task]) -> str:
             "| --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
+    for task in tasks:
+        description = task.description.replace("|", "\\|")
+        tags = ", ".join(task.tags) if task.tags else "-"
+        lines.append(
+            f"| {task.id} | {description} | {task.status} | {task.priority} | {task.due_date or '-'} | {task.recurrence or '-'} | {tags} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def render_archive_markdown(tasks: list[Task], created_at: str) -> str:
+    lines = [
+        "# Completed Task Archive",
+        "",
+        f"Created at: {created_at}",
+        f"Archived tasks: {len(tasks)}",
+        "",
+        "## Archived tasks",
+        "",
+        f"Total tasks: {len(tasks)}",
+        "",
+        "| ID | Description | Status | Priority | Due | Repeat | Tags |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
     for task in tasks:
         description = task.description.replace("|", "\\|")
         tags = ", ".join(task.tags) if task.tags else "-"
