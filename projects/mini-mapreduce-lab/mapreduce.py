@@ -93,6 +93,7 @@ class BenchmarkResult:
     timings_ms: list[dict[str, int | float]]
     heatmap_rows: list[dict[str, int | str]]
     plugin: str | None = None
+    available_dataset_families: list[str] | None = None
 
     def to_json(self) -> str:
         return json.dumps(
@@ -108,6 +109,7 @@ class BenchmarkResult:
                 "reducers": self.reducers,
                 "timings_ms": self.timings_ms,
                 "heatmap_rows": self.heatmap_rows,
+                "available_dataset_families": self.available_dataset_families,
             },
             indent=2,
             sort_keys=True,
@@ -281,12 +283,16 @@ class BenchmarkResult:
             f"- Total records: `{self.total_records}`",
             f"- Shard size: `{self.shard_size}`",
             f"- Reducer counts: `{', '.join(str(value) for value in self.reducers)}`",
+        ]
+        if self.available_dataset_families:
+            lines.append(f"- Available dataset families: `{', '.join(self.available_dataset_families)}`")
+        lines.extend([
             "",
             "## Timing summary",
             "",
             "| Reducers | Elapsed (ms) | Shards | Map records | Unique keys | Max reducer records | Skew ratio |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-        ]
+        ])
         for timing in self.timings_ms:
             lines.append(
                 "| {reducers} | {elapsed_ms} | {shards} | {map_records} | {unique_keys} | {max_reducer_records} | {skew_ratio} |".format(**timing)
@@ -434,6 +440,7 @@ class BenchmarkResult:
     <li><strong>Total records</strong><br><code>{esc(self.total_records)}</code></li>
     <li><strong>Shard size</strong><br><code>{esc(self.shard_size)}</code></li>
     <li><strong>Reducer counts</strong><br><code>{esc(', '.join(str(value) for value in self.reducers))}</code></li>
+    {f"<li><strong>Available dataset families</strong><br><code>{esc(', '.join(self.available_dataset_families))}</code></li>" if self.available_dataset_families else ""}
   </ul>
   <h2>Timing summary</h2>
   <div class="chart-card"><h3>Elapsed timing chart</h3>{timing_chart}</div>
@@ -457,6 +464,20 @@ class PluginJob:
     reducer: Reducer
     path: Path
     benchmark_generator: BenchmarkGenerator | None = None
+    dataset_families: list[str] | None = None
+
+
+def normalize_dataset_families(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ValueError("plugin BENCHMARK_DATASET_FAMILIES must be a non-empty list/tuple of strings")
+    families: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("plugin BENCHMARK_DATASET_FAMILIES must only contain non-empty strings")
+        families.append(item)
+    return families
 
 
 BUILTIN_JOBS = ("wordcount", "json-group-count")
@@ -520,6 +541,7 @@ def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> Pl
     reducer = getattr(module, "reduce_key", None)
     name = getattr(module, "JOB_NAME", fallback_name)
     benchmark_generator = getattr(module, "benchmark_records", None)
+    dataset_families = normalize_dataset_families(getattr(module, "BENCHMARK_DATASET_FAMILIES", None))
     if not callable(mapper):
         raise ValueError("plugin must define callable map_records(lines)")
     if combiner is not None and not callable(combiner):
@@ -535,6 +557,7 @@ def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> Pl
         reducer=reducer,
         path=origin,
         benchmark_generator=benchmark_generator,
+        dataset_families=dataset_families,
     )
 
 
@@ -694,6 +717,10 @@ def build_benchmark_lines(
     if job == "plugin" and plugin is not None and plugin.benchmark_generator is not None:
         signature = inspect.signature(plugin.benchmark_generator)
         accepts_dataset_family = len(signature.parameters) >= 4
+        if plugin.dataset_families and dataset_family not in plugin.dataset_families:
+            raise ValueError(
+                f"unsupported dataset_family for plugin benchmark: {dataset_family} (supported: {', '.join(plugin.dataset_families)})"
+            )
         if dataset_family != "default" and not accepts_dataset_family:
             raise ValueError("plugin benchmark_records does not support dataset_family")
         plugin_lines = (
@@ -826,6 +853,7 @@ def benchmark_job(
     return BenchmarkResult(
         job=job if job != "plugin" or benchmark_plugin is None else benchmark_plugin.name,
         plugin=str(benchmark_plugin.path) if benchmark_plugin else None,
+        available_dataset_families=(list(benchmark_plugin.dataset_families) if benchmark_plugin and benchmark_plugin.dataset_families else None),
         scenario=scenario,
         dataset_family=dataset_family,
         seed=seed,
@@ -880,14 +908,17 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--plugin is required for plugin jobs")
         if args.reducers <= 0:
             parser.error("--reducers must be positive")
-        result = execute_job(
-            job=args.job,
-            inputs=[Path(item) for item in args.inputs],
-            shard_size=args.shard_size,
-            group_field=args.group_field,
-            reducers=args.reducers,
-            plugin_path=args.plugin if args.plugin else None,
-        )
+        try:
+            result = execute_job(
+                job=args.job,
+                inputs=[Path(item) for item in args.inputs],
+                shard_size=args.shard_size,
+                group_field=args.group_field,
+                reducers=args.reducers,
+                plugin_path=args.plugin if args.plugin else None,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
         rendered = result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
@@ -904,16 +935,19 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--reducers values must be positive")
         if args.job == "plugin" and not args.plugin:
             parser.error("--plugin is required for plugin benchmarks")
-        result = benchmark_job(
-            job=args.job,
-            scenario=args.scenario,
-            records=args.records,
-            shard_size=args.shard_size,
-            reducers=args.reducers,
-            seed=args.seed,
-            plugin_path=args.plugin if args.plugin else None,
-            dataset_family=args.dataset_family,
-        )
+        try:
+            result = benchmark_job(
+                job=args.job,
+                scenario=args.scenario,
+                records=args.records,
+                shard_size=args.shard_size,
+                reducers=args.reducers,
+                seed=args.seed,
+                plugin_path=args.plugin if args.plugin else None,
+                dataset_family=args.dataset_family,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
         rendered = result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")

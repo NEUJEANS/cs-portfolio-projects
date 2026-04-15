@@ -154,3 +154,16 @@
 - [x] extend project and repo-level tests for programmatic and CLI dataset-family benchmark flows
 - [x] run tests and 3 review passes
 - [ ] consider surfacing supported dataset families automatically in CLI help/report output
+
+
+## Plugin dataset-family discovery slice (2026-04-15 16:42 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python metadata-validation and backward-compatible plugin-contract refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] let plugins advertise supported benchmark dataset families with validation in the runner
+- [x] surface plugin dataset-family metadata in benchmark JSON/Markdown/HTML artifacts and clearer CLI validation errors
+- [x] extend project and repo-level tests for metadata rendering and invalid-family failures
+- [x] run tests and 3 review passes
+- [ ] consider exposing plugin dataset-family metadata in generated CSV summaries or a dedicated inspect subcommand in a future run

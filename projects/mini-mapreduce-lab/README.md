@@ -24,6 +24,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
 - optional plugin-defined synthetic benchmark generators for domain-specific benchmark fixtures
 - dataset-family selection so benchmarks can simulate different plugin or wordcount workload shapes without changing the runner
+- plugin-advertised dataset-family metadata surfaced automatically in benchmark JSON/Markdown/HTML artifacts
 
 ## Usage
 
@@ -190,7 +191,7 @@ Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/pl
 
 The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation.
 
-The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, and the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks. It now supports named dataset families such as `exam-cram` and `project-week`, which makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
+The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, and the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks. It now supports named dataset families such as `exam-cram` and `project-week`, and advertises them via `BENCHMARK_DATASET_FAMILIES` so benchmark artifacts can surface the supported families automatically. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
 
 ## Output shape
 
@@ -215,10 +216,11 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
+`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
 
 ```json
 {
+  "available_dataset_families": ["default", "exam-cram", "project-week"],
   "dataset_family": "project-week",
   "heatmap_rows": [
     {
@@ -252,5 +254,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
-- let plugins advertise supported dataset families directly in generated reports/help output
 - add richer built-in benchmark families for JSON/event workloads, not just wordcount-style text streams
+- consider surfacing plugin metadata in CSV summaries or a dedicated plugin inspection command

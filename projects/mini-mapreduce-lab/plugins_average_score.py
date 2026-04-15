@@ -1,4 +1,5 @@
 JOB_NAME = "plugin-average-score"
+BENCHMARK_DATASET_FAMILIES = ["default", "exam-cram", "project-week"]
 
 
 def map_records(lines):

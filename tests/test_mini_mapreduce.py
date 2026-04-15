@@ -249,6 +249,40 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.timings_ms[0]["map_records"], 24)
         self.assertTrue(all(row["dataset_family"] == "project-week" for row in result.heatmap_rows))
 
+    def test_plugin_benchmark_surfaces_available_dataset_families_in_artifacts(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "balanced",
+            records=24,
+            shard_size=6,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_average_score.py",
+            dataset_family="project-week",
+        )
+
+        self.assertEqual(result.available_dataset_families, ["default", "exam-cram", "project-week"])
+        payload = json.loads(result.to_json())
+        self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
+        report = result.to_markdown()
+        html_report = result.to_html()
+        self.assertIn("- Available dataset families: `default, exam-cram, project-week`", report)
+        self.assertIn("<strong>Available dataset families</strong>", html_report)
+        self.assertIn("default, exam-cram, project-week", html_report)
+
+    def test_plugin_benchmark_rejects_unsupported_declared_dataset_family(self) -> None:
+        with self.assertRaisesRegex(ValueError, "supported: default, exam-cram, project-week"):
+            benchmark_job(
+                "plugin",
+                "balanced",
+                records=24,
+                shard_size=6,
+                reducers=[2],
+                seed=11,
+                plugin_path=PROJECT_DIR / "plugins_average_score.py",
+                dataset_family="hackathon",
+            )
+
     def test_plugin_benchmark_rejects_invalid_generator_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             plugin = Path(tmpdir) / "bad_generator.py"
@@ -303,6 +337,38 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(payload["dataset_family"], "project-week")
             self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
             self.assertEqual(payload["reducers"], [2, 4])
+
+    def test_cli_benchmark_rejects_unsupported_dataset_family_cleanly(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                "projects/mini-mapreduce-lab/mapreduce.py",
+                "benchmark",
+                "--job",
+                "plugin",
+                "--plugin",
+                "projects/mini-mapreduce-lab/plugins_average_score.py",
+                "--scenario",
+                "balanced",
+                "--dataset-family",
+                "hackathon",
+                "--records",
+                "24",
+                "--shard-size",
+                "6",
+                "--reducers",
+                "2",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("unsupported dataset_family for plugin benchmark", completed.stderr)
+        self.assertIn("supported: default, exam-cram, project-week", completed.stderr)
+        self.assertNotIn("Traceback", completed.stderr)
 
     def test_cli_benchmark_html_report_contains_svg_charts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
