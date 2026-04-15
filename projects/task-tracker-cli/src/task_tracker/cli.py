@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from .store import (
+    ISO_DATE,
     Task,
     TaskService,
     TaskStorage,
@@ -15,11 +19,54 @@ from .store import (
     VALID_STATUSES,
 )
 
+ANSI_RESET = "\033[0m"
+ANSI_BOLD = "\033[1m"
+ANSI_DIM = "\033[2m"
+ANSI_RED = "\033[31m"
+ANSI_GREEN = "\033[32m"
+ANSI_YELLOW = "\033[33m"
+ANSI_BLUE = "\033[34m"
+ANSI_MAGENTA = "\033[35m"
+ANSI_CYAN = "\033[36m"
+
+STATUS_STYLES = {
+    "todo": ("○ todo", ANSI_BLUE),
+    "in-progress": ("▶ in-progress", ANSI_YELLOW),
+    "done": ("✓ done", ANSI_GREEN),
+}
+PRIORITY_STYLES = {
+    "high": ("!!! high", ANSI_RED),
+    "medium": ("!! medium", ANSI_YELLOW),
+    "low": ("! low", ANSI_CYAN),
+}
+
+
+@dataclass(slots=True)
+class ColorProfile:
+    enabled: bool
+
+    def apply(self, text: str, *codes: str) -> str:
+        if not self.enabled or not codes:
+            return text
+        return f"{''.join(codes)}{text}{ANSI_RESET}"
+
+
+@dataclass(slots=True)
+class RenderContext:
+    color: ColorProfile
+    today: str
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Task Tracker CLI")
     parser.add_argument("--data-file", default="data/tasks.json", help="Path to the JSON task store.")
     parser.add_argument("--db", dest="data_file", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--color",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="Control ANSI color output for human-readable terminal views.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     add_parser = subparsers.add_parser("add", help="Add a task.")
@@ -94,36 +141,96 @@ def add_list_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--tag", action="append", default=[], help="Require a tag. Repeat or pass comma-separated values.")
 
 
-def format_task(task: Task) -> str:
-    due = task.due_date or "-"
-    tags = ",".join(task.tags) if task.tags else "-"
-    repeat = task.recurrence or "-"
-    return f"[{task.id}] {task.description} | status={task.status} | priority={task.priority} | due={due} | repeat={repeat} | tags={tags}"
+def _should_use_color(mode: str) -> bool:
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+    if os.environ.get("NO_COLOR"):
+        return False
+    if os.environ.get("TERM", "").lower() == "dumb":
+        return False
+    return sys.stdout.isatty()
 
 
-def render_table(tasks: list[Task]) -> str:
+def build_render_context(color_mode: str) -> RenderContext:
+    return RenderContext(color=ColorProfile(_should_use_color(color_mode)), today=date.today().strftime(ISO_DATE))
+
+
+def _format_due(task: Task, context: RenderContext) -> str:
+    if not task.due_date:
+        return context.color.apply("—", ANSI_DIM)
+    if task.status != "done" and task.due_date < context.today:
+        return context.color.apply(f"⚠ {task.due_date}", ANSI_RED, ANSI_BOLD)
+    if task.status != "done" and task.due_date == context.today:
+        return context.color.apply(f"★ {task.due_date}", ANSI_YELLOW, ANSI_BOLD)
+    return task.due_date
+
+
+def _format_status(status: str, context: RenderContext) -> str:
+    label, color = STATUS_STYLES[status]
+    return context.color.apply(label, color, ANSI_BOLD if status != "todo" else "")
+
+
+def _format_priority(priority: str, context: RenderContext) -> str:
+    label, color = PRIORITY_STYLES[priority]
+    return context.color.apply(label, color, ANSI_BOLD if priority == "high" else "")
+
+
+def format_task(task: Task, context: RenderContext | None = None) -> str:
+    context = context or build_render_context("never")
+    tags = ",".join(task.tags) if task.tags else context.color.apply("-", ANSI_DIM)
+    repeat = task.recurrence or context.color.apply("-", ANSI_DIM)
+    return (
+        f"[{task.id}] {task.description} | status={_format_status(task.status, context)}"
+        f" | priority={_format_priority(task.priority, context)} | due={_format_due(task, context)}"
+        f" | repeat={repeat} | tags={tags}"
+    )
+
+
+def render_table(tasks: list[Task], context: RenderContext | None = None) -> str:
+    context = context or build_render_context("never")
     if not tasks:
         return "No tasks found."
-    headers = ("ID", "Description", "Status", "Priority", "Due", "Repeat", "Tags")
+    headers = ("ID", "Description", "State", "Priority", "Due", "Repeat", "Tags")
     rows = [headers] + [
         (
             str(task.id),
             task.description,
-            task.status,
-            task.priority,
-            task.due_date or "-",
-            task.recurrence or "-",
-            ", ".join(task.tags) or "-",
+            _format_status(task.status, context),
+            _format_priority(task.priority, context),
+            _format_due(task, context),
+            task.recurrence or context.color.apply("—", ANSI_DIM),
+            ", ".join(task.tags) or context.color.apply("—", ANSI_DIM),
         )
         for task in tasks
     ]
-    widths = [max(len(row[index]) for row in rows) for index in range(len(headers))]
+    widths = [max(_visible_length(row[index]) for row in rows) for index in range(len(headers))]
     lines = []
     for row_index, row in enumerate(rows):
-        lines.append(" | ".join(cell.ljust(widths[index]) for index, cell in enumerate(row)))
+        lines.append(" | ".join(_pad_visible(cell, widths[index]) for index, cell in enumerate(row)))
         if row_index == 0:
             lines.append("-+-".join("-" * width for width in widths))
     return "\n".join(lines)
+
+
+def _visible_length(text: str) -> int:
+    length = 0
+    skip = False
+    for char in text:
+        if skip:
+            if char == "m":
+                skip = False
+            continue
+        if char == "\033":
+            skip = True
+            continue
+        length += 1
+    return length
+
+
+def _pad_visible(text: str, width: int) -> str:
+    return text + (" " * max(0, width - _visible_length(text)))
 
 
 def _coalesce_task_id(args: argparse.Namespace) -> int:
@@ -142,17 +249,29 @@ def _select_tasks(service: TaskService, args: argparse.Namespace) -> list[Task]:
     )
 
 
-def _render_summary(payload: dict[str, int], as_json: bool) -> str:
+def _render_summary(payload: dict[str, int], as_json: bool, context: RenderContext) -> str:
     if as_json:
         return json.dumps(payload, indent=2)
-    ordered_keys = ["todo", "in-progress", "done", "total", "overdue", "tagged", "unique_tags", "recurring"]
-    return " | ".join(f"{key}: {payload[key]}" for key in ordered_keys)
+    headline = [
+        context.color.apply(f"todo {payload['todo']}", ANSI_BLUE, ANSI_BOLD),
+        context.color.apply(f"in-progress {payload['in-progress']}", ANSI_YELLOW, ANSI_BOLD),
+        context.color.apply(f"done {payload['done']}", ANSI_GREEN, ANSI_BOLD),
+        context.color.apply(f"total {payload['total']}", ANSI_MAGENTA, ANSI_BOLD),
+    ]
+    detail = [
+        f"overdue: {payload['overdue']}",
+        f"tagged: {payload['tagged']}",
+        f"unique_tags: {payload['unique_tags']}",
+        f"recurring: {payload['recurring']}",
+    ]
+    return "Task summary\n" + "  ".join(headline) + "\n" + "  ".join(detail)
 
 
 def run_cli(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     service = TaskService(TaskStorage(Path(args.data_file)))
+    context = build_render_context(args.color)
 
     try:
         if args.command == "add":
@@ -163,14 +282,14 @@ def run_cli(argv: list[str] | None = None) -> int:
                 tags=args.tag,
                 recurrence=args.repeat,
             )
-            print(f"Added: {format_task(task)}")
+            print(f"Added: {format_task(task, context)}")
             return 0
         if args.command == "list":
             tasks = _select_tasks(service, args)
             if args.json:
                 print(json.dumps([task.to_dict() for task in tasks], indent=2))
             else:
-                print(render_table(tasks))
+                print(render_table(tasks, context))
             return 0
         if args.command == "update":
             if args.clear_tags and args.tag is not None:
@@ -196,17 +315,17 @@ def run_cli(argv: list[str] | None = None) -> int:
                 tags=[] if args.clear_tags else args.tag,
                 recurrence="" if args.clear_repeat else args.repeat,
             )
-            print(f"Updated: {format_task(task)}")
+            print(f"Updated: {format_task(task, context)}")
             return 0
         if args.command == "start":
             task, _ = service.set_status(args.id, "in-progress")
-            print(f"Started: {format_task(task)}")
+            print(f"Started: {format_task(task, context)}")
             return 0
         if args.command == "done":
             task, spawned_task = service.set_status(_coalesce_task_id(args), "done")
             print(f"Completed task #{task.id}: {task.description}")
             if spawned_task is not None:
-                print(f"Spawned next recurring task: {format_task(spawned_task)}")
+                print(f"Spawned next recurring task: {format_task(spawned_task, context)}")
             return 0
         if args.command == "reopen":
             task, _ = service.set_status(args.task_id, "todo")
@@ -233,10 +352,10 @@ def run_cli(argv: list[str] | None = None) -> int:
             restored = service.restore_archive(Path(args.source), status=args.status)
             print(f"Restored {len(restored)} task(s) from {args.source}")
             if restored:
-                print(f"Newest restored task: {format_task(restored[-1])}")
+                print(f"Newest restored task: {format_task(restored[-1], context)}")
             return 0
         if args.command == "summary":
-            print(_render_summary(service.summary(), args.json))
+            print(_render_summary(service.summary(), args.json, context))
             return 0
         if args.command == "export":
             tasks = _select_tasks(service, args)
@@ -253,7 +372,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             imported = service.import_tasks(Path(args.source), args.format)
             print(f"Imported {len(imported)} task(s) from {args.source}")
             if imported:
-                print(f"Newest task: {format_task(imported[-1])}")
+                print(f"Newest task: {format_task(imported[-1], context)}")
             return 0
     except TaskTrackerError as exc:
         print(str(exc), file=sys.stderr)

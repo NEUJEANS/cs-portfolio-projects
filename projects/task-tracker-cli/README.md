@@ -12,6 +12,7 @@ A polished command-line task tracker built with Python's standard library, with 
 ## Features
 - add tasks with priority, due date, tags, and recurrence rules
 - list tasks with filters, search, sorting, table output, or JSON output
+- emphasize statuses, priorities, and urgent due dates in terminal-friendly task tables with optional ANSI colors
 - update fields without rewriting the full task
 - mark tasks in progress, done, or reopened
 - automatically spawn the next task instance for recurring work
@@ -19,13 +20,14 @@ A polished command-line task tracker built with Python's standard library, with 
 - export filtered task views as CSV or Markdown
 - archive completed tasks into dated JSON + Markdown snapshots
 - restore archived tasks back into the active store with new ids when needed
-- print summary statistics including overdue, tagged, and recurring counts
+- print summary statistics including overdue, tagged, and recurring counts with a richer human-readable dashboard view
 
 ## Run
 ```bash
 python3 -m src.task_tracker --help
 python3 -m src.task_tracker add "Finish systems assignment" --priority high --due 2026-04-20 --tag school --tag systems
 python3 -m src.task_tracker list --status todo --sort-by due_date
+python3 -m src.task_tracker --color always summary
 python3 -m src.task_tracker start 1
 python3 -m src.task_tracker done 1
 python3 -m src.task_tracker archive
@@ -70,8 +72,9 @@ python3 -m pytest tests -q
 - keeps parsing, validation, persistence, and CLI rendering separate so tests can hit each layer cleanly
 - normalizes tags and validates recurrence/due-date relationships before data is saved
 - archives use timestamped filenames to make repeated snapshots resumable and conflict-free
+- keeps human-friendly ANSI styling optional so JSON/export flows stay automation-safe
 
 ## Next upgrades
-- richer terminal formatting for summaries and table emphasis
 - bulk task actions (complete/delete/archive by filter)
+- saved views or dashboard presets for common task slices
 - optional archive restore command for replaying old completed work into the active store

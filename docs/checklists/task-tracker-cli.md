@@ -23,7 +23,7 @@ Build a portfolio-friendly command-line task manager that demonstrates:
 - [x] Add due dates / priorities
 - [x] Add import/export support
 - [x] Add completed-task archive snapshots
-- [ ] Add richer terminal formatting
+- [x] Add richer terminal formatting
 
 ## Current archive slice
 - [x] Add `archive` command with default archive directory near the data store
@@ -41,5 +41,5 @@ Build a portfolio-friendly command-line task manager that demonstrates:
 - [x] Refresh README usage examples for archive recovery
 
 ## Notes for next run
-- Richer terminal formatting is still the biggest presentation gap.
 - Bulk actions would make repeated demo workflows stronger.
+- A future slice could add saved views or dashboard-style reporting on top of the richer terminal formatting.

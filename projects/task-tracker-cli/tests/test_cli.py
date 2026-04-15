@@ -8,7 +8,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.task_tracker.cli import build_parser, render_table, run_cli
+from src.task_tracker.cli import build_parser, build_render_context, render_table, run_cli
 from src.task_tracker.store import Task, TaskService, TaskStorage
 
 
@@ -28,7 +28,8 @@ def test_cli_add_list_summary_and_json(data_file: Path, capsys: pytest.CaptureFi
     assert run_args(data_file, "list", "--sort-by", "priority") == 0
     listing = capsys.readouterr().out
     assert "Write docs" in listing
-    assert "priority" in listing
+    assert "State" in listing
+    assert "!!! high" in listing
 
     assert run_args(data_file, "list", "--json", "--tag", "demo") == 0
     payload = json.loads(capsys.readouterr().out)
@@ -36,7 +37,8 @@ def test_cli_add_list_summary_and_json(data_file: Path, capsys: pytest.CaptureFi
 
     assert run_args(data_file, "summary") == 0
     summary = capsys.readouterr().out
-    assert "todo: 2" in summary
+    assert "Task summary" in summary
+    assert "todo 2" in summary
     assert "unique_tags: 3" in summary
 
 
@@ -46,8 +48,8 @@ def test_cli_update_clear_due_and_export(data_file: Path, tmp_path: Path, capsys
 
     assert run_args(data_file, "update", "1", "--priority", "low", "--clear-due", "--tag", "talk") == 0
     updated = capsys.readouterr().out
-    assert "priority=low" in updated
-    assert "due=-" in updated
+    assert "! low" in updated
+    assert "due=—" in updated
     assert "tags=talk" in updated
 
     export_path = tmp_path / "tasks.md"
@@ -92,7 +94,43 @@ def test_cli_rejects_conflicting_update_flags(data_file: Path, capsys: pytest.Ca
 
 
 def test_render_table_empty() -> None:
-    assert render_table([]) == "No tasks found."
+    assert render_table([], build_render_context("never")) == "No tasks found."
+
+
+def test_render_table_marks_overdue_and_today_without_color() -> None:
+    context = build_render_context("never")
+    overdue = Task(
+        id=1,
+        description="Overdue",
+        status="todo",
+        priority="high",
+        due_date="2000-01-01",
+        created_at="2026-04-15T00:00:00Z",
+        updated_at="2026-04-15T00:00:00Z",
+        tags=[],
+        recurrence=None,
+    )
+    due_today = Task(
+        id=2,
+        description="Today",
+        status="in-progress",
+        priority="medium",
+        due_date=context.today,
+        created_at="2026-04-15T00:00:00Z",
+        updated_at="2026-04-15T00:00:00Z",
+        tags=["demo"],
+        recurrence="weekly",
+    )
+
+    table = render_table([overdue, due_today], context)
+    assert "⚠ 2000-01-01" in table
+    assert f"★ {context.today}" in table
+    assert "▶ in-progress" in table
+
+
+def test_build_parser_supports_color_flag() -> None:
+    args = build_parser().parse_args(["--color", "never", "summary"])
+    assert args.color == "never"
 
 
 def test_build_parser_supports_clear_due() -> None:
@@ -149,7 +187,7 @@ def test_cli_restore_replays_archived_tasks(data_file: Path, tmp_path: Path, cap
     assert run_args(data_file, "restore", str(archive_path), "--status", "todo") == 0
     output = capsys.readouterr().out
     assert "Restored 1 task(s)" in output
-    assert "status=todo" in output
+    assert "status=○ todo" in output
 
     assert run_args(data_file, "list", "--json") == 0
     payload = json.loads(capsys.readouterr().out)
