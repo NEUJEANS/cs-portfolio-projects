@@ -30,4 +30,12 @@
 - [x] expand tests for refresh stats, reused signatures, and CLI refresh JSON output
 - [x] update README usage and talking points for repeated corpus rescans
 - [x] complete at least 3 review passes and fix issues found
-- [ ] future slice: export benchmark runs as CSV/Markdown summaries for portfolio write-ups
+## Benchmark export slice (2026-04-15 05:39 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the queued benchmark-export follow-up from the MinHash checklist
+- [x] refresh Python file-output patterns and benchmark summary payload design
+- [x] add benchmark report export support for JSON, CSV, and Markdown summaries
+- [x] expose CLI output-path support and keep the command resumable for repeated corpus runs
+- [x] expand tests for export helpers and benchmark CLI file generation
+- [x] update README usage and interview framing for portfolio write-ups
+- [x] complete at least 3 review passes and fix issues found

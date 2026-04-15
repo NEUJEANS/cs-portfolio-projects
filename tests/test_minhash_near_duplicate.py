@@ -22,6 +22,7 @@ build_signature_index = module.build_signature_index
 compare_texts = module.compare_texts
 estimate_jaccard = module.estimate_jaccard
 exact_jaccard = module.exact_jaccard
+export_benchmark_report = module.export_benchmark_report
 find_candidate_pairs = module.find_candidate_pairs
 find_candidate_pairs_from_index = module.find_candidate_pairs_from_index
 load_signature_index = module.load_signature_index
@@ -166,6 +167,52 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
         self.assertGreaterEqual(payload["all_pairs"], payload["candidate_pairs"])
         self.assertIn("exact_pairs_above_threshold", payload)
         self.assertIn("lsh_recall_vs_exact", payload)
+        self.assertIn("top_exact_pairs", payload)
+        self.assertIn("top_lsh_pairs", payload)
+
+    def test_export_benchmark_report_writes_csv_and_markdown(self) -> None:
+        payload = benchmark_corpus(
+            {
+                "a.txt": "alpha beta gamma delta epsilon zeta",
+                "b.txt": "alpha beta gamma delta epsilon eta",
+                "c.txt": "distributed systems consistent hashing lab",
+            },
+            shingle_size=2,
+            num_hashes=32,
+            bands=8,
+            threshold=0.2,
+            seed=9,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            csv_path = root / "bench.csv"
+            md_path = root / "bench.md"
+            export_benchmark_report(payload, csv_path)
+            export_benchmark_report(payload, md_path)
+
+            csv_text = csv_path.read_text(encoding="utf-8")
+            md_text = md_path.read_text(encoding="utf-8")
+
+            self.assertIn("metric,value", csv_text)
+            self.assertIn("candidate_pairs", csv_text)
+            self.assertIn("# MinHash benchmark summary", md_text)
+            self.assertIn("## Top LSH matches", md_text)
+
+    def test_export_benchmark_report_rejects_unknown_extension(self) -> None:
+        payload = benchmark_corpus(
+            {
+                "a.txt": "alpha beta gamma delta epsilon zeta",
+                "b.txt": "alpha beta gamma delta epsilon eta",
+            },
+            shingle_size=2,
+            num_hashes=32,
+            bands=8,
+            threshold=0.2,
+            seed=9,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaisesRegex(ValueError, "must end with"):
+                export_benchmark_report(payload, Path(tmpdir) / "bench.txt")
 
     def test_cli_compare_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -334,6 +381,39 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertIn("timings_seconds", payload)
             self.assertIn("exact_pairs_above_threshold", payload)
             self.assertIn("lsh_pairs_above_threshold", payload)
+            self.assertIn("top_exact_pairs", payload)
+            self.assertIn("top_lsh_pairs", payload)
+
+    def test_cli_benchmark_can_export_markdown_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            output = root / "benchmark-summary.md"
+            (root / "a.txt").write_text("alpha beta gamma delta epsilon zeta\n", encoding="utf-8")
+            (root / "b.txt").write_text("alpha beta gamma delta epsilon eta\n", encoding="utf-8")
+            (root / "c.txt").write_text("network routing consistent hashing replicas\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    str(root),
+                    "--threshold",
+                    "0.2",
+                    "--output",
+                    str(output),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["output"], str(output))
+            self.assertTrue(output.exists())
+            self.assertIn("# MinHash benchmark summary", output.read_text(encoding="utf-8"))
 
     def test_cli_rejects_band_mismatch(self) -> None:
         completed = subprocess.run(

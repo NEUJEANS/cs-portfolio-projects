@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import re
@@ -458,10 +459,20 @@ def benchmark_corpus(
 
     exact_started = time.perf_counter()
     exact_matches: set[tuple[str, str]] = set()
+    exact_match_reports: list[dict[str, object]] = []
     for left_name, right_name in all_pairs:
-        score = exact_jaccard(shingles_by_doc[left_name], shingles_by_doc[right_name])
-        if score >= threshold:
+        exact_score = exact_jaccard(shingles_by_doc[left_name], shingles_by_doc[right_name])
+        if exact_score >= threshold:
             exact_matches.add((left_name, right_name))
+            exact_match_reports.append(
+                {
+                    "left": left_name,
+                    "right": right_name,
+                    "exact_jaccard": round(exact_score, 4),
+                    "estimated_jaccard": round(estimate_jaccard(signatures[left_name], signatures[right_name]), 4),
+                    "shared_bands": shared_band_count(signatures[left_name], signatures[right_name], bands),
+                }
+            )
     exact_seconds = time.perf_counter() - exact_started
 
     candidate_reports = _reports_from_components(
@@ -477,6 +488,11 @@ def benchmark_corpus(
     return {
         "command": "benchmark",
         "documents_scanned": len(documents),
+        "shingle_size": shingle_size,
+        "num_hashes": num_hashes,
+        "bands": bands,
+        "threshold": threshold,
+        "seed": seed,
         "all_pairs": len(all_pairs),
         "candidate_pairs": len(lsh_candidates),
         "exact_pairs_above_threshold": len(exact_matches),
@@ -488,7 +504,87 @@ def benchmark_corpus(
             "lsh_candidate_generation": round(lsh_seconds, 6),
             "exact_all_pairs_scan": round(exact_seconds, 6),
         },
+        "top_exact_pairs": exact_match_reports[:5],
+        "top_lsh_pairs": [report.to_dict() for report in candidate_reports[:5]],
     }
+
+
+def export_benchmark_report(payload: dict[str, object], output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = output_path.suffix.lower()
+    if suffix == ".json":
+        output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return output_path
+    if suffix == ".csv":
+        rows = [
+            ("documents_scanned", payload["documents_scanned"]),
+            ("shingle_size", payload["shingle_size"]),
+            ("num_hashes", payload["num_hashes"]),
+            ("bands", payload["bands"]),
+            ("threshold", payload["threshold"]),
+            ("seed", payload["seed"]),
+            ("all_pairs", payload["all_pairs"]),
+            ("candidate_pairs", payload["candidate_pairs"]),
+            ("exact_pairs_above_threshold", payload["exact_pairs_above_threshold"]),
+            ("lsh_pairs_above_threshold", payload["lsh_pairs_above_threshold"]),
+            ("lsh_recall_vs_exact", payload["lsh_recall_vs_exact"]),
+            ("candidate_reduction_ratio", payload["candidate_reduction_ratio"]),
+            ("build_signatures_seconds", payload["timings_seconds"]["build_signatures"]),
+            ("lsh_candidate_generation_seconds", payload["timings_seconds"]["lsh_candidate_generation"]),
+            ("exact_all_pairs_scan_seconds", payload["timings_seconds"]["exact_all_pairs_scan"]),
+        ]
+        with output_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["metric", "value"])
+            writer.writerows(rows)
+        return output_path
+    if suffix == ".md":
+        timings = payload["timings_seconds"]
+        top_lsh_pairs = payload.get("top_lsh_pairs", [])
+        top_exact_pairs = payload.get("top_exact_pairs", [])
+        lines = [
+            "# MinHash benchmark summary",
+            "",
+            f"- Documents scanned: {payload['documents_scanned']}",
+            f"- Shingle size: {payload['shingle_size']}",
+            f"- Signature hashes: {payload['num_hashes']}",
+            f"- Bands: {payload['bands']}",
+            f"- Threshold: {payload['threshold']}",
+            f"- Seed: {payload['seed']}",
+            f"- All pairs: {payload['all_pairs']}",
+            f"- Candidate pairs: {payload['candidate_pairs']}",
+            f"- Exact pairs above threshold: {payload['exact_pairs_above_threshold']}",
+            f"- LSH pairs above threshold: {payload['lsh_pairs_above_threshold']}",
+            f"- LSH recall vs exact: {payload['lsh_recall_vs_exact']}",
+            f"- Candidate reduction ratio: {payload['candidate_reduction_ratio']}",
+            "",
+            "## Timings",
+            "",
+            f"- Build signatures: {timings['build_signatures']:.6f}s",
+            f"- LSH candidate generation: {timings['lsh_candidate_generation']:.6f}s",
+            f"- Exact all-pairs scan: {timings['exact_all_pairs_scan']:.6f}s",
+            "",
+            "## Top exact matches",
+            "",
+        ]
+        if top_exact_pairs:
+            for pair in top_exact_pairs:
+                lines.append(
+                    f"- {pair['left']} <> {pair['right']} | exact={pair['exact_jaccard']:.4f} estimated={pair['estimated_jaccard']:.4f} shared_bands={pair['shared_bands']}"
+                )
+        else:
+            lines.append("- None")
+        lines.extend(["", "## Top LSH matches", ""])
+        if top_lsh_pairs:
+            for pair in top_lsh_pairs:
+                lines.append(
+                    f"- {pair['left']} <> {pair['right']} | exact={pair['exact_jaccard']:.4f} estimated={pair['estimated_jaccard']:.4f} shared_bands={pair['shared_bands']}"
+                )
+        else:
+            lines.append("- None")
+        output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return output_path
+    raise ValueError("benchmark export path must end with .json, .csv, or .md")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -520,6 +616,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("root")
     benchmark_parser.add_argument("--glob", default="*.txt", dest="glob_pattern")
     benchmark_parser.add_argument("--threshold", type=float, default=0.5)
+    benchmark_parser.add_argument("--output", help="write benchmark summary to .json, .csv, or .md")
 
     for subparser in (compare_parser, corpus_parser, index_parser, benchmark_parser):
         subparser.add_argument("--shingle-size", type=int, default=3)
@@ -567,6 +664,8 @@ def _emit(payload: dict[str, object], as_json: bool) -> int:
             f"lsh={timings['lsh_candidate_generation']:.6f}, "
             f"exact={timings['exact_all_pairs_scan']:.6f}"
         )
+        if payload.get('output'):
+            print(f"Saved report: {payload['output']}")
         return 0
     pairs = payload.get("pairs", [])
     print(f"Candidate pairs: {len(pairs)}")
@@ -684,6 +783,9 @@ def main(argv: list[str] | None = None) -> int:
             threshold=args.threshold,
             seed=args.seed,
         )
+        if args.output:
+            output_path = export_benchmark_report(payload, Path(args.output))
+            payload = {**payload, "output": str(output_path)}
         return _emit(payload, args.json)
 
     parser.error(f"unsupported command: {args.command}")

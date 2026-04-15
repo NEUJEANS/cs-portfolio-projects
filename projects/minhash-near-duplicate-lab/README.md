@@ -18,6 +18,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - persistent signature-index export for repeated scans without recomputing signatures every time
 - incremental index refresh that reuses stored signatures for unchanged files based on content hashes
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
+- benchmark export support for JSON, CSV, or Markdown portfolio summaries
 - CLI output in human-readable or JSON form
 - repository-level tests for API behavior and CLI workflows
 
@@ -80,6 +81,17 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
   --json
 ```
 
+Save the benchmark summary for a README, blog post, or spreadsheet:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
+  samples/ \
+  --glob '*.txt' \
+  --threshold 0.45 \
+  --output docs/minhash-benchmark-summary.md \
+  --json
+```
+
 ## Example JSON output
 
 ```json
@@ -107,6 +119,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 - why persisted signatures matter when you rerun scans across the same corpus repeatedly
 - how content hashes let incremental refresh skip unchanged documents while still keeping the index trustworthy
 - how recall and candidate-reduction trade off as you change shingle size, signature length, and band count
+- how reusable JSON/CSV/Markdown exports make experimental results easier to paste into portfolio write-ups and charts
 
 ## Test
 
@@ -116,5 +129,4 @@ python3 -m unittest tests.test_minhash_near_duplicate
 
 ## Future improvements
 - add character-shingle and code-token modes for source-code deduplication demos
-- export benchmark runs as CSV/Markdown summaries for portfolio write-ups
 - add a dry-run corpus diff summary before refresh for very large indexes
