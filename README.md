@@ -71,6 +71,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `distributed-snapshot-lab`
 - [x] `kd-tree-spatial-search-lab`
 - [x] `interval-tree-lab`
+- [x] `karger-min-cut-lab`
 - [x] `cuckoo-hashing-lab`
 - [x] `fenwick-tree-range-query-lab`
 - [x] `splay-tree-lab`
