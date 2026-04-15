@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 TOMBSTONE = "__TOMBSTONE__"
+DEFAULT_BLOOM_BITS_PER_KEY = 10
+MIN_BLOOM_FILTER_BITS = 64
 
 
 @dataclass(frozen=True)
@@ -32,11 +36,59 @@ class Entry:
         return cls(key=str(payload["key"]), value=value, seq=int(payload["seq"]), deleted=deleted)
 
 
+class BloomFilter:
+    def __init__(self, bit_count: int, hash_count: int, bits: int = 0) -> None:
+        self.bit_count = max(MIN_BLOOM_FILTER_BITS, int(bit_count))
+        self.hash_count = max(1, int(hash_count))
+        self.bits = int(bits)
+
+    @classmethod
+    def for_capacity(cls, item_count: int, bits_per_key: int = DEFAULT_BLOOM_BITS_PER_KEY) -> "BloomFilter":
+        item_count = max(1, int(item_count))
+        bit_count = max(MIN_BLOOM_FILTER_BITS, item_count * max(1, int(bits_per_key)))
+        hash_count = max(1, round((bit_count / item_count) * math.log(2)))
+        return cls(bit_count=bit_count, hash_count=hash_count)
+
+    @classmethod
+    def from_json(cls, payload: dict[str, object] | None) -> "BloomFilter | None":
+        if not payload:
+            return None
+        return cls(
+            bit_count=int(payload["bit_count"]),
+            hash_count=int(payload["hash_count"]),
+            bits=int(payload.get("bits", 0)),
+        )
+
+    def add(self, key: str) -> None:
+        for position in self._positions(key):
+            self.bits |= 1 << position
+
+    def might_contain(self, key: str) -> bool:
+        for position in self._positions(key):
+            if not (self.bits & (1 << position)):
+                return False
+        return True
+
+    def to_json(self) -> dict[str, int]:
+        return {
+            "bit_count": self.bit_count,
+            "hash_count": self.hash_count,
+            "bits": self.bits,
+        }
+
+    def _positions(self, key: str) -> list[int]:
+        digest = hashlib.sha256(key.encode("utf-8")).digest()
+        first = int.from_bytes(digest[:8], "big")
+        second = int.from_bytes(digest[8:16], "big") or 1
+        return [((first + index * second) % self.bit_count) for index in range(self.hash_count)]
+
+
 class LSMTreeKV:
-    def __init__(self, root: Path | str, flush_threshold: int = 8) -> None:
+    def __init__(self, root: Path | str, flush_threshold: int = 8, bloom_bits_per_key: int = DEFAULT_BLOOM_BITS_PER_KEY) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.flush_threshold = max(1, int(flush_threshold))
+        self.bloom_bits_per_key = max(1, int(bloom_bits_per_key))
         self.wal_path = self.root / "wal.jsonl"
         self.meta_path = self.root / "meta.json"
         self.tables_dir = self.root / "sstables"
@@ -93,19 +145,39 @@ class LSMTreeKV:
 
     def _write_sstable(self, entries: Iterable[Entry]) -> Path:
         ordered = sorted(entries, key=lambda item: item.key)
+        bloom_filter = BloomFilter.for_capacity(len(ordered), bits_per_key=self.bloom_bits_per_key)
+        for entry in ordered:
+            bloom_filter.add(entry.key)
         path = self.tables_dir / f"sstable-{self._next_seq():020d}.json"
         payload = {
             "count": len(ordered),
             "min_key": ordered[0].key if ordered else None,
             "max_key": ordered[-1].key if ordered else None,
+            "bloom_filter": bloom_filter.to_json(),
             "entries": [entry.to_json() for entry in ordered],
         }
         self._write_atomic_json(path, payload)
         return path
 
+    def _read_sstable_payload(self, path: Path) -> dict[str, object]:
+        return json.loads(path.read_text())
+
     def _load_sstable(self, path: Path) -> dict[str, Entry]:
-        payload = json.loads(path.read_text())
+        payload = self._read_sstable_payload(path)
         return {item["key"]: Entry.from_json(item) for item in payload.get("entries", [])}
+
+    def _sstable_might_contain_key(self, path: Path, key: str) -> bool:
+        payload = self._read_sstable_payload(path)
+        minimum = payload.get("min_key")
+        maximum = payload.get("max_key")
+        if minimum is not None and key < str(minimum):
+            return False
+        if maximum is not None and key > str(maximum):
+            return False
+        bloom_filter = BloomFilter.from_json(payload.get("bloom_filter"))
+        if bloom_filter is None:
+            return True
+        return bloom_filter.might_contain(key)
 
     def set(self, key: str, value: str) -> Entry:
         self._validate_key(key)
@@ -129,18 +201,14 @@ class LSMTreeKV:
         if key in self.memtable:
             entry = self.memtable[key]
             return None if entry.deleted else entry
-        tombstoned = False
         for path in self._sstable_paths():
+            if not self._sstable_might_contain_key(path, key):
+                continue
             table = self._load_sstable(path)
             if key not in table:
                 continue
             entry = table[key]
-            if entry.deleted:
-                tombstoned = True
-                break
-            return entry
-        if tombstoned:
-            return None
+            return None if entry.deleted else entry
         return None
 
     def list_items(self) -> list[Entry]:
@@ -184,12 +252,22 @@ class LSMTreeKV:
     def stats(self) -> dict[str, int]:
         live_count = len(self.list_items())
         sstable_paths = self._sstable_paths()
+        bloom_filter_count = 0
+        bloom_filter_bits = 0
+        for path in sstable_paths:
+            bloom_filter = BloomFilter.from_json(self._read_sstable_payload(path).get("bloom_filter"))
+            if bloom_filter is None:
+                continue
+            bloom_filter_count += 1
+            bloom_filter_bits += bloom_filter.bit_count
         return {
             "live_keys": live_count,
             "memtable_entries": len(self.memtable),
             "sstable_count": len(sstable_paths),
             "wal_bytes": self.wal_path.stat().st_size if self.wal_path.exists() else 0,
             "sstable_bytes": sum(path.stat().st_size for path in sstable_paths),
+            "bloom_filter_count": bloom_filter_count,
+            "bloom_filter_bits": bloom_filter_bits,
             "next_seq": self._seq + 1,
         }
 
@@ -207,6 +285,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Tiny LSM-tree inspired key-value store")
     parser.add_argument("--dir", required=True, help="storage directory")
     parser.add_argument("--flush-threshold", type=int, default=8, help="flush memtable after N distinct dirty keys")
+    parser.add_argument(
+        "--bloom-bits-per-key",
+        type=int,
+        default=DEFAULT_BLOOM_BITS_PER_KEY,
+        help="Bloom filter density stored per SSTable",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     set_parser = subparsers.add_parser("set", help="set a key")
@@ -230,7 +314,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    store = LSMTreeKV(args.dir, flush_threshold=args.flush_threshold)
+    store = LSMTreeKV(
+        args.dir,
+        flush_threshold=args.flush_threshold,
+        bloom_bits_per_key=args.bloom_bits_per_key,
+    )
 
     try:
         if args.command == "set":

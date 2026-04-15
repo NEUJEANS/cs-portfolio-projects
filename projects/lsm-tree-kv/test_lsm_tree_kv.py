@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from lsm_tree_kv import LSMTreeKV
 
@@ -65,6 +66,38 @@ class LSMTreeKVTests(unittest.TestCase):
         self.assertEqual([entry.key for entry in store.list_items()], ["a", "c", "d"])
         files = list((self.root / "sstables").glob("sstable-*.json"))
         self.assertEqual(len(files), 1)
+
+    def test_bloom_filter_metadata_is_persisted_in_sstable(self) -> None:
+        store = LSMTreeKV(self.root, flush_threshold=2, bloom_bits_per_key=12)
+        store.set("alpha", "1")
+        store.set("beta", "2")
+
+        sstable_path = next((self.root / "sstables").glob("sstable-*.json"))
+        payload = json.loads(sstable_path.read_text())
+
+        bloom = payload["bloom_filter"]
+        self.assertGreaterEqual(bloom["bit_count"], 24)
+        self.assertGreaterEqual(bloom["hash_count"], 1)
+        self.assertGreater(bloom["bits"], 0)
+
+    def test_negative_lookup_skips_loading_sstable_when_bloom_filter_rejects_key(self) -> None:
+        store = LSMTreeKV(self.root, flush_threshold=2)
+        store.set("alpha", "1")
+        store.set("beta", "2")
+
+        reloaded = LSMTreeKV(self.root, flush_threshold=2)
+        with mock.patch.object(reloaded, "_load_sstable", wraps=reloaded._load_sstable) as load_sstable:
+            self.assertIsNone(reloaded.get("omega"))
+        load_sstable.assert_not_called()
+
+    def test_stats_report_bloom_filter_footprint(self) -> None:
+        store = LSMTreeKV(self.root, flush_threshold=2)
+        store.set("alpha", "1")
+        store.set("beta", "2")
+
+        stats = store.stats()
+        self.assertEqual(stats["bloom_filter_count"], 1)
+        self.assertGreaterEqual(stats["bloom_filter_bits"], 20)
 
     def test_invalid_key_returns_error_code_from_cli(self) -> None:
         result = self.run_cli("set", "bad key", "value")

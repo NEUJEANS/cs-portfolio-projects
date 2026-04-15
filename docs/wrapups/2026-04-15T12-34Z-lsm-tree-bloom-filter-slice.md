@@ -1,0 +1,23 @@
+# Wrap-up — lsm-tree-kv Bloom Filter Slice
+
+- Timestamp: 2026-04-15T12:34:00Z
+- Project: `lsm-tree-kv`
+- What changed:
+  - added per-SSTable Bloom filter metadata during flush and compaction
+  - gated `get` with key-range checks plus Bloom filter membership checks before loading SSTable entries
+  - exposed Bloom filter footprint in stats
+  - added research, learning, checklist, and three review-pass notes for resumability
+  - expanded tests for Bloom filter persistence and negative-lookup skipping
+- Tests run:
+  - `python3 -m unittest discover -s projects/lsm-tree-kv -p 'test_*.py'`
+  - `python3 -m compileall projects/lsm-tree-kv`
+  - CLI smoke flow ending with `python3 projects/lsm-tree-kv/lsm_tree_kv.py --dir "$tmpdir" stats`
+- Reviews run:
+  - `docs/reviews/2026-04-15-lsm-tree-bloom-filter-review-pass-1.md`
+  - `docs/reviews/2026-04-15-lsm-tree-bloom-filter-review-pass-2.md`
+  - `docs/reviews/2026-04-15-lsm-tree-bloom-filter-review-pass-3.md`
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: `25268f2`
+- Next step:
+  - add sparse index metadata or a small benchmark harness to quantify the Bloom-filter win and explain the false-positive tradeoff
