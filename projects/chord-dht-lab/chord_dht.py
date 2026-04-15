@@ -96,6 +96,21 @@ class ChordRing:
         index = self.nodes.index(node)
         return self.nodes[(index - 1) % len(self.nodes)]
 
+    def successor_list(self, node_name: str, count: int = 3) -> list[dict[str, int | str]]:
+        if count <= 0:
+            raise ValueError("successor list count must be positive")
+        node = self.get_node(node_name)
+        index = self.nodes.index(node)
+        max_count = min(count, len(self.nodes) - 1)
+        successors: list[dict[str, int | str]] = []
+        for step in range(1, max_count + 1):
+            successor = self.nodes[(index + step) % len(self.nodes)]
+            successors.append({"name": successor.name, "id": successor.node_id})
+        return successors
+
+    def all_successor_lists(self, count: int = 3) -> dict[str, list[dict[str, int | str]]]:
+        return {node.name: self.successor_list(node.name, count=count) for node in self.nodes}
+
     def finger_table(self, node_name: str) -> list[FingerEntry]:
         node = self.get_node(node_name)
         table: list[FingerEntry] = []
@@ -217,9 +232,7 @@ class ChordRing:
                 chord_hops.append(finger_result.hop_count)
                 linear_hops.append(linear_result.hop_count)
 
-        improved_cases = sum(
-            1 for case in cases if int(case["hop_savings"]) > 0
-        )
+        improved_cases = sum(1 for case in cases if int(case["hop_savings"]) > 0)
         tied_cases = sum(1 for case in cases if int(case["hop_savings"]) == 0)
         slower_cases = len(cases) - improved_cases - tied_cases
 
@@ -257,6 +270,73 @@ class ChordRing:
                 }
             )
         return sorted(assignments, key=lambda item: (item["key_id"], item["key"]))
+
+    def replica_plan(self, keys: Iterable[str], replica_count: int = 3) -> list[dict[str, object]]:
+        if replica_count <= 0:
+            raise ValueError("replica_count must be positive")
+        max_replicas = min(replica_count, len(self.nodes))
+        plan: list[dict[str, object]] = []
+        for item in self.assign_keys(keys):
+            owner = self.get_node(str(item["owner"]))
+            owner_index = self.nodes.index(owner)
+            replicas = []
+            for offset in range(max_replicas):
+                replica = self.nodes[(owner_index + offset) % len(self.nodes)]
+                replicas.append({"name": replica.name, "id": replica.node_id})
+            plan.append({**item, "replicas": replicas})
+        return plan
+
+    def resilience_report(
+        self,
+        keys: Iterable[str],
+        failed_nodes: Iterable[str],
+        replica_count: int = 3,
+    ) -> dict[str, object]:
+        failed = list(dict.fromkeys(failed_nodes))
+        for name in failed:
+            self.get_node(name)
+        assignments = self.replica_plan(keys, replica_count=replica_count)
+        cases: list[dict[str, object]] = []
+        available_count = 0
+        degraded_count = 0
+
+        for assignment in assignments:
+            replicas = assignment["replicas"]
+            surviving = [replica for replica in replicas if replica["name"] not in failed]
+            primary_owner = assignment["owner"]
+            first_available = surviving[0]["name"] if surviving else None
+            if surviving:
+                available_count += 1
+            if surviving and first_available != primary_owner:
+                degraded_count += 1
+            cases.append(
+                {
+                    "key": assignment["key"],
+                    "key_id": assignment["key_id"],
+                    "primary_owner": primary_owner,
+                    "replicas": replicas,
+                    "failed_nodes": failed,
+                    "surviving_replicas": surviving,
+                    "available": bool(surviving),
+                    "served_by": first_available,
+                    "degraded": bool(surviving) and first_available != primary_owner,
+                }
+            )
+
+        return {
+            "m_bits": self.m_bits,
+            "node_count": len(self.nodes),
+            "nodes": self.list_nodes(),
+            "failed_nodes": failed,
+            "replica_count": min(replica_count, len(self.nodes)),
+            "cases": cases,
+            "summary": {
+                "case_count": len(cases),
+                "available_cases": available_count,
+                "unavailable_cases": len(cases) - available_count,
+                "degraded_cases": degraded_count,
+            },
+        }
 
     def join_report(self, new_node: str, keys: Iterable[str]) -> dict[str, object]:
         updated_ring = self.add_node(new_node)
@@ -307,9 +387,15 @@ def build_demo_payload() -> dict[str, object]:
         "ring_size": ring.ring_size,
         "nodes": ring.list_nodes(),
         "finger_tables": ring.all_finger_tables(),
+        "successor_lists": ring.all_successor_lists(count=3),
         "sample_assignments": ring.assign_keys(sample_keys),
         "lookup": asdict(route),
         "join_preview": ring.join_report("foxtrot", sample_keys),
+        "resilience_preview": ring.resilience_report(
+            sample_keys,
+            failed_nodes=["echo"],
+            replica_count=3,
+        ),
         "hop_benchmark": ring.benchmark_lookups(sample_keys, start_nodes=["alpha", "charlie"]),
     }
 
@@ -356,6 +442,27 @@ def parse_args() -> argparse.Namespace:
     )
     benchmark_parser.add_argument("--pretty", action="store_true")
 
+    resilience_parser = subparsers.add_parser(
+        "resilience",
+        help="simulate successor-list replicas and key availability during node failures",
+    )
+    resilience_parser.add_argument("ring_file", type=Path)
+    resilience_parser.add_argument("keys", nargs="+")
+    resilience_parser.add_argument(
+        "--failed-node",
+        dest="failed_nodes",
+        action="append",
+        default=[],
+        help="node to treat as failed; may be provided multiple times",
+    )
+    resilience_parser.add_argument(
+        "--replica-count",
+        type=int,
+        default=3,
+        help="number of consecutive successors to treat as replicas including the primary owner",
+    )
+    resilience_parser.add_argument("--pretty", action="store_true")
+
     return parser.parse_args()
 
 
@@ -375,6 +482,16 @@ def main() -> None:
         payload = {
             "command": "benchmark",
             **ring.benchmark_lookups(args.keys, start_nodes=args.start_nodes),
+        }
+    elif args.command == "resilience":
+        ring = load_ring(args.ring_file)
+        payload = {
+            "command": "resilience",
+            **ring.resilience_report(
+                args.keys,
+                failed_nodes=args.failed_nodes,
+                replica_count=args.replica_count,
+            ),
         }
     else:
         raise ValueError(f"unsupported command {args.command!r}")

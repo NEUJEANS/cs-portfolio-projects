@@ -36,6 +36,14 @@ class ChordDhtLabTests(unittest.TestCase):
             self.assertEqual(entry.successor, owner.name)
             self.assertEqual(entry.successor_id, owner.node_id)
 
+    def test_successor_list_follows_clockwise_ring_order(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        successors = ring.successor_list("alpha", count=3)
+
+        self.assertEqual([item["name"] for item in successors], ["charlie", "delta", "echo"])
+        self.assertEqual(successors[0]["id"], ring.get_node("charlie").node_id)
+
     def test_lookup_route_resolves_to_key_owner(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
 
@@ -71,13 +79,42 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(benchmark["start_nodes"], ["alpha", "charlie"])
         self.assertEqual(benchmark["summary"]["case_count"], 4)
         self.assertEqual(len(benchmark["cases"]), 4)
-        self.assertGreaterEqual(benchmark["summary"]["average_linear_hops"], benchmark["summary"]["average_chord_hops"])
+        self.assertGreaterEqual(
+            benchmark["summary"]["average_linear_hops"], benchmark["summary"]["average_chord_hops"]
+        )
         self.assertEqual(
             benchmark["summary"]["improved_cases"]
             + benchmark["summary"]["tied_cases"]
             + benchmark["summary"]["slower_cases"],
             4,
         )
+
+    def test_resilience_report_fails_over_to_next_replica(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.resilience_report(["compiler"], failed_nodes=["charlie"], replica_count=3)
+
+        case = report["cases"][0]
+        self.assertTrue(case["available"])
+        self.assertTrue(case["degraded"])
+        self.assertEqual(case["primary_owner"], "charlie")
+        self.assertEqual(case["served_by"], "delta")
+        self.assertEqual([item["name"] for item in case["surviving_replicas"]], ["delta", "echo"])
+
+    def test_resilience_report_marks_unavailable_when_all_replicas_fail(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        report = ring.resilience_report(
+            ["compiler"],
+            failed_nodes=["charlie", "delta", "echo"],
+            replica_count=3,
+        )
+
+        case = report["cases"][0]
+        self.assertFalse(case["available"])
+        self.assertIsNone(case["served_by"])
+        self.assertFalse(case["surviving_replicas"])
+        self.assertEqual(report["summary"]["unavailable_cases"], 1)
 
     def test_join_report_identifies_only_moved_keys(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
@@ -112,7 +149,9 @@ class ChordDhtLabTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["command"], "demo")
         self.assertIn("finger_tables", payload)
+        self.assertIn("successor_lists", payload)
         self.assertIn("lookup", payload)
+        self.assertIn("resilience_preview", payload)
         self.assertIn("hop_benchmark", payload)
         self.assertEqual(payload["lookup"]["key"], "compiler")
         owners = {item["key"]: item["owner"] for item in payload["sample_assignments"]}
@@ -156,6 +195,34 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["command"], "benchmark")
         self.assertEqual(payload["start_nodes"], ["alpha", "charlie"])
         self.assertEqual(payload["summary"]["case_count"], 4)
+
+    def test_cli_resilience_supports_failure_simulation(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "resilience",
+                str(RING_PATH),
+                "compiler",
+                "slides",
+                "--failed-node",
+                "alpha",
+                "--failed-node",
+                "echo",
+                "--replica-count",
+                "3",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "resilience")
+        self.assertEqual(payload["failed_nodes"], ["alpha", "echo"])
+        self.assertEqual(payload["replica_count"], 3)
+        self.assertEqual(payload["summary"]["case_count"], 2)
 
 
 if __name__ == "__main__":

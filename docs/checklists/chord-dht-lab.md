@@ -6,4 +6,5 @@
 - [x] add README usage, design notes, and future ideas
 - [x] add unit tests for routing, key ownership, joins, and CLI behavior
 - [x] add a hop-count benchmark that compares Chord finger routing against naive successor forwarding
-- [ ] consider a follow-up slice for stabilization, successor lists, or larger synthetic workload generation
+- [x] add successor-list and failover simulation so the lab covers a realistic fault-tolerance slice
+- [ ] consider a follow-up slice for explicit stabilization rounds or larger synthetic workload generation
