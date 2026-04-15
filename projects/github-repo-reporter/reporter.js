@@ -3,6 +3,7 @@ const https = require('https');
 const path = require('path');
 
 const DEFAULT_USER_AGENT = 'cs-portfolio-projects';
+const DEFAULT_API_VERSION = '2022-11-28';
 
 function buildListReposUrl(subject, options = {}) {
   const params = new URLSearchParams({
@@ -43,15 +44,28 @@ function parseLinkHeader(headerValue = '') {
   }, {});
 }
 
+function buildRequestHeaders(options = {}) {
+  const headers = {
+    'User-Agent': DEFAULT_USER_AGENT,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': DEFAULT_API_VERSION,
+    ...(options.headers || {})
+  };
+
+  if (options.tokenEnv) {
+    const token = process.env[options.tokenEnv];
+    if (!token || !token.trim()) {
+      throw new Error(`Environment variable ${options.tokenEnv} is required when using --token-env`);
+    }
+    headers.Authorization = `Bearer ${token.trim()}`;
+  }
+
+  return headers;
+}
+
 function requestJson(url, headers = {}) {
   return new Promise((resolve, reject) => {
-    const request = https.get(url, {
-      headers: {
-        'User-Agent': DEFAULT_USER_AGENT,
-        Accept: 'application/vnd.github+json',
-        ...headers
-      }
-    }, res => {
+    const request = https.get(url, { headers }, res => {
       let data = '';
       res.on('data', chunk => {
         data += chunk;
@@ -94,12 +108,13 @@ function safeErrorMessage(body) {
 async function fetchRepos(subject, options = {}) {
   const repos = [];
   const subjectType = options.subjectType === 'org' ? 'org' : 'user';
+  const requestHeaders = buildRequestHeaders(options);
   let nextUrl = subjectType === 'org'
     ? buildOrgReposUrl(subject, options)
     : buildReposUrl(subject, options);
 
   while (nextUrl) {
-    const { body, headers } = await requestJson(nextUrl, options.headers);
+    const { body, headers } = await requestJson(nextUrl, requestHeaders);
     repos.push(...body.map(normalizeRepo));
     const links = parseLinkHeader(headers.link);
     nextUrl = links.next || null;
@@ -128,11 +143,25 @@ function normalizeRepo(repo) {
   };
 }
 
+function parseDateInput(value, flagName = 'date') {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`${flagName} must be a valid ISO-8601 date or datetime`);
+  }
+  return parsed;
+}
+
 function applyRepoFilters(repos, options = {}) {
+  const pushedSince = options.pushedSince ? parseDateInput(options.pushedSince, '--pushed-since') : null;
+
   return repos.filter(repo => {
     if (!options.includeForks && repo.isFork) return false;
     if (!options.includeArchived && repo.archived) return false;
     if (options.language && (repo.language || '').toLowerCase() !== options.language.toLowerCase()) return false;
+    if (pushedSince) {
+      if (!repo.pushedAt) return false;
+      if (new Date(repo.pushedAt) < pushedSince) return false;
+    }
     return true;
   });
 }
@@ -322,7 +351,9 @@ function parseArgs(argv) {
     sort: 'updated',
     direction: 'desc',
     subjectType: 'user',
-    outPath: null
+    outPath: null,
+    pushedSince: null,
+    tokenEnv: null
   };
 
   let subject = null;
@@ -358,13 +389,19 @@ function parseArgs(argv) {
     } else if (arg === '--out') {
       options.outPath = requireArgValue(args, index, '--out');
       index += 1;
+    } else if (arg === '--pushed-since') {
+      options.pushedSince = requireArgValue(args, index, '--pushed-since');
+      index += 1;
+    } else if (arg === '--token-env') {
+      options.tokenEnv = requireArgValue(args, index, '--token-env');
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
 
   if (!subject) {
-    throw new Error('usage: node reporter.js <username-or-org> [--org] [--format json|text|markdown] [--language <name>] [--top <n>] [--include-forks] [--include-archived] [--out <file>]');
+    throw new Error('usage: node reporter.js <username-or-org> [--org] [--format json|text|markdown] [--language <name>] [--top <n>] [--include-forks] [--include-archived] [--pushed-since <iso-date>] [--token-env <ENV_VAR>] [--out <file>]');
   }
 
   if (!['json', 'text', 'markdown'].includes(options.format)) {
@@ -381,6 +418,10 @@ function parseArgs(argv) {
 
   if (!['asc', 'desc'].includes(options.direction)) {
     throw new Error('--direction must be one of: asc, desc');
+  }
+
+  if (options.pushedSince) {
+    parseDateInput(options.pushedSince, '--pushed-since');
   }
 
   return { subject, options };
@@ -407,12 +448,14 @@ module.exports = {
   buildListReposUrl,
   buildOrgReposUrl,
   buildReposUrl,
+  buildRequestHeaders,
   fetchRepos,
   formatMarkdownSummary,
   formatSummary,
   formatTextSummary,
   normalizeRepo,
   parseArgs,
+  parseDateInput,
   parseLinkHeader,
   requireArgValue,
   summarize,
