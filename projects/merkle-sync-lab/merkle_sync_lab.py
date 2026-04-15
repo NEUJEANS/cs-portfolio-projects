@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Merkle tree manifest builder, diff tool, and sync plan generator for directories."""
+"""Merkle tree manifest builder, diff tool, sync plan generator, and plan executor for directories."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -215,6 +216,49 @@ def build_copy_plan(source: dict, target: dict) -> dict:
     }
 
 
+def apply_plan(plan: dict, source_root: Path | None, execute: bool = False) -> dict:
+    if execute and source_root is None:
+        raise ValueError("applying changes requires a live source directory, not only a manifest")
+
+    target_root = Path(plan["target_root"]).resolve()
+    applied_operations: list[dict[str, object]] = []
+
+    for operation in plan["operations"]:
+        op = dict(operation)
+        rel_path = Path(str(op["path"]))
+        op["status"] = "planned"
+
+        if execute:
+            if op["op"] == "mkdir":
+                (target_root / rel_path).mkdir(parents=True, exist_ok=True)
+            elif op["op"] in {"copy", "update"}:
+                assert source_root is not None
+                source_path = source_root / rel_path
+                target_path = target_root / rel_path
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, target_path)
+            elif op["op"] == "delete":
+                target_path = target_root / rel_path
+                if target_path.exists():
+                    target_path.unlink()
+            else:
+                raise ValueError(f"unsupported operation: {op['op']}")
+            op["status"] = "applied"
+
+        applied_operations.append(op)
+
+    return {
+        **plan,
+        "mode": "execute" if execute else "dry-run",
+        "source_root": str(source_root.resolve()) if source_root else plan["source_root"],
+        "target_root": str(target_root),
+        "applied_operation_count": sum(
+            1 for operation in applied_operations if operation["status"] == "applied"
+        ),
+        "operations": applied_operations,
+    }
+
+
 def collect_parent_directories(file_paths: list[str]) -> list[str]:
     directories: set[str] = set()
     for file_path in file_paths:
@@ -264,6 +308,14 @@ def print_human_plan(plan: dict) -> None:
         print(f"  - {label} {path}{suffix}")
 
 
+def print_human_apply(report: dict) -> None:
+    print(f"mode: {report['mode']}")
+    print_human_plan(report)
+    print(f"applied operations: {report['applied_operation_count']}")
+    for operation in report["operations"]:
+        print(f"  - {operation['status']}: {operation['op']} {operation['path']}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -283,6 +335,15 @@ def build_parser() -> argparse.ArgumentParser:
     plan_cmd.add_argument("source", type=Path)
     plan_cmd.add_argument("target", type=Path)
     plan_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    apply_cmd = subparsers.add_parser(
+        "apply",
+        help="preview or execute a sync plan that makes a target directory match a source directory",
+    )
+    apply_cmd.add_argument("source", type=Path)
+    apply_cmd.add_argument("target", type=Path)
+    apply_cmd.add_argument("--execute", action="store_true", help="apply filesystem changes")
+    apply_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
     return parser
 
@@ -320,6 +381,19 @@ def main() -> int:
             print(json.dumps(plan, indent=2))
         else:
             print_human_plan(plan)
+        return 0
+
+    if args.command == "apply":
+        source_root = args.source.resolve() if args.source.is_dir() else None
+        plan = build_copy_plan(resolve_manifest(args.source), resolve_manifest(args.target))
+        try:
+            report = apply_plan(plan, source_root=source_root, execute=args.execute)
+        except ValueError as exc:
+            parser.exit(2, f"error: {exc}\n")
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print_human_apply(report)
         return 0
 
     parser.error("unknown command")

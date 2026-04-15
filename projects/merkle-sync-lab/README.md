@@ -1,12 +1,12 @@
 # merkle-sync-lab
 
-A portfolio-ready systems project that builds Merkle-tree-style manifests for directories, explains what changed, and produces a sync plan to reconcile two snapshots.
+A portfolio-ready systems project that builds Merkle-tree-style manifests for directories, explains what changed, produces a sync plan to reconcile two snapshots, and can now execute that plan against a live target.
 
 ## Why it is portfolio-worthy
 - demonstrates hierarchical hashing, a core idea behind Git, content-addressed storage, and distributed sync systems
 - turns a theoretical data structure into a practical file integrity and directory comparison tool
 - exposes human-readable CLI output plus JSON output for automation and scripting
-- now includes a sync-planning layer that feels closer to a real backup or replication system
+- now includes a sync-planning layer plus an execution mode that feels closer to a real backup or replication system
 - keeps the implementation dependency-free so interviewers can run it instantly
 
 ## Features
@@ -15,7 +15,8 @@ A portfolio-ready systems project that builds Merkle-tree-style manifests for di
 - diff two live directories, two manifests, or a manifest against a directory
 - report added, removed, and changed files plus changed directory subtrees
 - generate an ordered sync plan with `mkdir`, `copy`, `update`, and `delete` operations
-- export manifest and plan JSON for reproducible demos and follow-on tooling
+- preview or execute the generated sync plan with dry-run-safe output
+- export manifest, diff, plan, and apply JSON for reproducible demos and follow-on tooling
 
 ## Usage
 Build a manifest:
@@ -43,6 +44,16 @@ Generate a machine-readable plan from a saved manifest:
 python3 projects/merkle-sync-lab/merkle_sync_lab.py plan /tmp/merkle-manifest.json target_dir --json
 ```
 
+Preview the changes that would be applied:
+```bash
+python3 projects/merkle-sync-lab/merkle_sync_lab.py apply source_dir target_dir
+```
+
+Execute the sync plan against a live target directory:
+```bash
+python3 projects/merkle-sync-lab/merkle_sync_lab.py apply source_dir target_dir --execute
+```
+
 ## Example plan output
 ```text
 source: /tmp/source
@@ -56,6 +67,21 @@ bytes scheduled: copy=84 update=31
   - delete stale.log (size=128, sha256=1d2fe4cf9a1a)
 ```
 
+## Example apply output
+```text
+mode: execute
+source: /tmp/source
+target: /tmp/target
+operations: mkdir=1 copy=2 update=1 delete=1
+bytes scheduled: copy=84 update=31
+applied operations: 5
+  - applied: mkdir docs
+  - applied: copy docs/guide.txt
+  - applied: copy docs/index.txt
+  - applied: update config.json
+  - applied: delete stale.log
+```
+
 ## Test
 ```bash
 python3 -m unittest projects/merkle-sync-lab/test_merkle_sync_lab.py
@@ -63,5 +89,5 @@ python3 -m unittest projects/merkle-sync-lab/test_merkle_sync_lab.py
 
 ## Future improvements
 - add chunk-level Merkle proofs for large-file partial sync demos
-- emit Graphviz views of changed directory subtrees
-- optionally execute the generated sync plan in a dry-run/apply workflow
+- optionally emit Graphviz views of changed directory subtrees
+- add conflict-aware safety policies such as refusing to overwrite locally modified targets without a force flag

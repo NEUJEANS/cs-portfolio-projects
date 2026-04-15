@@ -17,6 +17,7 @@ SPEC.loader.exec_module(merkle_sync_lab)
 build_manifest = merkle_sync_lab.build_manifest
 build_copy_plan = merkle_sync_lab.build_copy_plan
 summarize_diff = merkle_sync_lab.summarize_diff
+apply_plan = merkle_sync_lab.apply_plan
 
 
 class MerkleSyncLabTests(unittest.TestCase):
@@ -97,7 +98,90 @@ class MerkleSyncLabTests(unittest.TestCase):
             self.assertEqual(plan["bytes_to_copy"], len("guide"))
             self.assertEqual(plan["bytes_to_update"], len("new value"))
 
-    def test_cli_build_diff_and_plan_json(self) -> None:
+    def test_apply_plan_dry_run_does_not_modify_target(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp:
+            source = Path(source_tmp)
+            target = Path(target_tmp)
+            (source / "nested").mkdir()
+            (source / "nested" / "guide.txt").write_text("source", encoding="utf-8")
+            (target / "stale.txt").write_text("target-only", encoding="utf-8")
+
+            plan = build_copy_plan(build_manifest(source), build_manifest(target))
+            report = apply_plan(plan, source_root=source, execute=False)
+
+            self.assertEqual(report["mode"], "dry-run")
+            self.assertEqual(report["applied_operation_count"], 0)
+            self.assertTrue((target / "stale.txt").exists())
+            self.assertFalse((target / "nested" / "guide.txt").exists())
+            self.assertTrue(all(entry["status"] == "planned" for entry in report["operations"]))
+
+    def test_apply_plan_execute_copies_updates_and_deletes(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp:
+            source = Path(source_tmp)
+            target = Path(target_tmp)
+            (source / "docs").mkdir()
+            (source / "docs" / "guide.txt").write_text("guide", encoding="utf-8")
+            (source / "shared.txt").write_text("new value", encoding="utf-8")
+            (target / "shared.txt").write_text("old value", encoding="utf-8")
+            (target / "stale.txt").write_text("remove me", encoding="utf-8")
+
+            plan = build_copy_plan(build_manifest(source), build_manifest(target))
+            report = apply_plan(plan, source_root=source, execute=True)
+
+            self.assertEqual(report["mode"], "execute")
+            self.assertEqual(report["applied_operation_count"], len(report["operations"]))
+            self.assertEqual((target / "docs" / "guide.txt").read_text(encoding="utf-8"), "guide")
+            self.assertEqual((target / "shared.txt").read_text(encoding="utf-8"), "new value")
+            self.assertFalse((target / "stale.txt").exists())
+            self.assertTrue(all(entry["status"] == "applied" for entry in report["operations"]))
+
+    def test_apply_plan_requires_live_source_for_execute(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp:
+            source = Path(source_tmp)
+            target = Path(target_tmp)
+            (source / "example.txt").write_text("hello", encoding="utf-8")
+
+            plan = build_copy_plan(build_manifest(source), build_manifest(target))
+
+            with self.assertRaisesRegex(ValueError, "live source directory"):
+                apply_plan(plan, source_root=None, execute=True)
+
+    def test_cli_apply_execute_rejects_manifest_only_source(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp, tempfile.TemporaryDirectory() as out_tmp:
+            source = Path(source_tmp)
+            target = Path(target_tmp)
+            out = Path(out_tmp)
+            (source / "data.txt").write_text("hello", encoding="utf-8")
+            manifest_path = out / "manifest.json"
+
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "build",
+                    str(source),
+                    "--output",
+                    str(manifest_path),
+                ],
+                check=True,
+            )
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "apply",
+                    str(manifest_path),
+                    str(target),
+                    "--execute",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("live source directory", result.stderr)
+
+    def test_cli_build_diff_plan_and_apply_json(self) -> None:
         with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp, tempfile.TemporaryDirectory() as out_tmp:
             source = Path(source_tmp)
             target = Path(target_tmp)
@@ -158,6 +242,25 @@ class MerkleSyncLabTests(unittest.TestCase):
             self.assertEqual(payload["delete_count"], 0)
             self.assertEqual(payload["operations"][0]["op"], "update")
             self.assertEqual(payload["operations"][0]["path"], "nested/data.txt")
+
+            apply_result = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "apply",
+                    str(source),
+                    str(target),
+                    "--execute",
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            apply_payload = json.loads(apply_result.stdout)
+            self.assertEqual(apply_payload["mode"], "execute")
+            self.assertEqual(apply_payload["applied_operation_count"], 1)
+            self.assertEqual((target / "nested" / "data.txt").read_text(encoding="utf-8"), "same")
 
 
 if __name__ == "__main__":

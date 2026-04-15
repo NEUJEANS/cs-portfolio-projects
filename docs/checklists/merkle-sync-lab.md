@@ -7,4 +7,5 @@
 - [x] add manifest export plus directory/manifest diff support
 - [x] add automated tests for stable manifests, diff behavior, and CLI JSON output
 - [x] add sync-plan generation with ordered mkdir/copy/update/delete operations
-- [ ] chunk-level proofs or plan execution in a future slice
+- [x] add sync-plan execution mode with dry-run/apply workflow
+- [ ] chunk-level proofs for large-file partial sync in a future slice
