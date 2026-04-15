@@ -65,6 +65,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `aho-corasick-search-lab`
 - [x] `raft-election-simulator`
 - [x] `network-flow-lab`
+- [x] `red-black-tree-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.
