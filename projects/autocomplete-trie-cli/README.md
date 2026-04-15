@@ -16,6 +16,7 @@ This is a portfolio-friendly CS project because it combines a classic prefix tre
 - sorts fuzzy results by lower edit distance first, then higher weight
 - supports one-shot human-readable output or machine-readable JSON
 - includes batch benchmark mode for repeated queries and timing summaries
+- adds optional `--explain` diagnostics so you can show trie traversal, pruning, and dynamic-programming work during demos
 - includes a sample dataset and unit tests
 
 ## Usage
@@ -24,6 +25,7 @@ Single query mode:
 python3 autocomplete.py sample_words.csv app
 python3 autocomplete.py sample_words.csv aple --limit 3 --max-distance 1
 python3 autocomplete.py sample_words.csv app --json
+python3 autocomplete.py sample_words.csv aple --limit 3 --max-distance 1 --explain
 ```
 
 Batch benchmark mode:
@@ -36,6 +38,7 @@ EOF
 
 python3 autocomplete.py sample_words.csv --batch-file sample_queries.txt
 python3 autocomplete.py sample_words.csv --batch-file sample_queries.txt --json
+python3 autocomplete.py sample_words.csv --batch-file sample_queries.txt --explain
 ```
 
 Example output:
@@ -66,6 +69,22 @@ per_query_top_hits:
 - app: prefix=[apple, application, apply] fuzzy=[none] prefix_ms=0.014 fuzzy_ms=0.029
 ```
 
+Explain-mode excerpt:
+```text
+search_explanation:
+- prefix_search:
+  - nodes_visited: 4
+  - terminal_words_considered: 3
+  - heap_updates: 3
+  - branches_pruned_by_weight: 1
+- fuzzy_search:
+  - trie_edges_evaluated: 11
+  - dynamic_programming_rows: 11
+  - terminal_words_considered: 4
+  - accepted_matches_within_distance: 2
+  - branches_pruned_by_distance: 3
+```
+
 ## Test
 ```bash
 python3 -m unittest discover -s . -p "test_*.py"
@@ -76,6 +95,7 @@ python3 -m unittest discover -s . -p "test_*.py"
 - shows practical ranking logic instead of plain alphabetical output
 - adds typo handling with dynamic-programming-based edit distance search
 - includes timing instrumentation and batch benchmarking for performance discussion
+- exposes explain-mode diagnostics that make trie pruning and DP-based fuzzy matching easier to discuss in interviews
 - is easy to extend into a service, web UI, or larger search system
 
 ## Future Improvements

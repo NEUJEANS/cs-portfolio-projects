@@ -14,3 +14,16 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-15 explain diagnostics slice
+- [x] review prior benchmark slice state and pick a portfolio-polish improvement
+- [x] add/update docs for the next slice
+- [x] implement explain-mode diagnostics for prefix and fuzzy search
+- [x] cover explain mode with unit and CLI tests
+- [x] run focused tests and smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

@@ -24,12 +24,24 @@ class TrieNode:
 
 
 @dataclass
+class SearchStats:
+    nodes_visited: int = 0
+    candidate_updates: int = 0
+    branches_pruned: int = 0
+    dynamic_programming_rows: int = 0
+    terminals_considered: int = 0
+    accepted_matches: int = 0
+
+
+@dataclass
 class QueryResult:
     query: str
     prefix_matches: List[Suggestion]
     fuzzy_matches: List[Suggestion]
     prefix_time_ms: float
     fuzzy_time_ms: float
+    prefix_stats: Optional[SearchStats] = None
+    fuzzy_stats: Optional[SearchStats] = None
 
 
 class DatasetError(ValueError):
@@ -68,46 +80,66 @@ class TrieAutocomplete:
                 return None
         return node
 
-    def top_k_prefix(self, prefix: str, limit: int) -> List[Suggestion]:
+    def top_k_prefix(
+        self,
+        prefix: str,
+        limit: int,
+        collect_stats: bool = False,
+    ) -> List[Suggestion] | Tuple[List[Suggestion], SearchStats]:
+        stats = SearchStats()
         if limit <= 0:
-            return []
+            return ([], stats) if collect_stats else []
         node = self._find_node(prefix)
         if node is None:
-            return []
+            return ([], stats) if collect_stats else []
 
         heap: List[Tuple[int, str]] = []
         stack: List[Tuple[TrieNode, str]] = [(node, prefix.lower())]
         while stack:
             current, built = stack.pop()
+            stats.nodes_visited += 1
             if current.is_terminal:
+                stats.terminals_considered += 1
                 candidate = (current.weight, built)
                 if len(heap) < limit:
                     heapq.heappush(heap, candidate)
+                    stats.candidate_updates += 1
                 elif candidate > heap[0]:
                     heapq.heapreplace(heap, candidate)
+                    stats.candidate_updates += 1
 
             children = sorted(
                 current.children.items(),
                 key=lambda item: (item[1].max_subtree_weight, item[0]),
-                reverse=True,
             )
             for ch, child in children:
                 if len(heap) == limit and child.max_subtree_weight < heap[0][0]:
+                    stats.branches_pruned += 1
                     continue
                 stack.append((child, built + ch))
 
         results = [Suggestion(word=word, weight=weight) for weight, word in heap]
-        return sorted(results, key=lambda item: (-item.weight, item.word))
+        ranked = sorted(results, key=lambda item: (-item.weight, item.word))
+        return (ranked, stats) if collect_stats else ranked
 
-    def fuzzy_search(self, query: str, limit: int, max_distance: int) -> List[Suggestion]:
+    def fuzzy_search(
+        self,
+        query: str,
+        limit: int,
+        max_distance: int,
+        collect_stats: bool = False,
+    ) -> List[Suggestion] | Tuple[List[Suggestion], SearchStats]:
+        stats = SearchStats()
         if limit <= 0 or max_distance < 0:
-            return []
+            return ([], stats) if collect_stats else []
         query = query.lower()
         initial_row = list(range(len(query) + 1))
         results: List[Suggestion] = []
 
         def walk(node: TrieNode, prefix: str, previous_row: Sequence[int]) -> None:
             for ch, child in node.children.items():
+                stats.nodes_visited += 1
+                stats.dynamic_programming_rows += 1
                 current_row = [previous_row[0] + 1]
                 for col in range(1, len(query) + 1):
                     insert_cost = current_row[col - 1] + 1
@@ -117,11 +149,16 @@ class TrieAutocomplete:
 
                 next_prefix = prefix + ch
                 distance = current_row[-1]
-                if child.is_terminal and distance <= max_distance:
-                    results.append(Suggestion(word=next_prefix, weight=child.weight, distance=distance))
+                if child.is_terminal:
+                    stats.terminals_considered += 1
+                    if distance <= max_distance:
+                        results.append(Suggestion(word=next_prefix, weight=child.weight, distance=distance))
+                        stats.accepted_matches += 1
 
                 if min(current_row) <= max_distance:
                     walk(child, next_prefix, current_row)
+                else:
+                    stats.branches_pruned += 1
 
         walk(self.root, '', initial_row)
         ranked = sorted(results, key=lambda item: (item.distance, -item.weight, item.word))
@@ -134,7 +171,7 @@ class TrieAutocomplete:
             seen.add(item.word)
             if len(deduped) == limit:
                 break
-        return deduped
+        return (deduped, stats) if collect_stats else deduped
 
 
 def load_entries(lines: Iterable[str]) -> List[Tuple[str, int]]:
@@ -185,16 +222,40 @@ def format_suggestions(prefix_results: Sequence[Suggestion], fuzzy_results: Sequ
     return '\n'.join(lines)
 
 
-def format_query_result(result: QueryResult) -> str:
+def format_explain_block(prefix_stats: Optional[SearchStats], fuzzy_stats: Optional[SearchStats]) -> str:
+    lines = ['search_explanation:']
+    if prefix_stats is None or fuzzy_stats is None:
+        lines.append('- unavailable')
+        return '\n'.join(lines)
+    lines.extend([
+        '- prefix_search:',
+        f'  - nodes_visited: {prefix_stats.nodes_visited}',
+        f'  - terminal_words_considered: {prefix_stats.terminals_considered}',
+        f'  - heap_updates: {prefix_stats.candidate_updates}',
+        f'  - branches_pruned_by_weight: {prefix_stats.branches_pruned}',
+        '- fuzzy_search:',
+        f'  - trie_edges_evaluated: {fuzzy_stats.nodes_visited}',
+        f'  - dynamic_programming_rows: {fuzzy_stats.dynamic_programming_rows}',
+        f'  - terminal_words_considered: {fuzzy_stats.terminals_considered}',
+        f'  - accepted_matches_within_distance: {fuzzy_stats.accepted_matches}',
+        f'  - branches_pruned_by_distance: {fuzzy_stats.branches_pruned}',
+    ])
+    return '\n'.join(lines)
+
+
+def format_query_result(result: QueryResult, explain: bool = False) -> str:
     lines = [f'query: {result.query}']
     lines.append(format_suggestions(result.prefix_matches, result.fuzzy_matches))
+    if explain:
+        lines.append('')
+        lines.append(format_explain_block(result.prefix_stats, result.fuzzy_stats))
     lines.append('')
     lines.append(f'prefix_time_ms: {result.prefix_time_ms:.3f}')
     lines.append(f'fuzzy_time_ms: {result.fuzzy_time_ms:.3f}')
     return '\n'.join(lines)
 
 
-def format_benchmark_report(results: Sequence[QueryResult], trie: TrieAutocomplete) -> str:
+def format_benchmark_report(results: Sequence[QueryResult], trie: TrieAutocomplete, explain: bool = False) -> str:
     if not results:
         return 'No benchmark queries provided.'
     average_prefix = sum(item.prefix_time_ms for item in results) / len(results)
@@ -210,27 +271,53 @@ def format_benchmark_report(results: Sequence[QueryResult], trie: TrieAutocomple
         f'- avg_fuzzy_time_ms: {average_fuzzy:.3f}',
         f'- slowest_prefix_query: {slowest_prefix.query} ({slowest_prefix.prefix_time_ms:.3f} ms)',
         f'- slowest_fuzzy_query: {slowest_fuzzy.query} ({slowest_fuzzy.fuzzy_time_ms:.3f} ms)',
+    ]
+    if explain:
+        total_prefix_nodes = sum((item.prefix_stats.nodes_visited if item.prefix_stats else 0) for item in results)
+        total_prefix_pruned = sum((item.prefix_stats.branches_pruned if item.prefix_stats else 0) for item in results)
+        total_fuzzy_rows = sum((item.fuzzy_stats.dynamic_programming_rows if item.fuzzy_stats else 0) for item in results)
+        total_fuzzy_pruned = sum((item.fuzzy_stats.branches_pruned if item.fuzzy_stats else 0) for item in results)
+        lines.extend([
+            f'- total_prefix_nodes_visited: {total_prefix_nodes}',
+            f'- total_prefix_branches_pruned: {total_prefix_pruned}',
+            f'- total_fuzzy_dp_rows: {total_fuzzy_rows}',
+            f'- total_fuzzy_branches_pruned: {total_fuzzy_pruned}',
+        ])
+    lines.extend([
         '',
         'per_query_top_hits:',
-    ]
+    ])
     for item in results:
         prefix_words = ', '.join(match.word for match in item.prefix_matches) or 'none'
         fuzzy_words = ', '.join(match.word for match in item.fuzzy_matches) or 'none'
-        lines.append(
+        line = (
             f'- {item.query}: prefix=[{prefix_words}] fuzzy=[{fuzzy_words}] '
             f'prefix_ms={item.prefix_time_ms:.3f} fuzzy_ms={item.fuzzy_time_ms:.3f}'
         )
+        if explain and item.prefix_stats and item.fuzzy_stats:
+            line += (
+                f' prefix_nodes={item.prefix_stats.nodes_visited}'
+                f' prefix_pruned={item.prefix_stats.branches_pruned}'
+                f' fuzzy_rows={item.fuzzy_stats.dynamic_programming_rows}'
+                f' fuzzy_pruned={item.fuzzy_stats.branches_pruned}'
+            )
+        lines.append(line)
     return '\n'.join(lines)
 
 
 def query_to_dict(result: QueryResult) -> Dict[str, object]:
-    return {
+    payload = {
         'query': result.query,
         'prefix_matches': [asdict(item) for item in result.prefix_matches],
         'fuzzy_matches': [asdict(item) for item in result.fuzzy_matches],
         'prefix_time_ms': round(result.prefix_time_ms, 6),
         'fuzzy_time_ms': round(result.fuzzy_time_ms, 6),
     }
+    if result.prefix_stats is not None:
+        payload['prefix_stats'] = asdict(result.prefix_stats)
+    if result.fuzzy_stats is not None:
+        payload['fuzzy_stats'] = asdict(result.fuzzy_stats)
+    return payload
 
 
 def benchmark_to_dict(results: Sequence[QueryResult], trie: TrieAutocomplete) -> Dict[str, object]:
@@ -238,7 +325,7 @@ def benchmark_to_dict(results: Sequence[QueryResult], trie: TrieAutocomplete) ->
     average_fuzzy = (sum(item.fuzzy_time_ms for item in results) / len(results)) if results else 0.0
     slowest_prefix = max(results, key=lambda item: item.prefix_time_ms) if results else None
     slowest_fuzzy = max(results, key=lambda item: item.fuzzy_time_ms) if results else None
-    return {
+    payload = {
         'query_count': len(results),
         'indexed_words': trie.word_count,
         'avg_prefix_time_ms': round(average_prefix, 6),
@@ -247,6 +334,14 @@ def benchmark_to_dict(results: Sequence[QueryResult], trie: TrieAutocomplete) ->
         'slowest_fuzzy_query': query_to_dict(slowest_fuzzy) if slowest_fuzzy else None,
         'results': [query_to_dict(item) for item in results],
     }
+    if results and any(item.prefix_stats is not None for item in results):
+        payload['aggregate_stats'] = {
+            'prefix_nodes_visited': sum((item.prefix_stats.nodes_visited if item.prefix_stats else 0) for item in results),
+            'prefix_branches_pruned': sum((item.prefix_stats.branches_pruned if item.prefix_stats else 0) for item in results),
+            'fuzzy_dynamic_programming_rows': sum((item.fuzzy_stats.dynamic_programming_rows if item.fuzzy_stats else 0) for item in results),
+            'fuzzy_branches_pruned': sum((item.fuzzy_stats.branches_pruned if item.fuzzy_stats else 0) for item in results),
+        }
+    return payload
 
 
 def normalize_query(raw: str) -> str:
@@ -265,15 +360,24 @@ def load_queries(lines: Iterable[str]) -> List[str]:
     return queries
 
 
-def run_query(trie: TrieAutocomplete, query: str, limit: int, max_distance: int) -> QueryResult:
+def run_query(trie: TrieAutocomplete, query: str, limit: int, max_distance: int, explain: bool = False) -> QueryResult:
     prefix_start = time.perf_counter()
-    prefix_matches = trie.top_k_prefix(query, limit)
+    if explain:
+        prefix_matches, prefix_stats = trie.top_k_prefix(query, limit, collect_stats=True)
+    else:
+        prefix_matches = trie.top_k_prefix(query, limit)
+        prefix_stats = None
     prefix_time_ms = (time.perf_counter() - prefix_start) * 1000
 
     prefix_words = {match.word for match in prefix_matches}
     fuzzy_start = time.perf_counter()
+    if explain:
+        fuzzy_candidates, fuzzy_stats = trie.fuzzy_search(query, limit, max_distance, collect_stats=True)
+    else:
+        fuzzy_candidates = trie.fuzzy_search(query, limit, max_distance)
+        fuzzy_stats = None
     fuzzy_matches = [
-        item for item in trie.fuzzy_search(query, limit, max_distance)
+        item for item in fuzzy_candidates
         if item.word not in prefix_words
     ]
     fuzzy_time_ms = (time.perf_counter() - fuzzy_start) * 1000
@@ -284,6 +388,8 @@ def run_query(trie: TrieAutocomplete, query: str, limit: int, max_distance: int)
         fuzzy_matches=fuzzy_matches,
         prefix_time_ms=prefix_time_ms,
         fuzzy_time_ms=fuzzy_time_ms,
+        prefix_stats=prefix_stats,
+        fuzzy_stats=fuzzy_stats,
     )
 
 
@@ -295,6 +401,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--limit', type=int, default=5, help='maximum number of suggestions per section')
     parser.add_argument('--max-distance', type=int, default=1, help='maximum edit distance for fuzzy matches')
     parser.add_argument('--json', action='store_true', help='emit machine-readable JSON output')
+    parser.add_argument('--explain', action='store_true', help='include traversal/pruning diagnostics for portfolio walkthroughs')
     return parser
 
 
@@ -314,17 +421,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         trie = build_trie(entries)
         if args.batch_file:
             queries = load_queries(Path(args.batch_file).read_text(encoding='utf-8').splitlines())
-            results = [run_query(trie, query, args.limit, args.max_distance) for query in queries]
+            results = [run_query(trie, query, args.limit, args.max_distance, explain=args.explain) for query in queries]
             if args.json:
                 print(json.dumps(benchmark_to_dict(results, trie), indent=2))
             else:
-                print(format_benchmark_report(results, trie))
+                print(format_benchmark_report(results, trie, explain=args.explain))
         else:
-            result = run_query(trie, normalize_query(args.query), args.limit, args.max_distance)
+            result = run_query(trie, normalize_query(args.query), args.limit, args.max_distance, explain=args.explain)
             if args.json:
                 print(json.dumps(query_to_dict(result), indent=2))
             else:
-                print(format_query_result(result))
+                print(format_query_result(result, explain=args.explain))
     except OSError as exc:
         parser.exit(2, f'file error: {exc}\n')
     except DatasetError as exc:
