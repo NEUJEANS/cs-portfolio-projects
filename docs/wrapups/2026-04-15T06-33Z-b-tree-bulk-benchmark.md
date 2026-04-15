@@ -18,7 +18,7 @@
 - secret scan planned before push: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit hash
-- `509747843e71ec8552eb732c8df3debb1528831d`
+- `f12a369cabf0e44f637f9536e2004acf0b9821e6`
 
 ## Next step
 - add fixed-size page encoding or export benchmark artifacts for README charts
