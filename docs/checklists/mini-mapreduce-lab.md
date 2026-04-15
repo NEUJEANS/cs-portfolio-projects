@@ -141,4 +141,16 @@
 - [x] wire the average-score example plugin to emit domain-shaped balanced/skewed benchmark fixtures
 - [x] extend project and repo-level tests for custom generator success and invalid generator failures
 - [x] run tests and 3 review passes
-- [ ] consider multiple domain-specific dataset families per plugin beyond the basic balanced/skewed hook
+- [x] consider multiple domain-specific dataset families per plugin beyond the basic balanced/skewed hook
+
+## Plugin dataset-family benchmark slice (2026-04-15 15:41 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the open follow-up was already clearly scoped in the README/checklist
+- [x] do a short Python callable-signature and backward-compat refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add benchmark dataset-family support to the runner and emitted benchmark artifacts
+- [x] extend the average-score plugin with multiple named dataset families (`default`, `exam-cram`, `project-week`)
+- [x] extend project and repo-level tests for programmatic and CLI dataset-family benchmark flows
+- [x] run tests and 3 review passes
+- [ ] consider surfacing supported dataset families automatically in CLI help/report output

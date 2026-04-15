@@ -23,6 +23,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional standalone HTML benchmark report export with colorized shard/reducer heatmap tables and inline SVG charts for portfolio screenshots
 - JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
 - optional plugin-defined synthetic benchmark generators for domain-specific benchmark fixtures
+- dataset-family selection so benchmarks can simulate different plugin or wordcount workload shapes without changing the runner
 
 ## Usage
 
@@ -160,6 +161,20 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output plugin-benchmark-report.html
 ```
 
+Switch benchmark dataset families to model different workload shapes. For example, the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --job plugin \
+  --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
+  --scenario balanced \
+  --dataset-family project-week \
+  --records 240 \
+  --shard-size 30 \
+  --reducers 2 4 \
+  --output project-week-benchmark.json
+```
+
 ## Plugin contract
 
 A plugin is a Python file with:
@@ -169,12 +184,13 @@ A plugin is a Python file with:
 - `combine_values(key, values)` → optional shard-local combiner for non-sum jobs
 - `reduce_key(key, values)` → returns a JSON-serializable result for that key
 - `benchmark_records(scenario, records, seed)` → optional synthetic input generator for plugin benchmarks
+- `benchmark_records(scenario, records, seed, dataset_family)` → optional extended form when a plugin wants multiple workload families
 
 Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/plugins_top_score.py` or as a dotted module path like `demo_plugins.topscore` when the package is importable on `PYTHONPATH`.
 
 The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation.
 
-The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, and the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
+The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, and the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks. It now supports named dataset families such as `exam-cram` and `project-week`, which makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
 
 ## Output shape
 
@@ -199,10 +215,11 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes benchmark `job`/`plugin` metadata plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
+`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
 
 ```json
 {
+  "dataset_family": "project-week",
   "heatmap_rows": [
     {
       "scenario": "skewed",
@@ -235,5 +252,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
-- add multiple plugin dataset families (for example leaderboard updates vs rolling averages) instead of a single synthetic score stream
-- add multiple plugin dataset families (for example leaderboard updates vs rolling averages) beyond the current balanced/skewed generator hooks
+- let plugins advertise supported dataset families directly in generated reports/help output
+- add richer built-in benchmark families for JSON/event workloads, not just wordcount-style text streams

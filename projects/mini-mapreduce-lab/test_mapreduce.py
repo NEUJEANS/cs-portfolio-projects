@@ -167,6 +167,7 @@ class MiniMapReduceTests(unittest.TestCase):
         result = benchmark_job("wordcount", "skewed", records=200, shard_size=25, reducers=[1, 4], seed=7)
 
         self.assertEqual(result.scenario, "skewed")
+        self.assertEqual(result.dataset_family, "default")
         self.assertEqual(result.total_records, 200)
         self.assertEqual(result.reducers, [1, 4])
         self.assertEqual(len(result.timings_ms), 2)
@@ -178,19 +179,19 @@ class MiniMapReduceTests(unittest.TestCase):
 
         csv_output = result.to_csv().strip().splitlines()
 
-        self.assertEqual(csv_output[0], "job,plugin,scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+        self.assertEqual(csv_output[0], "job,plugin,scenario,dataset_family,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
         self.assertEqual(len(csv_output), 3)
-        self.assertTrue(csv_output[1].startswith("wordcount,,balanced,5,120,20,1,"))
-        self.assertTrue(csv_output[2].startswith("wordcount,,balanced,5,120,20,3,"))
+        self.assertTrue(csv_output[1].startswith("wordcount,,balanced,default,5,120,20,1,"))
+        self.assertTrue(csv_output[2].startswith("wordcount,,balanced,default,5,120,20,3,"))
 
     def test_benchmark_wordcount_can_render_heatmap_csv_rows(self) -> None:
         result = benchmark_job("wordcount", "balanced", records=120, shard_size=20, reducers=[2], seed=5)
 
         rows = result.heatmap_to_csv().strip().splitlines()
 
-        self.assertEqual(rows[0], "job,plugin,scenario,seed,reducers,shard_index,reducer,records,unique_keys")
+        self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,seed,reducers,shard_index,reducer,records,unique_keys")
         self.assertEqual(len(rows), 1 + (6 * 2))
-        self.assertTrue(rows[1].startswith("wordcount,,balanced,5,2,0,"))
+        self.assertTrue(rows[1].startswith("wordcount,,balanced,default,5,2,0,"))
         self.assertTrue(any(",0," in row for row in rows[1:]))
         self.assertTrue(any(",1," in row for row in rows[1:]))
 
@@ -200,6 +201,7 @@ class MiniMapReduceTests(unittest.TestCase):
         report = result.to_markdown()
 
         self.assertIn("# Mini MapReduce benchmark report (wordcount: balanced)", report)
+        self.assertIn("- Dataset family: `default`", report)
         self.assertIn("| Reducers | Elapsed (ms) | Shards | Map records | Unique keys | Max reducer records | Skew ratio |", report)
         self.assertIn("### Reducers = 2", report)
         self.assertIn("### Reducers = 3", report)
@@ -213,6 +215,7 @@ class MiniMapReduceTests(unittest.TestCase):
 
         self.assertIn("<!DOCTYPE html>", report)
         self.assertIn("<h1>Mini MapReduce benchmark report (wordcount: balanced)</h1>", report)
+        self.assertIn("<strong>Dataset family</strong>", report)
         self.assertIn("<h2>Reducers = 2</h2>", report)
         self.assertIn("<th>r0</th><th>r1</th>", report)
         self.assertIn("Elapsed timing chart", report)
@@ -434,9 +437,9 @@ class MiniMapReduceTests(unittest.TestCase):
             report = report_output.read_text(encoding="utf-8")
             html_report = html_output.read_text(encoding="utf-8")
             self.assertEqual(payload["reducers"], [1, 3])
-            self.assertEqual(rows[0], "job,plugin,scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+            self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
             self.assertEqual(len(rows), 3)
-            self.assertEqual(heatmap_rows[0], "job,plugin,scenario,seed,reducers,shard_index,reducer,records,unique_keys")
+            self.assertEqual(heatmap_rows[0], "job,plugin,scenario,dataset_family,seed,reducers,shard_index,reducer,records,unique_keys")
             self.assertGreater(len(heatmap_rows), 3)
             self.assertIn(",1,", rows[1])
             self.assertIn(",3,", rows[2])
@@ -474,9 +477,27 @@ class MiniMapReduceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.job, "plugin-average-score")
+        self.assertEqual(result.dataset_family, "default")
         self.assertEqual(result.unique_keys, 12)
         self.assertTrue(result.plugin.endswith("plugins_average_score.py"))
         self.assertEqual(result.timings_ms[0]["map_records"], 24)
+
+    def test_plugin_benchmark_supports_named_dataset_families(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "balanced",
+            records=24,
+            shard_size=6,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_average_score.py",
+            dataset_family="project-week",
+        )
+
+        self.assertEqual(result.dataset_family, "project-week")
+        self.assertEqual(result.unique_keys, 8)
+        self.assertEqual(result.timings_ms[0]["map_records"], 24)
+        self.assertTrue(all(row["dataset_family"] == "project-week" for row in result.heatmap_rows))
 
     def test_plugin_benchmark_rejects_invalid_generator_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -519,6 +540,8 @@ class MiniMapReduceTests(unittest.TestCase):
                     "--reducers",
                     "2",
                     "4",
+                    "--dataset-family",
+                    "project-week",
                     "--output",
                     str(output),
                     "--csv-output",
@@ -531,9 +554,10 @@ class MiniMapReduceTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             rows = csv_output.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(payload["job"], "plugin-max-score")
+            self.assertEqual(payload["dataset_family"], "project-week")
             self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
             self.assertEqual(payload["reducers"], [2, 4])
-            self.assertEqual(rows[0], "job,plugin,scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+            self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
             self.assertTrue(rows[1].startswith("plugin-max-score,"))
 
     def test_cli_benchmark_requires_plugin_for_plugin_job(self) -> None:

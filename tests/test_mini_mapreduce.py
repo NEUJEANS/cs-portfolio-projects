@@ -101,6 +101,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         second = benchmark_job("wordcount", "balanced", records=90, shard_size=15, reducers=[1, 3], seed=99)
 
         self.assertEqual(first.scenario, second.scenario)
+        self.assertEqual(first.dataset_family, second.dataset_family)
         self.assertEqual(first.total_records, second.total_records)
         self.assertEqual(first.unique_keys, second.unique_keys)
         self.assertEqual([row["reducers"] for row in first.timings_ms], [1, 3])
@@ -204,7 +205,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(len(payload["timings_ms"]), 3)
             self.assertIn("skew_ratio", payload["timings_ms"][2])
             self.assertTrue(payload["heatmap_rows"])
-            self.assertEqual(heatmap_rows[0], "job,plugin,scenario,seed,reducers,shard_index,reducer,records,unique_keys")
+            self.assertEqual(heatmap_rows[0], "job,plugin,scenario,dataset_family,seed,reducers,shard_index,reducer,records,unique_keys")
 
     def test_plugin_benchmark_result_includes_plugin_metadata(self) -> None:
         result = benchmark_job("plugin", "balanced", records=90, shard_size=15, reducers=[2, 3], seed=99, plugin_path=PLUGIN_PATH)
@@ -226,9 +227,27 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         )
 
         self.assertEqual(result.job, "plugin-average-score")
+        self.assertEqual(result.dataset_family, "default")
         self.assertEqual(result.unique_keys, 12)
         self.assertTrue(result.plugin.endswith("plugins_average_score.py"))
         self.assertEqual(result.timings_ms[0]["map_records"], 24)
+
+    def test_plugin_benchmark_supports_named_dataset_families(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "balanced",
+            records=24,
+            shard_size=6,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_average_score.py",
+            dataset_family="project-week",
+        )
+
+        self.assertEqual(result.dataset_family, "project-week")
+        self.assertEqual(result.unique_keys, 8)
+        self.assertEqual(result.timings_ms[0]["map_records"], 24)
+        self.assertTrue(all(row["dataset_family"] == "project-week" for row in result.heatmap_rows))
 
     def test_plugin_benchmark_rejects_invalid_generator_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -270,6 +289,8 @@ class MiniMapReduceRepoTests(unittest.TestCase):
                     "--reducers",
                     "2",
                     "4",
+                    "--dataset-family",
+                    "project-week",
                     "--output",
                     str(output),
                 ],
@@ -279,6 +300,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
 
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(payload["job"], "plugin-max-score")
+            self.assertEqual(payload["dataset_family"], "project-week")
             self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
             self.assertEqual(payload["reducers"], [2, 4])
 

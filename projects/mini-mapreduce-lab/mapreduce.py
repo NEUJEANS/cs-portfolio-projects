@@ -7,6 +7,7 @@ import hashlib
 import html
 import importlib
 import importlib.util
+import inspect
 import json
 import random
 import statistics
@@ -24,7 +25,7 @@ JSONValue = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
 KeyValue = tuple[str, JSONValue]
 Mapper = Callable[[Iterable[str]], Iterator[KeyValue]]
 Reducer = Callable[[str, list[JSONValue]], JSONValue]
-BenchmarkGenerator = Callable[[str, int, int], list[str]]
+BenchmarkGenerator = Callable[..., list[str]]
 
 
 def is_json_value(value: Any) -> bool:
@@ -83,6 +84,7 @@ class JobResult:
 class BenchmarkResult:
     job: str
     scenario: str
+    dataset_family: str
     seed: int
     total_records: int
     unique_keys: int
@@ -98,6 +100,7 @@ class BenchmarkResult:
                 "job": self.job,
                 "plugin": self.plugin,
                 "scenario": self.scenario,
+                "dataset_family": self.dataset_family,
                 "seed": self.seed,
                 "total_records": self.total_records,
                 "unique_keys": self.unique_keys,
@@ -115,6 +118,7 @@ class BenchmarkResult:
             "job",
             "plugin",
             "scenario",
+            "dataset_family",
             "seed",
             "total_records",
             "shard_size",
@@ -132,6 +136,7 @@ class BenchmarkResult:
                 "job": self.job,
                 "plugin": self.plugin,
                 "scenario": self.scenario,
+                "dataset_family": self.dataset_family,
                 "seed": self.seed,
                 "total_records": self.total_records,
                 "shard_size": self.shard_size,
@@ -151,6 +156,7 @@ class BenchmarkResult:
             "job",
             "plugin",
             "scenario",
+            "dataset_family",
             "seed",
             "reducers",
             "shard_index",
@@ -270,6 +276,7 @@ class BenchmarkResult:
             "",
             f"- Job: `{self.job}`",
             f"- Plugin: `{self.plugin or 'builtin'}`",
+            f"- Dataset family: `{self.dataset_family}`",
             f"- Seed: `{self.seed}`",
             f"- Total records: `{self.total_records}`",
             f"- Shard size: `{self.shard_size}`",
@@ -422,6 +429,7 @@ class BenchmarkResult:
   <ul class="meta">
     <li><strong>Job</strong><br><code>{esc(self.job)}</code></li>
     <li><strong>Plugin</strong><br><code>{esc(self.plugin or 'builtin')}</code></li>
+    <li><strong>Dataset family</strong><br><code>{esc(self.dataset_family)}</code></li>
     <li><strong>Seed</strong><br><code>{esc(self.seed)}</code></li>
     <li><strong>Total records</strong><br><code>{esc(self.total_records)}</code></li>
     <li><strong>Shard size</strong><br><code>{esc(self.shard_size)}</code></li>
@@ -672,30 +680,64 @@ def execute_job(
     )
 
 
-def build_benchmark_lines(job: str, scenario: str, records: int, seed: int, plugin: PluginJob | None = None) -> list[str]:
+def build_benchmark_lines(
+    job: str,
+    scenario: str,
+    records: int,
+    seed: int,
+    plugin: PluginJob | None = None,
+    dataset_family: str = "default",
+) -> list[str]:
     if records <= 0:
         raise ValueError("records must be positive")
     rng = random.Random(seed)
     if job == "plugin" and plugin is not None and plugin.benchmark_generator is not None:
-        plugin_lines = plugin.benchmark_generator(scenario, records, seed)
+        signature = inspect.signature(plugin.benchmark_generator)
+        accepts_dataset_family = len(signature.parameters) >= 4
+        if dataset_family != "default" and not accepts_dataset_family:
+            raise ValueError("plugin benchmark_records does not support dataset_family")
+        plugin_lines = (
+            plugin.benchmark_generator(scenario, records, seed, dataset_family)
+            if accepts_dataset_family
+            else plugin.benchmark_generator(scenario, records, seed)
+        )
         if not isinstance(plugin_lines, list) or not all(isinstance(line, str) for line in plugin_lines):
             raise ValueError("plugin benchmark_records must return a list of strings")
         if len(plugin_lines) != records:
             raise ValueError("plugin benchmark_records must return exactly records lines")
         return plugin_lines
     if job == "wordcount":
+        if dataset_family not in {"default", "news", "logs"}:
+            raise ValueError(f"unsupported dataset_family for wordcount benchmark: {dataset_family}")
         if scenario == "balanced":
-            keys = [f"key-{index:02d}" for index in range(24)]
+            if dataset_family == "logs":
+                services = [f"svc-{index:02d}" for index in range(12)]
+                levels = ["info", "warn", "error", "debug"]
+                return [f"{services[index % len(services)]} {levels[index % len(levels)]}" for index in range(records)]
+            keys = [f"key-{index:02d}" for index in range(24)] if dataset_family == "default" else [f"topic-{index:02d}" for index in range(24)]
             return [f"{keys[index % len(keys)]} {keys[(index * 7) % len(keys)]}" for index in range(records)]
         if scenario == "skewed":
-            hot_keys = ["hot-key"] * 12 + [f"warm-{index}" for index in range(6)] + [f"cold-{index}" for index in range(18)]
+            if dataset_family == "logs":
+                hot_keys = ["checkout:error"] * 12 + [f"service-{index}:warn" for index in range(6)] + [f"service-{index}:info" for index in range(18)]
+            elif dataset_family == "news":
+                hot_keys = ["breaking-news"] * 12 + [f"desk-{index}" for index in range(6)] + [f"beat-{index}" for index in range(18)]
+            else:
+                hot_keys = ["hot-key"] * 12 + [f"warm-{index}" for index in range(6)] + [f"cold-{index}" for index in range(18)]
             return [f"{rng.choice(hot_keys)} {rng.choice(hot_keys)}" for _ in range(records)]
     if job == "plugin":
         if scenario == "balanced":
+            if dataset_family == "project-week":
+                students = [f"squad-{index:02d}" for index in range(16)]
+                return [f"{students[index % len(students)]},{68 + ((index * 13) % 27)}" for index in range(records)]
             students = [f"student-{index:02d}" for index in range(24)]
             return [f"{students[index % len(students)]},{70 + ((index * 11) % 31)}" for index in range(records)]
         if scenario == "skewed":
-            hot_students = ["capstone-lead"] * 12 + [f"frequent-{index}" for index in range(6)] + [f"rare-{index}" for index in range(18)]
+            if dataset_family == "exam-cram":
+                hot_students = ["exam-cram-core"] * 14 + [f"late-night-{index}" for index in range(4)] + [f"steady-{index}" for index in range(14)]
+            elif dataset_family == "project-week":
+                hot_students = ["demo-day-core"] * 12 + [f"integration-{index}" for index in range(6)] + [f"feature-{index}" for index in range(18)]
+            else:
+                hot_students = ["capstone-lead"] * 12 + [f"frequent-{index}" for index in range(6)] + [f"rare-{index}" for index in range(18)]
             return [f"{rng.choice(hot_students)},{55 + rng.randint(0, 45)}" for _ in range(records)]
     raise ValueError(f"unsupported benchmark scenario: {scenario}")
 
@@ -708,6 +750,7 @@ def benchmark_job(
     reducers: list[int],
     seed: int = 42,
     plugin_path: str | None = None,
+    dataset_family: str = "default",
 ) -> BenchmarkResult:
     if shard_size <= 0:
         raise ValueError("shard_size must be positive")
@@ -721,7 +764,7 @@ def benchmark_job(
         if plugin_path is None:
             raise ValueError("plugin_path is required for plugin benchmarks")
         benchmark_plugin = load_plugin(plugin_path)
-    lines = build_benchmark_lines(job, scenario, records, seed, benchmark_plugin)
+    lines = build_benchmark_lines(job, scenario, records, seed, benchmark_plugin, dataset_family=dataset_family)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", prefix="mini-mapreduce-benchmark-", delete=False) as handle:
         handle.write("\n".join(lines) + "\n")
         input_path = Path(handle.name)
@@ -768,6 +811,7 @@ def benchmark_job(
                             "job": job,
                             "plugin": str(benchmark_plugin.path) if benchmark_plugin else None,
                             "scenario": scenario,
+                            "dataset_family": dataset_family,
                             "seed": seed,
                             "reducers": reducer_count,
                             "shard_index": shard_index,
@@ -783,6 +827,7 @@ def benchmark_job(
         job=job if job != "plugin" or benchmark_plugin is None else benchmark_plugin.name,
         plugin=str(benchmark_plugin.path) if benchmark_plugin else None,
         scenario=scenario,
+        dataset_family=dataset_family,
         seed=seed,
         total_records=records,
         unique_keys=unique_keys,
@@ -813,6 +858,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--shard-size", type=int, default=250, help="lines per shard")
     benchmark_parser.add_argument("--reducers", type=int, nargs="+", default=[1, 2, 4, 8], help="one or more reducer counts to compare")
     benchmark_parser.add_argument("--seed", type=int, default=42, help="seed for deterministic synthetic data generation")
+    benchmark_parser.add_argument("--dataset-family", default="default", help="synthetic dataset family to use for benchmark generation")
     benchmark_parser.add_argument("--plugin", help="plugin file path or importable Python module for plugin benchmarks")
     benchmark_parser.add_argument("--output", help="optional output JSON path")
     benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
@@ -866,6 +912,7 @@ def main(argv: list[str] | None = None) -> int:
             reducers=args.reducers,
             seed=args.seed,
             plugin_path=args.plugin if args.plugin else None,
+            dataset_family=args.dataset_family,
         )
         rendered = result.to_json()
         if args.output:
