@@ -14,5 +14,8 @@
 - [x] cover trace mode with direct API tests and CLI tests
 - [x] add Graphviz DOT export with optional NIL leaves for portfolio diagrams
 - [x] cover DOT export with direct API tests and CLI tests
+- [x] add deterministic benchmark mode comparing red-black vs AVL height/rotation trade-offs
+- [x] export benchmark cases as chart-ready CSV for spreadsheets/README artifacts
+- [x] cover benchmark CSV export with direct API tests and CLI tests
 - [x] run at least 3 review passes and fix findings
 - [x] add wrap-up note for this slice

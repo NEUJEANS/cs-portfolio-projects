@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
+import io
 import json
 import random
 import statistics
@@ -610,6 +612,38 @@ def _benchmark_sequence(sequence: list[int]) -> dict[str, object]:
     }
 
 
+def _benchmark_rows(cases: dict[str, dict[str, object]]) -> list[dict[str, int | str]]:
+    rows: list[dict[str, int | str]] = []
+    for case_name, case in cases.items():
+        red_black = case["red_black"]
+        avl = case["avl"]
+        rows.append(
+            {
+                "case": case_name,
+                "input_size": int(case["input_size"]),
+                "red_black_height": int(red_black["height"]),
+                "red_black_black_height": int(red_black["black_height"]),
+                "red_black_rotation_count": int(red_black["rotation_count"]),
+                "avl_height": int(avl["height"]),
+                "avl_rotation_count": int(avl["rotation_count"]),
+                "height_gap_avl_minus_red_black": int(avl["height"]) - int(red_black["height"]),
+                "rotation_gap_avl_minus_red_black": int(avl["rotation_count"]) - int(red_black["rotation_count"]),
+            }
+        )
+    return rows
+
+
+def _benchmark_csv(rows: list[dict[str, int | str]]) -> str:
+    if not rows:
+        raise ValueError("benchmark rows cannot be empty")
+    fieldnames = list(rows[0].keys())
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
 def command_demo(args: argparse.Namespace) -> dict[str, object]:
     tree = build_tree([7, 3, 18, 10, 22, 8, 11, 26], trace_enabled=args.trace)
     payload = {"command": "demo", **tree.summary(include_trace=args.trace)}
@@ -697,6 +731,7 @@ def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
         "descending": _benchmark_sequence(descending),
         "shuffled": _benchmark_sequence(shuffled),
     }
+    rows = _benchmark_rows(cases)
 
     metrics = {
         "red_black_height_mean": statistics.fmean(case["red_black"]["height"] for case in cases.values()),
@@ -709,7 +744,7 @@ def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
         metrics["avl_rotation_mean"] - metrics["red_black_rotation_mean"]
     )
 
-    return {
+    payload = {
         "command": "benchmark",
         "count": args.count,
         "seed": args.seed,
@@ -717,6 +752,15 @@ def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
         "cases": cases,
         "summary": metrics,
     }
+    if args.csv or args.csv_file:
+        csv_text = _benchmark_csv(rows)
+        payload["csv"] = csv_text
+        if args.csv_file:
+            csv_path = Path(args.csv_file)
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            csv_path.write_text(csv_text, encoding="utf-8")
+            payload["csv_file"] = str(csv_path)
+    return payload
 
 
 def add_trace_flag(parser: argparse.ArgumentParser) -> None:
@@ -773,6 +817,11 @@ def main() -> None:
     benchmark_parser.add_argument("--count", type=int, default=31, help="number of sequential integers to insert")
     benchmark_parser.add_argument("--start", type=int, default=1, help="starting integer for the benchmark range")
     benchmark_parser.add_argument("--seed", type=int, default=7, help="random seed for the shuffled benchmark case")
+    benchmark_parser.add_argument("--csv", action="store_true", help="include a chart-ready CSV string in the JSON output")
+    benchmark_parser.add_argument(
+        "--csv-file",
+        help="write the benchmark cases to a CSV file for spreadsheet/chart tooling",
+    )
     benchmark_parser.set_defaults(handler=command_benchmark)
 
     args = parser.parse_args()

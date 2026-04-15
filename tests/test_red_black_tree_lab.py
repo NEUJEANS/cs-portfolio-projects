@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -282,6 +283,19 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertGreaterEqual(summary["red_black"]["rotation_count"], 0)
         self.assertGreaterEqual(summary["avl"]["rotation_count"], 0)
 
+    def test_benchmark_rows_and_csv_export_are_chart_ready(self) -> None:
+        cases = {
+            "ascending": module._benchmark_sequence([1, 2, 3, 4, 5]),
+            "descending": module._benchmark_sequence([5, 4, 3, 2, 1]),
+        }
+        rows = module._benchmark_rows(cases)
+        self.assertEqual([row["case"] for row in rows], ["ascending", "descending"])
+        self.assertIn("height_gap_avl_minus_red_black", rows[0])
+        csv_text = module._benchmark_csv(rows)
+        self.assertIn("case,input_size,red_black_height", csv_text)
+        self.assertIn("ascending,5", csv_text)
+        self.assertIn("descending,5", csv_text)
+
     def test_cli_benchmark_outputs_comparison_cases(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "benchmark", "--count", "9", "--seed", "11"],
@@ -296,6 +310,46 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertEqual(set(payload["cases"].keys()), {"ascending", "descending", "shuffled"})
         self.assertIn("height_gap_avl_minus_red_black", payload["summary"])
         self.assertIn("rotation_gap_avl_minus_red_black", payload["summary"])
+
+    def test_cli_benchmark_can_embed_csv_output(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "benchmark", "--count", "9", "--seed", "11", "--csv"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertIn("csv", payload)
+        self.assertIn("case,input_size,red_black_height", payload["csv"])
+        self.assertIn("ascending,9", payload["csv"])
+
+    def test_cli_benchmark_can_write_csv_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "artifacts" / "red-black-benchmark.csv"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--count",
+                    "9",
+                    "--seed",
+                    "11",
+                    "--csv-file",
+                    str(csv_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["csv_file"], str(csv_path))
+            self.assertTrue(csv_path.exists())
+            csv_text = csv_path.read_text(encoding="utf-8")
+            self.assertIn("case,input_size,red_black_height", csv_text)
+            self.assertIn("shuffled,9", csv_text)
 
     def test_cli_benchmark_rejects_non_positive_count(self) -> None:
         completed = subprocess.run(

@@ -1,0 +1,4 @@
+case,input_size,red_black_height,red_black_black_height,red_black_rotation_count,avl_height,avl_rotation_count,height_gap_avl_minus_red_black,rotation_gap_avl_minus_red_black
+ascending,9,4,3,5,4,5,0,0
+descending,9,4,3,5,4,5,0,0
+shuffled,9,4,3,3,4,2,0,-1
