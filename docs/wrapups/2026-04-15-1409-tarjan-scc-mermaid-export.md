@@ -2,7 +2,7 @@
 
 - Timestamp: 2026-04-15 14:09 UTC
 - Project: `tarjan-scc-lab`
-- Commit: `ae91461`
+- Commit: `18f8067`
 
 ## What changed
 - added a `mermaid` CLI export that renders the condensation DAG as Mermaid flowchart markup
