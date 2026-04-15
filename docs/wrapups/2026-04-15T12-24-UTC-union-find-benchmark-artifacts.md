@@ -16,7 +16,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- `3079c69` — `Add union-find benchmark artifact exports`
+- implementation commit: `a29a3c3` — `Add union-find benchmark artifact exports`
 
 ## Next step
 - turn exported benchmark/snapshot artifacts into a tiny chart generator so the repo can publish README-ready visualizations automatically.
