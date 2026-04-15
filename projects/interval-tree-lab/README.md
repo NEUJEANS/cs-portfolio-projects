@@ -20,6 +20,7 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 - validation for BST ordering and `max_end` correctness
 - JSON CLI output for demo, build, overlap, point, insert, delete, trace, benchmark, and benchmark-series flows
 - Graphviz DOT query-trace export that highlights visited, pruned, and overlapping branches
+- `explain` mode that narrates why each subtree was searched or pruned for one overlap query
 - optional trace artifact rendering to DOT, SVG, or PNG files for portfolio screenshots and README embeds
 
 ## Usage
@@ -84,12 +85,31 @@ Write a trace artifact directly to disk for portfolio screenshots or docs (SVG/P
 python3 projects/interval-tree-lab/interval_tree_lab.py trace 7-18 0-3:warmup 5-8:backup 6-10:deploy 15-23:analytics 17-19:alerts --output docs/artifacts/interval-tree-trace.dot --format dot
 ```
 
+Explain the pruning decisions step by step for one overlap query:
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py explain 7-18 0-3:warmup 5-8:backup 6-10:deploy 15-23:analytics 17-19:alerts
+```
+
+## Example artifact
+
+![Interval tree trace example](../../docs/artifacts/interval-tree-trace-example.svg)
+
+The checked-in SVG gives you a portfolio-ready screenshot even on machines that do not have Graphviz installed. You can still regenerate DOT/SVG/PNG artifacts locally with the `trace --output` command when `dot` is available.
+
 ## Test
 
 ```bash
 ./.venv/bin/python -m pytest -q tests/test_interval_tree_lab.py
 python3 -m unittest projects/interval-tree-lab/test_interval_tree_lab.py
+python3 scripts/audit_interval_tree_readme_commands.py
 ```
+
+## Complexity intuition
+- **Build from sorted unique intervals:** `O(n)` time for the balanced bulk-build helper and `O(n)` space for the nodes.
+- **Insert/delete:** `O(h)` time where `h` is tree height, because only one search path plus metadata refreshes are touched. In the balanced demo flow that is usually close to `O(log n)`; in a badly skewed incremental tree it can degrade toward `O(n)`.
+- **Overlap / point queries:** best case is near `O(1)` when the root immediately proves most branches irrelevant, average behavior is typically closer to `O(log n + k)` for balanced trees with `k` reported matches, and worst case is `O(n)` when many intervals overlap or the tree becomes skewed enough that pruning loses power.
+- **Why `max_end` matters:** without augmentation, a naive scan inspects every interval. With `max_end`, the search can discard entire left subtrees as soon as their maximum end falls before the query start.
 
 ## Design notes
 - Intervals are closed ranges `[start, end]`, so touching endpoints count as overlap.
@@ -100,6 +120,7 @@ python3 -m unittest projects/interval-tree-lab/test_interval_tree_lab.py
 - The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan overlap results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
 - The `benchmark-series` command intentionally increments the seed per row so each interval count gets a reproducible but non-identical workload snapshot.
 - The `trace` command still emits DOT inline in JSON output, but can now also write DOT/SVG/PNG artifacts to disk when you want concrete portfolio assets.
+- The `explain` command turns one query into a step-by-step narrative that says why each subtree was searched or pruned, which is useful for interviews and README screenshots.
 - SVG/PNG rendering is optional and only requires Graphviz `dot` when you explicitly ask for a rendered artifact.
 
 ## Future improvements

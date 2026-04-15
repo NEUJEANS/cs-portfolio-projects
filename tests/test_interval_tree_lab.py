@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import json
 import pathlib
@@ -21,6 +22,7 @@ benchmark_overlap_series = interval_tree_lab.benchmark_overlap_series
 parse_interval_spec = interval_tree_lab.parse_interval_spec
 render_benchmark_series_csv = interval_tree_lab.render_benchmark_series_csv
 render_query_trace_artifact = interval_tree_lab.render_query_trace_artifact
+command_trace = interval_tree_lab.command_trace
 
 
 class IntervalTreeLabTests(unittest.TestCase):
@@ -233,6 +235,26 @@ class IntervalTreeLabTests(unittest.TestCase):
         self.assertIn('search right', dot)
         self.assertIn('label="overlap"', dot)
 
+    def test_explain_overlap_query_reports_search_and_prune_reasons(self) -> None:
+        tree = IntervalTree(
+            [
+                Interval(0, 3, "warmup"),
+                Interval(5, 8, "backup"),
+                Interval(6, 10, "deploy"),
+                Interval(15, 23, "analytics"),
+                Interval(17, 19, "alerts"),
+            ]
+        )
+        explanation = tree.explain_overlap_query(Interval(7, 18, "query"))
+        self.assertEqual(
+            [entry.get("label") for entry in explanation["matches"]],
+            ["backup", "deploy", "analytics", "alerts"],
+        )
+        self.assertGreater(explanation["query_stats"]["nodes_visited"], 0)
+        reason_lines = [reason for step in explanation["steps"] for reason in step["reasons"]]
+        self.assertTrue(any("prune left because" in reason for reason in reason_lines))
+        self.assertTrue(any("search right because" in reason for reason in reason_lines))
+
     def test_render_query_trace_artifact_writes_dot_file(self) -> None:
         dot = IntervalTree([Interval(1, 3, "a")]).export_query_trace_dot(Interval(2, 2, "q"))
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -300,6 +322,49 @@ class IntervalTreeLabTests(unittest.TestCase):
             self.assertEqual(payload["artifact"], {"path": str(target), "format": "dot"})
             self.assertTrue(target.exists())
             self.assertIn('digraph interval_tree_query_trace', target.read_text(encoding="utf-8"))
+
+    def test_command_trace_smoke_writes_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = pathlib.Path(tmpdir) / "trace.dot"
+            args = argparse.Namespace(
+                query="7-18",
+                intervals=[
+                    "0-3:warmup",
+                    "5-8:backup",
+                    "6-10:deploy",
+                    "15-23:analytics",
+                    "17-19:alerts",
+                ],
+                output=str(target),
+                format="dot",
+            )
+            payload = command_trace(args)
+            self.assertEqual(payload["artifact"], {"path": str(target), "format": "dot"})
+            self.assertTrue(target.exists())
+
+    def test_cli_explain_outputs_reasoned_steps(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "projects/interval-tree-lab/interval_tree_lab.py",
+                "explain",
+                "7-18",
+                "0-3:warmup",
+                "5-8:backup",
+                "6-10:deploy",
+                "15-23:analytics",
+                "17-19:alerts",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "explain")
+        self.assertGreater(len(payload["steps"]), 0)
+        self.assertIn("left_action", payload["steps"][0])
+        all_reasons = [reason for step in payload["steps"] for reason in step["reasons"]]
+        self.assertTrue(any("search right because" in reason for reason in all_reasons))
 
     def test_cli_benchmark_series_can_write_json_and_csv_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

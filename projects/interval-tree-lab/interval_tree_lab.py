@@ -50,6 +50,26 @@ class QueryStats:
         return {"nodes_visited": self.nodes_visited}
 
 
+@dataclass(frozen=True)
+class ExplainStep:
+    node: dict[str, object]
+    depth: int
+    overlap: bool
+    left_action: str
+    right_action: str
+    reasons: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "node": self.node,
+            "depth": self.depth,
+            "overlap": self.overlap,
+            "left_action": self.left_action,
+            "right_action": self.right_action,
+            "reasons": self.reasons,
+        }
+
+
 class IntervalTree:
     def __init__(self, intervals: Iterable[Interval] = ()) -> None:
         unique = sorted(set(intervals))
@@ -146,6 +166,70 @@ class IntervalTree:
 
         walk(self.root, None, None)
         return len(errors) == 0, errors
+
+    def explain_overlap_query(self, query: Interval) -> dict[str, object]:
+        overlaps, stats = self.find_overlaps_with_stats(query)
+        steps: list[ExplainStep] = []
+
+        def walk(node: Node | None, depth: int) -> None:
+            if node is None:
+                return
+            overlap = node.interval.overlaps(query)
+            left_searchable = node.left is not None and node.left.max_end >= query.start
+            right_searchable = node.right is not None and node.interval.start <= query.end
+            left_action = "skip-empty"
+            right_action = "skip-empty"
+            reasons: list[str] = []
+
+            if node.left is not None:
+                if left_searchable:
+                    left_action = "search"
+                    reasons.append(
+                        f"search left because left.max_end={node.left.max_end} reaches query.start={query.start}"
+                    )
+                else:
+                    left_action = "prune"
+                    reasons.append(
+                        f"prune left because left.max_end={node.left.max_end} is below query.start={query.start}"
+                    )
+            if node.right is not None:
+                if right_searchable:
+                    right_action = "search"
+                    reasons.append(
+                        f"search right because node.start={node.interval.start} is at or before query.end={query.end}"
+                    )
+                else:
+                    right_action = "prune"
+                    reasons.append(
+                        f"prune right because node.start={node.interval.start} is after query.end={query.end}"
+                    )
+            if overlap:
+                reasons.insert(0, "current node overlaps the query, so include it in the result set")
+            else:
+                reasons.insert(0, "current node does not overlap the query")
+
+            steps.append(
+                ExplainStep(
+                    node=node.interval.to_dict(),
+                    depth=depth,
+                    overlap=overlap,
+                    left_action=left_action,
+                    right_action=right_action,
+                    reasons=reasons,
+                )
+            )
+            if left_searchable:
+                walk(node.left, depth + 1)
+            if right_searchable:
+                walk(node.right, depth + 1)
+
+        walk(self.root, 0)
+        return {
+            "query": query.to_dict(),
+            "matches": [interval.to_dict() for interval in overlaps],
+            "query_stats": stats.to_dict(),
+            "steps": [step.to_dict() for step in steps],
+        }
 
     def export_query_trace_dot(self, query: Interval) -> str:
         lines = [
@@ -697,6 +781,17 @@ def command_trace(args: argparse.Namespace) -> dict[str, object]:
     return payload
 
 
+def command_explain(args: argparse.Namespace) -> dict[str, object]:
+    tree = IntervalTree(load_intervals(args.intervals))
+    query = parse_interval_spec(args.query)
+    return {
+        "command": "explain",
+        "input": args.intervals,
+        **tree.explain_overlap_query(query),
+        **tree.summary(),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Interval tree lab for overlap and stabbing queries")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -771,6 +866,14 @@ def main() -> None:
         help="artifact format when --output is used: dot, svg, or png (default: dot)",
     )
     trace_parser.set_defaults(handler=command_trace)
+
+    explain_parser = subparsers.add_parser(
+        "explain",
+        help="narrate why overlap search visited or pruned each branch for one query",
+    )
+    explain_parser.add_argument("query", help="query interval spec")
+    explain_parser.add_argument("intervals", nargs="+", help="interval specs")
+    explain_parser.set_defaults(handler=command_explain)
 
     args = parser.parse_args()
     try:
