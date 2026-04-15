@@ -1,6 +1,8 @@
 import argparse
+import csv
 import json
 import hashlib
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -217,6 +219,18 @@ def parse_pair(line: str) -> tuple[str, str]:
     return key, value
 
 
+def parse_load_factors(raw: str) -> list[float]:
+    load_factors = []
+    for chunk in raw.split(","):
+        value = float(chunk.strip())
+        if value <= 0 or value >= 1:
+            raise ValueError("load factors must be between 0 and 1")
+        load_factors.append(value)
+    if not load_factors:
+        raise ValueError("at least one load factor is required")
+    return load_factors
+
+
 def load_pairs(path: Path) -> list[tuple[str, str]]:
     pairs = []
     for raw_line in path.read_text().splitlines():
@@ -236,6 +250,92 @@ def save_snapshot(path: Path, table: CuckooHashTable) -> None:
 
 def load_snapshot(path: Path) -> CuckooHashTable:
     return CuckooHashTable.from_dict(json.loads(path.read_text()))
+
+
+def run_benchmark(capacity: int, max_displacements: int, load_factors: list[float], trials: int) -> list[dict]:
+    if trials < 1:
+        raise ValueError("trials must be positive")
+
+    results = []
+    for load_factor in load_factors:
+        target_size = max(1, min(capacity - 1, int(round(capacity * load_factor))))
+        trial_rows = []
+        for trial in range(trials):
+            table = CuckooHashTable(
+                capacity=capacity,
+                max_displacements=max_displacements,
+                salt_a=f"bench-a-{trial}",
+                salt_b=f"bench-b-{trial}",
+            )
+            started = time.perf_counter()
+            for index in range(target_size):
+                key = f"trial{trial}-key-{index}"
+                table.insert(key, f"value-{index}")
+            elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
+            stats = table.stats()
+            trial_rows.append(
+                {
+                    "trial": trial,
+                    "elapsed_ms": elapsed_ms,
+                    "load_factor": stats["load_factor"],
+                    "rehash_count": stats["rehash_count"],
+                    "displacement_count": stats["displacement_count"],
+                    "size": stats["size"],
+                    "capacity": stats["capacity"],
+                }
+            )
+
+        results.append(
+            {
+                "target_load_factor": round(load_factor, 4),
+                "target_size": target_size,
+                "trials": trials,
+                "average_elapsed_ms": round(sum(row["elapsed_ms"] for row in trial_rows) / trials, 3),
+                "average_load_factor": round(sum(row["load_factor"] for row in trial_rows) / trials, 4),
+                "average_rehash_count": round(sum(row["rehash_count"] for row in trial_rows) / trials, 3),
+                "average_displacement_count": round(sum(row["displacement_count"] for row in trial_rows) / trials, 3),
+                "peak_displacement_count": max(row["displacement_count"] for row in trial_rows),
+                "final_capacity_range": [min(row["capacity"] for row in trial_rows), max(row["capacity"] for row in trial_rows)],
+                "trial_rows": trial_rows,
+            }
+        )
+    return results
+
+
+def save_benchmark_csv(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "target_load_factor",
+                "target_size",
+                "trials",
+                "average_elapsed_ms",
+                "average_load_factor",
+                "average_rehash_count",
+                "average_displacement_count",
+                "peak_displacement_count",
+                "final_capacity_min",
+                "final_capacity_max",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "target_load_factor": row["target_load_factor"],
+                    "target_size": row["target_size"],
+                    "trials": row["trials"],
+                    "average_elapsed_ms": row["average_elapsed_ms"],
+                    "average_load_factor": row["average_load_factor"],
+                    "average_rehash_count": row["average_rehash_count"],
+                    "average_displacement_count": row["average_displacement_count"],
+                    "peak_displacement_count": row["peak_displacement_count"],
+                    "final_capacity_min": row["final_capacity_range"][0],
+                    "final_capacity_max": row["final_capacity_range"][1],
+                }
+            )
 
 
 def build_command(args: argparse.Namespace) -> int:
@@ -278,6 +378,31 @@ def export_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def benchmark_command(args: argparse.Namespace) -> int:
+    results = run_benchmark(
+        capacity=args.capacity,
+        max_displacements=args.max_displacements,
+        load_factors=parse_load_factors(args.load_factors),
+        trials=args.trials,
+    )
+    if args.output:
+        save_benchmark_csv(Path(args.output), results)
+    print(
+        json.dumps(
+            {
+                "capacity": args.capacity,
+                "max_displacements": args.max_displacements,
+                "load_factors": [row["target_load_factor"] for row in results],
+                "trials": args.trials,
+                "output": args.output,
+                "results": results,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build and inspect a portfolio-friendly cuckoo hash table")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -308,6 +433,14 @@ def build_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("--snapshot", required=True, help="saved JSON snapshot")
     export_parser.add_argument("--output", required=True, help="destination text file")
     export_parser.set_defaults(func=export_command)
+
+    benchmark_parser = subparsers.add_parser("benchmark", help="benchmark displacement and rehash behavior across load factors")
+    benchmark_parser.add_argument("--capacity", type=int, default=101, help="starting slot count for each trial")
+    benchmark_parser.add_argument("--max-displacements", type=int, default=32, help="limit before rehash")
+    benchmark_parser.add_argument("--load-factors", default="0.25,0.4,0.55,0.7,0.8", help="comma-separated target load factors between 0 and 1")
+    benchmark_parser.add_argument("--trials", type=int, default=5, help="number of repeated trials per load factor")
+    benchmark_parser.add_argument("--output", help="optional CSV summary path")
+    benchmark_parser.set_defaults(func=benchmark_command)
 
     return parser
 

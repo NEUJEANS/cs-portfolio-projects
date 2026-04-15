@@ -7,7 +7,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from cuckoo_hashing_lab import CuckooHashTable, load_pairs, load_snapshot, parse_pair, save_snapshot
+from cuckoo_hashing_lab import (
+    CuckooHashTable,
+    load_pairs,
+    load_snapshot,
+    parse_load_factors,
+    parse_pair,
+    run_benchmark,
+    save_snapshot,
+)
 
 SCRIPT = ROOT / "cuckoo_hashing_lab.py"
 
@@ -17,6 +25,13 @@ class CuckooHashingLabTests(unittest.TestCase):
         self.assertEqual(parse_pair("alpha,1"), ("alpha", "1"))
         self.assertEqual(parse_pair("beta=2"), ("beta", "2"))
         self.assertEqual(parse_pair("gamma"), ("gamma", "gamma"))
+
+    def test_parse_load_factors_validates_range(self):
+        self.assertEqual(parse_load_factors("0.25, 0.5,0.75"), [0.25, 0.5, 0.75])
+        with self.assertRaises(ValueError):
+            parse_load_factors("1.0")
+        with self.assertRaises(ValueError):
+            parse_load_factors("0")
 
     def test_insert_lookup_update_and_remove(self):
         table = CuckooHashTable(capacity=5, max_displacements=8)
@@ -98,7 +113,16 @@ class CuckooHashingLabTests(unittest.TestCase):
                 child.unlink()
             temp_dir.rmdir()
 
-    def test_cli_build_stats_lookup_remove_and_export(self):
+    def test_run_benchmark_returns_summary_rows(self):
+        results = run_benchmark(capacity=31, max_displacements=4, load_factors=[0.3, 0.6], trials=2)
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["trials"], 2)
+        self.assertEqual(len(results[0]["trial_rows"]), 2)
+        self.assertLessEqual(results[0]["target_size"], 30)
+        self.assertGreater(results[0]["average_load_factor"], 0)
+        self.assertGreaterEqual(results[1]["average_displacement_count"], 0)
+
+    def test_cli_build_stats_lookup_remove_export_and_benchmark(self):
         temp_dir = ROOT / self._testMethodName
         temp_dir.mkdir(exist_ok=True)
         try:
@@ -106,6 +130,7 @@ class CuckooHashingLabTests(unittest.TestCase):
             snapshot = temp_dir / "table.json"
             updated = temp_dir / "updated.json"
             exported = temp_dir / "pairs.csv"
+            benchmark_csv = temp_dir / "benchmark.csv"
             source.write_text("alpha,1\nbeta,2\ngamma,3\ndelta,4\n")
 
             build = subprocess.run(
@@ -152,6 +177,31 @@ class CuckooHashingLabTests(unittest.TestCase):
             )
             self.assertEqual(json.loads(export.stdout)["exported"], 3)
             self.assertIn("alpha,1", exported.read_text())
+
+            benchmark = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "benchmark",
+                    "--capacity",
+                    "31",
+                    "--max-displacements",
+                    "4",
+                    "--load-factors",
+                    "0.3,0.6",
+                    "--trials",
+                    "2",
+                    "--output",
+                    str(benchmark_csv),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            benchmark_data = json.loads(benchmark.stdout)
+            self.assertEqual(benchmark_data["trials"], 2)
+            self.assertEqual(len(benchmark_data["results"]), 2)
+            self.assertIn("target_load_factor", benchmark_csv.read_text())
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()
