@@ -18,6 +18,7 @@ spec.loader.exec_module(module)
 
 BLACK = module.BLACK
 build_tree = module.build_tree
+RedBlackTree = module.RedBlackTree
 
 
 class RedBlackTreeLabTests(unittest.TestCase):
@@ -93,6 +94,28 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertTrue(valid, errors)
         self.assertEqual(tree.inorder(), [4, 9, 12])
         self.assertEqual(tree.size, 3)
+
+    def test_trace_records_insert_and_delete_fixup_events(self) -> None:
+        tree = build_tree([10, 20, 30, 15, 25, 5], trace_enabled=True)
+        self.assertTrue(any(event["event"] == "rotate_left" for event in tree.trace))
+        self.assertTrue(any(event["event"] == "insert_fixup_line" for event in tree.trace))
+        tree.trace.clear()
+        self.assertTrue(tree.delete(10))
+        valid, _, errors = tree.validate()
+        self.assertTrue(valid, errors)
+        self.assertTrue(any(event["event"] == "delete_case_two_children" for event in tree.trace))
+        self.assertTrue(any(event["event"] == "delete_complete" for event in tree.trace))
+
+    def test_trace_can_be_enabled_after_construction(self) -> None:
+        tree = RedBlackTree()
+        tree.enable_trace()
+        tree.insert(10)
+        tree.insert(20)
+        tree.insert(30)
+        self.assertTrue(tree.trace)
+        summary = tree.summary(include_trace=True)
+        self.assertIn("trace", summary)
+        self.assertTrue(any(event["event"] == "rotate_left" for event in summary["trace"]))
 
     def test_delete_sequence_to_empty_tree_stays_valid(self) -> None:
         values = [41, 38, 31, 12, 19, 8]
@@ -193,6 +216,19 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertTrue(payload["deleted"])
         self.assertEqual(payload["inorder"], [5, 15, 20, 25, 30, 35])
         self.assertTrue(payload["valid"], payload["errors"])
+
+    def test_cli_trace_flag_includes_rotation_and_fixup_events(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "delete", "--trace", "10", "20", "10", "30", "5", "15", "25", "35"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertIn("trace", payload)
+        self.assertTrue(any(event["event"] == "delete_case_two_children" for event in payload["trace"]))
+        self.assertTrue(any(event["event"] == "delete_complete" for event in payload["trace"]))
 
     def test_cli_select_reports_out_of_range_index(self) -> None:
         completed = subprocess.run(

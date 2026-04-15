@@ -20,9 +20,14 @@ class Node:
 
 
 class RedBlackTree:
-    def __init__(self) -> None:
+    def __init__(self, *, trace_enabled: bool = False) -> None:
         self.root: Node | None = None
         self.size = 0
+        self.trace_enabled = trace_enabled
+        self.trace: list[dict[str, object]] = []
+
+    def enable_trace(self) -> None:
+        self.trace_enabled = True
 
     def insert(self, key: int) -> bool:
         parent: Node | None = None
@@ -32,6 +37,7 @@ class RedBlackTree:
             parent = current
             path.append(current)
             if key == current.key:
+                self._log("insert_duplicate_rejected", key=key)
                 return False
             current = current.left if key < current.key else current.right
 
@@ -46,14 +52,23 @@ class RedBlackTree:
         self.size += 1
         for ancestor in path:
             ancestor.subtree_size += 1
+        self._log(
+            "inserted",
+            key=key,
+            parent=None if parent is None else parent.key,
+            direction=(None if parent is None else ("left" if key < parent.key else "right")),
+        )
         self._fix_insert(node)
         return True
 
     def delete(self, key: int) -> bool:
         target = self.find_node(key)
         if target is None:
+            self._log("delete_missing", key=key)
             return False
+        self._log("delete_start", key=key)
         self._delete_node(target)
+        self._log("delete_complete", key=key)
         return True
 
     def contains(self, key: int) -> bool:
@@ -167,9 +182,9 @@ class RedBlackTree:
             errors.append(f"tree size mismatch: expected {computed_size}, got {self.size}")
         return len(errors) == 0, black_height, errors
 
-    def summary(self) -> dict[str, object]:
+    def summary(self, *, include_trace: bool = False) -> dict[str, object]:
         valid, black_height, errors = self.validate()
-        return {
+        payload: dict[str, object] = {
             "size": self.size,
             "height": self.height(),
             "black_height": black_height,
@@ -180,6 +195,9 @@ class RedBlackTree:
             "valid": valid,
             "errors": errors,
         }
+        if include_trace:
+            payload["trace"] = self.trace
+        return payload
 
     def _delete_node(self, target: Node) -> None:
         removed_color = target.color
@@ -193,16 +211,19 @@ class RedBlackTree:
             replacement_was_left = replacement_parent is not None and target == replacement_parent.left
             self._transplant(target, target.right)
             refresh_points = [replacement_parent]
+            self._log("delete_case_single_or_empty_child", target=target.key, replacement=self._node_key(replacement))
         elif target.right is None:
             replacement = target.left
             replacement_parent = target.parent
             replacement_was_left = replacement_parent is not None and target == replacement_parent.left
             self._transplant(target, target.left)
             refresh_points = [replacement_parent]
+            self._log("delete_case_single_or_empty_child", target=target.key, replacement=self._node_key(replacement))
         else:
             successor = self._minimum(target.right)
             removed_color = successor.color
             replacement = successor.right
+            self._log("delete_case_two_children", target=target.key, successor=successor.key)
             if successor.parent == target:
                 replacement_parent = successor
                 replacement_was_left = False
@@ -233,6 +254,7 @@ class RedBlackTree:
         child = pivot.right
         if child is None:
             raise ValueError("cannot left-rotate without a right child")
+        self._log("rotate_left", pivot=pivot.key, child=child.key)
         pivot.right = child.left
         if child.left is not None:
             child.left.parent = pivot
@@ -252,6 +274,7 @@ class RedBlackTree:
         child = pivot.left
         if child is None:
             raise ValueError("cannot right-rotate without a left child")
+        self._log("rotate_right", pivot=pivot.key, child=child.key)
         pivot.left = child.right
         if child.right is not None:
             child.right.parent = pivot
@@ -275,30 +298,48 @@ class RedBlackTree:
             if node.parent == grandparent.left:
                 uncle = grandparent.right
                 if uncle is not None and uncle.color == RED:
+                    self._log(
+                        "insert_fixup_recolor",
+                        node=node.key,
+                        parent=node.parent.key,
+                        uncle=uncle.key,
+                        grandparent=grandparent.key,
+                    )
                     node.parent.color = BLACK
                     uncle.color = BLACK
                     grandparent.color = RED
                     node = grandparent
                     continue
                 if node == node.parent.right:
+                    self._log("insert_fixup_triangle", node=node.key, parent=node.parent.key, grandparent=grandparent.key)
                     node = node.parent
                     self._rotate_left(node)
                 assert node.parent is not None
+                self._log("insert_fixup_line", node=node.key, parent=node.parent.key, grandparent=grandparent.key)
                 node.parent.color = BLACK
                 grandparent.color = RED
                 self._rotate_right(grandparent)
             else:
                 uncle = grandparent.left
                 if uncle is not None and uncle.color == RED:
+                    self._log(
+                        "insert_fixup_recolor",
+                        node=node.key,
+                        parent=node.parent.key,
+                        uncle=uncle.key,
+                        grandparent=grandparent.key,
+                    )
                     node.parent.color = BLACK
                     uncle.color = BLACK
                     grandparent.color = RED
                     node = grandparent
                     continue
                 if node == node.parent.left:
+                    self._log("insert_fixup_triangle", node=node.key, parent=node.parent.key, grandparent=grandparent.key)
                     node = node.parent
                     self._rotate_right(node)
                 assert node.parent is not None
+                self._log("insert_fixup_line", node=node.key, parent=node.parent.key, grandparent=grandparent.key)
                 node.parent.color = BLACK
                 grandparent.color = RED
                 self._rotate_left(grandparent)
@@ -319,11 +360,18 @@ class RedBlackTree:
                 sibling = current_parent.right
                 if self._color_of(sibling) == RED:
                     assert sibling is not None
+                    self._log("delete_fixup_sibling_red", parent=current_parent.key, sibling=sibling.key, side="left")
                     sibling.color = BLACK
                     current_parent.color = RED
                     self._rotate_left(current_parent)
                     sibling = current_parent.right
                 if self._color_of(self._left_of(sibling)) == BLACK and self._color_of(self._right_of(sibling)) == BLACK:
+                    self._log(
+                        "delete_fixup_sibling_black_with_black_children",
+                        parent=current_parent.key,
+                        sibling=self._node_key(sibling),
+                        side="left",
+                    )
                     if sibling is not None:
                         sibling.color = RED
                     current = current_parent
@@ -331,6 +379,12 @@ class RedBlackTree:
                     current_was_left = current_parent is not None and current == current_parent.left
                 else:
                     if self._color_of(self._right_of(sibling)) == BLACK:
+                        self._log(
+                            "delete_fixup_inner_red_outer_black",
+                            parent=current_parent.key,
+                            sibling=self._node_key(sibling),
+                            side="left",
+                        )
                         if sibling is not None and sibling.left is not None:
                             sibling.left.color = BLACK
                         if sibling is not None:
@@ -338,6 +392,7 @@ class RedBlackTree:
                             self._rotate_right(sibling)
                         sibling = current_parent.right
                     assert sibling is not None
+                    self._log("delete_fixup_outer_red", parent=current_parent.key, sibling=sibling.key, side="left")
                     sibling.color = current_parent.color
                     current_parent.color = BLACK
                     if sibling.right is not None:
@@ -349,11 +404,18 @@ class RedBlackTree:
                 sibling = current_parent.left
                 if self._color_of(sibling) == RED:
                     assert sibling is not None
+                    self._log("delete_fixup_sibling_red", parent=current_parent.key, sibling=sibling.key, side="right")
                     sibling.color = BLACK
                     current_parent.color = RED
                     self._rotate_right(current_parent)
                     sibling = current_parent.left
                 if self._color_of(self._left_of(sibling)) == BLACK and self._color_of(self._right_of(sibling)) == BLACK:
+                    self._log(
+                        "delete_fixup_sibling_black_with_black_children",
+                        parent=current_parent.key,
+                        sibling=self._node_key(sibling),
+                        side="right",
+                    )
                     if sibling is not None:
                         sibling.color = RED
                     current = current_parent
@@ -361,6 +423,12 @@ class RedBlackTree:
                     current_was_left = current_parent is not None and current == current_parent.left
                 else:
                     if self._color_of(self._left_of(sibling)) == BLACK:
+                        self._log(
+                            "delete_fixup_inner_red_outer_black",
+                            parent=current_parent.key,
+                            sibling=self._node_key(sibling),
+                            side="right",
+                        )
                         if sibling is not None and sibling.right is not None:
                             sibling.right.color = BLACK
                         if sibling is not None:
@@ -368,6 +436,7 @@ class RedBlackTree:
                             self._rotate_left(sibling)
                         sibling = current_parent.left
                     assert sibling is not None
+                    self._log("delete_fixup_outer_red", parent=current_parent.key, sibling=sibling.key, side="right")
                     sibling.color = current_parent.color
                     current_parent.color = BLACK
                     if sibling.left is not None:
@@ -420,17 +489,26 @@ class RedBlackTree:
         if replacement is not None:
             replacement.parent = target.parent
 
+    def _log(self, event: str, **data: object) -> None:
+        if not self.trace_enabled:
+            return
+        self.trace.append({"event": event, **data})
 
-def build_tree(values: Iterable[int]) -> RedBlackTree:
-    tree = RedBlackTree()
+    @staticmethod
+    def _node_key(node: Node | None) -> int | None:
+        return None if node is None else node.key
+
+
+def build_tree(values: Iterable[int], *, trace_enabled: bool = False) -> RedBlackTree:
+    tree = RedBlackTree(trace_enabled=trace_enabled)
     for value in values:
         tree.insert(value)
     return tree
 
 
-def command_demo(_: argparse.Namespace) -> dict[str, object]:
-    tree = build_tree([7, 3, 18, 10, 22, 8, 11, 26])
-    payload = {"command": "demo", **tree.summary()}
+def command_demo(args: argparse.Namespace) -> dict[str, object]:
+    tree = build_tree([7, 3, 18, 10, 22, 8, 11, 26], trace_enabled=args.trace)
+    payload = {"command": "demo", **tree.summary(include_trace=args.trace)}
     payload["contains"] = {"8": tree.contains(8), "15": tree.contains(15)}
     payload["rank"] = {"8": tree.rank(8), "15": tree.rank(15)}
     payload["select"] = {"0": tree.select(0), "3": tree.select(3)}
@@ -438,54 +516,60 @@ def command_demo(_: argparse.Namespace) -> dict[str, object]:
 
 
 def command_build(args: argparse.Namespace) -> dict[str, object]:
-    tree = build_tree(args.values)
-    return {"command": "build", "input": args.values, **tree.summary()}
+    tree = build_tree(args.values, trace_enabled=args.trace)
+    return {"command": "build", "input": args.values, **tree.summary(include_trace=args.trace)}
 
 
 def command_contains(args: argparse.Namespace) -> dict[str, object]:
-    tree = build_tree(args.values)
+    tree = build_tree(args.values, trace_enabled=args.trace)
     return {
         "command": "contains",
         "input": args.values,
         "query": args.query,
         "found": tree.contains(args.query),
-        **tree.summary(),
+        **tree.summary(include_trace=args.trace),
     }
 
 
 def command_rank(args: argparse.Namespace) -> dict[str, object]:
-    tree = build_tree(args.values)
+    tree = build_tree(args.values, trace_enabled=args.trace)
     return {
         "command": "rank",
         "input": args.values,
         "query": args.query,
         "rank": tree.rank(args.query),
-        **tree.summary(),
+        **tree.summary(include_trace=args.trace),
     }
 
 
 def command_select(args: argparse.Namespace) -> dict[str, object]:
-    tree = build_tree(args.values)
+    tree = build_tree(args.values, trace_enabled=args.trace)
     selected = tree.select(args.index)
     return {
         "command": "select",
         "input": args.values,
         "index": args.index,
         "selected": selected,
-        **tree.summary(),
+        **tree.summary(include_trace=args.trace),
     }
 
 
 def command_delete(args: argparse.Namespace) -> dict[str, object]:
-    tree = build_tree(args.values)
+    tree = build_tree(args.values, trace_enabled=args.trace)
+    if args.trace:
+        tree.trace.clear()
     deleted = tree.delete(args.query)
     return {
         "command": "delete",
         "input": args.values,
         "query": args.query,
         "deleted": deleted,
-        **tree.summary(),
+        **tree.summary(include_trace=args.trace),
     }
+
+
+def add_trace_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--trace", action="store_true", help="include rotation and fix-up events in the JSON output")
 
 
 def main() -> None:
@@ -493,28 +577,34 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     demo_parser = subparsers.add_parser("demo", help="run a bundled insertion demo")
+    add_trace_flag(demo_parser)
     demo_parser.set_defaults(handler=command_demo)
 
     build_parser = subparsers.add_parser("build", help="build a tree from integer values")
+    add_trace_flag(build_parser)
     build_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     build_parser.set_defaults(handler=command_build)
 
     contains_parser = subparsers.add_parser("contains", help="build a tree and query a key")
+    add_trace_flag(contains_parser)
     contains_parser.add_argument("query", type=int, help="integer to search for")
     contains_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     contains_parser.set_defaults(handler=command_contains)
 
     rank_parser = subparsers.add_parser("rank", help="count how many inserted keys are smaller than the query")
+    add_trace_flag(rank_parser)
     rank_parser.add_argument("query", type=int, help="integer to rank")
     rank_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     rank_parser.set_defaults(handler=command_rank)
 
     select_parser = subparsers.add_parser("select", help="return the zero-based kth smallest key")
+    add_trace_flag(select_parser)
     select_parser.add_argument("index", type=int, help="zero-based inorder index")
     select_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     select_parser.set_defaults(handler=command_select)
 
     delete_parser = subparsers.add_parser("delete", help="build a tree, delete a key, and validate the result")
+    add_trace_flag(delete_parser)
     delete_parser.add_argument("query", type=int, help="integer to delete")
     delete_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     delete_parser.set_defaults(handler=command_delete)

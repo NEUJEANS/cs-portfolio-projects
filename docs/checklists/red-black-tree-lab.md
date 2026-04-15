@@ -10,5 +10,7 @@
 - [x] add deletion with inorder-successor replacement and double-black repair
 - [x] document algorithm choices and usage in README
 - [x] add unit tests for rotations via insertion outcomes, deletion repair, invariants, duplicates, metadata validation, and CLI output
+- [x] add traceable insert/delete repair output for interview-friendly walkthroughs
+- [x] cover trace mode with direct API tests and CLI tests
 - [x] run at least 3 review passes and fix findings
-- [x] add wrap-up note for this slice
+- [ ] add wrap-up note for this slice
