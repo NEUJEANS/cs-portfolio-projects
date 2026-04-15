@@ -6,4 +6,4 @@
 - [x] update README usage and design notes for the new workflow
 - [x] run project tests and targeted CLI smoke checks
 - [x] complete at least 3 review passes and fix any issues found
-- [ ] append wrap-up after commit/push with commit hash and next step
+- [x] append wrap-up after commit/push with commit hash and next step
