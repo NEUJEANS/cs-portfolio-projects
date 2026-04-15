@@ -5,7 +5,7 @@ Snapshot a directory tree with hashing metadata, save a reusable baseline manife
 
 ## Why it is portfolio-worthy
 - demonstrates recursive filesystem traversal and content hashing
-- shows clean CLI design with reusable manifests, ignore patterns, and tamper-evident signed baselines
+- shows clean CLI design with reusable manifests, ignore patterns, tamper-evident signed baselines, and rotation-friendly verification workflows
 - includes automated tests that exercise both library and command-line usage
 - maps well to real-world integrity monitoring, deployment checks, and backup verification
 
@@ -18,6 +18,7 @@ Snapshot a directory tree with hashing metadata, save a reusable baseline manife
 - ignore temporary or generated files with repeatable glob patterns
 - emit either JSON for tooling or a readable text summary for humans
 - sign manifests with an HMAC secret and verify them before trusting a baseline
+- embed a key identifier in signed manifests so rotated secrets can be accepted during cutovers
 - keep the core logic importable for reuse in other scripts
 
 ## Usage
@@ -73,11 +74,27 @@ python3 integrity_monitor.py diff ../task-tracker-cli \
   --format text
 ```
 
+Support a key-rotation window while keeping old signed baselines valid:
+
+```bash
+export INTEGRITY_SECRET_V1="legacy-secret"
+export INTEGRITY_SECRET_V2="new-secret"
+python3 integrity_monitor.py scan ../task-tracker-cli \
+  --output signed-baseline-v1.json \
+  --signing-key-env INTEGRITY_SECRET_V1 \
+  --key-id INTEGRITY_SECRET_V1
+
+python3 integrity_monitor.py verify ../task-tracker-cli \
+  --baseline signed-baseline-v1.json \
+  --verify-key-env INTEGRITY_SECRET_V2 \
+  --verify-key-env INTEGRITY_SECRET_V1
+```
+
 ## Test
 ```bash
 python3 -m unittest discover -s . -p "test_*.py"
 ```
 
 ## Future Improvements
-- support directory-level include rules in addition to ignore globs
-- optionally rotate or load signing secrets from a dedicated secrets manager
+- support asymmetric signing and verification with public/private key material
+- optionally load rotation candidates from a dedicated secrets manager or KMS

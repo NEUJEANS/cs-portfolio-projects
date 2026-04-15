@@ -86,7 +86,7 @@ def build_manifest(
         embedded_paths=embedded_paths,
     )
     return {
-        "version": 3,
+        "version": 4,
         "algorithm": algorithm,
         "root": str(Path(directory).resolve()),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -102,7 +102,7 @@ def canonicalize_manifest(manifest):
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def sign_manifest(manifest, secret: str):
+def sign_manifest(manifest, secret: str, key_id: str | None = None):
     if not secret:
         raise ValueError("Signing secret cannot be empty")
 
@@ -112,6 +112,8 @@ def sign_manifest(manifest, secret: str):
         "algorithm": SIGNATURE_ALGORITHM,
         "value": signature,
     }
+    if key_id:
+        signed_manifest["signature"]["key_id"] = key_id
     return signed_manifest
 
 
@@ -135,6 +137,48 @@ def load_signing_secret(env_name: str | None):
     if not secret:
         raise ValueError(f"Signing key env var {env_name!r} is empty")
     return secret
+
+
+def load_verification_secrets(env_names: Iterable[str] | None):
+    secrets = []
+    seen = set()
+    for env_name in env_names or []:
+        if env_name in seen:
+            continue
+        seen.add(env_name)
+        secret = load_signing_secret(env_name)
+        secrets.append((env_name, secret))
+    return secrets
+
+
+def parse_verification_envs(signing_key_env: str | None, verify_key_envs: Iterable[str] | None):
+    env_names = []
+    for env_name in verify_key_envs or []:
+        if env_name and env_name not in env_names:
+            env_names.append(env_name)
+    if signing_key_env and signing_key_env not in env_names:
+        env_names.append(signing_key_env)
+    return env_names
+
+
+def verify_manifest_with_secrets(manifest, verification_secrets):
+    signature = manifest.get("signature") or {}
+    desired_key_id = signature.get("key_id")
+    matched_env = None
+
+    for env_name, secret in verification_secrets:
+        if desired_key_id and env_name != desired_key_id:
+            continue
+        if verify_manifest_signature(manifest, secret):
+            matched_env = env_name
+            break
+
+    return {
+        "verified": matched_env is not None,
+        "algorithm": signature.get("algorithm"),
+        "key_id": desired_key_id,
+        "matched_env": matched_env,
+    }
 
 
 def _coerce_snapshot(data):
@@ -221,7 +265,17 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--signing-key-env",
-        help="Environment variable containing the shared secret used to sign or verify manifests",
+        help="Environment variable containing the shared secret used to sign manifests and optionally verify them",
+    )
+    parser.add_argument(
+        "--verify-key-env",
+        action="append",
+        default=[],
+        help="Environment variable containing an accepted verification secret; repeat to support key rotation",
+    )
+    parser.add_argument(
+        "--key-id",
+        help="Stable key identifier to embed in the signature metadata (defaults to --signing-key-env when omitted)",
     )
     return parser.parse_args(argv)
 
@@ -234,6 +288,8 @@ def main(argv=None):
 
     try:
         signing_secret = load_signing_secret(args.signing_key_env)
+        verification_envs = parse_verification_envs(args.signing_key_env, args.verify_key_env)
+        verification_secrets = load_verification_secrets(verification_envs)
     except ValueError as exc:
         return fail_usage(str(exc))
 
@@ -249,7 +305,8 @@ def main(argv=None):
             embedded_paths=embedded_paths,
         )
         if signing_secret:
-            manifest = sign_manifest(manifest, signing_secret)
+            key_id = args.key_id or args.signing_key_env
+            manifest = sign_manifest(manifest, signing_secret, key_id=key_id)
         payload = json.dumps(manifest, indent=2)
         if output_path:
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -266,19 +323,23 @@ def main(argv=None):
     if args.command == "verify":
         if not signature_present:
             return fail_usage("verify requires a baseline with a signature")
-        if signing_secret is None:
-            return fail_usage("verify requires --signing-key-env")
-        if verify_manifest_signature(baseline, signing_secret):
-            print(json.dumps({"verified": True, "algorithm": baseline["signature"]["algorithm"]}, indent=2))
+        if not verification_secrets:
+            return fail_usage("verify requires --signing-key-env or --verify-key-env")
+        verification_result = verify_manifest_with_secrets(baseline, verification_secrets)
+        if verification_result["verified"]:
+            print(json.dumps(verification_result, indent=2))
             return EXIT_OK
-        print(json.dumps({"verified": False, "reason": "signature mismatch"}, indent=2))
+        verification_result["reason"] = "signature mismatch"
+        print(json.dumps(verification_result, indent=2))
         return EXIT_SIGNATURE_INVALID
 
     if signature_present:
-        if signing_secret is None:
-            return fail_usage("diff requires --signing-key-env when the baseline is signed")
-        if not verify_manifest_signature(baseline, signing_secret):
-            print(json.dumps({"verified": False, "reason": "signature mismatch"}, indent=2))
+        if not verification_secrets:
+            return fail_usage("diff requires --signing-key-env or --verify-key-env when the baseline is signed")
+        verification_result = verify_manifest_with_secrets(baseline, verification_secrets)
+        if not verification_result["verified"]:
+            verification_result["reason"] = "signature mismatch"
+            print(json.dumps(verification_result, indent=2))
             return EXIT_SIGNATURE_INVALID
 
     algorithm = baseline.get("algorithm", args.algorithm)

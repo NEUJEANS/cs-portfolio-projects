@@ -8,4 +8,5 @@
 - [x] refresh README usage examples and explain why the project is portfolio-worthy
 - [x] add CI-friendly exit codes for diff automation workflows
 - [x] add tamper-evident signed manifests with verification support
-- [ ] consider asymmetric signing or key-rotation workflows in a future pass
+- [x] add rotation-friendly signed baseline verification with key identifiers and multiple accepted secrets
+- [ ] consider asymmetric signing and verification in a future pass

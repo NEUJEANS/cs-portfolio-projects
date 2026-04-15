@@ -1,12 +1,9 @@
 # File Integrity Monitor Review Pass 2 — 2026-04-15
 
 ## Focus
-CLI ergonomics, usage errors, and regression coverage.
-
-## Checks
-- Verified `diff` requires `--signing-key-env` when a baseline is signed.
-- Verified `verify` requires both a signed baseline and a signing key env var.
-- Confirmed new tests cover signed scan/diff/verify flows plus embedded baseline handling.
+CLI ergonomics and failure-mode review.
 
 ## Findings
-- No additional code fixes required after the new regression tests passed.
+- `--verify-key-env` needs to be repeatable so operators can validate during cutovers.
+- Error messaging should explicitly mention either `--signing-key-env` or `--verify-key-env` for signed-baseline verification flows.
+- This is now reflected in the CLI usage checks and tests.

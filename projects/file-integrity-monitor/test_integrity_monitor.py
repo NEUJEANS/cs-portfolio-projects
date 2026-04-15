@@ -14,9 +14,11 @@ from integrity_monitor import (
     diff_exit_code,
     diff_snapshots,
     format_text_report,
+    parse_verification_envs,
     should_include,
     sign_manifest,
     verify_manifest_signature,
+    verify_manifest_with_secrets,
 )
 
 SCRIPT = Path(__file__).with_name("integrity_monitor.py")
@@ -97,10 +99,27 @@ class IntegrityMonitorTests(unittest.TestCase):
 
     def test_sign_manifest_and_verify_signature(self):
         manifest = build_manifest(Path(__file__).parent)
-        signed = sign_manifest(manifest, "secret-key")
+        signed = sign_manifest(manifest, "secret-key", key_id="integrity-v1")
         self.assertIn("signature", signed)
+        self.assertEqual(signed["signature"]["key_id"], "integrity-v1")
         self.assertTrue(verify_manifest_signature(signed, "secret-key"))
         self.assertFalse(verify_manifest_signature(signed, "wrong-key"))
+
+    def test_parse_verification_envs_prefers_unique_entries(self):
+        self.assertEqual(
+            parse_verification_envs("CURRENT_KEY", ["OLD_KEY", "CURRENT_KEY", "OLD_KEY"]),
+            ["OLD_KEY", "CURRENT_KEY"],
+        )
+
+    def test_verify_manifest_with_secrets_uses_key_id_to_match_rotated_keys(self):
+        manifest = sign_manifest(build_manifest(Path(__file__).parent), "old-secret", key_id="OLD_KEY")
+        result = verify_manifest_with_secrets(
+            manifest,
+            [("CURRENT_KEY", "new-secret"), ("OLD_KEY", "old-secret")],
+        )
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["matched_env"], "OLD_KEY")
+        self.assertEqual(result["key_id"], "OLD_KEY")
 
     def test_cli_scan_output_and_diff_text_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,6 +200,7 @@ class IntegrityMonitorTests(unittest.TestCase):
             )
             manifest = json.loads(scan.stdout)
             self.assertEqual(manifest["signature"]["algorithm"], "hmac-sha256")
+            self.assertEqual(manifest["signature"]["key_id"], "INTEGRITY_SECRET")
 
             verify = subprocess.run(
                 [
@@ -199,6 +219,7 @@ class IntegrityMonitorTests(unittest.TestCase):
                 env=env,
             )
             self.assertIn('"verified": true', verify.stdout)
+            self.assertIn('"matched_env": "INTEGRITY_SECRET"', verify.stdout)
 
             diff = subprocess.run(
                 [
@@ -215,6 +236,79 @@ class IntegrityMonitorTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 env=env,
+            )
+            self.assertIn('"has_changes": false', diff.stdout)
+
+    def test_cli_supports_key_rotation_with_multiple_verification_envs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_path = root / "baseline.json"
+            data_path = root / "data"
+            data_path.mkdir()
+            (data_path / "alpha.txt").write_text("alpha")
+
+            signing_env = os.environ | {"INTEGRITY_SECRET_V1": "legacy-secret"}
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "scan",
+                    str(data_path),
+                    "--output",
+                    str(baseline_path),
+                    "--signing-key-env",
+                    "INTEGRITY_SECRET_V1",
+                    "--key-id",
+                    "INTEGRITY_SECRET_V1",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=signing_env,
+            )
+
+            rotated_env = os.environ | {
+                "INTEGRITY_SECRET_V1": "legacy-secret",
+                "INTEGRITY_SECRET_V2": "new-secret",
+            }
+            verify = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "verify",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--verify-key-env",
+                    "INTEGRITY_SECRET_V2",
+                    "--verify-key-env",
+                    "INTEGRITY_SECRET_V1",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=rotated_env,
+            )
+            self.assertIn('"verified": true', verify.stdout)
+            self.assertIn('"matched_env": "INTEGRITY_SECRET_V1"', verify.stdout)
+
+            diff = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "diff",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--verify-key-env",
+                    "INTEGRITY_SECRET_V2",
+                    "--verify-key-env",
+                    "INTEGRITY_SECRET_V1",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=rotated_env,
             )
             self.assertIn('"has_changes": false', diff.stdout)
 
@@ -294,7 +388,7 @@ class IntegrityMonitorTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(missing_secret.returncode, 2)
-            self.assertIn("diff requires --signing-key-env", missing_secret.stderr)
+            self.assertIn("diff requires --signing-key-env or --verify-key-env", missing_secret.stderr)
 
             wrong_secret_env = os.environ | {"WRONG_SECRET": "bad-secret"}
             wrong_secret = subprocess.run(
