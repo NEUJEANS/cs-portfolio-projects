@@ -70,6 +70,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `chord-dht-lab`
 - [x] `distributed-snapshot-lab`
 - [x] `kd-tree-spatial-search-lab`
+- [x] `interval-tree-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.
