@@ -8,6 +8,7 @@ import importlib
 import importlib.util
 import json
 import random
+import statistics
 import tempfile
 import time
 from collections import defaultdict
@@ -151,6 +152,72 @@ class BenchmarkResult:
         writer.writeheader()
         writer.writerows(self.heatmap_rows)
         return buffer.getvalue()
+
+    def to_markdown(self) -> str:
+        lines = [
+            f"# Mini MapReduce benchmark report ({self.scenario})",
+            "",
+            f"- Seed: `{self.seed}`",
+            f"- Total records: `{self.total_records}`",
+            f"- Shard size: `{self.shard_size}`",
+            f"- Reducer counts: `{', '.join(str(value) for value in self.reducers)}`",
+            "",
+            "## Timing summary",
+            "",
+            "| Reducers | Elapsed (ms) | Shards | Map records | Unique keys | Max reducer records | Skew ratio |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+        for timing in self.timings_ms:
+            lines.append(
+                "| {reducers} | {elapsed_ms} | {shards} | {map_records} | {unique_keys} | {max_reducer_records} | {skew_ratio} |".format(**timing)
+            )
+
+        lines.extend(["", "## Heatmap highlights", ""])
+        for reducer_count in self.reducers:
+            rows = [row for row in self.heatmap_rows if row["reducers"] == reducer_count]
+            if not rows:
+                continue
+            max_records = max(int(row["records"]) for row in rows)
+            shard_count = max(int(row["shard_index"]) for row in rows) + 1
+            per_reducer_totals = {reducer: 0 for reducer in range(reducer_count)}
+            for row in rows:
+                per_reducer_totals[int(row["reducer"])] += int(row["records"])
+            hottest = max(rows, key=lambda row: (int(row["records"]), -int(row["shard_index"]), -int(row["reducer"])))
+            coldest = min(rows, key=lambda row: (int(row["records"]), int(row["shard_index"]), int(row["reducer"])))
+            total_values = list(per_reducer_totals.values())
+            average = sum(total_values) / len(total_values) if total_values else 0
+            stddev = statistics.pstdev(total_values) if len(total_values) > 1 else 0.0
+
+            lines.append(f"### Reducers = {reducer_count}")
+            lines.append(
+                f"- Hottest cell: shard `{hottest['shard_index']}` → reducer `{hottest['reducer']}` with `{hottest['records']}` records across `{hottest['unique_keys']}` keys"
+            )
+            lines.append(
+                f"- Coldest cell: shard `{coldest['shard_index']}` → reducer `{coldest['reducer']}` with `{coldest['records']}` records across `{coldest['unique_keys']}` keys"
+            )
+            lines.append(f"- Reducer load stddev: `{stddev:.3f}` records (mean `{average:.3f}`)")
+            lines.append(
+                f"- Total records per reducer: {', '.join(f'r{reducer}={per_reducer_totals[reducer]}' for reducer in range(reducer_count))}"
+            )
+            lines.append("")
+            lines.append("| Shard | " + " | ".join(f"r{reducer}" for reducer in range(reducer_count)) + " |")
+            lines.append("| --- | " + " | ".join("---:" for _ in range(reducer_count)) + " |")
+            rows_by_shard = {index: {reducer: 0 for reducer in range(reducer_count)} for index in range(shard_count)}
+            for row in rows:
+                rows_by_shard[int(row["shard_index"])][int(row["reducer"])] = int(row["records"])
+            for shard_index in range(shard_count):
+                rendered_cells = []
+                for reducer in range(reducer_count):
+                    value = rows_by_shard[shard_index][reducer]
+                    if max_records:
+                        bar = "█" * max(1, round((value / max_records) * 8)) if value else "·"
+                    else:
+                        bar = "·"
+                    rendered_cells.append(f"{value} {bar}")
+                lines.append(f"| {shard_index} | " + " | ".join(rendered_cells) + " |")
+            lines.append("")
+
+        return "\n".join(lines).rstrip() + "\n"
 
 
 @dataclass(slots=True)
@@ -480,6 +547,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--output", help="optional output JSON path")
     benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
     benchmark_parser.add_argument("--heatmap-output", help="optional shard-to-reducer heatmap CSV output path")
+    benchmark_parser.add_argument("--report-output", help="optional Markdown benchmark report path")
 
     return parser
 
@@ -533,6 +601,8 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
         if args.heatmap_output:
             Path(args.heatmap_output).write_text(result.heatmap_to_csv(), encoding="utf-8")
+        if args.report_output:
+            Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
         return 0
 
     parser.error("unsupported command")

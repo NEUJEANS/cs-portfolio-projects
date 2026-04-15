@@ -19,6 +19,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - machine-readable JSON output with shard and record statistics
 - optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
 - optional shard-to-reducer heatmap CSV export for slide-ready skew visualizations
+- optional Markdown benchmark report export with timing tables and shard/reducer load summaries
 - JSON-safe plugin outputs so custom jobs can emit floats or small structured values during reduction
 
 ## Usage
@@ -110,6 +111,20 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --heatmap-output benchmark-heatmap.csv
 ```
 
+Write a Markdown report artifact that can drop straight into a portfolio repo, issue comment, or blog draft:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --scenario skewed \
+  --records 10000 \
+  --shard-size 250 \
+  --reducers 2 4 8 \
+  --output benchmark.json \
+  --csv-output benchmark.csv \
+  --heatmap-output benchmark-heatmap.csv \
+  --report-output benchmark-report.md
+```
+
 ## Plugin contract
 
 A plugin is a Python file with:
@@ -148,7 +163,7 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes `heatmap_rows`, where each row captures one shard/reducer cell:
+`benchmark` mode now also includes `heatmap_rows`, where each row captures one shard/reducer cell, and `--report-output` can turn the same data into a narrative Markdown artifact with timing tables plus per-reducer heatmap summaries:
 
 ```json
 {
@@ -180,7 +195,8 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - why plugin-based jobs make a systems lab look extensible instead of hard-coded
 - why timing alone can mislead without reducer-distribution metrics beside it
 - how shard-to-reducer heatmaps make hot-key skew visible in demos, write-ups, and interviews
+- how generated Markdown reports make benchmark evidence easier to reuse in READMEs, blogs, and portfolio case studies
 
 ## Future improvements
-- generate Markdown/HTML chart artifacts directly from benchmark and heatmap exports
+- generate HTML chart artifacts directly from benchmark and heatmap exports
 - add benchmark scenarios for custom plugin workloads instead of only wordcount

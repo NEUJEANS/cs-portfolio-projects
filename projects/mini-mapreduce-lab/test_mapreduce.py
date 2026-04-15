@@ -194,6 +194,18 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertTrue(any(",0," in row for row in rows[1:]))
         self.assertTrue(any(",1," in row for row in rows[1:]))
 
+    def test_benchmark_wordcount_can_render_markdown_report(self) -> None:
+        result = benchmark_wordcount("balanced", records=120, shard_size=20, reducers=[2, 3], seed=5)
+
+        report = result.to_markdown()
+
+        self.assertIn("# Mini MapReduce benchmark report (balanced)", report)
+        self.assertIn("| Reducers | Elapsed (ms) | Shards | Map records | Unique keys | Max reducer records | Skew ratio |", report)
+        self.assertIn("### Reducers = 2", report)
+        self.assertIn("### Reducers = 3", report)
+        self.assertIn("| Shard | r0 | r1 |", report)
+        self.assertIn("Reducer load stddev", report)
+
     def test_benchmark_wordcount_rejects_non_positive_shard_size(self) -> None:
         with self.assertRaisesRegex(ValueError, "shard_size must be positive"):
             benchmark_wordcount("balanced", records=50, shard_size=0, reducers=[1, 2])
@@ -361,11 +373,12 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(len(payload["timings_ms"]), 2)
             self.assertEqual(payload["timings_ms"][0]["reducers"], 1)
 
-    def test_cli_benchmark_can_write_csv_and_heatmap_output(self) -> None:
+    def test_cli_benchmark_can_write_csv_heatmap_and_markdown_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "benchmark.json"
             csv_output = Path(tmpdir) / "benchmark.csv"
             heatmap_output = Path(tmpdir) / "benchmark-heatmap.csv"
+            report_output = Path(tmpdir) / "benchmark-report.md"
             subprocess.run(
                 [
                     "python3",
@@ -386,6 +399,8 @@ class MiniMapReduceTests(unittest.TestCase):
                     str(csv_output),
                     "--heatmap-output",
                     str(heatmap_output),
+                    "--report-output",
+                    str(report_output),
                 ],
                 check=True,
                 cwd=Path(__file__).resolve().parents[2],
@@ -394,6 +409,7 @@ class MiniMapReduceTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             rows = csv_output.read_text(encoding="utf-8").strip().splitlines()
             heatmap_rows = heatmap_output.read_text(encoding="utf-8").strip().splitlines()
+            report = report_output.read_text(encoding="utf-8")
             self.assertEqual(payload["reducers"], [1, 3])
             self.assertEqual(rows[0], "scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
             self.assertEqual(len(rows), 3)
@@ -401,6 +417,8 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertGreater(len(heatmap_rows), 3)
             self.assertIn(",1,", rows[1])
             self.assertIn(",3,", rows[2])
+            self.assertIn("# Mini MapReduce benchmark report (balanced)", report)
+            self.assertIn("### Reducers = 3", report)
 
     def test_cli_requires_group_field_for_json_group_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

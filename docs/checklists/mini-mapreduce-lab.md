@@ -80,3 +80,16 @@
 - [x] extend project and repo-level tests for deterministic heatmap rendering and CLI file output
 - [x] run tests and 3 review passes
 - [ ] consider HTML/Markdown chart generation from heatmap rows in a future run
+
+## Benchmark Markdown report slice (2026-04-15 10:29 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the benchmark export follow-up was already scoped in the project notes
+- [x] do a short Python Markdown-generation and summary-stat refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add benchmark Markdown report export with timing table and shard-to-reducer load summaries
+- [x] extend project and repo-level tests for deterministic report rendering and CLI file output
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider HTML chart artifact output in a future run
