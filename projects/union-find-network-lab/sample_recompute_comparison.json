@@ -1,0 +1,162 @@
+{
+  "checkpoint_every": 1250,
+  "edges_requested": 10000,
+  "input_edges": [
+    [
+      "n663",
+      "n308"
+    ],
+    [
+      "n808",
+      "n1333"
+    ],
+    [
+      "n98",
+      "n148"
+    ],
+    [
+      "n1097",
+      "n192"
+    ],
+    [
+      "n748",
+      "n1193"
+    ],
+    [
+      "n118",
+      "n1039"
+    ],
+    [
+      "n439",
+      "n76"
+    ],
+    [
+      "n176",
+      "n888"
+    ],
+    [
+      "n856",
+      "n143"
+    ],
+    [
+      "n492",
+      "n185"
+    ]
+  ],
+  "mode": "connectivity-comparison",
+  "nodes_requested": 1500,
+  "recompute_baseline": {
+    "checkpoints": [
+      {
+        "edge_index": 1250,
+        "elapsed_ms": 791.275,
+        "largest_component": 997
+      },
+      {
+        "edge_index": 2500,
+        "elapsed_ms": 1636.436,
+        "largest_component": 1442
+      },
+      {
+        "edge_index": 3750,
+        "elapsed_ms": 2573.73,
+        "largest_component": 1484
+      },
+      {
+        "edge_index": 5000,
+        "elapsed_ms": 3585.401,
+        "largest_component": 1498
+      },
+      {
+        "edge_index": 6250,
+        "elapsed_ms": 4676.744,
+        "largest_component": 1500
+      },
+      {
+        "edge_index": 7500,
+        "elapsed_ms": 5851.182,
+        "largest_component": 1500
+      },
+      {
+        "edge_index": 8750,
+        "elapsed_ms": 7106.34,
+        "largest_component": 1500
+      },
+      {
+        "edge_index": 10000,
+        "elapsed_ms": 8440.707,
+        "largest_component": 1500
+      }
+    ],
+    "cycle_edges": 8501,
+    "edges_per_second": 1184.733,
+    "elapsed_ms": 8440.719,
+    "stats": {
+      "components": 1,
+      "cyclic_components": 1,
+      "largest_component": 1500,
+      "nodes": 1500
+    },
+    "strategy": "full BFS component recomputation after every edge"
+  },
+  "seed": 7,
+  "summary": {
+    "same_component_count": true,
+    "same_largest_component": true,
+    "speedup_vs_recompute": 360.395
+  },
+  "union_find": {
+    "checkpoints": [
+      {
+        "edge_index": 1250,
+        "elapsed_ms": 2.881,
+        "largest_component": 997
+      },
+      {
+        "edge_index": 2500,
+        "elapsed_ms": 6.04,
+        "largest_component": 1442
+      },
+      {
+        "edge_index": 3750,
+        "elapsed_ms": 8.876,
+        "largest_component": 1484
+      },
+      {
+        "edge_index": 5000,
+        "elapsed_ms": 11.709,
+        "largest_component": 1498
+      },
+      {
+        "edge_index": 6250,
+        "elapsed_ms": 14.522,
+        "largest_component": 1500
+      },
+      {
+        "edge_index": 7500,
+        "elapsed_ms": 17.333,
+        "largest_component": 1500
+      },
+      {
+        "edge_index": 8750,
+        "elapsed_ms": 20.143,
+        "largest_component": 1500
+      },
+      {
+        "edge_index": 10000,
+        "elapsed_ms": 22.939,
+        "largest_component": 1500
+      }
+    ],
+    "cycle_edges": 8501,
+    "edges_per_second": 426971.354,
+    "elapsed_ms": 23.421,
+    "stats": {
+      "components": 1,
+      "cyclic_components": 1,
+      "largest_component": 1500,
+      "nodes": 1500,
+      "successful_unions": 1499
+    }
+  }
+}

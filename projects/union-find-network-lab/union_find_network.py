@@ -5,9 +5,10 @@ import csv
 import json
 import random
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Deque, Dict, Iterable, List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -233,7 +234,7 @@ def run_csv_import(csv_path: Path, snapshot_every: int = 0) -> Dict[str, object]
     return summary
 
 
-def run_benchmark(nodes: int, edges: int, seed: int = 7) -> Dict[str, object]:
+def generate_random_edges(nodes: int, edges: int, seed: int = 7) -> List[Tuple[str, str]]:
     if nodes < 2:
         raise ValueError("benchmark nodes must be at least 2")
     if edges < 1:
@@ -241,12 +242,16 @@ def run_benchmark(nodes: int, edges: int, seed: int = 7) -> Dict[str, object]:
 
     rng = random.Random(seed)
     labels = [f"n{i}" for i in range(nodes)]
+    return [tuple(rng.sample(labels, 2)) for _ in range(edges)]
+
+
+def run_benchmark(nodes: int, edges: int, seed: int = 7) -> Dict[str, object]:
+    random_edges = generate_random_edges(nodes, edges, seed=seed)
     network = UnionFindNetwork()
 
     started = time.perf_counter()
     cycle_edges = 0
-    for _ in range(edges):
-        left, right = rng.sample(labels, 2)
+    for left, right in random_edges:
         result = network.union(left, right)
         cycle_edges += 1 if result.created_cycle else 0
     elapsed = time.perf_counter() - started
@@ -283,6 +288,144 @@ def run_benchmark_series(nodes: int, edge_counts: List[int], seed: int = 7) -> D
             "slowest_edges_per_second": min(throughput_values) if throughput_values else None,
             "median_edges_per_second": _median(throughput_values),
         },
+    }
+
+
+def run_recompute_comparison(
+    nodes: int,
+    edges: int,
+    seed: int = 7,
+    checkpoint_every: int = 0,
+) -> Dict[str, object]:
+    random_edges = generate_random_edges(nodes, edges, seed=seed)
+    interval = checkpoint_every or max(1, edges // 8)
+
+    union_find = UnionFindNetwork()
+    union_started = time.perf_counter()
+    union_cycle_edges = 0
+    union_checkpoints: List[Dict[str, object]] = []
+    for index, (left, right) in enumerate(random_edges, start=1):
+        result = union_find.union(left, right)
+        union_cycle_edges += 1 if result.created_cycle else 0
+        if index % interval == 0 or index == edges:
+            union_elapsed_ms = (time.perf_counter() - union_started) * 1000
+            union_checkpoints.append(
+                {
+                    "edge_index": index,
+                    "elapsed_ms": round(union_elapsed_ms, 3),
+                    "largest_component": union_find.stats()["largest_component"],
+                }
+            )
+    union_elapsed = time.perf_counter() - union_started
+
+    adjacency: Dict[str, set[str]] = {f"n{i}": set() for i in range(nodes)}
+    baseline_cycle_edges = 0
+    baseline_checkpoints: List[Dict[str, object]] = []
+    baseline_started = time.perf_counter()
+    latest_baseline_stats: Dict[str, int] = {"components": nodes, "largest_component": 1, "cyclic_components": 0}
+    for index, (left, right) in enumerate(random_edges, start=1):
+        if graph_path_exists(adjacency, left, right):
+            baseline_cycle_edges += 1
+        adjacency[left].add(right)
+        adjacency[right].add(left)
+        latest_baseline_stats = recompute_graph_stats(adjacency)
+        if index % interval == 0 or index == edges:
+            baseline_elapsed_ms = (time.perf_counter() - baseline_started) * 1000
+            baseline_checkpoints.append(
+                {
+                    "edge_index": index,
+                    "elapsed_ms": round(baseline_elapsed_ms, 3),
+                    "largest_component": latest_baseline_stats["largest_component"],
+                }
+            )
+    baseline_elapsed = time.perf_counter() - baseline_started
+
+    union_elapsed_ms = round(union_elapsed * 1000, 3)
+    baseline_elapsed_ms = round(baseline_elapsed * 1000, 3)
+    speedup = round(baseline_elapsed / union_elapsed, 3) if union_elapsed else None
+
+    return {
+        "mode": "connectivity-comparison",
+        "seed": seed,
+        "nodes_requested": nodes,
+        "edges_requested": edges,
+        "checkpoint_every": interval,
+        "input_edges": [[left, right] for left, right in random_edges[: min(10, len(random_edges))]],
+        "union_find": {
+            "elapsed_ms": union_elapsed_ms,
+            "edges_per_second": round(edges / union_elapsed, 3) if union_elapsed else None,
+            "cycle_edges": union_cycle_edges,
+            "stats": union_find.stats(),
+            "checkpoints": union_checkpoints,
+        },
+        "recompute_baseline": {
+            "strategy": "full BFS component recomputation after every edge",
+            "elapsed_ms": baseline_elapsed_ms,
+            "edges_per_second": round(edges / baseline_elapsed, 3) if baseline_elapsed else None,
+            "cycle_edges": baseline_cycle_edges,
+            "stats": {
+                "nodes": nodes,
+                **latest_baseline_stats,
+            },
+            "checkpoints": baseline_checkpoints,
+        },
+        "summary": {
+            "speedup_vs_recompute": speedup,
+            "same_largest_component": union_find.stats()["largest_component"] == latest_baseline_stats["largest_component"],
+            "same_component_count": union_find.stats()["components"] == latest_baseline_stats["components"],
+        },
+    }
+
+
+def graph_path_exists(adjacency: Dict[str, set[str]], source: str, target: str) -> bool:
+    if source == target:
+        return True
+    if source not in adjacency or target not in adjacency:
+        return False
+    queue: Deque[str] = deque([source])
+    visited = {source}
+    while queue:
+        current = queue.popleft()
+        for neighbor in adjacency[current]:
+            if neighbor == target:
+                return True
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append(neighbor)
+    return False
+
+
+def recompute_graph_stats(adjacency: Dict[str, set[str]]) -> Dict[str, int]:
+    visited: set[str] = set()
+    components = 0
+    largest_component = 0
+    cyclic_components = 0
+
+    for node in adjacency:
+        if node in visited:
+            continue
+        components += 1
+        queue: Deque[str] = deque([node])
+        visited.add(node)
+        component_nodes = 0
+        degree_sum = 0
+        while queue:
+            current = queue.popleft()
+            component_nodes += 1
+            degree_sum += len(adjacency[current])
+            for neighbor in adjacency[current]:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        largest_component = max(largest_component, component_nodes)
+        edges_in_component = degree_sum // 2
+        if edges_in_component >= component_nodes:
+            cyclic_components += 1
+
+    return {
+        "components": components,
+        "largest_component": largest_component,
+        "cyclic_components": cyclic_components,
     }
 
 
@@ -368,7 +511,9 @@ def build_svg_chart(payload: Dict[str, object], title: str | None = None) -> str
         return _build_benchmark_series_svg(payload, title=title)
     if mode == "csv-import":
         return _build_csv_import_svg(payload, title=title)
-    raise ValueError("chart rendering currently supports benchmark-series and csv-import artifacts only")
+    if mode == "connectivity-comparison":
+        return _build_connectivity_comparison_svg(payload, title=title)
+    raise ValueError("chart rendering currently supports benchmark-series, csv-import, and connectivity-comparison artifacts only")
 
 
 def write_svg_chart(payload: Dict[str, object], output_path: Path, title: str | None = None) -> None:
@@ -428,6 +573,45 @@ def _build_csv_import_svg(payload: Dict[str, object], title: str | None = None) 
     polyline, circles, x_ticks, y_ticks = _render_xy_plot(points, labels, x_axis_label="Edges processed")
     footer = f"cycle edges detected: {payload.get('cycle_edges', 'n/a')}"
     return _wrap_svg(chart_title, subtitle, y_label, polyline, circles, x_ticks, y_ticks, footer)
+
+
+def _build_connectivity_comparison_svg(payload: Dict[str, object], title: str | None = None) -> str:
+    union_find = payload.get("union_find")
+    recompute = payload.get("recompute_baseline")
+    if not isinstance(union_find, dict) or not isinstance(recompute, dict):
+        raise ValueError("connectivity-comparison chart input must include union_find and recompute_baseline objects")
+    union_checkpoints = union_find.get("checkpoints")
+    recompute_checkpoints = recompute.get("checkpoints")
+    if not isinstance(union_checkpoints, list) or not isinstance(recompute_checkpoints, list):
+        raise ValueError("connectivity-comparison chart input must include checkpoint lists")
+
+    union_points = [
+        (_coerce_float(point.get("edge_index"), "edge_index"), _coerce_float(point.get("elapsed_ms"), "elapsed_ms"))
+        for point in union_checkpoints
+        if isinstance(point, dict)
+    ]
+    recompute_points = [
+        (_coerce_float(point.get("edge_index"), "edge_index"), _coerce_float(point.get("elapsed_ms"), "elapsed_ms"))
+        for point in recompute_checkpoints
+        if isinstance(point, dict)
+    ]
+    if not union_points or not recompute_points:
+        raise ValueError("connectivity-comparison chart input must include non-empty checkpoint points")
+
+    chart_title = title or "Union-Find vs BFS recomputation"
+    subtitle = "cumulative elapsed time while adding the same random edges"
+    footer = f"speedup vs recompute: {payload.get('summary', {}).get('speedup_vs_recompute', 'n/a')}x"
+    return _wrap_multi_series_svg(
+        chart_title=chart_title,
+        subtitle=subtitle,
+        y_axis_label="Elapsed milliseconds",
+        x_axis_label="Edges processed",
+        series=[
+            {"name": "Union-Find", "color": "#2563eb", "points": union_points},
+            {"name": "BFS recompute", "color": "#dc2626", "points": recompute_points},
+        ],
+        footer=footer,
+    )
 
 
 def _render_xy_plot(
@@ -501,6 +685,99 @@ def _render_xy_plot(
         )
 
     return polyline, circle_markup, "\n".join(x_tick_markup), "\n".join(y_tick_markup)
+
+
+def _wrap_multi_series_svg(
+    *,
+    chart_title: str,
+    subtitle: str,
+    y_axis_label: str,
+    x_axis_label: str,
+    series: Sequence[Dict[str, object]],
+    footer: str,
+) -> str:
+    if not series:
+        raise ValueError("multi-series chart requires at least one series")
+
+    width = 960
+    height = 540
+    left = 90
+    right = 40
+    top = 90
+    bottom = 90
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+
+    all_points = [point for entry in series for point in entry.get("points", []) if isinstance(point, tuple)]
+    if not all_points:
+        raise ValueError("multi-series chart requires at least one point")
+    x_values = [point[0] for point in all_points]
+    y_values = [point[1] for point in all_points]
+    min_x = min(x_values)
+    max_x = max(x_values)
+    min_y = 0.0
+    max_y = max(y_values)
+    if max_x == min_x:
+        max_x += 1.0
+    if max_y == min_y:
+        max_y += 1.0
+
+    def project_x(value: float) -> float:
+        return left + ((value - min_x) / (max_x - min_x)) * plot_width
+
+    def project_y(value: float) -> float:
+        return top + plot_height - ((value - min_y) / (max_y - min_y)) * plot_height
+
+    x_tick_values = sorted({point[0] for point in all_points})
+    x_ticks = []
+    for value in x_tick_values:
+        x = project_x(value)
+        label = str(int(value)) if float(value).is_integer() else f"{value:g}"
+        x_ticks.append(f'<line x1="{x:.1f}" y1="{top + plot_height:.1f}" x2="{x:.1f}" y2="{top + plot_height + 8:.1f}" stroke="#6b7280" stroke-width="1" />')
+        x_ticks.append(f'<text x="{x:.1f}" y="{top + plot_height + 28:.1f}" text-anchor="middle" font-size="12" fill="#374151">{_xml_escape(label)}</text>')
+    x_ticks.append(f'<text x="{left + plot_width / 2:.1f}" y="{height - 24:.1f}" text-anchor="middle" font-size="14" fill="#111827">{_xml_escape(x_axis_label)}</text>')
+
+    y_ticks = []
+    for step in range(5):
+        value = min_y + ((max_y - min_y) * step / 4)
+        y = project_y(value)
+        label = f"{value:.0f}" if max_y >= 10 else f"{value:.2f}".rstrip("0").rstrip(".")
+        y_ticks.append(f'<line x1="{left:.1f}" y1="{y:.1f}" x2="{left + plot_width:.1f}" y2="{y:.1f}" stroke="#e5e7eb" stroke-width="1" />')
+        y_ticks.append(f'<text x="{left - 12:.1f}" y="{y + 4:.1f}" text-anchor="end" font-size="12" fill="#374151">{_xml_escape(label)}</text>')
+
+    plot_markup = []
+    legend_markup = []
+    for index, entry in enumerate(series):
+        name = str(entry.get("name", f"Series {index + 1}"))
+        color = str(entry.get("color", "#2563eb"))
+        points = entry.get("points", [])
+        if not isinstance(points, list):
+            raise ValueError("multi-series chart series points must be a list")
+        projected = [(project_x(x), project_y(y)) for x, y in points]
+        polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in projected)
+        plot_markup.append(f'<polyline fill="none" stroke="{_xml_escape(color)}" stroke-width="3" points="{polyline}" />')
+        for x, y in projected:
+            plot_markup.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="{_xml_escape(color)}" />')
+        legend_y = 92 + index * 22
+        legend_markup.append(f'<rect x="700" y="{legend_y - 10}" width="14" height="14" fill="{_xml_escape(color)}" rx="2" />')
+        legend_markup.append(f'<text x="722" y="{legend_y + 2}" font-size="13" fill="#1f2937">{_xml_escape(name)}</text>')
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title>{_xml_escape(chart_title)}</title>
+  <desc>{_xml_escape(subtitle)}</desc>
+  <rect width="960" height="540" fill="#ffffff" />
+  <text x="90" y="42" font-size="26" font-weight="700" fill="#111827">{_xml_escape(chart_title)}</text>
+  <text x="90" y="68" font-size="14" fill="#4b5563">{_xml_escape(subtitle)}</text>
+  <line x1="90" y1="90" x2="90" y2="450" stroke="#111827" stroke-width="2" />
+  <line x1="90" y1="450" x2="920" y2="450" stroke="#111827" stroke-width="2" />
+  {' '.join(y_ticks)}
+  <text x="24" y="270" font-size="14" fill="#111827" transform="rotate(-90 24 270)" text-anchor="middle">{_xml_escape(y_axis_label)}</text>
+  {' '.join(plot_markup)}
+  {' '.join(x_ticks)}
+  {' '.join(legend_markup)}
+  <text x="90" y="505" font-size="13" fill="#4b5563">{_xml_escape(footer)}</text>
+</svg>
+'''
 
 
 def _wrap_svg(
@@ -587,13 +864,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_benchmark_series,
         help="Comma-separated benchmark edge counts for a reproducible multi-run series, e.g. 1000,5000,10000",
     )
-    parser.add_argument("--chart-input", type=Path, help="Existing benchmark-series JSON/CSV or csv-import JSON artifact to render as SVG")
+    parser.add_argument("--compare-recompute", action="store_true", help="Compare union-find against full BFS recomputation on the same random edge stream")
+    parser.add_argument("--comparison-checkpoint-every", type=int, default=0, help="Record comparison checkpoints every N edges (default: edges/8)")
+    parser.add_argument("--chart-input", type=Path, help="Existing benchmark-series JSON/CSV, csv-import JSON, or connectivity comparison JSON artifact to render as SVG")
     parser.add_argument("--benchmark-nodes", type=int, default=1000, help="Number of nodes for benchmark mode")
     parser.add_argument("--benchmark-edges", type=int, default=5000, help="Number of random edges for benchmark mode")
     parser.add_argument("--benchmark-seed", type=int, default=7, help="Seed for reproducible benchmark mode")
     parser.add_argument("--output-json", type=Path, help="Write JSON output to a file in addition to stdout")
     parser.add_argument("--output-csv", type=Path, help="Write benchmark-series output as CSV")
-    parser.add_argument("--output-chart", type=Path, help="Write an SVG chart for benchmark-series or csv-import output")
+    parser.add_argument("--output-chart", type=Path, help="Write an SVG chart for benchmark-series, csv-import, or comparison output")
     parser.add_argument("--chart-title", help="Optional custom SVG chart title")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     parser.add_argument("command", nargs="*", help="Optional single command, e.g. union a b")
@@ -613,18 +892,27 @@ def main() -> int:
     try:
         if args.snapshot_every < 0:
             raise ValueError("--snapshot-every must be zero or a positive integer")
+        if args.comparison_checkpoint_every < 0:
+            raise ValueError("--comparison-checkpoint-every must be zero or a positive integer")
         enabled_modes = sum(
             bool(flag)
-            for flag in (args.script, args.edges_csv, args.benchmark, args.benchmark_series, args.chart_input)
+            for flag in (
+                args.script,
+                args.edges_csv,
+                args.benchmark,
+                args.benchmark_series,
+                args.compare_recompute,
+                args.chart_input,
+            )
         )
         if enabled_modes > 1:
             raise ValueError(
-                "choose only one of --script, --edges-csv, --benchmark, --benchmark-series, or --chart-input"
+                "choose only one of --script, --edges-csv, --benchmark, --benchmark-series, --compare-recompute, or --chart-input"
             )
         if args.output_csv and not args.benchmark_series:
             raise ValueError("--output-csv requires --benchmark-series")
-        if args.output_chart and not (args.edges_csv or args.benchmark_series or args.chart_input):
-            raise ValueError("--output-chart requires --edges-csv, --benchmark-series, or --chart-input")
+        if args.output_chart and not (args.edges_csv or args.benchmark_series or args.compare_recompute or args.chart_input):
+            raise ValueError("--output-chart requires --edges-csv, --benchmark-series, --compare-recompute, or --chart-input")
         if args.chart_title and not args.output_chart:
             raise ValueError("--chart-title requires --output-chart")
 
@@ -643,6 +931,13 @@ def main() -> int:
             result = run_benchmark(args.benchmark_nodes, args.benchmark_edges, seed=args.benchmark_seed)
         elif args.benchmark_series:
             result = run_benchmark_series(args.benchmark_nodes, args.benchmark_series, seed=args.benchmark_seed)
+        elif args.compare_recompute:
+            result = run_recompute_comparison(
+                args.benchmark_nodes,
+                args.benchmark_edges,
+                seed=args.benchmark_seed,
+                checkpoint_every=args.comparison_checkpoint_every,
+            )
         elif args.chart_input:
             result = load_chart_source(args.chart_input)
         else:
@@ -654,7 +949,7 @@ def main() -> int:
 
     if args.output_chart and args.chart_input and not args.json:
         print(json.dumps({"mode": result.get("mode"), "chart_output": str(args.output_chart)}, indent=2, sort_keys=True))
-    elif args.json or args.script or args.edges_csv or args.benchmark or args.benchmark_series or args.chart_input:
+    elif args.json or args.script or args.edges_csv or args.benchmark or args.benchmark_series or args.compare_recompute or args.chart_input:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
         print(result)

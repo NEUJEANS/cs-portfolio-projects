@@ -12,12 +12,16 @@ sys.path.insert(0, str(MODULE_PATH.parent))
 from union_find_network import (  # noqa: E402
     UnionFindNetwork,
     build_svg_chart,
+    generate_random_edges,
+    graph_path_exists,
     load_chart_source,
     load_edges_from_csv,
     parse_benchmark_series,
+    recompute_graph_stats,
     run_benchmark,
     run_benchmark_series,
     run_csv_import,
+    run_recompute_comparison,
     write_benchmark_series_csv,
     write_json_report,
     write_svg_chart,
@@ -193,7 +197,57 @@ class UnionFindNetworkTests(unittest.TestCase):
         self.assertEqual(payload["runs"][-1]["edges_requested"], 80)
         self.assertIn("median_edges_per_second", payload["summary"])
 
-    def test_chart_rendering_from_benchmark_series_and_csv_import(self):
+    def test_recompute_comparison_matches_union_find_stats(self):
+        comparison = run_recompute_comparison(nodes=18, edges=36, seed=5, checkpoint_every=9)
+        self.assertEqual(comparison["mode"], "connectivity-comparison")
+        self.assertEqual(comparison["checkpoint_every"], 9)
+        self.assertTrue(comparison["summary"]["same_largest_component"])
+        self.assertTrue(comparison["summary"]["same_component_count"])
+        self.assertGreater(comparison["summary"]["speedup_vs_recompute"], 0)
+        self.assertEqual(len(comparison["union_find"]["checkpoints"]), 4)
+        self.assertEqual(len(comparison["recompute_baseline"]["checkpoints"]), 4)
+
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "--compare-recompute",
+                "--benchmark-nodes",
+                "18",
+                "--benchmark-edges",
+                "36",
+                "--benchmark-seed",
+                "5",
+                "--comparison-checkpoint-every",
+                "9",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mode"], "connectivity-comparison")
+        self.assertEqual(payload["summary"]["same_component_count"], True)
+
+    def test_recompute_graph_stats_and_edge_generation(self):
+        adjacency = {
+            "a": {"b", "c"},
+            "b": {"a", "c"},
+            "c": {"b", "a"},
+            "d": set(),
+        }
+        stats = recompute_graph_stats(adjacency)
+        self.assertEqual(stats["components"], 2)
+        self.assertEqual(stats["largest_component"], 3)
+        self.assertEqual(stats["cyclic_components"], 1)
+        self.assertTrue(graph_path_exists(adjacency, "a", "c"))
+        self.assertFalse(graph_path_exists(adjacency, "a", "d"))
+
+        edges = generate_random_edges(nodes=6, edges=5, seed=17)
+        self.assertEqual(edges, generate_random_edges(nodes=6, edges=5, seed=17))
+        self.assertEqual(len(edges), 5)
+
+    def test_chart_rendering_from_supported_modes(self):
         benchmark_series = {
             "mode": "benchmark-series",
             "summary": {"median_edges_per_second": 222.5},
@@ -221,26 +275,60 @@ class UnionFindNetworkTests(unittest.TestCase):
         self.assertIn("component growth", import_svg)
         self.assertIn("Largest component size", import_svg)
 
+        comparison_svg = build_svg_chart(
+            {
+                "mode": "connectivity-comparison",
+                "summary": {"speedup_vs_recompute": 4.2},
+                "union_find": {
+                    "checkpoints": [
+                        {"edge_index": 10, "elapsed_ms": 1.0},
+                        {"edge_index": 20, "elapsed_ms": 2.0},
+                    ]
+                },
+                "recompute_baseline": {
+                    "checkpoints": [
+                        {"edge_index": 10, "elapsed_ms": 3.0},
+                        {"edge_index": 20, "elapsed_ms": 8.0},
+                    ]
+                },
+            },
+            title="Comparison demo",
+        )
+        self.assertIn("Comparison demo", comparison_svg)
+        self.assertIn("Union-Find", comparison_svg)
+        self.assertIn("BFS recompute", comparison_svg)
+
     def test_chart_source_loading_and_svg_export_cli(self):
         series = run_benchmark_series(nodes=24, edge_counts=[20, 40, 80], seed=13)
+        comparison = run_recompute_comparison(nodes=20, edges=40, seed=13, checkpoint_every=10)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             json_path = tmpdir_path / "benchmark.json"
             csv_path = tmpdir_path / "benchmark.csv"
             svg_path = tmpdir_path / "benchmark.svg"
+            comparison_json = tmpdir_path / "comparison.json"
+            comparison_svg = tmpdir_path / "comparison.svg"
             write_json_report(series, json_path)
             write_benchmark_series_csv(series, csv_path)
+            write_json_report(comparison, comparison_json)
 
             json_payload = load_chart_source(json_path)
             csv_payload = load_chart_source(csv_path)
+            comparison_payload = load_chart_source(comparison_json)
             self.assertEqual(json_payload["mode"], "benchmark-series")
             self.assertEqual(csv_payload["mode"], "benchmark-series-csv")
             self.assertEqual(len(csv_payload["runs"]), 3)
+            self.assertEqual(comparison_payload["mode"], "connectivity-comparison")
 
             write_svg_chart(json_payload, svg_path, title="Rendered from JSON")
             svg_text = svg_path.read_text(encoding="utf-8")
             self.assertIn("Rendered from JSON", svg_text)
             self.assertIn("<polyline", svg_text)
+
+            write_svg_chart(comparison_payload, comparison_svg, title="Rendered comparison")
+            comparison_text = comparison_svg.read_text(encoding="utf-8")
+            self.assertIn("Rendered comparison", comparison_text)
+            self.assertIn("Union-Find", comparison_text)
 
             completed = subprocess.run(
                 [
@@ -305,6 +393,14 @@ class UnionFindNetworkTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("--chart-title requires", completed.stderr)
+
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--compare-recompute", "--comparison-checkpoint-every", "-1"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("--comparison-checkpoint-every must be zero or a positive integer", completed.stderr)
 
 
 if __name__ == "__main__":
