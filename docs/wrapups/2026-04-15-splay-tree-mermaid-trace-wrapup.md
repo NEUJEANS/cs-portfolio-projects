@@ -1,0 +1,23 @@
+# Wrap-up — Splay tree Mermaid trace export
+
+- Timestamp: 2026-04-15T10:13:16Z
+- Project: `splay-tree-lab`
+- What changed:
+  - added `to_mermaid()` tree export for browser-friendly diagrams
+  - extended `trace` CLI with `--before-mermaid` and `--after-mermaid`
+  - added deterministic unit/CLI coverage for Mermaid artifact generation
+  - updated slice checklist, learning note, review logs, and README guidance
+- Tests run:
+  - `python3 -m unittest projects/splay-tree-lab/test_splay_tree_lab.py`
+  - `python3 -m unittest tests/test_red_black_tree_lab.py`
+  - manual CLI check: `python3 projects/splay-tree-lab/splay_tree_lab.py trace --help`
+  - manual CLI check: Mermaid export run against `sample_values.txt`
+- Reviews run:
+  - `docs/reviews/2026-04-15-splay-tree-mermaid-trace-review-1.md`
+  - `docs/reviews/2026-04-15-splay-tree-mermaid-trace-review-2.md`
+  - `docs/reviews/2026-04-15-splay-tree-mermaid-trace-review-3.md`
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → clean
+- Commit hash: `3e99186`
+- Next step:
+  - export per-step trace snapshots or animation-friendly artifacts so students can show the full splay sequence, not just before/after trees.
