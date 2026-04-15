@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import re
+import time
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 @dataclass
@@ -16,6 +19,15 @@ class Edge:
     start: int
     end: int
     child: Node
+
+
+@dataclass(frozen=True)
+class BenchmarkResult:
+    method: str
+    pattern: str
+    matches: int
+    total_seconds: float
+    avg_seconds: float
 
 
 class SuffixTree:
@@ -154,6 +166,50 @@ class SuffixTree:
         steps.append(f"matched {pattern!r} with {len(node.suffix_starts)} suffix hits")
         return steps
 
+    def benchmark_search(self, patterns: Sequence[str], *, iterations: int = 200) -> List[BenchmarkResult]:
+        if not patterns:
+            raise ValueError("patterns must be non-empty")
+        if iterations < 1:
+            raise ValueError("iterations must be at least 1")
+
+        normalized = []
+        for pattern in patterns:
+            if not pattern:
+                raise ValueError("patterns must not contain empty strings")
+            normalized.append(pattern)
+
+        baseline_counts = {pattern: len(self.find(pattern)) for pattern in normalized}
+        methods = {
+            "suffix_tree": self.find,
+            "python_find": lambda pattern: find_with_python(self.original_text, pattern),
+            "regex_lookahead": lambda pattern: find_with_regex(self.original_text, pattern),
+        }
+        results: List[BenchmarkResult] = []
+
+        for method_name, method in methods.items():
+            for pattern in normalized:
+                start = time.perf_counter()
+                matches: List[int] = []
+                for _ in range(iterations):
+                    matches = method(pattern)
+                total_seconds = time.perf_counter() - start
+                match_count = len(matches)
+                if match_count != baseline_counts[pattern]:
+                    raise AssertionError(
+                        f"benchmark mismatch for {method_name} and pattern {pattern!r}: "
+                        f"expected {baseline_counts[pattern]}, saw {match_count}"
+                    )
+                results.append(
+                    BenchmarkResult(
+                        method=method_name,
+                        pattern=pattern,
+                        matches=match_count,
+                        total_seconds=total_seconds,
+                        avg_seconds=total_seconds / iterations,
+                    )
+                )
+        return results
+
     def to_dot(self, *, show_suffix_starts: bool = False) -> str:
         """Render the suffix tree as a Graphviz DOT graph."""
         lines = [
@@ -218,6 +274,54 @@ class SuffixTree:
         return node
 
 
+def find_with_python(text: str, pattern: str) -> List[int]:
+    matches: List[int] = []
+    start = 0
+    while True:
+        index = text.find(pattern, start)
+        if index == -1:
+            return matches
+        matches.append(index)
+        start = index + 1
+
+
+def find_with_regex(text: str, pattern: str) -> List[int]:
+    compiled = re.compile(f"(?={re.escape(pattern)})")
+    return [match.start() for match in compiled.finditer(text)]
+
+
+def benchmark_results_to_csv(results: Sequence[BenchmarkResult]) -> str:
+    rows = [["method", "pattern", "matches", "total_seconds", "avg_seconds"]]
+    for result in results:
+        rows.append(
+            [
+                result.method,
+                result.pattern,
+                str(result.matches),
+                f"{result.total_seconds:.9f}",
+                f"{result.avg_seconds:.9f}",
+            ]
+        )
+
+    output: List[str] = []
+    for row in rows:
+        output.append(",".join(_csv_escape(value) for value in row))
+    return "\n".join(output)
+
+
+def _csv_escape(value: str) -> str:
+    if any(char in value for char in [",", '"', "\n"]):
+        return '"' + value.replace('"', '""') + '"'
+    return value
+
+
+def parse_patterns(patterns: str) -> List[str]:
+    parsed = [pattern.strip() for pattern in patterns.split(",") if pattern.strip()]
+    if not parsed:
+        raise ValueError("at least one non-empty pattern is required")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compressed suffix tree lab")
     parser.add_argument("text", help="source text to index")
@@ -234,30 +338,62 @@ def build_parser() -> argparse.ArgumentParser:
 
     export_parser = subparsers.add_parser("export-dot", help="export the tree as Graphviz DOT")
     export_parser.add_argument("--show-suffix-starts", action="store_true")
+
+    benchmark_parser = subparsers.add_parser(
+        "benchmark", help="compare suffix-tree search against Python and regex baselines"
+    )
+    benchmark_parser.add_argument(
+        "--patterns",
+        required=True,
+        help="comma-separated patterns to benchmark, for example ana,na,ban",
+    )
+    benchmark_parser.add_argument("--iterations", type=int, default=200)
+    benchmark_parser.add_argument("--csv", action="store_true", help="print CSV instead of a readable table")
+    benchmark_parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional output file path for CSV export; parent directories are created automatically",
+    )
+
     return parser
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    args = build_parser().parse_args(argv)
     tree = SuffixTree(args.text)
 
     if args.command == "find":
         matches = tree.find(args.pattern)
         print(f"matches={matches}")
-        return 0 if matches else 1
-    if args.command == "repeat":
-        repeated = tree.longest_repeated_substring(args.min_occurrences)
+    elif args.command == "repeat":
+        repeated = tree.longest_repeated_substring(min_occurrences=args.min_occurrences)
         print(repeated)
-        return 0 if repeated else 1
-    if args.command == "explain":
-        for line in tree.explain_find(args.pattern):
-            print(line)
-        return 0
-    if args.command == "export-dot":
+    elif args.command == "explain":
+        lines = tree.explain_find(args.pattern)
+        print("\n".join(lines))
+    elif args.command == "export-dot":
         print(tree.to_dot(show_suffix_starts=args.show_suffix_starts))
-        return 0
-    raise AssertionError(f"unknown command: {args.command}")
+    elif args.command == "benchmark":
+        patterns = parse_patterns(args.patterns)
+        results = tree.benchmark_search(patterns, iterations=args.iterations)
+        csv_output = benchmark_results_to_csv(results)
+        if args.output is not None:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(csv_output + "\n", encoding="utf-8")
+        if args.csv:
+            print(csv_output)
+        else:
+            print("method           pattern  matches  total_seconds  avg_seconds")
+            for result in results:
+                print(
+                    f"{result.method:<16} {result.pattern:<8} {result.matches:<8} "
+                    f"{result.total_seconds:>13.6f} {result.avg_seconds:>12.6f}"
+                )
+            if args.output is not None:
+                print(f"wrote_csv={args.output}")
+    else:
+        raise AssertionError(f"unknown command: {args.command}")
+    return 0
 
 
 if __name__ == "__main__":

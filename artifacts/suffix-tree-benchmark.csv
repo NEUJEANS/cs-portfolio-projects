@@ -1,0 +1,10 @@
+method,pattern,matches,total_seconds,avg_seconds
+suffix_tree,ana,5,0.000281949,0.000001410
+suffix_tree,ban,3,0.000208166,0.000001041
+suffix_tree,na,5,0.000239052,0.000001195
+python_find,ana,5,0.000087698,0.000000438
+python_find,ban,3,0.000060589,0.000000303
+python_find,na,5,0.000085344,0.000000427
+regex_lookahead,ana,5,0.000505062,0.000002525
+regex_lookahead,ban,3,0.000388682,0.000001943
+regex_lookahead,na,5,0.000471912,0.000002360

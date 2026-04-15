@@ -13,7 +13,9 @@ This project demonstrates string indexing, edge splitting, compact tree represen
 - provides an `explain` mode that traces how a pattern is matched through compressed edges
 - exports Graphviz DOT for quick rendering into SVG/PNG diagrams
 - optionally annotates exported nodes with suffix-start offsets for debugging and demos
-- includes a simple CLI for search, repetition analysis, and structure export
+- benchmarks suffix-tree lookup against Python `str.find` and regex-lookahead baselines
+- exports benchmark results as CSV so performance snapshots can be versioned in `artifacts/`
+- includes a simple CLI for search, repetition analysis, structure export, and benchmark runs
 
 ## CLI usage
 ```bash
@@ -24,6 +26,8 @@ python3 suffix_tree_lab.py banana explain band
 python3 suffix_tree_lab.py banana export-dot > banana.dot
 dot -Tsvg banana.dot -o banana.svg
 python3 suffix_tree_lab.py banana export-dot --show-suffix-starts
+python3 suffix_tree_lab.py "banana bandana banana" benchmark --patterns ana,ban,na
+python3 suffix_tree_lab.py "banana bandana banana" benchmark --patterns ana,ban,na --csv --output ../../artifacts/suffix-tree-benchmark.csv
 ```
 
 ## Example output
@@ -33,6 +37,14 @@ matches=[1, 3]
 
 $ python3 suffix_tree_lab.py banana repeat
 ana
+
+$ python3 suffix_tree_lab.py "banana bandana banana" benchmark --patterns ana,ban --iterations 50
+method           pattern  matches  total_seconds  avg_seconds
+suffix_tree      ana      5             0.000069     0.000001
+suffix_tree      ban      3             0.000052     0.000001
+python_find      ana      5             0.000022     0.000000
+regex_lookahead  ban      3             0.000097     0.000002
+# timings vary by machine; CSV export is the stable artifact format
 ```
 
 ```dot
@@ -57,6 +69,8 @@ pytest -q test_suffix_tree_lab.py
 - compresses shared prefixes into labeled edges instead of one-character trie edges
 - stores suffix start offsets below each node to support occurrence reporting
 - uses DOT as a zero-dependency interchange format so diagrams can be rendered externally with Graphviz
+- benchmark mode cross-checks suffix-tree match counts against Python and regex baselines before recording timings
+- exported CSV snapshots make it easy to discuss asymptotics versus real constant-factor tradeoffs in interviews
 - favors readability and correctness over Ukkonen-level linear-time construction complexity
 
 ## Future improvements
