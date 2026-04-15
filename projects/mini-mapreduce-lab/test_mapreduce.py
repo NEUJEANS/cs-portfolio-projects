@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from mapreduce import benchmark_job, execute_job, inspect_plugin, load_plugin, stable_partition
+from mapreduce import benchmark_job, execute_job, inspect_plugin, inspect_plugins, load_plugin, stable_partition
 
 
 class MiniMapReduceTests(unittest.TestCase):
@@ -148,6 +148,22 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertTrue(inspection.benchmark_generator and inspection.benchmark_generator.endswith(".benchmark_records"))
 
 
+    def test_inspect_plugins_batches_multiple_plugins(self) -> None:
+        batch = inspect_plugins([
+            PROJECT_DIR / "plugins_average_score.py",
+            PROJECT_DIR / "plugins_top_score.py",
+        ])
+
+        self.assertEqual(batch.as_dict()["plugin_count"], 2)
+        self.assertEqual([item.name for item in batch.plugins], ["plugin-average-score", "plugin-max-score"])
+
+        csv_lines = batch.to_csv().strip().splitlines()
+        self.assertEqual(csv_lines[0], "name,plugin,mapper,reducer,combiner,benchmark_generator,available_dataset_families")
+        self.assertEqual(len(csv_lines), 3)
+        self.assertIn("plugin-average-score", csv_lines[1])
+        self.assertIn("plugin-max-score", csv_lines[2])
+
+
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             bad_plugin = Path(tmpdir) / "bad_plugin.py"
@@ -197,6 +213,38 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
             self.assertTrue(payload["mapper"].endswith(".map_records"))
             self.assertTrue(payload["benchmark_generator"].endswith(".benchmark_records"))
+
+    def test_cli_inspect_plugin_batches_multiple_plugins_to_json_and_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-batch.json"
+            csv_output = Path(tmpdir) / "plugin-batch.csv"
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "inspect-plugin",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_average_score.py",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_top_score.py",
+                    "--output",
+                    str(output),
+                    "--csv-output",
+                    str(csv_output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["plugin_count"], 2)
+            self.assertEqual([item["name"] for item in payload["plugins"]], ["plugin-average-score", "plugin-max-score"])
+
+            csv_lines = csv_output.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(csv_lines), 3)
+            self.assertIn("plugin-average-score", csv_lines[1])
+            self.assertIn("plugin-max-score", csv_lines[2])
 
     def test_benchmark_wordcount_reports_skew_metrics(self) -> None:
         result = benchmark_job("wordcount", "skewed", records=200, shard_size=25, reducers=[1, 4], seed=7)

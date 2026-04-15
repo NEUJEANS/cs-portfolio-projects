@@ -29,6 +29,17 @@ Reducer = Callable[[str, list[JSONValue]], JSONValue]
 BenchmarkGenerator = Callable[..., list[str]]
 
 
+PLUGIN_INSPECTION_FIELDNAMES = [
+    "name",
+    "plugin",
+    "mapper",
+    "reducer",
+    "combiner",
+    "benchmark_generator",
+    "available_dataset_families",
+]
+
+
 @dataclass(slots=True)
 class PluginInspection:
     name: str
@@ -50,28 +61,43 @@ class PluginInspection:
             "available_dataset_families": self.available_dataset_families,
         }
 
-    def to_json(self) -> str:
-        return json.dumps(self.as_dict(), indent=2, sort_keys=True)
-
-    def to_csv(self) -> str:
-        fieldnames = [
-            "name",
-            "plugin",
-            "mapper",
-            "reducer",
-            "combiner",
-            "benchmark_generator",
-            "available_dataset_families",
-        ]
+    def csv_row(self) -> dict[str, object]:
         row = self.as_dict()
         row["available_dataset_families"] = (
             ",".join(self.available_dataset_families) if self.available_dataset_families else None
         )
-        buffer = StringIO()
-        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerow(row)
-        return buffer.getvalue()
+        return row
+
+    def to_json(self) -> str:
+        return json.dumps(self.as_dict(), indent=2, sort_keys=True)
+
+    def to_csv(self) -> str:
+        return render_plugin_inspections_csv([self])
+
+
+@dataclass(slots=True)
+class PluginInspectionBatch:
+    plugins: list[PluginInspection]
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "plugin_count": len(self.plugins),
+            "plugins": [plugin.as_dict() for plugin in self.plugins],
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.as_dict(), indent=2, sort_keys=True)
+
+    def to_csv(self) -> str:
+        return render_plugin_inspections_csv(self.plugins)
+
+
+def render_plugin_inspections_csv(plugins: list[PluginInspection]) -> str:
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=PLUGIN_INSPECTION_FIELDNAMES)
+    writer.writeheader()
+    writer.writerows(plugin.csv_row() for plugin in plugins)
+    return buffer.getvalue()
 
 
 def is_json_value(value: Any) -> bool:
@@ -648,6 +674,12 @@ def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
     )
 
 
+def inspect_plugins(plugin_refs: list[str | Path]) -> PluginInspectionBatch:
+    if not plugin_refs:
+        raise ValueError("at least one plugin is required for inspection")
+    return PluginInspectionBatch(plugins=[inspect_plugin(plugin_ref) for plugin_ref in plugin_refs])
+
+
 def load_plugin(plugin_ref: str | Path) -> PluginJob:
     plugin_text = str(plugin_ref)
     candidate_path = Path(plugin_text)
@@ -972,7 +1004,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--output", help="optional output JSON path")
 
     inspect_parser = subparsers.add_parser("inspect-plugin", help="inspect plugin metadata and exported hooks")
-    inspect_parser.add_argument("--plugin", required=True, help="plugin file path or importable Python module to inspect")
+    inspect_parser.add_argument(
+        "--plugin",
+        required=True,
+        action="append",
+        help="plugin file path or importable Python module to inspect (repeat to inspect multiple plugins)",
+    )
     inspect_parser.add_argument("--output", help="optional output JSON path")
     inspect_parser.add_argument("--csv-output", help="optional plugin inspection CSV output path")
 
@@ -1025,10 +1062,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "inspect-plugin":
         try:
-            result = inspect_plugin(args.plugin)
+            result = inspect_plugins(args.plugin)
         except ValueError as exc:
             parser.error(str(exc))
-        rendered = result.to_json()
+        rendered = result.plugins[0].to_json() if len(result.plugins) == 1 else result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
         elif not args.csv_output:

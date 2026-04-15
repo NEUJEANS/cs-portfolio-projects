@@ -181,6 +181,16 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --csv-output plugin-inspection.csv
 ```
 
+Repeat `--plugin` to batch multiple plugins into one JSON/CSV artifact when you want a side-by-side portfolio comparison of supported hooks and dataset families:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
+  --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
+  --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
+  --output plugin-batch.json \
+  --csv-output plugin-batch.csv
+```
+
 Switch benchmark dataset families to model different workload shapes. For example, the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
 
 ```bash

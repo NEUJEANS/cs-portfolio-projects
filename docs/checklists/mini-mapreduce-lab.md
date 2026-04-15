@@ -206,4 +206,18 @@
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider metadata diff tooling or multi-plugin inspection batches in a future run
+- [x] consider metadata diff tooling or multi-plugin inspection batches in a future run
+
+## Multi-plugin inspection batch slice (2026-04-15 20:52 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python argparse `action="append"` and CSV row-batch refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] extend `inspect-plugin` so repeated `--plugin` flags produce batch JSON/CSV inspection artifacts
+- [x] keep single-plugin JSON output backward compatible while adding multi-plugin batch output
+- [x] extend project and repo-level tests for programmatic batching plus CLI JSON/CSV batch artifacts
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider plugin metadata diff views once batch snapshots are stable
