@@ -65,6 +65,22 @@ class TreapOrderStatisticsLabTests(unittest.TestCase):
         self.assertTrue(any("insert key=10" in event for event in treap.events))
         self.assertTrue(any("delete key=20" in event for event in treap.events))
 
+    def test_mermaid_export_includes_nodes_edges_and_nulls(self) -> None:
+        treap = build_treap([40, 10, 60, 5, 20], seed=7)
+        diagram = treap.to_mermaid()
+        self.assertTrue(diagram.startswith("flowchart TD"))
+        self.assertIn("key=40", diagram)
+        self.assertIn("priority=p", diagram)
+        self.assertIn("size=", diagram)
+        self.assertIn("-->|L|", diagram)
+        self.assertIn("-.->|R|", diagram)
+        self.assertIn("((∅))", diagram)
+
+    def test_empty_treap_mermaid_export_is_explicit(self) -> None:
+        treap = Treap(seed=9)
+        diagram = treap.to_mermaid()
+        self.assertEqual(diagram, 'flowchart TD\n    empty["empty treap"]')
+
     def test_benchmark_summary_reports_cross_tree_comparison(self) -> None:
         payload = benchmark_trees(count=15, start=1, build_seed=7, query_seed=13, queries=24)
         self.assertEqual(set(payload["cases"].keys()), {"ascending", "descending", "shuffled"})
@@ -153,6 +169,41 @@ class TreapOrderStatisticsLabTests(unittest.TestCase):
             self.assertIn("case,input_size,query_count,treap_height", payload["csv"])
             self.assertTrue(csv_path.exists())
             self.assertIn("ascending,11,18", csv_path.read_text(encoding="utf-8"))
+
+    def test_cli_export_mermaid_can_write_diagram_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "docs" / "artifacts" / "treap.mmd"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--seed",
+                    "12",
+                    "export-mermaid",
+                    "40",
+                    "10",
+                    "60",
+                    "5",
+                    "20",
+                    "50",
+                    "70",
+                    "--output",
+                    str(output_path),
+                ],
+                cwd=PROJECT_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["command"], "export-mermaid")
+            self.assertEqual(payload["output_file"], str(output_path))
+            self.assertTrue(payload["validation"]["is_valid"])
+            self.assertIn("flowchart TD", payload["mermaid"])
+            self.assertTrue(output_path.exists())
+            written = output_path.read_text(encoding="utf-8")
+            self.assertTrue(written.endswith("\n"))
+            self.assertIn("key=40", written)
 
     def test_cli_benchmark_rejects_non_positive_count(self) -> None:
         result = subprocess.run(

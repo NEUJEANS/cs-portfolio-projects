@@ -15,9 +15,10 @@ A portfolio-friendly randomized balanced BST project that combines treap split/m
 - `contains`, `rank`, `select`, and inclusive `range-count` queries
 - validation for BST ordering, heap priorities, and stored subtree sizes
 - trace mode that logs inserted priorities and deletions
+- Mermaid flowchart export for GitHub-friendly diagrams that show keys, priorities, subtree sizes, and missing-child leaves
 - cross-project benchmark mode that compares treap height and successful lookup costs against this repo's AVL, red-black, and splay tree labs
 - chart-ready CSV export for recruiter-friendly artifacts and README plots
-- CLI commands for demo runs, custom builds, deletion, order-statistics queries, validation, and benchmarking
+- CLI commands for demo runs, custom builds, deletion, order-statistics queries, validation, Mermaid export, and benchmarking
 
 ## Usage
 
@@ -63,6 +64,15 @@ Validate a built treap:
 python3 projects/treap-order-statistics-lab/treap_order_statistics_lab.py --seed 12 validate 40 10 60 5 20 50 70
 ```
 
+Export a GitHub-friendly Mermaid diagram:
+
+```bash
+python3 projects/treap-order-statistics-lab/treap_order_statistics_lab.py --seed 12 export-mermaid 40 10 60 5 20 50 70
+python3 projects/treap-order-statistics-lab/treap_order_statistics_lab.py --seed 12 export-mermaid 40 10 60 5 20 50 70 --output docs/artifacts/treap-order-statistics-mermaid.mmd
+```
+
+Because treap shape depends on randomized priorities, keep the seed fixed when you want reproducible diagrams. The committed sample diagram in `docs/artifacts/treap-order-statistics-mermaid.mmd` was generated with `--seed 12`.
+
 Benchmark treap behavior against the repo's AVL, red-black, and splay labs:
 
 ```bash
@@ -83,9 +93,10 @@ python3 -m unittest projects/treap-order-statistics-lab/test_treap_order_statist
 - insertion promotes a new node when its priority beats the current root, then reuses split to partition the older subtree
 - deletion removes a key by merging its left and right children, keeping the implementation compact
 - validation recomputes subtree sizes and checks heap-order constraints so invariants are inspectable rather than assumed
+- Mermaid export keeps the visualization text-based and GitHub-renderable without extra tooling
 - deterministic seeds make the project teachable, benchmarkable, and easier to compare across runs
 
 ## Future improvements
-- add Graphviz or Mermaid export for split/merge traces
+- add split/merge trace overlays on top of the Mermaid export for step-by-step debugging
 - extend the benchmark from successful lookups to mixed insert/delete/query workloads over time
 - extend the node payload from keys to `(key, value)` pairs for map-style use cases

@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 
+MERMAID_SAFE_PRIORITY_PREFIX = "p"
+
+
 @dataclass
 class Node:
     key: int
@@ -180,6 +183,47 @@ class Treap:
         if node is None:
             return []
         return [node.key] + self._preorder(node.left) + self._preorder(node.right)
+
+    def to_mermaid(self) -> str:
+        lines = ["flowchart TD"]
+        if self.root is None:
+            lines.append("    empty[\"empty treap\"]")
+            return "\n".join(lines)
+
+        counter = {"value": 0}
+
+        def visit(node: Optional[Node]) -> str:
+            if node is None:
+                null_id = f"null_{counter['value']}"
+                counter["value"] += 1
+                lines.append(f"    {null_id}((∅))")
+                return null_id
+
+            node_id = f"node_{counter['value']}"
+            counter["value"] += 1
+            label = (
+                f"key={node.key}<br/>priority={MERMAID_SAFE_PRIORITY_PREFIX}{node.priority}"
+                f"<br/>size={node.size}"
+            )
+            lines.append(f'    {node_id}["{label}"]')
+
+            if node.left is not None:
+                left_id = visit(node.left)
+                lines.append(f"    {node_id} -->|L| {left_id}")
+            else:
+                left_id = visit(None)
+                lines.append(f"    {node_id} -.->|L| {left_id}")
+
+            if node.right is not None:
+                right_id = visit(node.right)
+                lines.append(f"    {node_id} -->|R| {right_id}")
+            else:
+                right_id = visit(None)
+                lines.append(f"    {node_id} -.->|R| {right_id}")
+            return node_id
+
+        visit(self.root)
+        return "\n".join(lines)
 
     def validate(self) -> dict:
         result = self._validate(self.root, lower=None, upper=None)
@@ -565,6 +609,24 @@ def command_validate(args: argparse.Namespace) -> None:
     _print_json(treap.validate())
 
 
+def command_export_mermaid(args: argparse.Namespace) -> None:
+    treap = build_treap(args.keys, seed=args.seed)
+    mermaid = treap.to_mermaid()
+    payload = {
+        "command": "export-mermaid",
+        "seed": args.seed,
+        "key_count": len(args.keys),
+        "validation": treap.validate(),
+        "mermaid": mermaid,
+    }
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(mermaid + "\n", encoding="utf-8")
+        payload["output_file"] = str(output_path)
+    _print_json(payload)
+
+
 def command_benchmark(args: argparse.Namespace) -> None:
     payload = benchmark_trees(
         count=args.count,
@@ -624,6 +686,14 @@ def build_parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate", help="validate a built treap")
     validate.add_argument("keys", nargs="+", type=int)
     validate.set_defaults(func=command_validate)
+
+    export_mermaid = subparsers.add_parser(
+        "export-mermaid",
+        help="export the treap as a GitHub-friendly Mermaid flowchart",
+    )
+    export_mermaid.add_argument("keys", nargs="+", type=int)
+    export_mermaid.add_argument("--output", help="optional path to write the Mermaid diagram")
+    export_mermaid.set_defaults(func=command_export_mermaid)
 
     benchmark = subparsers.add_parser(
         "benchmark",

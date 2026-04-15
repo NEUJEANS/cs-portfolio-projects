@@ -1,0 +1,30 @@
+flowchart TD
+    node_0["key=20<br/>priority=p715552799<br/>size=7"]
+    node_1["key=5<br/>priority=p568149844<br/>size=2"]
+    null_2((∅))
+    node_1 -.->|L| null_2
+    node_3["key=10<br/>priority=p288831131<br/>size=1"]
+    null_4((∅))
+    node_3 -.->|L| null_4
+    null_5((∅))
+    node_3 -.->|R| null_5
+    node_1 -->|R| node_3
+    node_0 -->|L| node_1
+    node_6["key=60<br/>priority=p705955724<br/>size=4"]
+    node_7["key=40<br/>priority=p509566392<br/>size=2"]
+    null_8((∅))
+    node_7 -.->|L| null_8
+    node_9["key=50<br/>priority=p375579191<br/>size=1"]
+    null_10((∅))
+    node_9 -.->|L| null_10
+    null_11((∅))
+    node_9 -.->|R| null_11
+    node_7 -->|R| node_9
+    node_6 -->|L| node_7
+    node_12["key=70<br/>priority=p153115962<br/>size=1"]
+    null_13((∅))
+    node_12 -.->|L| null_13
+    null_14((∅))
+    node_12 -.->|R| null_14
+    node_6 -->|R| node_12
+    node_0 -->|R| node_6
