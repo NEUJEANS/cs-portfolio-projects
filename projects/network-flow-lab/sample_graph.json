@@ -1,0 +1,16 @@
+{
+  "nodes": ["s", "a", "b", "c", "d", "t"],
+  "source": "s",
+  "sink": "t",
+  "edges": [
+    {"source": "s", "target": "a", "capacity": 10},
+    {"source": "s", "target": "c", "capacity": 10},
+    {"source": "a", "target": "b", "capacity": 4},
+    {"source": "a", "target": "c", "capacity": 2},
+    {"source": "a", "target": "d", "capacity": 8},
+    {"source": "c", "target": "d", "capacity": 9},
+    {"source": "d", "target": "b", "capacity": 6},
+    {"source": "b", "target": "t", "capacity": 10},
+    {"source": "d", "target": "t", "capacity": 10}
+  ]
+}
