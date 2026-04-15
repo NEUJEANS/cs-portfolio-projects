@@ -17,7 +17,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit hash
-- 3895710
+- 3904cc6
 
 ## Next step
 - add scripted failure/recovery scenarios so snapshots can be demonstrated under crash or restart conditions
