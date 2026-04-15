@@ -80,6 +80,7 @@ class JobResult:
 
 @dataclass(slots=True)
 class BenchmarkResult:
+    job: str
     scenario: str
     seed: int
     total_records: int
@@ -88,10 +89,13 @@ class BenchmarkResult:
     reducers: list[int]
     timings_ms: list[dict[str, int | float]]
     heatmap_rows: list[dict[str, int | str]]
+    plugin: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(
             {
+                "job": self.job,
+                "plugin": self.plugin,
                 "scenario": self.scenario,
                 "seed": self.seed,
                 "total_records": self.total_records,
@@ -107,6 +111,8 @@ class BenchmarkResult:
 
     def to_csv(self) -> str:
         fieldnames = [
+            "job",
+            "plugin",
             "scenario",
             "seed",
             "total_records",
@@ -122,6 +128,8 @@ class BenchmarkResult:
         rows: list[dict[str, object]] = []
         for timing in self.timings_ms:
             row = {
+                "job": self.job,
+                "plugin": self.plugin,
                 "scenario": self.scenario,
                 "seed": self.seed,
                 "total_records": self.total_records,
@@ -139,6 +147,8 @@ class BenchmarkResult:
 
     def heatmap_to_csv(self) -> str:
         fieldnames = [
+            "job",
+            "plugin",
             "scenario",
             "seed",
             "reducers",
@@ -151,7 +161,10 @@ class BenchmarkResult:
         buffer = StringIO()
         writer = csv.DictWriter(buffer, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(self.heatmap_rows)
+        writer.writerows(
+            {name: row.get(name) for name in fieldnames}
+            for row in self.heatmap_rows
+        )
         return buffer.getvalue()
 
     def _timing_svg(self) -> str:
@@ -252,8 +265,10 @@ class BenchmarkResult:
 
     def to_markdown(self) -> str:
         lines = [
-            f"# Mini MapReduce benchmark report ({self.scenario})",
+            f"# Mini MapReduce benchmark report ({self.job}: {self.scenario})",
             "",
+            f"- Job: `{self.job}`",
+            f"- Plugin: `{self.plugin or 'builtin'}`",
             f"- Seed: `{self.seed}`",
             f"- Total records: `{self.total_records}`",
             f"- Shard size: `{self.shard_size}`",
@@ -383,7 +398,7 @@ class BenchmarkResult:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mini MapReduce benchmark report ({esc(self.scenario)})</title>
+  <title>Mini MapReduce benchmark report ({esc(self.job)}: {esc(self.scenario)})</title>
   <style>
     :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
     body {{ margin: 2rem auto; max-width: 1100px; padding: 0 1rem 3rem; line-height: 1.5; }}
@@ -402,8 +417,10 @@ class BenchmarkResult:
   </style>
 </head>
 <body>
-  <h1>Mini MapReduce benchmark report ({esc(self.scenario)})</h1>
+  <h1>Mini MapReduce benchmark report ({esc(self.job)}: {esc(self.scenario)})</h1>
   <ul class="meta">
+    <li><strong>Job</strong><br><code>{esc(self.job)}</code></li>
+    <li><strong>Plugin</strong><br><code>{esc(self.plugin or 'builtin')}</code></li>
     <li><strong>Seed</strong><br><code>{esc(self.seed)}</code></li>
     <li><strong>Total records</strong><br><code>{esc(self.total_records)}</code></li>
     <li><strong>Shard size</strong><br><code>{esc(self.shard_size)}</code></li>
@@ -643,25 +660,35 @@ def execute_job(
     )
 
 
-def build_benchmark_lines(scenario: str, records: int, seed: int) -> list[str]:
+def build_benchmark_lines(job: str, scenario: str, records: int, seed: int) -> list[str]:
     if records <= 0:
         raise ValueError("records must be positive")
     rng = random.Random(seed)
-    if scenario == "balanced":
-        keys = [f"key-{index:02d}" for index in range(24)]
-        return [f"{keys[index % len(keys)]} {keys[(index * 7) % len(keys)]}" for index in range(records)]
-    if scenario == "skewed":
-        hot_keys = ["hot-key"] * 12 + [f"warm-{index}" for index in range(6)] + [f"cold-{index}" for index in range(18)]
-        return [f"{rng.choice(hot_keys)} {rng.choice(hot_keys)}" for _ in range(records)]
+    if job == "wordcount":
+        if scenario == "balanced":
+            keys = [f"key-{index:02d}" for index in range(24)]
+            return [f"{keys[index % len(keys)]} {keys[(index * 7) % len(keys)]}" for index in range(records)]
+        if scenario == "skewed":
+            hot_keys = ["hot-key"] * 12 + [f"warm-{index}" for index in range(6)] + [f"cold-{index}" for index in range(18)]
+            return [f"{rng.choice(hot_keys)} {rng.choice(hot_keys)}" for _ in range(records)]
+    if job == "plugin":
+        if scenario == "balanced":
+            students = [f"student-{index:02d}" for index in range(24)]
+            return [f"{students[index % len(students)]},{70 + ((index * 11) % 31)}" for index in range(records)]
+        if scenario == "skewed":
+            hot_students = ["capstone-lead"] * 12 + [f"frequent-{index}" for index in range(6)] + [f"rare-{index}" for index in range(18)]
+            return [f"{rng.choice(hot_students)},{55 + rng.randint(0, 45)}" for _ in range(records)]
     raise ValueError(f"unsupported benchmark scenario: {scenario}")
 
 
-def benchmark_wordcount(
+def benchmark_job(
+    job: str,
     scenario: str,
     records: int,
     shard_size: int,
     reducers: list[int],
     seed: int = 42,
+    plugin_path: str | None = None,
 ) -> BenchmarkResult:
     if shard_size <= 0:
         raise ValueError("shard_size must be positive")
@@ -670,7 +697,7 @@ def benchmark_wordcount(
     if any(count <= 0 for count in reducers):
         raise ValueError("reducers must be positive")
 
-    lines = build_benchmark_lines(scenario, records, seed)
+    lines = build_benchmark_lines(job, scenario, records, seed)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", prefix="mini-mapreduce-benchmark-", delete=False) as handle:
         handle.write("\n".join(lines) + "\n")
         input_path = Path(handle.name)
@@ -678,15 +705,28 @@ def benchmark_wordcount(
     timings: list[dict[str, int | float]] = []
     heatmap_rows: list[dict[str, int | str]] = []
     benchmark_shards = list(chunked(lines, shard_size)) or [[]]
+    if job == "wordcount":
+        benchmark_mapper = map_wordcount
+        benchmark_combiner = sum_reducer
+        benchmark_plugin = None
+    elif job == "plugin":
+        if plugin_path is None:
+            raise ValueError("plugin_path is required for plugin benchmarks")
+        benchmark_plugin = load_plugin(plugin_path)
+        benchmark_mapper = benchmark_plugin.mapper
+        benchmark_combiner = benchmark_plugin.combiner
+    else:
+        raise ValueError(f"unsupported benchmark job: {job}")
+
     benchmark_partials = [
-        combine([(key, normalize_json_value(value, context="mapper")) for key, value in map_wordcount(shard)])
+        combine([(key, normalize_json_value(value, context="mapper")) for key, value in benchmark_mapper(shard)], combiner_fn=benchmark_combiner)
         for shard in benchmark_shards
     ]
     unique_keys = 0
     try:
         for reducer_count in reducers:
             started = time.perf_counter()
-            result = execute_job("wordcount", [input_path], shard_size=shard_size, reducers=reducer_count)
+            result = execute_job(job, [input_path], shard_size=shard_size, reducers=reducer_count, plugin_path=plugin_path)
             elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
             unique_keys = result.unique_keys
             timings.append(
@@ -704,6 +744,8 @@ def benchmark_wordcount(
                 for summary in summarize_partial_by_reducer(partial, reducer_count):
                     heatmap_rows.append(
                         {
+                            "job": job,
+                            "plugin": str(benchmark_plugin.path) if benchmark_plugin else None,
                             "scenario": scenario,
                             "seed": seed,
                             "reducers": reducer_count,
@@ -717,6 +759,8 @@ def benchmark_wordcount(
         input_path.unlink(missing_ok=True)
 
     return BenchmarkResult(
+        job=job if job != "plugin" or benchmark_plugin is None else benchmark_plugin.name,
+        plugin=str(benchmark_plugin.path) if benchmark_plugin else None,
         scenario=scenario,
         seed=seed,
         total_records=records,
@@ -741,12 +785,14 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--plugin", help="plugin file path or importable Python module with map_records/reduce_key")
     run_parser.add_argument("--output", help="optional output JSON path")
 
-    benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic wordcount benchmark")
+    benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
+    benchmark_parser.add_argument("--job", choices=["wordcount", "plugin"], default="wordcount")
     benchmark_parser.add_argument("--scenario", choices=["balanced", "skewed"], default="skewed")
     benchmark_parser.add_argument("--records", type=int, default=5000, help="synthetic input line count")
     benchmark_parser.add_argument("--shard-size", type=int, default=250, help="lines per shard")
     benchmark_parser.add_argument("--reducers", type=int, nargs="+", default=[1, 2, 4, 8], help="one or more reducer counts to compare")
     benchmark_parser.add_argument("--seed", type=int, default=42, help="seed for deterministic synthetic data generation")
+    benchmark_parser.add_argument("--plugin", help="plugin file path or importable Python module for plugin benchmarks")
     benchmark_parser.add_argument("--output", help="optional output JSON path")
     benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
     benchmark_parser.add_argument("--heatmap-output", help="optional shard-to-reducer heatmap CSV output path")
@@ -789,12 +835,16 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--shard-size must be positive")
         if any(count <= 0 for count in args.reducers):
             parser.error("--reducers values must be positive")
-        result = benchmark_wordcount(
+        if args.job == "plugin" and not args.plugin:
+            parser.error("--plugin is required for plugin benchmarks")
+        result = benchmark_job(
+            job=args.job,
             scenario=args.scenario,
             records=args.records,
             shard_size=args.shard_size,
             reducers=args.reducers,
             seed=args.seed,
+            plugin_path=args.plugin if args.plugin else None,
         )
         rendered = result.to_json()
         if args.output:

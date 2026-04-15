@@ -19,7 +19,7 @@ assert spec is not None and spec.loader is not None
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
-benchmark_wordcount = module.benchmark_wordcount
+benchmark_job = module.benchmark_job
 execute_job = module.execute_job
 load_plugin = module.load_plugin
 stable_partition = module.stable_partition
@@ -97,8 +97,8 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertNotEqual(single.reducer_stats, many.reducer_stats)
 
     def test_benchmark_result_is_deterministic_for_same_seed(self) -> None:
-        first = benchmark_wordcount("balanced", records=90, shard_size=15, reducers=[1, 3], seed=99)
-        second = benchmark_wordcount("balanced", records=90, shard_size=15, reducers=[1, 3], seed=99)
+        first = benchmark_job("wordcount", "balanced", records=90, shard_size=15, reducers=[1, 3], seed=99)
+        second = benchmark_job("wordcount", "balanced", records=90, shard_size=15, reducers=[1, 3], seed=99)
 
         self.assertEqual(first.scenario, second.scenario)
         self.assertEqual(first.total_records, second.total_records)
@@ -112,7 +112,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
 
     def test_benchmark_rejects_non_positive_shard_size(self) -> None:
         with self.assertRaisesRegex(ValueError, "shard_size must be positive"):
-            benchmark_wordcount("skewed", records=100, shard_size=0, reducers=[1, 2])
+            benchmark_job("wordcount", "skewed", records=100, shard_size=0, reducers=[1, 2])
 
     def test_cli_writes_json_output_with_reducer_stats(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -199,11 +199,53 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             heatmap_rows = heatmap_output.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(payload["scenario"], "skewed")
+            self.assertEqual(payload["job"], "wordcount")
             self.assertEqual(payload["reducers"], [1, 2, 4])
             self.assertEqual(len(payload["timings_ms"]), 3)
             self.assertIn("skew_ratio", payload["timings_ms"][2])
             self.assertTrue(payload["heatmap_rows"])
-            self.assertEqual(heatmap_rows[0], "scenario,seed,reducers,shard_index,reducer,records,unique_keys")
+            self.assertEqual(heatmap_rows[0], "job,plugin,scenario,seed,reducers,shard_index,reducer,records,unique_keys")
+
+    def test_plugin_benchmark_result_includes_plugin_metadata(self) -> None:
+        result = benchmark_job("plugin", "balanced", records=90, shard_size=15, reducers=[2, 3], seed=99, plugin_path=PLUGIN_PATH)
+
+        self.assertEqual(result.job, "plugin-max-score")
+        self.assertTrue(result.plugin.endswith("plugins_top_score.py"))
+        self.assertTrue(result.heatmap_rows)
+        self.assertTrue(all(row["plugin"] for row in result.heatmap_rows))
+
+    def test_cli_plugin_benchmark_writes_expected_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-benchmark.json"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--job",
+                    "plugin",
+                    "--plugin",
+                    str(PLUGIN_PATH),
+                    "--scenario",
+                    "balanced",
+                    "--records",
+                    "120",
+                    "--shard-size",
+                    "20",
+                    "--reducers",
+                    "2",
+                    "4",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["job"], "plugin-max-score")
+            self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
+            self.assertEqual(payload["reducers"], [2, 4])
 
     def test_cli_benchmark_html_report_contains_svg_charts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

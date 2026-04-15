@@ -15,7 +15,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - plugin job loading via `importlib` from either a local Python file or an importable module/package path
 - stable SHA-256-based partitioner to simulate multiple reducer buckets reproducibly across processes
 - reducer distribution stats so you can talk about key skew in interviews
-- synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts
+- synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts for either built-in wordcount or plugin jobs
 - machine-readable JSON output with shard and record statistics
 - optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
 - optional shard-to-reducer heatmap CSV export for slide-ready skew visualizations
@@ -69,10 +69,11 @@ PYTHONPATH=. python3 projects/mini-mapreduce-lab/mapreduce.py run \
   --reducers 2
 ```
 
-Benchmark balanced vs skewed synthetic inputs:
+Benchmark balanced vs skewed synthetic inputs for the built-in wordcount job:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --job wordcount \
   --scenario skewed \
   --records 5000 \
   --shard-size 250 \
@@ -141,6 +142,23 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output benchmark-report.html
 ```
 
+Benchmark a plugin job on deterministic synthetic score data so the same artifact pipeline works for custom reducers too:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --job plugin \
+  --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
+  --scenario skewed \
+  --records 5000 \
+  --shard-size 250 \
+  --reducers 2 4 8 \
+  --output plugin-benchmark.json \
+  --csv-output plugin-benchmark.csv \
+  --heatmap-output plugin-benchmark-heatmap.csv \
+  --report-output plugin-benchmark-report.md \
+  --html-output plugin-benchmark-report.html
+```
+
 ## Plugin contract
 
 A plugin is a Python file with:
@@ -179,7 +197,7 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes `heatmap_rows`, where each row captures one shard/reducer cell, `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
+`benchmark` mode now also includes benchmark `job`/`plugin` metadata plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
 
 ```json
 {
@@ -215,5 +233,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
-- add benchmark scenarios for custom plugin workloads instead of only wordcount
-- add plugin-specific benchmark scenarios beyond built-in wordcount so the SVG report can compare custom jobs too
+- add multiple plugin dataset families (for example leaderboard updates vs rolling averages) instead of a single synthetic score stream
+- let plugins optionally define their own synthetic benchmark generators so the runner can benchmark domain-specific data shapes directly

@@ -118,3 +118,15 @@
 - [x] extend project and repo-level tests for SVG rendering and CLI HTML output
 - [x] run tests and 3 review passes
 - [ ] consider plugin-specific benchmark scenarios in a future run
+
+## Plugin benchmark scenarios slice (2026-04-15 15:05 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the benchmark/report follow-up was already scoped in the existing README and checklist
+- [x] do a short Python synthetic-fixture and benchmark-contract refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add plugin benchmark support with deterministic balanced and skewed score datasets
+- [x] include benchmark job/plugin metadata in JSON, CSV, Markdown, HTML, and heatmap artifacts
+- [x] extend project and repo-level tests for programmatic and CLI plugin benchmark flows
+- [x] run tests and 3 review passes
+- [ ] consider multiple plugin benchmark dataset families or plugin-defined benchmark generators in a future run

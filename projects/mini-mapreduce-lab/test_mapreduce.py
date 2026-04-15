@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from mapreduce import benchmark_wordcount, execute_job, load_plugin, stable_partition
+from mapreduce import benchmark_job, execute_job, load_plugin, stable_partition
 
 
 class MiniMapReduceTests(unittest.TestCase):
@@ -164,7 +164,7 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertNotEqual(single.reducer_stats, many.reducer_stats)
 
     def test_benchmark_wordcount_reports_skew_metrics(self) -> None:
-        result = benchmark_wordcount("skewed", records=200, shard_size=25, reducers=[1, 4], seed=7)
+        result = benchmark_job("wordcount", "skewed", records=200, shard_size=25, reducers=[1, 4], seed=7)
 
         self.assertEqual(result.scenario, "skewed")
         self.assertEqual(result.total_records, 200)
@@ -174,32 +174,32 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("max_reducer_records", result.timings_ms[1])
 
     def test_benchmark_wordcount_can_render_csv_rows(self) -> None:
-        result = benchmark_wordcount("balanced", records=120, shard_size=20, reducers=[1, 3], seed=5)
+        result = benchmark_job("wordcount", "balanced", records=120, shard_size=20, reducers=[1, 3], seed=5)
 
         csv_output = result.to_csv().strip().splitlines()
 
-        self.assertEqual(csv_output[0], "scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+        self.assertEqual(csv_output[0], "job,plugin,scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
         self.assertEqual(len(csv_output), 3)
-        self.assertTrue(csv_output[1].startswith("balanced,5,120,20,1,"))
-        self.assertTrue(csv_output[2].startswith("balanced,5,120,20,3,"))
+        self.assertTrue(csv_output[1].startswith("wordcount,,balanced,5,120,20,1,"))
+        self.assertTrue(csv_output[2].startswith("wordcount,,balanced,5,120,20,3,"))
 
     def test_benchmark_wordcount_can_render_heatmap_csv_rows(self) -> None:
-        result = benchmark_wordcount("balanced", records=120, shard_size=20, reducers=[2], seed=5)
+        result = benchmark_job("wordcount", "balanced", records=120, shard_size=20, reducers=[2], seed=5)
 
         rows = result.heatmap_to_csv().strip().splitlines()
 
-        self.assertEqual(rows[0], "scenario,seed,reducers,shard_index,reducer,records,unique_keys")
+        self.assertEqual(rows[0], "job,plugin,scenario,seed,reducers,shard_index,reducer,records,unique_keys")
         self.assertEqual(len(rows), 1 + (6 * 2))
-        self.assertTrue(rows[1].startswith("balanced,5,2,0,"))
+        self.assertTrue(rows[1].startswith("wordcount,,balanced,5,2,0,"))
         self.assertTrue(any(",0," in row for row in rows[1:]))
         self.assertTrue(any(",1," in row for row in rows[1:]))
 
     def test_benchmark_wordcount_can_render_markdown_report(self) -> None:
-        result = benchmark_wordcount("balanced", records=120, shard_size=20, reducers=[2, 3], seed=5)
+        result = benchmark_job("wordcount", "balanced", records=120, shard_size=20, reducers=[2, 3], seed=5)
 
         report = result.to_markdown()
 
-        self.assertIn("# Mini MapReduce benchmark report (balanced)", report)
+        self.assertIn("# Mini MapReduce benchmark report (wordcount: balanced)", report)
         self.assertIn("| Reducers | Elapsed (ms) | Shards | Map records | Unique keys | Max reducer records | Skew ratio |", report)
         self.assertIn("### Reducers = 2", report)
         self.assertIn("### Reducers = 3", report)
@@ -207,12 +207,12 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("Reducer load stddev", report)
 
     def test_benchmark_wordcount_can_render_html_report(self) -> None:
-        result = benchmark_wordcount("balanced", records=120, shard_size=20, reducers=[2, 3], seed=5)
+        result = benchmark_job("wordcount", "balanced", records=120, shard_size=20, reducers=[2, 3], seed=5)
 
         report = result.to_html()
 
         self.assertIn("<!DOCTYPE html>", report)
-        self.assertIn("<h1>Mini MapReduce benchmark report (balanced)</h1>", report)
+        self.assertIn("<h1>Mini MapReduce benchmark report (wordcount: balanced)</h1>", report)
         self.assertIn("<h2>Reducers = 2</h2>", report)
         self.assertIn("<th>r0</th><th>r1</th>", report)
         self.assertIn("Elapsed timing chart", report)
@@ -226,7 +226,7 @@ class MiniMapReduceTests(unittest.TestCase):
 
     def test_benchmark_wordcount_rejects_non_positive_shard_size(self) -> None:
         with self.assertRaisesRegex(ValueError, "shard_size must be positive"):
-            benchmark_wordcount("balanced", records=50, shard_size=0, reducers=[1, 2])
+            benchmark_job("wordcount", "balanced", records=50, shard_size=0, reducers=[1, 2])
 
     def test_cli_writes_json_output_with_reducer_stats(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -387,6 +387,7 @@ class MiniMapReduceTests(unittest.TestCase):
 
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(payload["scenario"], "balanced")
+            self.assertEqual(payload["job"], "wordcount")
             self.assertEqual(payload["reducers"], [1, 3])
             self.assertEqual(len(payload["timings_ms"]), 2)
             self.assertEqual(payload["timings_ms"][0]["reducers"], 1)
@@ -433,16 +434,90 @@ class MiniMapReduceTests(unittest.TestCase):
             report = report_output.read_text(encoding="utf-8")
             html_report = html_output.read_text(encoding="utf-8")
             self.assertEqual(payload["reducers"], [1, 3])
-            self.assertEqual(rows[0], "scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+            self.assertEqual(rows[0], "job,plugin,scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
             self.assertEqual(len(rows), 3)
-            self.assertEqual(heatmap_rows[0], "scenario,seed,reducers,shard_index,reducer,records,unique_keys")
+            self.assertEqual(heatmap_rows[0], "job,plugin,scenario,seed,reducers,shard_index,reducer,records,unique_keys")
             self.assertGreater(len(heatmap_rows), 3)
             self.assertIn(",1,", rows[1])
             self.assertIn(",3,", rows[2])
-            self.assertIn("# Mini MapReduce benchmark report (balanced)", report)
+            self.assertIn("# Mini MapReduce benchmark report (wordcount: balanced)", report)
             self.assertIn("### Reducers = 3", report)
             self.assertIn("<!DOCTYPE html>", html_report)
             self.assertIn("<h2>Reducers = 3</h2>", html_report)
+
+    def test_benchmark_plugin_reports_plugin_metadata_and_heatmap(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=120,
+            shard_size=20,
+            reducers=[2, 4],
+            seed=7,
+            plugin_path=PROJECT_DIR / "plugins_top_score.py",
+        )
+
+        self.assertEqual(result.job, "plugin-max-score")
+        self.assertTrue(result.plugin.endswith("plugins_top_score.py"))
+        self.assertEqual(result.reducers, [2, 4])
+        self.assertTrue(all(row["job"] == "plugin" for row in result.heatmap_rows))
+        self.assertTrue(all(row["plugin"] for row in result.heatmap_rows))
+
+    def test_cli_benchmark_runs_plugin_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-benchmark.json"
+            csv_output = Path(tmpdir) / "plugin-benchmark.csv"
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "benchmark",
+                    "--job",
+                    "plugin",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_top_score.py",
+                    "--scenario",
+                    "balanced",
+                    "--records",
+                    "120",
+                    "--shard-size",
+                    "20",
+                    "--reducers",
+                    "2",
+                    "4",
+                    "--output",
+                    str(output),
+                    "--csv-output",
+                    str(csv_output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            rows = csv_output.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(payload["job"], "plugin-max-score")
+            self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
+            self.assertEqual(payload["reducers"], [2, 4])
+            self.assertEqual(rows[0], "job,plugin,scenario,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+            self.assertTrue(rows[1].startswith("plugin-max-score,"))
+
+    def test_cli_benchmark_requires_plugin_for_plugin_job(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                "projects/mini-mapreduce-lab/mapreduce.py",
+                "benchmark",
+                "--job",
+                "plugin",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parents[2],
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--plugin is required for plugin benchmarks", completed.stderr)
 
     def test_cli_requires_group_field_for_json_group_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
