@@ -11,4 +11,4 @@
 - [x] run secret scan before push
 - [x] commit changes for this slice
 - [x] write run wrap-up
-- [ ] push to origin/main
+- [x] push to origin/main
