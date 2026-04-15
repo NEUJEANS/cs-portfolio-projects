@@ -10,9 +10,10 @@ A compact Python simulator for Bellman-Ford-style distance-vector routing, inclu
 
 ## Features
 - symmetric weighted-topology input via JSON
-- deterministic round-based convergence history
+- deterministic round-based convergence history with active-router scheduling metadata
 - three advertisement modes: `classic`, `split-horizon`, and `poison-reverse`
 - link-removal event simulation that can continue from the converged pre-failure state
+- explicit `periodic` vs `triggered` update scheduling modes for comparing propagation behavior
 - classic count-to-infinity behavior vs split-horizon / poison-reverse mitigation
 - Markdown or Mermaid timeline export for per-round failure reconvergence artifacts
 - JSON output suitable for docs, screenshots, notebooks, or lightweight visualizers
@@ -35,6 +36,15 @@ python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate
   --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}'
 ```
 
+Switch from full-round periodic propagation to event-driven triggered updates and inspect `history[*].active_routers` to see which router advertised each step:
+
+```bash
+python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate \
+  --mode classic \
+  --update-strategy triggered \
+  --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}'
+```
+
 Remove a link and inspect reconvergence before vs after the event. The `after.history` timeline starts from the already-converged routing tables, so classic mode can visibly count upward toward the infinity metric:
 
 ```bash
@@ -42,6 +52,7 @@ python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate
   --mode classic \
   --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}' \
   --remove-link B C \
+  --update-strategy triggered \
   --max-rounds 20
 ```
 
@@ -83,7 +94,7 @@ Use Mermaid when you want diagrams that render directly in GitHub markdown, and 
 
 ## Output shape
 
-Steady-state runs return mode/config metadata, the normalized topology snapshot, final routing tables, and full round history:
+Steady-state runs return mode/config metadata, the normalized topology snapshot, final routing tables, and full round history. Each history entry now includes `active_routers` so you can tell whether the run used broad periodic rounds or narrower triggered propagation steps:
 
 ```json
 {
@@ -114,10 +125,12 @@ python3 -m unittest projects/distance-vector-routing-lab/test_distance_vector_ro
 - why distance-vector routing can be implemented with only neighbor-to-neighbor table exchange
 - how Bellman-Ford appears in distributed form rather than as a single centralized shortest-path pass
 - what split horizon suppresses and what poison reverse actively advertises as unreachable
+- how periodic full-table rounds differ from triggered route-change propagation
 - why round snapshots are useful for deterministic tests and teaching demos
 - how failure-driven reconvergence reveals more systems understanding than a static shortest-path answer
 
 ## Future improvements
 - render neighbor-to-neighbor advertisement messages explicitly, not only final per-round tables
 - add a built-in count-to-infinity sample scenario file plus checked-in timeline artifacts
+- add per-route timeout / garbage-collection timers closer to RIP behavior
 - compare convergence length across modes on larger benchmark scenarios

@@ -47,6 +47,14 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         self.assertEqual(split["tables"]["A"]["C"]["cost"], 2)
         self.assertEqual(poison["tables"]["A"]["C"]["cost"], 2)
 
+    def test_triggered_strategy_matches_periodic_tables_and_tracks_active_router(self):
+        periodic = run_simulation(LOOP_PRONE, mode="classic", update_strategy="periodic")
+        triggered = run_simulation(LOOP_PRONE, mode="classic", update_strategy="triggered")
+        self.assertEqual(triggered["update_strategy"], "triggered")
+        self.assertEqual(triggered["tables"], periodic["tables"])
+        self.assertEqual(triggered["history"][1]["active_routers"], ["A"])
+        self.assertEqual(triggered["history"][2]["active_routers"], ["B"])
+
     def test_link_failure_from_converged_state_shows_count_to_infinity_in_classic_mode(self):
         failure = run_failure_simulation(LOOP_PRONE, "B", "C", mode="classic", max_rounds=20)
         history = failure["after"]["history"]
@@ -89,6 +97,26 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         self.assertEqual(output["event"], {"type": "remove-link", "left": "B", "right": "C"})
         self.assertTrue(output["after"]["starts_from_converged_before_failure"])
         self.assertEqual(output["after"]["tables"]["A"]["C"]["cost"], 16)
+
+    def test_simulate_cli_accepts_triggered_update_strategy(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "simulate",
+                "--topology",
+                json.dumps(LOOP_PRONE),
+                "--update-strategy",
+                "triggered",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        output = json.loads(completed.stdout)
+        self.assertEqual(output["update_strategy"], "triggered")
+        self.assertEqual(output["history"][2]["active_routers"], ["B"])
+        self.assertEqual(output["tables"]["A"]["C"]["cost"], 2)
 
     def test_invalid_topology_is_rejected(self):
         completed = subprocess.run(

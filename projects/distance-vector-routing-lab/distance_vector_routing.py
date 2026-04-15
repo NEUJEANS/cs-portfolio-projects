@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import deque
 from dataclasses import dataclass
 from typing import Mapping, MutableMapping, Sequence
 
@@ -27,11 +28,13 @@ class RoundState:
     round_index: int
     changed: bool
     tables: dict[str, dict[str, Route]]
+    active_routers: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
             "round": self.round_index,
             "changed": self.changed,
+            "active_routers": list(self.active_routers),
             "tables": serialize_tables(self.tables),
         }
 
@@ -135,15 +138,90 @@ def run_rounds(
     mode: str,
     infinity: int,
     max_rounds: int,
+    update_strategy: str,
 ) -> tuple[dict[str, dict[str, Route]], list[RoundState], bool]:
     tables = {router: dict(table) for router, table in initial_tables.items()}
-    history: list[RoundState] = [RoundState(round_index=0, changed=False, tables=tables)]
+    routers = tuple(sorted(topology))
+    history: list[RoundState] = [RoundState(round_index=0, changed=False, tables=tables, active_routers=routers)]
+
+    if update_strategy == "periodic":
+        converged = False
+        for round_index in range(1, max_rounds + 1):
+            tables, changed = update_once(topology, tables, mode=mode, infinity=infinity)
+            history.append(RoundState(round_index=round_index, changed=changed, tables=tables, active_routers=routers))
+            if not changed:
+                converged = True
+                break
+        return tables, history, converged
+
+    if update_strategy != "triggered":
+        raise ValueError("update_strategy must be periodic or triggered")
+
     converged = False
+    pending = deque(routers)
+    queued = set(routers)
 
     for round_index in range(1, max_rounds + 1):
-        tables, changed = update_once(topology, tables, mode=mode, infinity=infinity)
-        history.append(RoundState(round_index=round_index, changed=changed, tables=tables))
-        if not changed:
+        if not pending:
+            history.append(RoundState(round_index=round_index, changed=False, tables=tables, active_routers=()))
+            converged = True
+            break
+
+        active_router = pending.popleft()
+        queued.remove(active_router)
+        changed_routers: list[str] = []
+        next_tables = {router: dict(table) for router, table in tables.items()}
+
+        for router in sorted(topology[active_router]):
+            current = tables[router]
+            new_table: dict[str, Route] = {router: Route(destination=router, cost=0, next_hop=router)}
+            for destination in routers:
+                if destination == router:
+                    continue
+                candidates: list[Route] = []
+                direct_cost = topology[router].get(destination)
+                if direct_cost is not None:
+                    candidates.append(Route(destination=destination, cost=direct_cost, next_hop=destination))
+                for neighbor, link_cost in sorted(topology[router].items()):
+                    if neighbor != active_router:
+                        neighbor_route = tables[neighbor].get(destination)
+                    else:
+                        neighbor_route = tables[active_router].get(destination)
+                    if neighbor_route is None:
+                        continue
+                    advertised = advertised_cost(
+                        neighbor_route,
+                        recipient=router,
+                        mode=mode,
+                        infinity=infinity,
+                    )
+                    if advertised is None:
+                        continue
+                    combined = min(infinity, link_cost + advertised)
+                    candidates.append(Route(destination=destination, cost=combined, next_hop=neighbor))
+                best = min(candidates, key=route_sort_key) if candidates else Route(destination, infinity, None)
+                if best.cost >= infinity:
+                    best = Route(destination, infinity, None)
+                new_table[destination] = best
+            if serialize_table(current) != serialize_table(new_table):
+                next_tables[router] = new_table
+                changed_routers.append(router)
+
+        tables = next_tables
+        for router in sorted(changed_routers):
+            for neighbor in sorted(topology[router]):
+                if neighbor not in queued:
+                    pending.append(neighbor)
+                    queued.add(neighbor)
+        history.append(
+            RoundState(
+                round_index=round_index,
+                changed=bool(changed_routers),
+                tables=tables,
+                active_routers=(active_router,),
+            )
+        )
+        if not pending and not changed_routers:
             converged = True
             break
 
@@ -156,9 +234,12 @@ def run_simulation(
     mode: str = "classic",
     infinity: int = INFINITY,
     max_rounds: int = 50,
+    update_strategy: str = "periodic",
 ) -> dict[str, object]:
     if mode not in {"classic", "split-horizon", "poison-reverse"}:
         raise ValueError("mode must be classic, split-horizon, or poison-reverse")
+    if update_strategy not in {"periodic", "triggered"}:
+        raise ValueError("update_strategy must be periodic or triggered")
     normalized = normalize_topology(topology)
     tables, history, converged = run_rounds(
         normalized,
@@ -166,11 +247,13 @@ def run_simulation(
         mode=mode,
         infinity=infinity,
         max_rounds=max_rounds,
+        update_strategy=update_strategy,
     )
 
     return {
         "mode": mode,
         "infinity": infinity,
+        "update_strategy": update_strategy,
         "topology": {router: dict(sorted(neighbors.items())) for router, neighbors in sorted(normalized.items())},
         "converged": converged,
         "rounds": len(history) - 1,
@@ -196,9 +279,16 @@ def run_failure_simulation(
     mode: str = "classic",
     infinity: int = INFINITY,
     max_rounds: int = 50,
+    update_strategy: str = "periodic",
 ) -> dict[str, object]:
     normalized = normalize_topology(topology)
-    before = run_simulation(normalized, mode=mode, infinity=infinity, max_rounds=max_rounds)
+    before = run_simulation(
+        normalized,
+        mode=mode,
+        infinity=infinity,
+        max_rounds=max_rounds,
+        update_strategy=update_strategy,
+    )
     updated_topology = remove_link(normalized, left, right)
     initial_tables = {
         router: {
@@ -217,6 +307,7 @@ def run_failure_simulation(
         mode=mode,
         infinity=infinity,
         max_rounds=max_rounds,
+        update_strategy=update_strategy,
     )
     return {
         "event": {"type": "remove-link", "left": left, "right": right},
@@ -224,6 +315,7 @@ def run_failure_simulation(
         "after": {
             "mode": mode,
             "infinity": infinity,
+            "update_strategy": update_strategy,
             "topology": {
                 router: dict(sorted(neighbors.items())) for router, neighbors in sorted(updated_topology.items())
             },
@@ -381,11 +473,18 @@ def export_diagram(
     mode: str,
     infinity: int,
     max_rounds: int,
+    update_strategy: str = "periodic",
     router: str | None,
 ) -> str:
     if snapshot == "topology":
         return render_topology_diagram(topology, diagram_format=diagram_format)
-    simulation = run_simulation(topology, mode=mode, infinity=infinity, max_rounds=max_rounds)
+    simulation = run_simulation(
+        topology,
+        mode=mode,
+        infinity=infinity,
+        max_rounds=max_rounds,
+        update_strategy=update_strategy,
+    )
     return render_routes_diagram(simulation, router=router, diagram_format=diagram_format)
 
 
@@ -419,6 +518,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate_parser.add_argument("--mode", default="classic", choices=["classic", "split-horizon", "poison-reverse"])
     simulate_parser.add_argument("--infinity", type=int, default=INFINITY)
     simulate_parser.add_argument("--max-rounds", type=int, default=50)
+    simulate_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
 
     failure_parser = subparsers.add_parser("simulate-failure", help="remove one link and observe reconvergence")
     failure_parser.add_argument("--topology", required=True)
@@ -426,6 +526,7 @@ def build_parser() -> argparse.ArgumentParser:
     failure_parser.add_argument("--mode", default="classic", choices=["classic", "split-horizon", "poison-reverse"])
     failure_parser.add_argument("--infinity", type=int, default=INFINITY)
     failure_parser.add_argument("--max-rounds", type=int, default=50)
+    failure_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
 
     diagram_parser = subparsers.add_parser("export-diagram", help="render topology or routing tables as Mermaid or Graphviz")
     diagram_parser.add_argument("--topology", required=True)
@@ -434,6 +535,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagram_parser.add_argument("--mode", default="classic", choices=["classic", "split-horizon", "poison-reverse"])
     diagram_parser.add_argument("--infinity", type=int, default=INFINITY)
     diagram_parser.add_argument("--max-rounds", type=int, default=50)
+    diagram_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
     diagram_parser.add_argument("--router", help="limit route snapshots to one router")
 
     timeline_parser = subparsers.add_parser(
@@ -448,6 +550,7 @@ def build_parser() -> argparse.ArgumentParser:
     timeline_parser.add_argument("--format", dest="timeline_format", default="markdown", choices=["markdown", "mermaid"])
     timeline_parser.add_argument("--infinity", type=int, default=INFINITY)
     timeline_parser.add_argument("--max-rounds", type=int, default=50)
+    timeline_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
 
     return parser
 
@@ -463,13 +566,35 @@ def cli(argv: Sequence[str] | None = None) -> int:
 
     topology = parse_topology(args.topology)
     if args.command == "simulate":
-        payload: object = run_simulation(topology, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
+        payload: object = run_simulation(
+            topology,
+            mode=args.mode,
+            infinity=args.infinity,
+            max_rounds=args.max_rounds,
+            update_strategy=args.update_strategy,
+        )
     elif args.command == "simulate-failure":
         left, right = args.remove_link
-        payload = run_failure_simulation(topology, left, right, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
+        payload = run_failure_simulation(
+            topology,
+            left,
+            right,
+            mode=args.mode,
+            infinity=args.infinity,
+            max_rounds=args.max_rounds,
+            update_strategy=args.update_strategy,
+        )
     elif args.command == "export-timeline":
         left, right = args.remove_link
-        failure = run_failure_simulation(topology, left, right, mode=args.mode, infinity=args.infinity, max_rounds=args.max_rounds)
+        failure = run_failure_simulation(
+            topology,
+            left,
+            right,
+            mode=args.mode,
+            infinity=args.infinity,
+            max_rounds=args.max_rounds,
+            update_strategy=args.update_strategy,
+        )
         payload = render_failure_timeline(
             failure,
             destination=args.destination,
@@ -484,6 +609,7 @@ def cli(argv: Sequence[str] | None = None) -> int:
             mode=args.mode,
             infinity=args.infinity,
             max_rounds=args.max_rounds,
+            update_strategy=args.update_strategy,
             router=args.router,
         )
 
