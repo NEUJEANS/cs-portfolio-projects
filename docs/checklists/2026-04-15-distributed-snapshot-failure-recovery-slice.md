@@ -12,6 +12,6 @@
 - [x] complete review pass 1 and fix issues found
 - [x] complete review pass 2 and fix issues found
 - [x] complete review pass 3 and fix issues found
-- [ ] run secret scan before push
-- [ ] commit and push
-- [ ] append wrap-up with commit hash and next step
+- [x] run secret scan before push
+- [x] commit and push
+- [x] append wrap-up with commit hash and next step
