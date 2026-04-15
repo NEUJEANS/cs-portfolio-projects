@@ -18,6 +18,9 @@ build_manifest = merkle_sync_lab.build_manifest
 build_copy_plan = merkle_sync_lab.build_copy_plan
 summarize_diff = merkle_sync_lab.summarize_diff
 apply_plan = merkle_sync_lab.apply_plan
+build_chunk_proof = merkle_sync_lab.build_chunk_proof
+diff_chunk_proofs = merkle_sync_lab.diff_chunk_proofs
+verify_chunk_entry = merkle_sync_lab.verify_chunk_entry
 
 
 class MerkleSyncLabTests(unittest.TestCase):
@@ -146,6 +149,50 @@ class MerkleSyncLabTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "live source directory"):
                 apply_plan(plan, source_root=None, execute=True)
 
+    def test_chunk_proof_roundtrip_verifies_each_chunk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "payload.bin"
+            path.write_bytes(b"abcdefghijklmno")
+
+            proof = build_chunk_proof(path, chunk_size=4)
+
+            self.assertEqual(proof["chunk_count"], 4)
+            for entry in proof["chunks"]:
+                self.assertTrue(
+                    verify_chunk_entry(proof["root_digest"], entry["sha256"], entry["proof"])
+                )
+
+    def test_chunk_diff_reports_only_changed_chunks(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp:
+            source = Path(source_tmp) / "data.bin"
+            target = Path(target_tmp) / "data.bin"
+            source.write_bytes(b"AAAAxxxxCCCCzzzz")
+            target.write_bytes(b"AAAAgainCCCCzzzz")
+
+            summary = diff_chunk_proofs(source, target, chunk_size=4)
+
+            self.assertEqual(summary["changed_chunk_count"], 1)
+            changed = summary["changed_chunks"][0]
+            self.assertEqual(changed["index"], 1)
+            self.assertEqual(changed["offset"], 4)
+            self.assertTrue(
+                verify_chunk_entry(
+                    summary["source_root_digest"], changed["source_sha256"], changed["source_proof"]
+                )
+            )
+
+    def test_chunk_diff_handles_source_growth(self) -> None:
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp:
+            source = Path(source_tmp) / "data.bin"
+            target = Path(target_tmp) / "data.bin"
+            source.write_bytes(b"ABCDEFGHIJKLMNOP")
+            target.write_bytes(b"ABCDEFGH")
+
+            summary = diff_chunk_proofs(source, target, chunk_size=4)
+            indexes = [entry["index"] for entry in summary["changed_chunks"]]
+
+            self.assertEqual(indexes, [2, 3])
+
     def test_cli_apply_execute_rejects_manifest_only_source(self) -> None:
         with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp, tempfile.TemporaryDirectory() as out_tmp:
             source = Path(source_tmp)
@@ -261,6 +308,48 @@ class MerkleSyncLabTests(unittest.TestCase):
             self.assertEqual(apply_payload["mode"], "execute")
             self.assertEqual(apply_payload["applied_operation_count"], 1)
             self.assertEqual((target / "nested" / "data.txt").read_text(encoding="utf-8"), "same")
+
+    def test_cli_chunk_diff_and_verify_chunk(self) -> None:
+        with tempfile.TemporaryDirectory() as left_tmp, tempfile.TemporaryDirectory() as right_tmp, tempfile.TemporaryDirectory() as out_tmp:
+            left = Path(left_tmp) / "blob.bin"
+            right = Path(right_tmp) / "blob.bin"
+            proof_path = Path(out_tmp) / "chunk-diff.json"
+            left.write_bytes(b"AAAAxxxxCCCCzzzz")
+            right.write_bytes(b"AAAAyyyyCCCCzzzz")
+
+            diff_result = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "chunk-diff",
+                    str(left),
+                    str(right),
+                    "--chunk-size",
+                    "4",
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            proof_path.write_text(diff_result.stdout, encoding="utf-8")
+            payload = json.loads(diff_result.stdout)
+            self.assertEqual(payload["changed_chunk_count"], 1)
+            self.assertEqual(payload["changed_chunks"][0]["index"], 1)
+
+            verify_result = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "verify-chunk",
+                    str(proof_path),
+                    "1",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(verify_result.stdout.strip(), "valid")
 
 
 if __name__ == "__main__":

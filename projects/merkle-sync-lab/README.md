@@ -1,12 +1,12 @@
 # merkle-sync-lab
 
-A portfolio-ready systems project that builds Merkle-tree-style manifests for directories, explains what changed, produces a sync plan to reconcile two snapshots, and can now execute that plan against a live target.
+A portfolio-ready systems project that builds Merkle-tree-style manifests for directories, explains what changed, produces a sync plan to reconcile two snapshots, executes that plan, and now demonstrates chunk-level proofs for partial file sync.
 
 ## Why it is portfolio-worthy
-- demonstrates hierarchical hashing, a core idea behind Git, content-addressed storage, and distributed sync systems
+- demonstrates hierarchical hashing, a core idea behind Git, content-addressed storage, distributed sync systems, and integrity verification
 - turns a theoretical data structure into a practical file integrity and directory comparison tool
 - exposes human-readable CLI output plus JSON output for automation and scripting
-- now includes a sync-planning layer plus an execution mode that feels closer to a real backup or replication system
+- includes both directory-level sync planning and file-level chunk proofs, which makes the project feel closer to real replication tooling
 - keeps the implementation dependency-free so interviewers can run it instantly
 
 ## Features
@@ -17,6 +17,8 @@ A portfolio-ready systems project that builds Merkle-tree-style manifests for di
 - generate an ordered sync plan with `mkdir`, `copy`, `update`, and `delete` operations
 - preview or execute the generated sync plan with dry-run-safe output
 - export manifest, diff, plan, and apply JSON for reproducible demos and follow-on tooling
+- build chunk-level file Merkle proofs and compare two files chunk-by-chunk
+- verify a saved chunk proof artifact against a source root digest
 
 ## Usage
 Build a manifest:
@@ -54,6 +56,39 @@ Execute the sync plan against a live target directory:
 python3 projects/merkle-sync-lab/merkle_sync_lab.py apply source_dir target_dir --execute
 ```
 
+Compare two file versions at chunk granularity and emit proofs for changed source chunks:
+```bash
+python3 projects/merkle-sync-lab/merkle_sync_lab.py chunk-diff old.bin new.bin --chunk-size 4096 --json
+```
+
+Verify one changed chunk from saved proof JSON:
+```bash
+python3 projects/merkle-sync-lab/merkle_sync_lab.py verify-chunk /tmp/chunk-diff.json 3
+```
+
+## Example chunk-diff output
+```json
+{
+  "chunk_size": 4,
+  "changed_chunk_count": 1,
+  "changed_chunks": [
+    {
+      "index": 1,
+      "offset": 4,
+      "source_sha256": "2481a63c85a62cf889d2b149f1a52e985a9341750173fe01eff50cc27b5941b5",
+      "target_sha256": "e8db10a741d31d2deb85370cd966c807fcc1615ed5b600b987a1a04bbcd3ca1e",
+      "source_size": 4,
+      "target_size": 4,
+      "source_proof": [
+        {"position": "right", "digest": "e8db10a741d3..."},
+        {"position": "left", "digest": "6aa79987d2d6..."}
+      ]
+    }
+  ],
+  "is_identical": false
+}
+```
+
 ## Example plan output
 ```text
 source: /tmp/source
@@ -88,6 +123,6 @@ python3 -m unittest projects/merkle-sync-lab/test_merkle_sync_lab.py
 ```
 
 ## Future improvements
-- add chunk-level Merkle proofs for large-file partial sync demos
-- optionally emit Graphviz views of changed directory subtrees
+- add direct partial-sync application so changed chunks can be patched without copying an entire file
+- optionally emit Graphviz views of changed directory subtrees or file chunk trees
 - add conflict-aware safety policies such as refusing to overwrite locally modified targets without a force flag

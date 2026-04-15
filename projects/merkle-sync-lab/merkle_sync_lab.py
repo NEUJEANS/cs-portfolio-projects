@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merkle tree manifest builder, diff tool, sync plan generator, and plan executor for directories."""
+"""Merkle tree manifest builder, diff tool, sync plan generator, plan executor, and chunk-proof helper for directories."""
 
 from __future__ import annotations
 
@@ -38,6 +38,126 @@ def hash_file(path: Path, chunk_size: int = 65536) -> tuple[str, int]:
             size += len(chunk)
             hasher.update(chunk)
     return hasher.hexdigest(), size
+
+
+def read_file_chunks(path: Path, chunk_size: int) -> list[bytes]:
+    if chunk_size <= 0:
+        raise ValueError("chunk size must be positive")
+    chunks: list[bytes] = []
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            chunks.append(chunk)
+    if not chunks:
+        chunks.append(b"")
+    return chunks
+
+
+def merkle_parent_digest(left: str, right: str) -> str:
+    return sha256_bytes(f"{left}:{right}".encode("utf-8"))
+
+
+def build_chunk_proof(path: Path, chunk_size: int = 1024) -> dict:
+    chunks = read_file_chunks(path, chunk_size)
+    leaf_hashes = [sha256_bytes(chunk) for chunk in chunks]
+    if not leaf_hashes:
+        leaf_hashes = [sha256_bytes(b"")]
+
+    levels: list[list[str]] = [leaf_hashes]
+    current = leaf_hashes
+    while len(current) > 1:
+        next_level: list[str] = []
+        for index in range(0, len(current), 2):
+            left = current[index]
+            right = current[index + 1] if index + 1 < len(current) else left
+            next_level.append(merkle_parent_digest(left, right))
+        levels.append(next_level)
+        current = next_level
+
+    chunk_records = []
+    for index, chunk in enumerate(chunks):
+        proof: list[dict[str, str]] = []
+        node_index = index
+        for level in levels[:-1]:
+            is_right = node_index % 2 == 1
+            sibling_index = node_index - 1 if is_right else node_index + 1
+            sibling_hash = level[sibling_index] if sibling_index < len(level) else level[node_index]
+            proof.append(
+                {
+                    "position": "left" if is_right else "right",
+                    "digest": sibling_hash,
+                }
+            )
+            node_index //= 2
+        chunk_records.append(
+            {
+                "index": index,
+                "offset": index * chunk_size,
+                "size": len(chunk),
+                "sha256": leaf_hashes[index],
+                "proof": proof,
+            }
+        )
+
+    return {
+        "path": str(path.resolve()),
+        "chunk_size": chunk_size,
+        "file_size": path.stat().st_size,
+        "chunk_count": len(chunks),
+        "root_digest": levels[-1][0],
+        "chunks": chunk_records,
+    }
+
+
+def verify_chunk_entry(root_digest: str, chunk_sha256: str, proof: list[dict[str, str]]) -> bool:
+    current = chunk_sha256
+    for entry in proof:
+        if entry["position"] == "left":
+            current = merkle_parent_digest(entry["digest"], current)
+        elif entry["position"] == "right":
+            current = merkle_parent_digest(current, entry["digest"])
+        else:
+            raise ValueError(f"invalid proof position: {entry['position']}")
+    return current == root_digest
+
+
+def diff_chunk_proofs(source_path: Path, target_path: Path, chunk_size: int = 1024) -> dict:
+    source = build_chunk_proof(source_path, chunk_size=chunk_size)
+    target = build_chunk_proof(target_path, chunk_size=chunk_size)
+
+    limit = max(source["chunk_count"], target["chunk_count"])
+    source_chunks = {entry["index"]: entry for entry in source["chunks"]}
+    target_chunks = {entry["index"]: entry for entry in target["chunks"]}
+    changed_chunks: list[dict[str, object]] = []
+
+    for index in range(limit):
+        left = source_chunks.get(index)
+        right = target_chunks.get(index)
+        if left and right and left["sha256"] == right["sha256"]:
+            continue
+        changed_chunks.append(
+            {
+                "index": index,
+                "offset": index * chunk_size,
+                "source_sha256": left["sha256"] if left else None,
+                "target_sha256": right["sha256"] if right else None,
+                "source_size": left["size"] if left else 0,
+                "target_size": right["size"] if right else 0,
+                "source_proof": left["proof"] if left else [],
+            }
+        )
+
+    return {
+        "source_path": str(source_path.resolve()),
+        "target_path": str(target_path.resolve()),
+        "chunk_size": chunk_size,
+        "source_root_digest": source["root_digest"],
+        "target_root_digest": target["root_digest"],
+        "source_chunk_count": source["chunk_count"],
+        "target_chunk_count": target["chunk_count"],
+        "changed_chunk_count": len(changed_chunks),
+        "changed_chunks": changed_chunks,
+        "is_identical": not changed_chunks,
+    }
 
 
 def should_ignore(path: Path, root: Path) -> bool:
@@ -316,6 +436,23 @@ def print_human_apply(report: dict) -> None:
         print(f"  - {operation['status']}: {operation['op']} {operation['path']}")
 
 
+def print_human_chunk_diff(summary: dict) -> None:
+    print(f"source file: {summary['source_path']}")
+    print(f"target file: {summary['target_path']}")
+    print(f"chunk size: {summary['chunk_size']}")
+    print(f"identical: {summary['is_identical']}")
+    print(
+        f"root digests: {summary['source_root_digest']} -> {summary['target_root_digest']}"
+    )
+    print(f"changed chunks ({summary['changed_chunk_count']}):")
+    for chunk in summary["changed_chunks"]:
+        print(
+            "  - "
+            f"index={chunk['index']} offset={chunk['offset']} "
+            f"source={str(chunk['source_sha256'])[:12]} target={str(chunk['target_sha256'])[:12]}"
+        )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -344,6 +481,24 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("target", type=Path)
     apply_cmd.add_argument("--execute", action="store_true", help="apply filesystem changes")
     apply_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    chunk_diff_cmd = subparsers.add_parser(
+        "chunk-diff",
+        help="compare two files at the chunk level and emit chunk proofs for changed source chunks",
+    )
+    chunk_diff_cmd.add_argument("source", type=Path)
+    chunk_diff_cmd.add_argument("target", type=Path)
+    chunk_diff_cmd.add_argument(
+        "--chunk-size", type=int, default=1024, help="bytes per chunk for the file Merkle tree"
+    )
+    chunk_diff_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    verify_cmd = subparsers.add_parser(
+        "verify-chunk",
+        help="verify a single chunk proof against a root digest using a JSON payload",
+    )
+    verify_cmd.add_argument("proof_json", type=Path, help="JSON file from chunk-diff or build_chunk_proof")
+    verify_cmd.add_argument("chunk_index", type=int)
 
     return parser
 
@@ -395,6 +550,30 @@ def main() -> int:
         else:
             print_human_apply(report)
         return 0
+
+    if args.command == "chunk-diff":
+        summary = diff_chunk_proofs(args.source, args.target, chunk_size=args.chunk_size)
+        if args.json:
+            print(json.dumps(summary, indent=2))
+        else:
+            print_human_chunk_diff(summary)
+        return 0
+
+    if args.command == "verify-chunk":
+        payload = load_manifest(args.proof_json)
+        chunks = payload.get("chunks") or payload.get("changed_chunks")
+        if chunks is None:
+            parser.exit(2, "error: proof payload must contain 'chunks' or 'changed_chunks'\n")
+        for chunk in chunks:
+            if chunk["index"] == args.chunk_index:
+                proof = chunk.get("proof") or chunk.get("source_proof") or []
+                digest = chunk.get("sha256") or chunk.get("source_sha256")
+                root_digest = payload.get("root_digest") or payload.get("source_root_digest")
+                if digest is None or root_digest is None:
+                    parser.exit(2, "error: proof payload is missing digest fields\n")
+                print("valid" if verify_chunk_entry(root_digest, digest, proof) else "invalid")
+                return 0
+        parser.exit(2, f"error: chunk index {args.chunk_index} not found\n")
 
     parser.error("unknown command")
     return 2

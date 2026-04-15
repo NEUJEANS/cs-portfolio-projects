@@ -8,4 +8,4 @@
 - [x] add automated tests for stable manifests, diff behavior, and CLI JSON output
 - [x] add sync-plan generation with ordered mkdir/copy/update/delete operations
 - [x] add sync-plan execution mode with dry-run/apply workflow
-- [ ] chunk-level proofs for large-file partial sync in a future slice
+- [x] chunk-level proofs for large-file partial sync in a future slice
