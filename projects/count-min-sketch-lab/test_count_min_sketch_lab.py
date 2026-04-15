@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from count_min_sketch_lab import CountMinSketch, benchmark_memory, build_sketch, load_sketch, save_sketch
+from count_min_sketch_lab import CountMinSketch, SpaceSavingSummary, benchmark_memory, build_sketch, load_sketch, save_sketch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -46,14 +46,23 @@ def test_merge_rejects_different_update_modes():
 
 
 def test_round_trip_json_serialization(tmp_path: Path):
-    sketch = build_sketch(['alpha', 'beta', 'alpha'], epsilon=0.05, delta=0.01, seed=3, conservative_update=True)
+    sketch = build_sketch(
+        ['alpha', 'beta', 'alpha'],
+        epsilon=0.05,
+        delta=0.01,
+        seed=3,
+        conservative_update=True,
+        top_k_capacity=3,
+    )
     output = tmp_path / 'sketch.json'
     save_sketch(output, sketch)
     loaded = load_sketch(output)
     assert loaded.total_count == 3
     assert loaded.config.conservative_update is True
+    assert loaded.config.top_k_capacity == 3
     assert loaded.estimate('alpha') == sketch.estimate('alpha')
     assert loaded.heavy_hitters(2)[0]['item'] == 'alpha'
+    assert loaded.top_k_candidates(1)[0]['item'] == 'alpha'
 
 
 def test_cli_build_estimate_and_heavy_hitters(tmp_path: Path):
@@ -70,6 +79,8 @@ def test_cli_build_estimate_and_heavy_hitters(tmp_path: Path):
             '--delta',
             '0.01',
             '--conservative-update',
+            '--top-k-capacity',
+            '3',
             'build',
             str(tokens),
             '--output',
@@ -80,6 +91,7 @@ def test_cli_build_estimate_and_heavy_hitters(tmp_path: Path):
     estimate = subprocess.run([sys.executable, str(SCRIPT), 'estimate', str(sketch_file), 'red', 'blue'], check=True, capture_output=True, text=True)
     payload = json.loads(estimate.stdout)
     assert payload['conservative_update'] is True
+    assert payload['top_k_capacity'] == 3
     assert payload['estimates']['red'] >= 3
     hitters = subprocess.run([sys.executable, str(SCRIPT), 'heavy-hitters', str(sketch_file), '--threshold', '2'], check=True, capture_output=True, text=True)
     hitters_payload = json.loads(hitters.stdout)
@@ -122,15 +134,18 @@ def test_benchmark_memory_reports_exact_and_sketch_sizes():
         delta=0.01,
         sample_size=2,
         conservative_update=True,
+        top_k_capacity=2,
     )
     assert payload['stream_items'] == 17
     assert payload['unique_items'] == 3
     assert payload['conservative_update'] is True
+    assert payload['top_k_capacity'] == 2
     assert payload['exact_counter_bytes'] > 0
     assert payload['sketch_core_bytes'] > 0
     assert len(payload['top_item_estimates']) == 2
     assert payload['top_item_estimates'][0]['item'] == 'hot'
     assert payload['top_item_estimates'][0]['estimate'] >= payload['top_item_estimates'][0]['exact_count']
+    assert payload['top_k_candidates'][0]['item'] == 'hot'
 
 
 def test_cli_benchmark_memory(tmp_path: Path):
@@ -145,6 +160,8 @@ def test_cli_benchmark_memory(tmp_path: Path):
             '--delta',
             '0.01',
             '--conservative-update',
+            '--top-k-capacity',
+            '3',
             'benchmark-memory',
             str(tokens),
             '--sample-size',
@@ -158,5 +175,78 @@ def test_cli_benchmark_memory(tmp_path: Path):
     assert payload['stream_items'] == 7
     assert payload['unique_items'] == 4
     assert payload['conservative_update'] is True
+    assert payload['top_k_capacity'] == 3
     assert payload['top_item_estimates'][0]['item'] == 'alpha'
     assert payload['sketch_core_bytes'] <= payload['sketch_full_bytes']
+    assert payload['top_k_candidates']
+
+
+def test_space_saving_summary_replaces_minimum_entry_when_full():
+    summary = SpaceSavingSummary(capacity=2)
+    summary.add('alpha', 3)
+    summary.add('beta', 1)
+    summary.add('gamma', 1)
+
+    entries = {entry['item']: entry for entry in summary.top_k()}
+    assert 'alpha' in entries
+    assert 'gamma' in entries
+    assert entries['gamma']['estimate'] == 2
+    assert entries['gamma']['error'] == 1
+
+
+def test_top_k_candidates_track_stream_heavy_hitters():
+    sketch = build_sketch(
+        ['alpha'] * 8 + ['beta'] * 5 + ['gamma'] * 3 + ['delta'],
+        epsilon=0.05,
+        delta=0.01,
+        top_k_capacity=3,
+    )
+    candidates = sketch.top_k_candidates(2)
+    assert [entry['item'] for entry in candidates] == ['alpha', 'beta']
+    assert candidates[0]['cms_estimate'] >= candidates[0]['exact_count']
+
+
+def test_cli_top_k_reports_summary_candidates(tmp_path: Path):
+    tokens = tmp_path / 'tokens.txt'
+    tokens.write_text('alpha beta alpha gamma alpha beta alpha delta', encoding='utf-8')
+    sketch_file = tmp_path / 'cms.json'
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            '--top-k-capacity',
+            '3',
+            'build',
+            str(tokens),
+            '--output',
+            str(sketch_file),
+        ],
+        check=True,
+    )
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), 'top-k', str(sketch_file), '--limit', '2'],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload['top_k_capacity'] == 3
+    assert [entry['item'] for entry in payload['candidates']] == ['alpha', 'beta']
+
+
+def test_merge_rebuilds_top_k_summary_from_combined_observed_counts():
+    left = build_sketch(['alpha'] * 4 + ['beta'] * 2, epsilon=0.05, delta=0.01, seed=1, top_k_capacity=2)
+    right = build_sketch(['beta'] * 5 + ['gamma'], epsilon=0.05, delta=0.01, seed=1, top_k_capacity=2)
+    left.merge(right)
+
+    candidates = left.top_k_candidates(2)
+    assert [entry['item'] for entry in candidates] == ['beta', 'alpha']
+    assert candidates[0]['exact_count'] == 7
+
+
+def test_merge_rejects_different_top_k_capacity():
+    left = build_sketch(['a'], epsilon=0.05, delta=0.01, seed=1, top_k_capacity=2)
+    right = build_sketch(['a'], epsilon=0.05, delta=0.01, seed=1, top_k_capacity=3)
+    with pytest.raises(ValueError):
+        left.merge(right)

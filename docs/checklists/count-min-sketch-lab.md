@@ -9,4 +9,5 @@
 - [x] add benchmark comparing CMS memory to exact counters
 - [x] add conservative update mode
 - [x] document benchmark trade-offs and resumable next step
-- [ ] future slice: pair CMS with a streaming top-k structure or richer benchmark exports
+- [x] pair CMS with a streaming top-k structure and resumable candidate reporting
+- [ ] future slice: add richer benchmark exports or repeated experiment artifact output
