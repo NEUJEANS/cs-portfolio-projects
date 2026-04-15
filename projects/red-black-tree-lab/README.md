@@ -21,7 +21,7 @@ A portfolio-friendly balanced tree lab that implements red-black tree insertion 
 - Graphviz DOT export for portfolio screenshots, blog posts, and balancing walkthrough diagrams
 - deterministic benchmark mode that compares red-black and AVL tree height/rotation trade-offs on ascending, descending, and shuffled insert orders
 - chart-ready benchmark CSV export for spreadsheet plots, README charts, or recruiter-facing artifacts
-- CLI commands for demo runs, custom builds, membership queries, rank queries, kth-smallest lookup, deletion checks, DOT export, and cross-tree benchmarking
+- CLI commands for demo runs, custom builds, membership queries, rank queries, kth-smallest lookup, deletion checks, DOT export, trace-to-Markdown walkthrough export, and cross-tree benchmarking
 
 ## Usage
 
@@ -88,6 +88,13 @@ python3 projects/red-black-tree-lab/red_black_tree.py delete --trace 10 20 10 30
 python3 projects/red-black-tree-lab/red_black_tree.py demo --trace
 ```
 
+Generate a recruiter-friendly Markdown explanation from the same trace stream and optionally write it to a file:
+
+```bash
+python3 projects/red-black-tree-lab/red_black_tree.py explain-trace build 10 20 30 15 25 5
+python3 projects/red-black-tree-lab/red_black_tree.py explain-trace delete 20 10 30 5 15 25 35 --query 10 --output artifacts/red-black-delete-trace.md
+```
+
 ## Test
 
 ```bash
@@ -103,6 +110,7 @@ python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --see
 - Order-statistics support stores `subtree_size` on every node and refreshes it after path growth, transplants, and rotations.
 - Validation explicitly checks BST bounds, black-height consistency, parent pointers, and subtree-size consistency so augmentation bugs stay explainable.
 - Trace output names the repair cases that fired during insertion or deletion, making the balancing logic easier to narrate in a README, code review, or interview demo.
+- The `explain-trace` command turns low-level trace events into a Markdown walkthrough so the project can produce portfolio-ready writeups without hand-editing every balancing step.
 - DOT export labels left/right child edges and can optionally render NIL leaves, which makes black-height explanations and deletion repair screenshots easier to present.
 - The benchmark command intentionally uses deterministic ascending, descending, and seeded shuffled sequences so the AVL-vs-red-black comparison is repeatable in README snippets, interviews, and CI runs.
 - CSV export keeps the case-level metrics flat and spreadsheet-friendly so the project can produce quick charts without extra post-processing glue code.
@@ -110,4 +118,4 @@ python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --see
 ## Future improvements
 - emit Graphviz diagrams after each insertion/deletion step
 - extend the benchmark with CSV export for chart-ready artifacts across larger input sizes
-- add a compact trace-to-markdown explainer that turns raw events into a narrated balancing walkthrough
+- emit before/after DOT snippets inside the Markdown walkthrough for richer visual debugging artifacts

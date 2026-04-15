@@ -644,6 +644,72 @@ def _benchmark_csv(rows: list[dict[str, int | str]]) -> str:
     return buffer.getvalue()
 
 
+def _describe_trace_event(event: dict[str, object], index: int) -> str:
+    name = str(event["event"])
+    if name == "inserted":
+        direction = event.get("direction")
+        parent = event.get("parent")
+        if parent is None:
+            return f"{index}. Inserted `{event['key']}` as the root node."
+        return f"{index}. Inserted `{event['key']}` as the {direction} child of `{parent}`."
+    if name == "insert_duplicate_rejected":
+        return f"{index}. Rejected duplicate key `{event['key']}` without changing the tree."
+    if name == "insert_fixup_line":
+        return (
+            f"{index}. Insert fix-up detected a red-red violation for node `{event['node']}` "
+            f"with parent `{event['parent']}` and grandparent `{event['grandparent']}`."
+        )
+    if name == "insert_fixup_triangle":
+        return (
+            f"{index}. Insert fix-up hit the triangle case at node `{event['node']}` and rotated toward "
+            f"parent `{event['parent']}` before the line case."
+        )
+    if name == "insert_fixup_recolor":
+        return (
+            f"{index}. Insert fix-up recolored parent `{event['parent']}`, uncle `{event['uncle']}`, "
+            f"and grandparent `{event['grandparent']}` to push the violation upward."
+        )
+    if name == "rotate_left":
+        return f"{index}. Rotated left around pivot `{event['pivot']}` so child `{event['child']}` moved up."
+    if name == "rotate_right":
+        return f"{index}. Rotated right around pivot `{event['pivot']}` so child `{event['child']}` moved up."
+    if name == "delete_start":
+        return f"{index}. Started deletion for key `{event['key']}`."
+    if name == "delete_missing":
+        return f"{index}. Delete request for `{event['key']}` was ignored because the key was not present."
+    if name == "delete_case_two_children":
+        return (
+            f"{index}. Node `{event['target']}` had two children, so the algorithm swapped in inorder successor "
+            f"`{event['successor']}` before repairing colors."
+        )
+    if name == "delete_case_black_repair":
+        return (
+            f"{index}. Removing a black node created a double-black repair path near parent `{event['parent']}`."
+        )
+    if name == "delete_case_sibling_red":
+        return (
+            f"{index}. Delete repair found a red sibling `{event['sibling']}` and rotated to convert the case "
+            f"into a black-sibling scenario."
+        )
+    if name == "delete_case_sibling_black_children_black":
+        return (
+            f"{index}. Delete repair recolored black sibling `{event['sibling']}` because both of its children were black."
+        )
+    if name == "delete_case_inner_red":
+        return (
+            f"{index}. Delete repair hit an inner-red nephew case at sibling `{event['sibling']}` and used a preparatory rotation."
+        )
+    if name == "delete_case_outer_red":
+        return (
+            f"{index}. Delete repair resolved the double-black issue with an outer-red nephew case at sibling `{event['sibling']}`."
+        )
+    if name == "delete_complete":
+        return f"{index}. Finished deletion for key `{event['key']}`."
+    details = ", ".join(f"{key}={value}" for key, value in sorted(event.items()) if key != "event")
+    suffix = f" ({details})" if details else ""
+    return f"{index}. `{name}`{suffix}."
+
+
 def command_demo(args: argparse.Namespace) -> dict[str, object]:
     tree = build_tree([7, 3, 18, 10, 22, 8, 11, 26], trace_enabled=args.trace)
     payload = {"command": "demo", **tree.summary(include_trace=args.trace)}
@@ -715,6 +781,64 @@ def command_dot(args: argparse.Namespace) -> dict[str, object]:
         "dot": tree.to_dot(include_nil=args.include_nil),
         **tree.summary(include_trace=args.trace),
     }
+
+
+def command_explain_trace(args: argparse.Namespace) -> dict[str, object]:
+    tree = build_tree(args.values, trace_enabled=True)
+    deleted = None
+    if args.operation == "delete":
+        tree.trace.clear()
+        deleted = tree.delete(args.query)
+
+    summary = tree.summary(include_trace=True)
+    heading = f"# Red-Black Tree Trace Walkthrough ({args.operation})"
+    overview = [
+        heading,
+        "",
+        f"- input: `{summary['inorder'] if args.operation == 'delete' and deleted is False else args.values}`",
+        f"- size: `{summary['size']}`",
+        f"- height: `{summary['height']}`",
+        f"- black height: `{summary['black_height']}`",
+        f"- valid: `{summary['valid']}`",
+    ]
+    if args.operation == "delete":
+        overview.insert(2, f"- delete query: `{args.query}`")
+        overview.insert(3, f"- deleted: `{deleted}`")
+    overview.extend(["", "## Event-by-event explanation", ""])
+
+    trace_lines = [
+        _describe_trace_event(event, index)
+        for index, event in enumerate(summary.get("trace", []), start=1)
+    ]
+    if not trace_lines:
+        trace_lines = ["1. No balancing events fired; the operation completed without rotations or repair cases."]
+
+    closing = [
+        "",
+        "## Final state",
+        "",
+        f"- root: `{summary['root']}`",
+        f"- inorder traversal: `{summary['inorder']}`",
+        f"- validation errors: `{summary['errors']}`",
+    ]
+    markdown = "\n".join(overview + trace_lines + closing) + "\n"
+
+    payload = {
+        "command": "explain-trace",
+        "operation": args.operation,
+        "input": args.values,
+        "markdown": markdown,
+        **summary,
+    }
+    if args.operation == "delete":
+        payload["query"] = args.query
+        payload["deleted"] = deleted
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(markdown, encoding="utf-8")
+        payload["output"] = str(output_path)
+    return payload
 
 
 def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
@@ -810,6 +934,16 @@ def main() -> None:
     dot_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
     dot_parser.set_defaults(handler=command_dot, include_nil=True)
 
+    explain_trace_parser = subparsers.add_parser(
+        "explain-trace",
+        help="build or mutate a tree and turn the trace stream into a Markdown walkthrough",
+    )
+    explain_trace_parser.add_argument("operation", choices=("build", "delete"), help="which workflow to narrate")
+    explain_trace_parser.add_argument("values", nargs="+", type=int, help="integers to insert")
+    explain_trace_parser.add_argument("--query", type=int, help="key to delete when operation=delete")
+    explain_trace_parser.add_argument("--output", help="optional Markdown file path for the walkthrough")
+    explain_trace_parser.set_defaults(handler=command_explain_trace)
+
     benchmark_parser = subparsers.add_parser(
         "benchmark",
         help="compare red-black and AVL insertion outcomes across ascending, descending, and shuffled inputs",
@@ -825,6 +959,8 @@ def main() -> None:
     benchmark_parser.set_defaults(handler=command_benchmark)
 
     args = parser.parse_args()
+    if args.command == "explain-trace" and args.operation == "delete" and args.query is None:
+        parser.error("explain-trace delete requires --query KEY")
     try:
         payload = args.handler(args)
     except IndexError as error:

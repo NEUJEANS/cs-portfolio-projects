@@ -17,5 +17,7 @@
 - [x] add deterministic benchmark mode comparing red-black vs AVL height/rotation trade-offs
 - [x] export benchmark cases as chart-ready CSV for spreadsheets/README artifacts
 - [x] cover benchmark CSV export with direct API tests and CLI tests
+- [x] add `explain-trace` Markdown walkthrough export for build/delete trace streams
+- [x] cover Markdown walkthrough generation with CLI tests and file-output checks
 - [x] run at least 3 review passes and fix findings
 - [x] add wrap-up note for this slice

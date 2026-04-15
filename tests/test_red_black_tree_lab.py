@@ -262,6 +262,57 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertIn('label="NIL"', payload["dot"])
         self.assertTrue(payload["valid"], payload["errors"])
 
+    def test_cli_explain_trace_build_returns_markdown_walkthrough(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "explain-trace", "build", "10", "20", "30", "15", "25", "5"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "explain-trace")
+        self.assertEqual(payload["operation"], "build")
+        self.assertIn("# Red-Black Tree Trace Walkthrough (build)", payload["markdown"])
+        self.assertIn("Rotated left around pivot `10`", payload["markdown"])
+        self.assertTrue(payload["valid"], payload["errors"])
+
+    def test_cli_explain_trace_delete_can_write_markdown_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "trace.md"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "explain-trace",
+                    "delete",
+                    "20",
+                    "10",
+                    "30",
+                    "5",
+                    "15",
+                    "25",
+                    "35",
+                    "--query",
+                    "10",
+                    "--output",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["operation"], "delete")
+            self.assertTrue(payload["deleted"])
+            self.assertEqual(payload["output"], str(output_path))
+            markdown = output_path.read_text(encoding="utf-8")
+            self.assertIn("delete query: `10`", markdown)
+            self.assertIn("Node `10` had two children", markdown)
+            self.assertIn("Finished deletion for key `10`", markdown)
+            self.assertTrue(payload["valid"], payload["errors"])
+
     def test_cli_dot_command_can_omit_nil_leaves(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "dot", "--no-nil", "20", "10", "30", "5"],
