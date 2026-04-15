@@ -9,4 +9,4 @@
 - [x] run targeted tests for the project
 - [x] complete at least 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and record wrap-up
+- [x] commit, push, and record wrap-up
