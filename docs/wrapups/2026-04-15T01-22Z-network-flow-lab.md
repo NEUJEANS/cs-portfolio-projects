@@ -22,7 +22,7 @@ network-flow-lab
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-22bbf01e0075e8db7e0234bb379f431c46782a9d
+31c69cf4f4e95efcb7b9c07416c72762bb7133a8
 
 ## Next step
 Consider a visualization-focused follow-up: emit Graphviz DOT for the original network, residual graph, and final min cut, or compare Edmonds-Karp against Dinic on larger random graphs.
