@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from mapreduce import benchmark_wordcount, execute_job, stable_partition
+from mapreduce import benchmark_wordcount, execute_job, load_plugin, stable_partition
 
 
 class MiniMapReduceTests(unittest.TestCase):
@@ -56,6 +56,31 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(result.output["<null>"], 1)
             self.assertEqual(result.output["<missing>"], 1)
             self.assertEqual(len(result.reducer_stats), 3)
+
+    def test_plugin_job_supports_custom_reducer_logic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            source.write_text("Alice,5\nBob,8\nAlice,11\nBob,3\n", encoding="utf-8")
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=PROJECT_DIR / "plugins_top_score.py",
+            )
+
+            self.assertEqual(result.job, "plugin-max-score")
+            self.assertEqual(result.output, {"alice": 11, "bob": 8})
+            self.assertIsNotNone(result.plugin)
+
+    def test_load_plugin_rejects_missing_mapper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_plugin = Path(tmpdir) / "bad_plugin.py"
+            bad_plugin.write_text("def reduce_key(key, values):\n    return sum(values)\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "map_records"):
+                load_plugin(bad_plugin)
 
     def test_partitioning_is_deterministic(self) -> None:
         keys = ["alpha", "beta", "gamma", "delta"]
@@ -117,6 +142,35 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["reducers"], 2)
             self.assertEqual(len(payload["reducer_stats"]), 2)
 
+    def test_cli_runs_plugin_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            output = Path(tmpdir) / "plugin.json"
+            source.write_text("Alice,4\nAlice,9\nBob,3\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "run",
+                    "plugin",
+                    str(source),
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_top_score.py",
+                    "--reducers",
+                    "2",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["job"], "plugin-max-score")
+            self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
+            self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
+
     def test_cli_benchmark_outputs_json_with_timings(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "benchmark.json"
@@ -168,6 +222,28 @@ class MiniMapReduceTests(unittest.TestCase):
 
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("--group-field is required", completed.stderr)
+
+    def test_cli_requires_plugin_path_for_plugin_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            source.write_text("Alice,1\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "run",
+                    "plugin",
+                    str(source),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("--plugin is required", completed.stderr)
 
     def test_cli_rejects_non_positive_reducers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

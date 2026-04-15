@@ -6,11 +6,13 @@ A compact Python project that demonstrates the map → combine → partition →
 - shows the core execution model behind Hadoop-style batch processing without heavy infrastructure
 - demonstrates shard partitioning, local combiners, deterministic reducer routing, and deterministic reduction
 - stays practical with built-in jobs you can run on portfolio-friendly sample datasets
+- now supports external Python mapper/reducer plugins so you can demo domain-specific jobs without rewriting the runner
 
 ## Features
 - line-sharded execution over one or more input files
 - built-in `wordcount` job for text analytics
 - built-in `json-group-count` job for JSONL event aggregation
+- plugin job loading via `importlib` from a local Python file with `map_records` and `reduce_key`
 - stable SHA-256-based partitioner to simulate multiple reducer buckets reproducibly across processes
 - reducer distribution stats so you can talk about key skew in interviews
 - synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts
@@ -44,6 +46,15 @@ python3 projects/mini-mapreduce-lab/mapreduce.py run \
   --reducers 4
 ```
 
+Run a plugin job that keeps the maximum score per user:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py run \
+  plugin scores.csv \
+  --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
+  --reducers 2
+```
+
 Benchmark balanced vs skewed synthetic inputs:
 
 ```bash
@@ -63,27 +74,35 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --output benchmark.json
 ```
 
+## Plugin contract
+
+A plugin is a Python file with:
+
+- `JOB_NAME = "human-readable-name"` (optional)
+- `map_records(lines)` → yields `(key, value)` pairs
+- `combine_values(key, values)` → optional shard-local combiner for non-sum jobs
+- `reduce_key(key, values)` → returns one integer result for that key
+
+The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation. This gives you a reusable pattern for portfolio demos like per-user peaks, per-endpoint latency maxima, or custom counters.
+
 ## Output shape
 
 ```json
 {
-  "reducers": [1, 2, 4],
-  "scenario": "skewed",
-  "seed": 42,
-  "shard_size": 250,
-  "timings_ms": [
+  "job": "plugin-max-score",
+  "plugin": "/abs/path/to/plugins_top_score.py",
+  "reducers": 2,
+  "reducer_stats": [
     {
-      "elapsed_ms": 4.112,
-      "map_records": 10000,
-      "max_reducer_records": 8123,
-      "reducers": 4,
-      "shards": 20,
-      "skew_ratio": 3.249,
-      "unique_keys": 25
+      "records": 11,
+      "reducer": 0,
+      "unique_keys": 1
     }
   ],
-  "total_records": 5000,
-  "unique_keys": 25
+  "output": {
+    "alice": 11,
+    "bob": 8
+  }
 }
 ```
 
@@ -91,15 +110,17 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
 
 ```bash
 python3 -m unittest projects/mini-mapreduce-lab/test_mapreduce.py
+python3 -m unittest tests/test_mini_mapreduce.py
 ```
 
 ## Interview talking points
 - why combiners reduce shuffle volume before the global reduce step
 - how partitioning affects reducer balance and hot-key skew
 - how deterministic benchmark fixtures make systems demos reproducible
+- why plugin-based jobs make a systems lab look extensible instead of hard-coded
 - why timing alone can mislead without reducer-distribution metrics beside it
 
 ## Future improvements
-- support external mapper/reducer plugins for custom portfolio demos
+- support plugins packaged as reusable modules, not just file paths
 - export benchmark runs as CSV for charting in notebooks or slide decks
 - visualize reducer skew across shards over time

@@ -11,6 +11,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_DIR = PROJECT_ROOT / "projects" / "mini-mapreduce-lab"
 MODULE_PATH = PROJECT_DIR / "mapreduce.py"
+PLUGIN_PATH = PROJECT_DIR / "plugins_top_score.py"
 
 spec = importlib.util.spec_from_file_location("mini_mapreduce_lab", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
@@ -20,6 +21,7 @@ spec.loader.exec_module(module)
 
 benchmark_wordcount = module.benchmark_wordcount
 execute_job = module.execute_job
+load_plugin = module.load_plugin
 stable_partition = module.stable_partition
 
 
@@ -59,6 +61,25 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(result.output["ok"], 2)
             self.assertEqual(result.output["<missing>"], 1)
             self.assertEqual(len(result.reducer_stats), 3)
+
+    def test_plugin_job_supports_custom_reducer_logic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            source.write_text("Alice,5\nBob,8\nAlice,11\nBob,3\n", encoding="utf-8")
+
+            result = execute_job("plugin", [source], shard_size=2, reducers=2, plugin_path=PLUGIN_PATH)
+
+            self.assertEqual(result.job, "plugin-max-score")
+            self.assertEqual(result.output, {"alice": 11, "bob": 8})
+            self.assertTrue(str(result.plugin).endswith("plugins_top_score.py"))
+
+    def test_load_plugin_rejects_missing_mapper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_plugin = Path(tmpdir) / "bad_plugin.py"
+            bad_plugin.write_text("def reduce_key(key, values):\n    return sum(values)\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "map_records"):
+                load_plugin(bad_plugin)
 
     def test_partitioning_is_deterministic(self) -> None:
         keys = ["alpha", "beta", "gamma", "delta"]
@@ -117,6 +138,34 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(payload["reducers"], 2)
             self.assertEqual(len(payload["reducer_stats"]), 2)
+
+    def test_cli_plugin_writes_expected_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scores.csv"
+            output = Path(tmpdir) / "plugin.json"
+            source.write_text("Alice,4\nAlice,9\nBob,3\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "run",
+                    "plugin",
+                    str(source),
+                    "--plugin",
+                    str(PLUGIN_PATH),
+                    "--reducers",
+                    "2",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["job"], "plugin-max-score")
+            self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
 
     def test_cli_benchmark_writes_timing_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

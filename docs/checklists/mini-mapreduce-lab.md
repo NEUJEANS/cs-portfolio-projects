@@ -25,4 +25,14 @@
 - [x] extend project and repo-level tests for benchmark behavior
 - [x] update README with benchmark usage and interview framing
 - [x] run tests and 3 review passes
-- [ ] consider external mapper/reducer plugin support in a future run
+
+## External plugin slice (2026-04-15 02:38 UTC run)
+- [x] confirm repo sync before editing
+- [x] do brief Python `importlib` research for safe file-based plugin loading
+- [x] refresh mapper/reducer callable validation and dynamic import constraints
+- [x] add plugin job support with local file loading and validation
+- [x] ship an example max-score plugin for portfolio demos
+- [x] extend project and repo-level tests for plugin execution and failure modes
+- [x] update README with plugin contract and CLI examples
+- [x] run tests and 3 review passes
+- [ ] consider package-based plugin discovery or non-integer aggregator outputs in a future run
