@@ -28,5 +28,22 @@
 - [x] complete review pass 2 and fix issues found
 - [x] complete review pass 3 and fix issues found
 - [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
+
+## 2026-04-15 vertical slice: nested routes and relative page links
+- [x] identify `static-site-generator` as the next unfinished project because nested page routes and internal markdown links were still missing
+- [x] skip extra web research because the next slice was already clearly scoped in the local README/checklist
+- [x] do a short Node/path handling refresh with a quick relative-path self-test
+- [x] add a resumable checklist for the slice
+- [x] preserve nested output paths for Markdown pages, including `index.md` -> `index.html`
+- [x] rewrite internal `.md` links into working relative `.html` links across folders and keep nav links relative per page
+- [x] expand automated tests for nested pages, relative nav links, and preserved assets
+- [x] update README with nested-route behavior and new future follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
 - [ ] commit and push
 - [ ] append wrap-up

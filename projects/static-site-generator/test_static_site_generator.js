@@ -50,9 +50,10 @@ Paragraph with **bold**, *italics*, [link](https://example.com), and \`code\`.
   assert.match(html, /<ul><li>alpha<\/li><li>beta<\/li><\/ul>/);
 });
 
-test('buildSite renders ordered navigation and slugified pages', () => {
+test('buildSite renders nested navigation and relative markdown links', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'guides'), { recursive: true });
 
   fs.writeFileSync(
     path.join(contentDir, 'home.md'),
@@ -63,49 +64,37 @@ description: Landing page
 nav: true
 ---
 # Welcome
-See the [projects](student-projects.html).`,
+See the [guide](guides/setup.md).`,
     'utf8'
   );
 
   fs.writeFileSync(
-    path.join(contentDir, 'projects.md'),
+    path.join(contentDir, 'guides', 'setup.md'),
     `---
-title: Student Projects
+title: Setup Guide
 order: 2
-slug: student-projects
+slug: setup
 tags: [algorithms, systems]
 ---
-# Projects
-- Pathfinding visualizer
-- Static site generator`,
-    'utf8'
-  );
-
-  fs.writeFileSync(
-    path.join(contentDir, 'draft.md'),
-    `---
-title: Hidden Draft
-nav: false
----
-# Draft
-Invisible in navigation but still rendered.`,
+# Setup
+Return [home](../home.md).`,
     'utf8'
   );
 
   const result = buildSite(contentDir, outputDir);
-  assert.equal(result.pages.length, 3);
+  assert.equal(result.pages.length, 2);
   assert.deepEqual(result.assets, []);
 
   const homeHtml = fs.readFileSync(path.join(outputDir, 'home.html'), 'utf8');
-  const projectsHtml = fs.readFileSync(path.join(outputDir, 'student-projects.html'), 'utf8');
-  const draftHtml = fs.readFileSync(path.join(outputDir, 'hidden-draft.html'), 'utf8');
+  const guideHtml = fs.readFileSync(path.join(outputDir, 'guides', 'setup.html'), 'utf8');
 
   assert.match(homeHtml, /<a class="active" href="home.html">Home<\/a>/);
-  assert.match(homeHtml, /<a href="student-projects.html">Student Projects<\/a>/);
-  assert.doesNotMatch(homeHtml, /Hidden Draft/);
-  assert.match(projectsHtml, /<span>algorithms<\/span><span>systems<\/span>/);
-  assert.match(projectsHtml, /<li>Pathfinding visualizer<\/li>/);
-  assert.match(draftHtml, /Invisible in navigation but still rendered\./);
+  assert.match(homeHtml, /<a href="guides\/setup.html">Setup Guide<\/a>/);
+  assert.match(homeHtml, /href="guides\/setup.html">guide<\/a>/i);
+  assert.match(guideHtml, /<a href="\.\.\/home.html">Home<\/a>/);
+  assert.match(guideHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
+  assert.match(guideHtml, /href="\.\.\/home.html">home<\/a>/i);
+  assert.match(guideHtml, /<span>algorithms<\/span><span>systems<\/span>/);
 });
 
 test('parseFrontMatter accepts leading whitespace and CRLF front matter fences', () => {

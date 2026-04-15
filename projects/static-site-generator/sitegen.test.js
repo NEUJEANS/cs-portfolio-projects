@@ -10,9 +10,12 @@ const {
   loadPages,
   markdownToHtml,
   parseFrontMatter,
+  relativeLink,
   replaceMarkdownImages,
+  resolveDocumentHref,
   sanitizeHref,
   slugify,
+  toOutputPath,
   walkContentEntries,
 } = require('./sitegen');
 
@@ -51,6 +54,29 @@ test('slugify normalizes custom output names', () => {
   assert.equal(slugify('  C++ & Rust  '), 'c-rust');
 });
 
+test('toOutputPath keeps nested directories and rewrites markdown extension', () => {
+  assert.equal(toOutputPath('index.md'), 'index.html');
+  assert.equal(toOutputPath('guides/setup.md'), 'guides/setup.html');
+  assert.equal(toOutputPath('posts/hello-world.md', { slug: 'intro-post' }), 'posts/intro-post.html');
+});
+
+test('resolveDocumentHref rewrites markdown links relative to the rendered page', () => {
+  const page = {
+    sourceName: 'guides/setup.md',
+    outputName: 'guides/setup.html',
+  };
+
+  assert.equal(resolveDocumentHref('../index.md', page), '../index.html');
+  assert.equal(resolveDocumentHref('../posts/welcome.md#demo', page), '../posts/welcome.html#demo');
+  assert.equal(resolveDocumentHref('assets/diagram.png', page), 'assets/diagram.png');
+});
+
+test('relativeLink computes nav hrefs across nested pages', () => {
+  assert.equal(relativeLink('guides/setup.html', 'index.html'), '../index.html');
+  assert.equal(relativeLink('guides/setup.html', 'posts/welcome.html'), '../posts/welcome.html');
+  assert.equal(relativeLink('posts/welcome.html', 'posts/welcome.html'), 'welcome.html');
+});
+
 test('walkContentEntries and loadPages include nested content in stable order', () => {
   const tmp = makeTempDir();
   fs.mkdirSync(path.join(tmp, 'nested'), { recursive: true });
@@ -67,6 +93,10 @@ test('walkContentEntries and loadPages include nested content in stable order', 
     pages.map((page) => page.metadata.title || page.slug),
     ['Alpha', 'Beta', 'c']
   );
+  assert.deepEqual(
+    pages.map((page) => page.outputName),
+    ['nested/alpha.html', 'beta.html', 'c.html']
+  );
 });
 
 test('copyStaticAssets preserves nested asset paths', () => {
@@ -81,10 +111,11 @@ test('copyStaticAssets preserves nested asset paths', () => {
   assert.equal(fs.readFileSync(path.join(outputDir, 'assets', 'styles.css'), 'utf8'), 'body { color: red; }');
 });
 
-test('buildSite writes pages and copied assets', () => {
+test('buildSite writes nested pages, relative nav links, and copied assets', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, 'images'), { recursive: true });
+  fs.mkdirSync(path.join(contentDir, 'guides'), { recursive: true });
 
   fs.writeFileSync(
     path.join(contentDir, 'index.md'),
@@ -96,23 +127,23 @@ nav: true
 ---
 # Welcome
 
-![Hero](images/hero.png)
-
-See the [projects](student-projects.html).`,
+See the [setup guide](guides/setup.md).`,
     'utf8'
   );
 
   fs.writeFileSync(
-    path.join(contentDir, 'projects.md'),
+    path.join(contentDir, 'guides', 'setup.md'),
     `---
-title: Student Projects
+title: Setup Guide
 order: 2
-slug: student-projects
-tags: [algorithms, systems]
+slug: setup
+tags: [portfolio, docs]
 ---
-# Projects
-- Pathfinding visualizer
-- Static site generator`,
+# Setup
+
+![Hero](../images/hero.png)
+
+Return [home](../index.md).`,
     'utf8'
   );
 
@@ -122,13 +153,17 @@ tags: [algorithms, systems]
   assert.equal(result.pages.length, 2);
   assert.deepEqual(result.assets, [path.join('images', 'hero.png')]);
 
-  const homeHtml = fs.readFileSync(path.join(outputDir, 'home.html'), 'utf8');
-  const projectsHtml = fs.readFileSync(path.join(outputDir, 'student-projects.html'), 'utf8');
+  const homeHtml = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
+  const setupHtml = fs.readFileSync(path.join(outputDir, 'guides', 'setup.html'), 'utf8');
 
-  assert.match(homeHtml, /<a class="active" href="home.html">Home<\/a>/);
-  assert.match(homeHtml, /<img src="images\/hero.png" alt="Hero" loading="lazy">/);
-  assert.match(homeHtml, /href="student-projects.html"/);
-  assert.match(projectsHtml, /<span>algorithms<\/span><span>systems<\/span>/);
+  assert.match(homeHtml, /<a class="active" href="index.html">Home<\/a>/);
+  assert.match(homeHtml, /<a href="guides\/setup.html">Setup Guide<\/a>/);
+  assert.match(homeHtml, /href="guides\/setup.html"/);
+  assert.match(setupHtml, /<a href="\.\.\/index.html">Home<\/a>/);
+  assert.match(setupHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
+  assert.match(setupHtml, /<img src="\.\.\/images\/hero.png" alt="Hero" loading="lazy">/);
+  assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
+  assert.match(setupHtml, /<span>portfolio<\/span><span>docs<\/span>/);
   assert.equal(fs.readFileSync(path.join(outputDir, 'images', 'hero.png'), 'utf8'), 'png-data');
 });
 

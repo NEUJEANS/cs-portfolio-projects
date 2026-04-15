@@ -87,7 +87,59 @@ function sanitizeHref(url) {
   return '#';
 }
 
-function replaceMarkdownImages(html) {
+function toPosixPath(value) {
+  return String(value).split(path.sep).join('/');
+}
+
+function splitHref(href) {
+  const value = String(href);
+  const hashIndex = value.indexOf('#');
+  const queryIndex = value.indexOf('?');
+  let endIndex = value.length;
+  if (hashIndex !== -1) endIndex = Math.min(endIndex, hashIndex);
+  if (queryIndex !== -1) endIndex = Math.min(endIndex, queryIndex);
+
+  return {
+    base: value.slice(0, endIndex),
+    suffix: value.slice(endIndex),
+  };
+}
+
+function toOutputPath(relativeMarkdownPath, metadata = {}) {
+  const normalized = toPosixPath(relativeMarkdownPath);
+  if (!normalized.endsWith('.md')) {
+    return normalized;
+  }
+
+  const dirname = path.posix.dirname(normalized);
+  const baseName = path.posix.basename(normalized, '.md');
+  const derivedName = metadata.slug || (baseName === 'index' ? 'index' : slugify(metadata.title || baseName));
+  const fileName = `${derivedName}.html`;
+  return dirname === '.' ? fileName : path.posix.join(dirname, fileName);
+}
+
+function resolveDocumentHref(rawHref, page = {}) {
+  const { base, suffix } = splitHref(rawHref);
+  if (!base || /^(https?:|mailto:|#|\/)/i.test(base)) {
+    return `${base}${suffix}`;
+  }
+
+  const normalizedBase = toPosixPath(base);
+  if (!normalizedBase.endsWith('.md')) {
+    return `${normalizedBase}${suffix}`;
+  }
+
+  const sourceName = toPosixPath(page.sourceName || '');
+  const outputName = toPosixPath(page.outputName || '');
+  const sourceDir = sourceName ? path.posix.dirname(sourceName) : '.';
+  const outputDir = outputName ? path.posix.dirname(outputName) : '.';
+  const resolvedSourcePath = path.posix.normalize(path.posix.join(sourceDir, normalizedBase));
+  const targetOutputPath = toOutputPath(resolvedSourcePath);
+  const relative = path.posix.relative(outputDir, targetOutputPath) || path.posix.basename(targetOutputPath);
+  return `${relative}${suffix}`;
+}
+
+function replaceMarkdownImages(html, page) {
   let result = '';
   let index = 0;
 
@@ -128,14 +180,14 @@ function replaceMarkdownImages(html) {
     const alt = html.slice(markerStart + 2, altEnd);
     const src = html.slice(urlStart + 1, urlEnd);
     result += html.slice(index, markerStart);
-    result += `<img src="${sanitizeHref(src)}" alt="${alt}" loading="lazy">`;
+    result += `<img src="${sanitizeHref(resolveDocumentHref(src, page))}" alt="${alt}" loading="lazy">`;
     index = urlEnd + 1;
   }
 
   return result;
 }
 
-function replaceMarkdownLinks(html) {
+function replaceMarkdownLinks(html, page) {
   let result = '';
   let index = 0;
 
@@ -182,24 +234,24 @@ function replaceMarkdownLinks(html) {
     const label = html.slice(labelStart + 1, labelEnd);
     const href = html.slice(urlStart + 1, urlEnd);
     result += html.slice(index, labelStart);
-    result += `<a href="${sanitizeHref(href)}">${label}</a>`;
+    result += `<a href="${sanitizeHref(resolveDocumentHref(href, page))}">${label}</a>`;
     index = urlEnd + 1;
   }
 
   return result;
 }
 
-function inlineMarkdown(text) {
+function inlineMarkdown(text, page) {
   let html = escapeHtml(text);
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  html = replaceMarkdownImages(html);
-  html = replaceMarkdownLinks(html);
+  html = replaceMarkdownImages(html, page);
+  html = replaceMarkdownLinks(html, page);
   return html;
 }
 
-function markdownToHtml(markdown) {
+function markdownToHtml(markdown, page) {
   const lines = markdown.replace(/\r/g, '').split('\n');
   const parts = [];
   let paragraph = [];
@@ -207,13 +259,13 @@ function markdownToHtml(markdown) {
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
-    parts.push(`<p>${inlineMarkdown(paragraph.join(' '))}</p>`);
+    parts.push(`<p>${inlineMarkdown(paragraph.join(' '), page)}</p>`);
     paragraph = [];
   };
 
   const flushList = () => {
     if (!listItems.length) return;
-    parts.push(`<ul>${listItems.map((item) => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`);
+    parts.push(`<ul>${listItems.map((item) => `<li>${inlineMarkdown(item, page)}</li>`).join('')}</ul>`);
     listItems = [];
   };
 
@@ -231,7 +283,7 @@ function markdownToHtml(markdown) {
       flushParagraph();
       flushList();
       const level = heading[1].length;
-      parts.push(`<h${level}>${inlineMarkdown(heading[2].trim())}</h${level}>`);
+      parts.push(`<h${level}>${inlineMarkdown(heading[2].trim(), page)}</h${level}>`);
       continue;
     }
 
@@ -252,6 +304,12 @@ function markdownToHtml(markdown) {
   return parts.join('\n');
 }
 
+function relativeLink(fromOutputName, toOutputName) {
+  const fromDir = path.posix.dirname(toPosixPath(fromOutputName));
+  const target = toPosixPath(toOutputName);
+  return path.posix.relative(fromDir, target) || path.posix.basename(target);
+}
+
 function renderTemplate(page, navigation, contentHtml) {
   const title = page.metadata.title || page.slug;
   const description = page.metadata.description || '';
@@ -260,7 +318,7 @@ function renderTemplate(page, navigation, contentHtml) {
     ? `<nav><ul>${navigation
         .map((item) => {
           const className = item.outputName === page.outputName ? ' class="active"' : '';
-          return `<li><a${className} href="${escapeHtml(item.outputName)}">${escapeHtml(item.title)}</a></li>`;
+          return `<li><a${className} href="${escapeHtml(relativeLink(page.outputName, item.outputName))}">${escapeHtml(item.title)}</a></li>`;
         })
         .join('')}</ul></nav>`
     : '';
@@ -336,11 +394,12 @@ function loadPages(contentDir) {
       const { metadata, body } = parseFrontMatter(raw);
       const baseName = path.basename(entry.relativePath, '.md');
       const slug = metadata.slug || slugify(metadata.title || baseName);
+      const sourceName = toPosixPath(entry.relativePath);
       return {
         sourcePath: entry.fullPath,
-        sourceName: entry.relativePath,
+        sourceName,
         slug,
-        outputName: `${slug}.html`,
+        outputName: toOutputPath(sourceName, metadata),
         metadata,
         body,
       };
@@ -390,9 +449,11 @@ function buildSite(contentDir, outputDir) {
   const assets = copyStaticAssets(contentDir, outputDir);
 
   for (const page of pages) {
-    const contentHtml = markdownToHtml(page.body.trim());
+    const contentHtml = markdownToHtml(page.body.trim(), page);
     const html = renderTemplate(page, navigation, contentHtml);
-    fs.writeFileSync(path.join(outputDir, page.outputName), html, 'utf8');
+    const destination = path.join(outputDir, page.outputName);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, html, 'utf8');
   }
 
   return {
@@ -432,9 +493,12 @@ module.exports = {
   loadPages,
   markdownToHtml,
   parseFrontMatter,
+  relativeLink,
   replaceMarkdownImages,
+  resolveDocumentHref,
   sanitizeHref,
   slugify,
+  toOutputPath,
   walkContentEntries,
   replaceMarkdownLinks,
 };
