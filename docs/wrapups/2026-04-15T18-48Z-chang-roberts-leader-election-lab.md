@@ -15,7 +15,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` (clean)
 
 ## Commit
-- `ac80d5e` — Add Chang-Roberts leader election lab
+- `6589287` — Add Chang-Roberts leader election lab
 
 ## Next step
 - add a visualization export (Mermaid or Graphviz timeline) so the trace becomes a stronger demo artifact
