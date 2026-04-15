@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from kd_tree_spatial_search import KDTree, Point, load_points, main
+from kd_tree_spatial_search import KDTree, Point, benchmark_nearest_search, brute_force_k_nearest, load_points, main
 
 
 FIXTURE_PATH = Path(__file__).with_name("sample_points.json")
@@ -30,6 +30,25 @@ def test_nearest_neighbor_breaks_distance_ties_deterministically():
     assert tree.nearest_neighbor(1, 0) == Point(0, 0, "left")
 
 
+def test_k_nearest_neighbors_match_brute_force_ordering():
+    points = load_points(FIXTURE_PATH)
+    tree = KDTree(points)
+    assert tree.k_nearest_neighbors(7.0, 2.0, 3) == brute_force_k_nearest(points, 7.0, 2.0, 3)
+
+
+def test_k_nearest_neighbor_caps_at_dataset_size():
+    points = [Point(0, 0, "a"), Point(3, 4, "b")]
+    tree = KDTree(points)
+    assert tree.k_nearest_neighbors(0, 0, 10) == [Point(0, 0, "a"), Point(3, 4, "b")]
+
+
+def test_k_nearest_supports_duplicate_points_without_heap_comparison_errors():
+    points = [Point(1, 1, "dup"), Point(1, 1, "dup"), Point(2, 2, "other")]
+    tree = KDTree(points)
+    matches = tree.k_nearest_neighbors(1, 1, 2)
+    assert matches == [Point(1, 1, "dup"), Point(1, 1, "dup")]
+
+
 def test_invalid_range_query_raises():
     with pytest.raises(ValueError):
         sample_tree().range_query(5, 1, 4, 2)
@@ -40,6 +59,18 @@ def test_load_points_rejects_non_list_json(tmp_path: Path):
     bad_path.write_text('{"x": 1}')
     with pytest.raises(ValueError):
         load_points(bad_path)
+
+
+def test_k_nearest_rejects_non_positive_k():
+    with pytest.raises(ValueError):
+        sample_tree().k_nearest_neighbors(1, 1, 0)
+
+
+def test_benchmark_matches_brute_force_and_reports_speedup():
+    report = benchmark_nearest_search(load_points(FIXTURE_PATH), query_count=12, k=2, seed=7)
+    assert report["query_count"] == 12
+    assert report["k"] == 2
+    assert report["speedup"] is None or report["speedup"] > 0
 
 
 def test_cli_nearest_outputs_json():
@@ -53,6 +84,18 @@ def test_cli_nearest_outputs_json():
     assert payload["nearest"]["label"] == "e"
 
 
+def test_cli_knearest_outputs_ranked_matches():
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("kd_tree_spatial_search.py")), str(FIXTURE_PATH), "knearest", "7", "2", "3"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["count"] == 3
+    assert [item["label"] for item in payload["matches"]] == ["f", "e", "b"]
+
+
 def test_cli_range_outputs_match_count(capsys):
     exit_code = main([str(FIXTURE_PATH), "range", "0", "0", "5", "5"])
     captured = capsys.readouterr()
@@ -60,3 +103,12 @@ def test_cli_range_outputs_match_count(capsys):
     assert exit_code == 0
     assert payload["count"] == 2
     assert [item["label"] for item in payload["matches"]] == ["a", "b"]
+
+
+def test_cli_benchmark_outputs_summary(capsys):
+    exit_code = main([str(FIXTURE_PATH), "benchmark", "--queries", "8", "--k", "2", "--seed", "5"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["query_count"] == 8
+    assert payload["k"] == 2

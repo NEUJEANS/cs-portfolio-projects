@@ -5,6 +5,7 @@
 - [x] do a short Python/geometry refresh and self-test
 - [x] implement KD-tree build, nearest-neighbor search, and rectangle range query
 - [x] add README, sample data, and tests
+- [x] add a follow-up slice for k-nearest-neighbor queries and benchmark comparisons
 - [x] run tests
 - [x] complete review pass 1 and fix issues found
 - [x] complete review pass 2 and fix issues found

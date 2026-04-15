@@ -6,7 +6,8 @@ A compact computational-geometry project that builds a 2D KD-tree for fast spati
 - recursive divide-and-conquer tree construction
 - axis-alternating partitioning for 2D points
 - rectangle range queries with branch pruning
-- nearest-neighbor search with backtracking and distance bounds
+- nearest-neighbor and k-nearest-neighbor search with backtracking and distance bounds
+- reproducible benchmarking versus brute-force search
 - clean CLI + JSON input/output for reproducible demos
 
 ## Files
@@ -18,7 +19,8 @@ A compact computational-geometry project that builds a 2D KD-tree for fast spati
 ```bash
 cd projects/kd-tree-spatial-search-lab
 python kd_tree_spatial_search.py sample_points.json nearest 7.8 1.2
-python kd_tree_spatial_search.py sample_points.json range 0 0 5 5
+python kd_tree_spatial_search.py sample_points.json knearest 7 2 3
+python kd_tree_spatial_search.py sample_points.json benchmark --queries 500 --k 3 --seed 7
 pytest -q test_kd_tree_spatial_search.py
 ```
 
@@ -33,9 +35,9 @@ Provide a JSON array of points:
 ```
 
 ## Why this is portfolio-worthy
-KD-trees show practical algorithm engineering beyond textbook sorting/searching. This project highlights geometric indexing, query pruning, deterministic testing, and a reusable CLI surface.
+KD-trees show practical algorithm engineering beyond textbook sorting/searching. This project highlights geometric indexing, query pruning, deterministic testing, ranking semantics for k-nearest results, and benchmark-driven performance discussion.
 
 ## Future improvements
-- support k-nearest-neighbor queries
-- add bulk benchmarking against brute-force search
+- support radius / circular range queries
+- benchmark larger synthetic point clouds and chart scaling behavior
 - extend to higher dimensions or typed payload metadata
