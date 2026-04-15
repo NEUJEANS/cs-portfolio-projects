@@ -58,6 +58,9 @@
 - [x] simulate `fix_fingers` scheduling strategies instead of repairing exactly one finger slot per round
 - [x] export the ring and lookup or stabilization routes as Graphviz diagrams
 - [x] let synthetic benchmarks sample random subsets of start nodes instead of taking the first N sorted nodes
+- [x] add a side-by-side stabilization comparison command that runs multiple finger repair modes on the same scenario
+- [ ] export comparison summaries as Markdown/CSV for portfolio write-ups
+- [ ] add a churn workload driver that chains multiple joins/failures and summarizes recovery over time
 
 ## Randomized benchmark start-node slice (2026-04-15 09:29 UTC run)
 - [x] confirm repo sync before editing

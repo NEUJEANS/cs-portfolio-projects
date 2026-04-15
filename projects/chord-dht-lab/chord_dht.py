@@ -37,6 +37,7 @@ class LookupResult:
 
 
 FingerRepairMode = Literal["single", "all", "random"]
+SUPPORTED_FINGER_REPAIR_MODES: tuple[FingerRepairMode, ...] = ("single", "all", "random")
 
 
 class ChordRing:
@@ -386,7 +387,7 @@ class ChordRing:
     ) -> dict[str, object]:
         if rounds <= 0:
             raise ValueError("rounds must be positive")
-        if finger_repair_mode not in {"single", "all", "random"}:
+        if finger_repair_mode not in SUPPORTED_FINGER_REPAIR_MODES:
             raise ValueError(f"unsupported finger_repair_mode {finger_repair_mode!r}")
         if finger_repair_mode == "random" and finger_repair_seed is None:
             raise ValueError("random finger repair mode requires a seed")
@@ -590,6 +591,97 @@ class ChordRing:
             return value > start or value < end
         return value != start
 
+    def compare_stabilization_modes(
+        self,
+        *,
+        joined_node: str | None = None,
+        failed_nodes: Iterable[str] | None = None,
+        rounds: int = 3,
+        modes: Iterable[FingerRepairMode] | None = None,
+        random_seed: int = 17,
+    ) -> dict[str, object]:
+        selected_modes = list(dict.fromkeys(modes or SUPPORTED_FINGER_REPAIR_MODES))
+        if not selected_modes:
+            raise ValueError("at least one stabilization mode is required")
+        for mode in selected_modes:
+            if mode not in SUPPORTED_FINGER_REPAIR_MODES:
+                raise ValueError(f"unsupported finger_repair_mode {mode!r}")
+
+        reports: dict[str, dict[str, object]] = {}
+        score_rows: list[dict[str, object]] = []
+        fastest_modes: list[str] = []
+        fastest_rounds: int | None = None
+        highest_progress_mode = selected_modes[0]
+        highest_progress_ratio = -1.0
+
+        for mode in selected_modes:
+            report = self.stabilization_report(
+                joined_node=joined_node,
+                failed_nodes=failed_nodes,
+                rounds=rounds,
+                finger_repair_mode=mode,
+                finger_repair_seed=random_seed if mode == "random" else None,
+            )
+            reports[mode] = report
+            stabilized_round = next(
+                (
+                    round_data["round"]
+                    for round_data in report["rounds"]
+                    if round_data["summary"]["successor_matches"] == report["target_node_count"]
+                    and round_data["summary"]["predecessor_matches"] == report["target_node_count"]
+                    and round_data["summary"]["finger_matches"] == report["summary"]["total_fingers"]
+                ),
+                None,
+            )
+            progress_ratio = report["summary"]["final_finger_matches"] / max(report["summary"]["total_fingers"], 1)
+            if progress_ratio > highest_progress_ratio:
+                highest_progress_ratio = progress_ratio
+                highest_progress_mode = mode
+            if stabilized_round is not None and (fastest_rounds is None or stabilized_round < fastest_rounds):
+                fastest_rounds = stabilized_round
+                fastest_modes = [mode]
+            elif stabilized_round is not None and stabilized_round == fastest_rounds:
+                fastest_modes.append(mode)
+
+            score_rows.append(
+                {
+                    "mode": mode,
+                    "random_seed": random_seed if mode == "random" else None,
+                    "fully_stabilized": report["summary"]["fully_stabilized"],
+                    "stabilized_round": stabilized_round,
+                    "final_successor_matches": report["summary"]["final_successor_matches"],
+                    "final_predecessor_matches": report["summary"]["final_predecessor_matches"],
+                    "final_finger_matches": report["summary"]["final_finger_matches"],
+                    "total_fingers": report["summary"]["total_fingers"],
+                    "final_finger_progress_ratio": round(progress_ratio, 3),
+                }
+            )
+
+        score_rows.sort(
+            key=lambda row: (
+                row["stabilized_round"] is None,
+                row["stabilized_round"] if row["stabilized_round"] is not None else rounds + 1,
+                -float(row["final_finger_progress_ratio"]),
+                str(row["mode"]),
+            )
+        )
+        return {
+            "m_bits": self.m_bits,
+            "joined_node": joined_node,
+            "failed_nodes": list(dict.fromkeys(failed_nodes or [])),
+            "rounds_requested": rounds,
+            "modes": selected_modes,
+            "random_seed": random_seed,
+            "comparison": score_rows,
+            "reports": reports,
+            "summary": {
+                "fastest_modes": fastest_modes,
+                "fastest_stabilized_round": fastest_rounds,
+                "highest_progress_mode": highest_progress_mode,
+                "highest_progress_ratio": round(highest_progress_ratio, 3),
+            },
+        }
+
     def export_graphviz(
         self,
         mode: str,
@@ -779,6 +871,11 @@ def build_demo_payload() -> dict[str, object]:
     ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
     sample_keys = ["report.pdf", "slides", "internship-notes", "compiler", "final-project"]
     route = ring.lookup("alpha", "compiler")
+    stabilization_comparison = ring.compare_stabilization_modes(
+        joined_node="foxtrot",
+        rounds=3,
+        random_seed=17,
+    )
     return {
         "m_bits": ring.m_bits,
         "ring_size": ring.ring_size,
@@ -794,6 +891,12 @@ def build_demo_payload() -> dict[str, object]:
             replica_count=3,
         ),
         "stabilization_preview": ring.stabilization_report(joined_node="foxtrot", rounds=3),
+        "stabilization_comparison_preview": {
+            "modes": stabilization_comparison["modes"],
+            "random_seed": stabilization_comparison["random_seed"],
+            "comparison": stabilization_comparison["comparison"],
+            "summary": stabilization_comparison["summary"],
+        },
         "graphviz_preview": {
             "ring_dot": ring.export_graphviz("ring"),
             "route_dot": ring.export_graphviz("route", start_node="alpha", key="compiler"),
@@ -964,6 +1067,44 @@ def parse_args() -> argparse.Namespace:
     )
     stabilize_parser.add_argument("--pretty", action="store_true")
 
+    compare_stabilize_parser = subparsers.add_parser(
+        "compare-stabilize",
+        help="compare stabilization outcomes across multiple finger repair modes on the same scenario",
+    )
+    compare_stabilize_parser.add_argument("ring_file", type=Path)
+    compare_stabilize_parser.add_argument(
+        "--joined-node",
+        help="optional node that just joined and starts with stale self-pointing metadata",
+    )
+    compare_stabilize_parser.add_argument(
+        "--failed-node",
+        dest="failed_nodes",
+        action="append",
+        default=[],
+        help="node to remove from the live ring before stabilization; may be provided multiple times",
+    )
+    compare_stabilize_parser.add_argument(
+        "--rounds",
+        type=int,
+        default=3,
+        help="number of stabilization rounds to simulate for each mode",
+    )
+    compare_stabilize_parser.add_argument(
+        "--mode",
+        dest="modes",
+        action="append",
+        default=None,
+        choices=list(SUPPORTED_FINGER_REPAIR_MODES),
+        help="stabilization mode to include; may be provided multiple times and defaults to all modes",
+    )
+    compare_stabilize_parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=17,
+        help="seed to use for the random finger repair mode during comparison",
+    )
+    compare_stabilize_parser.add_argument("--pretty", action="store_true")
+
     synth_parser = subparsers.add_parser(
         "synth-benchmark",
         help="generate a deterministic synthetic ring/workload and benchmark lookup hops",
@@ -1072,6 +1213,18 @@ def main() -> None:
                 rounds=args.rounds,
                 finger_repair_mode=args.finger_repair_mode,
                 finger_repair_seed=args.finger_repair_seed,
+            ),
+        }
+    elif args.command == "compare-stabilize":
+        ring = load_ring(args.ring_file)
+        payload = {
+            "command": "compare-stabilize",
+            **ring.compare_stabilization_modes(
+                joined_node=args.joined_node,
+                failed_nodes=args.failed_nodes,
+                rounds=args.rounds,
+                modes=args.modes,
+                random_seed=args.random_seed,
             ),
         }
     elif args.command == "synth-benchmark":

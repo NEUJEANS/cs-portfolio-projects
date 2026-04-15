@@ -207,6 +207,35 @@ class ChordDhtLabTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "seed"):
             module.select_benchmark_start_nodes(ring, 2, sample_mode="random")
 
+    def test_compare_stabilization_modes_reports_fastest_mode_and_progress(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = ring.compare_stabilization_modes(joined_node="foxtrot", rounds=3, random_seed=17)
+
+        self.assertEqual(comparison["modes"], ["single", "all", "random"])
+        self.assertEqual(comparison["summary"]["fastest_modes"], ["all"])
+        self.assertEqual(comparison["summary"]["fastest_stabilized_round"], 1)
+        self.assertEqual(comparison["comparison"][0]["mode"], "all")
+        self.assertEqual(comparison["comparison"][0]["stabilized_round"], 1)
+        self.assertEqual(comparison["comparison"][0]["final_finger_progress_ratio"], 1.0)
+        self.assertIn("single", comparison["reports"])
+        self.assertEqual(comparison["reports"]["random"]["finger_repair_seed"], 17)
+
+    def test_compare_stabilization_modes_supports_filtered_mode_lists(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = ring.compare_stabilization_modes(
+            failed_nodes=["echo"],
+            rounds=2,
+            modes=["random", "single", "random"],
+            random_seed=29,
+        )
+
+        self.assertEqual(comparison["modes"], ["random", "single"])
+        self.assertEqual([row["mode"] for row in comparison["comparison"]], ["random", "single"])
+        self.assertEqual(comparison["reports"]["random"]["finger_repair_seed"], 29)
+        self.assertEqual(comparison["failed_nodes"], ["echo"])
+
     def test_synthetic_benchmark_payload_is_deterministic_and_unique(self) -> None:
         payload = module.build_synthetic_benchmark_payload(
             m_bits=8,
@@ -325,6 +354,7 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("lookup", payload)
         self.assertIn("resilience_preview", payload)
         self.assertIn("stabilization_preview", payload)
+        self.assertIn("stabilization_comparison_preview", payload)
         self.assertIn("graphviz_preview", payload)
         self.assertIn("hop_benchmark", payload)
         self.assertEqual(payload["lookup"]["key"], "compiler")
@@ -447,6 +477,40 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["finger_repair_mode"], "all")
         self.assertEqual(payload["rounds"][1]["repaired_finger_slots"], list(range(payload["m_bits"])))
         self.assertTrue(payload["summary"]["fully_stabilized"])
+
+    def test_cli_compare_stabilize_outputs_scoreboard(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "compare-stabilize",
+                str(RING_PATH),
+                "--joined-node",
+                "foxtrot",
+                "--rounds",
+                "3",
+                "--mode",
+                "single",
+                "--mode",
+                "all",
+                "--mode",
+                "random",
+                "--random-seed",
+                "17",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "compare-stabilize")
+        self.assertEqual(payload["modes"], ["single", "all", "random"])
+        self.assertEqual(payload["summary"]["fastest_modes"], ["all"])
+        self.assertEqual(payload["summary"]["fastest_stabilized_round"], 1)
+        self.assertEqual(payload["comparison"][0]["mode"], "all")
+        self.assertEqual(payload["reports"]["random"]["finger_repair_seed"], 17)
 
     def test_cli_synth_benchmark_generates_reproducible_workload(self) -> None:
         completed = subprocess.run(

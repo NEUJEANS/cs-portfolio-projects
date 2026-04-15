@@ -17,6 +17,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - successor-list replica planning and failure simulation for degraded/unavailable key checks
 - explicit stabilization-round simulation for join/failure repair of successor, predecessor, and finger metadata
 - configurable `fix_fingers` scheduling modes so stabilization can model one-slot, full-round, or seeded-random finger repair policies
+- side-by-side stabilization comparison mode so multiple repair schedules can be evaluated on the same join/failure scenario
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
@@ -113,6 +114,20 @@ python3 projects/chord-dht-lab/chord_dht.py stabilize \
   --pretty
 ```
 
+Compare alternative `fix_fingers` repair schedules on the same scenario:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py compare-stabilize \
+  projects/chord-dht-lab/ring.json \
+  --joined-node foxtrot \
+  --rounds 4 \
+  --mode single \
+  --mode all \
+  --mode random \
+  --random-seed 17 \
+  --pretty
+```
+
 Compare alternative `fix_fingers` repair schedules:
 
 ```bash
@@ -181,5 +196,5 @@ python3 -m unittest tests/test_chord_dht_lab.py
 
 ## Future improvements
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
-- add a side-by-side stabilization comparison command that runs multiple finger repair modes on the same join/failure scenario
 - export benchmark summaries as CSV/Markdown tables for portfolio write-ups
+- render comparison summaries as Markdown tables or chart-friendly CSV for portfolio write-ups
