@@ -16,6 +16,7 @@ class SketchConfig:
     epsilon: float = 0.02
     delta: float = 0.01
     seed: int = 0
+    conservative_update: bool = False
 
     @property
     def width(self) -> int:
@@ -27,10 +28,21 @@ class SketchConfig:
 
 
 class CountMinSketch:
-    def __init__(self, epsilon: float = 0.02, delta: float = 0.01, seed: int = 0) -> None:
+    def __init__(
+        self,
+        epsilon: float = 0.02,
+        delta: float = 0.01,
+        seed: int = 0,
+        conservative_update: bool = False,
+    ) -> None:
         if epsilon <= 0 or delta <= 0 or delta >= 1:
             raise ValueError('epsilon must be > 0 and delta must be in (0, 1)')
-        self.config = SketchConfig(epsilon=epsilon, delta=delta, seed=seed)
+        self.config = SketchConfig(
+            epsilon=epsilon,
+            delta=delta,
+            seed=seed,
+            conservative_update=conservative_update,
+        )
         self.width = self.config.width
         self.depth = self.config.depth
         self.tables: List[List[int]] = [[0] * self.width for _ in range(self.depth)]
@@ -42,13 +54,31 @@ class CountMinSketch:
         digest = hashlib.blake2b(payload, digest_size=8).digest()
         return int.from_bytes(digest, 'big') % self.width
 
+    def _cell_locations(self, item: str) -> List[tuple[int, int]]:
+        return [(row, self._index_for(item, row)) for row in range(self.depth)]
+
+    def _add_standard(self, item: str, count: int) -> None:
+        for row, column in self._cell_locations(item):
+            self.tables[row][column] += count
+
+    def _add_conservative(self, item: str, count: int) -> None:
+        locations = self._cell_locations(item)
+        for _ in range(count):
+            current_values = [self.tables[row][column] for row, column in locations]
+            minimum = min(current_values)
+            for row, column in locations:
+                if self.tables[row][column] == minimum:
+                    self.tables[row][column] += 1
+
     def add(self, item: str, count: int = 1) -> None:
         if count < 0:
             raise ValueError('count must be non-negative')
         if count == 0:
             return
-        for row in range(self.depth):
-            self.tables[row][self._index_for(item, row)] += count
+        if self.config.conservative_update:
+            self._add_conservative(item, count)
+        else:
+            self._add_standard(item, count)
         self.total_count += count
         self._observed[item] += count
 
@@ -58,8 +88,13 @@ class CountMinSketch:
         return min(self.tables[row][self._index_for(item, row)] for row in range(self.depth))
 
     def merge(self, other: 'CountMinSketch') -> None:
-        if self.width != other.width or self.depth != other.depth or self.config.seed != other.config.seed:
-            raise ValueError('sketches must share width, depth, and seed to merge')
+        if (
+            self.width != other.width
+            or self.depth != other.depth
+            or self.config.seed != other.config.seed
+            or self.config.conservative_update != other.config.conservative_update
+        ):
+            raise ValueError('sketches must share width, depth, seed, and update mode to merge')
         for row in range(self.depth):
             for column in range(self.width):
                 self.tables[row][column] += other.tables[row][column]
@@ -91,6 +126,7 @@ class CountMinSketch:
             'epsilon': self.config.epsilon,
             'delta': self.config.delta,
             'seed': self.config.seed,
+            'conservative_update': self.config.conservative_update,
             'width': self.width,
             'depth': self.depth,
             'total_count': self.total_count,
@@ -104,6 +140,7 @@ class CountMinSketch:
             epsilon=float(payload['epsilon']),
             delta=float(payload['delta']),
             seed=int(payload.get('seed', 0)),
+            conservative_update=bool(payload.get('conservative_update', False)),
         )
         sketch.tables = [list(map(int, row)) for row in payload['tables']]
         if len(sketch.tables) != sketch.depth or any(len(row) != sketch.width for row in sketch.tables):
@@ -113,8 +150,19 @@ class CountMinSketch:
         return sketch
 
 
-def build_sketch(items: Iterable[str], epsilon: float, delta: float, seed: int = 0) -> CountMinSketch:
-    sketch = CountMinSketch(epsilon=epsilon, delta=delta, seed=seed)
+def build_sketch(
+    items: Iterable[str],
+    epsilon: float,
+    delta: float,
+    seed: int = 0,
+    conservative_update: bool = False,
+) -> CountMinSketch:
+    sketch = CountMinSketch(
+        epsilon=epsilon,
+        delta=delta,
+        seed=seed,
+        conservative_update=conservative_update,
+    )
     for item in items:
         if item:
             sketch.add(item)
@@ -159,8 +207,21 @@ def sketch_core_size_bytes(sketch: CountMinSketch) -> int:
     return deep_size_bytes(sketch.tables)
 
 
-def benchmark_memory(items: Sequence[str], epsilon: float, delta: float, seed: int = 0, sample_size: int = 10) -> Dict[str, Any]:
-    sketch = build_sketch(items, epsilon=epsilon, delta=delta, seed=seed)
+def benchmark_memory(
+    items: Sequence[str],
+    epsilon: float,
+    delta: float,
+    seed: int = 0,
+    sample_size: int = 10,
+    conservative_update: bool = False,
+) -> Dict[str, Any]:
+    sketch = build_sketch(
+        items,
+        epsilon=epsilon,
+        delta=delta,
+        seed=seed,
+        conservative_update=conservative_update,
+    )
     exact_counter = Counter(items)
     top_items = exact_counter.most_common(max(0, sample_size))
 
@@ -187,6 +248,8 @@ def benchmark_memory(items: Sequence[str], epsilon: float, delta: float, seed: i
         'delta': delta,
         'width': sketch.width,
         'depth': sketch.depth,
+        'seed': seed,
+        'conservative_update': conservative_update,
         'exact_counter_bytes': exact_bytes,
         'sketch_core_bytes': sketch_core_bytes,
         'sketch_full_bytes': sketch_full_bytes,
@@ -202,6 +265,11 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--epsilon', type=float, default=0.02)
     parser.add_argument('--delta', type=float, default=0.01)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument(
+        '--conservative-update',
+        action='store_true',
+        help='Use conservative updates to reduce overestimation under collisions.',
+    )
 
     subparsers = parser.add_subparsers(dest='command', required=True)
 
@@ -234,9 +302,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == 'build':
-        sketch = build_sketch(load_tokens_from_file(args.input), epsilon=args.epsilon, delta=args.delta, seed=args.seed)
+        sketch = build_sketch(
+            load_tokens_from_file(args.input),
+            epsilon=args.epsilon,
+            delta=args.delta,
+            seed=args.seed,
+            conservative_update=args.conservative_update,
+        )
         save_sketch(args.output, sketch)
-        print(json.dumps({'output': str(args.output), 'total_count': sketch.total_count, 'width': sketch.width, 'depth': sketch.depth}, indent=2))
+        print(
+            json.dumps(
+                {
+                    'output': str(args.output),
+                    'total_count': sketch.total_count,
+                    'width': sketch.width,
+                    'depth': sketch.depth,
+                    'conservative_update': sketch.config.conservative_update,
+                },
+                indent=2,
+            )
+        )
         return 0
 
     if args.command == 'estimate':
@@ -244,6 +329,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = {
             'total_count': sketch.total_count,
             'error_bound': sketch.error_bound(),
+            'conservative_update': sketch.config.conservative_update,
             'estimates': {item: sketch.estimate(item) for item in args.items},
         }
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -251,7 +337,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == 'heavy-hitters':
         sketch = load_sketch(args.sketch)
-        print(json.dumps({'threshold': args.threshold, 'heavy_hitters': sketch.heavy_hitters(args.threshold)}, indent=2))
+        print(
+            json.dumps(
+                {
+                    'threshold': args.threshold,
+                    'conservative_update': sketch.config.conservative_update,
+                    'heavy_hitters': sketch.heavy_hitters(args.threshold),
+                },
+                indent=2,
+            )
+        )
         return 0
 
     if args.command == 'merge':
@@ -259,7 +354,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         right = load_sketch(args.right)
         left.merge(right)
         save_sketch(args.output, left)
-        print(json.dumps({'output': str(args.output), 'total_count': left.total_count}, indent=2))
+        print(
+            json.dumps(
+                {
+                    'output': str(args.output),
+                    'total_count': left.total_count,
+                    'conservative_update': left.config.conservative_update,
+                },
+                indent=2,
+            )
+        )
         return 0
 
     if args.command == 'benchmark-memory':
@@ -269,6 +373,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             delta=args.delta,
             seed=args.seed,
             sample_size=args.sample_size,
+            conservative_update=args.conservative_update,
         )
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0

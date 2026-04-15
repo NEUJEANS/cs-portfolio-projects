@@ -38,12 +38,20 @@ def test_merge_rejects_incompatible_sketches():
         left.merge(right)
 
 
+def test_merge_rejects_different_update_modes():
+    left = build_sketch(['a'], epsilon=0.05, delta=0.01, seed=1, conservative_update=False)
+    right = build_sketch(['a'], epsilon=0.05, delta=0.01, seed=1, conservative_update=True)
+    with pytest.raises(ValueError):
+        left.merge(right)
+
+
 def test_round_trip_json_serialization(tmp_path: Path):
-    sketch = build_sketch(['alpha', 'beta', 'alpha'], epsilon=0.05, delta=0.01, seed=3)
+    sketch = build_sketch(['alpha', 'beta', 'alpha'], epsilon=0.05, delta=0.01, seed=3, conservative_update=True)
     output = tmp_path / 'sketch.json'
     save_sketch(output, sketch)
     loaded = load_sketch(output)
     assert loaded.total_count == 3
+    assert loaded.config.conservative_update is True
     assert loaded.estimate('alpha') == sketch.estimate('alpha')
     assert loaded.heavy_hitters(2)[0]['item'] == 'alpha'
 
@@ -53,12 +61,29 @@ def test_cli_build_estimate_and_heavy_hitters(tmp_path: Path):
     tokens.write_text('red blue red green red blue', encoding='utf-8')
     sketch_file = tmp_path / 'cms.json'
 
-    subprocess.run([sys.executable, str(SCRIPT), '--epsilon', '0.05', '--delta', '0.01', 'build', str(tokens), '--output', str(sketch_file)], check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            '--epsilon',
+            '0.05',
+            '--delta',
+            '0.01',
+            '--conservative-update',
+            'build',
+            str(tokens),
+            '--output',
+            str(sketch_file),
+        ],
+        check=True,
+    )
     estimate = subprocess.run([sys.executable, str(SCRIPT), 'estimate', str(sketch_file), 'red', 'blue'], check=True, capture_output=True, text=True)
     payload = json.loads(estimate.stdout)
+    assert payload['conservative_update'] is True
     assert payload['estimates']['red'] >= 3
     hitters = subprocess.run([sys.executable, str(SCRIPT), 'heavy-hitters', str(sketch_file), '--threshold', '2'], check=True, capture_output=True, text=True)
     hitters_payload = json.loads(hitters.stdout)
+    assert hitters_payload['conservative_update'] is True
     assert hitters_payload['heavy_hitters'][0]['item'] == 'red'
 
 
@@ -69,15 +94,38 @@ def test_error_bound_tracks_total_count_growth():
     assert sketch.error_bound() == pytest.approx(1.0)
 
 
+def test_conservative_update_only_increments_minimum_cells():
+    standard = CountMinSketch(epsilon=1.0, delta=0.2, conservative_update=False)
+    conservative = CountMinSketch(epsilon=1.0, delta=0.2, conservative_update=True)
+
+    standard._index_for = lambda item, row: 0
+    conservative._index_for = lambda item, row: 0
+
+    standard.tables = [[5], [1]]
+    conservative.tables = [[5], [1]]
+    standard.total_count = 6
+    conservative.total_count = 6
+
+    standard.add('anchor')
+    conservative.add('anchor')
+
+    assert [row[0] for row in standard.tables] == [6, 2]
+    assert [row[0] for row in conservative.tables] == [5, 2]
+    assert standard.estimate('anchor') == 2
+    assert conservative.estimate('anchor') == 2
+
+
 def test_benchmark_memory_reports_exact_and_sketch_sizes():
     payload = benchmark_memory(
         ['hot'] * 10 + ['warm'] * 5 + ['cold'] * 2,
         epsilon=0.05,
         delta=0.01,
         sample_size=2,
+        conservative_update=True,
     )
     assert payload['stream_items'] == 17
     assert payload['unique_items'] == 3
+    assert payload['conservative_update'] is True
     assert payload['exact_counter_bytes'] > 0
     assert payload['sketch_core_bytes'] > 0
     assert len(payload['top_item_estimates']) == 2
@@ -89,7 +137,19 @@ def test_cli_benchmark_memory(tmp_path: Path):
     tokens = tmp_path / 'tokens.txt'
     tokens.write_text('alpha beta alpha gamma alpha beta delta', encoding='utf-8')
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), '--epsilon', '0.05', '--delta', '0.01', 'benchmark-memory', str(tokens), '--sample-size', '3'],
+        [
+            sys.executable,
+            str(SCRIPT),
+            '--epsilon',
+            '0.05',
+            '--delta',
+            '0.01',
+            '--conservative-update',
+            'benchmark-memory',
+            str(tokens),
+            '--sample-size',
+            '3',
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -97,5 +157,6 @@ def test_cli_benchmark_memory(tmp_path: Path):
     payload = json.loads(result.stdout)
     assert payload['stream_items'] == 7
     assert payload['unique_items'] == 4
+    assert payload['conservative_update'] is True
     assert payload['top_item_estimates'][0]['item'] == 'alpha'
     assert payload['sketch_core_bytes'] <= payload['sketch_full_bytes']
