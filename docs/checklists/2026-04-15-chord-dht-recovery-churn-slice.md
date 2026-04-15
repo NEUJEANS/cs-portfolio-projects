@@ -17,7 +17,7 @@
 - [x] review pass 2
 - [x] review pass 3
 - [x] secret scan
-- [ ] commit, push, wrap-up
+- [x] commit, push, wrap-up
 
 ## Notes
 - Recovery should only apply to nodes from the original ring; brand-new joined nodes still use `join` if they return later.
