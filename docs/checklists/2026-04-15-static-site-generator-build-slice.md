@@ -9,5 +9,6 @@
 - [x] run tests and a manual CLI smoke test
 - [x] do 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit and push
-- [ ] write run wrap-up
+- [x] commit changes for this slice
+- [x] write run wrap-up
+- [ ] push to origin/main
