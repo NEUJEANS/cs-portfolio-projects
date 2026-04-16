@@ -17,8 +17,8 @@
 - [x] review pass 1
 - [x] review pass 2
 - [x] review pass 3
-- [ ] secret scan
-- [ ] commit, push, wrap-up
+- [x] secret scan
+- [x] commit, push, wrap-up
 
 ## Notes
 - Keep the export deterministic by reusing the existing benchmark payload instead of rebuilding benchmark logic in parallel.
