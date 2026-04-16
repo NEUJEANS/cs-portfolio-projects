@@ -15,7 +15,7 @@ This project shows practical compiler-style text processing, file-system automat
 - converts Markdown files into standalone HTML pages while preserving nested content folders
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
-- renders a focused Markdown subset: headings, paragraphs, bullet lists, links, images, inline code, bold, and italics
+- renders a focused Markdown subset: headings, paragraphs, bullet lists, links, images, inline code, fenced code blocks, bold, and italics
 - recursively copies non-Markdown assets into the output directory so screenshots, CSS files, and downloadable artifacts ship with the site
 - preserves nested page paths and rewrites internal Markdown `.md` links into working relative `.html` links across folders
 - applies a clean shared HTML layout and inline stylesheet
@@ -55,6 +55,15 @@ Then build the site:
 node sitegen.js content dist
 ```
 
+Fenced code blocks are preserved for technical write-ups:
+
+~~~md
+```python
+from pathlib import Path
+print(Path('portfolio').resolve())
+```
+~~~
+
 Generated files are written to `dist/` and the CLI prints a short build summary.
 
 ## Test
@@ -70,6 +79,6 @@ node --test test_static_site_generator.js
 
 ## Future Improvements
 - blog collections such as date-based post indexes or tag archive pages
-- syntax highlighting and fenced code blocks
+- syntax highlighting themes and line-number support for fenced code blocks
 - shared header/footer partials loaded from template files
 - incremental rebuilds or a watch mode for faster authoring

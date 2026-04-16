@@ -32,8 +32,8 @@ test('parseFrontMatter extracts metadata and body', () => {
   assert.equal(parsed.body, '# Heading');
 });
 
-test('markdownToHtml renders headings, lists, emphasis, code, links, and images', () => {
-  const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))');
+test('markdownToHtml renders headings, lists, emphasis, code, links, images, and fenced blocks', () => {
+  const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))\n\n```js\nconst x = 1 < 2;\nconsole.log(x);\n```');
   assert.match(html, /<h1>Title<\/h1>/);
   assert.match(html, /<img src="assets\/graph.png" alt="Diagram" loading="lazy">/);
   assert.match(html, /<ul>/);
@@ -41,6 +41,7 @@ test('markdownToHtml renders headings, lists, emphasis, code, links, and images'
   assert.match(html, /<code>code<\/code>/);
   assert.match(html, /<a href="https:\/\/example.com">docs<\/a>/);
   assert.match(html, /<a href="#">bad<\/a>/);
+  assert.match(html, /<pre><code class="language-js">const x = 1 &lt; 2;\nconsole\.log\(x\);<\/code><\/pre>/);
 });
 
 test('replaceMarkdownImages sanitizes unsafe image URLs', () => {
@@ -111,6 +112,11 @@ test('copyStaticAssets preserves nested asset paths', () => {
   assert.equal(fs.readFileSync(path.join(outputDir, 'assets', 'styles.css'), 'utf8'), 'body { color: red; }');
 });
 
+test('markdownToHtml closes an unclosed fenced code block at end of document', () => {
+  const html = markdownToHtml('```python\nprint("hi")');
+  assert.match(html, /<pre><code class="language-python">print\(&quot;hi&quot;\)<\/code><\/pre>/);
+});
+
 test('buildSite writes nested pages, relative nav links, and copied assets', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
@@ -143,6 +149,13 @@ tags: [portfolio, docs]
 
 ![Hero](../images/hero.png)
 
+
+test command:
+
+\`\`\`bash
+node sitegen.js content dist
+\`\`\`
+
 Return [home](../index.md).`,
     'utf8'
   );
@@ -162,6 +175,7 @@ Return [home](../index.md).`,
   assert.match(setupHtml, /<a href="\.\.\/index.html">Home<\/a>/);
   assert.match(setupHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
   assert.match(setupHtml, /<img src="\.\.\/images\/hero.png" alt="Hero" loading="lazy">/);
+  assert.match(setupHtml, /<pre><code class="language-bash">node sitegen\.js content dist<\/code><\/pre>/);
   assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
   assert.match(setupHtml, /<span>portfolio<\/span><span>docs<\/span>/);
   assert.equal(fs.readFileSync(path.join(outputDir, 'images', 'hero.png'), 'utf8'), 'png-data');

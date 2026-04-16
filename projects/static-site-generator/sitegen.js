@@ -256,6 +256,8 @@ function markdownToHtml(markdown, page) {
   const parts = [];
   let paragraph = [];
   let listItems = [];
+  let codeFence = null;
+  let codeLines = [];
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
@@ -269,7 +271,32 @@ function markdownToHtml(markdown, page) {
     listItems = [];
   };
 
+  const flushCodeBlock = () => {
+    if (codeFence === null) return;
+    const languageClass = codeFence ? ` class="language-${escapeHtml(codeFence)}"` : '';
+    parts.push(`<pre><code${languageClass}>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+    codeFence = null;
+    codeLines = [];
+  };
+
   for (const rawLine of lines) {
+    const fenceMatch = /^```\s*([^`]*)$/.exec(rawLine.trim());
+    if (fenceMatch) {
+      if (codeFence !== null) {
+        flushCodeBlock();
+      } else {
+        flushParagraph();
+        flushList();
+        codeFence = fenceMatch[1].trim();
+      }
+      continue;
+    }
+
+    if (codeFence !== null) {
+      codeLines.push(rawLine);
+      continue;
+    }
+
     const line = rawLine.trim();
 
     if (!line) {
@@ -300,6 +327,7 @@ function markdownToHtml(markdown, page) {
 
   flushParagraph();
   flushList();
+  flushCodeBlock();
 
   return parts.join('\n');
 }
@@ -343,6 +371,8 @@ function renderTemplate(page, navigation, contentHtml) {
       main { display: grid; gap: 1rem; }
       img { max-width: 100%; height: auto; border-radius: 0.75rem; }
       code { background: #9992; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
+      pre { overflow-x: auto; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 0.85rem; }
+      pre code { display: block; background: transparent; padding: 0; border-radius: 0; }
       .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
       .tags span { font-size: 0.9rem; background: #9992; padding: 0.2rem 0.55rem; border-radius: 999px; }
       footer { margin-top: 2rem; font-size: 0.9rem; color: #666; }
