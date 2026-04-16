@@ -61,9 +61,13 @@ class DiskScheduler:
         if normalized == 'sstf':
             return self._sstf()
         if normalized == 'scan':
-            return self._scan(circular=False)
+            return self._elevator(name='scan', circular=False, look=False)
         if normalized == 'cscan':
-            return self._scan(circular=True)
+            return self._elevator(name='cscan', circular=True, look=False)
+        if normalized == 'look':
+            return self._elevator(name='look', circular=False, look=True)
+        if normalized == 'clook':
+            return self._elevator(name='clook', circular=True, look=True)
         raise ValueError(f'Unsupported algorithm: {algorithm}')
 
     def compare(self, algorithms: Iterable[str]) -> List[SimulationResult]:
@@ -89,62 +93,134 @@ class DiskScheduler:
 
         return self._result('sstf', order, path)
 
-    def _scan(self, circular: bool) -> SimulationResult:
+    def _elevator(self, *, name: str, circular: bool, look: bool) -> SimulationResult:
         start = self.request.start
         lower = sorted(value for value in self.request.requests if value < start)
         higher = sorted(value for value in self.request.requests if value >= start)
         path = [start]
 
         if not self.request.requests:
-            return self._result('cscan' if circular else 'scan', [], path)
+            return self._result(name, [], path)
 
         if self.request.direction == 'up':
-            if circular:
-                order = higher + lower
-                if higher:
-                    path.extend(higher)
-                path.append(self.request.max_cylinder)
-                if lower:
-                    path.append(0)
-                    path.extend(lower)
-            else:
-                order = higher + list(reversed(lower))
-                if higher:
-                    path.extend(higher)
-                if lower:
-                    path.append(self.request.max_cylinder)
-                    path.extend(reversed(lower))
-                elif higher:
-                    path.append(self.request.max_cylinder)
-                elif path[-1] != self.request.max_cylinder:
-                    path.append(self.request.max_cylinder)
+            order, path = self._upward_elevator(path, lower, higher, circular=circular, look=look)
         else:
-            if circular:
-                order = list(reversed(lower)) + list(reversed(higher))
-                if lower:
-                    path.extend(reversed(lower))
-                path.append(0)
-                if higher:
-                    path.append(self.request.max_cylinder)
-                    path.extend(reversed(higher))
-            else:
-                order = list(reversed(lower)) + higher
-                if lower:
-                    path.extend(reversed(lower))
-                if higher:
-                    path.append(0)
-                    path.extend(higher)
-                elif lower:
-                    path.append(0)
-                elif path[-1] != 0:
-                    path.append(0)
+            order, path = self._downward_elevator(path, lower, higher, circular=circular, look=look)
 
         deduped_path = [path[0]]
         for point in path[1:]:
             if point != deduped_path[-1]:
                 deduped_path.append(point)
 
-        return self._result('cscan' if circular else 'scan', order, deduped_path)
+        return self._result(name, order, deduped_path)
+
+    def _upward_elevator(
+        self,
+        path: List[int],
+        lower: List[int],
+        higher: List[int],
+        *,
+        circular: bool,
+        look: bool,
+    ) -> tuple[List[int], List[int]]:
+        if circular:
+            if higher:
+                order = higher + lower
+                path.extend(higher)
+                if lower:
+                    if look:
+                        path.extend(lower)
+                    else:
+                        path.append(self.request.max_cylinder)
+                        path.append(0)
+                        path.extend(lower)
+                elif not look and path[-1] != self.request.max_cylinder:
+                    path.append(self.request.max_cylinder)
+                return order, path
+
+            order = list(lower)
+            if look:
+                path.extend(lower)
+            else:
+                path.append(self.request.max_cylinder)
+                path.append(0)
+                path.extend(lower)
+            return order, path
+
+        if higher:
+            order = higher + list(reversed(lower))
+            path.extend(higher)
+            if lower:
+                if look:
+                    path.extend(reversed(lower))
+                else:
+                    path.append(self.request.max_cylinder)
+                    path.extend(reversed(lower))
+            elif not look and path[-1] != self.request.max_cylinder:
+                path.append(self.request.max_cylinder)
+            return order, path
+
+        order = list(reversed(lower))
+        if look:
+            path.extend(reversed(lower))
+        else:
+            path.append(self.request.max_cylinder)
+            path.extend(reversed(lower))
+        return order, path
+
+    def _downward_elevator(
+        self,
+        path: List[int],
+        lower: List[int],
+        higher: List[int],
+        *,
+        circular: bool,
+        look: bool,
+    ) -> tuple[List[int], List[int]]:
+        if circular:
+            if lower:
+                order = list(reversed(lower)) + list(reversed(higher))
+                path.extend(reversed(lower))
+                if higher:
+                    if look:
+                        path.extend(reversed(higher))
+                    else:
+                        path.append(0)
+                        path.append(self.request.max_cylinder)
+                        path.extend(reversed(higher))
+                elif not look and path[-1] != 0:
+                    path.append(0)
+                return order, path
+
+            order = list(reversed(higher))
+            if look:
+                path.extend(reversed(higher))
+            else:
+                path.append(0)
+                path.append(self.request.max_cylinder)
+                path.extend(reversed(higher))
+            return order, path
+
+        if lower:
+            order = list(reversed(lower)) + higher
+            path.extend(reversed(lower))
+            if higher:
+                if look:
+                    path.extend(higher)
+                else:
+                    path.append(0)
+                    path.extend(higher)
+            elif not look and path[-1] != 0:
+                path.append(0)
+            return order, path
+
+        order = list(higher)
+        if look:
+            path.extend(higher)
+        else:
+            path.append(0)
+            path.extend(higher)
+        return order, path
 
     def _result(self, algorithm: str, order: List[int], path: List[int]) -> SimulationResult:
         total = sum(abs(right - left) for left, right in zip(path, path[1:]))
@@ -173,19 +249,22 @@ def load_request(path: Path) -> SimulationRequest:
 
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Simulate classic disk scheduling algorithms.')
-    parser.add_argument('--input', type=Path, help='Path to JSON request payload.')
-    parser.add_argument('--start', type=int, default=50)
-    parser.add_argument('--max-cylinder', type=int, default=199)
-    parser.add_argument('--direction', choices=['up', 'down'], default='up')
-    parser.add_argument('--requests', nargs='*', type=int, default=[])
+    algorithms = ['fcfs', 'sstf', 'scan', 'cscan', 'look', 'clook']
+
+    shared = argparse.ArgumentParser(add_help=False)
+    shared.add_argument('--input', type=Path, help='Path to JSON request payload.')
+    shared.add_argument('--start', type=int, default=50)
+    shared.add_argument('--max-cylinder', type=int, default=199)
+    shared.add_argument('--direction', choices=['up', 'down'], default='up')
+    shared.add_argument('--requests', nargs='*', type=int, default=[])
 
     subparsers = parser.add_subparsers(dest='command', required=True)
 
-    simulate_parser = subparsers.add_parser('simulate', help='Run one scheduling algorithm.')
-    simulate_parser.add_argument('--algorithm', choices=['fcfs', 'sstf', 'scan', 'cscan'], required=True)
+    simulate_parser = subparsers.add_parser('simulate', parents=[shared], help='Run one scheduling algorithm.')
+    simulate_parser.add_argument('--algorithm', choices=algorithms, required=True)
 
-    compare_parser = subparsers.add_parser('compare', help='Compare multiple scheduling algorithms.')
-    compare_parser.add_argument('--algorithms', nargs='+', choices=['fcfs', 'sstf', 'scan', 'cscan'], required=True)
+    compare_parser = subparsers.add_parser('compare', parents=[shared], help='Compare multiple scheduling algorithms.')
+    compare_parser.add_argument('--algorithms', nargs='+', choices=algorithms, required=True)
 
     return parser
 
