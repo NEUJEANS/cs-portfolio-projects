@@ -261,5 +261,5 @@
 - [x] extend project-level and repo-level tests for programmatic and CLI inspection artifacts with the richer metadata
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider surfacing per-hook docstring excerpts or source line numbers in a future run
