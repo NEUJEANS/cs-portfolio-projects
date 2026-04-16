@@ -23,6 +23,7 @@
 - [x] Add a lightweight README command audit script for docs drift
 
 ## Next slice ideas
-- [ ] Plot CSV benchmark output into a small chart artifact for README embedding
+- [x] Plot CSV benchmark output into a small chart artifact for README embedding
 - [x] Add an `explain` mode that narrates why branches were pruned for a single query
 - [ ] Add workloads that model schedule windows vs random intervals for more realistic comparisons
+- [ ] Add point-query benchmark mode so stabbing queries have the same portfolio evidence as overlap queries

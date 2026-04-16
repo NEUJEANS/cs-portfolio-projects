@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import random
 import shutil
@@ -9,6 +10,7 @@ import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Iterable, Sequence
+from xml.sax.saxutils import escape as xml_escape
 
 
 @dataclass(frozen=True, order=True)
@@ -582,6 +584,126 @@ def render_benchmark_series_csv(rows: Sequence[dict[str, object]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def parse_benchmark_series_csv(csv_text: str) -> list[dict[str, object]]:
+    reader = csv.DictReader(csv_text.splitlines())
+    rows: list[dict[str, object]] = []
+    int_fields = {"interval_count", "query_count", "seed", "tree_height", "worst_nodes_visited"}
+    float_fields = {"tree_average_ms", "naive_average_ms", "speedup_vs_naive", "average_nodes_visited", "average_visit_ratio"}
+    bool_fields = {"same_results", "valid"}
+    for raw in reader:
+        row: dict[str, object] = {}
+        for key, value in raw.items():
+            if value is None:
+                row[key] = None
+            elif key in int_fields:
+                row[key] = int(value)
+            elif key in float_fields:
+                row[key] = None if value == "None" else float(value)
+            elif key in bool_fields:
+                row[key] = value.lower() == "true"
+            else:
+                row[key] = value
+        rows.append(row)
+    return rows
+
+
+def render_benchmark_series_svg(rows: Sequence[dict[str, object]], *, title: str = "Interval tree benchmark series") -> str:
+    if not rows:
+        raise ValueError("benchmark chart requires at least one row")
+
+    interval_counts = [int(row["interval_count"]) for row in rows]
+    tree_values = [float(row["tree_average_ms"]) for row in rows]
+    naive_values = [float(row["naive_average_ms"]) for row in rows]
+    speedups = [float(row["speedup_vs_naive"]) for row in rows if row.get("speedup_vs_naive") is not None]
+
+    width = 960
+    height = 540
+    left = 90
+    right = 40
+    top = 90
+    bottom = 90
+    chart_width = width - left - right
+    chart_height = height - top - bottom
+
+    combined = tree_values + naive_values
+    min_value = min(combined)
+    max_value = max(combined)
+    if max_value == min_value:
+        max_value = min_value + 1.0
+
+    def project(values: Sequence[float]) -> list[tuple[float, float]]:
+        if len(values) == 1:
+            x_positions = [left + chart_width / 2]
+        else:
+            x_positions = [left + chart_width * index / (len(values) - 1) for index in range(len(values))]
+        return [
+            (x, top + chart_height - ((value - min_value) / (max_value - min_value)) * chart_height)
+            for x, value in zip(x_positions, values)
+        ]
+
+    tree_points = project(tree_values)
+    naive_points = project(naive_values)
+
+    def point_markup(points: Sequence[tuple[float, float]], color: str) -> str:
+        polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
+        circles = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="{color}" />' for x, y in points)
+        return f'<polyline fill="none" stroke="{color}" stroke-width="3" points="{polyline}" />{circles}'
+
+    y_ticks = []
+    for step in range(5):
+        ratio = step / 4
+        value = max_value - (max_value - min_value) * ratio
+        y = top + chart_height * ratio
+        y_ticks.append(
+            f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" stroke="#e2e8f0" stroke-width="1" />'
+            f'<text x="{left-12}" y="{y+4:.1f}" font-size="12" text-anchor="end" fill="#475569">{value:.4f} ms</text>'
+        )
+
+    x_ticks = []
+    for index, interval_count in enumerate(interval_counts):
+        x = left + chart_width / 2 if len(interval_counts) == 1 else left + chart_width * index / (len(interval_counts) - 1)
+        x_ticks.append(
+            f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{height-bottom}" stroke="#f1f5f9" stroke-width="1" />'
+            f'<text x="{x:.1f}" y="{height-bottom+24}" font-size="12" text-anchor="middle" fill="#475569">{interval_count}</text>'
+        )
+
+    subtitle = (
+        f"{len(rows)} workload sizes • avg speedup {sum(speedups)/len(speedups):.2f}× over naive scan"
+        if speedups else
+        f"{len(rows)} workload sizes"
+    )
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">
+  <title id="title">{xml_escape(title)}</title>
+  <desc id="desc">Line chart comparing interval-tree and naive overlap-query timings as interval counts grow.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" rx="24" />
+  <text x="{left}" y="42" font-size="28" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">{xml_escape(title)}</text>
+  <text x="{left}" y="68" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="#475569">{xml_escape(subtitle)}</text>
+  <rect x="{left}" y="{top}" width="{chart_width}" height="{chart_height}" fill="#ffffff" stroke="#cbd5e1" rx="18" />
+  {''.join(y_ticks)}
+  {''.join(x_ticks)}
+  <line x1="{left}" y1="{height-bottom}" x2="{width-right}" y2="{height-bottom}" stroke="#0f172a" stroke-width="1.5" />
+  <line x1="{left}" y1="{top}" x2="{left}" y2="{height-bottom}" stroke="#0f172a" stroke-width="1.5" />
+  {point_markup(naive_points, '#dc2626')}
+  {point_markup(tree_points, '#2563eb')}
+  <rect x="{width-260}" y="28" width="214" height="58" rx="12" fill="#ffffff" stroke="#cbd5e1" />
+  <line x1="{width-240}" y1="50" x2="{width-200}" y2="50" stroke="#2563eb" stroke-width="3" />
+  <circle cx="{width-220}" cy="50" r="4.5" fill="#2563eb" />
+  <text x="{width-190}" y="55" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="#0f172a">interval tree</text>
+  <line x1="{width-240}" y1="71" x2="{width-200}" y2="71" stroke="#dc2626" stroke-width="3" />
+  <circle cx="{width-220}" cy="71" r="4.5" fill="#dc2626" />
+  <text x="{width-190}" y="76" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="#0f172a">naive scan</text>
+  <text x="{left + chart_width / 2}" y="{height - 28}" font-size="14" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" fill="#334155">interval count</text>
+  <text x="24" y="{top + chart_height / 2}" font-size="14" font-family="Helvetica, Arial, sans-serif" fill="#334155" transform="rotate(-90 24 {top + chart_height / 2})">average query time (ms)</text>
+</svg>'''
+
+
+def write_benchmark_chart_from_rows(rows: Sequence[dict[str, object]], output_path: Path, *, title: str = "Interval tree benchmark series") -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_benchmark_series_svg(rows, title=title), encoding="utf-8")
+    return output_path
+
+
 
 def command_demo(_: argparse.Namespace) -> dict[str, object]:
     intervals = [
@@ -727,6 +849,33 @@ def command_benchmark_series(args: argparse.Namespace) -> dict[str, object]:
         payload["csv_artifact"] = str(output_csv)
     return payload
 
+def command_benchmark_chart(args: argparse.Namespace) -> dict[str, object]:
+    output_path = Path(args.output_svg)
+    if args.input_csv:
+        rows = parse_benchmark_series_csv(Path(args.input_csv).read_text(encoding="utf-8"))
+    else:
+        interval_counts = [int(part.strip()) for part in args.interval_counts.split(",") if part.strip()]
+        if not interval_counts:
+            raise ValueError("--interval-counts must include at least one positive integer")
+        rows = benchmark_overlap_series(
+            interval_counts=interval_counts,
+            query_count=args.queries,
+            seed=args.seed,
+            start_max=args.start_max,
+            width_max=args.width_max,
+            query_width_max=args.query_width_max,
+        )
+    artifact = write_benchmark_chart_from_rows(rows, output_path, title=args.title)
+    return {
+        "command": "benchmark-chart",
+        "title": args.title,
+        "point_count": len(rows),
+        "artifact": {"path": str(artifact), "format": "svg"},
+        "source_csv": args.input_csv,
+        "rows": rows,
+    }
+
+
 
 def render_query_trace_artifact(*, dot_text: str, output_path: Path, artifact_format: str) -> Path:
     artifact_format = artifact_format.lower()
@@ -852,6 +1001,25 @@ def main() -> None:
     benchmark_series_parser.add_argument("--output-json", help="optional path to write the full JSON payload")
     benchmark_series_parser.add_argument("--output-csv", help="optional path to write a compact CSV summary")
     benchmark_series_parser.set_defaults(handler=command_benchmark_series)
+
+    benchmark_chart_parser = subparsers.add_parser(
+        "benchmark-chart",
+        help="render a small SVG chart from a benchmark-series CSV artifact or a freshly generated series",
+    )
+    benchmark_chart_parser.add_argument("--input-csv", help="optional CSV artifact generated by benchmark-series")
+    benchmark_chart_parser.add_argument(
+        "--interval-counts",
+        default="100,250,500,1000",
+        help="comma-separated interval counts to benchmark when --input-csv is omitted",
+    )
+    benchmark_chart_parser.add_argument("--queries", type=int, default=250, help="number of synthetic queries per run")
+    benchmark_chart_parser.add_argument("--seed", type=int, default=7, help="base random seed for reproducibility")
+    benchmark_chart_parser.add_argument("--start-max", type=int, default=5000, help="max generated interval/query start")
+    benchmark_chart_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
+    benchmark_chart_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
+    benchmark_chart_parser.add_argument("--title", default="Interval tree benchmark series", help="chart title")
+    benchmark_chart_parser.add_argument("--output-svg", required=True, help="path to write the SVG chart artifact")
+    benchmark_chart_parser.set_defaults(handler=command_benchmark_chart)
 
     trace_parser = subparsers.add_parser(
         "trace",

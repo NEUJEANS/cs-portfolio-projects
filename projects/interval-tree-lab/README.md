@@ -15,6 +15,7 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 - find any overlap, find all overlaps, and point stabbing queries
 - reproducible synthetic benchmark that compares pruned interval-tree searches versus naive scans
 - benchmark-series command that scales workloads across multiple interval counts and can write JSON/CSV artifacts for portfolio evidence
+- benchmark-chart command that turns a checked-in CSV benchmark snapshot into a small SVG chart for README/portfolio embedding
 - per-query node-visit stats for making pruning behavior visible in JSON output
 - bundled `sample_intervals.json` artifact for quick inspection and demo data
 - validation for BST ordering and `max_end` correctness
@@ -73,6 +74,12 @@ Generate a portfolio-ready benchmark series with JSON and CSV artifacts:
 python3 projects/interval-tree-lab/interval_tree_lab.py benchmark-series --interval-counts 100,250,500,1000 --queries 250 --output-json artifacts/interval-tree-benchmark-series.json --output-csv artifacts/interval-tree-benchmark-series.csv
 ```
 
+Render a lightweight SVG chart from a benchmark-series CSV artifact:
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py benchmark-chart --input-csv artifacts/interval-tree-benchmark-series.csv --output-svg docs/artifacts/interval-tree-benchmark-series.svg
+```
+
 Export a Graphviz DOT trace for one query (render later with Graphviz if desired):
 
 ```bash
@@ -91,11 +98,15 @@ Explain the pruning decisions step by step for one overlap query:
 python3 projects/interval-tree-lab/interval_tree_lab.py explain 7-18 0-3:warmup 5-8:backup 6-10:deploy 15-23:analytics 17-19:alerts
 ```
 
-## Example artifact
+## Example artifacts
+
+![Interval tree benchmark chart](../../docs/artifacts/interval-tree-benchmark-series.svg)
+
+The benchmark chart turns the checked-in CSV series into a simple SVG you can embed directly in a portfolio write-up without extra plotting dependencies.
 
 ![Interval tree trace example](../../docs/artifacts/interval-tree-trace-example.svg)
 
-The checked-in SVG gives you a portfolio-ready screenshot even on machines that do not have Graphviz installed. You can still regenerate DOT/SVG/PNG artifacts locally with the `trace --output` command when `dot` is available.
+The checked-in trace SVG gives you a portfolio-ready screenshot even on machines that do not have Graphviz installed. You can still regenerate DOT/SVG/PNG artifacts locally with the `trace --output` command when `dot` is available.
 
 ## Test
 
@@ -119,6 +130,7 @@ python3 scripts/audit_interval_tree_readme_commands.py
 - Validation checks both BST ordering and `max_end` propagation so augmentation bugs are easy to catch.
 - The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan overlap results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
 - The `benchmark-series` command intentionally increments the seed per row so each interval count gets a reproducible but non-identical workload snapshot.
+- The `benchmark-chart` command can either render directly from a fresh benchmark run or reuse a checked-in CSV artifact, which keeps the portfolio evidence reproducible and lightweight.
 - The `trace` command still emits DOT inline in JSON output, but can now also write DOT/SVG/PNG artifacts to disk when you want concrete portfolio assets.
 - The `explain` command turns one query into a step-by-step narrative that says why each subtree was searched or pruned, which is useful for interviews and README screenshots.
 - SVG/PNG rendering is optional and only requires Graphviz `dot` when you explicitly ask for a rendered artifact.
@@ -126,4 +138,4 @@ python3 scripts/audit_interval_tree_readme_commands.py
 ## Future improvements
 - add canned example artifact files under `docs/artifacts/` for a couple of canonical trace scenarios
 - add range-update or interval-assignment variants for scheduling-heavy demonstrations
-- add CSV/plot export for benchmark runs across multiple workload sizes
+- add workloads that mimic clustered meeting schedules instead of only uniform random intervals

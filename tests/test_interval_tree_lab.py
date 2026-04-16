@@ -21,6 +21,8 @@ benchmark_overlap_queries = interval_tree_lab.benchmark_overlap_queries
 benchmark_overlap_series = interval_tree_lab.benchmark_overlap_series
 parse_interval_spec = interval_tree_lab.parse_interval_spec
 render_benchmark_series_csv = interval_tree_lab.render_benchmark_series_csv
+parse_benchmark_series_csv = interval_tree_lab.parse_benchmark_series_csv
+render_benchmark_series_svg = interval_tree_lab.render_benchmark_series_svg
 render_query_trace_artifact = interval_tree_lab.render_query_trace_artifact
 command_trace = interval_tree_lab.command_trace
 
@@ -218,6 +220,119 @@ class IntervalTreeLabTests(unittest.TestCase):
             "interval_count,query_count,seed,tree_height,tree_average_ms,naive_average_ms,speedup_vs_naive,average_nodes_visited,worst_nodes_visited,average_visit_ratio,same_results,valid",
         )
         self.assertEqual(lines[1], "8,6,13,4,0.001,0.003,3.0,2.5,4,0.312,true,true")
+    def test_parse_benchmark_series_csv_round_trips_typed_rows(self) -> None:
+        csv_text = render_benchmark_series_csv(
+            [
+                {
+                    "interval_count": 8,
+                    "query_count": 6,
+                    "seed": 13,
+                    "tree_height": 4,
+                    "tree_average_ms": 0.001,
+                    "naive_average_ms": 0.003,
+                    "speedup_vs_naive": 3.0,
+                    "average_nodes_visited": 2.5,
+                    "worst_nodes_visited": 4,
+                    "average_visit_ratio": 0.312,
+                    "same_results": True,
+                    "valid": True,
+                }
+            ]
+        )
+        rows = parse_benchmark_series_csv(csv_text)
+        self.assertEqual(rows[0]["interval_count"], 8)
+        self.assertEqual(rows[0]["query_count"], 6)
+        self.assertEqual(rows[0]["speedup_vs_naive"], 3.0)
+        self.assertTrue(rows[0]["same_results"])
+
+    def test_render_benchmark_series_svg_contains_two_series(self) -> None:
+        svg = render_benchmark_series_svg(
+            [
+                {
+                    "interval_count": 100,
+                    "query_count": 40,
+                    "seed": 11,
+                    "tree_height": 7,
+                    "tree_average_ms": 0.012,
+                    "naive_average_ms": 0.043,
+                    "speedup_vs_naive": 3.583,
+                    "average_nodes_visited": 8.2,
+                    "worst_nodes_visited": 14,
+                    "average_visit_ratio": 0.082,
+                    "same_results": True,
+                    "valid": True,
+                },
+                {
+                    "interval_count": 250,
+                    "query_count": 40,
+                    "seed": 12,
+                    "tree_height": 8,
+                    "tree_average_ms": 0.018,
+                    "naive_average_ms": 0.097,
+                    "speedup_vs_naive": 5.389,
+                    "average_nodes_visited": 10.4,
+                    "worst_nodes_visited": 19,
+                    "average_visit_ratio": 0.042,
+                    "same_results": True,
+                    "valid": True,
+                },
+            ]
+        )
+        self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', svg)
+        self.assertGreaterEqual(svg.count('<polyline fill="none"'), 2)
+        self.assertIn('interval tree', svg)
+        self.assertIn('naive scan', svg)
+
+    def test_cli_benchmark_chart_can_render_from_csv_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            csv_target = pathlib.Path(tmpdir) / "interval-series.csv"
+            svg_target = pathlib.Path(tmpdir) / "interval-series.svg"
+            benchmark_series = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/interval-tree-lab/interval_tree_lab.py",
+                    "benchmark-series",
+                    "--interval-counts",
+                    "8,16",
+                    "--queries",
+                    "6",
+                    "--seed",
+                    "13",
+                    "--start-max",
+                    "40",
+                    "--width-max",
+                    "5",
+                    "--query-width-max",
+                    "6",
+                    "--output-csv",
+                    str(csv_target),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(csv_target.exists(), benchmark_series.stdout)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/interval-tree-lab/interval_tree_lab.py",
+                    "benchmark-chart",
+                    "--input-csv",
+                    str(csv_target),
+                    "--output-svg",
+                    str(svg_target),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "benchmark-chart")
+            self.assertEqual(payload["artifact"], {"path": str(svg_target), "format": "svg"})
+            self.assertEqual(payload["point_count"], 2)
+            self.assertTrue(svg_target.exists())
+            self.assertIn("<svg", svg_target.read_text(encoding="utf-8"))
+
 
     def test_export_query_trace_dot_marks_pruned_and_overlap_edges(self) -> None:
         tree = IntervalTree(
