@@ -18,7 +18,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- `dcd261d` — `Add GitHub source links to mini-mapreduce inspections`
+- `e34fdb9` — `Add GitHub source links to mini-mapreduce inspections`
 
 ## Next step
 - add optional commit-SHA-pinned source links for archival inspection reports so generated docs can stay stable even after the branch tip moves
