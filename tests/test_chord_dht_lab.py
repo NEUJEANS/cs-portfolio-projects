@@ -236,6 +236,26 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(comparison["reports"]["random"]["finger_repair_seed"], 29)
         self.assertEqual(comparison["failed_nodes"], ["echo"])
 
+    def test_render_benchmark_report_markdown_contains_case_table(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        benchmark = ring.benchmark_lookups(["compiler", "slides"], start_nodes=["alpha", "charlie"])
+        report = module.render_benchmark_report_markdown(benchmark)
+
+        self.assertIn("# Chord lookup benchmark", report)
+        self.assertIn("- Start nodes benchmarked: `alpha`, `charlie`", report)
+        self.assertIn("| Start node | Key | Responsible node | Chord hops | Linear hops | Hop savings |", report)
+        self.assertIn("`compiler`", report)
+
+    def test_render_benchmark_report_csv_contains_machine_readable_rows(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        benchmark = ring.benchmark_lookups(["compiler"], start_nodes=["alpha"])
+        report = module.render_benchmark_report_csv(benchmark)
+
+        self.assertIn("start_node,key,key_id,responsible_node,chord_hops,linear_hops,hop_savings,chord_route,linear_route", report)
+        self.assertIn("alpha,compiler", report)
+
     def test_render_stabilization_comparison_markdown_contains_summary_table(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
 
@@ -420,6 +440,52 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["command"], "benchmark")
         self.assertEqual(payload["start_nodes"], ["alpha", "charlie"])
         self.assertEqual(payload["summary"]["case_count"], 4)
+
+    def test_cli_benchmark_export_outputs_markdown(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "benchmark-export",
+                str(RING_PATH),
+                "compiler",
+                "slides",
+                "--start-node",
+                "alpha",
+                "--start-node",
+                "charlie",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("# Chord lookup benchmark", completed.stdout)
+        self.assertIn("- Start nodes benchmarked: `alpha`, `charlie`", completed.stdout)
+        self.assertIn("| Start node | Key | Responsible node | Chord hops | Linear hops | Hop savings |", completed.stdout)
+
+    def test_cli_benchmark_export_outputs_csv(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "benchmark-export",
+                str(RING_PATH),
+                "compiler",
+                "--start-node",
+                "alpha",
+                "--format",
+                "csv",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("start_node,key,key_id,responsible_node,chord_hops,linear_hops,hop_savings,chord_route,linear_route", completed.stdout)
+        self.assertIn("alpha,compiler", completed.stdout)
 
     def test_cli_resilience_supports_failure_simulation(self) -> None:
         completed = subprocess.run(

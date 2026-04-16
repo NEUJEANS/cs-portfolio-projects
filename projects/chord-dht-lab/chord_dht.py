@@ -979,6 +979,65 @@ def select_benchmark_start_nodes(
     raise ValueError(f"unsupported sample_mode {sample_mode!r}")
 
 
+def render_benchmark_report_markdown(benchmark: dict[str, object]) -> str:
+    summary = benchmark["summary"]
+    lines = [
+        "# Chord lookup benchmark",
+        "",
+        f"- Identifier bits: `{benchmark['m_bits']}`",
+        f"- Node count: `{benchmark['node_count']}`",
+        f"- Start nodes benchmarked: {', '.join(f'`{name}`' for name in benchmark['start_nodes'])}",
+        f"- Key count: `{len(benchmark['keys'])}`",
+        f"- Case count: `{summary['case_count']}`",
+        f"- Average Chord hops: `{summary['average_chord_hops']}`",
+        f"- Average linear hops: `{summary['average_linear_hops']}`",
+        f"- Total hop savings: `{summary['total_hop_savings']}`",
+        f"- Improved cases: `{summary['improved_cases']}`",
+        f"- Tied cases: `{summary['tied_cases']}`",
+        f"- Slower cases: `{summary['slower_cases']}`",
+        "",
+        "| Start node | Key | Responsible node | Chord hops | Linear hops | Hop savings | Chord route | Linear route |",
+        "| --- | --- | --- | ---: | ---: | ---: | --- | --- |",
+    ]
+    for case in benchmark["cases"]:
+        lines.append(
+            f"| `{case['start_node']}` | `{case['key']}` | `{case['responsible_node']}` | {case['chord_hops']} | {case['linear_hops']} | {case['hop_savings']} | {' → '.join(case['chord_route'])} | {' → '.join(case['linear_route'])} |"
+        )
+    return "\n".join(lines)
+
+
+def render_benchmark_report_csv(benchmark: dict[str, object]) -> str:
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "start_node",
+        "key",
+        "key_id",
+        "responsible_node",
+        "chord_hops",
+        "linear_hops",
+        "hop_savings",
+        "chord_route",
+        "linear_route",
+    ])
+    for case in benchmark["cases"]:
+        writer.writerow([
+            case["start_node"],
+            case["key"],
+            case["key_id"],
+            case["responsible_node"],
+            case["chord_hops"],
+            case["linear_hops"],
+            case["hop_savings"],
+            "->".join(case["chord_route"]),
+            "->".join(case["linear_route"]),
+        ])
+    return output.getvalue().strip()
+
+
 def render_stabilization_comparison_markdown(comparison: dict[str, object]) -> str:
     rows = comparison["comparison"]
     summary = comparison["summary"]
@@ -1269,6 +1328,26 @@ def parse_args() -> argparse.Namespace:
     )
     benchmark_parser.add_argument("--pretty", action="store_true")
 
+    benchmark_export_parser = subparsers.add_parser(
+        "benchmark-export",
+        help="render a lookup benchmark as Markdown or CSV for portfolio notes",
+    )
+    benchmark_export_parser.add_argument("ring_file", type=Path)
+    benchmark_export_parser.add_argument("keys", nargs="+", help="keys to benchmark")
+    benchmark_export_parser.add_argument(
+        "--start-node",
+        dest="start_nodes",
+        action="append",
+        default=None,
+        help="optional start node; may be provided multiple times",
+    )
+    benchmark_export_parser.add_argument(
+        "--format",
+        choices=["markdown", "csv"],
+        default="markdown",
+        help="report format for the rendered lookup benchmark",
+    )
+
     resilience_parser = subparsers.add_parser(
         "resilience",
         help="simulate successor-list replicas and key availability during node failures",
@@ -1551,6 +1630,16 @@ def main() -> None:
             "command": "benchmark",
             **ring.benchmark_lookups(args.keys, start_nodes=args.start_nodes),
         }
+    elif args.command == "benchmark-export":
+        ring = load_ring(args.ring_file)
+        benchmark = ring.benchmark_lookups(args.keys, start_nodes=args.start_nodes)
+        if args.format == "markdown":
+            print(render_benchmark_report_markdown(benchmark))
+            return
+        if args.format == "csv":
+            print(render_benchmark_report_csv(benchmark))
+            return
+        raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "resilience":
         ring = load_ring(args.ring_file)
         payload = {

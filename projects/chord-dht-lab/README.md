@@ -58,6 +58,27 @@ python3 projects/chord-dht-lab/chord_dht.py benchmark \
   --pretty
 ```
 
+Export the same benchmark as Markdown for a portfolio write-up:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py benchmark-export \
+  projects/chord-dht-lab/ring.json \
+  compiler slides final-project \
+  --start-node alpha \
+  --start-node charlie
+```
+
+Export the benchmark as CSV for charts or spreadsheets:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py benchmark-export \
+  projects/chord-dht-lab/ring.json \
+  compiler slides final-project \
+  --start-node alpha \
+  --start-node charlie \
+  --format csv
+```
+
 Generate a larger deterministic synthetic ring and workload for benchmark experiments:
 
 ```bash
@@ -257,5 +278,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 
 ## Future improvements
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
-- export benchmark summaries as CSV/Markdown tables for portfolio write-ups
 - compare multiple churn event files side by side to show workload sensitivity across different recovery patterns
