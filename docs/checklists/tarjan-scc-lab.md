@@ -78,5 +78,21 @@
 - [x] export the condensation DAG as Graphviz for portfolio screenshots
 - [x] export the condensation DAG as Mermaid for markdown-native demos
 - [x] compare Tarjan and Kosaraju implementations with the same fixtures and benchmark output
-- [ ] add in-degree/out-degree bottleneck summaries per SCC in the condensation graph
+- [x] add in-degree/out-degree bottleneck summaries per SCC in the condensation graph
 - [ ] support topological ordering groups directly in JSON for downstream tooling
+
+## Bottleneck summary slice (2026-04-16 02:11 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current Tarjan SCC lab for the weakest unfinished portfolio gap
+- [x] skip web research because SCC bottleneck summaries are already the clearest next extension in the README/checklist
+- [x] do a short SCC condensation self-check while planning the slice
+- [x] update/add checklist docs so the slice is resumable
+- [x] add incoming/outgoing component counts and bottleneck roles to SCC summary + condensation JSON
+- [x] expose the new metadata in the text explain flow and README examples
+- [x] extend automated coverage for source/bridge/sink/isolated labeling
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up

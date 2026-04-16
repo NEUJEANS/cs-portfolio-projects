@@ -70,8 +70,24 @@ def test_condensation_dag_collapses_internal_component_edges():
     components = tarjan_strongly_connected_components(graph)
     dag = condensation_dag(graph, components)
     assert dag['components'] == [
-        {'id': 'C0', 'nodes': ['A', 'B'], 'size': 2, 'topology_level': 0},
-        {'id': 'C1', 'nodes': ['C', 'D'], 'size': 2, 'topology_level': 1},
+        {
+            'id': 'C0',
+            'nodes': ['A', 'B'],
+            'size': 2,
+            'topology_level': 0,
+            'incoming_component_count': 0,
+            'outgoing_component_count': 1,
+            'bottleneck_role': 'source',
+        },
+        {
+            'id': 'C1',
+            'nodes': ['C', 'D'],
+            'size': 2,
+            'topology_level': 1,
+            'incoming_component_count': 1,
+            'outgoing_component_count': 0,
+            'bottleneck_role': 'sink',
+        },
     ]
     assert dag['edge_count'] == 1
     assert dag['level_count'] == 2
@@ -90,10 +106,22 @@ def test_condensation_dag_assigns_levels_by_longest_source_path():
     components = tarjan_strongly_connected_components(graph)
     dag = condensation_dag(graph, components)
     assert dag['components'] == [
-        {'id': 'C0', 'nodes': ['A', 'B'], 'size': 2, 'topology_level': 0},
-        {'id': 'C1', 'nodes': ['C', 'D'], 'size': 2, 'topology_level': 1},
-        {'id': 'C2', 'nodes': ['E'], 'size': 1, 'topology_level': 1},
-        {'id': 'C3', 'nodes': ['F'], 'size': 1, 'topology_level': 2},
+        {
+            'id': 'C0', 'nodes': ['A', 'B'], 'size': 2, 'topology_level': 0,
+            'incoming_component_count': 0, 'outgoing_component_count': 2, 'bottleneck_role': 'source',
+        },
+        {
+            'id': 'C1', 'nodes': ['C', 'D'], 'size': 2, 'topology_level': 1,
+            'incoming_component_count': 1, 'outgoing_component_count': 1, 'bottleneck_role': 'bridge',
+        },
+        {
+            'id': 'C2', 'nodes': ['E'], 'size': 1, 'topology_level': 1,
+            'incoming_component_count': 1, 'outgoing_component_count': 1, 'bottleneck_role': 'bridge',
+        },
+        {
+            'id': 'C3', 'nodes': ['F'], 'size': 1, 'topology_level': 2,
+            'incoming_component_count': 2, 'outgoing_component_count': 0, 'bottleneck_role': 'sink',
+        },
     ]
     assert dag['level_count'] == 3
 
@@ -173,6 +201,26 @@ def test_summary_treats_singleton_self_loop_as_cyclic():
     assert summary['condensation_level_count'] == 1
     assert summary['components'][0]['self_loop'] is True
     assert summary['components'][0]['topology_level'] == 0
+    assert summary['components'][0]['bottleneck_role'] == 'isolated'
+
+
+def test_summary_reports_component_bottleneck_roles_and_degrees():
+    graph = DirectedGraph({
+        'A': ('B',),
+        'B': ('A', 'C', 'E'),
+        'C': ('D',),
+        'D': ('C', 'F'),
+        'E': ('F',),
+        'F': (),
+    })
+    summary = summarize_components(graph, tarjan_strongly_connected_components(graph))
+    assert summary['source_component_count'] == 1
+    assert summary['sink_component_count'] == 1
+    assert summary['components'][0]['bottleneck_role'] == 'source'
+    assert summary['components'][0]['outgoing_component_count'] == 2
+    assert summary['components'][1]['bottleneck_role'] == 'bridge'
+    assert summary['components'][3]['bottleneck_role'] == 'sink'
+    assert summary['components'][3]['incoming_component_count'] == 2
 
 
 def test_cli_scc_outputs_json_summary():
@@ -234,6 +282,6 @@ def test_cli_explain_reports_requested_component_limit(capsys):
     assert exit_code == 0
     assert '4 strongly connected components' in captured.out
     assert 'Condensation DAG spans 4 topological level(s).' in captured.out
-    assert 'C0 (level 0): A, B, C' in captured.out
-    assert 'C1 (level 1): D, E' in captured.out
+    assert 'C0 (level 0, role source, in=0, out=1): A, B, C' in captured.out
+    assert 'C1 (level 1, role bridge, in=1, out=1): D, E' in captured.out
     assert 'C2:' not in captured.out

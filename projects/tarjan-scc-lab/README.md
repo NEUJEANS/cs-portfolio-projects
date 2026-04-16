@@ -55,17 +55,35 @@ Edge list:
 Strongly connected components come up in dependency analysis, compiler passes, graph databases, package management, and distributed-systems reasoning. This project shows algorithm knowledge, clean interfaces, and the ability to turn theory into a reusable tool.
 
 ## Output details
-The SCC summary and condensation DAG now annotate each component with a `topology_level`, and the lab can export both Graphviz DOT and Mermaid views for portfolio screenshots or markdown-native demos:
+The SCC summary and condensation DAG now annotate each component with a `topology_level`, plus lightweight bottleneck metadata that highlights whether a component behaves like a source, sink, bridge, or isolated SCC. The lab can also export both Graphviz DOT and Mermaid views for portfolio screenshots or markdown-native demos:
 - level `0` means a source SCC in the condensation DAG
 - higher levels indicate longer downstream dependency distance from any source SCC
-- levels make it easier to explain build pipelines, dependency cycles, and call-graph collapse order in interviews
+- `incoming_component_count` / `outgoing_component_count` summarize how many other SCCs feed into or depend on a component
+- `bottleneck_role` classifies each SCC as `source`, `sink`, `bridge`, or `isolated`
+- these annotations make it easier to explain build pipelines, dependency cycles, and chokepoints in interviews
 
 Example condensation output excerpt:
 ```json
 {
   "components": [
-    {"id": "C0", "nodes": ["A", "B", "C"], "size": 3, "topology_level": 0},
-    {"id": "C1", "nodes": ["D", "E"], "size": 2, "topology_level": 1}
+    {
+      "id": "C0",
+      "nodes": ["A", "B", "C"],
+      "size": 3,
+      "topology_level": 0,
+      "incoming_component_count": 0,
+      "outgoing_component_count": 1,
+      "bottleneck_role": "source"
+    },
+    {
+      "id": "C1",
+      "nodes": ["D", "E"],
+      "size": 2,
+      "topology_level": 1,
+      "incoming_component_count": 1,
+      "outgoing_component_count": 1,
+      "bottleneck_role": "bridge"
+    }
   ],
   "edges": [{"from": "C0", "to": "C1"}],
   "edge_count": 1,
@@ -100,6 +118,8 @@ flowchart LR
 ```
 
 This makes it easy to paste the condensation view directly into GitHub-flavored markdown that supports Mermaid.
+
+The JSON `scc`, `condensation`, and text `explain` outputs also expose bottleneck summaries. That gives you quick interview talking points such as "this SCC is a bridge between two cycles" or "this singleton sink is where all paths converge" without manually inspecting the DAG.
 
 You can render the DOT file with Graphviz if installed:
 ```bash

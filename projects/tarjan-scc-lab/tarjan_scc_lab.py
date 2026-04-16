@@ -235,9 +235,31 @@ def compute_component_levels(component_count: int, dag_edges: list[tuple[int, in
     return levels
 
 
+def _component_degree_summaries(component_count: int, dag_edges: list[tuple[int, int]]) -> tuple[dict[int, int], dict[int, int]]:
+    incoming = {index: 0 for index in range(component_count)}
+    outgoing = {index: 0 for index in range(component_count)}
+    for src, dst in dag_edges:
+        outgoing[src] += 1
+        incoming[dst] += 1
+    return incoming, outgoing
+
+
+
+def _bottleneck_role(incoming_count: int, outgoing_count: int) -> str:
+    if incoming_count == 0 and outgoing_count == 0:
+        return 'isolated'
+    if incoming_count == 0:
+        return 'source'
+    if outgoing_count == 0:
+        return 'sink'
+    return 'bridge'
+
+
+
 def condensation_dag(graph: DirectedGraph, components: list[list[str]]) -> dict[str, object]:
     summaries, dag_edges = build_component_graph(graph, components)
     levels = compute_component_levels(len(summaries), dag_edges)
+    incoming, outgoing = _component_degree_summaries(len(summaries), dag_edges)
     return {
         'components': [
             {
@@ -245,6 +267,9 @@ def condensation_dag(graph: DirectedGraph, components: list[list[str]]) -> dict[
                 'nodes': summary['nodes'],
                 'size': summary['size'],
                 'topology_level': levels[index],
+                'incoming_component_count': incoming[index],
+                'outgoing_component_count': outgoing[index],
+                'bottleneck_role': _bottleneck_role(incoming[index], outgoing[index]),
             }
             for index, summary in enumerate(summaries)
         ],
@@ -327,6 +352,7 @@ def condensation_mermaid(graph: DirectedGraph, components: list[list[str]]) -> s
 def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> dict[str, object]:
     summaries, dag_edges = build_component_graph(graph, components)
     levels = compute_component_levels(len(summaries), dag_edges)
+    incoming, outgoing = _component_degree_summaries(len(summaries), dag_edges)
     sizes = sorted((summary['size'] for summary in summaries), reverse=True)
     source_components = {index for index, _ in dag_edges}
     sink_components = {index for _, index in dag_edges}
@@ -349,6 +375,9 @@ def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> d
                 'nodes': summary['nodes'],
                 'self_loop': summary['self_loop'],
                 'topology_level': levels[index],
+                'incoming_component_count': incoming[index],
+                'outgoing_component_count': outgoing[index],
+                'bottleneck_role': _bottleneck_role(incoming[index], outgoing[index]),
             }
             for index, summary in enumerate(summaries)
         ],
@@ -403,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
         for index, component_summary in enumerate(summary['components'][:limit]):
             lines.append(
-                f"C{index} (level {component_summary['topology_level']}): {', '.join(component_summary['nodes'])}"
+                f"C{index} (level {component_summary['topology_level']}, role {component_summary['bottleneck_role']}, in={component_summary['incoming_component_count']}, out={component_summary['outgoing_component_count']}): {', '.join(component_summary['nodes'])}"
             )
         print("\n".join(lines))
         return 0
