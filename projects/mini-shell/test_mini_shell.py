@@ -138,6 +138,43 @@ class MiniShellTests(unittest.TestCase):
         self.assertEqual(out, "alpha")
         self.assertEqual(history[-1], "echo alpha")
 
+    def test_prefix_history_replays_most_recent_matching_command(self):
+        history = []
+        cwd, _ = run_command("echo alpha", "/tmp", history)
+        cwd, _ = run_command("pwd", cwd, history)
+        cwd, _ = run_command("echo beta", cwd, history)
+        cwd, out = run_command("!echo", cwd, history)
+        self.assertEqual(cwd, "/tmp")
+        self.assertEqual(out, "beta")
+        self.assertEqual(history[-1], "echo beta")
+
+    def test_prefix_history_can_match_multi_word_prefixes(self):
+        history = []
+        cwd, _ = run_command("echo alpha", "/tmp", history)
+        cwd, _ = run_command("echo alphabet soup", cwd, history)
+        cwd, out = run_command("!echo alph", cwd, history)
+        self.assertEqual(cwd, "/tmp")
+        self.assertEqual(out, "alphabet soup")
+        self.assertEqual(history[-1], "echo alphabet soup")
+
+    def test_substring_history_replays_most_recent_matching_command(self):
+        history = []
+        cwd, _ = run_command("echo alpha", "/tmp", history)
+        cwd, _ = run_command("pwd", cwd, history)
+        cwd, _ = run_command("echo beta gamma", cwd, history)
+        cwd, out = run_command("!?gamma?", cwd, history)
+        self.assertEqual(cwd, "/tmp")
+        self.assertEqual(out, "beta gamma")
+        self.assertEqual(history[-1], "echo beta gamma")
+
+    def test_substring_history_supports_optional_trailing_question_mark(self):
+        history = []
+        cwd, _ = run_command("echo alpha beta", "/tmp", history)
+        cwd, out = run_command("!?alpha", cwd, history)
+        self.assertEqual(cwd, "/tmp")
+        self.assertEqual(out, "alpha beta")
+        self.assertEqual(history[-1], "echo alpha beta")
+
     def test_history_reference_requires_existing_entry(self):
         with self.assertRaises(ValueError) as ctx:
             run_command("!!", "/tmp", [])
@@ -149,6 +186,35 @@ class MiniShellTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             run_command("!3", "/tmp", history)
         self.assertIn("history entry not found: 3", str(ctx.exception))
+
+    def test_prefix_history_requires_match(self):
+        history = []
+        run_command("echo alpha", "/tmp", history)
+        with self.assertRaises(ValueError) as ctx:
+            run_command("!git", "/tmp", history)
+        self.assertIn("history entry not found for prefix: git", str(ctx.exception))
+
+    def test_substring_history_requires_match(self):
+        history = []
+        run_command("echo alpha", "/tmp", history)
+        with self.assertRaises(ValueError) as ctx:
+            run_command("!?delta?", "/tmp", history)
+        self.assertIn("history entry not found for search: delta", str(ctx.exception))
+
+    def test_substring_history_requires_non_empty_query(self):
+        history = []
+        run_command("echo alpha", "/tmp", history)
+        with self.assertRaises(ValueError) as ctx:
+            run_command("!?", "/tmp", history)
+        self.assertIn("history search requires a non-empty query", str(ctx.exception))
+
+    def test_failed_history_search_does_not_mutate_history(self):
+        history = []
+        run_command("echo alpha", "/tmp", history)
+        original_history = list(history)
+        with self.assertRaises(ValueError):
+            run_command("!git", "/tmp", history)
+        self.assertEqual(history, original_history)
 
     def test_history_builtin_can_be_redirected(self):
         history = []

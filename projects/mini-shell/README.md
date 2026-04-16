@@ -1,7 +1,7 @@
 # mini-shell
 
 ## Overview
-A compact Python shell that demonstrates tokenization, built-ins, environment-variable expansion, persistent command history with configurable size limits, I/O redirection, and multi-process pipelines.
+A compact Python shell that demonstrates tokenization, built-ins, environment-variable expansion, searchable persistent command history with configurable size limits, I/O redirection, and multi-process pipelines.
 
 ## Stack
 - Python 3
@@ -12,7 +12,7 @@ A compact Python shell that demonstrates tokenization, built-ins, environment-va
 - `$NAME` / `${NAME}` environment-variable expansion
 - persistent command history loaded at REPL startup and appended across sessions
 - configurable history retention limits for both in-memory history and the persisted history file
-- numbered `history` output plus full-line `!!` / `!N` replay
+- numbered `history` output plus full-line `!!`, `!N`, `!prefix`, and `!?substring?` replay
 - `history -c` to clear the in-memory history and the configured history file for this focused teaching shell
 - input redirection with `<` for standalone external commands and pipeline entrypoints
 - output redirection with `>` / `>>` for standalone commands and pipeline final output
@@ -48,10 +48,10 @@ IMPORTANT IDEAS
    1  echo hello alice
    2  cat < notes.txt | python3 -c "import sys; print(sys.stdin.read().upper().strip())"
    3  history
-/tmp$ !!
-   1  echo hello alice
-   2  cat < notes.txt | python3 -c "import sys; print(sys.stdin.read().upper().strip())"
-   3  history
+/tmp$ !echo
+hello alice
+/tmp$ !?notes.txt?
+IMPORTANT IDEAS
 /tmp$ history -c
 /tmp$ exit
 ```
@@ -59,7 +59,8 @@ IMPORTANT IDEAS
 Notes:
 - builtins can redirect stdout, but builtin stdin redirection is intentionally out of scope for this focused slice
 - pipelines support file input on the first stage and file output on the last stage
-- history replay is intentionally limited to full-line `!!` and `!N` commands; inline substitutions like `sudo !!` are not implemented yet
+- history replay is intentionally limited to full-line `!!`, `!N`, `!prefix`, and `!?substring?` commands; inline substitutions, word designators, and modifiers like `sudo !!` or `!23:$` are not implemented yet
+- `!prefix` replays the most recent stored command that starts with that prefix, while `!?substring?` replays the most recent stored command containing the substring
 - unlike Bash's separate `HISTSIZE` and `HISTFILESIZE`, this project uses one `MINI_SHELL_HISTORY_LIMIT` for both in-memory and persisted history so the teaching implementation stays predictable
 - `MINI_SHELL_HISTORY_LIMIT=0` disables retention while still letting the REPL run normally
 - oversized history files are trimmed on REPL startup when a history limit is configured
@@ -76,6 +77,6 @@ This project shows several core systems ideas in a small package: command parsin
 
 ## Future Improvements
 - background jobs and job control
-- richer history search / prefix replay beyond the current numbered replay + size limit support
+- richer history expansion beyond the current full-line `!!`, `!N`, `!prefix`, and `!?substring?` support
 - richer parser support for stderr redirects, combined operators, and shell quoting edge cases
 - shell-local stdin/stdout handling for builtins beyond the current focused slice

@@ -3,7 +3,7 @@ import os
 import shlex
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 BUILTINS = {"cd", "pwd", "exit", "echo", "history"}
 OPERATORS = {"|", "<", ">", ">>"}
@@ -201,6 +201,13 @@ def write_redirected_output(path: str, append: bool, output: str, cwd: str) -> N
                 handle.write("\n")
 
 
+def find_history_match(history: List[str], predicate: Callable[[str], bool], description: str) -> str:
+    for entry in reversed(history):
+        if predicate(entry):
+            return entry
+    raise ValueError(description)
+
+
 def expand_history(command: str, history: List[str]) -> str:
     if command == "!!":
         if not history:
@@ -212,6 +219,24 @@ def expand_history(command: str, history: List[str]) -> str:
         if entry_number < 1 or entry_number > len(history):
             raise ValueError(f"history entry not found: {entry_number}")
         return history[entry_number - 1]
+
+    if command.startswith("!?"):
+        query = command[2:-1] if command.endswith("?") else command[2:]
+        if not query:
+            raise ValueError("history search requires a non-empty query")
+        return find_history_match(
+            history,
+            lambda entry: query in entry,
+            f"history entry not found for search: {query}",
+        )
+
+    if command.startswith("!") and len(command) > 1:
+        prefix = command[1:]
+        return find_history_match(
+            history,
+            lambda entry: entry.startswith(prefix),
+            f"history entry not found for prefix: {prefix}",
+        )
 
     return command
 
