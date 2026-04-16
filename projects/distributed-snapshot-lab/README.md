@@ -14,10 +14,11 @@ A small distributed-systems simulation that demonstrates the Chandy-Lamport dist
 - process-local balances plus directed channels with queued in-flight transfers
 - transfer and delivery simulation that preserves total money across local state and channels
 - process up/down state for lightweight crash/recovery scenarios
+- directed link up/down state to model one-way network partitions separately from whole-process failures
 - snapshot capture initiated by any live process
 - marker-delay controls to model different channel recording windows
 - named concurrent snapshots with isolated results per snapshot ID
-- scripted scenario playback with `send`, `deliver`, `fail`, `recover`, and `snapshot` steps
+- scripted scenario playback with `send`, `deliver`, `fail`, `recover`, `link-fail`, `link-recover`, and `snapshot` steps
 - JSON CLI output that is easy to inspect or feed into follow-up tooling
 - Mermaid sequence-diagram export for presentation-ready visualization, including fail/recover notes
 - unit and CLI tests for core invariants and representative scenarios
@@ -75,6 +76,16 @@ python3 distributed_snapshot_lab.py simulate \
   --snapshot A
 ```
 
+### Snapshot during a one-way link partition
+```bash
+python3 distributed_snapshot_lab.py simulate \
+  --balances '{"A": 10, "B": 10, "C": 10}' \
+  --send C:B:2:cb-1 \
+  --link-fail A:B \
+  --snapshot A \
+  --marker-delay 'C->B=2'
+```
+
 ### Replay a scripted failure/recovery scenario
 ```bash
 python3 distributed_snapshot_lab.py script \
@@ -94,7 +105,9 @@ python3 distributed_snapshot_lab.py script \
 
 ## Output notes
 - `process_statuses` reports which processes were `up` or `down` when the snapshot was recorded.
+- `channel_statuses` reports which directed links were `up` or `down`, so a partitioned edge is visible in both JSON and Mermaid output.
 - failed receivers block `deliver` until they recover, so queued channel state can survive across an outage.
+- failed or partitioned directed links block both new sends and deliveries on that edge until recovery.
 - failed processes cannot send new transfers or initiate snapshots in this lightweight model.
 - scripted runs return the final balances, remaining in-flight messages, full timeline, and every snapshot captured during the script.
 
@@ -113,6 +126,6 @@ python3 -m unittest discover -s projects/distributed-snapshot-lab -p 'test_*.py'
 - why visualization export makes distributed behavior easier to explain than raw JSON alone
 
 ## Future improvements
-- model link-level partitions separately from whole-process failures
 - export richer Mermaid notes for per-process recorded state transitions
+- generate canned partition-heal walkthrough assets for README/blog screenshots
 - generate markdown-ready assets automatically for project pages

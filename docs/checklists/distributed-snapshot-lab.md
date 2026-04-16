@@ -10,4 +10,5 @@
 - [x] add Mermaid visualization export for README/blog/interview demos
 - [x] support multiple concurrent snapshots with named snapshot IDs and isolated results
 - [x] add failure/recovery scripting with process liveness and scripted scenario playback
-- [ ] future slice: model explicit network partitions or link-level failures separately from process crashes
+- [x] future slice: model explicit network partitions or link-level failures separately from process crashes
+- [ ] future slice: add scripted partition-heal walkthrough assets or richer per-link visualization notes

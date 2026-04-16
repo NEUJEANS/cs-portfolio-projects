@@ -106,6 +106,57 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "process A is down"):
             bank.snapshot("A")
 
+    def test_failed_link_blocks_send_and_deliver_until_recovery(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10})
+        bank.fail_link("A", "B", reason="partition")
+
+        with self.assertRaisesRegex(ValueError, "channel A->B is down"):
+            bank.transfer("A", "B", 3, "ab-1")
+
+        bank.recover_link("A", "B")
+        bank.transfer("A", "B", 3, "ab-2")
+        bank.fail_link("A", "B", reason="mid-flight")
+        with self.assertRaisesRegex(ValueError, "channel A->B is down"):
+            bank.deliver("A", "B")
+
+        bank.recover_link("A", "B")
+        bank.deliver("A", "B")
+        self.assertEqual(bank.current_balances(), {"A": 7, "B": 13})
+
+    def test_snapshot_records_down_links_and_skips_blocked_markers(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        bank.transfer("C", "B", 2, "cb-1")
+        bank.fail_link("A", "B", reason="partition")
+
+        result = bank.snapshot("A", marker_delay_overrides={"C->B": 2})
+
+        self.assertTrue(result["consistent"])
+        self.assertEqual(result["channel_statuses"]["A->B"], "down")
+        self.assertNotIn("A->B", [marker["channel"] for marker in result["markers"]])
+        self.assertEqual(result["channel_messages"]["C->B"][0]["label"], "cb-1")
+
+    def test_script_runner_supports_link_failure_and_recovery_steps(self) -> None:
+        result = run_cli_json(
+            "script",
+            "--balances",
+            '{"A": 10, "B": 10, "C": 10}',
+            "--marker-delay",
+            "C->B=2",
+            "--script",
+            json.dumps(
+                [
+                    {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                    {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                    {"op": "snapshot", "snapshot_id": "partitioned", "initiator": "A"},
+                    {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "healed"},
+                ]
+            ),
+        )
+
+        self.assertEqual(result["channel_statuses"]["A->B"], "up")
+        self.assertEqual(result["snapshots"][0]["channel_statuses"]["A->B"], "down")
+        self.assertEqual(result["snapshots"][0]["channel_messages"]["C->B"][0]["amount"], 2)
+
     def test_snapshot_records_process_statuses(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10, "C": 10})
         bank.transfer("A", "B", 3, "ab-1")

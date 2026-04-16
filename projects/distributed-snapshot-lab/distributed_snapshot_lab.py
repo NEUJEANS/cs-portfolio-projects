@@ -64,6 +64,7 @@ class DistributedBank:
             for receiver in self.processes
             if sender != receiver
         }
+        self.channel_statuses = {channel: "up" for channel in self.in_flight}
         self.timeline: list[dict[str, object]] = []
 
     @staticmethod
@@ -97,6 +98,26 @@ class DistributedBank:
             event["reason"] = reason
         self.timeline.append(event)
 
+    def fail_link(self, sender: str, receiver: str, reason: str | None = None) -> None:
+        channel = self.channel_name(sender, receiver)
+        self._require_channel_up(channel)
+        self.channel_statuses[channel] = "down"
+        event = {"event": "link_fail", "channel": channel, "channel_statuses": self.current_channel_statuses()}
+        if reason:
+            event["reason"] = reason
+        self.timeline.append(event)
+
+    def recover_link(self, sender: str, receiver: str, reason: str | None = None) -> None:
+        channel = self.channel_name(sender, receiver)
+        self._require_channel_known(channel)
+        if self.channel_statuses[channel] == "up":
+            raise ValueError(f"channel {channel} is already up")
+        self.channel_statuses[channel] = "up"
+        event = {"event": "link_recover", "channel": channel, "channel_statuses": self.current_channel_statuses()}
+        if reason:
+            event["reason"] = reason
+        self.timeline.append(event)
+
     def transfer(self, sender: str, receiver: str, amount: int, label: str) -> Transfer:
         self._require_process(sender)
         self._require_process(receiver)
@@ -105,6 +126,7 @@ class DistributedBank:
             raise ValueError("sender and receiver must differ")
         if amount <= 0:
             raise ValueError("amount must be positive")
+        self._require_channel_up(self.channel_name(sender, receiver))
         if self.balances[sender] < amount:
             raise ValueError("sender has insufficient balance")
         transfer = Transfer(sender=sender, receiver=receiver, amount=amount, label=label)
@@ -116,6 +138,7 @@ class DistributedBank:
                 **transfer.to_dict(),
                 "balances": self.current_balances(),
                 "process_statuses": self.current_process_statuses(),
+                "channel_statuses": self.current_channel_statuses(),
             }
         )
         return transfer
@@ -125,6 +148,7 @@ class DistributedBank:
         self._require_process(receiver)
         self._require_process_up(receiver)
         channel = self.channel_name(sender, receiver)
+        self._require_channel_up(channel)
         queue = self.in_flight[channel]
         if not queue:
             raise ValueError(f"no in-flight transfer on channel {channel}")
@@ -136,6 +160,7 @@ class DistributedBank:
                 **transfer.to_dict(),
                 "balances": self.current_balances(),
                 "process_statuses": self.current_process_statuses(),
+                "channel_statuses": self.current_channel_statuses(),
             }
         )
         return transfer
@@ -145,6 +170,9 @@ class DistributedBank:
 
     def current_process_statuses(self) -> dict[str, str]:
         return dict(sorted(self.process_statuses.items()))
+
+    def current_channel_statuses(self) -> dict[str, str]:
+        return dict(sorted(self.channel_statuses.items()))
 
     def total_money(self) -> int:
         return sum(self.balances.values()) + sum(
@@ -161,6 +189,14 @@ class DistributedBank:
         self._validate_marker_delay_overrides(marker_delay_overrides)
         incoming_channels = {
             process: [self.channel_name(sender, process) for sender in self.processes if sender != process]
+            for process in self.processes
+        }
+        unavailable_incoming_channels = {
+            process: {
+                channel
+                for channel in incoming_channels[process]
+                if self.channel_statuses[channel] != "up"
+            }
             for process in self.processes
         }
         marker_events: list[dict[str, object]] = []
@@ -183,6 +219,7 @@ class DistributedBank:
                     closed = {self.channel_name(marker_sender, process)}
                     record.markers_seen[process].append(marker_sender)
                 record.closed_channels.update(closed)
+                record.closed_channels.update(unavailable_incoming_channels[process])
                 if set(incoming_channels[process]) <= record.closed_channels:
                     record.completed_processes.add(process)
                 if self.process_statuses[process] != "up":
@@ -191,6 +228,8 @@ class DistributedBank:
                     if target == process or self.process_statuses[target] != "up":
                         continue
                     channel = self.channel_name(process, target)
+                    if self.channel_statuses[channel] != "up":
+                        continue
                     delay = marker_delay_overrides.get(channel, 0)
                     marker_events.append(
                         {
@@ -249,6 +288,7 @@ class DistributedBank:
             "initiator": initiator,
             "balances": dict(sorted(record.balances.items())),
             "process_statuses": dict(sorted(record.process_statuses.items())),
+            "channel_statuses": self.current_channel_statuses(),
             "channel_messages": record.channel_messages,
             "markers": sorted(
                 marker_events,
@@ -285,6 +325,7 @@ class DistributedBank:
             "all_consistent": all(result["consistent"] for result in snapshots.values()),
             "timeline": list(self.timeline),
             "process_statuses": self.current_process_statuses(),
+            "channel_statuses": self.current_channel_statuses(),
         }
 
     def run_script(
@@ -308,6 +349,18 @@ class DistributedBank:
                 self.fail_process(str(operation["process"]), reason=_optional_text(operation.get("reason")))
             elif op == "recover":
                 self.recover_process(str(operation["process"]), reason=_optional_text(operation.get("reason")))
+            elif op == "link-fail":
+                self.fail_link(
+                    str(operation["sender"]),
+                    str(operation["receiver"]),
+                    reason=_optional_text(operation.get("reason")),
+                )
+            elif op == "link-recover":
+                self.recover_link(
+                    str(operation["sender"]),
+                    str(operation["receiver"]),
+                    reason=_optional_text(operation.get("reason")),
+                )
             elif op == "snapshot":
                 initiator = str(operation["initiator"])
                 snapshot_id = _optional_text(operation.get("snapshot_id")) or f"snapshot-{len(snapshots) + 1}"
@@ -323,6 +376,7 @@ class DistributedBank:
             "snapshots": snapshots,
             "balances": self.current_balances(),
             "process_statuses": self.current_process_statuses(),
+            "channel_statuses": self.current_channel_statuses(),
             "in_flight": {
                 channel: [transfer.to_dict() for transfer in queue]
                 for channel, queue in sorted(self.in_flight.items())
@@ -345,6 +399,18 @@ class DistributedBank:
     def _require_process(self, process: str) -> None:
         if process not in self.balances:
             raise ValueError(f"unknown process: {process}")
+
+    def _require_channel_known(self, channel: str) -> None:
+        sender, receiver = self.parse_channel_name(channel)
+        self._require_process(sender)
+        self._require_process(receiver)
+        if sender == receiver:
+            raise ValueError("channels must connect two distinct processes")
+
+    def _require_channel_up(self, channel: str) -> None:
+        self._require_channel_known(channel)
+        if self.channel_statuses[channel] != "up":
+            raise ValueError(f"channel {channel} is down")
 
     def _require_process_up(self, process: str) -> None:
         self._require_process(process)
@@ -455,6 +521,16 @@ def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
             reason = _optional_text(event.get("reason"))
             suffix = f" ({_safe_mermaid_text(reason)})" if reason else ""
             lines.append(f"    Note over {process}: RECOVER{suffix}")
+        elif event.get("event") == "link_fail":
+            sender, receiver = str(event["channel"]).split("->", 1)
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({_safe_mermaid_text(reason)})" if reason else ""
+            lines.append(f"    Note over {sender},{receiver}: LINK FAIL{suffix}")
+        elif event.get("event") == "link_recover":
+            sender, receiver = str(event["channel"]).split("->", 1)
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({_safe_mermaid_text(reason)})" if reason else ""
+            lines.append(f"    Note over {sender},{receiver}: LINK RECOVER{suffix}")
 
     snapshot_label = _safe_mermaid_text(result.get("snapshot_id", "snapshot"))
     initiator = _safe_mermaid_text(result["initiator"])
@@ -479,6 +555,11 @@ def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
             for process, status in sorted(process_statuses.items())
         )
         lines.append(f"    Note over {','.join(ordered_processes)}: process status {status_summary}")
+
+    channel_statuses = result.get("channel_statuses") or {}
+    down_channels = [channel for channel, status in sorted(channel_statuses.items()) if status != "up"]
+    if down_channels:
+        lines.append(f"    Note over {','.join(ordered_processes)}: down links {', '.join(down_channels)}")
 
     channel_messages = result.get("channel_messages") or {}
     if channel_messages:
@@ -510,6 +591,8 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--deliver", action="append", default=[], help="sender:receiver")
     simulate.add_argument("--fail", action="append", default=[], help="process to mark down before the snapshot")
     simulate.add_argument("--recover", action="append", default=[], help="process to recover before the snapshot")
+    simulate.add_argument("--link-fail", action="append", default=[], help="directed link sender:receiver to mark down before the snapshot")
+    simulate.add_argument("--link-recover", action="append", default=[], help="directed link sender:receiver to recover before the snapshot")
     simulate.add_argument("--snapshot", required=True, help="process that initiates the snapshot")
     simulate.add_argument(
         "--marker-delay",
@@ -533,6 +616,8 @@ def build_parser() -> argparse.ArgumentParser:
     concurrent.add_argument("--deliver", action="append", default=[], help="sender:receiver")
     concurrent.add_argument("--fail", action="append", default=[], help="process to mark down before capturing snapshots")
     concurrent.add_argument("--recover", action="append", default=[], help="process to recover before capturing snapshots")
+    concurrent.add_argument("--link-fail", action="append", default=[], help="directed link sender:receiver to mark down before capturing snapshots")
+    concurrent.add_argument("--link-recover", action="append", default=[], help="directed link sender:receiver to recover before capturing snapshots")
     concurrent.add_argument(
         "--snapshot",
         action="append",
@@ -549,7 +634,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     script = subparsers.add_parser(
         "script",
-        help="run a scripted sequence of send/deliver/fail/recover/snapshot operations",
+        help="run a scripted sequence of send/deliver/fail/recover/link-fail/link-recover/snapshot operations",
     )
     script.add_argument("--balances", required=True, help='JSON object like {"A": 10, "B": 10}')
     script.add_argument(
@@ -582,6 +667,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         bank.fail_process(process)
     for process in getattr(args, "recover", []):
         bank.recover_process(process)
+    for raw in getattr(args, "link_fail", []):
+        sender, receiver = raw.split(":", 1)
+        bank.fail_link(sender, receiver)
+    for raw in getattr(args, "link_recover", []):
+        sender, receiver = raw.split(":", 1)
+        bank.recover_link(sender, receiver)
 
     if args.command == "simulate":
         marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
