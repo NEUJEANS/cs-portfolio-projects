@@ -1,0 +1,21 @@
+# Wrap-up — Flashcard Quiz App JSON import/export slice
+
+- Timestamp (UTC): 2026-04-16T06:08:25Z
+- Commit: 687230ea1a9b17b659e0060b8afbc1c2cb4fefdc
+- What changed:
+  - added CSV/JSON deck loading for flashcard-quiz-app
+  - added normalized JSON export plus an --export-only conversion workflow
+  - expanded README, checklist, refresh notes, and review log for the new slice
+  - added automated tests for JSON import/export and CLI conversion behavior
+- Tests run:
+  - python3 -m unittest discover -s projects/flashcard-quiz-app -p 'test_*.py'
+  - python3 -m py_compile projects/flashcard-quiz-app/flashcards.py projects/flashcard-quiz-app/test_flashcards.py
+  - flashcard export-only smoke test with generated CSV -> JSON deck
+- Reviews run:
+  - pass 1: CLI/API shape and docs audit
+  - pass 2: JSON validation and tag-normalization audit
+  - pass 3: conversion workflow smoke test and regression audit
+- Secret scan:
+  - /home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail
+- Next step:
+  - add an Anki-oriented bridge (for example TSV/export mapping or package conversion) without complicating the core dependency-free quiz path

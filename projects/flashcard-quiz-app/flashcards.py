@@ -17,24 +17,44 @@ class Card:
 
 REQUIRED_COLUMNS = {"prompt", "answer"}
 OPTIONAL_COLUMNS = {"tags"}
+SUPPORTED_SUFFIXES = {".csv", ".json"}
 
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
 
 
-def parse_tags(raw: str | None) -> tuple[str, ...]:
-    if not raw:
+def parse_tags(raw: object) -> tuple[str, ...]:
+    if raw is None:
         return ()
+    if isinstance(raw, str):
+        parts = raw.split(',')
+    elif isinstance(raw, (list, tuple)):
+        parts = []
+        for value in raw:
+            if value is None:
+                continue
+            parts.extend(str(value).split(','))
+    else:
+        raise ValueError('Card tags must be a string, list, or tuple when using JSON deck files')
+
     seen: list[str] = []
-    for part in raw.split(','):
-        tag = part.strip().lower()
+    for part in parts:
+        tag = str(part).strip().lower()
         if tag and tag not in seen:
             seen.append(tag)
     return tuple(seen)
 
 
-def load_cards(path):
+def validate_card_fields(prompt: str, answer: str, index: int, *, source: str) -> Card:
+    clean_prompt = prompt.strip()
+    clean_answer = answer.strip()
+    if not clean_prompt or not clean_answer:
+        raise ValueError(f'{source} row {index} must include non-empty prompt and answer values')
+    return Card(clean_prompt, clean_answer)
+
+
+def load_cards_from_csv(path: str | Path) -> list[Card]:
     with open(path, newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         if reader.fieldnames is None:
@@ -47,16 +67,73 @@ def load_cards(path):
 
         cards = []
         for index, row in enumerate(reader, start=2):
-            prompt = (row.get('prompt') or '').strip()
-            answer = (row.get('answer') or '').strip()
-            if not prompt or not answer:
-                raise ValueError(f'Row {index} must include non-empty prompt and answer values')
-            cards.append(Card(prompt, answer, parse_tags(row.get('tags'))))
+            card = validate_card_fields(row.get('prompt') or '', row.get('answer') or '', index, source='CSV')
+            cards.append(Card(card.prompt, card.answer, parse_tags(row.get('tags'))))
 
     if not cards:
         raise ValueError('CSV file must include at least one flashcard')
 
     return cards
+
+
+def load_cards_from_json(path: str | Path) -> list[Card]:
+    deck_path = Path(path)
+    try:
+        payload = json.loads(deck_path.read_text(encoding='utf-8'))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f'JSON deck file is not valid JSON: {deck_path}') from exc
+
+    if isinstance(payload, dict):
+        raw_cards = payload.get('cards')
+    else:
+        raw_cards = payload
+
+    if not isinstance(raw_cards, list):
+        raise ValueError('JSON deck must be a list of cards or an object with a cards list')
+
+    cards: list[Card] = []
+    for index, entry in enumerate(raw_cards, start=1):
+        if not isinstance(entry, dict):
+            raise ValueError(f'JSON deck card {index} must be an object')
+        card = validate_card_fields(str(entry.get('prompt', '')), str(entry.get('answer', '')), index, source='JSON deck')
+        cards.append(Card(card.prompt, card.answer, parse_tags(entry.get('tags'))))
+
+    if not cards:
+        raise ValueError('JSON deck must include at least one flashcard')
+
+    return cards
+
+
+def load_cards(path: str | Path):
+    deck_path = Path(path)
+    suffix = deck_path.suffix.lower()
+    if suffix == '.csv':
+        return load_cards_from_csv(deck_path)
+    if suffix == '.json':
+        return load_cards_from_json(deck_path)
+    supported = ', '.join(sorted(SUPPORTED_SUFFIXES))
+    raise ValueError(f'Unsupported deck format: {deck_path.suffix or "<none>"}. Supported formats: {supported}')
+
+
+def export_cards_to_json(cards: Sequence[Card], path: str | Path, *, source_path: str | Path | None = None) -> Path:
+    export_path = Path(path)
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        'version': 1,
+        'exported_at': utc_now_iso(),
+        'source_path': str(source_path) if source_path else None,
+        'card_count': len(cards),
+        'cards': [
+            {
+                'prompt': card.prompt,
+                'answer': card.answer,
+                'tags': list(card.tags),
+            }
+            for card in cards
+        ],
+    }
+    export_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    return export_path
 
 
 def normalize_answer(value: str) -> str:
@@ -216,7 +293,6 @@ def build_recommendations(history: dict, limit: int = 5) -> list[dict]:
         incorrect = int(entry.get('times_incorrect', 0))
         streak = int(entry.get('streak', 0))
         accuracy = correct / seen if seen else 0.0
-        miss_rate = incorrect / seen if seen else 0.0
         score = (incorrect * 3) + ((1.0 - accuracy) * 4) + max(0, 2 - streak)
 
         if incorrect == 0 and streak >= 3 and accuracy >= 0.85:
@@ -328,7 +404,7 @@ def run_quiz(cards: Sequence[Card], *, retry_incorrect: bool = False):
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='Flashcard quiz app')
-    p.add_argument('csv_path')
+    p.add_argument('deck_path', help='Input deck in CSV or JSON format')
     p.add_argument('--limit', type=int, help='Study only the first N cards from the shuffled deck')
     p.add_argument('--seed', type=int, help='Shuffle seed for reproducible study sessions')
     p.add_argument('--retry-incorrect', action='store_true', help='Ask missed cards one additional time')
@@ -336,6 +412,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--show-history-summary', action='store_true', help='Print the persistent history summary after the session')
     p.add_argument('--show-recommendations', action='store_true', help='Print spaced-repetition study recommendations from history')
     p.add_argument('--recommend-limit', type=int, default=5, help='Number of study recommendations to print when enabled')
+    p.add_argument('--export-json', help='Write the loaded deck to a normalized JSON file')
+    p.add_argument('--export-only', action='store_true', help='Convert/export the deck and exit without starting a quiz')
     p.add_argument(
         '--tag',
         dest='tags',
@@ -358,16 +436,24 @@ def main(argv=None):
     if missing_history_flags and not args.history_path:
         joined_flags = ' and '.join(missing_history_flags)
         p.exit(2, f'Error: {joined_flags} require --history-path\n')
+
     if args.recommend_limit <= 0:
         p.exit(2, 'Error: --recommend-limit must be a positive integer\n')
 
     try:
-        cards = load_cards(args.csv_path)
+        cards = load_cards(args.deck_path)
         filtered_cards = filter_cards(cards, args.tags)
         session_cards = build_session(filtered_cards, limit=args.limit, seed=args.seed)
         history = load_history(args.history_path) if args.history_path else None
     except ValueError as exc:
         p.exit(2, f'Error: {exc}\n')
+
+    if args.export_json:
+        export_path = export_cards_to_json(filtered_cards, args.export_json, source_path=args.deck_path)
+        print(f'Exported {len(filtered_cards)} cards to {export_path}')
+
+    if args.export_only:
+        return
 
     summary = run_quiz(session_cards, retry_incorrect=args.retry_incorrect)
     print(

@@ -13,4 +13,5 @@
 - [x] review implementation in 3 passes and capture fixes
 - [x] add persistent study history to track weak cards over time
 - [x] add spaced-repetition scheduling recommendations based on history
-- [ ] add import/export support for JSON or Anki-style formats
+- [x] add import/export support for JSON deck files and conversion workflows
+- [ ] add Anki-style package export/import bridge

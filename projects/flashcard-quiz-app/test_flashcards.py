@@ -10,6 +10,7 @@ from flashcards import (
     build_history_key,
     build_recommendations,
     build_session,
+    export_cards_to_json,
     filter_cards,
     load_cards,
     load_history,
@@ -23,7 +24,7 @@ from flashcards import (
 
 
 class FlashcardTests(unittest.TestCase):
-    def test_load_and_quiz(self):
+    def test_load_csv_and_quiz(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'cards.csv'
             path.write_text('prompt,answer,tags\n2+2,4,math\ncapital of France,Paris,geo\n', encoding='utf-8')
@@ -33,6 +34,33 @@ class FlashcardTests(unittest.TestCase):
             self.assertEqual(results, [True, True])
             self.assertEqual(cards[0].tags, ('math',))
 
+    def test_load_json_cards_accepts_list_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'cards.json'
+            path.write_text(
+                json.dumps(
+                    [
+                        {'prompt': '2+2', 'answer': '4', 'tags': ['math', 'drill']},
+                        {'prompt': 'capital of France', 'answer': 'Paris', 'tags': 'geo, capitals'},
+                    ]
+                ),
+                encoding='utf-8',
+            )
+            cards = load_cards(path)
+            self.assertEqual(cards[0], Card('2+2', '4', ('math', 'drill')))
+            self.assertEqual(cards[1].tags, ('geo', 'capitals'))
+
+    def test_export_cards_to_json_writes_normalized_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            export_path = Path(tmp) / 'deck.json'
+            cards = [Card('2+2', '4', ('math',)), Card('BFS', 'queue', ('graphs', 'algorithms'))]
+            export_cards_to_json(cards, export_path, source_path='cards.csv')
+            payload = json.loads(export_path.read_text(encoding='utf-8'))
+            self.assertEqual(payload['version'], 1)
+            self.assertEqual(payload['card_count'], 2)
+            self.assertEqual(payload['source_path'], 'cards.csv')
+            self.assertEqual(payload['cards'][1]['tags'], ['graphs', 'algorithms'])
+
     def test_load_cards_rejects_missing_columns(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'cards.csv'
@@ -40,11 +68,18 @@ class FlashcardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'missing required columns: answer'):
                 load_cards(path)
 
+    def test_load_json_rejects_non_object_cards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'cards.json'
+            path.write_text(json.dumps(['bad-card']), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'JSON deck card 1 must be an object'):
+                load_cards(path)
+
     def test_load_cards_rejects_blank_values(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'cards.csv'
             path.write_text('prompt,answer\n2+2,\n', encoding='utf-8')
-            with self.assertRaisesRegex(ValueError, 'Row 2 must include non-empty prompt and answer values'):
+            with self.assertRaisesRegex(ValueError, 'CSV row 2 must include non-empty prompt and answer values'):
                 load_cards(path)
 
     def test_build_session_is_reproducible_and_limited(self):
@@ -218,11 +253,34 @@ class FlashcardTests(unittest.TestCase):
         self.assertIn('Weakest tags: math', output)
         self.assertIn('across 2 unique cards', output)
 
-    def test_main_persists_history_and_prints_history_summary_and_recommendations(self):
+    def test_main_can_export_only_normalized_json(self):
         with tempfile.TemporaryDirectory() as tmp:
             cards_path = Path(tmp) / 'cards.csv'
+            export_path = Path(tmp) / 'out' / 'cards.json'
+            cards_path.write_text('prompt,answer,tags\n2+2,4,math\ncapital of France,Paris,geo\n', encoding='utf-8')
+            stdout = io.StringIO()
+            with patch('sys.stdout', stdout):
+                main([str(cards_path), '--export-json', str(export_path), '--export-only'])
+            payload = json.loads(export_path.read_text(encoding='utf-8'))
+            self.assertEqual(payload['card_count'], 2)
+            self.assertEqual(payload['cards'][0]['prompt'], '2+2')
+            self.assertIn('Exported 2 cards', stdout.getvalue())
+
+    def test_main_loads_json_deck_and_persists_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cards_path = Path(tmp) / 'cards.json'
             history_path = Path(tmp) / 'history.json'
-            cards_path.write_text('prompt,answer,tags\n2+2,4,math\ncapital of France,Paris,geography\n', encoding='utf-8')
+            cards_path.write_text(
+                json.dumps(
+                    {
+                        'cards': [
+                            {'prompt': '2+2', 'answer': '4', 'tags': ['math']},
+                            {'prompt': 'capital of France', 'answer': 'Paris', 'tags': ['geography']},
+                        ]
+                    }
+                ),
+                encoding='utf-8',
+            )
             stdout = io.StringIO()
             with patch('builtins.input', side_effect=['4', 'Rome']), patch('sys.stdout', stdout):
                 main([
