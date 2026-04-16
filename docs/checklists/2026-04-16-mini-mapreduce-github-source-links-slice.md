@@ -16,4 +16,4 @@ Make `inspect-plugin` artifacts publishable by adding branch-aware GitHub blob l
 - [x] extend project-level and repo-level tests for richer inspection metadata and rendered source links
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
