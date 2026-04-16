@@ -288,7 +288,7 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 - [x] consider file:// or GitHub blob links for published inspection reports in a future run
-- [ ] consider repository commit-SHA pinned source links for archival inspection artifacts in a future run
+- [x] consider repository commit-SHA pinned source links for archival inspection artifacts in a future run
 
 ## GitHub source links slice (2026-04-16 05:21 UTC run)
 - [x] confirm repo sync before editing
@@ -301,3 +301,16 @@
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Commit-pinned inspection links slice (2026-04-16 06:31 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short git `rev-parse HEAD` / archival-link refresh and self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] extend `inspect-plugin` JSON/CSV/Markdown/HTML artifacts with repository commit SHAs and commit-pinned GitHub source URLs
+- [x] extend project-level and repo-level tests for commit-pinned inspection metadata and rendered report links
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider repository-level inspection index pages or release-to-release comparison artifacts in a future run

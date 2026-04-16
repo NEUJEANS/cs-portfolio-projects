@@ -1,0 +1,28 @@
+# Mini MapReduce commit-pinned inspection links wrap-up
+
+- Timestamp: `2026-04-16 06:53 UTC`
+- Project: `mini-mapreduce-lab`
+- Summary: Added repository commit SHA metadata and commit-pinned GitHub blob URLs to plugin inspection artifacts so published reports can reference immutable source snapshots alongside the existing branch-aware links.
+- Files changed:
+  - `projects/mini-mapreduce-lab/mapreduce.py`
+  - `projects/mini-mapreduce-lab/README.md`
+  - `projects/mini-mapreduce-lab/test_mapreduce.py`
+  - `tests/test_mini_mapreduce.py`
+  - `docs/checklists/mini-mapreduce-lab.md`
+  - `docs/checklists/2026-04-16-mini-mapreduce-commit-pinned-links-slice.md`
+  - `docs/learning/2026-04-16-mini-mapreduce-commit-pinned-links-refresh.md`
+  - `docs/reviews/2026-04-16-mini-mapreduce-commit-pinned-links-review-pass-1.md`
+  - `docs/reviews/2026-04-16-mini-mapreduce-commit-pinned-links-review-pass-2.md`
+  - `docs/reviews/2026-04-16-mini-mapreduce-commit-pinned-links-review-pass-3.md`
+- Tests run:
+  - `python3 -m unittest projects/mini-mapreduce-lab/test_mapreduce.py`
+  - `python3 -m unittest tests/test_mini_mapreduce.py`
+- Reviews run:
+  - pass 1: repo metadata helper behavior and payload compatibility
+  - pass 2: CLI JSON/CSV/Markdown/HTML artifact rendering coverage
+  - pass 3: README/checklist resumability and next-step clarity
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+  - Result: no verified or unknown secrets found
+- Commit: `1fd1106` (`Add commit-pinned plugin inspection links`)
+- Next step: Build a repository-level inspection index or release-to-release comparison artifact so multiple plugin inspection snapshots can be browsed together.

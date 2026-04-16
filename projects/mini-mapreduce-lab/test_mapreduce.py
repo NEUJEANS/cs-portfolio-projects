@@ -139,8 +139,14 @@ class MiniMapReduceTests(unittest.TestCase):
     def test_inspect_plugin_reports_callable_metadata_and_dataset_families(self) -> None:
         inspection = inspect_plugin(PROJECT_DIR / "plugins_average_score.py")
 
+        expected_commit = subprocess.check_output(
+            ["git", "-C", str(PROJECT_DIR.parents[1]), "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+
         self.assertEqual(inspection.name, "plugin-average-score")
         self.assertTrue(inspection.plugin.endswith("plugins_average_score.py"))
+        self.assertEqual(inspection.plugin_repo_commit, expected_commit)
         self.assertEqual(inspection.available_dataset_families, ["default", "exam-cram", "project-week"])
         self.assertEqual(inspection.module_doc_summary, "Average-score analytics plugin with synthetic cohort benchmark families.")
         self.assertTrue(inspection.mapper.endswith(".map_records"))
@@ -152,6 +158,10 @@ class MiniMapReduceTests(unittest.TestCase):
             inspection.mapper_source_url,
             "https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
         )
+        self.assertEqual(
+            inspection.mapper_source_commit_url,
+            f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
+        )
         self.assertIn('def map_records(lines):', inspection.mapper_source_excerpt)
         self.assertTrue(inspection.reducer.endswith(".reduce_key"))
         self.assertEqual(inspection.reducer_signature, "reduce_key(_key, values)")
@@ -159,6 +169,7 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIsInstance(inspection.reducer_source_line, int)
         self.assertTrue(inspection.reducer_source_anchor and '#L' in inspection.reducer_source_anchor)
         self.assertTrue(inspection.reducer_source_url and inspection.reducer_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
+        self.assertTrue(inspection.reducer_source_commit_url and inspection.reducer_source_commit_url.startswith(f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/"))
         self.assertIn('def reduce_key(_key, values):', inspection.reducer_source_excerpt)
         self.assertTrue(inspection.combiner and inspection.combiner.endswith(".combine_values"))
         self.assertEqual(inspection.combiner_signature, "combine_values(_key, values)")
@@ -166,6 +177,7 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIsInstance(inspection.combiner_source_line, int)
         self.assertTrue(inspection.combiner_source_anchor and '#L' in inspection.combiner_source_anchor)
         self.assertTrue(inspection.combiner_source_url and inspection.combiner_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
+        self.assertTrue(inspection.combiner_source_commit_url and inspection.combiner_source_commit_url.startswith(f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/"))
         self.assertIn('def combine_values(_key, values):', inspection.combiner_source_excerpt)
         self.assertTrue(inspection.benchmark_generator and inspection.benchmark_generator.endswith(".benchmark_records"))
         self.assertEqual(inspection.benchmark_generator_signature, "benchmark_records(scenario, records, seed, dataset_family='default')")
@@ -173,6 +185,7 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIsInstance(inspection.benchmark_generator_source_line, int)
         self.assertTrue(inspection.benchmark_generator_source_anchor and '#L' in inspection.benchmark_generator_source_anchor)
         self.assertTrue(inspection.benchmark_generator_source_url and inspection.benchmark_generator_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
+        self.assertTrue(inspection.benchmark_generator_source_commit_url and inspection.benchmark_generator_source_commit_url.startswith(f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/"))
         self.assertIn('def benchmark_records(', inspection.benchmark_generator_source_excerpt)
 
 
@@ -186,7 +199,7 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual([item.name for item in batch.plugins], ["plugin-average-score", "plugin-max-score"])
 
         csv_lines = batch.to_csv().strip().splitlines()
-        self.assertEqual(csv_lines[0], "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,available_dataset_families")
+        self.assertEqual(csv_lines[0], "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,available_dataset_families")
         self.assertEqual(len(csv_lines), 3)
         self.assertIn("plugin-average-score", csv_lines[1])
         self.assertIn("plugin-max-score", csv_lines[2])
@@ -227,8 +240,10 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("Emit per-student sum/count records from comma-separated score lines.", markdown)
         self.assertIn("line " , markdown)
         self.assertIn("## Hook source excerpts", markdown)
+        self.assertIn("Repository commit:", markdown)
         self.assertIn("Source anchor:", markdown)
         self.assertIn("GitHub source:", markdown)
+        self.assertIn("GitHub source (commit pinned):", markdown)
         self.assertIn("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13", markdown)
         self.assertIn("def map_records(lines):", markdown)
         self.assertIn("`available_dataset_families`", markdown)
@@ -240,8 +255,10 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("Emit per-student sum/count records from comma-separated score lines.", html_output)
         self.assertIn("line ", html_output)
         self.assertIn("Hook source excerpts:", html_output)
+        self.assertIn("Repository commit:", html_output)
         self.assertIn("Source anchor:", html_output)
         self.assertIn("GitHub source:", html_output)
+        self.assertIn("GitHub source (commit pinned):", html_output)
         self.assertIn("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13", html_output)
         self.assertIn("def map_records(lines):", html_output)
         self.assertIn("available_dataset_families", html_output)
@@ -292,7 +309,13 @@ class MiniMapReduceTests(unittest.TestCase):
             )
 
             payload = json.loads(output.read_text(encoding="utf-8"))
+            expected_commit = subprocess.check_output(
+                ["git", "-C", str(PROJECT_DIR.parents[1]), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
+
             self.assertEqual(payload["name"], "plugin-average-score")
+            self.assertEqual(payload["plugin_repo_commit"], expected_commit)
             self.assertEqual(payload["module_doc_summary"], "Average-score analytics plugin with synthetic cohort benchmark families.")
             self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
             self.assertTrue(payload["mapper"].endswith(".map_records"))
@@ -300,6 +323,10 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["mapper_doc_summary"], "Emit per-student sum/count records from comma-separated score lines.")
             self.assertIsInstance(payload["mapper_source_line"], int)
             self.assertEqual(payload["mapper_source_anchor"], "plugins_average_score.py#L7-L13")
+            self.assertEqual(
+                payload["mapper_source_commit_url"],
+                f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
+            )
             self.assertIn('def map_records(lines):', payload["mapper_source_excerpt"])
             self.assertTrue(payload["benchmark_generator"].endswith(".benchmark_records"))
             self.assertEqual(payload["benchmark_generator_signature"], "benchmark_records(scenario, records, seed, dataset_family='default')")
@@ -395,10 +422,12 @@ class MiniMapReduceTests(unittest.TestCase):
             html_payload = html_output.read_text(encoding="utf-8")
             self.assertIn("## Adjacent diffs", markdown)
             self.assertIn("## Hook source excerpts", markdown)
+            self.assertIn("Repository commit:", markdown)
             self.assertIn("plugin-average-score", markdown)
             self.assertIn("def map_records(lines):", markdown)
             self.assertIn("<h2>Diff 1:", html_payload)
             self.assertIn("Hook source excerpts:", html_payload)
+            self.assertIn("Repository commit:", html_payload)
             self.assertIn("plugin-max-score", html_payload)
             self.assertIn("def map_records(lines):", html_payload)
 

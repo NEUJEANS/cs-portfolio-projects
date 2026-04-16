@@ -29,7 +29,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional CSV export for plugin inspection snapshots so metadata can land in docs/spreadsheets without a JSON-only step
 - benchmark CSV summaries now carry plugin inspection metadata so spreadsheet artifacts stay self-describing without a separate JSON lookup
 - optional adjacent plugin metadata diffs for batched inspection runs so contract changes are reviewable without hand-comparing JSON snapshots
-- optional Markdown and HTML inspection reports with hook signatures, file anchors, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
+- optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
 
 ## Usage
 
@@ -167,7 +167,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output plugin-benchmark-report.html
 ```
 
-Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, concise hook doc summaries, source line numbers, file anchors, branch-aware GitHub blob links, source excerpts, and benchmark families it exports:
+Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, concise hook doc summaries, source line numbers, file anchors, branch-aware GitHub blob links, commit-pinned GitHub blob links, source excerpts, and benchmark families it exports:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
@@ -203,7 +203,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --output plugin-diff.json
 ```
 
-Write publishable Markdown and HTML inspection artifacts from the same diff-aware batch so plugin contract changes, file anchors, GitHub blob links, and source excerpts can land directly in docs or GitHub Pages:
+Write publishable Markdown and HTML inspection artifacts from the same diff-aware batch so plugin contract changes, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts can land directly in docs or GitHub Pages:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
@@ -307,4 +307,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add richer built-in benchmark families for JSON/event workloads, not just wordcount-style text streams
-- surface per-hook docstring excerpts or source line numbers in inspection artifacts for faster review handoffs
+- add repository-level inspection summaries that compare multiple plugin snapshots across releases, not just adjacent runs

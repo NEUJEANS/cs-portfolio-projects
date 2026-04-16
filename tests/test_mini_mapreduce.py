@@ -321,7 +321,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         csv_rows = result.to_csv().strip().splitlines()
         self.assertEqual(
             csv_rows[0],
-            "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,available_dataset_families",
+            "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,available_dataset_families",
         )
         self.assertIn("plugin-average-score", csv_rows[1])
         self.assertIn("Average-score analytics plugin with synthetic cohort benchmark families.", csv_rows[1])
@@ -329,7 +329,15 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertIn("Emit per-student sum/count records from comma-separated score lines.", csv_rows[1])
         self.assertRegex(csv_rows[1], r",\d+,")
         self.assertIn("plugins_average_score.py#L7-L13", csv_rows[1])
+        expected_commit = subprocess.check_output(
+            ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
         self.assertIn("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13", csv_rows[1])
+        self.assertIn(
+            f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
+            csv_rows[1],
+        )
         self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
 
     def test_plugin_inspection_diffs_capture_contract_changes(self) -> None:
@@ -363,13 +371,17 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertIn("map_records(lines)", markdown)
         self.assertIn("Emit per-student sum/count records from comma-separated score lines.", markdown)
         self.assertIn("line ", markdown)
+        self.assertIn("Repository commit:", markdown)
         self.assertIn("GitHub source:", markdown)
+        self.assertIn("GitHub source (commit pinned):", markdown)
         self.assertIn("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13", markdown)
         self.assertIn("<h2>Diff 1:", html_output)
         self.assertIn("map_records(lines)", html_output)
         self.assertIn("Emit per-student sum/count records from comma-separated score lines.", html_output)
         self.assertIn("line ", html_output)
+        self.assertIn("Repository commit:", html_output)
         self.assertIn("GitHub source:", html_output)
+        self.assertIn("GitHub source (commit pinned):", html_output)
         self.assertIn("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13", html_output)
 
     def test_cli_inspect_plugin_supports_csv_output(self) -> None:
@@ -397,14 +409,23 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(completed.stdout, "")
             payload = json.loads(json_output.read_text(encoding="utf-8"))
             csv_rows = csv_output.read_text(encoding="utf-8").strip().splitlines()
+            expected_commit = subprocess.check_output(
+                ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
             self.assertEqual(payload["name"], "plugin-average-score")
+            self.assertEqual(payload["plugin_repo_commit"], expected_commit)
             self.assertEqual(
                 payload["mapper_source_url"],
                 "https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
             )
             self.assertEqual(
+                payload["mapper_source_commit_url"],
+                f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
+            )
+            self.assertEqual(
                 csv_rows[0],
-                "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,available_dataset_families",
+                "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,available_dataset_families",
             )
             self.assertIn("plugin-average-score", csv_rows[1])
             self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
