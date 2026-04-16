@@ -11,7 +11,19 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from mapreduce import benchmark_job, diff_plugin_inspections, discover_plugin_refs, execute_job, inspect_plugin, inspect_plugins, load_plugin, stable_partition
+from mapreduce import (
+    benchmark_job,
+    build_plugin_page_links,
+    diff_plugin_inspections,
+    discover_plugin_refs,
+    execute_job,
+    inspect_plugin,
+    inspect_plugins,
+    load_plugin,
+    plugin_display_path,
+    stable_partition,
+    write_plugin_doc_pages,
+)
 
 
 class MiniMapReduceTests(unittest.TestCase):
@@ -279,6 +291,60 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("def map_records(lines):", html_output)
         self.assertIn("available_dataset_families", html_output)
 
+    def test_write_plugin_doc_pages_generates_dedicated_markdown_and_html(self) -> None:
+        batch = inspect_plugins([
+            PROJECT_DIR / "plugins_average_score.py",
+            PROJECT_DIR / "plugins_top_score.py",
+        ])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docs_dir = Path(tmpdir) / "plugin-pages"
+            report_output = Path(tmpdir) / "plugin-catalog.md"
+            html_output = Path(tmpdir) / "plugin-catalog.html"
+            written = write_plugin_doc_pages(
+                batch.plugins,
+                docs_dir=docs_dir,
+                catalog_markdown_path=report_output,
+                catalog_html_path=html_output,
+            )
+
+            self.assertEqual(
+                [path.name for path in written],
+                [
+                    "plugin-average-score.md",
+                    "plugin-average-score.html",
+                    "plugin-max-score.md",
+                    "plugin-max-score.html",
+                ],
+            )
+            markdown = (docs_dir / "plugin-average-score.md").read_text(encoding="utf-8")
+            html_payload = (docs_dir / "plugin-average-score.html").read_text(encoding="utf-8")
+            self.assertIn("# Mini MapReduce plugin doc: `plugin-average-score`", markdown)
+            self.assertIn("- Plugin path: `projects/mini-mapreduce-lab/plugins_average_score.py`", markdown)
+            self.assertIn("Catalog index: [plugin catalog](../plugin-catalog.md)", markdown)
+            self.assertIn("Alternate format: [HTML](plugin-average-score.html)", markdown)
+            self.assertIn("## Hook summary", markdown)
+            self.assertIn("## Hook source excerpts", markdown)
+            self.assertIn("benchmark_notes", markdown)
+            self.assertIn("<!DOCTYPE html>", html_payload)
+            self.assertIn("projects/mini-mapreduce-lab/plugins_average_score.py", html_payload)
+            self.assertIn('href="../plugin-catalog.html"', html_payload)
+            self.assertIn('href="plugin-average-score.md"', html_payload)
+            self.assertIn("Hook summary", html_payload)
+            self.assertIn("Hook source excerpts", html_payload)
+
+            markdown_links = build_plugin_page_links(
+                batch.plugins,
+                docs_dir=docs_dir,
+                output_parent=report_output.parent,
+                suffix=".md",
+            )
+            self.assertEqual(markdown_links["plugin-average-score"], "plugin-pages/plugin-average-score.md")
+
+
+    def test_plugin_display_path_prefers_repo_relative_paths(self) -> None:
+        display_path = plugin_display_path(str(PROJECT_DIR / "plugins_average_score.py"))
+        self.assertEqual(display_path, "projects/mini-mapreduce-lab/plugins_average_score.py")
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -500,6 +566,42 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertIn("Catalog quick links", html_payload)
             self.assertIn("plugin-average-score", html_payload)
             self.assertIn("plugin-max-score", html_payload)
+
+    def test_cli_catalog_plugins_can_generate_dedicated_plugin_docs_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report_output = Path(tmpdir) / "plugin-catalog.md"
+            html_output = Path(tmpdir) / "plugin-catalog.html"
+            docs_dir = Path(tmpdir) / "plugin-pages"
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "catalog-plugins",
+                    "--root",
+                    "projects/mini-mapreduce-lab",
+                    "--report-output",
+                    str(report_output),
+                    "--html-output",
+                    str(html_output),
+                    "--docs-dir",
+                    str(docs_dir),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            markdown = report_output.read_text(encoding="utf-8")
+            html_payload = html_output.read_text(encoding="utf-8")
+            plugin_markdown = (docs_dir / "plugin-average-score.md").read_text(encoding="utf-8")
+            plugin_html = (docs_dir / "plugin-average-score.html").read_text(encoding="utf-8")
+
+            self.assertIn("plugin-pages/plugin-average-score.md", markdown)
+            self.assertIn('href="plugin-pages/plugin-average-score.html"', html_payload)
+            self.assertIn("Plugin path: `projects/mini-mapreduce-lab/plugins_average_score.py`", plugin_markdown)
+            self.assertIn("projects/mini-mapreduce-lab/plugins_average_score.py", plugin_html)
+            self.assertIn("Catalog index: [plugin catalog](../plugin-catalog.md)", plugin_markdown)
+            self.assertIn('href="../plugin-catalog.html"', plugin_html)
 
     def test_cli_catalog_plugins_rejects_empty_matches(self) -> None:
         completed = subprocess.run(

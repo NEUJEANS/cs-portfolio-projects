@@ -25,6 +25,7 @@ execute_job = module.execute_job
 inspect_plugin = module.inspect_plugin
 inspect_plugins = module.inspect_plugins
 load_plugin = module.load_plugin
+plugin_display_path = module.plugin_display_path
 stable_partition = module.stable_partition
 
 
@@ -83,6 +84,12 @@ class MiniMapReduceRepoTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "map_records"):
                 load_plugin(bad_plugin)
+
+    def test_plugin_display_path_prefers_repo_relative_paths(self) -> None:
+        self.assertEqual(
+            plugin_display_path(str(PROJECT_DIR / "plugins_average_score.py")),
+            "projects/mini-mapreduce-lab/plugins_average_score.py",
+        )
 
     def test_partitioning_is_deterministic(self) -> None:
         keys = ["alpha", "beta", "gamma", "delta"]
@@ -618,6 +625,45 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertIn("## Adjacent diffs", markdown)
             self.assertIn("plugin-average-score", markdown)
             self.assertIn("<h2>Diff 1:", html_payload)
+
+    def test_cli_catalog_plugins_can_generate_dedicated_plugin_docs_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_output = Path(tmpdir) / "plugin-catalog.md"
+            html_output = Path(tmpdir) / "plugin-catalog.html"
+            docs_dir = Path(tmpdir) / "plugin-pages"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "catalog-plugins",
+                    "--root",
+                    str(PROJECT_DIR),
+                    "--report-output",
+                    str(markdown_output),
+                    "--html-output",
+                    str(html_output),
+                    "--docs-dir",
+                    str(docs_dir),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.stdout, "")
+            markdown = markdown_output.read_text(encoding="utf-8")
+            html_payload = html_output.read_text(encoding="utf-8")
+            plugin_markdown = (docs_dir / "plugin-average-score.md").read_text(encoding="utf-8")
+            plugin_html = (docs_dir / "plugin-average-score.html").read_text(encoding="utf-8")
+            self.assertIn("plugin-pages/plugin-average-score.md", markdown)
+            self.assertIn('href="plugin-pages/plugin-average-score.html"', html_payload)
+            self.assertIn("Plugin path: `projects/mini-mapreduce-lab/plugins_average_score.py`", plugin_markdown)
+            self.assertIn("projects/mini-mapreduce-lab/plugins_average_score.py", plugin_html)
+            self.assertIn("Catalog index: [plugin catalog](../plugin-catalog.md)", plugin_markdown)
+            self.assertIn('href="../plugin-catalog.html"', plugin_html)
+            self.assertIn("Hook source excerpts", plugin_markdown)
+            self.assertIn("Hook source excerpts", plugin_html)
 
     def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
         completed = subprocess.run(

@@ -33,6 +33,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional adjacent plugin metadata diffs for batched inspection runs so contract changes are reviewable without hand-comparing JSON snapshots
 - optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
 - plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts with quick-link landing cards and review-friendly badge summaries, without repeating `--plugin` flags manually
+- optional dedicated per-plugin Markdown/HTML docs pages from the catalog flow so each bundled plugin can ship as its own review-friendly portfolio page
 
 ## Usage
 
@@ -241,6 +242,16 @@ python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \
   --html-output plugin-catalog.html
 ```
 
+Add `--docs-dir` when you want the same catalog run to generate dedicated per-plugin Markdown and HTML docs pages that link back to the shared catalog index:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \
+  --root projects/mini-mapreduce-lab \
+  --report-output plugin-catalog.md \
+  --html-output plugin-catalog.html \
+  --docs-dir docs/plugin-pages
+```
+
 Switch benchmark dataset families to model different workload shapes. For example, the built-in `json-group-count` benchmark now supports `default`, `incidents`, and `deployments` families, while the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
 
 ```bash
@@ -335,4 +346,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add richer note-hook contracts for plugins that want structured benchmark annotations, not just short narrative bullet lists
-- add repository-level inspection summaries that compare multiple plugin snapshots across releases, not just adjacent runs
+- add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases, not just adjacent runs

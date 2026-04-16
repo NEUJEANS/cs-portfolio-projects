@@ -11,6 +11,7 @@ import importlib
 import importlib.util
 import inspect
 import json
+import os
 import random
 import subprocess
 import statistics
@@ -272,7 +273,7 @@ class PluginInspectionBatch:
     def to_csv(self) -> str:
         return render_plugin_inspections_csv(self.plugins)
 
-    def to_markdown(self) -> str:
+    def to_markdown(self, *, page_links: dict[str, str] | None = None) -> str:
         lines = [
             "# Mini MapReduce plugin inspection",
             "",
@@ -284,10 +285,11 @@ class PluginInspectionBatch:
         ]
         for plugin in self.plugins:
             anchor = plugin_anchor_id(plugin)
+            link_target = page_links.get(plugin.name) if page_links else f"#{anchor}"
             badges = " · ".join(f"`{badge}`" for badge in plugin_catalog_badges(plugin))
             dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
             lines.append(
-                f"- [`{plugin.name}`](#{anchor}) — {plugin.module_doc_summary or '-'} ({badges}; families: `{dataset_families}`)"
+                f"- [`{plugin.name}`]({link_target}) — {plugin.module_doc_summary or '-'} ({badges}; families: `{dataset_families}`)"
             )
         lines.extend([
             "",
@@ -369,7 +371,7 @@ class PluginInspectionBatch:
                 benchmark_note_cell = f"`{benchmark_note_name}`<br><small>{'<br>'.join(benchmark_note_meta)}</small>"
             commit_cell = f"`{plugin.plugin_repo_commit[:12]}`" if plugin.plugin_repo_commit else "-"
             lines.append(
-                f"| `{plugin.name}` | `{plugin.plugin}` | {commit_cell} | {plugin.module_doc_summary or '-'} | {mapper_cell} | {reducer_cell} | {combiner_cell} | {benchmark_cell} | {benchmark_note_cell} | `{dataset_families}` |"
+                f"| `{plugin.name}` | `{plugin_display_path(plugin.plugin)}` | {commit_cell} | {plugin.module_doc_summary or '-'} | {mapper_cell} | {reducer_cell} | {combiner_cell} | {benchmark_cell} | {benchmark_note_cell} | `{dataset_families}` |"
             )
         lines.extend(["", "## Hook source excerpts", ""])
         for plugin in self.plugins:
@@ -398,7 +400,9 @@ class PluginInspectionBatch:
         if self.diffs:
             lines.extend(["", "## Adjacent diffs", ""])
             for index, diff in enumerate(self.diffs, start=1):
-                lines.append(f"### Diff {index}: `{diff.previous_plugin}` → `{diff.current_plugin}`")
+                lines.append(
+                    f"### Diff {index}: `{plugin_display_path(diff.previous_plugin)}` → `{plugin_display_path(diff.current_plugin)}`"
+                )
                 if not diff.changed_fields:
                     lines.append("- No contract changes detected.")
                     lines.append("")
@@ -409,13 +413,18 @@ class PluginInspectionBatch:
                 lines.append("| --- | --- | --- |")
                 for field in diff.changed_fields:
                     change = diff.changes[field]
-                    previous = json.dumps(change["previous"], sort_keys=True)
-                    current = json.dumps(change["current"], sort_keys=True)
+                    previous_value = change["previous"]
+                    current_value = change["current"]
+                    if field == "plugin":
+                        previous_value = plugin_display_path(str(previous_value)) if previous_value is not None else None
+                        current_value = plugin_display_path(str(current_value)) if current_value is not None else None
+                    previous = json.dumps(previous_value, sort_keys=True)
+                    current = json.dumps(current_value, sort_keys=True)
                     lines.append(f"| `{field}` | `{previous}` | `{current}` |")
                 lines.append("")
         return "\n".join(lines).rstrip() + "\n"
 
-    def to_html(self) -> str:
+    def to_html(self, *, page_links: dict[str, str] | None = None) -> str:
         def esc(value: object) -> str:
             return html.escape(str(value), quote=True)
 
@@ -423,11 +432,12 @@ class PluginInspectionBatch:
         plugin_rows = []
         for plugin in self.plugins:
             anchor = plugin_anchor_id(plugin)
+            card_href = page_links.get(plugin.name) if page_links else f"#{anchor}"
             dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
             badges_html = "".join(f"<span class=\"badge\">{esc(badge)}</span>" for badge in plugin_catalog_badges(plugin))
             quick_link_cards.append(
                 "<li>"
-                f"<a href=\"#{esc(anchor)}\"><strong><code>{esc(plugin.name)}</code></strong></a>"
+                f"<a href=\"{esc(card_href)}\"><strong><code>{esc(plugin.name)}</code></strong></a>"
                 f"<p>{esc(plugin.module_doc_summary or '-')}</p>"
                 f"<p><small>{badges_html} <span class=\"badge\">families: {esc(dataset_families)}</span></small></p>"
                 "</li>"
@@ -435,7 +445,7 @@ class PluginInspectionBatch:
             plugin_rows.append(
                 "<tr>"
                 f"<td><a href=\"#{esc(anchor)}\"><code>{esc(plugin.name)}</code></a></td>"
-                f"<td><code>{esc(plugin.plugin)}</code></td>"
+                f"<td><code>{esc(plugin_display_path(plugin.plugin))}</code></td>"
                 f"<td><code>{esc(plugin.plugin_repo_commit[:12] if plugin.plugin_repo_commit else '-')}</code></td>"
                 f"<td>{esc(plugin.module_doc_summary or '-')}</td>"
                 f"<td>{_render_hook_html(plugin.mapper, plugin.mapper_signature, plugin.mapper_doc_summary, plugin.mapper_source_line, plugin.mapper_source_anchor, plugin.mapper_source_url, plugin.mapper_source_commit_url)}</td>"
@@ -480,24 +490,31 @@ class PluginInspectionBatch:
 
         diff_sections = []
         for index, diff in enumerate(self.diffs or [], start=1):
+            previous_plugin = plugin_display_path(diff.previous_plugin)
+            current_plugin = plugin_display_path(diff.current_plugin)
             if not diff.changed_fields:
                 diff_sections.append(
-                    f"<section><h2>Diff {index}: <code>{esc(diff.previous_plugin)}</code> → <code>{esc(diff.current_plugin)}</code></h2><p>No contract changes detected.</p></section>"
+                    f"<section><h2>Diff {index}: <code>{esc(previous_plugin)}</code> → <code>{esc(current_plugin)}</code></h2><p>No contract changes detected.</p></section>"
                 )
                 continue
             diff_rows = []
             for field in diff.changed_fields:
                 change = diff.changes[field]
+                previous_value = change["previous"]
+                current_value = change["current"]
+                if field == "plugin":
+                    previous_value = plugin_display_path(str(previous_value)) if previous_value is not None else None
+                    current_value = plugin_display_path(str(current_value)) if current_value is not None else None
                 diff_rows.append(
                     "<tr>"
                     f"<td><code>{esc(field)}</code></td>"
-                    f"<td><code>{esc(json.dumps(change['previous'], sort_keys=True))}</code></td>"
-                    f"<td><code>{esc(json.dumps(change['current'], sort_keys=True))}</code></td>"
+                    f"<td><code>{esc(json.dumps(previous_value, sort_keys=True))}</code></td>"
+                    f"<td><code>{esc(json.dumps(current_value, sort_keys=True))}</code></td>"
                     "</tr>"
                 )
             diff_sections.append(
                 "<section>"
-                f"<h2>Diff {index}: <code>{esc(diff.previous_plugin)}</code> → <code>{esc(diff.current_plugin)}</code></h2>"
+                f"<h2>Diff {index}: <code>{esc(previous_plugin)}</code> → <code>{esc(current_plugin)}</code></h2>"
                 f"<p><strong>Changed fields:</strong> <code>{esc(', '.join(diff.changed_fields))}</code></p>"
                 "<table><thead><tr><th>Field</th><th>Previous</th><th>Current</th></tr></thead>"
                 f"<tbody>{''.join(diff_rows)}</tbody></table>"
@@ -567,6 +584,319 @@ def plugin_catalog_badges(plugin: PluginInspection) -> list[str]:
     if plugin.mapper_source_url and plugin.reducer_source_url:
         badges.append("github linked")
     return badges
+
+
+def plugin_display_path(plugin_ref: str) -> str:
+    plugin_path = Path(plugin_ref)
+    try:
+        resolved = plugin_path.resolve(strict=False)
+    except OSError:
+        return plugin_ref
+    repo = _github_repo_blob_base(resolved)
+    if repo is not None:
+        _, root = repo
+        try:
+            return resolved.relative_to(root.resolve()).as_posix()
+        except ValueError:
+            pass
+    try:
+        return resolved.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return plugin_ref
+
+
+def plugin_hook_rows(plugin: PluginInspection) -> list[dict[str, object | None]]:
+    return [
+        {
+            "label": "Mapper",
+            "name": plugin.mapper,
+            "signature": plugin.mapper_signature,
+            "doc_summary": plugin.mapper_doc_summary,
+            "source_line": plugin.mapper_source_line,
+            "source_anchor": plugin.mapper_source_anchor,
+            "source_url": plugin.mapper_source_url,
+            "source_commit_url": plugin.mapper_source_commit_url,
+            "source_excerpt": plugin.mapper_source_excerpt,
+        },
+        {
+            "label": "Reducer",
+            "name": plugin.reducer,
+            "signature": plugin.reducer_signature,
+            "doc_summary": plugin.reducer_doc_summary,
+            "source_line": plugin.reducer_source_line,
+            "source_anchor": plugin.reducer_source_anchor,
+            "source_url": plugin.reducer_source_url,
+            "source_commit_url": plugin.reducer_source_commit_url,
+            "source_excerpt": plugin.reducer_source_excerpt,
+        },
+        {
+            "label": "Combiner",
+            "name": plugin.combiner,
+            "signature": plugin.combiner_signature,
+            "doc_summary": plugin.combiner_doc_summary,
+            "source_line": plugin.combiner_source_line,
+            "source_anchor": plugin.combiner_source_anchor,
+            "source_url": plugin.combiner_source_url,
+            "source_commit_url": plugin.combiner_source_commit_url,
+            "source_excerpt": plugin.combiner_source_excerpt,
+        },
+        {
+            "label": "Benchmark generator",
+            "name": plugin.benchmark_generator,
+            "signature": plugin.benchmark_generator_signature,
+            "doc_summary": plugin.benchmark_generator_doc_summary,
+            "source_line": plugin.benchmark_generator_source_line,
+            "source_anchor": plugin.benchmark_generator_source_anchor,
+            "source_url": plugin.benchmark_generator_source_url,
+            "source_commit_url": plugin.benchmark_generator_source_commit_url,
+            "source_excerpt": plugin.benchmark_generator_source_excerpt,
+        },
+        {
+            "label": "Benchmark note hook",
+            "name": plugin.benchmark_note_hook,
+            "signature": plugin.benchmark_note_hook_signature,
+            "doc_summary": plugin.benchmark_note_hook_doc_summary,
+            "source_line": plugin.benchmark_note_hook_source_line,
+            "source_anchor": plugin.benchmark_note_hook_source_anchor,
+            "source_url": plugin.benchmark_note_hook_source_url,
+            "source_commit_url": plugin.benchmark_note_hook_source_commit_url,
+            "source_excerpt": plugin.benchmark_note_hook_source_excerpt,
+        },
+    ]
+
+
+def plugin_doc_basename(plugin: PluginInspection, suffix: str) -> str:
+    return f"{plugin_anchor_id(plugin)}{suffix}"
+
+
+def build_plugin_page_links(
+    plugins: list[PluginInspection],
+    *,
+    docs_dir: Path,
+    output_parent: Path,
+    suffix: str,
+) -> dict[str, str]:
+    links: dict[str, str] = {}
+    for plugin in plugins:
+        doc_path = docs_dir / plugin_doc_basename(plugin, suffix)
+        links[plugin.name] = Path(os.path.relpath(doc_path, start=output_parent)).as_posix()
+    return links
+
+
+def render_plugin_doc_markdown(
+    plugin: PluginInspection,
+    *,
+    catalog_link: str | None = None,
+    html_page_link: str | None = None,
+) -> str:
+    dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
+    badges = " · ".join(f"`{badge}`" for badge in plugin_catalog_badges(plugin))
+    lines = [
+        f"# Mini MapReduce plugin doc: `{plugin.name}`",
+        "",
+        "## Snapshot",
+        "",
+        f"- Plugin path: `{plugin_display_path(plugin.plugin)}`",
+        f"- Summary: {plugin.module_doc_summary or '-'}",
+        f"- Dataset families: `{dataset_families}`",
+        f"- Catalog badges: {badges}",
+    ]
+    if plugin.plugin_repo_commit:
+        lines.append(f"- Repository commit: `{plugin.plugin_repo_commit}`")
+    if catalog_link:
+        lines.append(f"- Catalog index: [plugin catalog]({catalog_link})")
+    if html_page_link:
+        lines.append(f"- Alternate format: [HTML]({html_page_link})")
+    lines.extend([
+        "",
+        "## Hook summary",
+        "",
+        "| Hook | Export | Signature | Details | Source |",
+        "| --- | --- | --- | --- | --- |",
+    ])
+    for hook in plugin_hook_rows(plugin):
+        if not hook["name"]:
+            continue
+        details: list[str] = []
+        if hook["doc_summary"]:
+            details.append(str(hook["doc_summary"]))
+        if hook["source_line"] is not None:
+            details.append(f"line {hook['source_line']}")
+        if hook["source_anchor"]:
+            details.append(f"anchor `{hook['source_anchor']}`")
+        source_bits: list[str] = []
+        if hook["source_url"]:
+            source_bits.append(f"[github]({hook['source_url']})")
+        if hook["source_commit_url"]:
+            source_bits.append(f"[commit]({hook['source_commit_url']})")
+        lines.append(
+            f"| {hook['label']} | `{hook['name']}` | `{hook['signature'] or '-'}` | {'<br>'.join(details) or '-'} | {'<br>'.join(source_bits) or '-'} |"
+        )
+    lines.extend(["", "## Hook source excerpts", ""])
+    for hook in plugin_hook_rows(plugin):
+        if not hook["name"] or not hook["source_excerpt"]:
+            continue
+        lines.append(f"### {hook['label']}: `{hook['name']}`")
+        lines.append("")
+        if hook["doc_summary"]:
+            lines.append(f"- Summary: {hook['doc_summary']}")
+        if hook["source_line"] is not None:
+            lines.append(f"- Source line: `{hook['source_line']}`")
+        if hook["source_anchor"]:
+            lines.append(f"- Source anchor: `{hook['source_anchor']}`")
+        if hook["source_url"]:
+            lines.append(f"- GitHub source: <{hook['source_url']}>")
+        if hook["source_commit_url"]:
+            lines.append(f"- GitHub source (commit pinned): <{hook['source_commit_url']}>")
+        lines.extend(["", "```python", str(hook["source_excerpt"]), "```", ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_plugin_doc_html(
+    plugin: PluginInspection,
+    *,
+    catalog_link: str | None = None,
+    markdown_page_link: str | None = None,
+) -> str:
+    def esc(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
+    dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
+    badge_html = "".join(f"<span class=\"badge\">{esc(badge)}</span>" for badge in plugin_catalog_badges(plugin))
+    summary_items = [
+        f"<li><strong>Plugin path</strong><br><code>{esc(plugin_display_path(plugin.plugin))}</code></li>",
+        f"<li><strong>Summary</strong><br>{esc(plugin.module_doc_summary or '-')}</li>",
+        f"<li><strong>Dataset families</strong><br><code>{esc(dataset_families)}</code></li>",
+        f"<li><strong>Catalog badges</strong><br>{badge_html}</li>",
+    ]
+    if plugin.plugin_repo_commit:
+        summary_items.append(f"<li><strong>Repository commit</strong><br><code>{esc(plugin.plugin_repo_commit)}</code></li>")
+    if catalog_link:
+        summary_items.append(f"<li><strong>Catalog index</strong><br><a href=\"{esc(catalog_link)}\">plugin catalog</a></li>")
+    if markdown_page_link:
+        summary_items.append(f"<li><strong>Alternate format</strong><br><a href=\"{esc(markdown_page_link)}\">Markdown</a></li>")
+
+    hook_rows = []
+    hook_sections = []
+    for hook in plugin_hook_rows(plugin):
+        if not hook["name"]:
+            continue
+        details: list[str] = []
+        if hook["doc_summary"]:
+            details.append(esc(hook["doc_summary"]))
+        if hook["source_line"] is not None:
+            details.append(f"line {esc(hook['source_line'])}")
+        if hook["source_anchor"]:
+            details.append(f"anchor <code>{esc(hook['source_anchor'])}</code>")
+        source_bits: list[str] = []
+        if hook["source_url"]:
+            source_bits.append(f'<a href="{esc(hook["source_url"])}">github</a>')
+        if hook["source_commit_url"]:
+            source_bits.append(f'<a href="{esc(hook["source_commit_url"])}">commit</a>')
+        hook_rows.append(
+            "<tr>"
+            f"<td>{esc(hook['label'])}</td>"
+            f"<td><code>{esc(hook['name'])}</code></td>"
+            f"<td><code>{esc(hook['signature'] or '-')}</code></td>"
+            f"<td>{'<br>'.join(details) or '-'}</td>"
+            f"<td>{'<br>'.join(source_bits) or '-'}</td>"
+            "</tr>"
+        )
+        if not hook["source_excerpt"]:
+            continue
+        hook_meta = []
+        if hook["doc_summary"]:
+            hook_meta.append(f"<p><strong>Summary:</strong> {esc(hook['doc_summary'])}</p>")
+        if hook["source_line"] is not None:
+            hook_meta.append(f"<p><strong>Source line:</strong> <code>{esc(hook['source_line'])}</code></p>")
+        if hook["source_anchor"]:
+            hook_meta.append(f"<p><strong>Source anchor:</strong> <code>{esc(hook['source_anchor'])}</code></p>")
+        if hook["source_url"]:
+            hook_meta.append(f"<p><strong>GitHub source:</strong> <a href=\"{esc(hook['source_url'])}\">{esc(hook['source_url'])}</a></p>")
+        if hook["source_commit_url"]:
+            hook_meta.append(f"<p><strong>GitHub source (commit pinned):</strong> <a href=\"{esc(hook['source_commit_url'])}\">{esc(hook['source_commit_url'])}</a></p>")
+        hook_sections.append(
+            f"<article><h2>{esc(hook['label'])}: <code>{esc(hook['name'])}</code></h2>{''.join(hook_meta)}<pre><code>{esc(hook['source_excerpt'])}</code></pre></article>"
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Mini MapReduce plugin doc — {esc(plugin.name)}</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1080px; padding: 0 1rem 3rem; line-height: 1.5; }}
+    code {{ font-family: 'SFMono-Regular', Consolas, monospace; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }}
+    th, td {{ border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }}
+    thead th {{ background: rgba(148, 163, 184, 0.14); }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; padding: 0; }}
+    .meta li {{ list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.8rem; }}
+    .badge {{ display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }}
+    article {{ margin-top: 2rem; }}
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin doc: <code>{esc(plugin.name)}</code></h1>
+  <ul class=\"meta\">{''.join(summary_items)}</ul>
+  <section>
+    <h2>Hook summary</h2>
+    <table>
+      <thead><tr><th>Hook</th><th>Export</th><th>Signature</th><th>Details</th><th>Source</th></tr></thead>
+      <tbody>{''.join(hook_rows)}</tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Hook source excerpts</h2>
+    {''.join(hook_sections)}
+  </section>
+</body>
+</html>
+"""
+
+
+def write_plugin_doc_pages(
+    plugins: list[PluginInspection],
+    *,
+    docs_dir: Path,
+    catalog_markdown_path: Path | None = None,
+    catalog_html_path: Path | None = None,
+) -> list[Path]:
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for plugin in plugins:
+        markdown_path = docs_dir / plugin_doc_basename(plugin, ".md")
+        html_path = docs_dir / plugin_doc_basename(plugin, ".html")
+        markdown_catalog_link = (
+            Path(os.path.relpath(catalog_markdown_path, start=markdown_path.parent)).as_posix()
+            if catalog_markdown_path
+            else None
+        )
+        html_catalog_link = (
+            Path(os.path.relpath(catalog_html_path, start=html_path.parent)).as_posix()
+            if catalog_html_path
+            else None
+        )
+        markdown_path.write_text(
+            render_plugin_doc_markdown(
+                plugin,
+                catalog_link=markdown_catalog_link,
+                html_page_link=html_path.name,
+            ),
+            encoding="utf-8",
+        )
+        html_path.write_text(
+            render_plugin_doc_html(
+                plugin,
+                catalog_link=html_catalog_link,
+                markdown_page_link=markdown_path.name,
+            ),
+            encoding="utf-8",
+        )
+        written.extend([markdown_path, html_path])
+    return written
 
 
 def discover_plugin_refs(search_root: Path | None = None, *, pattern: str = "plugins_*.py") -> list[str]:
@@ -1930,6 +2260,7 @@ def build_parser() -> argparse.ArgumentParser:
     catalog_parser.add_argument("--csv-output", help="optional plugin catalog CSV output path")
     catalog_parser.add_argument("--report-output", help="optional Markdown plugin catalog report path")
     catalog_parser.add_argument("--html-output", help="optional HTML plugin catalog report path")
+    catalog_parser.add_argument("--docs-dir", help="optional directory for dedicated per-plugin Markdown/HTML docs pages")
     catalog_parser.add_argument(
         "--diff",
         action="store_true",
@@ -2011,16 +2342,44 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             parser.error(str(exc))
         rendered = result.to_json()
+        docs_dir = Path(args.docs_dir) if args.docs_dir else None
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
-        elif not args.csv_output and not args.report_output and not args.html_output:
+        elif not args.csv_output and not args.report_output and not args.html_output and not args.docs_dir:
             print(rendered)
         if args.csv_output:
             Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
         if args.report_output:
-            Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
+            markdown_links = (
+                build_plugin_page_links(
+                    result.plugins,
+                    docs_dir=docs_dir,
+                    output_parent=Path(args.report_output).resolve().parent,
+                    suffix=".md",
+                )
+                if docs_dir
+                else None
+            )
+            Path(args.report_output).write_text(result.to_markdown(page_links=markdown_links), encoding="utf-8")
         if args.html_output:
-            Path(args.html_output).write_text(result.to_html(), encoding="utf-8")
+            html_links = (
+                build_plugin_page_links(
+                    result.plugins,
+                    docs_dir=docs_dir,
+                    output_parent=Path(args.html_output).resolve().parent,
+                    suffix=".html",
+                )
+                if docs_dir
+                else None
+            )
+            Path(args.html_output).write_text(result.to_html(page_links=html_links), encoding="utf-8")
+        if docs_dir:
+            write_plugin_doc_pages(
+                result.plugins,
+                docs_dir=docs_dir,
+                catalog_markdown_path=Path(args.report_output).resolve() if args.report_output else None,
+                catalog_html_path=Path(args.html_output).resolve() if args.html_output else None,
+            )
         return 0
 
     if args.command == "benchmark":

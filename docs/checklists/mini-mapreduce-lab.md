@@ -340,7 +340,7 @@
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider generating dedicated per-plugin docs pages from the catalog in a future run
+- [x] consider generating dedicated per-plugin docs pages from the catalog in a future run
 
 ## JSON benchmark families slice (2026-04-16 08:24 UTC run)
 - [x] confirm repo sync before editing
@@ -379,3 +379,17 @@
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Plugin docs pages slice (2026-04-16 21:00 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the next follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python `os.path.relpath` / slugged-filename refresh and self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add dedicated per-plugin Markdown/HTML docs pages from the `catalog-plugins` flow
+- [x] link catalog quick-link landing cards to the dedicated docs pages when `--docs-dir` is provided
+- [x] extend project-level and repo-level tests for generated plugin docs pages and catalog links
+- [x] run targeted tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider release-to-release comparison pages or richer docs-site navigation for larger plugin sets
