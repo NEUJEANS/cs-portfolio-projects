@@ -12,8 +12,11 @@ from notes_search import (
     INDEX_VERSION,
     build_editor_command,
     build_preview_lines,
+    export_results,
     index_notes,
     search_notes,
+    selected_or_current_results,
+    selection_label,
     summarize_result_line,
     truncate_for_width,
 )
@@ -393,6 +396,74 @@ class NotesSearchTests(unittest.TestCase):
         self.assertEqual(truncate_for_width('abcdef', 4), 'abc…')
         self.assertEqual(truncate_for_width('abcdef', 1), '…')
         self.assertEqual(truncate_for_width('abc', 5), 'abc')
+
+
+    def test_export_results_writes_markdown_bundle_with_open_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            note = {
+                'path': 'systems.md',
+                'score': 120,
+                'tags': ['systems'],
+                'snippet': 'Failure detection notes.',
+                'section_match': {
+                    'path': 'systems.md',
+                    'path_with_anchor': 'systems.md#failure-detection',
+                    'line_number': 8,
+                },
+            }
+
+            destination = root / 'exports' / 'results.md'
+            export_results([note], destination, editor='code', base_directory=root)
+            payload = destination.read_text(encoding='utf-8')
+
+            self.assertIn('# Exported markdown-notes-search results', payload)
+            self.assertIn('## `systems.md`', payload)
+            self.assertIn('`systems.md#failure-detection:8`', payload)
+            self.assertIn('code --goto', payload)
+
+    def test_export_results_cli_writes_json_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text('# Distributed Systems\nFailure detection and quorum notes.', encoding='utf-8')
+            export_path = root / 'results.json'
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    'notes_search.py',
+                    str(root),
+                    'distributed',
+                    '--export-results',
+                    str(export_path),
+                    '--export-format',
+                    'json',
+                    '--editor',
+                    'code',
+                ],
+                cwd=Path(__file__).resolve().parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(export_path.read_text(encoding='utf-8'))
+            self.assertEqual(payload[0]['path'], 'systems.md')
+            self.assertEqual(payload[0]['open_command'][0], 'code')
+
+    def test_selection_helpers_prefer_marked_results(self):
+        results = [
+            {'path': 'a.md', 'score': 3},
+            {'path': 'b.md', 'score': 2},
+            {'path': 'c.md', 'score': 1},
+        ]
+
+        marked = selected_or_current_results(results, {2, 0}, 1)
+
+        self.assertEqual([note['path'] for note in marked], ['a.md', 'c.md'])
+        self.assertEqual(selection_label(results, set()), 'current result')
+        self.assertEqual(selection_label(results, {1}), '1 selected result')
+        self.assertEqual(selection_label(results, {0, 2}), '2 selected results')
 
     def test_default_index_filename_constant(self):
         self.assertEqual(DEFAULT_INDEX_FILENAME, '.notes_search_index.json')

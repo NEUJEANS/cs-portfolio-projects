@@ -1,6 +1,6 @@
 # Markdown Notes Search Checklist
 
-Status: vertical slice 7 complete
+Status: vertical slice 8 complete
 Last updated: 2026-04-16
 
 ## Vertical slice 1
@@ -111,7 +111,24 @@ Last updated: 2026-04-16
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+
+## Vertical slice 8 — multi-result TUI actions and export bundles
+- [x] identify markdown-notes-search as still worth another slice because the TUI could browse one result at a time but could not batch follow-up actions
+- [x] skip external web research because the next slice was already scoped clearly in the local checklist and README
+- [x] do short Python curses selection-state and export-format refresh by sketching the key handling and export payload shape before editing
+- [x] update checklist/docs so the slice is resumable
+- [x] add TUI multi-result marking with batch open support
+- [x] add Markdown/JSON export bundles for current search results with reusable editor commands
+- [x] wire TUI export to `--export-results` so interactive sessions can save the marked subset
+- [x] expand automated coverage for export helpers, selection helpers, and CLI export output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+
 ## Next slice candidates
 - [ ] richer posting-list style incremental index rather than storing full note bodies in cache
-- [ ] multi-result TUI actions such as bulk-open or export
+- [x] multi-result TUI actions such as bulk-open or export
 - [ ] section-scoped retrieval with heading anchors and open-in-editor actions for multiple selected hits

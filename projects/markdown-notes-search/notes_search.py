@@ -589,7 +589,67 @@ def build_preview_lines(note, width):
     return lines
 
 
-def launch_tui(results, editor=None, base_directory=None):
+
+
+def selection_label(results, selected_indices):
+    count = len(selected_indices)
+    if count == 0:
+        return 'current result'
+    noun = 'result' if count == 1 else 'results'
+    return f'{count} selected {noun}'
+
+
+def selected_or_current_results(results, selected_indices, current_index):
+    if not results:
+        return []
+    if selected_indices:
+        return [results[index] for index in sorted(selected_indices) if 0 <= index < len(results)]
+    return [results[current_index]]
+
+
+def export_results(results, destination, export_format='markdown', editor=None, base_directory=None):
+    destination_path = Path(destination)
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    selected = []
+    for note in results:
+        payload = {
+            'path': note['path'],
+            'score': note['score'],
+            'tags': note.get('tags', []),
+            'snippet': note.get('snippet', ''),
+            'section_match': note.get('section_match'),
+            'open_command': build_editor_command(note, editor=editor, base_directory=base_directory),
+        }
+        selected.append(payload)
+
+    if export_format == 'json':
+        destination_path.write_text(json.dumps(selected, indent=2) + '\n', encoding='utf-8')
+        return destination_path
+    if export_format != 'markdown':
+        raise ValueError('export_format must be markdown or json')
+
+    lines = ['# Exported markdown-notes-search results', '']
+    for note in selected:
+        lines.append(f"## `{note['path']}`")
+        lines.append(f"- score: {note['score']}")
+        if note['tags']:
+            lines.append(f"- tags: {' '.join('#' + tag for tag in note['tags'])}")
+        if note['section_match']:
+            section = note['section_match']
+            label = f"{section['path_with_anchor']}"
+            if section.get('line_number'):
+                label += f":{section['line_number']}"
+            lines.append(f"- section: `{label}`")
+        if note['snippet']:
+            lines.append(f"- snippet: {note['snippet']}")
+        command = ' '.join(shlex.quote(part) for part in note['open_command'])
+        lines.append(f"- open: `{command}`")
+        lines.append('')
+    destination_path.write_text('\n'.join(lines).rstrip() + '\n', encoding='utf-8')
+    return destination_path
+
+
+def launch_tui(results, editor=None, base_directory=None, export_file=None, export_format='markdown'):
     import curses
 
     if not results:
@@ -601,6 +661,8 @@ def launch_tui(results, editor=None, base_directory=None):
         stdscr.keypad(True)
         selected = 0
         scroll = 0
+        marked = set()
+        status_message = ''
 
         while True:
             height, width = stdscr.getmaxyx()
@@ -624,14 +686,16 @@ def launch_tui(results, editor=None, base_directory=None):
             if selected >= scroll + visible_rows:
                 scroll = selected - visible_rows + 1
 
-            title = 'markdown-notes-search TUI  ↑/↓ or j/k move  Enter open  q quit'
+            title = 'markdown-notes-search TUI  ↑/↓ move  Space mark  Enter/o open  e export  q quit'
             stdscr.addnstr(0, 0, title, width - 1, curses.A_BOLD)
 
             for row_index in range(visible_rows):
                 result_index = scroll + row_index
                 if result_index >= len(results):
                     break
-                line = summarize_result_line(results[result_index], left_width - 1)
+                marker = '*' if result_index in marked else ' ' 
+                summary = summarize_result_line(results[result_index], max(1, left_width - 4))
+                line = f'{marker} {summary}'
                 attr = curses.A_REVERSE if result_index == selected else curses.A_NORMAL
                 stdscr.addnstr(row_index + 1, 0, line, left_width - 1, attr)
 
@@ -640,6 +704,10 @@ def launch_tui(results, editor=None, base_directory=None):
                 stdscr.addch(y, divider_x, '|')
 
             preview_lines = build_preview_lines(results[selected], right_width)
+            preview_lines.append('')
+            preview_lines.append(selection_label(results, marked))
+            if status_message:
+                preview_lines.append(truncate_for_width(status_message, right_width))
             for row_index, line in enumerate(preview_lines[:visible_rows]):
                 stdscr.addnstr(row_index + 1, divider_x + 2, line, right_width)
 
@@ -655,8 +723,25 @@ def launch_tui(results, editor=None, base_directory=None):
                 selected = max(0, selected - visible_rows)
             elif key in (curses.KEY_NPAGE,):
                 selected = min(len(results) - 1, selected + visible_rows)
-            elif key in (10, 13, curses.KEY_ENTER):
-                open_result_in_editor(results[selected], editor=editor, base_directory=base_directory)
+            elif key == ord(' '):
+                if selected in marked:
+                    marked.remove(selected)
+                    status_message = 'Unmarked current result.'
+                else:
+                    marked.add(selected)
+                    status_message = 'Marked current result.'
+            elif key in (10, 13, curses.KEY_ENTER, ord('o')):
+                opened = selected_or_current_results(results, marked, selected)
+                for note in opened:
+                    open_result_in_editor(note, editor=editor, base_directory=base_directory)
+                status_message = f'Opened {len(opened)} result(s) in editor.'
+            elif key == ord('e'):
+                if not export_file:
+                    status_message = 'Set --export-results to enable TUI export.'
+                else:
+                    chosen = selected_or_current_results(results, marked, selected)
+                    export_results(chosen, export_file, export_format=export_format, editor=editor, base_directory=base_directory)
+                    status_message = f'Exported {len(chosen)} result(s) to {export_file}.'
 
     curses.wrapper(run)
 
@@ -673,6 +758,8 @@ def main(argv=None):
     parser.add_argument('--show-open-command', action='store_true', help='include an editor command for each plain-text result')
     parser.add_argument('--editor', default=None, help='editor command to use for generated open commands or --open-result')
     parser.add_argument('--open-result', action='store_true', help='launch the top result in an editor after printing results')
+    parser.add_argument('--export-results', default=None, help='write search results to a Markdown or JSON file for sharing or follow-up review')
+    parser.add_argument('--export-format', choices=('markdown', 'json'), default='markdown', help='export format for --export-results')
     parser.add_argument('--tui', action='store_true', help='browse results in a terminal UI with a preview pane')
     parser.add_argument(
         '--index-file',
@@ -710,7 +797,13 @@ def main(argv=None):
         return
 
     if args.tui:
-        launch_tui(results, editor=args.editor, base_directory=args.directory)
+        launch_tui(
+            results,
+            editor=args.editor,
+            base_directory=args.directory,
+            export_file=args.export_results,
+            export_format=args.export_format,
+        )
         return
 
     for note in results:
@@ -723,6 +816,15 @@ def main(argv=None):
                 editor=args.editor,
                 base_directory=args.directory,
             )
+        )
+
+    if args.export_results:
+        export_results(
+            results,
+            args.export_results,
+            export_format=args.export_format,
+            editor=args.editor,
+            base_directory=args.directory,
         )
 
     if args.open_result and results:

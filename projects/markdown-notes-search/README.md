@@ -1,7 +1,7 @@
 # markdown-notes-search
 
 ## Overview
-Search Markdown notes by filename, inline tags, YAML-style front matter tags, headings, backlinks, and full-text matches. Results are ranked so stronger matches surface first, and each hit includes a contextual snippet for quick scanning. The CLI also supports quoted phrase queries, boolean filtering, backlink-aware navigation, section-level anchor hints, generated editor jump commands, a lightweight TUI browser with preview panes, and an optional persistent index file for larger note vaults.
+Search Markdown notes by filename, inline tags, YAML-style front matter tags, headings, backlinks, and full-text matches. Results are ranked so stronger matches surface first, and each hit includes a contextual snippet for quick scanning. The CLI also supports quoted phrase queries, boolean filtering, backlink-aware navigation, section-level anchor hints, generated editor jump commands, a lightweight TUI browser with preview panes, export bundles for sharing follow-up reading lists, and an optional persistent index file for larger note vaults.
 
 ## Why it is portfolio-worthy
 - demonstrates text indexing, lightweight information retrieval, query parsing, and CLI product design
@@ -9,7 +9,7 @@ Search Markdown notes by filename, inline tags, YAML-style front matter tags, he
 - adds a persistent JSON-backed index cache to avoid reparsing unchanged notes on repeated searches
 - boosts notes whose headings directly match the query and surfaces heading-first snippets for faster scanning
 - extracts wiki-style and Markdown links to build backlink-aware navigation across note graphs
-- balances plain terminal output, JSON output, and an interactive TUI for scripting plus hands-on browsing
+- balances plain terminal output, JSON output, export bundles, and an interactive TUI for scripting plus hands-on browsing
 - includes automated tests for ranking, metadata parsing, backlink enrichment, cache refresh behavior, recursion, boolean logic, and CLI behavior
 
 ## Stack
@@ -31,6 +31,8 @@ Search Markdown notes by filename, inline tags, YAML-style front matter tags, he
 - emit plain text or JSON output, with optional backlink and section-anchor display in the terminal
 - include best-match `path#anchor` metadata, section line numbers, and generated editor commands so other tools or editors can jump straight to the relevant heading
 - browse results in a keyboard-driven TUI with a result list on the left and rich note preview on the right
+- mark multiple TUI results, open them together in an editor, and export the marked subset to Markdown or JSON
+- export ranked result bundles from plain CLI mode for sharing, review, or downstream automation
 - limit output for focused workflows
 
 ## Usage
@@ -45,7 +47,9 @@ python3 notes_search.py notes graphs --recursive --show-backlinks
 python3 notes_search.py notes "phi accrual" --recursive --show-sections
 python3 notes_search.py notes "phi accrual" --recursive --show-sections --show-open-command --editor "code --reuse-window"
 python3 notes_search.py notes graphs --recursive --index-file .notes_search_index.json --rebuild-index
-python3 notes_search.py notes "phi accrual" --recursive --tui --editor "code --reuse-window"
+python3 notes_search.py notes "phi accrual" --recursive --export-results exports/phi-accrual.md
+python3 notes_search.py notes "systems" --recursive --export-results exports/systems.json --export-format json
+python3 notes_search.py notes "phi accrual" --recursive --tui --editor "code --reuse-window" --export-results exports/tui-selection.md
 ```
 
 ### Example output
@@ -86,10 +90,11 @@ python3 -m unittest discover -s . -p "test_*.py"
 
 ## TUI notes
 - pass `--tui` to browse matches interactively inside a terminal window
-- use `↑` / `↓` or `j` / `k` to move through results, `PageUp` / `PageDown` for larger jumps, and `Enter` to open the selected note in your editor
-- the left pane shows ranked matches while the right pane previews tags, backlinks, the best section anchor, and the current snippet
+- use `↑` / `↓` or `j` / `k` to move through results, `PageUp` / `PageDown` for larger jumps, `Space` to mark results, and `Enter` or `o` to open the current/marked result set in your editor
+- add `--export-results path.md` (or `.json` with `--export-format json`) and press `e` inside the TUI to export the marked subset; without marks, the current result is exported
+- the left pane shows ranked matches while the right pane previews tags, backlinks, the best section anchor, selection state, and the current snippet
 - if the terminal is too small, the UI waits for a resize instead of crashing
 
 ## Future Improvements
 - support richer incremental posting-list structures instead of whole-note JSON cache entries
-- add multi-result bulk-open or export actions from the TUI
+- add section-scoped multi-select actions that can open only the matching anchors from several notes at once
