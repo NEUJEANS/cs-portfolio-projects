@@ -7,6 +7,7 @@ A small distributed-systems simulation that shows how vector clocks capture caus
 - turns theory into a runnable CLI plus tested simulation logic
 - surfaces tradeoffs around conflict detection and deterministic merge behavior
 - now includes a network-partition healing scenario that feels much closer to a real eventually consistent system
+- adds Mermaid sequence-diagram export so the same scenario can become a GitHub-ready visual artifact
 - gives you concrete interview material for replication, eventual consistency, anti-entropy, and version metadata
 
 ## Features
@@ -16,9 +17,10 @@ A small distributed-systems simulation that shows how vector clocks capture caus
 - replication flow that imports a remote version and updates local causal knowledge
 - deterministic merge command that resolves concurrent versions into a causally newer value
 - partition simulation command that models diverging writes during a network split, anti-entropy healing, and post-heal conflict resolution
+- Mermaid sequence-diagram rendering for partition/heal demos that students can paste directly into GitHub Markdown
 
 ## Project structure
-- `vector_clock_lab.py` - core data model, replica store, partition simulator, and CLI
+- `vector_clock_lab.py` - core data model, replica store, partition simulator, Mermaid renderer, and CLI
 - `test_vector_clock_lab.py` - unit + CLI tests
 
 ## Usage
@@ -65,6 +67,39 @@ python3 vector_clock_lab.py partition \
   --heal-replica b
 ```
 
+### Render the same partition/heal scenario as Mermaid
+```bash
+python3 vector_clock_lab.py partition-mermaid \
+  --replicas a b c \
+  --key profile \
+  --left-partition a b \
+  --right-partition c \
+  --left-write a:draft-a \
+  --right-write c:draft-c \
+  --heal-replica b
+```
+
+Example output:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant a
+    participant b
+    participant c
+    Note over a, b: left partition
+    Note over c: right partition
+    Note over a, c: network partition isolates the two sides
+    a->>a: write profile=draft-a @ {a:1}
+    c->>c: write profile=draft-c @ {c:1}
+    Note over a, b, c: partition heals and anti-entropy exchanges surviving versions
+    a-->>b: sync profile=a draft-a @ {a:1}
+    c-->>b: sync profile=c draft-c @ {c:1}
+    b->>b: merge conflicts into profile=draft-a | draft-c @ {a:1, b:1, c:1}
+```
+
+This gives you a lightweight diagram you can paste into project docs, a GitHub issue, or a study note without taking screenshots.
+
 ## Testing
 ```bash
 python3 -m unittest discover -s projects/vector-clock-lab -p 'test_*.py' -v
@@ -76,9 +111,10 @@ python3 -m unittest discover -s projects/vector-clock-lab -p 'test_*.py' -v
 - why concurrent versions need resolution instead of blind overwrite
 - how anti-entropy after a partition can preserve multiple causally concurrent versions until an explicit merge happens
 - why deterministic merges simplify demos while real systems often need domain-specific conflict handling
+- how generating diagrams from structured simulation output keeps docs honest and reproducible
 
 ## Future improvements
 - add Lamport clock comparison as a contrast mode
-- emit a timeline or Mermaid diagram for partition-heal scenarios
+- export Markdown reports that bundle JSON output with Mermaid diagrams
 - support configurable merge strategies such as last-writer-wins or custom reducers
 - expose a visualization of the version DAG for each key

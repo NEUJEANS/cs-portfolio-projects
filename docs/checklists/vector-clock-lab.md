@@ -28,3 +28,18 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 Mermaid timeline export slice
+- [x] inspect the vector-clock lab for the next portfolio-friendly upgrade
+- [x] capture a short research note for diagram-driven causality visualization
+- [x] capture a short refresh/self-test note for Mermaid sequence output
+- [x] implement deterministic Mermaid export for partition/heal scenarios
+- [x] expose the export through the CLI and document copy/paste usage
+- [x] add unit + CLI tests for Mermaid rendering behavior
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

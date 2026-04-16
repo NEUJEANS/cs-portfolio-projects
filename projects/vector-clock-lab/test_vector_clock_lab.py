@@ -4,14 +4,21 @@ import sys
 import unittest
 from pathlib import Path
 
-from vector_clock_lab import PartitionScenario, PartitionWrite, ReplicaStore, VectorClock, simulate_partition
+from vector_clock_lab import (
+    PartitionScenario,
+    PartitionWrite,
+    ReplicaStore,
+    VectorClock,
+    render_partition_mermaid,
+    simulate_partition,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SCRIPT = PROJECT_DIR / "vector_clock_lab.py"
 
 
-def run_cli(*args: str) -> dict:
+def run_cli_raw(*args: str) -> str:
     completed = subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         cwd=PROJECT_DIR,
@@ -19,7 +26,11 @@ def run_cli(*args: str) -> dict:
         capture_output=True,
         text=True,
     )
-    return json.loads(completed.stdout)
+    return completed.stdout
+
+
+def run_cli(*args: str) -> dict:
+    return json.loads(run_cli_raw(*args))
 
 
 class VectorClockLabTests(unittest.TestCase):
@@ -88,6 +99,7 @@ class VectorClockLabTests(unittest.TestCase):
         )
 
         self.assertTrue(result["conflict_detected"])
+        self.assertEqual(result["heal_replica"], "b")
         self.assertEqual(len(result["versions_before_heal"]), 2)
         self.assertEqual(result["merged"]["clock"], {"a": 1, "b": 1, "c": 1})
         self.assertEqual(
@@ -108,6 +120,30 @@ class VectorClockLabTests(unittest.TestCase):
                     right_writes=(),
                 ),
             )
+
+    def test_render_partition_mermaid_includes_partition_heal_and_merge_story(self) -> None:
+        store = ReplicaStore(["a", "b", "c"])
+        result = simulate_partition(
+            store,
+            PartitionScenario(
+                key="profile",
+                left_partition=("a", "b"),
+                right_partition=("c",),
+                left_writes=(PartitionWrite("a", "draft-a"),),
+                right_writes=(PartitionWrite("c", "draft-c"),),
+                heal_replica="b",
+            ),
+        )
+
+        diagram = render_partition_mermaid(result)
+
+        self.assertIn("sequenceDiagram", diagram)
+        self.assertIn("participant a", diagram)
+        self.assertIn("participant b", diagram)
+        self.assertIn("participant c", diagram)
+        self.assertIn("a->>a: write profile=draft-a @ {a:1}", diagram)
+        self.assertIn("c-->>b: sync profile=c draft-c @ {c:1}", diagram)
+        self.assertIn("b->>b: merge conflicts into profile=draft-a | draft-c @ {a:1, b:1, c:1}", diagram)
 
     def test_cli_compare_and_conflict_merge_flow(self) -> None:
         compare = run_cli("compare", '{"a": 1}', '{"a": 1, "b": 1}')
@@ -166,6 +202,33 @@ class VectorClockLabTests(unittest.TestCase):
             result["snapshot_after_merge"]["data"]["profile"][0]["clock"],
             {"a": 1, "b": 1, "c": 1},
         )
+
+    def test_cli_partition_mermaid_outputs_renderable_diagram(self) -> None:
+        diagram = run_cli_raw(
+            "partition-mermaid",
+            "--replicas",
+            "a",
+            "b",
+            "c",
+            "--key",
+            "profile",
+            "--left-partition",
+            "a",
+            "b",
+            "--right-partition",
+            "c",
+            "--left-write",
+            "a:draft-a",
+            "--right-write",
+            "c:draft-c",
+            "--heal-replica",
+            "b",
+        )
+
+        self.assertTrue(diagram.startswith("sequenceDiagram\nautonumber") or diagram.startswith("sequenceDiagram\n    autonumber"))
+        self.assertIn("Note over a, b: left partition", diagram)
+        self.assertIn("Note over c: right partition", diagram)
+        self.assertIn("c-->>b: sync profile=c draft-c @ {c:1}", diagram)
 
     def test_duplicate_replica_names_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "replica names must be unique"):

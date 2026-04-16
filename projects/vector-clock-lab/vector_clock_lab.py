@@ -234,6 +234,62 @@ def validate_partition_membership(
     return left, right
 
 
+def format_clock(clock: dict[str, int]) -> str:
+    if not clock:
+        return "{}"
+    return "{" + ", ".join(f"{replica}:{clock[replica]}" for replica in sorted(clock)) + "}"
+
+
+def format_version_summary(version: dict[str, object], *, include_replica: bool = False) -> str:
+    prefix = f"{version['replica']} " if include_replica else ""
+    return f"{prefix}{version['value']} @ {format_clock(version['clock'])}"
+
+
+def render_partition_mermaid(result: dict[str, object]) -> str:
+    partitions = result["partitions"]
+    left_partition = list(partitions["left"])
+    right_partition = list(partitions["right"])
+    replicas = left_partition + right_partition
+    heal_replica = result.get("heal_replica")
+
+    lines = ["sequenceDiagram", "    autonumber"]
+    for replica in replicas:
+        lines.append(f"    participant {replica}")
+
+    lines.append(f"    Note over {', '.join(left_partition)}: left partition")
+    lines.append(f"    Note over {', '.join(right_partition)}: right partition")
+    if len(replicas) > 1:
+        lines.append(f"    Note over {replicas[0]}, {replicas[-1]}: network partition isolates the two sides")
+
+    for event in result["timeline"]:
+        version = event["version"]
+        lines.append(
+            f"    {event['replica']}->>{event['replica']}: write {result['key']}={format_version_summary(version)}"
+        )
+
+    versions_before_heal = result.get("versions_before_heal", [])
+    if heal_replica and versions_before_heal:
+        lines.append(f"    Note over {', '.join(replicas)}: partition heals and anti-entropy exchanges surviving versions")
+        for version in versions_before_heal:
+            source = version["replica"]
+            if source == heal_replica:
+                lines.append(
+                    f"    {heal_replica}->>{heal_replica}: retains local {result['key']}={format_version_summary(version)}"
+                )
+            else:
+                lines.append(
+                    f"    {source}-->>{heal_replica}: sync {result['key']}={format_version_summary(version, include_replica=True)}"
+                )
+
+    merged = result.get("merged")
+    if heal_replica and merged:
+        lines.append(
+            f"    {heal_replica}->>{heal_replica}: merge conflicts into {result['key']}={format_version_summary(merged)}"
+        )
+
+    return "\n".join(lines)
+
+
 def simulate_partition(store: ReplicaStore, scenario: PartitionScenario) -> dict[str, object]:
     left_partition, right_partition = validate_partition_membership(
         store.replicas,
@@ -284,6 +340,7 @@ def simulate_partition(store: ReplicaStore, scenario: PartitionScenario) -> dict
     result: dict[str, object] = {
         "key": scenario.key,
         "partitions": {"left": list(left_partition), "right": list(right_partition)},
+        "heal_replica": scenario.heal_replica,
         "partition_snapshots": {
             name: partition_store.snapshot() for name, partition_store in partition_stores.items()
         },
@@ -347,6 +404,18 @@ def build_parser() -> argparse.ArgumentParser:
     partition.add_argument("--right-write", action="append", default=[], help="replica:value write visible only on the right partition")
     partition.add_argument("--heal-replica", help="replica that performs the deterministic merge after partitions heal")
 
+    partition_mermaid = subparsers.add_parser(
+        "partition-mermaid",
+        help="render a Mermaid sequence diagram for a partition/heal scenario",
+    )
+    partition_mermaid.add_argument("--replicas", nargs="+", required=True)
+    partition_mermaid.add_argument("--key", required=True)
+    partition_mermaid.add_argument("--left-partition", nargs="+", required=True)
+    partition_mermaid.add_argument("--right-partition", nargs="+", required=True)
+    partition_mermaid.add_argument("--left-write", action="append", default=[], help="replica:value write visible only on the left partition")
+    partition_mermaid.add_argument("--right-write", action="append", default=[], help="replica:value write visible only on the right partition")
+    partition_mermaid.add_argument("--heal-replica", help="replica that performs the deterministic merge after partitions heal")
+
     return parser
 
 
@@ -355,7 +424,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "compare":
-        result = {"relation": parse_clock(args.clock_a).compare(parse_clock(args.clock_b))}
+        result: str | dict[str, object] = {"relation": parse_clock(args.clock_a).compare(parse_clock(args.clock_b))}
     elif args.command == "write":
         store = ReplicaStore(args.replicas)
         writes = [store.write(args.replica, args.key, value).to_dict() for value in args.values]
@@ -365,7 +434,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         version = parse_version(args.version)
         store.replicate(args.target_replica, args.key, version)
         result = store.snapshot()
-    elif args.command == "partition":
+    elif args.command in {"partition", "partition-mermaid"}:
         store = ReplicaStore(args.replicas)
         scenario = PartitionScenario(
             key=args.key,
@@ -375,7 +444,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             right_writes=tuple(parse_partition_write(raw) for raw in args.right_write),
             heal_replica=args.heal_replica,
         )
-        result = simulate_partition(store, scenario)
+        simulation = simulate_partition(store, scenario)
+        result = render_partition_mermaid(simulation) if args.command == "partition-mermaid" else simulation
     else:
         store = ReplicaStore(args.replicas)
         left = store.write(args.left_replica, args.key, args.left_value)
@@ -392,7 +462,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             result["merged"] = merged.to_dict()
             result["snapshot"] = store.snapshot()
 
-    print(json.dumps(result, indent=2, sort_keys=True))
+    if isinstance(result, str):
+        print(result)
+    else:
+        print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
