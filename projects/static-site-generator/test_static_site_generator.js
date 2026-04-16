@@ -1,15 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const http = require('http');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
 const {
+  DEFAULT_SERVE_HOST,
+  LIVE_RELOAD_PATH,
   PARTIALS_DIR_NAME,
   buildSite,
   copyStaticAssets,
   createWatchSnapshot,
+  injectLiveReloadClient,
   loadPages,
   markdownToHtml,
   parseCliArgs,
@@ -17,8 +21,10 @@ const {
   relativeLink,
   replaceMarkdownImages,
   resolveDocumentHref,
+  resolvePreviewRequestPath,
   sanitizeHref,
   slugify,
+  startPreviewServer,
   toOutputPath,
   walkContentEntries,
 } = require('./sitegen');
@@ -41,6 +47,23 @@ async function waitFor(predicate, { timeoutMs = 5000, intervalMs = 100 } = {}) {
   throw new Error(`Timed out after ${timeoutMs}ms waiting for condition.`);
 }
 
+function httpRequest({ host = DEFAULT_SERVE_HOST, port, path: requestPath = '/', method = 'GET' }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host, port, path: requestPath, method }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        resolve({ statusCode: res.statusCode, headers: res.headers, body });
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 test('parseFrontMatter extracts metadata and body', () => {
   const parsed = parseFrontMatter(`---\r\ntitle: Portfolio\r\norder: 2\r\ntags: [node, markdown]\r\nnav: false\r\n---\r\n# Heading`);
   assert.equal(parsed.metadata.title, 'Portfolio');
@@ -50,12 +73,14 @@ test('parseFrontMatter extracts metadata and body', () => {
   assert.equal(parsed.body, '# Heading');
 });
 
-test('parseCliArgs enables watch mode and custom intervals', () => {
-  const parsed = parseCliArgs(['content', 'dist', '--watch', '--watch-interval', '750']);
+test('parseCliArgs enables watch mode, preview serving, and custom ports', () => {
+  const parsed = parseCliArgs(['content', 'dist', '--watch', '--watch-interval', '750', '--serve', '--serve-port', '4321']);
   assert.equal(parsed.contentDir, 'content');
   assert.equal(parsed.outputDir, 'dist');
   assert.equal(parsed.options.watch, true);
   assert.equal(parsed.options.watchIntervalMs, 750);
+  assert.equal(parsed.options.serve, true);
+  assert.equal(parsed.options.servePort, 4321);
 });
 
 test('createWatchSnapshot changes when shared partial templates change', () => {
@@ -73,6 +98,13 @@ test('createWatchSnapshot changes when shared partial templates change', () => {
 
   assert.notEqual(before, after);
   assert.match(after, /_partials\/header\.html/);
+});
+
+test('injectLiveReloadClient adds an EventSource script before </body>', () => {
+  const html = injectLiveReloadClient('<html><body><main>Hello</main></body></html>');
+  assert.match(html, /<main>Hello<\/main>/);
+  assert.match(html, /EventSource/);
+  assert.match(html, new RegExp(LIVE_RELOAD_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, images, and fenced blocks', () => {
@@ -320,6 +352,63 @@ tags: [docs]
   assert.equal(fs.existsSync(path.join(outputDir, PARTIALS_DIR_NAME, 'header.html')), false);
 });
 
+test('resolvePreviewRequestPath maps extensionless routes and blocks traversal', () => {
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(outputDir, 'guides'), { recursive: true });
+  fs.mkdirSync(path.join(outputDir, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(outputDir, 'index.html'), '<h1>Home</h1>', 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'guides', 'setup.html'), '<h1>Setup</h1>', 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'assets', 'logo.png'), 'png', 'utf8');
+
+  assert.equal(resolvePreviewRequestPath(outputDir, '/'), path.join(outputDir, 'index.html'));
+  assert.equal(resolvePreviewRequestPath(outputDir, '/guides/setup'), path.join(outputDir, 'guides', 'setup.html'));
+  assert.equal(resolvePreviewRequestPath(outputDir, '/guides/setup.html'), path.join(outputDir, 'guides', 'setup.html'));
+  assert.equal(resolvePreviewRequestPath(outputDir, '/assets/logo.png'), path.join(outputDir, 'assets', 'logo.png'));
+  assert.equal(resolvePreviewRequestPath(outputDir, '/../secret.txt'), null);
+});
+
+test('preview server serves extensionless html routes and injects live reload only into html', async (t) => {
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(outputDir, 'guides'), { recursive: true });
+  fs.mkdirSync(path.join(outputDir, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(outputDir, 'index.html'), '<html><body><h1>Home</h1></body></html>', 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'guides', 'setup.html'), '<html><body><h1>Setup</h1></body></html>', 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'assets', 'app.js'), 'console.log("ok");', 'utf8');
+
+  const preview = await startPreviewServer(outputDir, { port: 0, liveReload: true });
+  t.after(async () => {
+    await preview.close();
+  });
+
+  const setupPage = await httpRequest({ port: preview.port, path: '/guides/setup' });
+  assert.equal(setupPage.statusCode, 200);
+  assert.match(setupPage.body, /<h1>Setup<\/h1>/);
+  assert.match(setupPage.body, /EventSource/);
+
+  const scriptAsset = await httpRequest({ port: preview.port, path: '/assets/app.js' });
+  assert.equal(scriptAsset.statusCode, 200);
+  assert.equal(scriptAsset.body, 'console.log("ok");');
+  assert.doesNotMatch(scriptAsset.body, /EventSource/);
+});
+
+test('preview server can serve static output without injecting live reload when watch mode is off', async (t) => {
+  const outputDir = makeTempDir();
+  fs.writeFileSync(path.join(outputDir, 'index.html'), '<html><body><h1>Standalone preview</h1></body></html>', 'utf8');
+
+  const preview = await startPreviewServer(outputDir, { port: 0, liveReload: false });
+  t.after(async () => {
+    await preview.close();
+  });
+
+  const response = await httpRequest({ port: preview.port, path: '/' });
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Standalone preview/);
+  assert.doesNotMatch(response.body, /EventSource/);
+
+  const liveReloadEndpoint = await httpRequest({ port: preview.port, path: LIVE_RELOAD_PATH });
+  assert.equal(liveReloadEndpoint.statusCode, 404);
+});
+
 test('watch CLI rebuilds generated pages after content changes', async (t) => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
@@ -360,6 +449,82 @@ test('watch CLI rebuilds generated pages after content changes', async (t) => {
   fs.writeFileSync(sourcePath, '# Second version', 'utf8');
 
   await waitFor(() => fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8').includes('Second version'));
+  assert.equal(stderr, '');
+});
+
+test('watch + serve mode broadcasts live reload events after rebuilds', async (t) => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  const sourcePath = path.join(contentDir, 'index.md');
+  fs.writeFileSync(sourcePath, '# First preview', 'utf8');
+
+  const child = spawn(
+    process.execPath,
+    ['sitegen.js', contentDir, outputDir, '--watch', '--watch-interval', '100', '--serve', '--serve-port', '0'],
+    {
+      cwd: __dirname,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }
+  );
+
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const closePromise = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+
+  t.after(async () => {
+    if (!child.killed) {
+      child.kill('SIGTERM');
+    }
+    await closePromise;
+  });
+
+  const serverUrl = await waitFor(() => {
+    const match = stdout.match(/Preview server listening at (http:\/\/127\.0\.0\.1:(\d+))/);
+    return match ? match[1] : null;
+  });
+  const port = Number(new URL(serverUrl).port);
+
+  await waitFor(() => stdout.includes('Watching'));
+  const initialPage = await httpRequest({ port, path: '/' });
+  assert.equal(initialPage.statusCode, 200);
+  assert.match(initialPage.body, /First preview/);
+  assert.match(initialPage.body, /EventSource/);
+
+  let sseBuffer = '';
+  const sseRequest = http.get({ host: DEFAULT_SERVE_HOST, port, path: LIVE_RELOAD_PATH, headers: { Accept: 'text/event-stream' } });
+  sseRequest.on('response', (res) => {
+    res.setEncoding('utf8');
+    res.on('data', (chunk) => {
+      sseBuffer += chunk;
+    });
+  });
+  sseRequest.on('error', (error) => {
+    throw error;
+  });
+
+  t.after(() => {
+    sseRequest.destroy();
+  });
+
+  await waitFor(() => sseBuffer.includes(': connected'));
+
+  const stats = fs.statSync(sourcePath);
+  fs.utimesSync(sourcePath, stats.atime, new Date(Date.now() + 1500));
+  fs.writeFileSync(sourcePath, '# Second preview', 'utf8');
+
+  await waitFor(() => sseBuffer.includes('event: reload'));
+  const refreshedPage = await httpRequest({ port, path: '/' });
+  assert.match(refreshedPage.body, /Second preview/);
   assert.equal(stderr, '');
 });
 

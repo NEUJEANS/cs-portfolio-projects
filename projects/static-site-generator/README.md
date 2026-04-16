@@ -17,6 +17,7 @@ This project shows practical compiler-style text processing, file-system automat
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
 - supports a dependency-free `--watch` mode with a configurable polling interval so content edits, new files, and shared partial updates trigger rebuilds during local authoring
+- can serve the generated `dist/` folder through a built-in local preview server, including browser auto-refresh when `--serve` is combined with `--watch`
 - builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
 - generates a `tags/` directory of archive pages from front matter tags, including a browsable tags index and per-tag page listings
 - renders a focused Markdown subset: headings, paragraphs, bullet lists, ordered lists, blockquotes, links, images, inline code, fenced code blocks, bold, and italics
@@ -70,7 +71,19 @@ For a faster edit-build-preview loop, keep the generator running in watch mode:
 node sitegen.js content dist --watch --watch-interval 250
 ```
 
-Watch mode uses a small polling snapshot instead of platform-specific recursive file watching, so it also catches newly added Markdown files and `_partials/` template edits on Linux without extra dependencies.
+If you want to browse the generated site locally after a one-shot build, start the built-in preview server:
+
+```bash
+node sitegen.js content dist --serve --serve-port 4173
+```
+
+For the full local authoring loop, combine `--watch` and `--serve` so rebuilds automatically trigger browser refreshes through a tiny Server-Sent Events channel:
+
+```bash
+node sitegen.js content dist --watch --serve --watch-interval 250 --serve-port 4173
+```
+
+Watch mode uses a small polling snapshot instead of platform-specific recursive file watching, so it also catches newly added Markdown files and `_partials/` template edits on Linux without extra dependencies. When `--serve` is enabled without `--watch`, the preview server serves the current `dist/` snapshot without injecting the live-reload client.
 
 If you want shared layout chrome across every page, add optional partials under `content/_partials/`:
 
@@ -122,4 +135,4 @@ node --test test_static_site_generator.js
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
 - syntax highlighting themes and line-number support for fenced code blocks
-- optional live preview server with browser auto-refresh on rebuild
+- custom 404 pages and friendlier preview error surfaces for missing routes

@@ -114,3 +114,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 vertical slice: local preview server with live reload
+- [x] identify `static-site-generator` as still unfinished because authors could rebuild locally but still had no built-in way to browse the generated site
+- [x] skip extra web research and language refresh because a tiny preview server fits the existing Node/CommonJS standard-library workflow directly
+- [x] add a resumable checklist for the slice
+- [x] implement CLI `--serve` mode with configurable preview ports
+- [x] serve the generated `dist/` output with extensionless route handling for nested pages
+- [x] inject browser auto-refresh only when preview mode runs alongside `--watch`
+- [x] expand automated tests for preview routing, serve-only behavior, and watch+serve live reload flow
+- [x] update README and project checklist with local preview usage plus the next missing-route follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

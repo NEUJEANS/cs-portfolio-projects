@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 
 const PARTIALS_DIR_NAME = '_partials';
+const LIVE_RELOAD_PATH = '/__sitegen/live';
+const DEFAULT_SERVE_HOST = '127.0.0.1';
+const DEFAULT_SERVE_PORT = 4173;
 
 function parseFrontMatter(source) {
   const normalized = source.replace(/^\uFEFF/, '');
@@ -865,12 +869,22 @@ function parseWatchInterval(rawValue) {
   return parsed;
 }
 
+function parseServePort(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) {
+    throw new Error('Serve port must be an integer between 0 and 65535.');
+  }
+  return parsed;
+}
+
 function parseCliArgs(argv) {
   const positional = [];
   const options = {
     help: false,
     watch: false,
     watchIntervalMs: 500,
+    serve: false,
+    servePort: DEFAULT_SERVE_PORT,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -883,6 +897,11 @@ function parseCliArgs(argv) {
 
     if (arg === '--watch' || arg === '-w') {
       options.watch = true;
+      continue;
+    }
+
+    if (arg === '--serve' || arg === '-s') {
+      options.serve = true;
       continue;
     }
 
@@ -901,6 +920,21 @@ function parseCliArgs(argv) {
       continue;
     }
 
+    if (arg === '--serve-port') {
+      const value = argv[index + 1];
+      if (value === undefined) {
+        throw new Error('Missing value for --serve-port.');
+      }
+      options.servePort = parseServePort(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith('--serve-port=')) {
+      options.servePort = parseServePort(arg.split('=')[1]);
+      continue;
+    }
+
     positional.push(arg);
   }
 
@@ -911,11 +945,223 @@ function parseCliArgs(argv) {
   };
 }
 
+function createLiveReloadClientSnippet() {
+  return `<script>
+(() => {
+  if (!('EventSource' in window)) return;
+  const source = new EventSource('${LIVE_RELOAD_PATH}');
+  source.addEventListener('reload', () => {
+    window.location.reload();
+  });
+})();
+</script>`;
+}
+
+function injectLiveReloadClient(html) {
+  const snippet = createLiveReloadClientSnippet();
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${snippet}\n  </body>`);
+  }
+  return `${html}\n${snippet}`;
+}
+
+function normalizePreviewPathname(requestUrl) {
+  const url = new URL(requestUrl, 'http://127.0.0.1');
+  const pathname = decodeURIComponent(url.pathname || '/');
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    return null;
+  }
+  return segments.join(path.sep);
+}
+
+function resolvePreviewRequestPath(outputDir, requestUrl) {
+  const relativePath = normalizePreviewPathname(requestUrl);
+  if (relativePath === null) {
+    return null;
+  }
+
+  const candidates = [];
+  if (!relativePath) {
+    candidates.push('index.html');
+  } else if (path.extname(relativePath)) {
+    candidates.push(relativePath);
+  } else {
+    candidates.push(`${relativePath}.html`, path.join(relativePath, 'index.html'));
+  }
+
+  const resolvedOutputDir = path.resolve(outputDir);
+  for (const candidate of candidates) {
+    const absolute = path.resolve(resolvedOutputDir, candidate);
+    if (absolute !== resolvedOutputDir && !absolute.startsWith(`${resolvedOutputDir}${path.sep}`)) {
+      continue;
+    }
+    if (fs.existsSync(absolute) && fs.statSync(absolute).isFile()) {
+      return absolute;
+    }
+  }
+
+  return null;
+}
+
+function detectContentType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const types = {
+    '.css': 'text/css; charset=utf-8',
+    '.gif': 'image/gif',
+    '.html': 'text/html; charset=utf-8',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.js': 'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.md': 'text/markdown; charset=utf-8',
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.txt': 'text/plain; charset=utf-8',
+    '.webp': 'image/webp',
+  };
+  return types[ext] || 'application/octet-stream';
+}
+
+function startPreviewServer(outputDir, options = {}) {
+  const host = options.host || DEFAULT_SERVE_HOST;
+  const port = options.port ?? DEFAULT_SERVE_PORT;
+  const liveReload = options.liveReload !== false;
+  const clients = new Set();
+  const server = http.createServer((req, res) => {
+    if (!req.url) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Bad request');
+      return;
+    }
+
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Method not allowed');
+      return;
+    }
+
+    const parsedUrl = new URL(req.url, 'http://127.0.0.1');
+    if (liveReload && parsedUrl.pathname === LIVE_RELOAD_PATH) {
+      res.writeHead(200, {
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'Content-Type': 'text/event-stream',
+      });
+      res.write(': connected\n\n');
+      clients.add(res);
+      req.on('close', () => {
+        clients.delete(res);
+      });
+      return;
+    }
+
+    const filePath = resolvePreviewRequestPath(outputDir, req.url);
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+
+    const contentType = detectContentType(filePath);
+    const raw = fs.readFileSync(filePath);
+    if (contentType.startsWith('text/html') && liveReload) {
+      const html = injectLiveReloadClient(raw.toString('utf8'));
+      res.writeHead(200, {
+        'Cache-Control': 'no-cache',
+        'Content-Length': Buffer.byteLength(html),
+        'Content-Type': contentType,
+      });
+      if (req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+      res.end(html);
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Length': raw.length,
+      'Content-Type': contentType,
+    });
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    res.end(raw);
+  });
+
+  const heartbeat = setInterval(() => {
+    for (const client of clients) {
+      client.write(': ping\n\n');
+    }
+  }, 15000);
+  if (typeof heartbeat.unref === 'function') {
+    heartbeat.unref();
+  }
+
+  return new Promise((resolve, reject) => {
+    const handleError = (error) => {
+      clearInterval(heartbeat);
+      reject(error);
+    };
+
+    server.once('error', handleError);
+    server.listen(port, host, () => {
+      server.off('error', handleError);
+      const address = server.address();
+      const resolvedPort = typeof address === 'object' && address ? address.port : port;
+      const resolvedHost = typeof address === 'object' && address && address.address ? address.address : host;
+      const url = `http://${resolvedHost}:${resolvedPort}`;
+      console.log(
+        `[${new Date().toISOString()}] Preview server listening at ${url}${liveReload ? ' with live reload.' : '.'}`
+      );
+
+      resolve({
+        host: resolvedHost,
+        port: resolvedPort,
+        url,
+        broadcastReload(reason = 'content-change') {
+          const payload = JSON.stringify({ reason, time: new Date().toISOString() });
+          for (const client of clients) {
+            client.write(`event: reload\ndata: ${payload}\n\n`);
+          }
+        },
+        close() {
+          clearInterval(heartbeat);
+          for (const client of clients) {
+            client.end();
+          }
+          clients.clear();
+          return new Promise((closeResolve, closeReject) => {
+            server.close((error) => {
+              if (error) {
+                closeReject(error);
+                return;
+              }
+              closeResolve();
+            });
+          });
+        },
+      });
+    });
+  });
+}
+
 function watchSite(contentDir, outputDir, options = {}) {
   const intervalMs = options.watchIntervalMs || 500;
+  const onBuildSuccess = typeof options.onBuildSuccess === 'function' ? options.onBuildSuccess : null;
+  const onStop = typeof options.onStop === 'function' ? options.onStop : null;
   let lastSnapshot = createWatchSnapshot(contentDir);
 
-  buildWithLogging(contentDir, outputDir, 'Initial build');
+  if (!options.skipInitialBuild) {
+    const initialBuild = buildWithLogging(contentDir, outputDir, 'Initial build');
+    if (initialBuild.ok && onBuildSuccess) {
+      onBuildSuccess({ reason: 'initial-build', result: initialBuild.result });
+    }
+  }
+
   console.log(`[${new Date().toISOString()}] Watching ${contentDir} every ${intervalMs}ms for changes. Press Ctrl+C to stop.`);
 
   const timer = setInterval(() => {
@@ -926,20 +1172,47 @@ function watchSite(contentDir, outputDir, options = {}) {
 
     lastSnapshot = nextSnapshot;
     console.log(`[${new Date().toISOString()}] Change detected. Rebuilding...`);
-    buildWithLogging(contentDir, outputDir, 'Rebuild');
+    const rebuild = buildWithLogging(contentDir, outputDir, 'Rebuild');
+    if (rebuild.ok && onBuildSuccess) {
+      onBuildSuccess({ reason: 'rebuild', result: rebuild.result });
+    }
   }, intervalMs);
 
+  let stopping = false;
   const stopWatching = () => {
+    if (stopping) return;
+    stopping = true;
     clearInterval(timer);
-    console.log(`\n[${new Date().toISOString()}] Watch mode stopped.`);
-    process.exit(0);
+    Promise.resolve(onStop ? onStop() : undefined)
+      .catch(() => undefined)
+      .finally(() => {
+        console.log(`\n[${new Date().toISOString()}] Watch mode stopped.`);
+        process.exit(0);
+      });
   };
 
   process.once('SIGINT', stopWatching);
   process.once('SIGTERM', stopWatching);
 }
 
-function main(argv) {
+function installServeShutdown(preview) {
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    Promise.resolve(preview.close())
+      .catch(() => undefined)
+      .finally(() => {
+        console.log(`\n[${new Date().toISOString()}] Preview server stopped.`);
+        process.exit(0);
+      });
+  };
+
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+}
+
+async function main(argv) {
   let parsed;
 
   try {
@@ -952,29 +1225,67 @@ function main(argv) {
 
   const { contentDir, outputDir, options } = parsed;
   if (options.help || !contentDir || !outputDir) {
-    console.error('Usage: node sitegen.js <content-dir> <output-dir> [--watch] [--watch-interval <ms>]');
+    console.error(
+      'Usage: node sitegen.js <content-dir> <output-dir> [--watch] [--watch-interval <ms>] [--serve] [--serve-port <port>]'
+    );
     process.exitCode = options.help ? 0 : 1;
     return;
   }
 
   const resolvedContentDir = path.resolve(contentDir);
   const resolvedOutputDir = path.resolve(outputDir);
+
   if (options.watch) {
-    watchSite(resolvedContentDir, resolvedOutputDir, options);
+    const initialOutcome = buildWithLogging(resolvedContentDir, resolvedOutputDir, 'Initial build');
+    const preview = options.serve
+      ? await startPreviewServer(resolvedOutputDir, {
+          host: DEFAULT_SERVE_HOST,
+          port: options.servePort,
+          liveReload: true,
+        })
+      : null;
+
+    watchSite(resolvedContentDir, resolvedOutputDir, {
+      skipInitialBuild: true,
+      watchIntervalMs: options.watchIntervalMs,
+      onBuildSuccess: preview ? ({ reason }) => preview.broadcastReload(reason) : undefined,
+      onStop: preview ? () => preview.close() : undefined,
+    });
+
+    if (!initialOutcome.ok) {
+      process.exitCode = 1;
+    }
     return;
   }
 
   const outcome = buildWithLogging(resolvedContentDir, resolvedOutputDir, 'Build');
   if (!outcome.ok) {
     process.exitCode = 1;
+    return;
+  }
+
+  if (options.serve) {
+    const preview = await startPreviewServer(resolvedOutputDir, {
+      host: DEFAULT_SERVE_HOST,
+      port: options.servePort,
+      liveReload: false,
+    });
+    installServeShutdown(preview);
+    return;
   }
 }
 
 if (require.main === module) {
-  main(process.argv.slice(2));
+  main(process.argv.slice(2)).catch((error) => {
+    console.error(error.stack || error.message);
+    process.exit(1);
+  });
 }
 
 module.exports = {
+  DEFAULT_SERVE_HOST,
+  DEFAULT_SERVE_PORT,
+  LIVE_RELOAD_PATH,
   PARTIALS_DIR_NAME,
   assertNoGeneratedAssetConflicts,
   assertNoGeneratedPageConflicts,
@@ -983,26 +1294,33 @@ module.exports = {
   buildTagCollections,
   buildWithLogging,
   copyStaticAssets,
+  createLiveReloadClientSnippet,
   createWatchSnapshot,
+  detectContentType,
   escapeHtml,
   formatBuildSummary,
+  injectLiveReloadClient,
   isReservedContentPath,
   listStaticAssetOutputNames,
   loadPages,
   loadTemplatePartials,
   markdownToHtml,
+  normalizePreviewPathname,
   normalizeTags,
   parseCliArgs,
   parseFrontMatter,
+  parseServePort,
   parseWatchInterval,
   relativeLink,
   renderPartial,
   replaceMarkdownImages,
   replaceMarkdownLinks,
   resolveDocumentHref,
+  resolvePreviewRequestPath,
   rootPathForPage,
   sanitizeHref,
   slugify,
+  startPreviewServer,
   toOutputPath,
   walkContentEntries,
   walkWatchFiles,
