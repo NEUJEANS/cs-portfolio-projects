@@ -13,9 +13,9 @@
 - [x] add generated `tags/` index and per-tag archive pages
 - [x] link page-level tag pills into those generated archive pages and surface a `Tags` nav entry
 - [x] expand automated tests for generated archives, deduplicated tags, and nested relative links
-- [x] run focused tests and a syntax check
+- [x] run focused tests, the main `npm test` suite, and a syntax check
 - [x] perform review pass 1 and fix issues
 - [x] perform review pass 2 and fix issues
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
