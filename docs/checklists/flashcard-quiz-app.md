@@ -14,4 +14,4 @@
 - [x] add persistent study history to track weak cards over time
 - [x] add spaced-repetition scheduling recommendations based on history
 - [x] add import/export support for JSON deck files and conversion workflows
-- [ ] add Anki-style package export/import bridge
+- [x] add Anki-style package export/import bridge

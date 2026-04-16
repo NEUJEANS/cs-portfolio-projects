@@ -2,6 +2,7 @@ import argparse
 import csv
 import json
 import random
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,7 +18,9 @@ class Card:
 
 REQUIRED_COLUMNS = {"prompt", "answer"}
 OPTIONAL_COLUMNS = {"tags"}
-SUPPORTED_SUFFIXES = {".csv", ".json"}
+SUPPORTED_SUFFIXES = {".anki.zip", ".csv", ".json", ".tsv", ".txt", ".zip"}
+ANKI_TEXT_SUFFIXES = {".tsv", ".txt"}
+ANKI_PACKAGE_MARKER = 'anki-package'
 
 
 def utc_now_iso() -> str:
@@ -104,13 +107,70 @@ def load_cards_from_json(path: str | Path) -> list[Card]:
     return cards
 
 
+def parse_anki_text_lines(lines: Iterable[str], *, source: str) -> list[Card]:
+    cards: list[Card] = []
+    for index, raw_line in enumerate(lines, start=1):
+        line = raw_line.rstrip('\n').rstrip('\r')
+        if not line.strip():
+            continue
+        parts = [part.strip() for part in line.split('\t')]
+        if len(parts) < 2:
+            raise ValueError(f'{source} row {index} must contain at least prompt and answer columns')
+        tags = parse_tags(parts[2]) if len(parts) >= 3 else ()
+        card = validate_card_fields(parts[0], parts[1], index, source=source)
+        cards.append(Card(card.prompt, card.answer, tags))
+
+    if not cards:
+        raise ValueError(f'{source} must include at least one flashcard')
+
+    return cards
+
+
+def load_cards_from_anki_text(path: str | Path) -> list[Card]:
+    deck_path = Path(path)
+    return parse_anki_text_lines(deck_path.read_text(encoding='utf-8').splitlines(), source='Anki text deck')
+
+
+def load_cards_from_anki_package(path: str | Path) -> list[Card]:
+    package_path = Path(path)
+    try:
+        with zipfile.ZipFile(package_path) as archive:
+            manifest = json.loads(archive.read('manifest.json').decode('utf-8'))
+            if manifest.get('format') != ANKI_PACKAGE_MARKER:
+                raise ValueError('Anki package manifest format is not supported')
+            notes_name = manifest.get('notes_path', 'anki-notes.tsv')
+            lines = archive.read(notes_name).decode('utf-8').splitlines()
+            return parse_anki_text_lines(lines, source='Anki package')
+    except KeyError as exc:
+        missing_name = str(exc.args[0]).strip("\"").strip("'")
+        if missing_name.startswith('There is no item named '):
+            missing_name = missing_name.split("'", 2)[1]
+        raise ValueError(f'Anki package missing required entry: {missing_name}') from exc
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f'Anki package is not a valid zip archive: {package_path}') from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f'Anki package manifest is not valid JSON: {package_path}') from exc
+
+
+def detect_suffix(path: str | Path) -> str:
+    deck_path = Path(path)
+    name = deck_path.name.lower()
+    if name.endswith('.anki.zip'):
+        return '.anki.zip'
+    return deck_path.suffix.lower()
+
+
 def load_cards(path: str | Path):
     deck_path = Path(path)
-    suffix = deck_path.suffix.lower()
+    suffix = detect_suffix(deck_path)
     if suffix == '.csv':
         return load_cards_from_csv(deck_path)
     if suffix == '.json':
         return load_cards_from_json(deck_path)
+    if suffix in ANKI_TEXT_SUFFIXES:
+        return load_cards_from_anki_text(deck_path)
+    if suffix in {'.anki.zip', '.zip'}:
+        return load_cards_from_anki_package(deck_path)
     supported = ', '.join(sorted(SUPPORTED_SUFFIXES))
     raise ValueError(f'Unsupported deck format: {deck_path.suffix or "<none>"}. Supported formats: {supported}')
 
@@ -133,6 +193,59 @@ def export_cards_to_json(cards: Sequence[Card], path: str | Path, *, source_path
         ],
     }
     export_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    return export_path
+
+
+def export_cards_to_anki_text(cards: Sequence[Card], path: str | Path) -> Path:
+    export_path = Path(path)
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for card in cards:
+        tags = ', '.join(card.tags)
+        lines.append('\t'.join([card.prompt, card.answer, tags]).rstrip())
+    export_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    return export_path
+
+
+def export_cards_to_anki_package(cards: Sequence[Card], path: str | Path, *, source_path: str | Path | None = None) -> Path:
+    export_path = Path(path)
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        'format': ANKI_PACKAGE_MARKER,
+        'version': 1,
+        'exported_at': utc_now_iso(),
+        'source_path': str(source_path) if source_path else None,
+        'card_count': len(cards),
+        'notes_path': 'anki-notes.tsv',
+        'json_path': 'deck.json',
+        'fields': ['front', 'back', 'tags'],
+        'notes': 'Bridge bundle for import into Anki via tab-separated notes, not a binary .apkg export.',
+    }
+    notes_lines = []
+    for card in cards:
+        notes_lines.append('\t'.join([card.prompt, card.answer, ', '.join(card.tags)]).rstrip())
+
+    with zipfile.ZipFile(export_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('manifest.json', json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+        archive.writestr('anki-notes.tsv', '\n'.join(notes_lines) + '\n')
+        archive.writestr(
+            'README.txt',
+            'Import anki-notes.tsv into Anki as a tab-separated file with fields Front, Back, Tags.\n',
+        )
+        archive.writestr(
+            'deck.json',
+            json.dumps(
+                {
+                    'version': 1,
+                    'cards': [
+                        {'prompt': card.prompt, 'answer': card.answer, 'tags': list(card.tags)}
+                        for card in cards
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            ) + '\n',
+        )
     return export_path
 
 
@@ -258,6 +371,7 @@ def update_history(history: dict, card_results: Sequence[dict], *, now: str | No
 def summarize_history(history: dict, limit: int = 3) -> dict:
     total_attempts = int(history.get('total_attempts', 0))
     total_correct = int(history.get('total_correct', 0))
+
     cards = []
     for entry in history.get('cards', {}).values():
         seen = int(entry.get('times_seen', 0))
@@ -404,7 +518,7 @@ def run_quiz(cards: Sequence[Card], *, retry_incorrect: bool = False):
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='Flashcard quiz app')
-    p.add_argument('deck_path', help='Input deck in CSV or JSON format')
+    p.add_argument('deck_path', help='Input deck in CSV, JSON, TSV/TXT, or Anki bridge zip format')
     p.add_argument('--limit', type=int, help='Study only the first N cards from the shuffled deck')
     p.add_argument('--seed', type=int, help='Shuffle seed for reproducible study sessions')
     p.add_argument('--retry-incorrect', action='store_true', help='Ask missed cards one additional time')
@@ -413,6 +527,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--show-recommendations', action='store_true', help='Print spaced-repetition study recommendations from history')
     p.add_argument('--recommend-limit', type=int, default=5, help='Number of study recommendations to print when enabled')
     p.add_argument('--export-json', help='Write the loaded deck to a normalized JSON file')
+    p.add_argument('--export-anki-text', help='Write an Anki-importable tab-separated notes file')
+    p.add_argument('--export-anki-package', help='Write a portable Anki bridge zip bundle with notes and JSON deck files')
     p.add_argument('--export-only', action='store_true', help='Convert/export the deck and exit without starting a quiz')
     p.add_argument(
         '--tag',
@@ -451,6 +567,14 @@ def main(argv=None):
     if args.export_json:
         export_path = export_cards_to_json(filtered_cards, args.export_json, source_path=args.deck_path)
         print(f'Exported {len(filtered_cards)} cards to {export_path}')
+
+    if args.export_anki_text:
+        export_path = export_cards_to_anki_text(filtered_cards, args.export_anki_text)
+        print(f'Exported {len(filtered_cards)} cards to Anki text file {export_path}')
+
+    if args.export_anki_package:
+        export_path = export_cards_to_anki_package(filtered_cards, args.export_anki_package, source_path=args.deck_path)
+        print(f'Exported {len(filtered_cards)} cards to Anki package bridge {export_path}')
 
     if args.export_only:
         return

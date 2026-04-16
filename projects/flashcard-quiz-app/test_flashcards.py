@@ -2,14 +2,18 @@ import io
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 from flashcards import (
+    ANKI_PACKAGE_MARKER,
     Card,
     build_history_key,
     build_recommendations,
     build_session,
+    export_cards_to_anki_package,
+    export_cards_to_anki_text,
     export_cards_to_json,
     filter_cards,
     load_cards,
@@ -50,6 +54,14 @@ class FlashcardTests(unittest.TestCase):
             self.assertEqual(cards[0], Card('2+2', '4', ('math', 'drill')))
             self.assertEqual(cards[1].tags, ('geo', 'capitals'))
 
+    def test_load_anki_text_accepts_tab_separated_cards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'cards.tsv'
+            path.write_text('2+2\t4\tmath, drill\ncapital of France\tParis\tgeo\n', encoding='utf-8')
+            cards = load_cards(path)
+            self.assertEqual(cards[0], Card('2+2', '4', ('math', 'drill')))
+            self.assertEqual(cards[1], Card('capital of France', 'Paris', ('geo',)))
+
     def test_export_cards_to_json_writes_normalized_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             export_path = Path(tmp) / 'deck.json'
@@ -60,6 +72,44 @@ class FlashcardTests(unittest.TestCase):
             self.assertEqual(payload['card_count'], 2)
             self.assertEqual(payload['source_path'], 'cards.csv')
             self.assertEqual(payload['cards'][1]['tags'], ['graphs', 'algorithms'])
+
+    def test_export_cards_to_anki_text_writes_importable_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            export_path = Path(tmp) / 'anki-notes.tsv'
+            cards = [Card('2+2', '4', ('math',)), Card('BFS', 'queue', ('graphs', 'algorithms'))]
+            export_cards_to_anki_text(cards, export_path)
+            lines = export_path.read_text(encoding='utf-8').splitlines()
+            self.assertEqual(lines[0], '2+2\t4\tmath')
+            self.assertEqual(lines[1], 'BFS\tqueue\tgraphs, algorithms')
+
+    def test_export_cards_to_anki_package_writes_bridge_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            export_path = Path(tmp) / 'deck.anki.zip'
+            cards = [Card('2+2', '4', ('math',)), Card('BFS', 'queue', ('graphs', 'algorithms'))]
+            export_cards_to_anki_package(cards, export_path, source_path='cards.csv')
+            with zipfile.ZipFile(export_path) as archive:
+                manifest = json.loads(archive.read('manifest.json').decode('utf-8'))
+                notes = archive.read('anki-notes.tsv').decode('utf-8').splitlines()
+                self.assertEqual(manifest['format'], ANKI_PACKAGE_MARKER)
+                self.assertEqual(manifest['source_path'], 'cards.csv')
+                self.assertIn('Bridge bundle', manifest['notes'])
+                self.assertEqual(notes[0], '2+2\t4\tmath')
+
+    def test_load_cards_from_anki_package_zip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            export_path = Path(tmp) / 'deck.anki.zip'
+            cards = [Card('2+2', '4', ('math',)), Card('capital of France', 'Paris', ('geo', 'capitals'))]
+            export_cards_to_anki_package(cards, export_path)
+            loaded = load_cards(export_path)
+            self.assertEqual(loaded, cards)
+
+    def test_load_anki_package_rejects_missing_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'broken.anki.zip'
+            with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr('anki-notes.tsv', '2+2\t4\tmath\n')
+            with self.assertRaisesRegex(ValueError, 'Anki package missing required entry: manifest.json'):
+                load_cards(path)
 
     def test_load_cards_rejects_missing_columns(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,6 +123,13 @@ class FlashcardTests(unittest.TestCase):
             path = Path(tmp) / 'cards.json'
             path.write_text(json.dumps(['bad-card']), encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'JSON deck card 1 must be an object'):
+                load_cards(path)
+
+    def test_load_anki_text_rejects_short_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'cards.tsv'
+            path.write_text('2+2\n', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'Anki text deck row 1 must contain at least prompt and answer columns'):
                 load_cards(path)
 
     def test_load_cards_rejects_blank_values(self):
@@ -265,6 +322,26 @@ class FlashcardTests(unittest.TestCase):
             self.assertEqual(payload['card_count'], 2)
             self.assertEqual(payload['cards'][0]['prompt'], '2+2')
             self.assertIn('Exported 2 cards', stdout.getvalue())
+
+    def test_main_can_export_anki_bridge_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cards_path = Path(tmp) / 'cards.csv'
+            notes_path = Path(tmp) / 'out' / 'anki-notes.tsv'
+            package_path = Path(tmp) / 'out' / 'deck.anki.zip'
+            cards_path.write_text('prompt,answer,tags\n2+2,4,math\ncapital of France,Paris,geo\n', encoding='utf-8')
+            stdout = io.StringIO()
+            with patch('sys.stdout', stdout):
+                main([
+                    str(cards_path),
+                    '--export-anki-text', str(notes_path),
+                    '--export-anki-package', str(package_path),
+                    '--export-only',
+                ])
+            self.assertTrue(notes_path.exists())
+            self.assertTrue(package_path.exists())
+            output = stdout.getvalue()
+            self.assertIn('Anki text file', output)
+            self.assertIn('Anki package bridge', output)
 
     def test_main_loads_json_deck_and_persists_history(self):
         with tempfile.TemporaryDirectory() as tmp:

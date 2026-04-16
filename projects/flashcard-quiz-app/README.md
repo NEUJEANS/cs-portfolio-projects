@@ -1,14 +1,14 @@
 # flashcard-quiz-app
 
 ## Overview
-Load flashcards from CSV or normalized JSON decks and run a command-line study session with reproducible shuffling, focused deck limits, topic-tag filters, optional retry rounds, persistent JSON study history, and spaced-repetition recommendations.
+Load flashcards from CSV, normalized JSON, Anki-importable TSV/TXT notes, or a portable Anki bridge zip bundle and run a command-line study session with reproducible shuffling, focused deck limits, topic-tag filters, optional retry rounds, persistent JSON study history, and spaced-repetition recommendations.
 
 ## Stack
 - Python
-- standard library only (`argparse`, `csv`, `json`, `pathlib`, `random`, `unittest`)
+- standard library only (`argparse`, `csv`, `json`, `pathlib`, `random`, `unittest`, `zipfile`)
 
 ## Features
-- validates CSV and JSON deck structure before starting a session
+- validates CSV, JSON, Anki-style TSV/TXT, and bridge zip deck structure before starting a session
 - reproducible shuffle order via `--seed` for demos and testing
 - focused study rounds via `--limit`
 - optional tagged decks via a `tags` column or JSON field
@@ -19,7 +19,9 @@ Load flashcards from CSV or normalized JSON decks and run a command-line study s
 - historical weakest-card summary via `--show-history-summary`
 - study recommendations via `--show-recommendations` and `--recommend-limit`
 - normalized JSON deck export via `--export-json` with optional `--export-only` conversion mode
-- automated tests for validation, filtering, shuffle behavior, retry flow, history persistence, JSON import/export, and recommendation ranking
+- Anki-friendly tab-separated note export via `--export-anki-text`
+- portable Anki bridge bundle export/import via `--export-anki-package`
+- automated tests for validation, filtering, shuffle behavior, retry flow, history persistence, JSON import/export, Anki bridge import/export, and recommendation ranking
 
 ## Deck formats
 ### CSV
@@ -45,12 +47,32 @@ The `tags` column is optional. When present, separate multiple tags with commas.
 
 JSON decks may be either a top-level `cards` object wrapper or a plain list of card objects.
 
+### Anki-style TSV/TXT
+```text
+2+2	4	math
+capital of France	Paris	geography, capitals
+```
+
+The third column is optional and maps to tags.
+
+### Anki bridge zip bundle
+A `.anki.zip` file exported by this project contains:
+- `manifest.json` — self-describing bundle metadata
+- `anki-notes.tsv` — Anki-importable note rows
+- `deck.json` — normalized deck export for round-tripping back into this project
+- `README.txt` — import hint for Anki
+
+This is an **Anki-friendly bridge**, not a native binary `.apkg` generator.
+
 ## Usage
 ```bash
 python3 flashcards.py cards.csv --seed 7 --limit 5 --retry-incorrect
 python3 flashcards.py cards.csv --tag algorithms --tag graphs --seed 3
 python3 flashcards.py cards.json --history-path data/history.json --show-history-summary --show-recommendations
 python3 flashcards.py cards.csv --export-json exported/cards.json --export-only
+python3 flashcards.py cards.csv --export-anki-text exported/anki-notes.tsv --export-only
+python3 flashcards.py cards.csv --export-anki-package exported/deck.anki.zip --export-only
+python3 flashcards.py exported/deck.anki.zip --seed 11
 ```
 
 Example session output:
@@ -112,5 +134,5 @@ The recommendation engine is intentionally lightweight and interview-friendly:
 This keeps the project dependency-free while still demonstrating stateful study-planning logic.
 
 ## Future Improvements
-- add Anki-style package export/import bridge for sharing with existing spaced-repetition tools
 - support merging history across multiple decks
+- add optional HTML card rendering previews for richer deck QA
