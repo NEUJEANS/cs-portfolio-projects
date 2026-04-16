@@ -19,7 +19,7 @@
 - [x] review pass 2
 - [x] review pass 3
 - [x] secret scan
-- [ ] commit, push, wrap-up
+- [x] commit, push, wrap-up
 
 ## Notes
 - Keep comparison deterministic by reusing the existing `churn_report` result for each workload file.
