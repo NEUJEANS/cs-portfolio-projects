@@ -26,8 +26,10 @@ build_barbell_graph = module.build_barbell_graph
 build_complete_graph = module.build_complete_graph
 build_cycle_graph = module.build_cycle_graph
 build_erdos_renyi_graph = module.build_erdos_renyi_graph
+build_trace_dot = module.build_trace_dot
 exact_min_cut_size = module.exact_min_cut_size
 is_connected = module.is_connected
+write_trace_dot_snapshots = module.write_trace_dot_snapshots
 
 
 class KargerMinCutLabTests(unittest.TestCase):
@@ -94,6 +96,28 @@ class KargerMinCutLabTests(unittest.TestCase):
         self.assertEqual({row["family"] for row in payload["rows"]}, {"cycle", "complete"})
         self.assertTrue(all("hit_exact_cut" in row for row in payload["rows"]))
         self.assertEqual(len(payload["family_summary"]), 2)
+
+    def test_trace_dot_builder_renders_parallel_edges(self) -> None:
+        graph = module.build_sample_graph()
+        payload = KargerMinCutLab(graph).run_trials(trials=2, seed=4, include_trace=True)
+        payload["graph_summary"] = {"vertices": graph.vertices, "edge_count": len(graph.edges)}
+        payload["input_edges"] = [list(edge) for edge in graph.edges]
+        dot_text = build_trace_dot(payload, step=0)
+        self.assertIn('graph KargerTrace {', dot_text)
+        self.assertIn('label="Karger trace step 0"', dot_text)
+        self.assertIn('penwidth=', dot_text)
+
+    def test_trace_dot_writer_emits_one_file_per_step(self) -> None:
+        graph = module.build_sample_graph()
+        payload = KargerMinCutLab(graph).run_trials(trials=1, seed=3, include_trace=True)
+        payload["graph_summary"] = {"vertices": graph.vertices, "edge_count": len(graph.edges)}
+        payload["input_edges"] = [list(edge) for edge in graph.edges]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            paths = write_trace_dot_snapshots(Path(tmpdir), payload)
+            self.assertEqual(len(paths), len(payload["trial_results"][0]["contractions"]) + 1)
+            self.assertTrue(paths[0].exists())
+            self.assertIn('step-00.dot', str(paths[0]))
+            self.assertIn('Karger trace step 1', paths[1].read_text())
 
     def test_cli_demo_outputs_exact_check_and_histogram(self) -> None:
         completed = subprocess.run(
@@ -179,6 +203,32 @@ class KargerMinCutLabTests(unittest.TestCase):
             csv_text = csv_path.read_text()
             self.assertIn("family,size_parameter", csv_text)
             self.assertIn("barbell", csv_text)
+
+    def test_cli_trace_dot_dir_writes_snapshot_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_dir = Path(tmpdir) / "trace"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "demo",
+                    "--trials",
+                    "2",
+                    "--seed",
+                    "4",
+                    "--trace-dot-dir",
+                    str(trace_dir),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertTrue(payload["trace_dot_files"])
+            self.assertTrue(trace_dir.exists())
+            self.assertIn("step-00.dot", payload["trace_dot_files"][0])
+            self.assertIn("Karger trace step 0", Path(payload["trace_dot_files"][0]).read_text())
 
 
 if __name__ == "__main__":

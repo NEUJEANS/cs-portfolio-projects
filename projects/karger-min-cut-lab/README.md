@@ -14,12 +14,13 @@ A portfolio-friendly randomized algorithms project that implements Karger's rand
 - single-trial and multi-trial Karger runs
 - deterministic sequential seeds for reproducible repeated trials
 - optional contraction trace for the first reported trial
+- Graphviz DOT snapshot export for each contraction step to support diagrams and slide-ready visual explanations
 - exact min-cut checker for small graphs to validate randomized runs
 - built-in benchmark mode across cycle, complete, barbell, and Erdos-Renyi graph families
 - JSON and CSV output suitable for automation, README embeds, and future chart rendering
 
 ## Project structure
-- `karger_min_cut.py` - graph model, randomized contraction engine, exact checker, graph-family builders, and CLI
+- `karger_min_cut.py` - graph model, randomized contraction engine, exact checker, DOT trace export helpers, graph-family builders, and CLI
 - `sample_graph.json` - small demo graph for reproducible experiments
 - `test_karger_min_cut.py` - unit and CLI coverage
 
@@ -27,6 +28,7 @@ A portfolio-friendly randomized algorithms project that implements Karger's rand
 ```bash
 python3 projects/karger-min-cut-lab/karger_min_cut.py demo --trials 8 --seed 7 --exact-check --pretty
 python3 projects/karger-min-cut-lab/karger_min_cut.py run --graph-file projects/karger-min-cut-lab/sample_graph.json --trials 20 --seed 11 --include-trace --exact-check --pretty
+python3 projects/karger-min-cut-lab/karger_min_cut.py demo --trials 6 --seed 4 --trace-dot-dir docs/artifacts/karger-min-cut-trace --pretty
 python3 projects/karger-min-cut-lab/karger_min_cut.py benchmark \
   --families cycle,complete,barbell,erdos-renyi \
   --sizes 4,6,8 \
@@ -39,9 +41,12 @@ python3 projects/karger-min-cut-lab/karger_min_cut.py benchmark \
 ```
 
 ## Benchmark artifact snapshot
-Committed artifacts from the latest benchmark slice:
+Committed artifacts from the latest benchmark and visualization slices:
 - `artifacts/karger-min-cut-benchmark.json`
 - `artifacts/karger-min-cut-benchmark.csv`
+- `docs/artifacts/karger-min-cut-trace/step-00.dot`
+- `docs/artifacts/karger-min-cut-trace/step-01.dot`
+- `docs/artifacts/karger-min-cut-trace/step-02.dot`
 
 Current family summary (`32` trials per instance, two instances per size):
 - cycle: hit rate `1.0`, average best cut `2.0`
@@ -70,5 +75,5 @@ python3 -m unittest discover -s projects/karger-min-cut-lab -p 'test_*.py' -v
 
 ## Future improvements
 - compare Karger with Stoer-Wagner or max-flow-based exact min cut on the same inputs
-- emit Graphviz snapshots after each contraction for richer visual demos
+- render the exported DOT snapshots into committed SVG/PNG visuals for README embedding
 - render the CSV benchmark artifact into a small Markdown or image chart for README embedding

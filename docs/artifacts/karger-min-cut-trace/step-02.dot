@@ -1,0 +1,8 @@
+graph KargerTrace {
+  graph [labelloc="t"];
+  label="Karger trace step 2";
+  node [shape=ellipse];
+  "cluster_A_C" [label="A\nC"];
+  "cluster_B_D" [label="B\nD"];
+  "cluster_A_C" -- "cluster_B_D" [label="3", penwidth=2.5];
+}

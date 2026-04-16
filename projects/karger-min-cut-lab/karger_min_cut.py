@@ -103,6 +103,7 @@ class KargerMinCutLab:
                         "picked_edge": [left, right],
                         "merged_supernode": merged_label,
                         "remaining_supernodes": sorted(sorted(group) for group in supernodes.values()),
+                        "remaining_edges": [list(edge) for edge in edges],
                         "remaining_edge_count": len(edges),
                         "removed_self_loops": removed_loops,
                     }
@@ -377,6 +378,73 @@ def maybe_write_json(path: Path | None, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def _trace_contractions(payload: dict[str, object]) -> list[dict[str, object]]:
+    direct = payload.get("contractions")
+    if isinstance(direct, list) and direct:
+        return direct
+    trial_results = payload.get("trial_results")
+    if isinstance(trial_results, list) and trial_results:
+        first_trial = trial_results[0]
+        if isinstance(first_trial, dict):
+            contractions = first_trial.get("contractions")
+            if isinstance(contractions, list) and contractions:
+                return contractions
+    raise ValueError("payload must include a contraction trace before DOT export")
+
+
+def build_trace_dot(payload: dict[str, object], step: int) -> str:
+    if step < 0:
+        raise ValueError("step must be non-negative")
+    graph_summary = payload.get("graph_summary")
+    if not isinstance(graph_summary, dict):
+        raise ValueError("payload must include graph_summary for trace export")
+    vertices = graph_summary.get("vertices")
+    if not isinstance(vertices, list) or not vertices:
+        raise ValueError("graph_summary must include vertices")
+    contractions = _trace_contractions(payload)
+
+    if step == 0:
+        remaining_supernodes = [[str(vertex)] for vertex in vertices]
+        remaining_edges = payload.get("input_edges")
+    else:
+        if step > len(contractions):
+            raise ValueError("step exceeds available contraction trace")
+        contraction = contractions[step - 1]
+        if not isinstance(contraction, dict):
+            raise ValueError("invalid contraction entry")
+        remaining_supernodes = contraction.get("remaining_supernodes")
+        remaining_edges = contraction.get("remaining_edges")
+
+    if not isinstance(remaining_supernodes, list) or not isinstance(remaining_edges, list):
+        raise ValueError("trace step must include remaining supernodes and edges")
+
+    lines = ["graph KargerTrace {", '  graph [labelloc="t"];', f'  label="Karger trace step {step}";', "  node [shape=ellipse];"]
+    for group in remaining_supernodes:
+        members = [str(member) for member in group]
+        node_id = "cluster_" + "_".join(members)
+        label = "\\n".join(members)
+        lines.append(f'  "{node_id}" [label="{label}"];')
+
+    multiplicity = Counter(tuple(sorted((str(edge[0]), str(edge[1])))) for edge in remaining_edges)
+    for (left, right), count in sorted(multiplicity.items()):
+        left_id = "cluster_" + "_".join(left.strip("{}").split(",")) if left.startswith("{") else f"cluster_{left}"
+        right_id = "cluster_" + "_".join(right.strip("{}").split(",")) if right.startswith("{") else f"cluster_{right}"
+        lines.append(f'  "{left_id}" -- "{right_id}" [label="{count}", penwidth={1 + count / 2:.1f}];')
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def write_trace_dot_snapshots(output_dir: Path, payload: dict[str, object]) -> list[Path]:
+    contractions = _trace_contractions(payload)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written_paths: list[Path] = []
+    for step in range(len(contractions) + 1):
+        path = output_dir / f"step-{step:02d}.dot"
+        path.write_text(build_trace_dot(payload, step))
+        written_paths.append(path)
+    return written_paths
+
+
 def parse_csv_list(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
@@ -395,6 +463,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trials", type=int, default=1, help="number of independent trials to run")
     parser.add_argument("--seed", type=int, help="starting seed for deterministic sequential trials")
     parser.add_argument("--include-trace", action="store_true", help="include contraction trace for the first reported trial")
+    parser.add_argument("--trace-dot-dir", type=Path, help="write Graphviz DOT snapshots for each contraction step")
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     parser.add_argument("--exact-check", action="store_true", help="also compute the exact min-cut size for small graphs")
     parser.add_argument("--families", default="cycle,complete,barbell,erdos-renyi", help="comma-separated graph families for benchmark mode")
@@ -426,13 +495,17 @@ def main() -> None:
 
     graph = build_sample_graph() if args.command == "demo" and args.graph_file is None else load_graph(args.graph_file)
     lab = KargerMinCutLab(graph)
-    payload = lab.run_trials(trials=args.trials, seed=args.seed, include_trace=args.include_trace)
+    include_trace = args.include_trace or args.trace_dot_dir is not None
+    payload = lab.run_trials(trials=args.trials, seed=args.seed, include_trace=include_trace)
     payload["graph_summary"] = {
         "vertices": graph.vertices,
         "edge_count": len(graph.edges),
     }
+    payload["input_edges"] = [list(edge) for edge in graph.edges]
     if args.exact_check:
         payload["exact_min_cut_size"] = exact_min_cut_size(graph)
+    if args.trace_dot_dir is not None:
+        payload["trace_dot_files"] = [str(path) for path in write_trace_dot_snapshots(args.trace_dot_dir, payload)]
     print(json.dumps(payload, indent=2 if args.pretty else None, sort_keys=True))
 
 

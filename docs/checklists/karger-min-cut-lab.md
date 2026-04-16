@@ -7,7 +7,23 @@
 - [x] include a sample graph, README, and usage examples
 - [x] cover unit and CLI behavior with tests
 - [x] add benchmark/reporting mode across graph families
-- [ ] add Graphviz contraction snapshots
+- [x] add Graphviz contraction snapshots
+
+## 2026-04-16 Graphviz contraction snapshot slice
+- [x] decide that a trace-export visualization slice is the next meaningful improvement for this project
+- [x] capture a short refresh/self-test note for DOT graph export structure and multiedge labeling
+- [x] add a resumable slice checklist entry
+- [x] extend contraction traces with enough state to reconstruct each step
+- [x] implement Graphviz DOT snapshot export helpers and CLI support
+- [x] document snapshot export usage in the project README
+- [x] add unit and CLI tests for DOT export behavior
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
 
 ## 2026-04-16 benchmark/reporting slice
 - [x] brief research note captured for benchmark graph-family selection and trial-count framing
