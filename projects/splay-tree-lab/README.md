@@ -15,6 +15,7 @@ A portfolio-ready Python lab for splay trees: self-adjusting binary search trees
 - split a tree around a pivot, optionally persist both sides as resumable snapshots, and join two disjoint sorted value sets into a new snapshot
 - benchmark skewed hot-set lookups against the `red-black-tree-lab` baseline using deterministic comparison counts
 - sweep multiple tree sizes in one command and export chart-ready benchmark-series JSON/CSV artifacts
+- render a Markdown benchmark report with Mermaid charts, interpretation, and embedded artifact links
 - export benchmark payloads as JSON and chart-ready CSV artifacts for portfolio screenshots and write-ups
 - export Graphviz DOT and Mermaid diagrams before and after an access trace for easy portfolio visuals
 - export initial/per-step structured JSON snapshots plus a manifest for slide decks, animation tooling, and replayable demos
@@ -108,6 +109,15 @@ python3 splay_tree_lab.py benchmark-series 63 127 255 --hot-set-size 8 --hot-que
   --csv-output ../../artifacts/splay-tree-benchmark-series.csv
 ```
 
+Generate a recruiter-friendly Markdown report that links directly to the committed series artifacts:
+
+```bash
+python3 splay_tree_lab.py benchmark-report 63 127 255 --hot-set-size 8 --hot-queries 256 --random-queries 256 --seed 42 \
+  --json-output ../../artifacts/splay-tree-benchmark-series.json \
+  --csv-output ../../artifacts/splay-tree-benchmark-series.csv \
+  --output ../../docs/artifacts/splay-tree-benchmark-report.md
+```
+
 ## Test
 
 ```bash
@@ -118,8 +128,9 @@ python3 -m unittest projects/splay-tree-lab/test_splay_tree_lab.py
 - the benchmark reports key-comparison counts instead of wall-clock time so the output stays deterministic and testable
 - positive `hotset_comparison_gap` means the splay tree used fewer comparisons than the red-black baseline on repeated hot-key accesses
 - the `benchmark-series` command emits a `summary` table and advances the seed by series index so each size stays deterministic without reusing identical shuffle/query streams
+- the `benchmark-report` command turns that summary into a Markdown artifact with Mermaid charts and embedded JSON/CSV links for portfolio write-ups
 - uniform-random workloads may reduce or reverse the gap, which helps explain the trade-off between self-adjusting behavior and steadier balancing
 
 ## Future improvements
-- generate a Markdown benchmark report with interpretation and embedded artifact links
+- render the Mermaid benchmark report into checked-in SVG/PNG assets for portfolio sites that do not support Mermaid natively
 - add direct GIF/SVG animation export built on top of the per-step trace snapshot manifest

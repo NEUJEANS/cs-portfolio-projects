@@ -11,7 +11,15 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from splay_tree_lab import SplayTree, benchmark_csv_rows, benchmark_series, benchmark_series_csv_rows, benchmark_trees, export_trace_step_snapshots
+from splay_tree_lab import (
+    SplayTree,
+    benchmark_csv_rows,
+    benchmark_report_markdown,
+    benchmark_series,
+    benchmark_series_csv_rows,
+    benchmark_trees,
+    export_trace_step_snapshots,
+)
 
 
 class SplayTreeBehaviorTests(unittest.TestCase):
@@ -139,6 +147,22 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         payload = benchmark_series(sizes=[63, 31, 63], hot_set_size=4, hot_queries=64, random_queries=64, seed=29)
         self.assertEqual(payload["sizes"], [63, 31])
         self.assertEqual([row["seed"] for row in payload["summary"]], [29, 30])
+
+    def test_benchmark_report_markdown_includes_charts_table_and_artifact_links(self) -> None:
+        payload = benchmark_series(sizes=[31, 63, 127], hot_set_size=4, hot_queries=64, random_queries=64, seed=31)
+        markdown = benchmark_report_markdown(
+            payload,
+            report_path=Path("docs/artifacts/splay-tree-benchmark-report.md"),
+            json_output=Path("artifacts/splay-tree-benchmark-series.json"),
+            csv_output=Path("artifacts/splay-tree-benchmark-series.csv"),
+        )
+        self.assertIn("# Splay Tree Benchmark Report", markdown)
+        self.assertIn("[`splay-tree-benchmark-series.json`](../../artifacts/splay-tree-benchmark-series.json)", markdown)
+        self.assertIn("[`splay-tree-benchmark-series.csv`](../../artifacts/splay-tree-benchmark-series.csv)", markdown)
+        self.assertIn("| Size | Seed | Hot-set gap (RB-Splay comps) |", markdown)
+        self.assertIn("Hot-set comparisons per query", markdown)
+        self.assertIn("Uniform-random comparisons per query", markdown)
+        self.assertIn("Interview talking points", markdown)
 
     def test_split_returns_values_around_missing_pivot(self) -> None:
         tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
@@ -423,6 +447,55 @@ class SplayTreeCliTests(unittest.TestCase):
             self.assertIn("hot_set_ratio", csv_lines[0])
             self.assertIn(",31,5,4,0.129", csv_lines[1])
             self.assertIn(",127,7,4,0.0315", csv_lines[-1])
+
+    def test_benchmark_report_cli_writes_markdown_and_supporting_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            json_output = tmp_path / "artifacts" / "benchmark-series.json"
+            csv_output = tmp_path / "artifacts" / "benchmark-series.csv"
+            report_output = tmp_path / "docs" / "artifacts" / "benchmark-report.md"
+            benchmark = subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "benchmark-report",
+                    "31",
+                    "63",
+                    "127",
+                    "--hot-set-size",
+                    "4",
+                    "--hot-queries",
+                    "64",
+                    "--random-queries",
+                    "64",
+                    "--seed",
+                    "5",
+                    "--json-output",
+                    str(json_output),
+                    "--csv-output",
+                    str(csv_output),
+                    "--output",
+                    str(report_output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(benchmark.stdout)
+            self.assertEqual(payload["command"], "benchmark-report")
+            self.assertEqual(payload["sizes"], [31, 63, 127])
+            self.assertEqual(payload["output"], str(report_output))
+            self.assertEqual(payload["json_output"], str(json_output))
+            self.assertEqual(payload["csv_output"], str(csv_output))
+            self.assertTrue(json_output.exists())
+            self.assertTrue(csv_output.exists())
+            self.assertTrue(report_output.exists())
+            markdown = report_output.read_text()
+            self.assertIn("# Splay Tree Benchmark Report", markdown)
+            self.assertIn("[`benchmark-series.json`](../../artifacts/benchmark-series.json)", markdown)
+            self.assertIn("[`benchmark-series.csv`](../../artifacts/benchmark-series.csv)", markdown)
+            self.assertIn("Hot-set comparisons per query", markdown)
+            self.assertIn("Uniform-random comparisons per query", markdown)
 
     def test_split_and_join_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

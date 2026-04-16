@@ -4,8 +4,10 @@ import argparse
 import csv
 import importlib.util
 import json
+import os
 import random
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -663,6 +665,136 @@ def save_benchmark_series_csv(path: Path, payload: dict[str, object]) -> None:
         writer.writerows(rows)
 
 
+def markdown_link(target_path: Path, *, report_path: Path | None = None) -> str:
+    if report_path is not None:
+        href = Path(os.path.relpath(target_path, start=report_path.parent))
+    else:
+        href = target_path
+    return f"[`{target_path.name}`]({href.as_posix()})"
+
+
+def benchmark_report_markdown(
+    payload: dict[str, object],
+    *,
+    report_path: Path | None = None,
+    json_output: Path | None = None,
+    csv_output: Path | None = None,
+) -> str:
+    summary_rows = payload["summary"]
+    sizes = payload["sizes"]
+    hotset_splay = [row["hotset_splay_comparisons_per_query"] for row in summary_rows]
+    hotset_red_black = [row["hotset_red_black_comparisons_per_query"] for row in summary_rows]
+    uniform_splay = [row["uniform_random_splay_comparisons_per_query"] for row in summary_rows]
+    uniform_red_black = [row["uniform_random_red_black_comparisons_per_query"] for row in summary_rows]
+
+    best_hotset = payload["takeaway"]["best_hotset_gap"]
+    best_uniform = payload["takeaway"]["best_uniform_random_gap"]
+
+    artifact_lines: list[str] = []
+    if json_output is not None:
+        artifact_lines.append(
+            f"- full benchmark-series JSON: {markdown_link(json_output, report_path=report_path)}"
+        )
+    if csv_output is not None:
+        artifact_lines.append(
+            f"- chart-ready CSV rows: {markdown_link(csv_output, report_path=report_path)}"
+        )
+    if not artifact_lines:
+        artifact_lines.append("- no external JSON/CSV artifact files were requested for this run")
+
+    table_lines = [
+        "| Size | Seed | Hot-set gap (RB-Splay comps) | Uniform gap (RB-Splay comps) | Hot-set splay cmp/query | Hot-set RB cmp/query | Uniform splay cmp/query | Uniform RB cmp/query |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in summary_rows:
+        table_lines.append(
+            "| {size} | {seed} | {hot_gap:+d} | {uniform_gap:+d} | {hot_splay:.3f} | {hot_rb:.3f} | {uniform_splay:.3f} | {uniform_rb:.3f} |".format(
+                size=row["size"],
+                seed=row["seed"],
+                hot_gap=row["hotset_comparison_gap"],
+                uniform_gap=row["uniform_random_comparison_gap"],
+                hot_splay=row["hotset_splay_comparisons_per_query"],
+                hot_rb=row["hotset_red_black_comparisons_per_query"],
+                uniform_splay=row["uniform_random_splay_comparisons_per_query"],
+                uniform_rb=row["uniform_random_red_black_comparisons_per_query"],
+            )
+        )
+
+    hotset_chart_ceiling = max(max(hotset_splay), max(hotset_red_black)) + 1
+    uniform_chart_ceiling = max(max(uniform_splay), max(uniform_red_black)) + 1
+
+    hotset_chart = textwrap.dedent(
+        f"""
+        ```mermaid
+        xychart-beta
+            title "Hot-set comparisons per query (line 1 = splay, line 2 = red-black)"
+            x-axis "Tree size" [{", ".join(str(size) for size in sizes)}]
+            y-axis "Comparisons / query" 0 --> {hotset_chart_ceiling:.1f}
+            line [{", ".join(f"{value:.3f}" for value in hotset_splay)}]
+            line [{", ".join(f"{value:.3f}" for value in hotset_red_black)}]
+        ```
+        """
+    ).strip()
+    uniform_chart = textwrap.dedent(
+        f"""
+        ```mermaid
+        xychart-beta
+            title "Uniform-random comparisons per query (line 1 = splay, line 2 = red-black)"
+            x-axis "Tree size" [{", ".join(str(size) for size in sizes)}]
+            y-axis "Comparisons / query" 0 --> {uniform_chart_ceiling:.1f}
+            line [{", ".join(f"{value:.3f}" for value in uniform_splay)}]
+            line [{", ".join(f"{value:.3f}" for value in uniform_red_black)}]
+        ```
+        """
+    ).strip()
+
+    markdown = [
+        "# Splay Tree Benchmark Report",
+        "",
+        "## Setup",
+        "",
+        f"- sizes: `{sizes}`",
+        f"- hot-set size: `{payload['hot_set_size']}`",
+        f"- hot queries per size: `{payload['hot_queries']}`",
+        f"- uniform-random queries per size: `{payload['random_queries']}`",
+        f"- seed base: `{payload['seed_base']}`",
+        "- interpretation rule: positive gap means the splay tree used fewer total key comparisons than the red-black baseline",
+        "",
+        "## Embedded artifact links",
+        "",
+        *artifact_lines,
+        "",
+        "## Summary",
+        "",
+        f"- Best hot-set result: size `{best_hotset['size']}` with a `{best_hotset['hotset_comparison_gap']:+d}` comparison gap and splay averaging `{best_hotset['hotset_splay_comparisons_per_query']:.3f}` comparisons/query.",
+        f"- Most favorable uniform-random result: size `{best_uniform['size']}` with a `{best_uniform['uniform_random_comparison_gap']:+d}` comparison gap and splay averaging `{best_uniform['uniform_random_splay_comparisons_per_query']:.3f}` comparisons/query.",
+        "- Hot-set workloads should usually favor splay trees more strongly than uniform-random workloads, which gives you a clean locality story for interviews.",
+        "",
+        "## Per-size metrics",
+        "",
+        *table_lines,
+        "",
+        "## Hot-set chart",
+        "",
+        hotset_chart,
+        "",
+        "## Uniform-random chart",
+        "",
+        uniform_chart,
+        "",
+        "## Interview talking points",
+        "",
+        "- The hot-set chart makes the self-adjusting value proposition visible: repeated popular keys move toward the root and stay cheap to revisit.",
+        "- The uniform-random chart keeps the story honest by showing where locality fades and the red-black baseline can stay competitive.",
+        (
+            "- Because the report links directly to committed JSON/CSV artifacts, you can reuse the same data in portfolio charts without rerunning ad-hoc analysis."
+            if json_output is not None or csv_output is not None
+            else "- Add --json-output/--csv-output when you want the Markdown report to point at committed chart data as well as inline charts."
+        ),
+    ]
+    return "\n".join(markdown) + "\n"
+
+
 def load_red_black_tree_class() -> type:
     module_path = Path(__file__).resolve().parents[1] / "red-black-tree-lab" / "red_black_tree.py"
     spec = importlib.util.spec_from_file_location("red_black_tree_lab_module", module_path)
@@ -952,6 +1084,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--csv-output", type=Path, help="optional path to save flattened chart-ready series rows as CSV"
     )
 
+    benchmark_report_parser = subparsers.add_parser(
+        "benchmark-report",
+        help="render a Markdown portfolio report from a benchmark-series run",
+    )
+    benchmark_report_parser.add_argument(
+        "sizes",
+        nargs="+",
+        type=int,
+        help="one or more tree sizes to sweep, for example: 63 127 255",
+    )
+    benchmark_report_parser.add_argument(
+        "--hot-set-size", type=int, default=8, help="number of hot keys reused inside each skewed workload"
+    )
+    benchmark_report_parser.add_argument(
+        "--hot-queries", type=int, default=256, help="number of skewed hot-set queries per tree size"
+    )
+    benchmark_report_parser.add_argument(
+        "--random-queries", type=int, default=256, help="number of uniformly random successful queries per tree size"
+    )
+    benchmark_report_parser.add_argument(
+        "--seed", type=int, default=42, help="deterministic base seed; each size increments the seed by its series index"
+    )
+    benchmark_report_parser.add_argument(
+        "--json-output", type=Path, help="optional path to save the full benchmark-series payload as JSON"
+    )
+    benchmark_report_parser.add_argument(
+        "--csv-output", type=Path, help="optional path to save flattened chart-ready series rows as CSV"
+    )
+    benchmark_report_parser.add_argument(
+        "--output", type=Path, help="optional Markdown path for the generated benchmark report"
+    )
+
     return parser
 
 
@@ -1058,6 +1222,39 @@ def main(argv: list[str] | None = None) -> int:
             if args.csv_output is not None:
                 save_benchmark_series_csv(args.csv_output, payload)
             print(json.dumps(payload, indent=2))
+            return 0
+
+        if args.command == "benchmark-report":
+            payload = benchmark_series(
+                sizes=args.sizes,
+                hot_set_size=args.hot_set_size,
+                hot_queries=args.hot_queries,
+                random_queries=args.random_queries,
+                seed=args.seed,
+            )
+            if args.json_output is not None:
+                save_snapshot_payload(args.json_output, payload)
+            if args.csv_output is not None:
+                save_benchmark_series_csv(args.csv_output, payload)
+            markdown = benchmark_report_markdown(
+                payload,
+                report_path=args.output,
+                json_output=args.json_output,
+                csv_output=args.csv_output,
+            )
+            response = {
+                "command": "benchmark-report",
+                **payload,
+                "markdown": markdown,
+            }
+            if args.output is not None:
+                save_text(args.output, markdown)
+                response["output"] = str(args.output)
+            if args.json_output is not None:
+                response["json_output"] = str(args.json_output)
+            if args.csv_output is not None:
+                response["csv_output"] = str(args.csv_output)
+            print(json.dumps(response, indent=2))
             return 0
     except ValueError as exc:
         parser.exit(2, f"error: {exc}\n")
