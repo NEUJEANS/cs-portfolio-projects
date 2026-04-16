@@ -14,4 +14,4 @@
 - [x] complete review pass 2 and fix the README/checklist/docs gaps found
 - [x] complete review pass 3 and fix any remaining artifact/test mismatches found
 - [ ] run a secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
