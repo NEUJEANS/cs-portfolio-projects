@@ -15,7 +15,8 @@ A compact Python project that demonstrates the map → combine → partition →
 - plugin job loading via `importlib` from either a local Python file or an importable module/package path
 - stable SHA-256-based partitioner to simulate multiple reducer buckets reproducibly across processes
 - reducer distribution stats so you can talk about key skew in interviews
-- synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts for either built-in wordcount or plugin jobs
+- synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts for built-in wordcount, built-in JSONL aggregation, or plugin jobs
+- built-in JSON benchmark dataset families for generic events, incident workflows, and deployment pipelines
 - machine-readable JSON output with shard and record statistics
 - optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
 - optional shard-to-reducer heatmap CSV export for slide-ready skew visualizations
@@ -84,6 +85,19 @@ Benchmark balanced vs skewed synthetic inputs for the built-in wordcount job:
 python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --job wordcount \
   --scenario skewed \
+  --records 5000 \
+  --shard-size 250 \
+  --reducers 1 2 4 8
+```
+
+Benchmark the built-in JSONL grouping job on incident-style status streams:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --job json-group-count \
+  --group-field status \
+  --scenario skewed \
+  --dataset-family incidents \
   --records 5000 \
   --shard-size 250 \
   --reducers 1 2 4 8
@@ -226,7 +240,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \
   --html-output plugin-catalog.html
 ```
 
-Switch benchmark dataset families to model different workload shapes. For example, the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
+Switch benchmark dataset families to model different workload shapes. For example, the built-in `json-group-count` benchmark now supports `default`, `incidents`, and `deployments` families, while the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
@@ -318,5 +332,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
-- add richer built-in benchmark families for JSON/event workloads, not just wordcount-style text streams
+- add benchmark result narratives that explain likely hot keys for each built-in dataset family directly in Markdown/HTML reports
 - add repository-level inspection summaries that compare multiple plugin snapshots across releases, not just adjacent runs

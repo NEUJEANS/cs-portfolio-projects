@@ -1525,6 +1525,51 @@ def build_benchmark_lines(
             else:
                 hot_keys = ["hot-key"] * 12 + [f"warm-{index}" for index in range(6)] + [f"cold-{index}" for index in range(18)]
             return [f"{rng.choice(hot_keys)} {rng.choice(hot_keys)}" for _ in range(records)]
+    if job == "json-group-count":
+        if dataset_family not in {"default", "incidents", "deployments"}:
+            raise ValueError(f"unsupported dataset_family for json-group-count benchmark: {dataset_family}")
+        if scenario == "balanced":
+            if dataset_family == "incidents":
+                statuses = ["detected", "triaged", "mitigated", "resolved"]
+                services = [f"svc-{index:02d}" for index in range(6)]
+                return [
+                    json.dumps({"status": statuses[index % len(statuses)], "service": services[index % len(services)], "severity": ["sev1", "sev2", "sev3"][index % 3]}, sort_keys=True)
+                    for index in range(records)
+                ]
+            if dataset_family == "deployments":
+                statuses = ["queued", "running", "passed", "rolled_back"]
+                teams = [f"team-{index:02d}" for index in range(6)]
+                return [
+                    json.dumps({"status": statuses[index % len(statuses)], "team": teams[index % len(teams)], "region": ["us-east", "eu-west", "ap-south"][index % 3]}, sort_keys=True)
+                    for index in range(records)
+                ]
+            statuses = ["ok", "error", "retry", "queued"]
+            sources = [f"ingest-{index:02d}" for index in range(6)]
+            return [
+                json.dumps({"status": statuses[index % len(statuses)], "source": sources[index % len(sources)]}, sort_keys=True)
+                for index in range(records)
+            ]
+        if scenario == "skewed":
+            if dataset_family == "incidents":
+                statuses = ["triaged"] * 14 + ["detected"] * 6 + ["mitigated"] * 4 + ["resolved"] * 4
+                services = [f"payments-{index}" for index in range(3)] + [f"edge-{index}" for index in range(5)]
+                return [
+                    json.dumps({"status": rng.choice(statuses), "service": rng.choice(services), "severity": rng.choice(["sev1", "sev2", "sev3"])}, sort_keys=True)
+                    for _ in range(records)
+                ]
+            if dataset_family == "deployments":
+                statuses = ["running"] * 12 + ["queued"] * 8 + ["passed"] * 4 + ["rolled_back"] * 2
+                teams = ["release-core"] * 8 + [f"service-{index}" for index in range(8)]
+                return [
+                    json.dumps({"status": rng.choice(statuses), "team": rng.choice(teams), "region": rng.choice(["us-east", "eu-west", "ap-south"])}, sort_keys=True)
+                    for _ in range(records)
+                ]
+            statuses = ["ok"] * 12 + ["retry"] * 8 + ["error"] * 4 + ["queued"] * 2
+            sources = ["gateway"] * 8 + [f"ingest-{index}" for index in range(8)]
+            return [
+                json.dumps({"status": rng.choice(statuses), "source": rng.choice(sources)}, sort_keys=True)
+                for _ in range(records)
+            ]
     if job == "plugin":
         if scenario == "balanced":
             if dataset_family == "project-week":
@@ -1552,6 +1597,7 @@ def benchmark_job(
     seed: int = 42,
     plugin_path: str | None = None,
     dataset_family: str = "default",
+    group_field: str | None = None,
 ) -> BenchmarkResult:
     if shard_size <= 0:
         raise ValueError("shard_size must be positive")
@@ -1561,6 +1607,7 @@ def benchmark_job(
         raise ValueError("reducers must be positive")
 
     benchmark_plugin: PluginJob | None = None
+    resolved_group_field = group_field or "status"
     if job == "plugin":
         if plugin_path is None:
             raise ValueError("plugin_path is required for plugin benchmarks")
@@ -1575,6 +1622,9 @@ def benchmark_job(
     benchmark_shards = list(chunked(lines, shard_size)) or [[]]
     if job == "wordcount":
         benchmark_mapper = map_wordcount
+        benchmark_combiner = sum_reducer
+    elif job == "json-group-count":
+        benchmark_mapper = lambda shard: map_json_group_count(shard, resolved_group_field)
         benchmark_combiner = sum_reducer
     elif job == "plugin":
         assert benchmark_plugin is not None
@@ -1591,7 +1641,14 @@ def benchmark_job(
     try:
         for reducer_count in reducers:
             started = time.perf_counter()
-            result = execute_job(job, [input_path], shard_size=shard_size, reducers=reducer_count, plugin_path=plugin_path)
+            result = execute_job(
+                job,
+                [input_path],
+                shard_size=shard_size,
+                reducers=reducer_count,
+                plugin_path=plugin_path,
+                group_field=resolved_group_field if job == "json-group-count" else group_field,
+            )
             elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
             unique_keys = result.unique_keys
             timings.append(
@@ -1628,7 +1685,11 @@ def benchmark_job(
     return BenchmarkResult(
         job=job if job != "plugin" or benchmark_plugin is None else benchmark_plugin.name,
         plugin=str(benchmark_plugin.path) if benchmark_plugin else None,
-        available_dataset_families=(list(benchmark_plugin.dataset_families) if benchmark_plugin and benchmark_plugin.dataset_families else None),
+        available_dataset_families=(
+            list(benchmark_plugin.dataset_families)
+            if benchmark_plugin and benchmark_plugin.dataset_families
+            else (["default", "news", "logs"] if job == "wordcount" else (["default", "incidents", "deployments"] if job == "json-group-count" else None))
+        ),
         plugin_mapper=inspection.mapper if inspection else None,
         plugin_reducer=inspection.reducer if inspection else None,
         plugin_combiner=inspection.combiner if inspection else None,
@@ -1689,13 +1750,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
-    benchmark_parser.add_argument("--job", choices=["wordcount", "plugin"], default="wordcount")
+    benchmark_parser.add_argument("--job", choices=["wordcount", "json-group-count", "plugin"], default="wordcount")
     benchmark_parser.add_argument("--scenario", choices=["balanced", "skewed"], default="skewed")
     benchmark_parser.add_argument("--records", type=int, default=5000, help="synthetic input line count")
     benchmark_parser.add_argument("--shard-size", type=int, default=250, help="lines per shard")
     benchmark_parser.add_argument("--reducers", type=int, nargs="+", default=[1, 2, 4, 8], help="one or more reducer counts to compare")
     benchmark_parser.add_argument("--seed", type=int, default=42, help="seed for deterministic synthetic data generation")
     benchmark_parser.add_argument("--dataset-family", default="default", help="synthetic dataset family to use for benchmark generation")
+    benchmark_parser.add_argument("--group-field", default="status", help="JSON field to group for json-group-count benchmarks")
     benchmark_parser.add_argument("--plugin", help="plugin file path or importable Python module for plugin benchmarks")
     benchmark_parser.add_argument("--output", help="optional output JSON path")
     benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
@@ -1793,6 +1855,7 @@ def main(argv: list[str] | None = None) -> int:
                 seed=args.seed,
                 plugin_path=args.plugin if args.plugin else None,
                 dataset_family=args.dataset_family,
+                group_field=args.group_field if args.job == "json-group-count" else None,
             )
         except ValueError as exc:
             parser.error(str(exc))

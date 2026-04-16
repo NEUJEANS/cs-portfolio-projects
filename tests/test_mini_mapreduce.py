@@ -172,6 +172,43 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(payload["job"], "plugin-max-score")
             self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
 
+    def test_cli_json_group_count_benchmark_writes_expected_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "json-benchmark.json"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--job",
+                    "json-group-count",
+                    "--scenario",
+                    "skewed",
+                    "--dataset-family",
+                    "deployments",
+                    "--group-field",
+                    "status",
+                    "--records",
+                    "120",
+                    "--shard-size",
+                    "30",
+                    "--reducers",
+                    "2",
+                    "4",
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["job"], "json-group-count")
+            self.assertEqual(payload["dataset_family"], "deployments")
+            self.assertEqual(payload["available_dataset_families"], ["default", "incidents", "deployments"])
+            self.assertEqual(payload["reducers"], [2, 4])
+            self.assertTrue(payload["heatmap_rows"])
+
     def test_cli_benchmark_writes_timing_and_heatmap_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "benchmark.json"
@@ -234,6 +271,37 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.unique_keys, 12)
         self.assertTrue(result.plugin.endswith("plugins_average_score.py"))
         self.assertEqual(result.timings_ms[0]["map_records"], 24)
+
+    def test_json_group_count_benchmark_supports_dataset_families(self) -> None:
+        result = benchmark_job(
+            "json-group-count",
+            "balanced",
+            records=24,
+            shard_size=6,
+            reducers=[2, 4],
+            seed=11,
+            dataset_family="incidents",
+            group_field="status",
+        )
+
+        self.assertEqual(result.job, "json-group-count")
+        self.assertEqual(result.dataset_family, "incidents")
+        self.assertEqual(result.available_dataset_families, ["default", "incidents", "deployments"])
+        self.assertEqual(result.unique_keys, 4)
+        self.assertTrue(all(row["dataset_family"] == "incidents" for row in result.heatmap_rows))
+
+    def test_json_group_count_benchmark_rejects_unsupported_dataset_family(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported dataset_family for json-group-count benchmark"):
+            benchmark_job(
+                "json-group-count",
+                "skewed",
+                records=24,
+                shard_size=6,
+                reducers=[2],
+                seed=11,
+                dataset_family="unknown-family",
+                group_field="status",
+            )
 
     def test_plugin_benchmark_supports_named_dataset_families(self) -> None:
         result = benchmark_job(

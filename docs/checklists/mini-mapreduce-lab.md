@@ -341,3 +341,17 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 - [ ] consider generating dedicated per-plugin docs pages from the catalog in a future run
+
+## JSON benchmark families slice (2026-04-16 08:24 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] do brief local research on realistic JSON/event benchmark families
+- [x] do a short deterministic JSON fixture refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add `json-group-count` benchmark support with dataset families and `--group-field` benchmark wiring
+- [x] extend project-level and repo-level tests for programmatic and CLI benchmark coverage
+- [x] update README usage, features, and future-improvement notes
+- [x] run targeted tests and at least 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider benchmark report annotations that call out likely hot keys for each built-in family in a future run
