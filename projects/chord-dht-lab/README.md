@@ -27,6 +27,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
 - optional seeded random sampling of benchmark start nodes so larger rings can be profiled without always biasing toward the first sorted nodes
 - JSON ring input for reproducible demos and unit tests
+- seeded sample-comparison export for measuring how lookup benchmark results vary across different random start-node subsets
 
 ## Usage
 
@@ -77,6 +78,29 @@ python3 projects/chord-dht-lab/chord_dht.py benchmark-export \
   compiler slides final-project \
   --start-node alpha \
   --start-node charlie \
+  --format csv
+```
+
+Compare multiple seeded random start-node samples to show benchmark variance:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py benchmark-sample-export \
+  projects/chord-dht-lab/ring.json \
+  compiler slides final-project \
+  --sample-size 3 \
+  --sample-seed 17 \
+  --sample-seed 29
+```
+
+Export the same sample comparison as CSV for charts or spreadsheets:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py benchmark-sample-export \
+  projects/chord-dht-lab/ring.json \
+  compiler slides final-project \
+  --sample-size 3 \
+  --sample-seed 17 \
+  --sample-seed 29 \
   --format csv
 ```
 
@@ -299,4 +323,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - The benchmark uses the same ring and key identifiers for both lookup strategies so hop-count differences stay attributable to routing logic rather than input drift.
 
 ## Future improvements
-- compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
+- export per-key variance summaries so the sample comparison can highlight which lookups are most sensitive to start-node choice

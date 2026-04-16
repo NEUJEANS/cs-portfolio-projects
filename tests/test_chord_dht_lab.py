@@ -207,6 +207,29 @@ class ChordDhtLabTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "seed"):
             module.select_benchmark_start_nodes(ring, 2, sample_mode="random")
 
+    def test_compare_benchmark_start_node_samples_summarizes_seeded_variance(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = module.compare_benchmark_start_node_samples(
+            ring,
+            ["compiler", "slides", "final-project"],
+            sample_size=3,
+            sample_seeds=[17, 29, 17],
+        )
+
+        self.assertEqual(comparison["sample_size"], 3)
+        self.assertEqual(comparison["sample_seeds"], [17, 29])
+        self.assertEqual(comparison["summary"]["sample_count"], 2)
+        self.assertEqual(len(comparison["samples"]), 2)
+        self.assertEqual(comparison["summary"]["case_count_per_sample"], 9)
+        self.assertGreaterEqual(comparison["summary"]["max_total_hop_savings"], comparison["summary"]["min_total_hop_savings"])
+
+    def test_compare_benchmark_start_node_samples_requires_seeds(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        with self.assertRaisesRegex(ValueError, "seed"):
+            module.compare_benchmark_start_node_samples(ring, ["compiler"], sample_size=2, sample_seeds=[])
+
     def test_compare_stabilization_modes_reports_fastest_mode_and_progress(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
 
@@ -255,6 +278,35 @@ class ChordDhtLabTests(unittest.TestCase):
 
         self.assertIn("start_node,key,key_id,responsible_node,chord_hops,linear_hops,hop_savings,chord_route,linear_route", report)
         self.assertIn("alpha,compiler", report)
+
+    def test_render_benchmark_sample_comparison_markdown_contains_seed_rows(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = module.compare_benchmark_start_node_samples(
+            ring,
+            ["compiler", "slides"],
+            sample_size=3,
+            sample_seeds=[17, 29],
+        )
+        report = module.render_benchmark_sample_comparison_markdown(comparison)
+
+        self.assertIn("# Chord benchmark sample comparison", report)
+        self.assertIn("- Sample seeds: `17`, `29`", report)
+        self.assertIn("| Seed | Start nodes | Avg Chord hops | Avg linear hops | Total hop savings |", report)
+
+    def test_render_benchmark_sample_comparison_csv_contains_machine_readable_rows(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = module.compare_benchmark_start_node_samples(
+            ring,
+            ["compiler"],
+            sample_size=2,
+            sample_seeds=[17],
+        )
+        report = module.render_benchmark_sample_comparison_csv(comparison)
+
+        self.assertIn("seed,start_nodes,average_chord_hops,average_linear_hops,total_hop_savings,improved_cases,tied_cases,slower_cases,case_count", report)
+        self.assertIn("17,", report)
 
     def test_render_stabilization_comparison_markdown_contains_summary_table(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
@@ -486,6 +538,32 @@ class ChordDhtLabTests(unittest.TestCase):
 
         self.assertIn("start_node,key,key_id,responsible_node,chord_hops,linear_hops,hop_savings,chord_route,linear_route", completed.stdout)
         self.assertIn("alpha,compiler", completed.stdout)
+
+    def test_cli_benchmark_sample_export_outputs_markdown(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "benchmark-sample-export",
+                str(RING_PATH),
+                "compiler",
+                "slides",
+                "--sample-size",
+                "3",
+                "--sample-seed",
+                "17",
+                "--sample-seed",
+                "29",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("# Chord benchmark sample comparison", completed.stdout)
+        self.assertIn("- Sample seeds: `17`, `29`", completed.stdout)
+        self.assertIn("| Seed | Start nodes | Avg Chord hops | Avg linear hops | Total hop savings |", completed.stdout)
 
     def test_cli_resilience_supports_failure_simulation(self) -> None:
         completed = subprocess.run(

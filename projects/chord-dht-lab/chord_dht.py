@@ -1038,6 +1038,135 @@ def render_benchmark_report_csv(benchmark: dict[str, object]) -> str:
     return output.getvalue().strip()
 
 
+def compare_benchmark_start_node_samples(
+    ring: ChordRing,
+    keys: list[str],
+    *,
+    sample_size: int,
+    sample_seeds: list[int],
+) -> dict[str, object]:
+    if sample_size <= 0:
+        raise ValueError("sample_size must be positive")
+    if not sample_seeds:
+        raise ValueError("sample comparison requires at least one sample seed")
+
+    deduped_seeds: list[int] = []
+    for seed in sample_seeds:
+        if seed not in deduped_seeds:
+            deduped_seeds.append(seed)
+
+    samples: list[dict[str, object]] = []
+    for seed in deduped_seeds:
+        start_nodes = select_benchmark_start_nodes(ring, sample_size, sample_mode="random", seed=seed)
+        benchmark = ring.benchmark_lookups(keys, start_nodes=start_nodes)
+        summary = benchmark["summary"]
+        samples.append(
+            {
+                "seed": seed,
+                "start_nodes": start_nodes,
+                "average_chord_hops": summary["average_chord_hops"],
+                "average_linear_hops": summary["average_linear_hops"],
+                "total_hop_savings": summary["total_hop_savings"],
+                "improved_cases": summary["improved_cases"],
+                "tied_cases": summary["tied_cases"],
+                "slower_cases": summary["slower_cases"],
+                "case_count": summary["case_count"],
+                "benchmark": benchmark,
+            }
+        )
+
+    total_hop_savings = [sample["total_hop_savings"] for sample in samples]
+    average_chord_hops = [sample["average_chord_hops"] for sample in samples]
+    average_linear_hops = [sample["average_linear_hops"] for sample in samples]
+    strongest_samples = [
+        sample for sample in samples if sample["total_hop_savings"] == max(total_hop_savings)
+    ]
+    weakest_samples = [
+        sample for sample in samples if sample["total_hop_savings"] == min(total_hop_savings)
+    ]
+    summary = {
+        "sample_count": len(samples),
+        "case_count_per_sample": samples[0]["case_count"],
+        "max_total_hop_savings": max(total_hop_savings),
+        "min_total_hop_savings": min(total_hop_savings),
+        "hop_savings_spread": max(total_hop_savings) - min(total_hop_savings),
+        "max_average_chord_hops": max(average_chord_hops),
+        "min_average_chord_hops": min(average_chord_hops),
+        "max_average_linear_hops": max(average_linear_hops),
+        "min_average_linear_hops": min(average_linear_hops),
+        "strongest_sample_seeds": [sample["seed"] for sample in strongest_samples],
+        "weakest_sample_seeds": [sample["seed"] for sample in weakest_samples],
+    }
+    return {
+        "m_bits": ring.m_bits,
+        "node_count": len(ring.nodes),
+        "keys": list(keys),
+        "sample_size": min(sample_size, len(ring.nodes)),
+        "sample_seeds": deduped_seeds,
+        "samples": samples,
+        "summary": summary,
+    }
+
+
+def render_benchmark_sample_comparison_markdown(comparison: dict[str, object]) -> str:
+    summary = comparison["summary"]
+    lines = [
+        "# Chord benchmark sample comparison",
+        "",
+        f"- Identifier bits: `{comparison['m_bits']}`",
+        f"- Node count: `{comparison['node_count']}`",
+        f"- Key count: `{len(comparison['keys'])}`",
+        f"- Sample count: `{summary['sample_count']}`",
+        f"- Start nodes per sample: `{comparison['sample_size']}`",
+        f"- Sample seeds: {', '.join(f'`{seed}`' for seed in comparison['sample_seeds'])}",
+        f"- Cases per sample: `{summary['case_count_per_sample']}`",
+        f"- Total hop savings range: `{summary['min_total_hop_savings']}` to `{summary['max_total_hop_savings']}`",
+        f"- Hop savings spread: `{summary['hop_savings_spread']}`",
+        f"- Strongest sample seed(s): {', '.join(f'`{seed}`' for seed in summary['strongest_sample_seeds'])}",
+        f"- Weakest sample seed(s): {', '.join(f'`{seed}`' for seed in summary['weakest_sample_seeds'])}",
+        "",
+        "| Seed | Start nodes | Avg Chord hops | Avg linear hops | Total hop savings | Improved | Tied | Slower |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for sample in comparison["samples"]:
+        lines.append(
+            f"| `{sample['seed']}` | {', '.join(f'`{name}`' for name in sample['start_nodes'])} | {sample['average_chord_hops']} | {sample['average_linear_hops']} | {sample['total_hop_savings']} | {sample['improved_cases']} | {sample['tied_cases']} | {sample['slower_cases']} |"
+        )
+    return "\n".join(lines)
+
+
+def render_benchmark_sample_comparison_csv(comparison: dict[str, object]) -> str:
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "seed",
+        "start_nodes",
+        "average_chord_hops",
+        "average_linear_hops",
+        "total_hop_savings",
+        "improved_cases",
+        "tied_cases",
+        "slower_cases",
+        "case_count",
+    ])
+    for sample in comparison["samples"]:
+        writer.writerow([
+            sample["seed"],
+            "->".join(sample["start_nodes"]),
+            sample["average_chord_hops"],
+            sample["average_linear_hops"],
+            sample["total_hop_savings"],
+            sample["improved_cases"],
+            sample["tied_cases"],
+            sample["slower_cases"],
+            sample["case_count"],
+        ])
+    return output.getvalue().strip()
+
+
 def render_stabilization_comparison_markdown(comparison: dict[str, object]) -> str:
     rows = comparison["comparison"]
     summary = comparison["summary"]
@@ -1509,6 +1638,33 @@ def parse_args() -> argparse.Namespace:
         help="report format for the rendered lookup benchmark",
     )
 
+    benchmark_sample_export_parser = subparsers.add_parser(
+        "benchmark-sample-export",
+        help="compare lookup benchmark results across multiple random start-node samples",
+    )
+    benchmark_sample_export_parser.add_argument("ring_file", type=Path)
+    benchmark_sample_export_parser.add_argument("keys", nargs="+", help="keys to benchmark")
+    benchmark_sample_export_parser.add_argument(
+        "--sample-size",
+        type=int,
+        required=True,
+        help="number of start nodes to include in each seeded random sample",
+    )
+    benchmark_sample_export_parser.add_argument(
+        "--sample-seed",
+        dest="sample_seeds",
+        action="append",
+        type=int,
+        required=True,
+        help="seed for one benchmark sample; may be provided multiple times",
+    )
+    benchmark_sample_export_parser.add_argument(
+        "--format",
+        choices=["markdown", "csv"],
+        default="markdown",
+        help="report format for the rendered sample comparison",
+    )
+
     resilience_parser = subparsers.add_parser(
         "resilience",
         help="simulate successor-list replicas and key availability during node failures",
@@ -1826,6 +1982,21 @@ def main() -> None:
             return
         if args.format == "csv":
             print(render_benchmark_report_csv(benchmark))
+            return
+        raise ValueError(f"unsupported export format {args.format!r}")
+    elif args.command == "benchmark-sample-export":
+        ring = load_ring(args.ring_file)
+        comparison = compare_benchmark_start_node_samples(
+            ring,
+            args.keys,
+            sample_size=args.sample_size,
+            sample_seeds=args.sample_seeds,
+        )
+        if args.format == "markdown":
+            print(render_benchmark_sample_comparison_markdown(comparison))
+            return
+        if args.format == "csv":
+            print(render_benchmark_sample_comparison_csv(comparison))
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "resilience":

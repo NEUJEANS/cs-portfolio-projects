@@ -160,3 +160,18 @@
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Benchmark sample variance slice (2026-04-16 04:11 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current benchmark tooling for the weakest unfinished reporting gap
+- [x] skip web research because the README already called out start-node sample variance as the next direct extension
+- [x] do a short Python CLI/self-test while planning the slice
+- [x] update checklist/docs so the slice is resumable
+- [x] add seeded sample-comparison helpers and a dedicated export command for benchmark variance across start-node subsets
+- [x] extend automated coverage for comparison summaries, renderers, and CLI output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
