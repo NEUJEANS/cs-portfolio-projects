@@ -14,6 +14,7 @@ A compact Python simulator for Bellman-Ford-style distance-vector routing, inclu
 - three advertisement modes: `classic`, `split-horizon`, and `poison-reverse`
 - link-removal event simulation that can continue from the converged pre-failure state
 - explicit `periodic` vs `triggered` update scheduling modes for comparing propagation behavior
+- optional silent-router outage simulation with learned-route aging and timeout invalidation
 - classic count-to-infinity behavior vs split-horizon / poison-reverse mitigation
 - Markdown or Mermaid timeline export for per-round failure reconvergence artifacts
 - JSON output suitable for docs, screenshots, notebooks, or lightweight visualizers
@@ -54,6 +55,17 @@ python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate
   --remove-link B C \
   --update-strategy triggered \
   --max-rounds 20
+```
+
+Treat one router as silent after convergence and let learned routes age out when refreshes stop arriving:
+
+```bash
+python3 projects/distance-vector-routing-lab/distance_vector_routing.py simulate-outage \
+  --mode classic \
+  --topology '{"A":{"B":1},"B":{"A":1,"C":1},"C":{"B":1}}' \
+  --silent-routers B \
+  --route-timeout 2 \
+  --max-rounds 4
 ```
 
 Export that same failure as a portfolio-friendly round-by-round timeline for destination `C`:

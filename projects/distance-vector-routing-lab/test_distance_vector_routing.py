@@ -13,6 +13,7 @@ from distance_vector_routing import (
     remove_link,
     render_failure_timeline,
     run_failure_simulation,
+    run_outage_simulation,
     run_simulation,
 )
 
@@ -70,6 +71,36 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         self.assertEqual(costs[:3], [2, 2, 16])
         self.assertEqual(costs[-1], 16)
 
+    def test_silent_router_outage_aging_expires_stale_learned_routes(self):
+        result = run_outage_simulation(
+            LOOP_PRONE,
+            mode="classic",
+            update_strategy="periodic",
+            silent_routers=["B"],
+            route_timeout=2,
+            max_rounds=4,
+        )
+        history = result["after"]["history"]
+        self.assertEqual(history[0]["tables"]["A"]["C"]["cost"], 2)
+        self.assertEqual(history[1]["tables"]["A"]["C"]["cost"], 2)
+        self.assertEqual(history[1]["route_ages"]["A"]["C"], 1)
+        self.assertEqual(history[2]["tables"]["A"]["C"], {"destination": "C", "cost": 16, "next_hop": None})
+        self.assertEqual(history[2]["route_ages"]["A"]["C"], 2)
+        self.assertEqual(history[2]["tables"]["B"]["C"]["cost"], 1)
+
+    def test_triggered_silent_router_omits_silent_from_active_router_schedule(self):
+        result = run_simulation(
+            LOOP_PRONE,
+            mode="classic",
+            update_strategy="triggered",
+            silent_routers=["B"],
+            route_timeout=2,
+            max_rounds=4,
+        )
+        self.assertEqual(result["silent_routers"], ["B"])
+        self.assertEqual(result["history"][1]["active_routers"], ["A"])
+        self.assertNotIn("B", result["history"][0]["active_routers"])
+
     def test_remove_link_rejects_missing_edge(self):
         with self.assertRaises(ValueError):
             remove_link(LOOP_PRONE, "A", "C")
@@ -117,6 +148,30 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         self.assertEqual(output["update_strategy"], "triggered")
         self.assertEqual(output["history"][2]["active_routers"], ["B"])
         self.assertEqual(output["tables"]["A"]["C"]["cost"], 2)
+
+    def test_simulate_cli_accepts_route_timeout_and_silent_routers(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "simulate-outage",
+                "--topology",
+                json.dumps(LOOP_PRONE),
+                "--silent-routers",
+                "B",
+                "--route-timeout",
+                "2",
+                "--max-rounds",
+                "4",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        output = json.loads(completed.stdout)
+        self.assertEqual(output["after"]["silent_routers"], ["B"])
+        self.assertEqual(output["after"]["route_timeout"], 2)
+        self.assertEqual(output["after"]["history"][2]["tables"]["A"]["C"]["cost"], 16)
 
     def test_invalid_topology_is_rejected(self):
         completed = subprocess.run(
@@ -169,6 +224,19 @@ class DistanceVectorRoutingTests(unittest.TestCase):
         self.assertIn("| 2 | cost=4, via B | cost=3, via A |", timeline)
         self.assertIn("| 14 | cost=16, via unreachable | cost=15, via A |", timeline)
         self.assertIn("| 15 | cost=16, via unreachable | cost=16, via unreachable |", timeline)
+
+    def test_timeline_includes_age_annotations_when_timeout_enabled(self):
+        failure = run_failure_simulation(
+            LOOP_PRONE,
+            "B",
+            "C",
+            mode="classic",
+            max_rounds=6,
+            silent_routers=["C"],
+            route_timeout=2,
+        )
+        timeline = render_failure_timeline(failure, destination="C", diagram_format="markdown", routers=["A"])
+        self.assertIn("age=", timeline)
 
     def test_export_timeline_cli_supports_mermaid(self):
         completed = subprocess.run(

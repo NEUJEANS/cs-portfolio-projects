@@ -29,14 +29,21 @@ class RoundState:
     changed: bool
     tables: dict[str, dict[str, Route]]
     active_routers: tuple[str, ...] = ()
+    route_ages: dict[str, dict[str, int]] | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "round": self.round_index,
             "changed": self.changed,
             "active_routers": list(self.active_routers),
             "tables": serialize_tables(self.tables),
         }
+        if self.route_ages is not None:
+            payload["route_ages"] = {
+                router: dict(sorted(destinations.items()))
+                for router, destinations in sorted(self.route_ages.items())
+            }
+        return payload
 
 
 def normalize_topology(topology: Mapping[str, Mapping[str, int]]) -> dict[str, dict[str, int]]:
@@ -70,7 +77,16 @@ def initialize_tables(topology: Mapping[str, Mapping[str, int]]) -> dict[str, di
     return tables
 
 
-def advertised_cost(route: Route, *, recipient: str, mode: str, infinity: int) -> int | None:
+def advertised_cost(
+    route: Route,
+    *,
+    recipient: str,
+    mode: str,
+    infinity: int,
+    advertiser_silent: bool,
+) -> int | None:
+    if advertiser_silent:
+        return None
     if route.destination == recipient:
         return route.cost
     if mode == "split-horizon" and route.next_hop == recipient:
@@ -85,50 +101,171 @@ def route_sort_key(route: Route) -> tuple[int, int, str]:
     return (route.cost, 0 if route.next_hop is not None else 1, next_hop)
 
 
-def update_once(
+def clone_tables(tables: Mapping[str, Mapping[str, Route]]) -> dict[str, dict[str, Route]]:
+    return {router: dict(table) for router, table in tables.items()}
+
+
+def initialize_route_ages(
+    topology: Mapping[str, Mapping[str, int]],
+    tables: Mapping[str, Mapping[str, Route]],
+) -> dict[str, dict[str, int]]:
+    route_ages: dict[str, dict[str, int]] = {}
+    for router, table in tables.items():
+        route_ages[router] = {}
+        for destination, route in table.items():
+            if destination == router:
+                continue
+            if route.next_hop is None:
+                route_ages[router][destination] = 0
+            elif route.next_hop == destination and destination in topology[router]:
+                route_ages[router][destination] = 0
+            else:
+                route_ages[router][destination] = 0
+    return route_ages
+
+
+def compute_best_route(
+    router: str,
+    destination: str,
     topology: Mapping[str, Mapping[str, int]],
     tables: Mapping[str, Mapping[str, Route]],
     *,
     mode: str,
     infinity: int,
-) -> tuple[dict[str, dict[str, Route]], bool]:
+    silent_routers: set[str],
+) -> tuple[Route, bool]:
+    candidates: list[tuple[Route, bool]] = []
+    direct_cost = topology[router].get(destination)
+    if direct_cost is not None:
+        candidates.append((Route(destination=destination, cost=direct_cost, next_hop=destination), False))
+
+    for neighbor, link_cost in sorted(topology[router].items()):
+        neighbor_route = tables[neighbor].get(destination)
+        if neighbor_route is None:
+            continue
+        advertised = advertised_cost(
+            neighbor_route,
+            recipient=router,
+            mode=mode,
+            infinity=infinity,
+            advertiser_silent=neighbor in silent_routers,
+        )
+        if advertised is None:
+            continue
+        combined = min(infinity, link_cost + advertised)
+        candidates.append((Route(destination=destination, cost=combined, next_hop=neighbor), True))
+
+    if not candidates:
+        return Route(destination, infinity, None), False
+
+    best_route, refreshed = min(candidates, key=lambda item: route_sort_key(item[0]))
+    if best_route.cost >= infinity:
+        return Route(destination, infinity, None), refreshed
+    return best_route, refreshed
+
+
+def apply_route_aging(
+    topology: Mapping[str, Mapping[str, int]],
+    previous_tables: Mapping[str, Mapping[str, Route]],
+    previous_ages: Mapping[str, Mapping[str, int]],
+    next_tables: dict[str, dict[str, Route]],
+    refresh_flags: Mapping[str, Mapping[str, bool]],
+    *,
+    route_timeout: int | None,
+    infinity: int,
+) -> dict[str, dict[str, int]] | None:
+    if route_timeout is None:
+        return None
+
+    next_ages: dict[str, dict[str, int]] = {}
+    for router, table in next_tables.items():
+        next_ages[router] = {}
+        for destination, route in table.items():
+            if destination == router:
+                continue
+            if route.next_hop is None:
+                next_ages[router][destination] = 0
+                continue
+            if route.next_hop == destination and destination in topology[router]:
+                next_ages[router][destination] = 0
+                continue
+
+            previous_route = previous_tables[router].get(destination)
+            previous_age = previous_ages.get(router, {}).get(destination, 0)
+            refreshed = refresh_flags.get(router, {}).get(destination, False)
+
+            if refreshed:
+                age = 0
+            elif previous_route is not None and previous_route.next_hop == route.next_hop and previous_route.cost == route.cost:
+                age = previous_age + 1
+            else:
+                age = 0
+
+            if age >= route_timeout:
+                next_tables[router][destination] = Route(destination=destination, cost=infinity, next_hop=None)
+                next_ages[router][destination] = route_timeout
+            else:
+                next_ages[router][destination] = age
+    return next_ages
+
+
+def update_once(
+    topology: Mapping[str, Mapping[str, int]],
+    tables: Mapping[str, Mapping[str, Route]],
+    previous_ages: Mapping[str, Mapping[str, int]],
+    *,
+    mode: str,
+    infinity: int,
+    silent_routers: set[str],
+    route_timeout: int | None,
+) -> tuple[dict[str, dict[str, Route]], dict[str, dict[str, int]] | None, bool]:
     all_destinations = sorted(topology)
     next_tables: dict[str, dict[str, Route]] = {}
-    changed = False
+    refresh_flags: dict[str, dict[str, bool]] = {}
 
     for router in sorted(topology):
-        current = tables[router]
         new_table: dict[str, Route] = {router: Route(destination=router, cost=0, next_hop=router)}
+        refresh_flags[router] = {}
         for destination in all_destinations:
             if destination == router:
                 continue
-            candidates: list[Route] = []
-            direct_cost = topology[router].get(destination)
-            if direct_cost is not None:
-                candidates.append(Route(destination=destination, cost=direct_cost, next_hop=destination))
-            for neighbor, link_cost in sorted(topology[router].items()):
-                neighbor_route = tables[neighbor].get(destination)
-                if neighbor_route is None:
-                    continue
-                advertised = advertised_cost(
-                    neighbor_route,
-                    recipient=router,
-                    mode=mode,
-                    infinity=infinity,
-                )
-                if advertised is None:
-                    continue
-                combined = min(infinity, link_cost + advertised)
-                candidates.append(Route(destination=destination, cost=combined, next_hop=neighbor))
-            best = min(candidates, key=route_sort_key) if candidates else Route(destination, infinity, None)
-            if best.cost >= infinity:
-                best = Route(destination, infinity, None)
+            best, refreshed = compute_best_route(
+                router,
+                destination,
+                topology,
+                tables,
+                mode=mode,
+                infinity=infinity,
+                silent_routers=silent_routers,
+            )
+            previous_route = tables[router].get(destination)
+            if (
+                route_timeout is not None
+                and previous_route is not None
+                and previous_route.next_hop is not None
+                and previous_route.next_hop != destination
+                and best.next_hop is None
+                and previous_route.next_hop in silent_routers
+            ):
+                best = previous_route
+                refreshed = False
             new_table[destination] = best
+            refresh_flags[router][destination] = refreshed
         next_tables[router] = new_table
-        if serialize_table(current) != serialize_table(new_table):
-            changed = True
 
-    return next_tables, changed
+    next_ages = apply_route_aging(
+        topology,
+        tables,
+        previous_ages,
+        next_tables,
+        refresh_flags,
+        route_timeout=route_timeout,
+        infinity=infinity,
+    )
+    changed = serialize_tables(tables) != serialize_tables(next_tables)
+    if route_timeout is not None:
+        changed = changed or dict(previous_ages) != dict(next_ages or {})
+    return next_tables, next_ages, changed
 
 
 def run_rounds(
@@ -139,38 +276,78 @@ def run_rounds(
     infinity: int,
     max_rounds: int,
     update_strategy: str,
-) -> tuple[dict[str, dict[str, Route]], list[RoundState], bool]:
-    tables = {router: dict(table) for router, table in initial_tables.items()}
+    silent_routers: set[str],
+    route_timeout: int | None,
+) -> tuple[dict[str, dict[str, Route]], dict[str, dict[str, int]] | None, list[RoundState], bool]:
+    tables = clone_tables(initial_tables)
+    route_ages = initialize_route_ages(topology, tables) if route_timeout is not None else None
     routers = tuple(sorted(topology))
-    history: list[RoundState] = [RoundState(round_index=0, changed=False, tables=tables, active_routers=routers)]
+    advertising_routers = tuple(router for router in routers if router not in silent_routers)
+    history: list[RoundState] = [
+        RoundState(
+            round_index=0,
+            changed=False,
+            tables=clone_tables(tables),
+            active_routers=advertising_routers if update_strategy == "periodic" else advertising_routers,
+            route_ages=None if route_ages is None else {router: dict(ages) for router, ages in route_ages.items()},
+        )
+    ]
 
     if update_strategy == "periodic":
         converged = False
+        current_ages = route_ages or {}
         for round_index in range(1, max_rounds + 1):
-            tables, changed = update_once(topology, tables, mode=mode, infinity=infinity)
-            history.append(RoundState(round_index=round_index, changed=changed, tables=tables, active_routers=routers))
+            tables, route_ages, changed = update_once(
+                topology,
+                tables,
+                current_ages,
+                mode=mode,
+                infinity=infinity,
+                silent_routers=silent_routers,
+                route_timeout=route_timeout,
+            )
+            current_ages = route_ages or {}
+            history.append(
+                RoundState(
+                    round_index=round_index,
+                    changed=changed,
+                    tables=clone_tables(tables),
+                    active_routers=advertising_routers,
+                    route_ages=None if route_ages is None else {router: dict(ages) for router, ages in route_ages.items()},
+                )
+            )
             if not changed:
                 converged = True
                 break
-        return tables, history, converged
+        return tables, route_ages, history, converged
 
     if update_strategy != "triggered":
         raise ValueError("update_strategy must be periodic or triggered")
 
     converged = False
-    pending = deque(routers)
-    queued = set(routers)
+    current_ages = route_ages or {}
+    pending = deque(advertising_routers)
+    queued = set(advertising_routers)
 
     for round_index in range(1, max_rounds + 1):
         if not pending:
-            history.append(RoundState(round_index=round_index, changed=False, tables=tables, active_routers=()))
+            history.append(
+                RoundState(
+                    round_index=round_index,
+                    changed=False,
+                    tables=clone_tables(tables),
+                    active_routers=(),
+                    route_ages=None if route_ages is None else {router: dict(ages) for router, ages in current_ages.items()},
+                )
+            )
             converged = True
             break
 
         active_router = pending.popleft()
         queued.remove(active_router)
+        next_tables = clone_tables(tables)
+        refresh_flags: dict[str, dict[str, bool]] = {router: {} for router in tables}
         changed_routers: list[str] = []
-        next_tables = {router: dict(table) for router, table in tables.items()}
 
         for router in sorted(topology[active_router]):
             current = tables[router]
@@ -178,54 +355,57 @@ def run_rounds(
             for destination in routers:
                 if destination == router:
                     continue
-                candidates: list[Route] = []
-                direct_cost = topology[router].get(destination)
-                if direct_cost is not None:
-                    candidates.append(Route(destination=destination, cost=direct_cost, next_hop=destination))
-                for neighbor, link_cost in sorted(topology[router].items()):
-                    if neighbor != active_router:
-                        neighbor_route = tables[neighbor].get(destination)
-                    else:
-                        neighbor_route = tables[active_router].get(destination)
-                    if neighbor_route is None:
-                        continue
-                    advertised = advertised_cost(
-                        neighbor_route,
-                        recipient=router,
-                        mode=mode,
-                        infinity=infinity,
-                    )
-                    if advertised is None:
-                        continue
-                    combined = min(infinity, link_cost + advertised)
-                    candidates.append(Route(destination=destination, cost=combined, next_hop=neighbor))
-                best = min(candidates, key=route_sort_key) if candidates else Route(destination, infinity, None)
-                if best.cost >= infinity:
-                    best = Route(destination, infinity, None)
+                best, refreshed = compute_best_route(
+                    router,
+                    destination,
+                    topology,
+                    tables,
+                    mode=mode,
+                    infinity=infinity,
+                    silent_routers=silent_routers,
+                )
                 new_table[destination] = best
+                refresh_flags[router][destination] = refreshed and best.next_hop == active_router
             if serialize_table(current) != serialize_table(new_table):
                 next_tables[router] = new_table
                 changed_routers.append(router)
 
+        next_ages = apply_route_aging(
+            topology,
+            tables,
+            current_ages,
+            next_tables,
+            refresh_flags,
+            route_timeout=route_timeout,
+            infinity=infinity,
+        )
+        route_ages = next_ages
+        current_ages = next_ages or {}
         tables = next_tables
+
         for router in sorted(changed_routers):
             for neighbor in sorted(topology[router]):
+                if neighbor in silent_routers:
+                    continue
                 if neighbor not in queued:
                     pending.append(neighbor)
                     queued.add(neighbor)
+
+        changed = bool(changed_routers) or serialize_tables(history[-1].tables) != serialize_tables(tables)
         history.append(
             RoundState(
                 round_index=round_index,
-                changed=bool(changed_routers),
-                tables=tables,
+                changed=changed,
+                tables=clone_tables(tables),
                 active_routers=(active_router,),
+                route_ages=None if route_ages is None else {router: dict(ages) for router, ages in current_ages.items()},
             )
         )
-        if not pending and not changed_routers:
+        if not pending and not changed:
             converged = True
             break
 
-    return tables, history, converged
+    return tables, route_ages, history, converged
 
 
 def run_simulation(
@@ -235,31 +415,50 @@ def run_simulation(
     infinity: int = INFINITY,
     max_rounds: int = 50,
     update_strategy: str = "periodic",
+    silent_routers: Sequence[str] | None = None,
+    route_timeout: int | None = None,
 ) -> dict[str, object]:
     if mode not in {"classic", "split-horizon", "poison-reverse"}:
         raise ValueError("mode must be classic, split-horizon, or poison-reverse")
     if update_strategy not in {"periodic", "triggered"}:
         raise ValueError("update_strategy must be periodic or triggered")
+    if route_timeout is not None and route_timeout <= 0:
+        raise ValueError("route_timeout must be positive when provided")
+
     normalized = normalize_topology(topology)
-    tables, history, converged = run_rounds(
+    silent = set(silent_routers or ())
+    unknown = sorted(silent - set(normalized))
+    if unknown:
+        raise ValueError(f"silent routers must exist in the topology: {', '.join(unknown)}")
+
+    tables, route_ages, history, converged = run_rounds(
         normalized,
         initialize_tables(normalized),
         mode=mode,
         infinity=infinity,
         max_rounds=max_rounds,
         update_strategy=update_strategy,
+        silent_routers=silent,
+        route_timeout=route_timeout,
     )
 
-    return {
+    payload: dict[str, object] = {
         "mode": mode,
         "infinity": infinity,
         "update_strategy": update_strategy,
+        "silent_routers": sorted(silent),
+        "route_timeout": route_timeout,
         "topology": {router: dict(sorted(neighbors.items())) for router, neighbors in sorted(normalized.items())},
         "converged": converged,
         "rounds": len(history) - 1,
         "tables": serialize_tables(tables),
         "history": [entry.to_dict() for entry in history],
     }
+    if route_ages is not None:
+        payload["route_ages"] = {
+            router: dict(sorted(ages.items())) for router, ages in sorted(route_ages.items())
+        }
+    return payload
 
 
 def remove_link(topology: Mapping[str, Mapping[str, int]], left: str, right: str) -> dict[str, dict[str, int]]:
@@ -271,6 +470,71 @@ def remove_link(topology: Mapping[str, Mapping[str, int]], left: str, right: str
     return normalized
 
 
+def run_outage_simulation(
+    topology: Mapping[str, Mapping[str, int]],
+    *,
+    silent_routers: Sequence[str],
+    mode: str = "classic",
+    infinity: int = INFINITY,
+    max_rounds: int = 50,
+    update_strategy: str = "periodic",
+    route_timeout: int | None = None,
+) -> dict[str, object]:
+    normalized = normalize_topology(topology)
+    before = run_simulation(
+        normalized,
+        mode=mode,
+        infinity=infinity,
+        max_rounds=max_rounds,
+        update_strategy=update_strategy,
+        silent_routers=[],
+        route_timeout=None,
+    )
+    initial_tables = {
+        router: {
+            destination: Route(
+                destination=route["destination"],
+                cost=int(route["cost"]),
+                next_hop=route["next_hop"],
+            )
+            for destination, route in table.items()
+        }
+        for router, table in before["tables"].items()
+    }
+    after_tables, route_ages, outage_history, converged = run_rounds(
+        normalized,
+        initial_tables,
+        mode=mode,
+        infinity=infinity,
+        max_rounds=max_rounds,
+        update_strategy=update_strategy,
+        silent_routers=set(silent_routers),
+        route_timeout=route_timeout,
+    )
+    after_payload: dict[str, object] = {
+        "mode": mode,
+        "infinity": infinity,
+        "update_strategy": update_strategy,
+        "silent_routers": sorted(set(silent_routers)),
+        "route_timeout": route_timeout,
+        "topology": {router: dict(sorted(neighbors.items())) for router, neighbors in sorted(normalized.items())},
+        "converged": converged,
+        "rounds": len(outage_history) - 1,
+        "tables": serialize_tables(after_tables),
+        "history": [entry.to_dict() for entry in outage_history],
+        "starts_from_converged_before_outage": True,
+    }
+    if route_ages is not None:
+        after_payload["route_ages"] = {
+            router: dict(sorted(ages.items())) for router, ages in sorted(route_ages.items())
+        }
+    return {
+        "event": {"type": "silent-router-outage", "routers": sorted(set(silent_routers))},
+        "before": before,
+        "after": after_payload,
+    }
+
+
 def run_failure_simulation(
     topology: Mapping[str, Mapping[str, int]],
     left: str,
@@ -280,6 +544,8 @@ def run_failure_simulation(
     infinity: int = INFINITY,
     max_rounds: int = 50,
     update_strategy: str = "periodic",
+    silent_routers: Sequence[str] | None = None,
+    route_timeout: int | None = None,
 ) -> dict[str, object]:
     normalized = normalize_topology(topology)
     before = run_simulation(
@@ -288,6 +554,8 @@ def run_failure_simulation(
         infinity=infinity,
         max_rounds=max_rounds,
         update_strategy=update_strategy,
+        silent_routers=silent_routers,
+        route_timeout=route_timeout,
     )
     updated_topology = remove_link(normalized, left, right)
     initial_tables = {
@@ -301,30 +569,39 @@ def run_failure_simulation(
         }
         for router, table in before["tables"].items()
     }
-    after_tables, failure_history, converged = run_rounds(
+    after_tables, route_ages, failure_history, converged = run_rounds(
         updated_topology,
         initial_tables,
         mode=mode,
         infinity=infinity,
         max_rounds=max_rounds,
         update_strategy=update_strategy,
+        silent_routers=set(silent_routers or ()),
+        route_timeout=route_timeout,
     )
+    after_payload: dict[str, object] = {
+        "mode": mode,
+        "infinity": infinity,
+        "update_strategy": update_strategy,
+        "silent_routers": sorted(set(silent_routers or ())),
+        "route_timeout": route_timeout,
+        "topology": {
+            router: dict(sorted(neighbors.items())) for router, neighbors in sorted(updated_topology.items())
+        },
+        "converged": converged,
+        "rounds": len(failure_history) - 1,
+        "tables": serialize_tables(after_tables),
+        "history": [entry.to_dict() for entry in failure_history],
+        "starts_from_converged_before_failure": True,
+    }
+    if route_ages is not None:
+        after_payload["route_ages"] = {
+            router: dict(sorted(ages.items())) for router, ages in sorted(route_ages.items())
+        }
     return {
         "event": {"type": "remove-link", "left": left, "right": right},
         "before": before,
-        "after": {
-            "mode": mode,
-            "infinity": infinity,
-            "update_strategy": update_strategy,
-            "topology": {
-                router: dict(sorted(neighbors.items())) for router, neighbors in sorted(updated_topology.items())
-            },
-            "converged": converged,
-            "rounds": len(failure_history) - 1,
-            "tables": serialize_tables(after_tables),
-            "history": [entry.to_dict() for entry in failure_history],
-            "starts_from_converged_before_failure": True,
-        },
+        "after": after_payload,
     }
 
 
@@ -446,9 +723,11 @@ def render_failure_timeline(
             for router in selected_routers:
                 route = step["tables"][router][destination]
                 next_hop = route["next_hop"] if route["next_hop"] is not None else "unreachable"
-                lines.append(
-                    f"    Note over {mermaid_id(router)}: {destination} cost={route['cost']} via {next_hop}"
-                )
+                note = f"{destination} cost={route['cost']} via {next_hop}"
+                age = step.get("route_ages", {}).get(router, {}).get(destination)
+                if age is not None:
+                    note += f" age={age}"
+                lines.append(f"    Note over {mermaid_id(router)}: {note}")
         return "\n".join(lines)
 
     lines = [
@@ -460,7 +739,11 @@ def render_failure_timeline(
         for router in selected_routers:
             route = step["tables"][router][destination]
             next_hop = route["next_hop"] if route["next_hop"] is not None else "unreachable"
-            row.append(f"cost={route['cost']}, via {next_hop}")
+            cell = f"cost={route['cost']}, via {next_hop}"
+            age = step.get("route_ages", {}).get(router, {}).get(destination)
+            if age is not None:
+                cell += f", age={age}"
+            row.append(cell)
         lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines)
 
@@ -474,6 +757,8 @@ def export_diagram(
     infinity: int,
     max_rounds: int,
     update_strategy: str = "periodic",
+    silent_routers: Sequence[str] | None = None,
+    route_timeout: int | None = None,
     router: str | None,
 ) -> str:
     if snapshot == "topology":
@@ -484,6 +769,8 @@ def export_diagram(
         infinity=infinity,
         max_rounds=max_rounds,
         update_strategy=update_strategy,
+        silent_routers=silent_routers,
+        route_timeout=route_timeout,
     )
     return render_routes_diagram(simulation, router=router, diagram_format=diagram_format)
 
@@ -519,6 +806,8 @@ def build_parser() -> argparse.ArgumentParser:
     simulate_parser.add_argument("--infinity", type=int, default=INFINITY)
     simulate_parser.add_argument("--max-rounds", type=int, default=50)
     simulate_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
+    simulate_parser.add_argument("--silent-routers", nargs="*", default=[])
+    simulate_parser.add_argument("--route-timeout", type=int)
 
     failure_parser = subparsers.add_parser("simulate-failure", help="remove one link and observe reconvergence")
     failure_parser.add_argument("--topology", required=True)
@@ -527,6 +816,20 @@ def build_parser() -> argparse.ArgumentParser:
     failure_parser.add_argument("--infinity", type=int, default=INFINITY)
     failure_parser.add_argument("--max-rounds", type=int, default=50)
     failure_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
+    failure_parser.add_argument("--silent-routers", nargs="*", default=[])
+    failure_parser.add_argument("--route-timeout", type=int)
+
+    outage_parser = subparsers.add_parser(
+        "simulate-outage",
+        help="treat one or more routers as silent and observe stale-route expiration from a converged state",
+    )
+    outage_parser.add_argument("--topology", required=True)
+    outage_parser.add_argument("--silent-routers", nargs="+", required=True)
+    outage_parser.add_argument("--mode", default="classic", choices=["classic", "split-horizon", "poison-reverse"])
+    outage_parser.add_argument("--infinity", type=int, default=INFINITY)
+    outage_parser.add_argument("--max-rounds", type=int, default=50)
+    outage_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
+    outage_parser.add_argument("--route-timeout", type=int)
 
     diagram_parser = subparsers.add_parser("export-diagram", help="render topology or routing tables as Mermaid or Graphviz")
     diagram_parser.add_argument("--topology", required=True)
@@ -536,6 +839,8 @@ def build_parser() -> argparse.ArgumentParser:
     diagram_parser.add_argument("--infinity", type=int, default=INFINITY)
     diagram_parser.add_argument("--max-rounds", type=int, default=50)
     diagram_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
+    diagram_parser.add_argument("--silent-routers", nargs="*", default=[])
+    diagram_parser.add_argument("--route-timeout", type=int)
     diagram_parser.add_argument("--router", help="limit route snapshots to one router")
 
     timeline_parser = subparsers.add_parser(
@@ -551,6 +856,8 @@ def build_parser() -> argparse.ArgumentParser:
     timeline_parser.add_argument("--infinity", type=int, default=INFINITY)
     timeline_parser.add_argument("--max-rounds", type=int, default=50)
     timeline_parser.add_argument("--update-strategy", default="periodic", choices=["periodic", "triggered"])
+    timeline_parser.add_argument("--silent-routers", nargs="*", default=[])
+    timeline_parser.add_argument("--route-timeout", type=int)
 
     return parser
 
@@ -563,6 +870,8 @@ def cli(argv: Sequence[str] | None = None) -> int:
         parser.error("--infinity must be positive")
     if getattr(args, "max_rounds", 1) <= 0:
         parser.error("--max-rounds must be positive")
+    if getattr(args, "route_timeout", None) is not None and args.route_timeout <= 0:
+        parser.error("--route-timeout must be positive")
 
     topology = parse_topology(args.topology)
     if args.command == "simulate":
@@ -572,6 +881,8 @@ def cli(argv: Sequence[str] | None = None) -> int:
             infinity=args.infinity,
             max_rounds=args.max_rounds,
             update_strategy=args.update_strategy,
+            silent_routers=args.silent_routers,
+            route_timeout=args.route_timeout,
         )
     elif args.command == "simulate-failure":
         left, right = args.remove_link
@@ -583,6 +894,18 @@ def cli(argv: Sequence[str] | None = None) -> int:
             infinity=args.infinity,
             max_rounds=args.max_rounds,
             update_strategy=args.update_strategy,
+            silent_routers=args.silent_routers,
+            route_timeout=args.route_timeout,
+        )
+    elif args.command == "simulate-outage":
+        payload = run_outage_simulation(
+            topology,
+            silent_routers=args.silent_routers,
+            mode=args.mode,
+            infinity=args.infinity,
+            max_rounds=args.max_rounds,
+            update_strategy=args.update_strategy,
+            route_timeout=args.route_timeout,
         )
     elif args.command == "export-timeline":
         left, right = args.remove_link
@@ -594,6 +917,8 @@ def cli(argv: Sequence[str] | None = None) -> int:
             infinity=args.infinity,
             max_rounds=args.max_rounds,
             update_strategy=args.update_strategy,
+            silent_routers=args.silent_routers,
+            route_timeout=args.route_timeout,
         )
         payload = render_failure_timeline(
             failure,
@@ -610,6 +935,8 @@ def cli(argv: Sequence[str] | None = None) -> int:
             infinity=args.infinity,
             max_rounds=args.max_rounds,
             update_strategy=args.update_strategy,
+            silent_routers=args.silent_routers,
+            route_timeout=args.route_timeout,
             router=args.router,
         )
 
