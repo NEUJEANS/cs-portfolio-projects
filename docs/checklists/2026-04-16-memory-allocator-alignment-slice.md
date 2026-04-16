@@ -16,5 +16,5 @@
   - targeted passing suite: `python3 -m unittest projects/memory-allocator-simulator/test_memory_allocator.py`
   - repo-wide `./.venv/bin/pytest -q` still has unrelated pre-existing collection errors in `projects/interval-tree-lab/test_interval_tree_lab.py` and duplicate `test_task_tracker` modules
 - [x] run secret scan before push
-- [ ] commit and push the slice
-- [ ] append a wrap-up note for resumability
+- [x] commit and push the slice
+- [x] append a wrap-up note for resumability
