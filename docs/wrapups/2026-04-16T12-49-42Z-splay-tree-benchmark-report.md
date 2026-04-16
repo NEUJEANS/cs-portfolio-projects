@@ -20,7 +20,7 @@
 - secret scan: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
 
 ## Commit
-- Hash: `COMMIT_HASH_PLACEHOLDER`
+- Feature commit hash: `68c78bfeae333f69a971b9188fcfcd347278928c`
 
 ## Next step
 - render the Mermaid benchmark report into checked-in SVG/PNG assets for portfolio sites that do not support Mermaid natively
