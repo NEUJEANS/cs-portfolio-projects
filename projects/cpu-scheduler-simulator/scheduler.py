@@ -30,7 +30,7 @@ class TimelineSlice:
         return self.end - self.start
 
 
-SUPPORTED_ALGORITHMS = {"fcfs", "sjf", "rr"}
+SUPPORTED_ALGORITHMS = {"fcfs", "sjf", "srtf", "rr"}
 
 
 def load_processes(path: Path) -> List[Process]:
@@ -163,6 +163,53 @@ def simulate_sjf(processes: Iterable[Process]) -> Dict:
     return finalize(processes, timeline, first_start, completion)
 
 
+def simulate_srtf(processes: Iterable[Process]) -> Dict:
+    processes = normalize_processes(processes)
+    time = 0
+    index = 0
+    ready: List[Process] = []
+    remaining = {proc.pid: proc.burst for proc in processes}
+    timeline: List[TimelineSlice] = []
+    first_start: Dict[str, int] = {}
+    completion: Dict[str, int] = {}
+
+    while index < len(processes) or ready:
+        while index < len(processes) and processes[index].arrival <= time:
+            ready.append(processes[index])
+            index += 1
+
+        if not ready:
+            next_arrival = processes[index].arrival
+            append_slice(timeline, time, next_arrival, "IDLE")
+            time = next_arrival
+            continue
+
+        ready.sort(key=lambda proc: (remaining[proc.pid], proc.arrival, proc.pid))
+        proc = ready.pop(0)
+        first_start.setdefault(proc.pid, time)
+
+        next_arrival = processes[index].arrival if index < len(processes) else None
+        run_for = remaining[proc.pid]
+        if next_arrival is not None:
+            run_for = min(run_for, next_arrival - time)
+
+        end = time + run_for
+        append_slice(timeline, time, end, proc.pid)
+        time = end
+        remaining[proc.pid] -= run_for
+
+        while index < len(processes) and processes[index].arrival <= time:
+            ready.append(processes[index])
+            index += 1
+
+        if remaining[proc.pid] > 0:
+            ready.append(proc)
+        else:
+            completion[proc.pid] = time
+
+    return finalize(processes, timeline, first_start, completion)
+
+
 def simulate_round_robin(processes: Iterable[Process], quantum: int) -> Dict:
     if quantum <= 0:
         raise ValueError("quantum must be > 0")
@@ -214,6 +261,8 @@ def simulate(processes: Iterable[Process], algorithm: str, quantum: int = 2) -> 
         return simulate_fcfs(processes)
     if algorithm == "sjf":
         return simulate_sjf(processes)
+    if algorithm == "srtf":
+        return simulate_srtf(processes)
     if algorithm == "rr":
         return simulate_round_robin(processes, quantum=quantum)
     raise ValueError(f"unsupported algorithm: {algorithm}")

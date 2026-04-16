@@ -11,6 +11,19 @@
 - [x] complete review pass 1
 - [x] complete review pass 2
 - [x] complete review pass 3
-- [ ] run secret scan
+- [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 vertical slice
+- [x] refresh SRTF preemption rules and deterministic tie-breaking
+- [x] add preemptive SRTF algorithm support to the simulator and CLI
+- [x] extend tests for preemption, tie-breaking, and JSON output
+- [x] update README examples and feature list
+- [x] run tests
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

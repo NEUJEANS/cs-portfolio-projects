@@ -41,6 +41,36 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(by_pid["P3"]["waiting"], 3)
         self.assertEqual(by_pid["P2"]["response"], 5)
 
+    def test_srtf_preempts_on_shorter_arrival(self):
+        result = simulate([
+            Process("P1", arrival=0, burst=8),
+            Process("P2", arrival=1, burst=4),
+            Process("P3", arrival=2, burst=2),
+        ], "srtf")
+        self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
+            ("P1", 0, 1),
+            ("P2", 1, 2),
+            ("P3", 2, 4),
+            ("P2", 4, 7),
+            ("P1", 7, 14),
+        ])
+        by_pid = {row["pid"]: row for row in result["processes"]}
+        self.assertEqual(by_pid["P3"]["response"], 0)
+        self.assertEqual(by_pid["P2"]["completion"], 7)
+        self.assertEqual(by_pid["P1"]["waiting"], 6)
+
+    def test_srtf_uses_deterministic_tie_breaking(self):
+        result = simulate([
+            Process("P2", arrival=0, burst=3),
+            Process("P1", arrival=0, burst=3),
+            Process("P3", arrival=5, burst=1),
+        ], "srtf")
+        self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
+            ("P1", 0, 3),
+            ("P2", 3, 6),
+            ("P3", 6, 7),
+        ])
+
     def test_round_robin_rotates_jobs(self):
         result = simulate(self.workload, "rr", quantum=2)
         self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
@@ -76,15 +106,15 @@ class SchedulerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_processes(path)
 
-    def test_cli_json_output(self):
+    def test_cli_json_output_for_srtf(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workload.json"
             path.write_text(json.dumps([
-                {"pid": "P1", "arrival": 0, "burst": 2},
-                {"pid": "P2", "arrival": 1, "burst": 1},
+                {"pid": "P1", "arrival": 0, "burst": 5},
+                {"pid": "P2", "arrival": 1, "burst": 2},
             ]))
             completed = subprocess.run(
-                ["python3", "scheduler.py", "rr", str(path), "--quantum", "1", "--json"],
+                ["python3", "scheduler.py", "srtf", str(path), "--json"],
                 cwd=Path(__file__).parent,
                 capture_output=True,
                 text=True,
@@ -92,6 +122,7 @@ class SchedulerTests(unittest.TestCase):
             )
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["timeline"][0]["pid"], "P1")
+            self.assertEqual(payload["timeline"][1]["pid"], "P2")
             self.assertIn("averages", payload)
 
 
