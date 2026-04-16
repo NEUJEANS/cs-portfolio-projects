@@ -644,6 +644,60 @@ def _benchmark_csv(rows: list[dict[str, int | str]]) -> str:
     return buffer.getvalue()
 
 
+def _benchmark_series(counts: list[int], start: int, seed: int) -> dict[str, object]:
+    if not counts:
+        raise ValueError("benchmark series requires at least one count")
+    if any(count <= 0 for count in counts):
+        raise ValueError("benchmark series counts must be positive")
+
+    runs: list[dict[str, object]] = []
+    rows: list[dict[str, int | str]] = []
+    for count in counts:
+        ascending = list(range(start, start + count))
+        descending = list(reversed(ascending))
+        rng = random.Random(seed)
+        shuffled = ascending.copy()
+        rng.shuffle(shuffled)
+
+        cases = {
+            "ascending": _benchmark_sequence(ascending),
+            "descending": _benchmark_sequence(descending),
+            "shuffled": _benchmark_sequence(shuffled),
+        }
+        case_rows = _benchmark_rows(cases)
+        for row in case_rows:
+            rows.append({"series_count": count, **row})
+
+        summary = {
+            "count": count,
+            "red_black_height_mean": statistics.fmean(case["red_black"]["height"] for case in cases.values()),
+            "avl_height_mean": statistics.fmean(case["avl"]["height"] for case in cases.values()),
+            "red_black_rotation_mean": statistics.fmean(case["red_black"]["rotation_count"] for case in cases.values()),
+            "avl_rotation_mean": statistics.fmean(case["avl"]["rotation_count"] for case in cases.values()),
+        }
+        summary["height_gap_avl_minus_red_black"] = summary["avl_height_mean"] - summary["red_black_height_mean"]
+        summary["rotation_gap_avl_minus_red_black"] = (
+            summary["avl_rotation_mean"] - summary["red_black_rotation_mean"]
+        )
+        runs.append({"count": count, "cases": cases, "summary": summary})
+
+    trend_rows = [run["summary"] for run in runs]
+    aggregate = {
+        "count_min": min(counts),
+        "count_max": max(counts),
+        "run_count": len(runs),
+        "red_black_height_mean": statistics.fmean(row["red_black_height_mean"] for row in trend_rows),
+        "avl_height_mean": statistics.fmean(row["avl_height_mean"] for row in trend_rows),
+        "red_black_rotation_mean": statistics.fmean(row["red_black_rotation_mean"] for row in trend_rows),
+        "avl_rotation_mean": statistics.fmean(row["avl_rotation_mean"] for row in trend_rows),
+    }
+    aggregate["height_gap_avl_minus_red_black"] = aggregate["avl_height_mean"] - aggregate["red_black_height_mean"]
+    aggregate["rotation_gap_avl_minus_red_black"] = (
+        aggregate["avl_rotation_mean"] - aggregate["red_black_rotation_mean"]
+    )
+    return {"runs": runs, "rows": rows, "aggregate": aggregate}
+
+
 def _describe_trace_event(event: dict[str, object], index: int) -> str:
     name = str(event["event"])
     if name == "inserted":
@@ -873,40 +927,39 @@ def command_explain_trace(args: argparse.Namespace) -> dict[str, object]:
 def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
     if args.count <= 0:
         raise ValueError("benchmark count must be positive")
-    ascending = list(range(args.start, args.start + args.count))
-    descending = list(reversed(ascending))
-    rng = random.Random(args.seed)
-    shuffled = ascending.copy()
-    rng.shuffle(shuffled)
-
-    cases = {
-        "ascending": _benchmark_sequence(ascending),
-        "descending": _benchmark_sequence(descending),
-        "shuffled": _benchmark_sequence(shuffled),
-    }
-    rows = _benchmark_rows(cases)
-
-    metrics = {
-        "red_black_height_mean": statistics.fmean(case["red_black"]["height"] for case in cases.values()),
-        "avl_height_mean": statistics.fmean(case["avl"]["height"] for case in cases.values()),
-        "red_black_rotation_mean": statistics.fmean(case["red_black"]["rotation_count"] for case in cases.values()),
-        "avl_rotation_mean": statistics.fmean(case["avl"]["rotation_count"] for case in cases.values()),
-    }
-    metrics["height_gap_avl_minus_red_black"] = metrics["avl_height_mean"] - metrics["red_black_height_mean"]
-    metrics["rotation_gap_avl_minus_red_black"] = (
-        metrics["avl_rotation_mean"] - metrics["red_black_rotation_mean"]
-    )
-
+    series = _benchmark_series([args.count], start=args.start, seed=args.seed)
+    run = series["runs"][0]
     payload = {
         "command": "benchmark",
         "count": args.count,
         "seed": args.seed,
         "start": args.start,
-        "cases": cases,
-        "summary": metrics,
+        "cases": run["cases"],
+        "summary": run["summary"],
     }
     if args.csv or args.csv_file:
-        csv_text = _benchmark_csv(rows)
+        csv_text = _benchmark_csv(_benchmark_rows(run["cases"]))
+        payload["csv"] = csv_text
+        if args.csv_file:
+            csv_path = Path(args.csv_file)
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            csv_path.write_text(csv_text, encoding="utf-8")
+            payload["csv_file"] = str(csv_path)
+    return payload
+
+
+def command_benchmark_series(args: argparse.Namespace) -> dict[str, object]:
+    series = _benchmark_series(args.counts, start=args.start, seed=args.seed)
+    payload = {
+        "command": "benchmark-series",
+        "counts": args.counts,
+        "seed": args.seed,
+        "start": args.start,
+        "runs": series["runs"],
+        "aggregate": series["aggregate"],
+    }
+    if args.csv or args.csv_file:
+        csv_text = _benchmark_csv(series["rows"])
         payload["csv"] = csv_text
         if args.csv_file:
             csv_path = Path(args.csv_file)
@@ -986,6 +1039,29 @@ def main() -> None:
         help="write the benchmark cases to a CSV file for spreadsheet/chart tooling",
     )
     benchmark_parser.set_defaults(handler=command_benchmark)
+
+    benchmark_series_parser = subparsers.add_parser(
+        "benchmark-series",
+        help="compare red-black and AVL trees across multiple input sizes and insertion orders",
+    )
+    benchmark_series_parser.add_argument(
+        "counts",
+        nargs="+",
+        type=int,
+        help="one or more input sizes to benchmark in ascending/descending/shuffled form",
+    )
+    benchmark_series_parser.add_argument("--start", type=int, default=1, help="starting integer for the benchmark range")
+    benchmark_series_parser.add_argument("--seed", type=int, default=7, help="random seed for the shuffled benchmark case")
+    benchmark_series_parser.add_argument(
+        "--csv",
+        action="store_true",
+        help="include a chart-ready CSV string in the JSON output",
+    )
+    benchmark_series_parser.add_argument(
+        "--csv-file",
+        help="write the benchmark series rows to a CSV file for spreadsheet/chart tooling",
+    )
+    benchmark_series_parser.set_defaults(handler=command_benchmark_series)
 
     args = parser.parse_args()
     if args.command == "explain-trace" and args.operation == "delete" and args.query is None:

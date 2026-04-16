@@ -358,6 +358,16 @@ class RedBlackTreeLabTests(unittest.TestCase):
         self.assertIn("ascending,5", csv_text)
         self.assertIn("descending,5", csv_text)
 
+    def test_benchmark_series_reports_runs_rows_and_aggregate_metrics(self) -> None:
+        series = module._benchmark_series([7, 15], start=1, seed=11)
+        self.assertEqual([run["count"] for run in series["runs"]], [7, 15])
+        self.assertEqual(series["aggregate"]["run_count"], 2)
+        self.assertEqual(series["aggregate"]["count_min"], 7)
+        self.assertEqual(series["aggregate"]["count_max"], 15)
+        self.assertEqual(len(series["rows"]), 6)
+        self.assertEqual(series["rows"][0]["series_count"], 7)
+        self.assertIn("rotation_gap_avl_minus_red_black", series["aggregate"])
+
     def test_cli_benchmark_outputs_comparison_cases(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "benchmark", "--count", "9", "--seed", "11"],
@@ -423,6 +433,60 @@ class RedBlackTreeLabTests(unittest.TestCase):
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("benchmark count must be positive", completed.stderr)
+
+    def test_cli_benchmark_series_outputs_runs_and_aggregate(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "benchmark-series", "7", "15", "--seed", "11"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "benchmark-series")
+        self.assertEqual(payload["counts"], [7, 15])
+        self.assertEqual(len(payload["runs"]), 2)
+        self.assertEqual(payload["aggregate"]["run_count"], 2)
+        self.assertIn("height_gap_avl_minus_red_black", payload["aggregate"])
+
+    def test_cli_benchmark_series_can_write_csv_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "artifacts" / "red-black-benchmark-series.csv"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark-series",
+                    "7",
+                    "15",
+                    "--seed",
+                    "11",
+                    "--csv-file",
+                    str(csv_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["csv_file"], str(csv_path))
+            self.assertTrue(csv_path.exists())
+            csv_text = csv_path.read_text(encoding="utf-8")
+            self.assertIn("series_count,case,input_size", csv_text)
+            self.assertIn("7,ascending,7", csv_text)
+            self.assertIn("15,shuffled,15", csv_text)
+
+    def test_cli_benchmark_series_rejects_non_positive_counts(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "benchmark-series", "7", "0"],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("benchmark series counts must be positive", completed.stderr)
 
     def test_cli_select_reports_out_of_range_index(self) -> None:
         completed = subprocess.run(

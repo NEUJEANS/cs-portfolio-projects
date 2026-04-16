@@ -17,6 +17,9 @@
 - [x] add deterministic benchmark mode comparing red-black vs AVL height/rotation trade-offs
 - [x] export benchmark cases as chart-ready CSV for spreadsheets/README artifacts
 - [x] cover benchmark CSV export with direct API tests and CLI tests
+- [x] extend the benchmark workflow to sweep multiple input sizes in one run
+- [x] export benchmark-series rows as chart-ready CSV with per-size case labels
+- [x] cover benchmark-series aggregate metrics plus CLI CSV file output
 - [x] add `explain-trace` Markdown walkthrough export for build/delete trace streams
 - [x] embed initial/final Graphviz DOT snapshots in trace walkthrough exports for before/after visuals
 - [x] cover Markdown walkthrough generation with CLI tests and file-output checks
