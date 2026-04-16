@@ -28,7 +28,7 @@
 - [x] complete review pass 3 and fix issues found
 - [x] run secret scan
 - [x] commit and push
-- [ ] append wrap-up
+- [x] append wrap-up
 
 ## 2026-04-16 benchmark-report slice
 - [x] do brief web research on HyperLogLog accuracy/storage reporting patterns
@@ -45,3 +45,18 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 benchmark-export-assets slice
+- [x] confirm prior HyperLogLog research is sufficient for chart-export work and note that no new external lookup is required
+- [x] do a short Python CSV/SVG rendering refresh and self-test
+- [x] add a resumable checklist entry for the benchmark-export-assets slice
+- [x] implement benchmark CSV and SVG export outputs
+- [x] update README usage plus future-slice notes for publishable benchmark assets
+- [x] add automated coverage for render helpers and CLI asset outputs
+- [x] run tests for the updated slice
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [ ] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

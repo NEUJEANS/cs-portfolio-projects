@@ -2,6 +2,7 @@ import json
 import subprocess
 import sys
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -14,7 +15,9 @@ from hyperloglog import (
     infer_input_format,
     load_hll,
     parse_int_list,
+    render_benchmark_csv,
     render_benchmark_markdown,
+    render_benchmark_svg,
     save_hll,
     simulate_accuracy,
 )
@@ -113,6 +116,24 @@ class HyperLogLogTests(unittest.TestCase):
         self.assertIn("# HyperLogLog benchmark report", markdown)
         self.assertIn("## Cardinality 250", markdown)
         self.assertIn("| precision | registers | dense bytes |", markdown)
+
+    def test_render_benchmark_csv_includes_expected_columns(self):
+        report = benchmark_accuracy([8, 10], [250], trials=3, seed=5)
+        csv_text = render_benchmark_csv(report)
+        header = csv_text.splitlines()[0]
+        self.assertIn("cardinality,precision,register_count,dense_register_bytes", header)
+        self.assertEqual(len(csv_text.splitlines()), 3)
+        self.assertIn(",0.065000", csv_text)
+
+    def test_render_benchmark_svg_includes_chart_labels(self):
+        report = benchmark_accuracy([8, 10], [250, 2500], trials=3, seed=5)
+        svg = render_benchmark_svg(report)
+        self.assertIn("<svg", svg)
+        self.assertIn("HyperLogLog benchmark chart", svg)
+        self.assertIn("Observed mean relative error", svg)
+        self.assertIn("Cardinality 2500", svg)
+        self.assertIn("p=10", svg)
+        self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
 
     def test_infer_input_format_by_extension(self):
         self.assertEqual(infer_input_format(Path("users.csv"), "auto"), "csv")
@@ -280,6 +301,8 @@ class HyperLogLogTests(unittest.TestCase):
             merged = temp_dir / "merged.json"
             benchmark_json = temp_dir / "benchmark.json"
             benchmark_md = temp_dir / "benchmark.md"
+            benchmark_csv = temp_dir / "benchmark.csv"
+            benchmark_svg = temp_dir / "benchmark.svg"
             input_a.write_text("apple\nbanana\ncarrot\n")
             input_b.write_text("banana\ndate\nelderberry\n")
             csv_input.write_text("user_id,plan\nu1,free\nu2,pro\nu1,team\n")
@@ -396,6 +419,10 @@ class HyperLogLogTests(unittest.TestCase):
                     str(benchmark_json),
                     "--markdown-output",
                     str(benchmark_md),
+                    "--csv-output",
+                    str(benchmark_csv),
+                    "--svg-output",
+                    str(benchmark_svg),
                 ],
                 capture_output=True,
                 text=True,
@@ -405,9 +432,17 @@ class HyperLogLogTests(unittest.TestCase):
             self.assertEqual(benchmark_data["precisions"], [8, 10])
             self.assertEqual(benchmark_data["cardinalities"], [200, 2000])
             self.assertEqual(len(benchmark_data["rows"]), 4)
+            self.assertEqual(benchmark_data["csv_output"], str(benchmark_csv))
+            self.assertEqual(benchmark_data["svg_output"], str(benchmark_svg))
             self.assertTrue(benchmark_json.exists())
             self.assertTrue(benchmark_md.exists())
+            self.assertTrue(benchmark_csv.exists())
+            self.assertTrue(benchmark_svg.exists())
             self.assertIn("HyperLogLog benchmark report", benchmark_md.read_text())
+            self.assertIn("dense_register_bytes", benchmark_csv.read_text())
+            svg_text = benchmark_svg.read_text()
+            self.assertIn("HyperLogLog benchmark chart", svg_text)
+            self.assertEqual(ET.fromstring(svg_text).tag, "{http://www.w3.org/2000/svg}svg")
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()

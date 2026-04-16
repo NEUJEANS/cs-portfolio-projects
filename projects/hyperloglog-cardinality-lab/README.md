@@ -19,6 +19,8 @@ A portfolio-friendly Python project that implements a HyperLogLog sketch for app
 - sketch merge support for combining partial counts
 - simulation mode to compare observed error with the theoretical error bound
 - benchmark/report mode for precision-vs-error-vs-memory sweeps across multiple cardinalities
+- CSV export for plotting or spreadsheet analysis of benchmark rows
+- self-contained SVG chart export for portfolio screenshots, README embeds, or GitHub Pages assets
 
 ## Usage
 
@@ -96,7 +98,7 @@ python3 projects/hyperloglog-cardinality-lab/hyperloglog.py simulate \
   --seed 42
 ```
 
-Generate a benchmark sweep and a publishable Markdown report:
+Generate a benchmark sweep and publish JSON, Markdown, CSV, plus an SVG chart:
 
 ```bash
 python3 projects/hyperloglog-cardinality-lab/hyperloglog.py benchmark \
@@ -105,10 +107,12 @@ python3 projects/hyperloglog-cardinality-lab/hyperloglog.py benchmark \
   --trials 8 \
   --seed 7 \
   --json-output artifacts/hyperloglog-benchmark-report.json \
-  --markdown-output docs/artifacts/hyperloglog-benchmark-report.md
+  --markdown-output docs/artifacts/hyperloglog-benchmark-report.md \
+  --csv-output artifacts/hyperloglog-benchmark-report.csv \
+  --svg-output docs/artifacts/hyperloglog-benchmark-report.svg
 ```
 
-The generated Markdown report is handy for portfolio write-ups because it summarizes the lowest-error sampled precision for each target cardinality in a GitHub-friendly table.
+The generated Markdown report is handy for portfolio write-ups because it summarizes the lowest-error sampled precision for each target cardinality in a GitHub-friendly table. The CSV export feeds notebooks or spreadsheets, and the SVG chart is self-contained so it can be embedded directly into a README or GitHub Pages portfolio site without extra plotting dependencies.
 
 ## Example build output
 
@@ -138,7 +142,7 @@ The generated Markdown report is handy for portfolio write-ups because it summar
 python3 -m unittest projects/hyperloglog-cardinality-lab/test_hyperloglog.py
 python3 projects/hyperloglog-cardinality-lab/hyperloglog.py build --input artifacts/events.csv --field user_id --output artifacts/events_users_hll.json
 python3 projects/hyperloglog-cardinality-lab/hyperloglog.py build --input artifacts/events.jsonl --field event.visitor.id --output artifacts/events_visitors_hll.json
-python3 projects/hyperloglog-cardinality-lab/hyperloglog.py benchmark --precisions 8,10 --cardinalities 200,2000 --trials 4 --seed 7
+python3 projects/hyperloglog-cardinality-lab/hyperloglog.py benchmark --precisions 8,10 --cardinalities 200,2000 --trials 4 --seed 7 --csv-output artifacts/hyperloglog-benchmark-report.csv --svg-output docs/artifacts/hyperloglog-benchmark-report.svg
 ```
 
 ## Design notes
@@ -150,5 +154,5 @@ python3 projects/hyperloglog-cardinality-lab/hyperloglog.py benchmark --precisio
 
 ## Future improvements
 - add register compression to compare dense vs sparse storage
-- add CSV/chart export or plotted visuals derived from benchmark report rows
+- add a tiny static HTML gallery that pairs the generated SVG chart with the Markdown benchmark summary
 - add side-by-side Bloom filter and HyperLogLog demos for probabilistic data structure interviews

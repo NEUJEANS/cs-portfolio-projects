@@ -1,6 +1,7 @@
 import argparse
 import csv
 import hashlib
+import io
 import json
 import math
 import random
@@ -441,6 +442,170 @@ def render_benchmark_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_benchmark_csv(report: dict[str, Any]) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "cardinality",
+            "precision",
+            "register_count",
+            "dense_register_bytes",
+            "dense_register_kib",
+            "trials",
+            "seed",
+            "mean_estimate",
+            "min_estimate",
+            "max_estimate",
+            "mean_absolute_error",
+            "mean_relative_error",
+            "max_relative_error",
+            "theoretical_error_bound",
+        ]
+    )
+    for row in report["rows"]:
+        writer.writerow(
+            [
+                row["cardinality"],
+                row["precision"],
+                row["register_count"],
+                row["dense_register_bytes"],
+                row["dense_register_kib"],
+                row["trials"],
+                row["seed"],
+                f"{row['mean_estimate']:.6f}",
+                f"{row['min_estimate']:.6f}",
+                f"{row['max_estimate']:.6f}",
+                f"{row['mean_absolute_error']:.6f}",
+                f"{row['mean_relative_error']:.6f}",
+                f"{row['max_relative_error']:.6f}",
+                f"{row['theoretical_error_bound']:.6f}",
+            ]
+        )
+    return buffer.getvalue()
+
+
+def _svg_text(x: float, y: float, text: str, *, size: int = 14, weight: str = "normal", fill: str = "#111827") -> str:
+    escaped = (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+    font_family = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    return f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" font-weight="{weight}" fill="{fill}" font-family=\'{font_family}\'>{escaped}</text>'
+
+
+def render_benchmark_svg(report: dict[str, Any]) -> str:
+    cardinalities = report["cardinalities"]
+    rows_by_cardinality = {
+        cardinality: [row for row in report["rows"] if row["cardinality"] == cardinality]
+        for cardinality in cardinalities
+    }
+    recommendations = {item["cardinality"]: item for item in report["best_by_cardinality"]}
+
+    width = 960
+    header_height = 120
+    panel_height = 260
+    panel_gap = 32
+    height = header_height + len(cardinalities) * panel_height + max(len(cardinalities) - 1, 0) * panel_gap
+
+    left = 84
+    right = 28
+    top_padding = 54
+    bottom_padding = 60
+    chart_width = width - left - right
+    chart_height = panel_height - top_padding - bottom_padding
+
+    max_error = max(
+        max(row["mean_relative_error"], row["theoretical_error_bound"])
+        for row in report["rows"]
+    )
+    y_max = max(max_error * 1.2, 0.02)
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">HyperLogLog benchmark chart</title>',
+        '<desc id="desc">Observed versus theoretical relative error across benchmarked HyperLogLog precisions.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 38, "HyperLogLog benchmark chart", size=28, weight="700"),
+        _svg_text(28, 64, f"Precisions: {', '.join(str(value) for value in report['precisions'])}", size=14, fill="#334155"),
+        _svg_text(28, 84, f"Cardinalities: {', '.join(str(value) for value in cardinalities)} · Trials: {report['trials']} · Seed: {report['seed']}", size=14, fill="#334155"),
+        '<rect x="690" y="28" width="18" height="18" rx="3" fill="#2563eb" />',
+        _svg_text(716, 42, "Observed mean relative error", size=13, fill="#1f2937"),
+        '<rect x="690" y="54" width="18" height="18" rx="3" fill="#94a3b8" />',
+        _svg_text(716, 68, "Theoretical error bound", size=13, fill="#1f2937"),
+    ]
+
+    for index, cardinality in enumerate(cardinalities):
+        panel_top = header_height + index * (panel_height + panel_gap)
+        rows = rows_by_cardinality[cardinality]
+        recommendation = recommendations[cardinality]
+        parts.append(f'<rect x="20" y="{panel_top:.1f}" width="920" height="{panel_height}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(40, panel_top + 30, f"Cardinality {cardinality}", size=22, weight="700"))
+        parts.append(
+            _svg_text(
+                40,
+                panel_top + 52,
+                "Best observed mean error: "
+                f"p={recommendation['recommended_precision']} at {recommendation['dense_register_bytes']} dense bytes "
+                f"({recommendation['mean_relative_error'] * 100:.2f}% mean relative error)",
+                size=13,
+                fill="#475569",
+            )
+        )
+
+        chart_left = left
+        chart_top = panel_top + top_padding
+        chart_bottom = chart_top + chart_height
+        chart_right = width - right
+        parts.append(f'<line x1="{chart_left}" y1="{chart_top}" x2="{chart_left}" y2="{chart_bottom}" stroke="#94a3b8" stroke-width="1.5" />')
+        parts.append(f'<line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_right}" y2="{chart_bottom}" stroke="#94a3b8" stroke-width="1.5" />')
+
+        for tick in range(5):
+            value = y_max * tick / 4
+            y = chart_bottom - (chart_height * tick / 4)
+            parts.append(f'<line x1="{chart_left}" y1="{y:.1f}" x2="{chart_right}" y2="{y:.1f}" stroke="#e2e8f0" stroke-width="1" />')
+            parts.append(_svg_text(28, y + 5, f"{value * 100:.1f}%", size=11, fill="#64748b"))
+
+        group_width = chart_width / max(len(rows), 1)
+        bar_width = min(34, group_width / 3)
+        label_y = chart_bottom + 22
+        for row_index, row in enumerate(rows):
+            center_x = chart_left + group_width * (row_index + 0.5)
+            observed_height = 0 if y_max == 0 else chart_height * (row['mean_relative_error'] / y_max)
+            theory_height = 0 if y_max == 0 else chart_height * (row['theoretical_error_bound'] / y_max)
+            observed_x = center_x - bar_width - 4
+            theory_x = center_x + 4
+            observed_y = chart_bottom - observed_height
+            theory_y = chart_bottom - theory_height
+            parts.append(
+                f'<rect x="{observed_x:.1f}" y="{observed_y:.1f}" width="{bar_width:.1f}" height="{observed_height:.1f}" rx="5" fill="#2563eb" />'
+            )
+            parts.append(
+                f'<rect x="{theory_x:.1f}" y="{theory_y:.1f}" width="{bar_width:.1f}" height="{theory_height:.1f}" rx="5" fill="#94a3b8" />'
+            )
+            parts.append(_svg_text(observed_x - 2, max(observed_y - 8, chart_top + 12), f"{row['mean_relative_error'] * 100:.2f}%", size=10, fill="#1d4ed8"))
+            parts.append(_svg_text(theory_x - 2, max(theory_y - 8, chart_top + 24), f"{row['theoretical_error_bound'] * 100:.2f}%", size=10, fill="#475569"))
+            parts.append(_svg_text(center_x - 18, label_y, f"p={row['precision']}", size=12, weight="700", fill="#111827"))
+            parts.append(_svg_text(center_x - 24, label_y + 16, f"{row['dense_register_bytes']}B", size=11, fill="#64748b"))
+
+        parts.append(_svg_text(28, chart_top - 8, "relative error", size=12, weight="700", fill="#334155"))
+        parts.append(
+            _svg_text(
+                chart_left + (chart_width / 2) - 58,
+                chart_bottom + 40,
+                "precision / dense bytes",
+                size=12,
+                weight="700",
+                fill="#334155",
+            )
+        )
+
+    parts.append('</svg>')
+    return "".join(parts) + "\n"
+
+
 def build_command(args: argparse.Namespace) -> int:
     sketch = HyperLogLog(precision=args.precision)
     items, extraction_summary = extract_items(
@@ -493,12 +658,22 @@ def benchmark_command(args: argparse.Namespace) -> int:
         output_path = Path(args.markdown_output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(render_benchmark_markdown(report))
+    if args.csv_output:
+        output_path = Path(args.csv_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(render_benchmark_csv(report))
+    if args.svg_output:
+        output_path = Path(args.svg_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(render_benchmark_svg(report))
     print(
         json.dumps(
             {
                 **report,
                 "json_output": args.json_output,
                 "markdown_output": args.markdown_output,
+                "csv_output": args.csv_output,
+                "svg_output": args.svg_output,
             },
             indent=2,
         )
@@ -558,6 +733,8 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--seed", type=int, default=0, help="deterministic seed")
     benchmark_parser.add_argument("--json-output", help="optional path for the full JSON benchmark report")
     benchmark_parser.add_argument("--markdown-output", help="optional path for a Markdown summary report")
+    benchmark_parser.add_argument("--csv-output", help="optional path for a CSV export of benchmark rows")
+    benchmark_parser.add_argument("--svg-output", help="optional path for a self-contained SVG chart")
     benchmark_parser.set_defaults(func=benchmark_command)
 
     return parser
