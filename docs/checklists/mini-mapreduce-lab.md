@@ -275,3 +275,16 @@
 - [x] extend project-level and repo-level tests for richer inspection metadata and missing-hook `None` handling
 - [x] run tests and 3 review passes
 - [ ] consider adding source-code excerpt output or file-anchor links in a future run
+
+## Inspection source excerpt slice (2026-04-16 03:46 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python `inspect.getsourcelines` / file-anchor refresh and self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] extend `inspect-plugin` JSON/CSV/Markdown/HTML artifacts with hook source anchors and source excerpts where appropriate
+- [x] extend project-level and repo-level tests for richer inspection metadata and report rendering
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider file:// or GitHub blob links for published inspection reports in a future run

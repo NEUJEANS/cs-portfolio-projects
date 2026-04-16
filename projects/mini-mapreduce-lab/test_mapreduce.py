@@ -147,18 +147,26 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(inspection.mapper_signature, "map_records(lines)")
         self.assertEqual(inspection.mapper_doc_summary, "Emit per-student sum/count records from comma-separated score lines.")
         self.assertIsInstance(inspection.mapper_source_line, int)
+        self.assertEqual(inspection.mapper_source_anchor, "plugins_average_score.py#L7-L13")
+        self.assertIn('def map_records(lines):', inspection.mapper_source_excerpt)
         self.assertTrue(inspection.reducer.endswith(".reduce_key"))
         self.assertEqual(inspection.reducer_signature, "reduce_key(_key, values)")
         self.assertEqual(inspection.reducer_doc_summary, "Return a rounded average score for one student key.")
         self.assertIsInstance(inspection.reducer_source_line, int)
+        self.assertTrue(inspection.reducer_source_anchor and '#L' in inspection.reducer_source_anchor)
+        self.assertIn('def reduce_key(_key, values):', inspection.reducer_source_excerpt)
         self.assertTrue(inspection.combiner and inspection.combiner.endswith(".combine_values"))
         self.assertEqual(inspection.combiner_signature, "combine_values(_key, values)")
         self.assertEqual(inspection.combiner_doc_summary, "Merge shard-local sum/count objects before the final reduce step.")
         self.assertIsInstance(inspection.combiner_source_line, int)
+        self.assertTrue(inspection.combiner_source_anchor and '#L' in inspection.combiner_source_anchor)
+        self.assertIn('def combine_values(_key, values):', inspection.combiner_source_excerpt)
         self.assertTrue(inspection.benchmark_generator and inspection.benchmark_generator.endswith(".benchmark_records"))
         self.assertEqual(inspection.benchmark_generator_signature, "benchmark_records(scenario, records, seed, dataset_family='default')")
         self.assertEqual(inspection.benchmark_generator_doc_summary, "Generate deterministic cohort score fixtures for benchmark scenarios.")
         self.assertIsInstance(inspection.benchmark_generator_source_line, int)
+        self.assertTrue(inspection.benchmark_generator_source_anchor and '#L' in inspection.benchmark_generator_source_anchor)
+        self.assertIn('def benchmark_records(', inspection.benchmark_generator_source_excerpt)
 
 
     def test_inspect_plugins_batches_multiple_plugins(self) -> None:
@@ -171,7 +179,7 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual([item.name for item in batch.plugins], ["plugin-average-score", "plugin-max-score"])
 
         csv_lines = batch.to_csv().strip().splitlines()
-        self.assertEqual(csv_lines[0], "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,available_dataset_families")
+        self.assertEqual(csv_lines[0], "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,available_dataset_families")
         self.assertEqual(len(csv_lines), 3)
         self.assertIn("plugin-average-score", csv_lines[1])
         self.assertIn("plugin-max-score", csv_lines[2])
@@ -211,6 +219,9 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("map_records(lines)", markdown)
         self.assertIn("Emit per-student sum/count records from comma-separated score lines.", markdown)
         self.assertIn("line " , markdown)
+        self.assertIn("## Hook source excerpts", markdown)
+        self.assertIn("Source anchor:", markdown)
+        self.assertIn("def map_records(lines):", markdown)
         self.assertIn("`available_dataset_families`", markdown)
 
         html_output = batch.to_html()
@@ -219,6 +230,9 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("map_records(lines)", html_output)
         self.assertIn("Emit per-student sum/count records from comma-separated score lines.", html_output)
         self.assertIn("line ", html_output)
+        self.assertIn("Hook source excerpts:", html_output)
+        self.assertIn("Source anchor:", html_output)
+        self.assertIn("def map_records(lines):", html_output)
         self.assertIn("available_dataset_families", html_output)
 
 
@@ -274,10 +288,14 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["mapper_signature"], "map_records(lines)")
             self.assertEqual(payload["mapper_doc_summary"], "Emit per-student sum/count records from comma-separated score lines.")
             self.assertIsInstance(payload["mapper_source_line"], int)
+            self.assertEqual(payload["mapper_source_anchor"], "plugins_average_score.py#L7-L13")
+            self.assertIn('def map_records(lines):', payload["mapper_source_excerpt"])
             self.assertTrue(payload["benchmark_generator"].endswith(".benchmark_records"))
             self.assertEqual(payload["benchmark_generator_signature"], "benchmark_records(scenario, records, seed, dataset_family='default')")
             self.assertEqual(payload["benchmark_generator_doc_summary"], "Generate deterministic cohort score fixtures for benchmark scenarios.")
             self.assertIsInstance(payload["benchmark_generator_source_line"], int)
+            self.assertTrue('#L' in payload["benchmark_generator_source_anchor"])
+            self.assertIn('def benchmark_records(', payload["benchmark_generator_source_excerpt"])
 
     def test_cli_inspect_plugin_batches_multiple_plugins_to_json_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -365,9 +383,13 @@ class MiniMapReduceTests(unittest.TestCase):
             markdown = report_output.read_text(encoding="utf-8")
             html_payload = html_output.read_text(encoding="utf-8")
             self.assertIn("## Adjacent diffs", markdown)
+            self.assertIn("## Hook source excerpts", markdown)
             self.assertIn("plugin-average-score", markdown)
+            self.assertIn("def map_records(lines):", markdown)
             self.assertIn("<h2>Diff 1:", html_payload)
+            self.assertIn("Hook source excerpts:", html_payload)
             self.assertIn("plugin-max-score", html_payload)
+            self.assertIn("def map_records(lines):", html_payload)
 
     def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
         completed = subprocess.run(

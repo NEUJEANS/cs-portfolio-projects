@@ -29,7 +29,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional CSV export for plugin inspection snapshots so metadata can land in docs/spreadsheets without a JSON-only step
 - benchmark CSV summaries now carry plugin inspection metadata so spreadsheet artifacts stay self-describing without a separate JSON lookup
 - optional adjacent plugin metadata diffs for batched inspection runs so contract changes are reviewable without hand-comparing JSON snapshots
-- optional Markdown and HTML inspection reports with hook signatures so plugin contract comparisons can be published as portfolio-ready artifacts
+- optional Markdown and HTML inspection reports with hook signatures, file anchors, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
 
 ## Usage
 
@@ -167,7 +167,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output plugin-benchmark-report.html
 ```
 
-Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, concise hook doc summaries, source line numbers, and benchmark families it exports:
+Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, concise hook doc summaries, source line numbers, file anchors, source excerpts, and benchmark families it exports:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
@@ -203,7 +203,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --output plugin-diff.json
 ```
 
-Write publishable Markdown and HTML inspection artifacts from the same diff-aware batch so plugin contract changes can land directly in docs or GitHub Pages:
+Write publishable Markdown and HTML inspection artifacts from the same diff-aware batch so plugin contract changes, file anchors, and source excerpts can land directly in docs or GitHub Pages:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
