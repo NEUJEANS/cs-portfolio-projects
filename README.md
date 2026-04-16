@@ -82,6 +82,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `treap-order-statistics-lab`
 - [x] `distance-vector-routing-lab`
 - [x] `chang-roberts-leader-election-lab`
+- [x] `link-state-routing-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.
