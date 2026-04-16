@@ -14,7 +14,7 @@
 - git diff review pass over code, tests, and docs
 
 ## Commit
-- commit hash: 65d875265a3755d66250e03e1946b12b6762e06f
+- commit hash: b50624cadfe50418f3ce57f4d76d0b1e56ea5a2f
 
 ## Next step
 - add a richer benchmark dataset pack with expected-recall scenarios so the project can show tuning trade-offs across tiny, medium, and noisy corpora
