@@ -603,6 +603,7 @@ class BenchmarkResult:
     heatmap_rows: list[dict[str, int | str]]
     plugin: str | None = None
     available_dataset_families: list[str] | None = None
+    benchmark_notes: list[str] | None = None
     plugin_mapper: str | None = None
     plugin_reducer: str | None = None
     plugin_combiner: str | None = None
@@ -623,6 +624,7 @@ class BenchmarkResult:
                 "timings_ms": self.timings_ms,
                 "heatmap_rows": self.heatmap_rows,
                 "available_dataset_families": self.available_dataset_families,
+                "benchmark_notes": self.benchmark_notes,
                 "plugin_mapper": self.plugin_mapper,
                 "plugin_reducer": self.plugin_reducer,
                 "plugin_combiner": self.plugin_combiner,
@@ -811,6 +813,11 @@ class BenchmarkResult:
         ]
         if self.available_dataset_families:
             lines.append(f"- Available dataset families: `{', '.join(self.available_dataset_families)}`")
+        if self.benchmark_notes:
+            lines.append("")
+            lines.append("## Dataset notes")
+            lines.append("")
+            lines.extend(f"- {note}" for note in self.benchmark_notes)
         lines.extend([
             "",
             "## Timing summary",
@@ -967,6 +974,7 @@ class BenchmarkResult:
     <li><strong>Reducer counts</strong><br><code>{esc(', '.join(str(value) for value in self.reducers))}</code></li>
     {f"<li><strong>Available dataset families</strong><br><code>{esc(', '.join(self.available_dataset_families))}</code></li>" if self.available_dataset_families else ""}
   </ul>
+  {f"<h2>Dataset notes</h2><ul class='summary'>{''.join(f'<li>{esc(note)}</li>' for note in self.benchmark_notes)}</ul>" if self.benchmark_notes else ""}
   <h2>Timing summary</h2>
   <div class="chart-card"><h3>Elapsed timing chart</h3>{timing_chart}</div>
   <table>
@@ -1006,6 +1014,85 @@ def normalize_dataset_families(value: Any) -> list[str] | None:
 
 
 BUILTIN_JOBS = ("wordcount", "json-group-count")
+
+
+BUILTIN_JOB_BENCHMARK_NOTES: dict[tuple[str, str, str], list[str]] = {
+    ("wordcount", "balanced", "default"): [
+        "The default balanced corpus rotates evenly across 24 generic keys, so reducer hot spots should stay mild unless the partitioner itself clusters hashes.",
+        "If one reducer still pulls ahead here, that usually reflects hash-bucket variance rather than an intentionally dominant vocabulary term.",
+    ],
+    ("wordcount", "balanced", "news"): [
+        "The news family spreads traffic across desk and beat labels, which makes it a cleaner proxy for editorial-topic fan-out than the generic default keys.",
+        "Balanced runs here should keep topic counts close, so timing changes are easier to attribute to reducer count than to vocabulary skew.",
+    ],
+    ("wordcount", "balanced", "logs"): [
+        "The log-shaped balanced corpus cycles through service and level pairs, so every reducer should see a similar mix of info/warn/error/debug tokens.",
+        "This family is useful when you want interview-ready examples that resemble observability pipelines without injecting a dominant error burst.",
+    ],
+    ("wordcount", "skewed", "default"): [
+        "The skewed default corpus intentionally repeats `hot-key` far more often than the warm/cold tail, so the hottest reducer cells should usually reflect that synthetic hotspot.",
+        "Use this family to show how a single dominant token can stretch one reducer even when the aggregate output is still correct.",
+    ],
+    ("wordcount", "skewed", "news"): [
+        "`breaking-news` is the dominant topic in this family, with smaller desk/beat tails behind it, so one reducer often absorbs most of the urgency spike.",
+        "That makes the report feel closer to a real newsroom burst where one story label suddenly dwarfs the rest of the taxonomy.",
+    ],
+    ("wordcount", "skewed", "logs"): [
+        "`checkout:error` is deliberately overrepresented here, with warn/info tokens filling the long tail, so the hottest cells simulate incident-driven log skew.",
+        "This is the most portfolio-friendly built-in family for discussing hot services, noisy alerts, and why aggregate counts alone hide reducer pain.",
+    ],
+    ("json-group-count", "balanced", "default"): [
+        "The default JSON family cycles evenly across `ok`, `error`, `retry`, and `queued`, so status counts should stay close across shards.",
+        "When a reducer dominates in this balanced case, it usually points to partition spread rather than a single status overwhelming the stream.",
+    ],
+    ("json-group-count", "balanced", "incidents"): [
+        "Incident statuses rotate through `detected`, `triaged`, `mitigated`, and `resolved`, giving you a realistic but intentionally even operations workflow.",
+        "This family is useful for showing that the same pipeline can model incident state machines without built-in skew.",
+    ],
+    ("json-group-count", "balanced", "deployments"): [
+        "Deployment states cycle evenly across `queued`, `running`, `passed`, and `rolled_back`, which makes it a stable release-pipeline baseline.",
+        "Balanced deployment runs help separate partitioning effects from the more dramatic release-train hotspots in the skewed family.",
+    ],
+    ("json-group-count", "skewed", "default"): [
+        "`ok` dominates the default skewed event stream, with `retry` and `error` forming the secondary tail, so one reducer often carries most of the healthy-traffic volume.",
+        "That pattern is handy for explaining why even mostly-good telemetry can still create reducer imbalance when one label wins by a large margin.",
+    ],
+    ("json-group-count", "skewed", "incidents"): [
+        "`triaged` is intentionally the hottest status in this incident family, which mirrors backlogs where many alerts stall in the same operational state.",
+        "If the hottest reducer aligns with a heavy triage bucket, the chart gives you a concrete story about response bottlenecks instead of abstract skew math.",
+    ],
+    ("json-group-count", "skewed", "deployments"): [
+        "`running` and `queued` dominate this deployment family, so the hottest reducers resemble a congested release train with many in-flight changes and a smaller rollback tail.",
+        "This family is useful for talking about CI/CD hotspots where transient active states outnumber terminal states by a wide margin.",
+    ],
+}
+
+
+def benchmark_notes_for(job: str, scenario: str, dataset_family: str, plugin: PluginJob | None = None) -> list[str]:
+    notes = list(BUILTIN_JOB_BENCHMARK_NOTES.get((job, scenario, dataset_family), []))
+    if job == "plugin" and plugin is not None and plugin.name == "plugin-average-score":
+        plugin_notes = {
+            ("balanced", "default"): [
+                "The default balanced cohort rotates evenly across team labels, so average-score aggregation stays spread out and mostly tests framework overhead rather than hot students.",
+            ],
+            ("skewed", "default"): [
+                "`capstone-core` is the dominant student key here, so the hottest reducer should look like one heavy project lead soaking up repeated score updates.",
+            ],
+            ("balanced", "exam-cram"): [
+                "Balanced exam-cram fixtures distribute scores across study groups, which makes them a clean baseline before simulating deadline pressure.",
+            ],
+            ("skewed", "exam-cram"): [
+                "`midterm-sprint` is intentionally overrepresented, so the report should surface one study cohort as the obvious hotspot during cram-week traffic.",
+            ],
+            ("balanced", "project-week"): [
+                "Balanced project-week fixtures rotate across studio squads so reducer load stays close even though the labels feel more portfolio-realistic than generic teams.",
+            ],
+            ("skewed", "project-week"): [
+                "`demo-day-core` is the main hotspot here, with integration and feature tails behind it, so you can narrate the skew as a deadline-driven project crunch.",
+            ],
+        }
+        notes.extend(plugin_notes.get((scenario, dataset_family), []))
+    return notes
 
 
 def chunked(items: list[str], size: int) -> Iterator[list[str]]:
@@ -1690,6 +1777,7 @@ def benchmark_job(
             if benchmark_plugin and benchmark_plugin.dataset_families
             else (["default", "news", "logs"] if job == "wordcount" else (["default", "incidents", "deployments"] if job == "json-group-count" else None))
         ),
+        benchmark_notes=benchmark_notes_for(job, scenario, dataset_family, plugin=benchmark_plugin),
         plugin_mapper=inspection.mapper if inspection else None,
         plugin_reducer=inspection.reducer if inspection else None,
         plugin_combiner=inspection.combiner if inspection else None,

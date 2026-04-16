@@ -563,6 +563,8 @@ class MiniMapReduceTests(unittest.TestCase):
 
         self.assertIn("# Mini MapReduce benchmark report (wordcount: balanced)", report)
         self.assertIn("- Dataset family: `default`", report)
+        self.assertIn("## Dataset notes", report)
+        self.assertIn("hot spots should stay mild", report)
         self.assertIn("| Reducers | Elapsed (ms) | Shards | Map records | Unique keys | Max reducer records | Skew ratio |", report)
         self.assertIn("### Reducers = 2", report)
         self.assertIn("### Reducers = 3", report)
@@ -577,6 +579,8 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("<!DOCTYPE html>", report)
         self.assertIn("<h1>Mini MapReduce benchmark report (wordcount: balanced)</h1>", report)
         self.assertIn("<strong>Dataset family</strong>", report)
+        self.assertIn("<h2>Dataset notes</h2>", report)
+        self.assertIn("hot spots should stay mild", report)
         self.assertIn("<h2>Reducers = 2</h2>", report)
         self.assertIn("<th>r0</th><th>r1</th>", report)
         self.assertIn("Elapsed timing chart", report)

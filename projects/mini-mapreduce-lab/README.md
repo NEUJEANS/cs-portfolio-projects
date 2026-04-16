@@ -17,6 +17,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - reducer distribution stats so you can talk about key skew in interviews
 - synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts for built-in wordcount, built-in JSONL aggregation, or plugin jobs
 - built-in JSON benchmark dataset families for generic events, incident workflows, and deployment pipelines
+- benchmark JSON/Markdown/HTML artifacts now include dataset-specific hotspot notes so reviewers can connect skewed cells back to the synthetic workload design
 - machine-readable JSON output with shard and record statistics
 - optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
 - optional shard-to-reducer heatmap CSV export for slide-ready skew visualizations
@@ -294,7 +295,7 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
+`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, dataset-specific `benchmark_notes`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
 
 ```json
 {
@@ -332,5 +333,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
-- add benchmark result narratives that explain likely hot keys for each built-in dataset family directly in Markdown/HTML reports
+- add plugin-extensible benchmark note hooks so third-party generators can describe their own hot keys without editing the core runner
 - add repository-level inspection summaries that compare multiple plugin snapshots across releases, not just adjacent runs

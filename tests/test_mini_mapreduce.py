@@ -339,6 +339,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.plugin_benchmark_generator, "plugins_average_score.benchmark_records")
         payload = json.loads(result.to_json())
         self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
+        self.assertIn("studio squads", " ".join(payload["benchmark_notes"]))
         self.assertEqual(payload["plugin_mapper"], "plugins_average_score.map_records")
         self.assertEqual(payload["plugin_reducer"], "plugins_average_score.reduce_key")
         self.assertEqual(payload["plugin_combiner"], "plugins_average_score.combine_values")
@@ -348,7 +349,11 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         report = result.to_markdown()
         html_report = result.to_html()
         self.assertIn("- Available dataset families: `default, exam-cram, project-week`", report)
+        self.assertIn("## Dataset notes", report)
+        self.assertIn("studio squads", report)
         self.assertIn("<strong>Available dataset families</strong>", html_report)
+        self.assertIn("<h2>Dataset notes</h2>", html_report)
+        self.assertIn("studio squads", html_report)
         self.assertIn("default, exam-cram, project-week", html_report)
 
     def test_plugin_benchmark_rejects_unsupported_declared_dataset_family(self) -> None:
