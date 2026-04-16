@@ -8,11 +8,11 @@
 - [x] code-mode numeric literal normalization added
 - [x] code-mode string/boolean/None/float literal normalization added
 - [x] mixed-language corpus presets for Markdown + code notebook demos
-- [ ] dry-run corpus diff summary before refresh for very large indexes
+- [x] dry-run corpus diff summary before refresh for very large indexes
 - [ ] richer benchmark dataset pack with expected-recall scenarios
 
 ## This slice
-- [x] add a curated `mixed-markdown-code-notebook` preset with Markdown, Python, and notebook files
-- [x] support comma-separated glob patterns so mixed-language corpora can be scanned and indexed in one run
-- [x] add regression tests for preset generation and mixed-glob corpus scans
-- [x] refresh project README to document the new preset workflow and mixed-language demo usage
+- [x] add `refresh-index --dry-run` to preview reused, updated, added, and removed files before rewriting the index
+- [x] expose path-level dry-run summaries in JSON and readable CLI output for resumable large-corpus maintenance
+- [x] add regression tests covering summary helpers and dry-run CLI behavior without mutating the saved index
+- [x] refresh project README to document the dry-run refresh workflow and interview framing

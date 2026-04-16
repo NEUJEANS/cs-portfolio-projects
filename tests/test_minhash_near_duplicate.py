@@ -29,6 +29,7 @@ load_signature_index = module.load_signature_index
 minhash_signature = module.minhash_signature
 normalize_text = module.normalize_text
 refresh_signature_index = module.refresh_signature_index
+summarize_index_refresh = module.summarize_index_refresh
 save_signature_index = module.save_signature_index
 benchmark_corpus = module.benchmark_corpus
 write_preset_corpus = module.write_preset_corpus
@@ -191,6 +192,41 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertTrue(loaded.normalize_literals)
             reports = find_candidate_pairs_from_index(loaded, threshold=0.2)
             self.assertEqual(len(reports), 1)
+
+    def test_summarize_index_refresh_reports_path_level_diff_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            a_path = root / "a.txt"
+            b_path = root / "b.txt"
+            c_path = root / "c.txt"
+            a_path.write_text("alpha beta gamma delta epsilon\n", encoding="utf-8")
+            b_path.write_text("alpha beta gamma delta zeta\n", encoding="utf-8")
+            c_path.write_text("operating systems scheduling disk arm movement\n", encoding="utf-8")
+            index = build_signature_index(
+                sorted(root.glob("*.txt")),
+                root=root,
+                glob_pattern="*.txt",
+                shingle_size=2,
+                num_hashes=32,
+                bands=8,
+                seed=5,
+            )
+
+            b_path.write_text("alpha beta gamma delta eta\n", encoding="utf-8")
+            c_path.unlink()
+            d_path = root / "d.txt"
+            d_path.write_text("distributed systems portfolio minhash demo\n", encoding="utf-8")
+
+            summary = summarize_index_refresh(index, sorted(root.glob("*.txt")))
+
+            self.assertEqual(summary["documents_seen"], 3)
+            self.assertEqual(summary["reused"], 1)
+            self.assertEqual(summary["updated"], 1)
+            self.assertEqual(summary["added"], 1)
+            self.assertEqual(summary["removed"], 1)
+            self.assertEqual(summary["updated_paths"], [str(b_path)])
+            self.assertEqual(summary["added_paths"], [str(d_path)])
+            self.assertEqual(summary["removed_paths"], [str(c_path)])
 
     def test_refresh_signature_index_reuses_unchanged_docs_and_detects_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -639,6 +675,44 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertEqual(scan_payload["command"], "scan-index")
             self.assertEqual(scan_payload["documents_scanned"], 3)
             self.assertEqual(len(scan_payload["pairs"]), 1)
+
+    def test_cli_refresh_index_dry_run_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "docs"
+            root.mkdir()
+            (root / "a.txt").write_text("alpha beta gamma delta epsilon\n", encoding="utf-8")
+            (root / "b.txt").write_text("alpha beta gamma delta zeta\n", encoding="utf-8")
+            index_path = Path(tmpdir) / "signatures.json"
+
+            subprocess.run(
+                ["python3", str(MODULE_PATH), "build-index", str(root), str(index_path), "--json"],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            (root / "b.txt").write_text("alpha beta gamma delta eta\n", encoding="utf-8")
+            (root / "c.txt").write_text("memory allocator slab freelist\n", encoding="utf-8")
+
+            before = index_path.read_text(encoding="utf-8")
+            refreshed = subprocess.run(
+                ["python3", str(MODULE_PATH), "refresh-index", str(index_path), "--dry-run", "--json"],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(refreshed.stdout)
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(payload["documents_seen"], 3)
+            self.assertEqual(payload["reused"], 1)
+            self.assertEqual(payload["updated"], 1)
+            self.assertEqual(payload["added"], 1)
+            self.assertEqual(payload["removed"], 0)
+            self.assertEqual(len(payload["updated_paths"]), 1)
+            self.assertEqual(len(payload["added_paths"]), 1)
+            self.assertEqual(index_path.read_text(encoding="utf-8"), before)
 
     def test_cli_refresh_index_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

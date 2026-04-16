@@ -514,6 +514,42 @@ def build_signature_index(
     )
 
 
+def summarize_index_refresh(index: SignatureIndex, paths: Iterable[Path]) -> dict[str, object]:
+    existing_by_path = {document.path: document for document in index.documents}
+    seen_paths: list[str] = []
+    reused_paths: list[str] = []
+    updated_paths: list[str] = []
+    added_paths: list[str] = []
+
+    for path in paths:
+        path_str = str(path)
+        seen_paths.append(path_str)
+        text = path.read_text(encoding="utf-8")
+        content_sha256 = _sha256_text(text)
+        previous = existing_by_path.get(path_str)
+        if previous is not None and previous.content_sha256 == content_sha256:
+            reused_paths.append(path_str)
+        elif previous is None:
+            added_paths.append(path_str)
+        else:
+            updated_paths.append(path_str)
+
+    seen_set = set(seen_paths)
+    removed_paths = sorted(path_str for path_str in existing_by_path if path_str not in seen_set)
+    return {
+        "documents_seen": len(seen_paths),
+        "reused": len(reused_paths),
+        "updated": len(updated_paths),
+        "added": len(added_paths),
+        "removed": len(removed_paths),
+        "reused_paths": reused_paths,
+        "updated_paths": updated_paths,
+        "added_paths": added_paths,
+        "removed_paths": removed_paths,
+        "unchanged_ratio": round((len(reused_paths) / len(seen_paths)), 4) if seen_paths else 1.0,
+    }
+
+
 def refresh_signature_index(index: SignatureIndex, paths: Iterable[Path]) -> tuple[SignatureIndex, dict[str, int]]:
     existing_by_path = {document.path: document for document in index.documents}
     refreshed_documents: list[IndexedDocument] = []
@@ -792,6 +828,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     refresh_index_parser = subparsers.add_parser("refresh-index", help="refresh a saved signature index and reuse unchanged documents")
     refresh_index_parser.add_argument("index_path")
+    refresh_index_parser.add_argument("--dry-run", action="store_true", help="preview added/updated/removed files without rewriting the index")
 
     scan_index_parser = subparsers.add_parser("scan-index", help="find candidate pairs from a saved signature index")
     scan_index_parser.add_argument("index_path")
@@ -839,10 +876,17 @@ def _emit(payload: dict[str, object], as_json: bool) -> int:
         print(f"Indexed {payload['documents_indexed']} documents into {payload['output']}")
         return 0
     if command == "refresh-index":
+        prefix = "Dry-run summary" if payload.get("dry_run") else "Refreshed"
         print(
-            f"Refreshed {payload['documents_seen']} documents in {payload['index_path']} "
+            f"{prefix} for {payload['documents_seen']} documents in {payload['index_path']} "
             f"(reused={payload['reused']}, updated={payload['updated']}, added={payload['added']}, removed={payload['removed']})"
         )
+        for label in ("updated_paths", "added_paths", "removed_paths"):
+            values = payload.get(label, [])
+            if values:
+                print(f"{label.replace('_', ' ').title()}:")
+                for value in values:
+                    print(f"- {value}")
         return 0
     if command == "write-preset":
         print(f"Wrote preset {payload['preset_name']} with {payload['files_written']} files to {payload['destination']}")
@@ -979,6 +1023,20 @@ def main(argv: list[str] | None = None) -> int:
         index_path = Path(args.index_path)
         index = load_signature_index(index_path)
         paths = _collect_paths(Path(index.root), index.glob_pattern)
+        summary = summarize_index_refresh(index, paths)
+        if args.dry_run:
+            return _emit(
+                {
+                    "command": "refresh-index",
+                    "index_path": str(index_path),
+                    "token_mode": index.token_mode,
+                    "normalize_identifiers": index.normalize_identifiers,
+                    "normalize_literals": index.normalize_literals,
+                    "dry_run": True,
+                    **summary,
+                },
+                args.json,
+            )
         refreshed_index, stats = refresh_signature_index(index, paths)
         save_signature_index(refreshed_index, index_path)
         return _emit(
@@ -988,6 +1046,10 @@ def main(argv: list[str] | None = None) -> int:
                 "token_mode": index.token_mode,
                 "normalize_identifiers": index.normalize_identifiers,
                 "normalize_literals": index.normalize_literals,
+                "dry_run": False,
+                "updated_paths": summary["updated_paths"],
+                "added_paths": summary["added_paths"],
+                "removed_paths": summary["removed_paths"],
                 **stats,
             },
             args.json,

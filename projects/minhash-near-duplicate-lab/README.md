@@ -17,6 +17,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - small-corpus fallback that still checks all pairs when banding would otherwise miss every candidate in tiny demos
 - persistent signature-index export for repeated scans without recomputing signatures every time
 - incremental index refresh that reuses stored signatures for unchanged files based on content hashes
+- dry-run refresh summaries that preview which files would be reused, updated, added, or removed before rewriting the saved index
 - persisted indexes record token mode plus identifier/literal-normalization metadata so repeated scans stay compatible with the original shingling strategy
 - optional identifier normalization for `code` mode so variable renames can collapse into the same near-duplicate fingerprint
 - optional literal normalization for `code` mode so integer, float, string, boolean, and `None`-only edits can be grouped into stronger clone-detection demos
@@ -120,6 +121,15 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py scan-index \
   --json
 ```
 
+Preview what would change before refreshing a very large index:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py refresh-index \
+  samples/minhash-index.json \
+  --dry-run \
+  --json
+```
+
 Refresh an existing index after some files changed:
 
 ```bash
@@ -180,6 +190,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 - why LSH banding reduces the number of candidate pairs you need to inspect exactly
 - why persisted signatures matter when you rerun scans across the same corpus repeatedly
 - how content hashes let incremental refresh skip unchanged documents while still keeping the index trustworthy
+- why a dry-run diff is useful before reindexing a large corpus or deleting stale paths from a saved signature index
 - how recall and candidate-reduction trade off as you change shingle size, signature length, and band count
 - how reusable JSON/CSV/Markdown exports make experimental results easier to paste into portfolio write-ups and charts
 
@@ -190,6 +201,6 @@ python3 -m unittest tests.test_minhash_near_duplicate
 ```
 
 ## Future improvements
-- add a dry-run corpus diff summary before refresh for very large indexes
+- add richer benchmark dataset packs with expected-recall scenarios across tiny, medium, and noisy corpora
 - add richer mixed-language preset families for data-science, web-dev, and systems-programming demos
 - add language-aware literal buckets for lists, dicts, and f-strings in code mode

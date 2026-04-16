@@ -70,3 +70,13 @@
 - [x] expand tests for normalized tokenization, similarity changes, CLI validation, benchmark exports, and index round-trips
 - [x] update README usage, feature notes, and future roadmap
 - [x] complete at least 3 review passes and fix issues found
+
+## Dry-run refresh summary slice (2026-04-16 01:51 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the remaining MinHash follow-up around dry-run refresh previews for large indexes
+- [x] do a quick Python refresh/self-test around path-diff summaries and non-mutating CLI flows
+- [x] add `refresh-index --dry-run` so saved indexes can preview reused/updated/added/removed files before rewrite
+- [x] keep refresh resumable by exposing path-level summaries while leaving the index untouched in dry-run mode
+- [x] expand tests for summary helpers and dry-run CLI JSON output
+- [x] update README usage, feature notes, and interview framing
+- [x] complete at least 3 review passes and fix issues found
