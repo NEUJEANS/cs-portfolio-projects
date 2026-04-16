@@ -12,5 +12,5 @@
 - [x] review pass 2: `py_compile` for `mapreduce.py` and `test_mapreduce.py`
 - [x] review pass 3: CLI smoke test for generated Markdown/HTML catalog artifacts
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] next: consider generating dedicated per-plugin docs pages from the catalog

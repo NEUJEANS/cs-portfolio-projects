@@ -339,5 +339,5 @@
 - [x] extend project-level and repo-level tests for quick-link anchors and badge rendering
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider generating dedicated per-plugin docs pages from the catalog in a future run
