@@ -126,7 +126,7 @@ Last updated: 2026-04-16
 - [x] perform review pass 2 and fix issues
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 
 ## Next slice candidates
 - [ ] richer posting-list style incremental index rather than storing full note bodies in cache
