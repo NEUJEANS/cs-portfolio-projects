@@ -1,0 +1,42 @@
+{
+  "requested_keys": [
+    7,
+    18,
+    99
+  ],
+  "snapshot_count": 4,
+  "snapshots": [
+    {
+      "step_index": 0,
+      "access_key": null,
+      "label": "initial",
+      "path": "00-initial.json",
+      "root": 18,
+      "found": null
+    },
+    {
+      "step_index": 1,
+      "access_key": 7,
+      "label": "after access 7",
+      "path": "01-after-access-7.json",
+      "root": 7,
+      "found": true
+    },
+    {
+      "step_index": 2,
+      "access_key": 18,
+      "label": "after access 18",
+      "path": "02-after-access-18.json",
+      "root": 18,
+      "found": true
+    },
+    {
+      "step_index": 3,
+      "access_key": 99,
+      "label": "after access 99",
+      "path": "03-after-access-99.json",
+      "root": 18,
+      "found": false
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # splay-tree-lab checklist
 
 ## Status
-- [x] vertical slice 6 complete
+- [x] vertical slice 7 complete
 
 ## Core functionality
 - [x] define portfolio goals for a self-adjusting BST lab with resumable snapshots
@@ -19,5 +19,21 @@
 
 ## Next ideas
 - [x] export benchmark sweeps across multiple tree sizes for chart-ready comparison series
-- [ ] add step-by-step trace snapshot export for slide decks or animation tooling
+- [x] add step-by-step trace snapshot export for slide decks or animation tooling
 - [ ] generate a Markdown benchmark report with interpretation and embedded artifact links
+
+## Trace step-snapshot export slice (2026-04-16 12:29 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current trace tooling for the weakest unfinished portfolio-visualization gap
+- [x] skip web research because per-step snapshot export is a direct extension of the existing trace workflow and README backlog
+- [x] do a short Python `Path`/filename self-test for deterministic step snapshot names
+- [x] update checklist/docs so the slice is resumable
+- [x] add optional per-step structured trace snapshot export plus a manifest for replayable demos
+- [x] commit sample trace-step artifacts for portfolio walkthroughs
+- [x] extend automated coverage for structured snapshots, manifest export, and CLI behavior
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up

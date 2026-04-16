@@ -1,0 +1,47 @@
+{
+  "values": [
+    2,
+    4,
+    7,
+    10,
+    12,
+    15,
+    18
+  ],
+  "root": 18,
+  "size": 7,
+  "rotation_count": 15,
+  "splay_steps": 9,
+  "comparison_count": 16,
+  "structure": {
+    "key": 18,
+    "left": {
+      "key": 15,
+      "left": {
+        "key": 12,
+        "left": {
+          "key": 10,
+          "left": {
+            "key": 7,
+            "left": {
+              "key": 4,
+              "left": {
+                "key": 2,
+                "left": null,
+                "right": null
+              },
+              "right": null
+            },
+            "right": null
+          },
+          "right": null
+        },
+        "right": null
+      },
+      "right": null
+    },
+    "right": null
+  },
+  "label": "initial",
+  "step_index": 0
+}

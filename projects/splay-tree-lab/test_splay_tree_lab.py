@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from splay_tree_lab import SplayTree, benchmark_csv_rows, benchmark_series, benchmark_series_csv_rows, benchmark_trees
+from splay_tree_lab import SplayTree, benchmark_csv_rows, benchmark_series, benchmark_series_csv_rows, benchmark_trees, export_trace_step_snapshots
 
 
 class SplayTreeBehaviorTests(unittest.TestCase):
@@ -42,6 +42,33 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertEqual(trace["steps"][0]["root_after"], 7)
         self.assertFalse(trace["steps"][-1]["found"])
         self.assertGreaterEqual(trace["steps"][-1]["comparisons_used"], 1)
+
+    def test_trace_access_sequence_can_capture_structured_snapshots(self) -> None:
+        tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
+        trace = tree.trace_access_sequence([7, 18], capture_tree_snapshots=True)
+        frames = trace["tree_snapshots"]
+        self.assertEqual([frame["step_index"] for frame in frames], [0, 1, 2])
+        self.assertEqual(frames[0]["label"], "initial")
+        self.assertEqual(frames[1]["access_key"], 7)
+        self.assertTrue(frames[1]["found"])
+        self.assertEqual(frames[1]["trace_step"]["root_after"], 7)
+        self.assertEqual(frames[1]["structure"]["key"], 7)
+        self.assertEqual(frames[2]["structure"]["key"], 18)
+
+    def test_export_trace_step_snapshots_writes_manifest(self) -> None:
+        tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
+        summary = tree.trace_access_sequence([7, 18, 99], capture_tree_snapshots=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            exported = export_trace_step_snapshots(summary, Path(tmp_dir))
+            self.assertEqual(exported["step_snapshot_count"], 4)
+            manifest = json.loads((Path(tmp_dir) / "manifest.json").read_text())
+            self.assertEqual(manifest["snapshot_count"], 4)
+            self.assertEqual(manifest["snapshots"][0]["path"], "00-initial.json")
+            self.assertEqual(manifest["snapshots"][1]["path"], "01-after-access-7.json")
+            self.assertTrue((Path(tmp_dir) / "03-after-access-99.json").exists())
+            final_snapshot = json.loads((Path(tmp_dir) / "03-after-access-99.json").read_text())
+            self.assertEqual(final_snapshot["trace_step"]["root_after"], 18)
+            self.assertEqual(final_snapshot["structure"]["key"], 18)
 
     def test_to_dot_marks_root_and_highlighted_keys(self) -> None:
         tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
@@ -249,6 +276,7 @@ class SplayTreeCliTests(unittest.TestCase):
             after_dot = tmp_path / "after.dot"
             before_mermaid = tmp_path / "before.mmd"
             after_mermaid = tmp_path / "after.mmd"
+            step_snapshots_dir = tmp_path / "step-snapshots"
             updated = tmp_path / "after.json"
             subprocess.run(
                 [
@@ -281,6 +309,8 @@ class SplayTreeCliTests(unittest.TestCase):
                     str(before_mermaid),
                     "--after-mermaid",
                     str(after_mermaid),
+                    "--step-snapshots-dir",
+                    str(step_snapshots_dir),
                     "7",
                     "18",
                     "99",
@@ -291,6 +321,7 @@ class SplayTreeCliTests(unittest.TestCase):
             )
             payload = json.loads(traced.stdout)
             self.assertEqual(len(payload["steps"]), 3)
+            self.assertEqual(payload["step_snapshot_count"], 4)
             self.assertTrue(before_dot.exists())
             self.assertTrue(after_dot.exists())
             self.assertTrue(before_mermaid.exists())
@@ -301,6 +332,10 @@ class SplayTreeCliTests(unittest.TestCase):
             self.assertIn("flowchart TD", before_mermaid.read_text())
             self.assertIn("class n18 root;", after_mermaid.read_text())
             self.assertIn("class n7,n18 highlight;", after_mermaid.read_text())
+            manifest = json.loads((step_snapshots_dir / "manifest.json").read_text())
+            self.assertEqual(manifest["snapshot_count"], 4)
+            self.assertEqual(manifest["snapshots"][2]["path"], "02-after-access-18.json")
+            self.assertEqual(json.loads((step_snapshots_dir / "01-after-access-7.json").read_text())["structure"]["key"], 7)
             self.assertEqual(json.loads(updated.read_text())["size"], 7)
 
     def test_benchmark_cli(self) -> None:

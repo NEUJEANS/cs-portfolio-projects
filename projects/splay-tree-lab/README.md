@@ -17,6 +17,7 @@ A portfolio-ready Python lab for splay trees: self-adjusting binary search trees
 - sweep multiple tree sizes in one command and export chart-ready benchmark-series JSON/CSV artifacts
 - export benchmark payloads as JSON and chart-ready CSV artifacts for portfolio screenshots and write-ups
 - export Graphviz DOT and Mermaid diagrams before and after an access trace for easy portfolio visuals
+- export initial/per-step structured JSON snapshots plus a manifest for slide decks, animation tooling, and replayable demos
 - deterministic unit tests for tree behavior, CLI workflows, and benchmark output
 
 ## Usage
@@ -38,6 +39,16 @@ Run a traced access sequence and export before/after DOT and Mermaid diagrams:
 ```bash
 python3 splay_tree_lab.py trace --snapshot artifacts/splay.json --output artifacts/splay-traced.json --before-dot artifacts/splay-before.dot --after-dot artifacts/splay-after.dot --before-mermaid artifacts/splay-before.mmd --after-mermaid artifacts/splay-after.mmd 7 18 99
 ```
+
+Export the same trace as step-by-step structured snapshots for slides or animation tooling:
+
+```bash
+python3 splay_tree_lab.py trace --snapshot artifacts/splay.json --output artifacts/splay-traced.json \
+  --step-snapshots-dir ../../docs/artifacts/splay-tree-trace-steps \
+  7 18 99
+```
+
+The snapshot directory includes `00-initial.json`, one `NN-after-access-<key>.json` file per access, and a `manifest.json` index for replayable walkthroughs.
 
 Insert a new key:
 
@@ -110,5 +121,5 @@ python3 -m unittest projects/splay-tree-lab/test_splay_tree_lab.py
 - uniform-random workloads may reduce or reverse the gap, which helps explain the trade-off between self-adjusting behavior and steadier balancing
 
 ## Future improvements
-- render trace animations directly from saved step data or export per-step snapshots for slide decks
 - generate a Markdown benchmark report with interpretation and embedded artifact links
+- add direct GIF/SVG animation export built on top of the per-step trace snapshot manifest

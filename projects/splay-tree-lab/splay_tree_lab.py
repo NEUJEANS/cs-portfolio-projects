@@ -286,6 +286,43 @@ class SplayTree:
             "comparison_count": self.comparison_count,
         }
 
+    def structure_snapshot(self) -> dict[str, object] | None:
+        def build(node: Node | None) -> dict[str, object] | None:
+            if node is None:
+                return None
+            return {
+                "key": node.key,
+                "left": build(node.left),
+                "right": build(node.right),
+            }
+
+        return build(self.root)
+
+    def detailed_snapshot(
+        self,
+        *,
+        label: str | None = None,
+        step_index: int | None = None,
+        access_key: int | None = None,
+        found: bool | None = None,
+        trace_step: dict[str, int | bool | None] | None = None,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            **self.snapshot(),
+            "structure": self.structure_snapshot(),
+        }
+        if label is not None:
+            payload["label"] = label
+        if step_index is not None:
+            payload["step_index"] = step_index
+        if access_key is not None:
+            payload["access_key"] = access_key
+        if found is not None:
+            payload["found"] = found
+        if trace_step is not None:
+            payload["trace_step"] = trace_step
+        return payload
+
     @classmethod
     def from_snapshot(cls, payload: dict) -> "SplayTree":
         tree = cls(payload.get("values", []))
@@ -297,7 +334,7 @@ class SplayTree:
             tree.find(root_key)
         return tree
 
-    def trace_access_sequence(self, keys: Iterable[int]) -> dict:
+    def trace_access_sequence(self, keys: Iterable[int], *, capture_tree_snapshots: bool = False) -> dict:
         sequence = list(keys)
         before_root = self.root.key if self.root is not None else None
         rotations_before = self.rotation_count
@@ -305,7 +342,10 @@ class SplayTree:
         hits = 0
         misses = 0
         steps: list[dict[str, int | bool | None]] = []
-        for key in sequence:
+        snapshot_frames: list[dict[str, object]] = []
+        if capture_tree_snapshots:
+            snapshot_frames.append(self.detailed_snapshot(label="initial", step_index=0))
+        for index, key in enumerate(sequence, start=1):
             step_root_before = self.root.key if self.root is not None else None
             step_rotations_before = self.rotation_count
             step_comparisons_before = self.comparison_count
@@ -322,8 +362,19 @@ class SplayTree:
                 rotations_used=self.rotation_count - step_rotations_before,
                 comparisons_used=self.comparison_count - step_comparisons_before,
             )
-            steps.append(step.__dict__)
-        return {
+            step_payload = step.__dict__
+            steps.append(step_payload)
+            if capture_tree_snapshots:
+                snapshot_frames.append(
+                    self.detailed_snapshot(
+                        label=f"after access {key}",
+                        step_index=index,
+                        access_key=key,
+                        found=found,
+                        trace_step=step_payload,
+                    )
+                )
+        summary: dict[str, object] = {
             "requested_keys": sequence,
             "hits": hits,
             "misses": misses,
@@ -334,6 +385,9 @@ class SplayTree:
             "size": self.size,
             "steps": steps,
         }
+        if capture_tree_snapshots:
+            summary["tree_snapshots"] = snapshot_frames
+        return summary
 
     def access_sequence(self, keys: Iterable[int]) -> dict:
         summary = self.trace_access_sequence(keys)
@@ -455,6 +509,51 @@ def split_result_snapshot(values: list[int], *, root: int | None) -> dict[str, o
 def save_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
+
+
+def trace_snapshot_filename(step_index: int, access_key: int | None = None) -> str:
+    if step_index == 0:
+        return "00-initial.json"
+    if access_key is None:
+        raise ValueError("access_key is required for non-initial trace snapshots")
+    return f"{step_index:02d}-after-access-{access_key}.json"
+
+
+def export_trace_step_snapshots(summary: dict[str, object], output_dir: Path) -> dict[str, object]:
+    frames = summary.pop("tree_snapshots", None)
+    if frames is None:
+        return summary
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_snapshots: list[dict[str, object]] = []
+    for frame in frames:
+        step_index = int(frame["step_index"])
+        access_key = frame.get("access_key")
+        filename = trace_snapshot_filename(step_index, access_key if isinstance(access_key, int) else None)
+        save_snapshot_payload(output_dir / filename, frame)
+        manifest_snapshots.append(
+            {
+                "step_index": step_index,
+                "access_key": access_key,
+                "label": frame.get("label"),
+                "path": filename,
+                "root": frame.get("root"),
+                "found": frame.get("found"),
+            }
+        )
+
+    manifest = {
+        "requested_keys": summary["requested_keys"],
+        "snapshot_count": len(manifest_snapshots),
+        "snapshots": manifest_snapshots,
+    }
+    manifest_path = output_dir / "manifest.json"
+    save_snapshot_payload(manifest_path, manifest)
+    summary["step_snapshot_dir"] = str(output_dir)
+    summary["step_snapshot_manifest"] = str(manifest_path)
+    summary["step_snapshot_count"] = len(manifest_snapshots)
+    summary["step_snapshot_files"] = manifest_snapshots
+    return summary
 
 
 BENCHMARK_CSV_FIELDNAMES = [
@@ -779,6 +878,11 @@ def build_parser() -> argparse.ArgumentParser:
     trace_parser.add_argument("--after-dot", type=Path)
     trace_parser.add_argument("--before-mermaid", type=Path)
     trace_parser.add_argument("--after-mermaid", type=Path)
+    trace_parser.add_argument(
+        "--step-snapshots-dir",
+        type=Path,
+        help="optional directory for initial/per-step structured tree snapshots plus a manifest",
+    )
     trace_parser.add_argument("keys", nargs="+", type=int)
 
     insert_parser = subparsers.add_parser("insert", help="insert a key into a snapshot")
@@ -876,13 +980,18 @@ def main(argv: list[str] | None = None) -> int:
                 save_text(args.before_dot, tree.to_dot(title="before access trace"))
             if args.before_mermaid is not None:
                 save_text(args.before_mermaid, tree.to_mermaid(title="before access trace"))
-            summary = tree.trace_access_sequence(args.keys)
+            summary = tree.trace_access_sequence(
+                args.keys,
+                capture_tree_snapshots=args.step_snapshots_dir is not None,
+            )
             if args.output is not None:
                 save_tree(args.output, tree)
             if args.after_dot is not None:
                 save_text(args.after_dot, tree.to_dot(highlight_keys=args.keys, title="after access trace"))
             if args.after_mermaid is not None:
                 save_text(args.after_mermaid, tree.to_mermaid(highlight_keys=args.keys, title="after access trace"))
+            if args.step_snapshots_dir is not None:
+                summary = export_trace_step_snapshots(summary, args.step_snapshots_dir)
             print(json.dumps(summary, indent=2))
             return 0
 
