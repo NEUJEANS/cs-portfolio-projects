@@ -1,0 +1,22 @@
+# Wrap-up: red-black trace DOT snapshots
+
+- Timestamp (UTC): 2026-04-16T00:35:00Z
+- Project: `red-black-tree-lab`
+- What changed:
+  - embedded initial/final Graphviz DOT snippets in `explain-trace` JSON and Markdown exports
+  - fixed build walkthrough snapshots so the initial DOT reflects the pre-build empty tree
+  - updated README usage/design notes plus the project checklist
+  - extended CLI tests to cover snapshot payloads and Markdown file output
+- Tests run:
+  - `python3 -m unittest tests.test_red_black_tree_lab`
+  - `python3 projects/red-black-tree-lab/red_black_tree.py explain-trace build 10 20 30 15 25 5`
+  - `python3 projects/red-black-tree-lab/red_black_tree.py explain-trace delete 20 10 30 5 15 25 35 --query 10`
+- Reviews run:
+  - review pass 1: unit/CLI regression run
+  - review pass 2: inspected generated build/delete walkthrough JSON for snapshot correctness
+  - review pass 3: reviewed README + future-improvements list and removed a now-completed TODO
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: `46ce91791050c19fc537b1db9e880605c65085bd`
+- Next step:
+  - add optional rendered SVG/PNG snapshot export so walkthrough artifacts can drop directly into portfolio pages

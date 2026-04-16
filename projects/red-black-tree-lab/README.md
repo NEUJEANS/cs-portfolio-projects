@@ -88,7 +88,7 @@ python3 projects/red-black-tree-lab/red_black_tree.py delete --trace 10 20 10 30
 python3 projects/red-black-tree-lab/red_black_tree.py demo --trace
 ```
 
-Generate a recruiter-friendly Markdown explanation from the same trace stream and optionally write it to a file:
+Generate a recruiter-friendly Markdown explanation from the same trace stream and optionally write it to a file. The exported walkthrough now embeds initial/final Graphviz DOT snippets so you can render before/after diagrams without rebuilding the tree by hand:
 
 ```bash
 python3 projects/red-black-tree-lab/red_black_tree.py explain-trace build 10 20 30 15 25 5
@@ -111,6 +111,7 @@ python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --see
 - Validation explicitly checks BST bounds, black-height consistency, parent pointers, and subtree-size consistency so augmentation bugs stay explainable.
 - Trace output names the repair cases that fired during insertion or deletion, making the balancing logic easier to narrate in a README, code review, or interview demo.
 - The `explain-trace` command turns low-level trace events into a Markdown walkthrough so the project can produce portfolio-ready writeups without hand-editing every balancing step.
+- `explain-trace` also embeds initial/final DOT snapshots in the exported Markdown, which makes before/after balancing diagrams easy to render directly from the walkthrough artifact.
 - DOT export labels left/right child edges and can optionally render NIL leaves, which makes black-height explanations and deletion repair screenshots easier to present.
 - The benchmark command intentionally uses deterministic ascending, descending, and seeded shuffled sequences so the AVL-vs-red-black comparison is repeatable in README snippets, interviews, and CI runs.
 - CSV export keeps the case-level metrics flat and spreadsheet-friendly so the project can produce quick charts without extra post-processing glue code.
@@ -118,4 +119,4 @@ python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --see
 ## Future improvements
 - emit Graphviz diagrams after each insertion/deletion step
 - extend the benchmark with CSV export for chart-ready artifacts across larger input sizes
-- emit before/after DOT snippets inside the Markdown walkthrough for richer visual debugging artifacts
+- render trace-event snapshots as SVG/PNG assets directly from the walkthrough export pipeline

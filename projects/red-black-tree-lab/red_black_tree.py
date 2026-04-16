@@ -784,13 +784,20 @@ def command_dot(args: argparse.Namespace) -> dict[str, object]:
 
 
 def command_explain_trace(args: argparse.Namespace) -> dict[str, object]:
-    tree = build_tree(args.values, trace_enabled=True)
     deleted = None
-    if args.operation == "delete":
+    if args.operation == "build":
+        tree = RedBlackTree(trace_enabled=True)
+        initial_dot = tree.to_dot(include_nil=True)
+        for value in args.values:
+            tree.insert(value)
+    else:
+        tree = build_tree(args.values, trace_enabled=True)
+        initial_dot = tree.to_dot(include_nil=True)
         tree.trace.clear()
         deleted = tree.delete(args.query)
 
     summary = tree.summary(include_trace=True)
+    final_dot = tree.to_dot(include_nil=True)
     heading = f"# Red-Black Tree Trace Walkthrough ({args.operation})"
     overview = [
         heading,
@@ -804,7 +811,27 @@ def command_explain_trace(args: argparse.Namespace) -> dict[str, object]:
     if args.operation == "delete":
         overview.insert(2, f"- delete query: `{args.query}`")
         overview.insert(3, f"- deleted: `{deleted}`")
-    overview.extend(["", "## Event-by-event explanation", ""])
+    overview.extend(
+        [
+            "",
+            "## Tree snapshots",
+            "",
+            "### Initial DOT",
+            "",
+            "```dot",
+            initial_dot,
+            "```",
+            "",
+            "### Final DOT",
+            "",
+            "```dot",
+            final_dot,
+            "```",
+            "",
+            "## Event-by-event explanation",
+            "",
+        ]
+    )
 
     trace_lines = [
         _describe_trace_event(event, index)
@@ -827,6 +854,8 @@ def command_explain_trace(args: argparse.Namespace) -> dict[str, object]:
         "command": "explain-trace",
         "operation": args.operation,
         "input": args.values,
+        "initial_dot": initial_dot,
+        "final_dot": final_dot,
         "markdown": markdown,
         **summary,
     }
