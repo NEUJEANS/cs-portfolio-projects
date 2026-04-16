@@ -19,7 +19,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - incremental index refresh that reuses stored signatures for unchanged files based on content hashes
 - persisted indexes record token mode plus identifier/literal-normalization metadata so repeated scans stay compatible with the original shingling strategy
 - optional identifier normalization for `code` mode so variable renames can collapse into the same near-duplicate fingerprint
-- optional numeric literal normalization for `code` mode so constant-only edits can be grouped into stronger clone-detection demos
+- optional literal normalization for `code` mode so integer, float, string, boolean, and `None`-only edits can be grouped into stronger clone-detection demos
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - benchmark export support for JSON, CSV, or Markdown portfolio summaries
 - CLI output in human-readable or JSON form
@@ -58,7 +58,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py compare \
   --json
 ```
 
-Also collapse numeric literals when the logic stays the same but constants differ:
+Also collapse literals when the logic stays the same but constants, strings, or flags differ:
 
 ```bash
 python3 projects/minhash-near-duplicate-lab/minhash_lab.py compare \
@@ -153,7 +153,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 ## Interview talking points
 - why word, code-token, and character shingles each highlight different kinds of near-duplicate structure
 - when identifier normalization helps code-clone detection and when it can hide semantically meaningful renames
-- when literal normalization helps surface parameterized clones and when it can over-merge code that differs in important thresholds or limits
+- when literal normalization helps surface parameterized clones across integers, floats, strings, booleans, and `None`, and when it can over-merge meaningful configuration changes
 - why k-shingles preserve local ordering better than simple bag-of-words counts
 - how MinHash compresses large shingle sets into signatures that approximate Jaccard similarity
 - why LSH banding reduces the number of candidate pairs you need to inspect exactly
@@ -171,4 +171,4 @@ python3 -m unittest tests.test_minhash_near_duplicate
 ## Future improvements
 - add mixed-language corpus presets for Markdown + code notebook demos
 - add a dry-run corpus diff summary before refresh for very large indexes
-- add richer code-mode literal buckets for strings, booleans, and floating-point constants
+- add language-aware literal buckets for lists, dicts, and f-strings in code mode

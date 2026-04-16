@@ -15,7 +15,14 @@ from typing import Iterable
 
 MAX_HASH = (1 << 64) - 1
 TOKEN_RE = re.compile(r"[a-z0-9']+")
-CODE_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|//=|\*=|/=|%=|\+=|-=|\*\*|//|->|[{}()\[\].,:;+\-*/%<>=]")
+CODE_TOKEN_RE = re.compile(
+    r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|[A-Za-z_][A-Za-z0-9_]*|(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+|\d+|==|!=|<=|>=|//=|\*=|/=|%=|\+=|-=|\*\*|//|->|[{}()\[\].,:;+\-*/%<>=]"
+)
+INTEGER_LITERAL_RE = re.compile(r"\d+")
+FLOAT_LITERAL_RE = re.compile(r"(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+")
+STRING_LITERAL_RE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
+BOOLEAN_LITERAL_TOKENS = {"true", "false"}
+NONE_LITERAL_TOKEN = "none"
 PYTHON_KEYWORDS = set(keyword.kwlist)
 INDEX_VERSION = 4
 
@@ -125,8 +132,17 @@ class SignatureIndex:
 
 def _normalize_code_token(token: str, *, normalize_identifiers: bool, normalize_literals: bool) -> str:
     lowered = token.lower()
-    if normalize_literals and re.fullmatch(r"\d+", token):
-        return "<num>"
+    if normalize_literals:
+        if STRING_LITERAL_RE.fullmatch(token):
+            return "<str>"
+        if FLOAT_LITERAL_RE.fullmatch(token):
+            return "<float>"
+        if INTEGER_LITERAL_RE.fullmatch(token):
+            return "<num>"
+        if lowered in BOOLEAN_LITERAL_TOKENS:
+            return "<bool>"
+        if lowered == NONE_LITERAL_TOKEN:
+            return "<none>"
     if normalize_identifiers and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", token) and lowered not in PYTHON_KEYWORDS:
         return "<id>"
     return lowered

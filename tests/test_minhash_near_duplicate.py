@@ -73,6 +73,26 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             ["if", "retries", ">=", "<num>", ":", "return", "limit", "+", "<num>"],
         )
 
+    def test_code_token_mode_can_normalize_string_boolean_none_and_float_literals(self) -> None:
+        self.assertEqual(
+            normalize_text(
+                'flag = True\nname = "Ada"\nvalue = 3.14\nfallback = None\n',
+                token_mode="code",
+                normalize_literals=True,
+            )[:16],
+            ["flag", "=", "<bool>", "name", "=", "<str>", "value", "=", "<float>", "fallback", "=", "<none>"],
+        )
+
+    def test_code_token_mode_can_normalize_scientific_notation_literals(self) -> None:
+        self.assertEqual(
+            normalize_text(
+                'budget = 1e6\nerror = 2.5e-3\n',
+                token_mode="code",
+                normalize_literals=True,
+            )[:8],
+            ["budget", "=", "<float>", "error", "=", "<float>"],
+        )
+
     def test_signature_is_deterministic_for_same_seed(self) -> None:
         shingles = {"a b", "b c", "c d"}
         self.assertEqual(minhash_signature(shingles, num_hashes=16, seed=7), minhash_signature(shingles, num_hashes=16, seed=7))
@@ -252,6 +272,33 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             num_hashes=64,
             bands=8,
             seed=21,
+            token_mode="code",
+            normalize_literals=True,
+        )
+        self.assertLess(plain.exact_jaccard, normalized.exact_jaccard)
+        self.assertGreater(normalized.estimated_jaccard, plain.estimated_jaccard)
+
+    def test_code_literal_normalization_increases_similarity_for_string_boolean_and_none_changes(self) -> None:
+        plain = compare_texts(
+            'def configure():\n    return {"enabled": True, "label": "alpha", "limit": None, "ratio": 1.5}\n',
+            'def configure():\n    return {"enabled": False, "label": "beta", "limit": None, "ratio": 2.75}\n',
+            left_name="left.py",
+            right_name="right.py",
+            shingle_size=4,
+            num_hashes=64,
+            bands=8,
+            seed=31,
+            token_mode="code",
+        )
+        normalized = compare_texts(
+            'def configure():\n    return {"enabled": True, "label": "alpha", "limit": None, "ratio": 1.5}\n',
+            'def configure():\n    return {"enabled": False, "label": "beta", "limit": None, "ratio": 2.75}\n',
+            left_name="left.py",
+            right_name="right.py",
+            shingle_size=4,
+            num_hashes=64,
+            bands=8,
+            seed=31,
             token_mode="code",
             normalize_literals=True,
         )
