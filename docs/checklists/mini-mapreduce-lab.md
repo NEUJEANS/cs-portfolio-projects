@@ -391,5 +391,5 @@
 - [x] extend project-level and repo-level tests for generated plugin docs pages and catalog links
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider release-to-release comparison pages or richer docs-site navigation for larger plugin sets

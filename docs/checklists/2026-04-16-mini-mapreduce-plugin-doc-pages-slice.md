@@ -13,5 +13,5 @@
 - [x] review pass 2: `py_compile` for `mapreduce.py`, `projects/mini-mapreduce-lab/test_mapreduce.py`, and `tests/test_mini_mapreduce.py`
 - [x] review pass 3: CLI smoke test for generated catalog + per-plugin Markdown/HTML docs pages
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] next: explore release-to-release comparison pages or docs-site sidebars once more bundled plugins exist
