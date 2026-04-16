@@ -17,7 +17,7 @@
 - note: full repo-wide `pytest` still has unrelated pre-existing collection issues outside Mini MapReduce, so this slice used targeted project + repo-level Mini MapReduce coverage
 
 ## Commit hash
-- `99d47541f4cd54fe3086b03bb2ca2a37a6981973`
+- `4497647c965fcfb540eec227bb0c10e68d59a0da`
 
 ## Next step
 - add benchmark report annotations that explain the likely hot keys and workload story for each built-in dataset family directly in Markdown/HTML artifacts

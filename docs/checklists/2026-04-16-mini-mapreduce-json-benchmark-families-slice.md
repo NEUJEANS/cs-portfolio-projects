@@ -17,4 +17,4 @@ Extend the built-in `json-group-count` job with realistic synthetic benchmark fa
 - [x] update README usage, features, and future-improvement notes
 - [x] run targeted tests and at least 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up

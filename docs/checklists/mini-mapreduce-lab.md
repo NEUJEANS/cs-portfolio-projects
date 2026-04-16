@@ -353,5 +353,5 @@
 - [x] update README usage, features, and future-improvement notes
 - [x] run targeted tests and at least 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider benchmark report annotations that call out likely hot keys for each built-in family in a future run
