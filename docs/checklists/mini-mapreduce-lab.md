@@ -326,4 +326,18 @@
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider richer catalog landing pages such as per-plugin badges or docs-site navigation sidebars in a future run
+- [x] consider richer catalog landing pages such as per-plugin badges or docs-site navigation sidebars in a future run
+
+## Catalog quick-link landing page slice (2026-04-16 08:01 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the landing-page follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python string-slug and HTML badge rendering refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add quick-link landing cards plus badge summaries to the catalog Markdown/HTML outputs so reviewers can jump straight to each plugin section
+- [x] keep the existing JSON/CSV inspection payloads backward compatible while linking summary rows to per-plugin source sections
+- [x] extend project-level and repo-level tests for quick-link anchors and badge rendering
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider generating dedicated per-plugin docs pages from the catalog in a future run

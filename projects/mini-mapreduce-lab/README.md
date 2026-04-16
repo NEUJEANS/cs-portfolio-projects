@@ -30,7 +30,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - benchmark CSV summaries now carry plugin inspection metadata so spreadsheet artifacts stay self-describing without a separate JSON lookup
 - optional adjacent plugin metadata diffs for batched inspection runs so contract changes are reviewable without hand-comparing JSON snapshots
 - optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
-- plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts without repeating `--plugin` flags manually
+- plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts with quick-link landing cards and review-friendly badge summaries, without repeating `--plugin` flags manually
 
 ## Usage
 
@@ -215,7 +215,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --html-output plugin-diff-report.html
 ```
 
-Auto-discover every bundled plugin under the project directory and generate a portfolio-ready catalog plus adjacent diffs in one step:
+Auto-discover every bundled plugin under the project directory and generate a portfolio-ready catalog plus adjacent diffs in one step. The Markdown/HTML catalog now starts with quick-link landing cards that summarize hook coverage, dataset families, and source-link readiness for each plugin:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \

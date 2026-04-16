@@ -233,6 +233,9 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("available_dataset_families", payload["diffs"][0]["changes"])
 
         markdown = batch.to_markdown()
+        self.assertIn("## Catalog quick links", markdown)
+        self.assertIn("[`plugin-average-score`](#plugin-average-score)", markdown)
+        self.assertIn("`4 hooks`", markdown)
         self.assertIn("## Adjacent diffs", markdown)
         self.assertIn("plugin-average-score", markdown)
         self.assertIn("Average-score analytics plugin", markdown)
@@ -249,6 +252,9 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("`available_dataset_families`", markdown)
 
         html_output = batch.to_html()
+        self.assertIn("<h2>Catalog quick links</h2>", html_output)
+        self.assertIn('href="#plugin-average-score"', html_output)
+        self.assertIn("4 hooks", html_output)
         self.assertIn("<h2>Diff 1:", html_output)
         self.assertIn("plugin-max-score", html_output)
         self.assertIn("map_records(lines)", html_output)
@@ -471,9 +477,11 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual([Path(item["plugin"]).name for item in payload["plugins"]], ["plugins_average_score.py", "plugins_top_score.py"])
             self.assertEqual(len(payload["diffs"]), 1)
             self.assertIn("# Mini MapReduce plugin inspection", markdown)
+            self.assertIn("## Catalog quick links", markdown)
             self.assertIn("plugin-average-score", markdown)
             self.assertIn("plugin-max-score", markdown)
             self.assertIn("<!DOCTYPE html>", html_payload)
+            self.assertIn("Catalog quick links", html_payload)
             self.assertIn("plugin-average-score", html_payload)
             self.assertIn("plugin-max-score", html_payload)
 

@@ -247,11 +247,23 @@ class PluginInspectionBatch:
             f"- Plugin count: `{len(self.plugins)}`",
             f"- Diff count: `{len(self.diffs or [])}`",
             "",
+            "## Catalog quick links",
+            "",
+        ]
+        for plugin in self.plugins:
+            anchor = plugin_anchor_id(plugin)
+            badges = " · ".join(f"`{badge}`" for badge in plugin_catalog_badges(plugin))
+            dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
+            lines.append(
+                f"- [`{plugin.name}`](#{anchor}) — {plugin.module_doc_summary or '-'} ({badges}; families: `{dataset_families}`)"
+            )
+        lines.extend([
+            "",
             "## Plugin summary",
             "",
             "| Name | Plugin | Commit | Summary | Mapper | Reducer | Combiner | Benchmark generator | Dataset families |",
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-        ]
+        ])
         for plugin in self.plugins:
             dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
             mapper_meta = [f"`{plugin.mapper_signature or '-'}`"]
@@ -314,7 +326,7 @@ class PluginInspectionBatch:
             )
         lines.extend(["", "## Hook source excerpts", ""])
         for plugin in self.plugins:
-            lines.append(f"### `{plugin.name}`")
+            lines.append(f"### <a id=\"{plugin_anchor_id(plugin)}\"></a>`{plugin.name}`")
             lines.append("")
             if plugin.plugin_repo_commit:
                 lines.append(f"- Repository commit: `{plugin.plugin_repo_commit}`")
@@ -359,12 +371,22 @@ class PluginInspectionBatch:
         def esc(value: object) -> str:
             return html.escape(str(value), quote=True)
 
+        quick_link_cards = []
         plugin_rows = []
         for plugin in self.plugins:
+            anchor = plugin_anchor_id(plugin)
             dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
+            badges_html = "".join(f"<span class=\"badge\">{esc(badge)}</span>" for badge in plugin_catalog_badges(plugin))
+            quick_link_cards.append(
+                "<li>"
+                f"<a href=\"#{esc(anchor)}\"><strong><code>{esc(plugin.name)}</code></strong></a>"
+                f"<p>{esc(plugin.module_doc_summary or '-')}</p>"
+                f"<p><small>{badges_html} <span class=\"badge\">families: {esc(dataset_families)}</span></small></p>"
+                "</li>"
+            )
             plugin_rows.append(
                 "<tr>"
-                f"<td><code>{esc(plugin.name)}</code></td>"
+                f"<td><a href=\"#{esc(anchor)}\"><code>{esc(plugin.name)}</code></a></td>"
                 f"<td><code>{esc(plugin.plugin)}</code></td>"
                 f"<td><code>{esc(plugin.plugin_repo_commit[:12] if plugin.plugin_repo_commit else '-')}</code></td>"
                 f"<td>{esc(plugin.module_doc_summary or '-')}</td>"
@@ -403,7 +425,7 @@ class PluginInspectionBatch:
                 )
             repo_commit_html = f"<p><strong>Repository commit:</strong> <code>{esc(plugin.plugin_repo_commit)}</code></p>" if plugin.plugin_repo_commit else ""
             source_sections.append(
-                f"<section><h2>Hook source excerpts: <code>{esc(plugin.name)}</code></h2>{repo_commit_html}{''.join(hook_blocks)}</section>"
+                f"<section id=\"{esc(plugin_anchor_id(plugin))}\"><h2>Hook source excerpts: <code>{esc(plugin.name)}</code></h2>{repo_commit_html}{''.join(hook_blocks)}</section>"
             )
 
         diff_sections = []
@@ -447,6 +469,10 @@ class PluginInspectionBatch:
     thead th {{ background: rgba(148, 163, 184, 0.14); }}
     .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 2rem; }}
     .meta li {{ list-style: none; padding: 0.75rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.75rem; }}
+    .catalog-links {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.9rem; padding: 0; }}
+    .catalog-links li {{ list-style: none; padding: 0.9rem 1rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.85rem; background: rgba(148, 163, 184, 0.08); }}
+    .catalog-links p {{ margin: 0.45rem 0; }}
+    .badge {{ display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }}
     section {{ margin-top: 2rem; }}
   </style>
 </head>
@@ -456,6 +482,10 @@ class PluginInspectionBatch:
     <li><strong>Plugin count</strong><br><code>{esc(len(self.plugins))}</code></li>
     <li><strong>Diff count</strong><br><code>{esc(len(self.diffs or []))}</code></li>
   </ul>
+  <section>
+    <h2>Catalog quick links</h2>
+    <ul class="catalog-links">{''.join(quick_link_cards)}</ul>
+  </section>
   <section>
     <h2>Plugin summary</h2>
     <table>
@@ -468,6 +498,25 @@ class PluginInspectionBatch:
 </body>
 </html>
 """
+
+
+def plugin_anchor_id(plugin: PluginInspection) -> str:
+    slug = "".join(ch if ch.isalnum() else "-" for ch in plugin.name.lower()).strip("-")
+    return slug or "plugin"
+
+
+def plugin_catalog_badges(plugin: PluginInspection) -> list[str]:
+    hook_count = 2 + int(bool(plugin.combiner)) + int(bool(plugin.benchmark_generator))
+    badges = [f"{hook_count} hooks"]
+    if plugin.available_dataset_families:
+        badges.append(f"{len(plugin.available_dataset_families)} dataset families")
+    else:
+        badges.append("no dataset families")
+    if plugin.plugin_repo_commit:
+        badges.append("commit pinned")
+    if plugin.mapper_source_url and plugin.reducer_source_url:
+        badges.append("github linked")
+    return badges
 
 
 def discover_plugin_refs(search_root: Path | None = None, *, pattern: str = "plugins_*.py") -> list[str]:
