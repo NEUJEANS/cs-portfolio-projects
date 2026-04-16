@@ -121,6 +121,46 @@ This makes it easy to paste the condensation view directly into GitHub-flavored 
 
 The JSON `scc`, `condensation`, and text `explain` outputs also expose bottleneck summaries. That gives you quick interview talking points such as "this SCC is a bridge between two cycles" or "this singleton sink is where all paths converge" without manually inspecting the DAG.
 
+The JSON outputs now also include `topology_groups`, which groups component payloads by topological level for downstream tooling, dashboards, or static-site portfolio embeds that want a layered SCC view without recomputing the grouping client-side.
+
+Example `topology_groups` excerpt:
+```json
+[
+  {
+    "level": 0,
+    "component_count": 1,
+    "component_ids": ["C0"],
+    "components": [
+      {
+        "id": "C0",
+        "nodes": ["A", "B", "C"],
+        "size": 3,
+        "topology_level": 0,
+        "incoming_component_count": 0,
+        "outgoing_component_count": 1,
+        "bottleneck_role": "source"
+      }
+    ]
+  },
+  {
+    "level": 1,
+    "component_count": 1,
+    "component_ids": ["C1"],
+    "components": [
+      {
+        "id": "C1",
+        "nodes": ["D", "E"],
+        "size": 2,
+        "topology_level": 1,
+        "incoming_component_count": 1,
+        "outgoing_component_count": 1,
+        "bottleneck_role": "bridge"
+      }
+    ]
+  }
+]
+```
+
 You can render the DOT file with Graphviz if installed:
 ```bash
 dot -Tpng condensation.dot -o condensation.png
@@ -147,5 +187,5 @@ This gives the project a stronger "theory plus evaluation" story: one implementa
 
 ## Future improvements
 - stream very large graphs from edge lists instead of loading everything into memory first
-- annotate components with in-degree/out-degree summaries for easier bottleneck analysis
 - export benchmark comparisons as CSV/markdown artifacts for portfolio screenshots
+- add a small HTML/markdown report template that consumes `topology_groups` directly for layered SCC portfolio cards

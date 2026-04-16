@@ -89,6 +89,40 @@ def test_condensation_dag_collapses_internal_component_edges():
             'bottleneck_role': 'sink',
         },
     ]
+    assert dag['topology_groups'] == [
+        {
+            'level': 0,
+            'component_count': 1,
+            'component_ids': ['C0'],
+            'components': [
+                {
+                    'id': 'C0',
+                    'nodes': ['A', 'B'],
+                    'size': 2,
+                    'topology_level': 0,
+                    'incoming_component_count': 0,
+                    'outgoing_component_count': 1,
+                    'bottleneck_role': 'source',
+                }
+            ],
+        },
+        {
+            'level': 1,
+            'component_count': 1,
+            'component_ids': ['C1'],
+            'components': [
+                {
+                    'id': 'C1',
+                    'nodes': ['C', 'D'],
+                    'size': 2,
+                    'topology_level': 1,
+                    'incoming_component_count': 1,
+                    'outgoing_component_count': 0,
+                    'bottleneck_role': 'sink',
+                }
+            ],
+        },
+    ]
     assert dag['edge_count'] == 1
     assert dag['level_count'] == 2
     assert dag['edges'] == [{'from': 'C0', 'to': 'C1'}]
@@ -121,6 +155,45 @@ def test_condensation_dag_assigns_levels_by_longest_source_path():
         {
             'id': 'C3', 'nodes': ['F'], 'size': 1, 'topology_level': 2,
             'incoming_component_count': 2, 'outgoing_component_count': 0, 'bottleneck_role': 'sink',
+        },
+    ]
+    assert dag['topology_groups'] == [
+        {
+            'level': 0,
+            'component_count': 1,
+            'component_ids': ['C0'],
+            'components': [
+                {
+                    'id': 'C0', 'nodes': ['A', 'B'], 'size': 2, 'topology_level': 0,
+                    'incoming_component_count': 0, 'outgoing_component_count': 2, 'bottleneck_role': 'source',
+                }
+            ],
+        },
+        {
+            'level': 1,
+            'component_count': 2,
+            'component_ids': ['C1', 'C2'],
+            'components': [
+                {
+                    'id': 'C1', 'nodes': ['C', 'D'], 'size': 2, 'topology_level': 1,
+                    'incoming_component_count': 1, 'outgoing_component_count': 1, 'bottleneck_role': 'bridge',
+                },
+                {
+                    'id': 'C2', 'nodes': ['E'], 'size': 1, 'topology_level': 1,
+                    'incoming_component_count': 1, 'outgoing_component_count': 1, 'bottleneck_role': 'bridge',
+                },
+            ],
+        },
+        {
+            'level': 2,
+            'component_count': 1,
+            'component_ids': ['C3'],
+            'components': [
+                {
+                    'id': 'C3', 'nodes': ['F'], 'size': 1, 'topology_level': 2,
+                    'incoming_component_count': 2, 'outgoing_component_count': 0, 'bottleneck_role': 'sink',
+                }
+            ],
         },
     ]
     assert dag['level_count'] == 3
@@ -221,6 +294,69 @@ def test_summary_reports_component_bottleneck_roles_and_degrees():
     assert summary['components'][1]['bottleneck_role'] == 'bridge'
     assert summary['components'][3]['bottleneck_role'] == 'sink'
     assert summary['components'][3]['incoming_component_count'] == 2
+    assert summary['topology_groups'] == [
+        {
+            'level': 0,
+            'component_count': 1,
+            'component_ids': ['C0'],
+            'components': [
+                {
+                    'id': 'C0',
+                    'size': 2,
+                    'nodes': ['A', 'B'],
+                    'self_loop': False,
+                    'topology_level': 0,
+                    'incoming_component_count': 0,
+                    'outgoing_component_count': 2,
+                    'bottleneck_role': 'source',
+                }
+            ],
+        },
+        {
+            'level': 1,
+            'component_count': 2,
+            'component_ids': ['C1', 'C2'],
+            'components': [
+                {
+                    'id': 'C1',
+                    'size': 2,
+                    'nodes': ['C', 'D'],
+                    'self_loop': False,
+                    'topology_level': 1,
+                    'incoming_component_count': 1,
+                    'outgoing_component_count': 1,
+                    'bottleneck_role': 'bridge',
+                },
+                {
+                    'id': 'C2',
+                    'size': 1,
+                    'nodes': ['E'],
+                    'self_loop': False,
+                    'topology_level': 1,
+                    'incoming_component_count': 1,
+                    'outgoing_component_count': 1,
+                    'bottleneck_role': 'bridge',
+                },
+            ],
+        },
+        {
+            'level': 2,
+            'component_count': 1,
+            'component_ids': ['C3'],
+            'components': [
+                {
+                    'id': 'C3',
+                    'size': 1,
+                    'nodes': ['F'],
+                    'self_loop': False,
+                    'topology_level': 2,
+                    'incoming_component_count': 2,
+                    'outgoing_component_count': 0,
+                    'bottleneck_role': 'sink',
+                }
+            ],
+        },
+    ]
 
 
 def test_cli_scc_outputs_json_summary():
@@ -233,6 +369,9 @@ def test_cli_scc_outputs_json_summary():
     payload = json.loads(result.stdout)
     assert payload['component_count'] == 4
     assert payload['components'][0]['nodes'] == ['A', 'B', 'C']
+    assert payload['topology_groups'][0]['level'] == 0
+    assert payload['topology_groups'][0]['component_ids'] == ['C0']
+    assert payload['topology_groups'][0]['components'][0]['id'] == 'C0'
 
 
 def test_cli_condensation_outputs_component_graph():
@@ -247,6 +386,72 @@ def test_cli_condensation_outputs_component_graph():
         {'from': 'C0', 'to': 'C1'},
         {'from': 'C1', 'to': 'C2'},
         {'from': 'C2', 'to': 'C3'},
+    ]
+    assert payload['topology_groups'] == [
+        {
+            'level': 0,
+            'component_count': 1,
+            'component_ids': ['C0'],
+            'components': [
+                {
+                    'id': 'C0',
+                    'nodes': ['A', 'B', 'C'],
+                    'size': 3,
+                    'topology_level': 0,
+                    'incoming_component_count': 0,
+                    'outgoing_component_count': 1,
+                    'bottleneck_role': 'source',
+                }
+            ],
+        },
+        {
+            'level': 1,
+            'component_count': 1,
+            'component_ids': ['C1'],
+            'components': [
+                {
+                    'id': 'C1',
+                    'nodes': ['D', 'E'],
+                    'size': 2,
+                    'topology_level': 1,
+                    'incoming_component_count': 1,
+                    'outgoing_component_count': 1,
+                    'bottleneck_role': 'bridge',
+                }
+            ],
+        },
+        {
+            'level': 2,
+            'component_count': 1,
+            'component_ids': ['C2'],
+            'components': [
+                {
+                    'id': 'C2',
+                    'nodes': ['F', 'G'],
+                    'size': 2,
+                    'topology_level': 2,
+                    'incoming_component_count': 1,
+                    'outgoing_component_count': 1,
+                    'bottleneck_role': 'bridge',
+                }
+            ],
+        },
+        {
+            'level': 3,
+            'component_count': 1,
+            'component_ids': ['C3'],
+            'components': [
+                {
+                    'id': 'C3',
+                    'nodes': ['H'],
+                    'size': 1,
+                    'topology_level': 3,
+                    'incoming_component_count': 1,
+                    'outgoing_component_count': 0,
+                    'bottleneck_role': 'sink',
+                }
+            ],
+        },
     ]
 
 

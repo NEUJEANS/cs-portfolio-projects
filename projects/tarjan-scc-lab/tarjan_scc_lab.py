@@ -256,23 +256,57 @@ def _bottleneck_role(incoming_count: int, outgoing_count: int) -> str:
 
 
 
+def _component_payloads(
+    summaries: list[dict[str, object]],
+    levels: dict[int, int],
+    incoming: dict[int, int],
+    outgoing: dict[int, int],
+    *,
+    include_self_loop: bool = False,
+) -> list[dict[str, object]]:
+    payloads: list[dict[str, object]] = []
+    for index, summary in enumerate(summaries):
+        component_payload: dict[str, object] = {
+            'id': summary['id'],
+            'nodes': summary['nodes'],
+            'size': summary['size'],
+            'topology_level': levels[index],
+            'incoming_component_count': incoming[index],
+            'outgoing_component_count': outgoing[index],
+            'bottleneck_role': _bottleneck_role(incoming[index], outgoing[index]),
+        }
+        if include_self_loop:
+            component_payload['self_loop'] = summary['self_loop']
+        payloads.append(component_payload)
+    return payloads
+
+
+
+def _topology_groups(component_payloads: list[dict[str, object]]) -> list[dict[str, object]]:
+    groups: dict[int, list[dict[str, object]]] = {}
+    for component in component_payloads:
+        level = int(component['topology_level'])
+        groups.setdefault(level, []).append(dict(component))
+    return [
+        {
+            'level': level,
+            'component_count': len(groups[level]),
+            'component_ids': [component['id'] for component in groups[level]],
+            'components': groups[level],
+        }
+        for level in sorted(groups)
+    ]
+
+
+
 def condensation_dag(graph: DirectedGraph, components: list[list[str]]) -> dict[str, object]:
     summaries, dag_edges = build_component_graph(graph, components)
     levels = compute_component_levels(len(summaries), dag_edges)
     incoming, outgoing = _component_degree_summaries(len(summaries), dag_edges)
+    component_payloads = _component_payloads(summaries, levels, incoming, outgoing)
     return {
-        'components': [
-            {
-                'id': summary['id'],
-                'nodes': summary['nodes'],
-                'size': summary['size'],
-                'topology_level': levels[index],
-                'incoming_component_count': incoming[index],
-                'outgoing_component_count': outgoing[index],
-                'bottleneck_role': _bottleneck_role(incoming[index], outgoing[index]),
-            }
-            for index, summary in enumerate(summaries)
-        ],
+        'components': component_payloads,
+        'topology_groups': _topology_groups(component_payloads),
         'edges': [
             {'from': f'C{src}', 'to': f'C{dst}'}
             for src, dst in dag_edges
@@ -353,6 +387,7 @@ def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> d
     summaries, dag_edges = build_component_graph(graph, components)
     levels = compute_component_levels(len(summaries), dag_edges)
     incoming, outgoing = _component_degree_summaries(len(summaries), dag_edges)
+    component_payloads = _component_payloads(summaries, levels, incoming, outgoing, include_self_loop=True)
     sizes = sorted((summary['size'] for summary in summaries), reverse=True)
     source_components = {index for index, _ in dag_edges}
     sink_components = {index for _, index in dag_edges}
@@ -368,19 +403,8 @@ def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> d
         'sink_component_count': len(components) - len(source_components),
         'condensation_edge_count': len(dag_edges),
         'condensation_level_count': (max(levels.values()) + 1) if levels else 0,
-        'components': [
-            {
-                'id': summary['id'],
-                'size': summary['size'],
-                'nodes': summary['nodes'],
-                'self_loop': summary['self_loop'],
-                'topology_level': levels[index],
-                'incoming_component_count': incoming[index],
-                'outgoing_component_count': outgoing[index],
-                'bottleneck_role': _bottleneck_role(incoming[index], outgoing[index]),
-            }
-            for index, summary in enumerate(summaries)
-        ],
+        'components': component_payloads,
+        'topology_groups': _topology_groups(component_payloads),
     }
 
 
