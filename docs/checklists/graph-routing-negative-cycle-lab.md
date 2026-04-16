@@ -1,0 +1,11 @@
+# graph-routing-negative-cycle-lab Checklist
+
+- [x] do brief research on Bellman-Ford, Johnson's algorithm, and negative-cycle reporting
+- [x] refresh shortest-path concepts with a short self-test note
+- [x] create a new portfolio-worthy graph/routing lab that complements the existing routing projects
+- [x] implement JSON graph loading, Bellman-Ford iteration logging, and reachable negative-cycle reconstruction
+- [x] implement Johnson all-pairs shortest paths for graphs with negative edges but no negative cycles
+- [x] add README usage examples and sample graph fixtures
+- [x] add automated tests for correctness, validation, and CLI output
+- [x] complete at least 3 review passes and fix issues found
+- [x] run repo test suite, secret scan, commit, push, and wrap up the slice

@@ -1,0 +1,10 @@
+{
+  "name": "negative_cycle_demo",
+  "nodes": ["A", "B", "C", "D"],
+  "edges": [
+    {"source": "A", "target": "B", "weight": 3},
+    {"source": "B", "target": "C", "weight": 2},
+    {"source": "C", "target": "A", "weight": -8},
+    {"source": "C", "target": "D", "weight": 4}
+  ]
+}
