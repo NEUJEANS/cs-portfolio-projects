@@ -160,15 +160,87 @@ class MemoryAllocator:
         }
 
 
+def allocation_symbol(allocation_id: str | None) -> str:
+    if not allocation_id:
+        return "#"
+    for character in allocation_id:
+        if character.isalnum():
+            return character.upper()
+    return "#"
+
+
+def render_layout_ascii(layout: list[dict], capacity: int, width: int | None = None) -> str:
+    if capacity <= 0:
+        raise ValueError("capacity must be positive")
+
+    width = width or min(capacity, 64)
+    if width <= 0:
+        raise ValueError("timeline width must be positive")
+
+    if capacity <= width:
+        cells: list[str] = []
+        for segment in layout:
+            symbol = allocation_symbol(segment["allocation_id"]) if segment["allocated"] else "."
+            cells.extend(symbol for _ in range(segment["size"]))
+        return "".join(cells)
+
+    rendered: list[str] = []
+    segment_index = 0
+    for column in range(width):
+        address = min(capacity - 1, (2 * column + 1) * capacity // (2 * width))
+        while segment_index < len(layout) - 1 and address >= layout[segment_index]["end"]:
+            segment_index += 1
+        segment = layout[segment_index]
+        rendered.append(allocation_symbol(segment["allocation_id"]) if segment["allocated"] else ".")
+    return "".join(rendered)
+
+
+def capture_timeline_snapshot(
+    allocator: MemoryAllocator,
+    operation: str,
+    step: int,
+    timeline_width: int | None = None,
+) -> dict:
+    layout = allocator.layout()
+    return {
+        "step": step,
+        "operation": operation,
+        "render": render_layout_ascii(layout, capacity=allocator.capacity, width=timeline_width),
+        "layout": layout,
+        "metrics": allocator.metrics(),
+    }
+
+
+def export_timeline_markdown(timeline: list[dict], capacity: int) -> str:
+    ruler_width = len(timeline[0]["render"]) if timeline else 0
+    ruler = "0" + (" " * max(ruler_width - 2, 0)) + str(capacity)
+    lines = ["# Memory Allocation Timeline", "", f"Capacity: {capacity} bytes", ""]
+    if ruler_width:
+        lines.extend(["```text", ruler, "```", ""])
+    lines.extend(["| Step | Operation | Render | Free bytes | Holes |", "| --- | --- | --- | ---: | ---: |"])
+    for entry in timeline:
+        metrics = entry["metrics"]
+        lines.append(
+            f"| {entry['step']} | `{entry['operation']}` | `{entry['render']}` | {metrics['free_bytes']} | {metrics['hole_count']} |"
+        )
+    return "\n".join(lines)
+
+
 def parse_operation(raw: str) -> tuple[str, list[str]]:
     parts = raw.split(":")
     command = parts[0]
     return command, parts[1:]
 
 
-def run_operations(allocator: MemoryAllocator, operations: Iterable[str]) -> dict:
+def run_operations(
+    allocator: MemoryAllocator,
+    operations: Iterable[str],
+    include_timeline: bool = False,
+    timeline_width: int | None = None,
+) -> dict:
     history = []
-    for raw in operations:
+    timeline = [capture_timeline_snapshot(allocator, operation="initial", step=0, timeline_width=timeline_width)] if include_timeline else []
+    for step, raw in enumerate(operations, start=1):
         command, args = parse_operation(raw)
         if command == "alloc" and len(args) == 2:
             allocation_id, size_text = args
@@ -180,12 +252,18 @@ def run_operations(allocator: MemoryAllocator, operations: Iterable[str]) -> dic
         else:
             raise ValueError(f"invalid operation: {raw}")
         history.append({"operation": raw, "result": result})
+        if include_timeline:
+            timeline.append(capture_timeline_snapshot(allocator, operation=raw, step=step, timeline_width=timeline_width))
 
-    return {
+    payload = {
         "history": history,
         "metrics": allocator.metrics(),
         "layout": allocator.layout(),
     }
+    if include_timeline:
+        payload["timeline"] = timeline
+        payload["timeline_markdown"] = export_timeline_markdown(timeline, capacity=allocator.capacity)
+    return payload
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -203,14 +281,33 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Operation: alloc:ID:SIZE, free:ID, compact",
     )
+    parser.add_argument(
+        "--timeline",
+        action="store_true",
+        help="Include per-step timeline snapshots and a Markdown timeline export",
+    )
+    parser.add_argument(
+        "--timeline-width",
+        type=int,
+        default=32,
+        help="Rendered timeline width in characters (default: 32)",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
     return parser
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.timeline_width <= 0:
+        parser.error("--timeline-width must be positive")
     allocator = MemoryAllocator(capacity=args.capacity, strategy=args.strategy)
-    result = run_operations(allocator, args.op)
+    result = run_operations(
+        allocator,
+        args.op,
+        include_timeline=args.timeline,
+        timeline_width=args.timeline_width,
+    )
     if args.pretty:
         print(json.dumps(result, indent=2))
     else:

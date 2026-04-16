@@ -13,6 +13,7 @@ A Python CLI that simulates contiguous memory allocation with **first-fit**, **b
 - free blocks and automatically merge adjacent holes
 - compact active allocations to eliminate external fragmentation
 - inspect memory layout and metrics as JSON
+- export per-step workload timelines as ASCII snapshots plus Markdown-ready summaries
 - script repeatable workloads from the command line
 
 ## Quick start
@@ -26,6 +27,8 @@ python3 memory_allocator.py \
   --op free:B \
   --op alloc:D:5 \
   --op compact \
+  --timeline \
+  --timeline-width 32 \
   --pretty
 ```
 
@@ -41,9 +44,28 @@ python3 memory_allocator.py \
     "hole_count": 1,
     "largest_free_block": 15,
     "external_fragmentation": 0
-  }
+  },
+  "timeline": [
+    {
+      "step": 0,
+      "operation": "initial",
+      "render": "................................"
+    },
+    {
+      "step": 5,
+      "operation": "alloc:D:5",
+      "render": "AAAAAAAADDDDDCCCC..............."
+    }
+  ]
 }
 ```
+
+## Timeline export
+Use `--timeline` to capture a snapshot after every operation. The JSON payload includes:
+- `timeline`: per-step renders, layouts, and metrics for animation or inspection
+- `timeline_markdown`: a Markdown table you can paste into notes, lab reports, or portfolio write-ups
+
+The ASCII render uses `.` for free space and the first alphanumeric character of each allocation ID for occupied bytes (scaled down automatically for larger capacities).
 
 ## Allocation strategies
 - **first-fit**: choose the first hole large enough for the request

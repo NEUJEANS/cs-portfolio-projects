@@ -9,4 +9,5 @@
 - [x] add CLI workflow for scripted operation sequences
 - [x] add tests covering strategies, free/merge, compaction, and failure cases
 - [x] complete three review passes and fix issues
-- [ ] add workload visualization or timeline export in a future slice
+- [x] add workload visualization and Markdown-ready timeline export
+- [ ] consider internal-fragmentation or alignment-aware simulation in a future slice
