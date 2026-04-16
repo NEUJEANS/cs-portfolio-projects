@@ -148,24 +148,31 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(inspection.mapper_doc_summary, "Emit per-student sum/count records from comma-separated score lines.")
         self.assertIsInstance(inspection.mapper_source_line, int)
         self.assertEqual(inspection.mapper_source_anchor, "plugins_average_score.py#L7-L13")
+        self.assertEqual(
+            inspection.mapper_source_url,
+            "https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
+        )
         self.assertIn('def map_records(lines):', inspection.mapper_source_excerpt)
         self.assertTrue(inspection.reducer.endswith(".reduce_key"))
         self.assertEqual(inspection.reducer_signature, "reduce_key(_key, values)")
         self.assertEqual(inspection.reducer_doc_summary, "Return a rounded average score for one student key.")
         self.assertIsInstance(inspection.reducer_source_line, int)
         self.assertTrue(inspection.reducer_source_anchor and '#L' in inspection.reducer_source_anchor)
+        self.assertTrue(inspection.reducer_source_url and inspection.reducer_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
         self.assertIn('def reduce_key(_key, values):', inspection.reducer_source_excerpt)
         self.assertTrue(inspection.combiner and inspection.combiner.endswith(".combine_values"))
         self.assertEqual(inspection.combiner_signature, "combine_values(_key, values)")
         self.assertEqual(inspection.combiner_doc_summary, "Merge shard-local sum/count objects before the final reduce step.")
         self.assertIsInstance(inspection.combiner_source_line, int)
         self.assertTrue(inspection.combiner_source_anchor and '#L' in inspection.combiner_source_anchor)
+        self.assertTrue(inspection.combiner_source_url and inspection.combiner_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
         self.assertIn('def combine_values(_key, values):', inspection.combiner_source_excerpt)
         self.assertTrue(inspection.benchmark_generator and inspection.benchmark_generator.endswith(".benchmark_records"))
         self.assertEqual(inspection.benchmark_generator_signature, "benchmark_records(scenario, records, seed, dataset_family='default')")
         self.assertEqual(inspection.benchmark_generator_doc_summary, "Generate deterministic cohort score fixtures for benchmark scenarios.")
         self.assertIsInstance(inspection.benchmark_generator_source_line, int)
         self.assertTrue(inspection.benchmark_generator_source_anchor and '#L' in inspection.benchmark_generator_source_anchor)
+        self.assertTrue(inspection.benchmark_generator_source_url and inspection.benchmark_generator_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
         self.assertIn('def benchmark_records(', inspection.benchmark_generator_source_excerpt)
 
 
@@ -179,7 +186,7 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual([item.name for item in batch.plugins], ["plugin-average-score", "plugin-max-score"])
 
         csv_lines = batch.to_csv().strip().splitlines()
-        self.assertEqual(csv_lines[0], "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,available_dataset_families")
+        self.assertEqual(csv_lines[0], "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,available_dataset_families")
         self.assertEqual(len(csv_lines), 3)
         self.assertIn("plugin-average-score", csv_lines[1])
         self.assertIn("plugin-max-score", csv_lines[2])
@@ -221,6 +228,8 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("line " , markdown)
         self.assertIn("## Hook source excerpts", markdown)
         self.assertIn("Source anchor:", markdown)
+        self.assertIn("GitHub source:", markdown)
+        self.assertIn("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13", markdown)
         self.assertIn("def map_records(lines):", markdown)
         self.assertIn("`available_dataset_families`", markdown)
 
@@ -232,6 +241,8 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("line ", html_output)
         self.assertIn("Hook source excerpts:", html_output)
         self.assertIn("Source anchor:", html_output)
+        self.assertIn("GitHub source:", html_output)
+        self.assertIn("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13", html_output)
         self.assertIn("def map_records(lines):", html_output)
         self.assertIn("available_dataset_families", html_output)
 

@@ -167,7 +167,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output plugin-benchmark-report.html
 ```
 
-Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, concise hook doc summaries, source line numbers, file anchors, source excerpts, and benchmark families it exports:
+Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, concise hook doc summaries, source line numbers, file anchors, branch-aware GitHub blob links, source excerpts, and benchmark families it exports:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
@@ -203,7 +203,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --output plugin-diff.json
 ```
 
-Write publishable Markdown and HTML inspection artifacts from the same diff-aware batch so plugin contract changes, file anchors, and source excerpts can land directly in docs or GitHub Pages:
+Write publishable Markdown and HTML inspection artifacts from the same diff-aware batch so plugin contract changes, file anchors, GitHub blob links, and source excerpts can land directly in docs or GitHub Pages:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \

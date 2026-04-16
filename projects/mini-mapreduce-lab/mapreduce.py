@@ -12,6 +12,7 @@ import importlib.util
 import inspect
 import json
 import random
+import subprocess
 import statistics
 import tempfile
 import time
@@ -39,21 +40,25 @@ PLUGIN_INSPECTION_FIELDNAMES = [
     "mapper_doc_summary",
     "mapper_source_line",
     "mapper_source_anchor",
+    "mapper_source_url",
     "reducer",
     "reducer_signature",
     "reducer_doc_summary",
     "reducer_source_line",
     "reducer_source_anchor",
+    "reducer_source_url",
     "combiner",
     "combiner_signature",
     "combiner_doc_summary",
     "combiner_source_line",
     "combiner_source_anchor",
+    "combiner_source_url",
     "benchmark_generator",
     "benchmark_generator_signature",
     "benchmark_generator_doc_summary",
     "benchmark_generator_source_line",
     "benchmark_generator_source_anchor",
+    "benchmark_generator_source_url",
     "available_dataset_families",
 ]
 
@@ -66,24 +71,28 @@ PLUGIN_INSPECTION_DIFF_FIELDS = [
     "mapper_doc_summary",
     "mapper_source_line",
     "mapper_source_anchor",
+    "mapper_source_url",
     "mapper_source_excerpt",
     "reducer",
     "reducer_signature",
     "reducer_doc_summary",
     "reducer_source_line",
     "reducer_source_anchor",
+    "reducer_source_url",
     "reducer_source_excerpt",
     "combiner",
     "combiner_signature",
     "combiner_doc_summary",
     "combiner_source_line",
     "combiner_source_anchor",
+    "combiner_source_url",
     "combiner_source_excerpt",
     "benchmark_generator",
     "benchmark_generator_signature",
     "benchmark_generator_doc_summary",
     "benchmark_generator_source_line",
     "benchmark_generator_source_anchor",
+    "benchmark_generator_source_url",
     "benchmark_generator_source_excerpt",
     "available_dataset_families",
 ]
@@ -99,24 +108,28 @@ class PluginInspection:
     mapper_doc_summary: str | None
     mapper_source_line: int | None
     mapper_source_anchor: str | None
+    mapper_source_url: str | None
     mapper_source_excerpt: str | None
     reducer: str
     reducer_signature: str | None
     reducer_doc_summary: str | None
     reducer_source_line: int | None
     reducer_source_anchor: str | None
+    reducer_source_url: str | None
     reducer_source_excerpt: str | None
     combiner: str | None
     combiner_signature: str | None
     combiner_doc_summary: str | None
     combiner_source_line: int | None
     combiner_source_anchor: str | None
+    combiner_source_url: str | None
     combiner_source_excerpt: str | None
     benchmark_generator: str | None
     benchmark_generator_signature: str | None
     benchmark_generator_doc_summary: str | None
     benchmark_generator_source_line: int | None
     benchmark_generator_source_anchor: str | None
+    benchmark_generator_source_url: str | None
     benchmark_generator_source_excerpt: str | None
     available_dataset_families: list[str] | None
 
@@ -130,24 +143,28 @@ class PluginInspection:
             "mapper_doc_summary": self.mapper_doc_summary,
             "mapper_source_line": self.mapper_source_line,
             "mapper_source_anchor": self.mapper_source_anchor,
+            "mapper_source_url": self.mapper_source_url,
             "mapper_source_excerpt": self.mapper_source_excerpt,
             "reducer": self.reducer,
             "reducer_signature": self.reducer_signature,
             "reducer_doc_summary": self.reducer_doc_summary,
             "reducer_source_line": self.reducer_source_line,
             "reducer_source_anchor": self.reducer_source_anchor,
+            "reducer_source_url": self.reducer_source_url,
             "reducer_source_excerpt": self.reducer_source_excerpt,
             "combiner": self.combiner,
             "combiner_signature": self.combiner_signature,
             "combiner_doc_summary": self.combiner_doc_summary,
             "combiner_source_line": self.combiner_source_line,
             "combiner_source_anchor": self.combiner_source_anchor,
+            "combiner_source_url": self.combiner_source_url,
             "combiner_source_excerpt": self.combiner_source_excerpt,
             "benchmark_generator": self.benchmark_generator,
             "benchmark_generator_signature": self.benchmark_generator_signature,
             "benchmark_generator_doc_summary": self.benchmark_generator_doc_summary,
             "benchmark_generator_source_line": self.benchmark_generator_source_line,
             "benchmark_generator_source_anchor": self.benchmark_generator_source_anchor,
+            "benchmark_generator_source_url": self.benchmark_generator_source_url,
             "benchmark_generator_source_excerpt": self.benchmark_generator_source_excerpt,
             "available_dataset_families": self.available_dataset_families,
         }
@@ -221,6 +238,8 @@ class PluginInspectionBatch:
                 mapper_meta.append(f"line {plugin.mapper_source_line}")
             if plugin.mapper_source_anchor:
                 mapper_meta.append(plugin.mapper_source_anchor)
+            if plugin.mapper_source_url:
+                mapper_meta.append(f"[github]({plugin.mapper_source_url})")
             if plugin.mapper_doc_summary:
                 mapper_meta.append(plugin.mapper_doc_summary)
             mapper_cell = f"`{plugin.mapper}`<br><small>{'<br>'.join(mapper_meta)}</small>"
@@ -229,6 +248,8 @@ class PluginInspectionBatch:
                 reducer_meta.append(f"line {plugin.reducer_source_line}")
             if plugin.reducer_source_anchor:
                 reducer_meta.append(plugin.reducer_source_anchor)
+            if plugin.reducer_source_url:
+                reducer_meta.append(f"[github]({plugin.reducer_source_url})")
             if plugin.reducer_doc_summary:
                 reducer_meta.append(plugin.reducer_doc_summary)
             reducer_cell = f"`{plugin.reducer}`<br><small>{'<br>'.join(reducer_meta)}</small>"
@@ -240,6 +261,8 @@ class PluginInspectionBatch:
                     combiner_meta.append(f"line {plugin.combiner_source_line}")
                 if plugin.combiner_source_anchor:
                     combiner_meta.append(plugin.combiner_source_anchor)
+                if plugin.combiner_source_url:
+                    combiner_meta.append(f"[github]({plugin.combiner_source_url})")
                 if plugin.combiner_doc_summary:
                     combiner_meta.append(plugin.combiner_doc_summary)
                 combiner_cell = f"`{combiner_name}`<br><small>{'<br>'.join(combiner_meta)}</small>"
@@ -251,6 +274,8 @@ class PluginInspectionBatch:
                     benchmark_meta.append(f"line {plugin.benchmark_generator_source_line}")
                 if plugin.benchmark_generator_source_anchor:
                     benchmark_meta.append(plugin.benchmark_generator_source_anchor)
+                if plugin.benchmark_generator_source_url:
+                    benchmark_meta.append(f"[github]({plugin.benchmark_generator_source_url})")
                 if plugin.benchmark_generator_doc_summary:
                     benchmark_meta.append(plugin.benchmark_generator_doc_summary)
                 benchmark_cell = f"`{benchmark_name}`<br><small>{'<br>'.join(benchmark_meta)}</small>"
@@ -262,17 +287,19 @@ class PluginInspectionBatch:
             lines.append(f"### `{plugin.name}`")
             lines.append("")
             hook_sections = [
-                ("Mapper", plugin.mapper, plugin.mapper_source_anchor, plugin.mapper_source_excerpt),
-                ("Reducer", plugin.reducer, plugin.reducer_source_anchor, plugin.reducer_source_excerpt),
-                ("Combiner", plugin.combiner, plugin.combiner_source_anchor, plugin.combiner_source_excerpt),
-                ("Benchmark generator", plugin.benchmark_generator, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_excerpt),
+                ("Mapper", plugin.mapper, plugin.mapper_source_anchor, plugin.mapper_source_url, plugin.mapper_source_excerpt),
+                ("Reducer", plugin.reducer, plugin.reducer_source_anchor, plugin.reducer_source_url, plugin.reducer_source_excerpt),
+                ("Combiner", plugin.combiner, plugin.combiner_source_anchor, plugin.combiner_source_url, plugin.combiner_source_excerpt),
+                ("Benchmark generator", plugin.benchmark_generator, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_url, plugin.benchmark_generator_source_excerpt),
             ]
-            for label, hook_name, source_anchor, excerpt in hook_sections:
+            for label, hook_name, source_anchor, source_url, excerpt in hook_sections:
                 if not hook_name or not excerpt:
                     continue
                 lines.append(f"#### {label}: `{hook_name}`")
                 if source_anchor:
                     lines.append(f"- Source anchor: `{source_anchor}`")
+                if source_url:
+                    lines.append(f"- GitHub source: <{source_url}>")
                 lines.extend(["", "```python", excerpt, "```", ""])
         if self.diffs:
             lines.extend(["", "## Adjacent diffs", ""])
@@ -306,10 +333,10 @@ class PluginInspectionBatch:
                 f"<td><code>{esc(plugin.name)}</code></td>"
                 f"<td><code>{esc(plugin.plugin)}</code></td>"
                 f"<td>{esc(plugin.module_doc_summary or '-')}</td>"
-                f"<td>{_render_hook_html(plugin.mapper, plugin.mapper_signature, plugin.mapper_doc_summary, plugin.mapper_source_line, plugin.mapper_source_anchor)}</td>"
-                f"<td>{_render_hook_html(plugin.reducer, plugin.reducer_signature, plugin.reducer_doc_summary, plugin.reducer_source_line, plugin.reducer_source_anchor)}</td>"
-                f"<td>{_render_hook_html(plugin.combiner, plugin.combiner_signature, plugin.combiner_doc_summary, plugin.combiner_source_line, plugin.combiner_source_anchor)}</td>"
-                f"<td>{_render_hook_html(plugin.benchmark_generator, plugin.benchmark_generator_signature, plugin.benchmark_generator_doc_summary, plugin.benchmark_generator_source_line, plugin.benchmark_generator_source_anchor)}</td>"
+                f"<td>{_render_hook_html(plugin.mapper, plugin.mapper_signature, plugin.mapper_doc_summary, plugin.mapper_source_line, plugin.mapper_source_anchor, plugin.mapper_source_url)}</td>"
+                f"<td>{_render_hook_html(plugin.reducer, plugin.reducer_signature, plugin.reducer_doc_summary, plugin.reducer_source_line, plugin.reducer_source_anchor, plugin.reducer_source_url)}</td>"
+                f"<td>{_render_hook_html(plugin.combiner, plugin.combiner_signature, plugin.combiner_doc_summary, plugin.combiner_source_line, plugin.combiner_source_anchor, plugin.combiner_source_url)}</td>"
+                f"<td>{_render_hook_html(plugin.benchmark_generator, plugin.benchmark_generator_signature, plugin.benchmark_generator_doc_summary, plugin.benchmark_generator_source_line, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_url)}</td>"
                 f"<td><code>{esc(dataset_families)}</code></td>"
                 "</tr>"
             )
@@ -317,17 +344,22 @@ class PluginInspectionBatch:
         source_sections = []
         for plugin in self.plugins:
             hook_blocks = []
-            for label, hook_name, source_anchor, excerpt in [
-                ("Mapper", plugin.mapper, plugin.mapper_source_anchor, plugin.mapper_source_excerpt),
-                ("Reducer", plugin.reducer, plugin.reducer_source_anchor, plugin.reducer_source_excerpt),
-                ("Combiner", plugin.combiner, plugin.combiner_source_anchor, plugin.combiner_source_excerpt),
-                ("Benchmark generator", plugin.benchmark_generator, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_excerpt),
+            for label, hook_name, source_anchor, source_url, excerpt in [
+                ("Mapper", plugin.mapper, plugin.mapper_source_anchor, plugin.mapper_source_url, plugin.mapper_source_excerpt),
+                ("Reducer", plugin.reducer, plugin.reducer_source_anchor, plugin.reducer_source_url, plugin.reducer_source_excerpt),
+                ("Combiner", plugin.combiner, plugin.combiner_source_anchor, plugin.combiner_source_url, plugin.combiner_source_excerpt),
+                ("Benchmark generator", plugin.benchmark_generator, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_url, plugin.benchmark_generator_source_excerpt),
             ]:
                 if not hook_name or not excerpt:
                     continue
                 anchor_html = f"<p><strong>Source anchor:</strong> <code>{esc(source_anchor)}</code></p>" if source_anchor else ""
+                source_url_html = (
+                    f"<p><strong>GitHub source:</strong> <a href=\"{esc(source_url)}\">{esc(source_url)}</a></p>"
+                    if source_url
+                    else ""
+                )
                 hook_blocks.append(
-                    f"<article><h3>{esc(label)}: <code>{esc(hook_name)}</code></h3>{anchor_html}<pre><code>{esc(excerpt)}</code></pre></article>"
+                    f"<article><h3>{esc(label)}: <code>{esc(hook_name)}</code></h3>{anchor_html}{source_url_html}<pre><code>{esc(excerpt)}</code></pre></article>"
                 )
             source_sections.append(f"<section><h2>Hook source excerpts: <code>{esc(plugin.name)}</code></h2>{''.join(hook_blocks)}</section>")
 
@@ -1000,7 +1032,7 @@ def _callable_source_line(fn: Callable[..., Any] | None) -> int | None:
     return line_number
 
 
-def _callable_source_anchor(fn: Callable[..., Any] | None) -> str | None:
+def _callable_source_span(fn: Callable[..., Any] | None) -> tuple[Path, int, int] | None:
     source = _callable_source_lines(fn)
     if source is None:
         return None
@@ -1009,7 +1041,66 @@ def _callable_source_anchor(fn: Callable[..., Any] | None) -> str | None:
     if not source_file:
         return None
     end_line = start_line + len(lines) - 1
-    return f"{Path(source_file).name}#L{start_line}-L{end_line}"
+    return Path(source_file), start_line, end_line
+
+
+def _callable_source_anchor(fn: Callable[..., Any] | None) -> str | None:
+    span = _callable_source_span(fn)
+    if span is None:
+        return None
+    source_file, start_line, end_line = span
+    return f"{source_file.name}#L{start_line}-L{end_line}"
+
+
+def _github_repo_blob_base(start_path: Path) -> tuple[str, Path] | None:
+    for candidate in [start_path, *start_path.parents]:
+        if not candidate.exists():
+            continue
+        repo_dir = candidate if candidate.is_dir() else candidate.parent
+        try:
+            root = subprocess.check_output(
+                ["git", "-C", str(repo_dir), "rev-parse", "--show-toplevel"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+            remote = subprocess.check_output(
+                ["git", "-C", root, "config", "--get", "remote.origin.url"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+            branch = subprocess.check_output(
+                ["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+        if remote.startswith("git@github.com:"):
+            remote = "https://github.com/" + remote.removeprefix("git@github.com:")
+        elif remote.startswith("ssh://git@github.com/"):
+            remote = "https://github.com/" + remote.removeprefix("ssh://git@github.com/")
+        if remote.endswith('.git'):
+            remote = remote[:-4]
+        if not remote.startswith("https://github.com/"):
+            return None
+        return f"{remote}/blob/{branch}", Path(root)
+    return None
+
+
+def _callable_source_url(fn: Callable[..., Any] | None) -> str | None:
+    span = _callable_source_span(fn)
+    if span is None:
+        return None
+    source_file, start_line, end_line = span
+    repo = _github_repo_blob_base(source_file)
+    if repo is None:
+        return None
+    blob_base, root = repo
+    try:
+        relative_path = source_file.resolve().relative_to(root.resolve())
+    except ValueError:
+        return None
+    return f"{blob_base}/{relative_path.as_posix()}#L{start_line}-L{end_line}"
 
 
 def _callable_source_excerpt(fn: Callable[..., Any] | None) -> str | None:
@@ -1020,7 +1111,7 @@ def _callable_source_excerpt(fn: Callable[..., Any] | None) -> str | None:
     return "".join(f"{line.rstrip()}\n" for line in lines).rstrip() or None
 
 
-def _render_hook_html(name: str | None, signature: str | None, doc_summary: str | None, source_line: int | None, source_anchor: str | None = None) -> str:
+def _render_hook_html(name: str | None, signature: str | None, doc_summary: str | None, source_line: int | None, source_anchor: str | None = None, source_url: str | None = None) -> str:
     def esc(value: object) -> str:
         return html.escape(str(value), quote=True)
 
@@ -1031,6 +1122,8 @@ def _render_hook_html(name: str | None, signature: str | None, doc_summary: str 
         meta.append(f"line {esc(source_line)}")
     if source_anchor:
         meta.append(f"anchor <code>{esc(source_anchor)}</code>")
+    if source_url:
+        meta.append(f'<a href="{esc(source_url)}">github</a>')
     if doc_summary:
         meta.append(esc(doc_summary))
     return f"<code>{esc(name)}</code><br><small>{'<br>'.join(meta)}</small>"
@@ -1060,24 +1153,28 @@ def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
         mapper_doc_summary=_doc_summary(plugin.mapper),
         mapper_source_line=_callable_source_line(plugin.mapper),
         mapper_source_anchor=_callable_source_anchor(plugin.mapper),
+        mapper_source_url=_callable_source_url(plugin.mapper),
         mapper_source_excerpt=_callable_source_excerpt(plugin.mapper),
         reducer=_callable_name(plugin.reducer) or "<unknown>",
         reducer_signature=_callable_signature(plugin.reducer),
         reducer_doc_summary=_doc_summary(plugin.reducer),
         reducer_source_line=_callable_source_line(plugin.reducer),
         reducer_source_anchor=_callable_source_anchor(plugin.reducer),
+        reducer_source_url=_callable_source_url(plugin.reducer),
         reducer_source_excerpt=_callable_source_excerpt(plugin.reducer),
         combiner=_callable_name(plugin.combiner),
         combiner_signature=_callable_signature(plugin.combiner),
         combiner_doc_summary=_doc_summary(plugin.combiner),
         combiner_source_line=_callable_source_line(plugin.combiner),
         combiner_source_anchor=_callable_source_anchor(plugin.combiner),
+        combiner_source_url=_callable_source_url(plugin.combiner),
         combiner_source_excerpt=_callable_source_excerpt(plugin.combiner),
         benchmark_generator=_callable_name(plugin.benchmark_generator),
         benchmark_generator_signature=_callable_signature(plugin.benchmark_generator),
         benchmark_generator_doc_summary=_doc_summary(plugin.benchmark_generator),
         benchmark_generator_source_line=_callable_source_line(plugin.benchmark_generator),
         benchmark_generator_source_anchor=_callable_source_anchor(plugin.benchmark_generator),
+        benchmark_generator_source_url=_callable_source_url(plugin.benchmark_generator),
         benchmark_generator_source_excerpt=_callable_source_excerpt(plugin.benchmark_generator),
         available_dataset_families=list(plugin.dataset_families) if plugin.dataset_families else None,
     )
