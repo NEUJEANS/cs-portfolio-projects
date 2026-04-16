@@ -16,7 +16,7 @@
   - `docs/reviews/2026-04-16-red-black-tree-benchmark-series-review-pass-3.md`
 
 ## Commit
-- `5689dd1` — Add red-black benchmark series sweep
+- `e98d346` — Add red-black benchmark series sweep
 
 ## Next step
 - turn the benchmark-series CSV into a checked-in chart or SVG so the README can show the AVL-vs-red-black trend visually instead of only shipping raw data
