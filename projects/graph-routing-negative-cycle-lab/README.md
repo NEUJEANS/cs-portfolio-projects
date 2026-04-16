@@ -16,6 +16,7 @@ A Python graph-routing lab that demonstrates Bellman-Ford single-source shortest
 - detect and reconstruct a reachable negative cycle
 - run Johnson's algorithm and emit all-pairs shortest-path routes
 - provide pretty or JSON CLI output for READMEs and automation
+- export Mermaid flowchart artifacts that highlight Bellman-Ford shortest-path trees and reachable negative cycles
 
 ## Usage
 ```bash
@@ -24,6 +25,7 @@ python3 graph_routing_lab.py sample_graph.json --source A
 python3 graph_routing_lab.py sample_graph.json --source A --format json
 python3 graph_routing_lab.py sample_graph.json --mode johnson --format json
 python3 graph_routing_lab.py negative_cycle_graph.json --source A --mode bellman-ford
+python3 graph_routing_lab.py sample_graph.json --source A --mode bellman-ford --export-mermaid ../../docs/artifacts/graph-routing-negative-cycle-sample.mmd
 pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
 ```
 
@@ -49,6 +51,6 @@ pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
 - input validation for duplicate nodes and invalid edge endpoints
 
 ## Future improvements
-- export Mermaid or DOT diagrams for graph and path visualizations
+- add DOT export alongside Mermaid for Graphviz-native workflows
 - compare Bellman-Ford vs DAG shortest-path performance on acyclic graphs
 - add unreachable-node examples and path explanation markdown artifacts

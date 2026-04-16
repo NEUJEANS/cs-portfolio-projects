@@ -293,6 +293,101 @@ def render_pretty(report: RoutingReport) -> str:
     return "\n".join(lines)
 
 
+def _sanitize_identifier(value: str) -> str:
+    return "".join(character if character.isalnum() else "_" for character in value)
+
+
+def _format_cost(value: float) -> str:
+    if value == INF:
+        return "∞"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _path_edges(path: tuple[str, ...]) -> set[tuple[str, str]]:
+    return {(path[index], path[index + 1]) for index in range(len(path) - 1)}
+
+
+def _cycle_edges(cycle: tuple[str, ...]) -> set[tuple[str, str]]:
+    return {(cycle[index], cycle[index + 1]) for index in range(len(cycle) - 1)}
+
+
+def export_mermaid(report: RoutingReport, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    highlighted_path_edges: set[tuple[str, str]] = set()
+    shortest_path_nodes: set[str] = set()
+    negative_cycle_edges: set[tuple[str, str]] = set()
+    negative_cycle_nodes: set[str] = set()
+
+    if report.bellman_ford:
+        for node, result in build_shortest_path_results(report.bellman_ford).items():
+            shortest_path_nodes.update(result.path)
+            highlighted_path_edges.update(_path_edges(result.path))
+        if report.bellman_ford.negative_cycle:
+            negative_cycle_nodes.update(report.bellman_ford.negative_cycle)
+            negative_cycle_edges.update(_cycle_edges(report.bellman_ford.negative_cycle))
+
+    lines = [f"%% {report.graph_name}", "flowchart LR"]
+    for node in report.nodes:
+        identifier = _sanitize_identifier(node)
+        suffix = []
+        if report.bellman_ford:
+            distance = report.bellman_ford.distances[node]
+            suffix.append(f"dist={_format_cost(distance)}")
+        lines.append(f'    {identifier}["{node}' + (f' | {", ".join(suffix)}' if suffix else "") + '"]')
+
+    for edge in report.edges:
+        source_id = _sanitize_identifier(edge.source)
+        target_id = _sanitize_identifier(edge.target)
+        edge_key = (edge.source, edge.target)
+        if edge_key in negative_cycle_edges:
+            arrow = f' ==>|"{edge.weight}"| '
+        elif edge_key in highlighted_path_edges:
+            arrow = f' -->|"{edge.weight}"| '
+        else:
+            arrow = f' -.->|"{edge.weight}"| '
+        lines.append(f"    {source_id}{arrow}{target_id}")
+
+    lines.append("")
+    lines.append("    classDef default fill:#f8fafc,stroke:#475569,color:#0f172a;")
+    lines.append("    classDef shortest fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;")
+    lines.append("    classDef cycle fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:3px;")
+
+    if shortest_path_nodes:
+        lines.append("    class " + ",".join(_sanitize_identifier(node) for node in sorted(shortest_path_nodes)) + " shortest;")
+    if negative_cycle_nodes:
+        lines.append("    class " + ",".join(_sanitize_identifier(node) for node in sorted(negative_cycle_nodes)) + " cycle;")
+    if report.bellman_ford and report.bellman_ford.negative_cycle:
+        lines.append(
+            "    %% negative cycle: " + " -> ".join(report.bellman_ford.negative_cycle)
+        )
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return output
+
+
+def build_shortest_path_results(result: BellmanFordResult) -> dict[str, PathResult]:
+    paths: dict[str, PathResult] = {}
+    for node, distance in result.distances.items():
+        if distance == INF:
+            path: tuple[str, ...] = tuple()
+        else:
+            chain: list[str] = []
+            current: str | None = node
+            seen: set[str] = set()
+            while current is not None and current not in seen:
+                chain.append(current)
+                seen.add(current)
+                current = result.predecessors[current]
+            path = tuple(reversed(chain))
+            if path and path[0] != result.source:
+                path = (result.source,) if node == result.source else tuple()
+        paths[node] = PathResult(source=result.source, target=node, cost=distance, path=path)
+    return paths
+
+
 def build_report(
     graph_name: str,
     nodes: Iterable[str],
@@ -325,6 +420,7 @@ def parse_args() -> argparse.Namespace:
         help="Which analysis to run",
     )
     parser.add_argument("--format", choices=("json", "pretty"), default="pretty")
+    parser.add_argument("--export-mermaid", help="Write a Mermaid flowchart artifact for the selected report")
     return parser.parse_args()
 
 
@@ -332,6 +428,8 @@ def main() -> None:
     args = parse_args()
     graph_name, nodes, edges = load_graph(args.graph)
     report = build_report(graph_name, nodes, edges, source=args.source, mode=args.mode)
+    if args.export_mermaid:
+        export_mermaid(report, args.export_mermaid)
     if args.format == "json":
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return

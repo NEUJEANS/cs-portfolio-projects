@@ -1,0 +1,17 @@
+%% routing_demo
+flowchart LR
+    A["A | dist=0"]
+    B["B | dist=1"]
+    C["C | dist=2"]
+    D["D | dist=3"]
+    A -.->|"4"| B
+    A -->|"2"| C
+    C -->|"-1"| B
+    B -->|"2"| D
+    C -.->|"5"| D
+    D -.->|"1"| A
+
+    classDef default fill:#f8fafc,stroke:#475569,color:#0f172a;
+    classDef shortest fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+    classDef cycle fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:3px;
+    class A,B,C,D shortest;

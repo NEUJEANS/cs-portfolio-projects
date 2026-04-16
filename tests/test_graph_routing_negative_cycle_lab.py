@@ -19,9 +19,10 @@ assert spec is not None and spec.loader is not None
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
-Edge = module.Edge
 bellman_ford = module.bellman_ford
 build_report = module.build_report
+build_shortest_path_results = module.build_shortest_path_results
+export_mermaid = module.export_mermaid
 johnson = module.johnson
 load_graph = module.load_graph
 render_pretty = module.render_pretty
@@ -39,6 +40,14 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         self.assertEqual(result.predecessors["B"], "C")
         self.assertEqual(result.predecessors["D"], "B")
         self.assertTrue(result.iterations)
+
+    def test_bellman_ford_shortest_path_reconstruction(self) -> None:
+        _, nodes, edges = load_graph(SAMPLE_PATH)
+        result = bellman_ford(nodes, edges, "A")
+        paths = build_shortest_path_results(result)
+        self.assertEqual(paths["A"].path, ("A",))
+        self.assertEqual(paths["D"].path, ("A", "C", "B", "D"))
+        self.assertEqual(paths["D"].cost, 3)
 
     def test_bellman_ford_detects_reachable_negative_cycle(self) -> None:
         _, nodes, edges = load_graph(NEGATIVE_PATH)
@@ -88,10 +97,30 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         self.assertIn("Bellman-Ford from A", output)
         self.assertIn("Iterations logged:", output)
 
+    def test_export_mermaid_writes_shortest_path_and_cycle_styles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "routing.mmd"
+
+            graph_name, nodes, edges = load_graph(SAMPLE_PATH)
+            report = build_report(graph_name, nodes, edges, source="A", mode="bellman-ford")
+            export_mermaid(report, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn("flowchart LR", rendered)
+            self.assertIn('A["A | dist=0"]', rendered)
+            self.assertIn('C -->|"-1"| B', rendered)
+            self.assertIn("class A,B,C,D shortest;", rendered)
+
+            negative_report = build_report(*load_graph(NEGATIVE_PATH), source="A", mode="bellman-ford")
+            export_mermaid(negative_report, output_path)
+            rendered_negative = output_path.read_text(encoding="utf-8")
+            self.assertIn("class A,B,C cycle;", rendered_negative)
+            self.assertIn("%% negative cycle:", rendered_negative)
+            self.assertIn('A ==>|"3"| B', rendered_negative)
+
     def test_cli_json_mode_emits_johnson_payload(self) -> None:
         completed = subprocess.run(
             [
-                "python3",
+                str(PROJECT_ROOT / ".venv" / "bin" / "python"),
                 str(MODULE_PATH),
                 str(SAMPLE_PATH),
                 "--source",
@@ -112,7 +141,7 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
     def test_cli_pretty_mode_supports_johnson_only(self) -> None:
         completed = subprocess.run(
             [
-                "python3",
+                str(PROJECT_ROOT / ".venv" / "bin" / "python"),
                 str(MODULE_PATH),
                 str(SAMPLE_PATH),
                 "--mode",
@@ -127,6 +156,30 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         )
         self.assertIn("Johnson all-pairs shortest paths", completed.stdout)
         self.assertIn("[A]", completed.stdout)
+
+    def test_cli_can_export_mermaid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "cli-routing.mmd"
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    str(SAMPLE_PATH),
+                    "--source",
+                    "A",
+                    "--mode",
+                    "bellman-ford",
+                    "--export-mermaid",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("Bellman-Ford from A", completed.stdout)
+            self.assertTrue(output_path.exists())
+            self.assertIn("shortest", output_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

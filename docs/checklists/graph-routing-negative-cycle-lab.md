@@ -9,3 +9,4 @@
 - [x] add automated tests for correctness, validation, and CLI output
 - [x] complete at least 3 review passes and fix issues found
 - [x] run repo test suite, secret scan, commit, push, and wrap up the slice
+- [x] add Mermaid artifact export for Bellman-Ford shortest-path trees and reachable negative cycles
