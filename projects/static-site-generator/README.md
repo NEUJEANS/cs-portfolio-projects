@@ -16,6 +16,7 @@ This project shows practical compiler-style text processing, file-system automat
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
+- supports a dependency-free `--watch` mode with a configurable polling interval so content edits, new files, and shared partial updates trigger rebuilds during local authoring
 - builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
 - generates a `tags/` directory of archive pages from front matter tags, including a browsable tags index and per-tag page listings
 - renders a focused Markdown subset: headings, paragraphs, bullet lists, ordered lists, blockquotes, links, images, inline code, fenced code blocks, bold, and italics
@@ -63,6 +64,14 @@ Then build the site:
 node sitegen.js content dist
 ```
 
+For a faster edit-build-preview loop, keep the generator running in watch mode:
+
+```bash
+node sitegen.js content dist --watch --watch-interval 250
+```
+
+Watch mode uses a small polling snapshot instead of platform-specific recursive file watching, so it also catches newly added Markdown files and `_partials/` template edits on Linux without extra dependencies.
+
 If you want shared layout chrome across every page, add optional partials under `content/_partials/`:
 
 ```html
@@ -97,7 +106,7 @@ print(Path('portfolio').resolve())
 ```
 ~~~
 
-Generated files are written to `dist/` and the CLI prints a short build summary.
+Generated files are written to `dist/` and the CLI prints a short build summary. In watch mode, the same summary is reprinted after each detected rebuild so authors can confirm which pages were regenerated.
 
 ## Test
 ```bash
@@ -113,4 +122,4 @@ node --test test_static_site_generator.js
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
 - syntax highlighting themes and line-number support for fenced code blocks
-- incremental rebuilds or a watch mode for faster authoring
+- optional live preview server with browser auto-refresh on rebuild

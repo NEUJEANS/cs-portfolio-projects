@@ -97,3 +97,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 vertical slice: authoring watch mode
+- [x] identify `static-site-generator` as still unfinished because local authoring required manually rerunning the build after every content or partial edit
+- [x] skip extra web research and language refresh because a polling-based watch loop is a direct extension of the existing Node/CommonJS filesystem workflow
+- [x] add a resumable checklist for the slice
+- [x] implement CLI `--watch` mode with configurable `--watch-interval` parsing
+- [x] rebuild when Markdown files, static assets, or shared `_partials/` templates change
+- [x] keep watch mode dependency-free and Linux-friendly by using content snapshots instead of recursive native watchers
+- [x] expand automated tests for CLI flag parsing, watch snapshots, and end-to-end watch rebuild behavior
+- [x] update README and project checklist with the new watch-mode workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

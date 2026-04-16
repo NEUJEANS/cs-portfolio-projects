@@ -796,20 +796,178 @@ function buildSite(contentDir, outputDir) {
   };
 }
 
+function walkWatchFiles(contentDir, currentDir = contentDir) {
+  if (!fs.existsSync(currentDir)) {
+    return [];
+  }
+
+  const entries = fs.readdirSync(currentDir, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkWatchFiles(contentDir, fullPath));
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+    const stat = fs.statSync(fullPath);
+    files.push({
+      relativePath: toPosixPath(path.relative(contentDir, fullPath)),
+      size: stat.size,
+      mtimeMs: Math.trunc(stat.mtimeMs),
+    });
+  }
+
+  return files;
+}
+
+function createWatchSnapshot(contentDir) {
+  if (!fs.existsSync(contentDir)) {
+    return `missing:${path.resolve(contentDir)}`;
+  }
+
+  return walkWatchFiles(contentDir)
+    .map((entry) => `${entry.relativePath}:${entry.size}:${entry.mtimeMs}`)
+    .join('\n');
+}
+
+function formatBuildSummary(result) {
+  const lines = [`Built ${result.pages.length} page(s):`];
+  for (const page of result.pages) {
+    lines.push(`- ${page.title} -> ${page.output}`);
+  }
+  lines.push(`Copied ${result.assets.length} asset(s).`);
+  return lines.join('\n');
+}
+
+function buildWithLogging(contentDir, outputDir, reason) {
+  const timestamp = new Date().toISOString();
+
+  try {
+    const result = buildSite(contentDir, outputDir);
+    console.log(`[${timestamp}] ${reason} succeeded.`);
+    console.log(formatBuildSummary(result));
+    return { ok: true, result };
+  } catch (error) {
+    console.error(`[${timestamp}] ${reason} failed.`);
+    console.error(error.stack || error.message);
+    return { ok: false, error };
+  }
+}
+
+function parseWatchInterval(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed < 50) {
+    throw new Error('Watch interval must be an integer >= 50 milliseconds.');
+  }
+  return parsed;
+}
+
+function parseCliArgs(argv) {
+  const positional = [];
+  const options = {
+    help: false,
+    watch: false,
+    watchIntervalMs: 500,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+
+    if (arg === '--watch' || arg === '-w') {
+      options.watch = true;
+      continue;
+    }
+
+    if (arg === '--watch-interval') {
+      const value = argv[index + 1];
+      if (value === undefined) {
+        throw new Error('Missing value for --watch-interval.');
+      }
+      options.watchIntervalMs = parseWatchInterval(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith('--watch-interval=')) {
+      options.watchIntervalMs = parseWatchInterval(arg.split('=')[1]);
+      continue;
+    }
+
+    positional.push(arg);
+  }
+
+  return {
+    contentDir: positional[0],
+    outputDir: positional[1],
+    options,
+  };
+}
+
+function watchSite(contentDir, outputDir, options = {}) {
+  const intervalMs = options.watchIntervalMs || 500;
+  let lastSnapshot = createWatchSnapshot(contentDir);
+
+  buildWithLogging(contentDir, outputDir, 'Initial build');
+  console.log(`[${new Date().toISOString()}] Watching ${contentDir} every ${intervalMs}ms for changes. Press Ctrl+C to stop.`);
+
+  const timer = setInterval(() => {
+    const nextSnapshot = createWatchSnapshot(contentDir);
+    if (nextSnapshot === lastSnapshot) {
+      return;
+    }
+
+    lastSnapshot = nextSnapshot;
+    console.log(`[${new Date().toISOString()}] Change detected. Rebuilding...`);
+    buildWithLogging(contentDir, outputDir, 'Rebuild');
+  }, intervalMs);
+
+  const stopWatching = () => {
+    clearInterval(timer);
+    console.log(`\n[${new Date().toISOString()}] Watch mode stopped.`);
+    process.exit(0);
+  };
+
+  process.once('SIGINT', stopWatching);
+  process.once('SIGTERM', stopWatching);
+}
+
 function main(argv) {
-  const [contentDir, outputDir] = argv;
-  if (!contentDir || !outputDir) {
-    console.error('Usage: node sitegen.js <content-dir> <output-dir>');
+  let parsed;
+
+  try {
+    parsed = parseCliArgs(argv);
+  } catch (error) {
+    console.error(error.message);
     process.exitCode = 1;
     return;
   }
 
-  const result = buildSite(path.resolve(contentDir), path.resolve(outputDir));
-  console.log(`Built ${result.pages.length} page(s):`);
-  for (const page of result.pages) {
-    console.log(`- ${page.title} -> ${page.output}`);
+  const { contentDir, outputDir, options } = parsed;
+  if (options.help || !contentDir || !outputDir) {
+    console.error('Usage: node sitegen.js <content-dir> <output-dir> [--watch] [--watch-interval <ms>]');
+    process.exitCode = options.help ? 0 : 1;
+    return;
   }
-  console.log(`Copied ${result.assets.length} asset(s).`);
+
+  const resolvedContentDir = path.resolve(contentDir);
+  const resolvedOutputDir = path.resolve(outputDir);
+  if (options.watch) {
+    watchSite(resolvedContentDir, resolvedOutputDir, options);
+    return;
+  }
+
+  const outcome = buildWithLogging(resolvedContentDir, resolvedOutputDir, 'Build');
+  if (!outcome.ok) {
+    process.exitCode = 1;
+  }
 }
 
 if (require.main === module) {
@@ -823,23 +981,30 @@ module.exports = {
   buildNavigation,
   buildSite,
   buildTagCollections,
+  buildWithLogging,
   copyStaticAssets,
+  createWatchSnapshot,
   escapeHtml,
+  formatBuildSummary,
   isReservedContentPath,
   listStaticAssetOutputNames,
   loadPages,
   loadTemplatePartials,
   markdownToHtml,
   normalizeTags,
+  parseCliArgs,
   parseFrontMatter,
+  parseWatchInterval,
   relativeLink,
   renderPartial,
   replaceMarkdownImages,
+  replaceMarkdownLinks,
   resolveDocumentHref,
   rootPathForPage,
   sanitizeHref,
   slugify,
   toOutputPath,
   walkContentEntries,
-  replaceMarkdownLinks,
+  walkWatchFiles,
+  watchSite,
 };

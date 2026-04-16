@@ -3,13 +3,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const {
   PARTIALS_DIR_NAME,
   buildSite,
   copyStaticAssets,
+  createWatchSnapshot,
   loadPages,
   markdownToHtml,
+  parseCliArgs,
   parseFrontMatter,
   relativeLink,
   replaceMarkdownImages,
@@ -24,6 +27,20 @@ function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'sitegen-suite-'));
 }
 
+async function waitFor(predicate, { timeoutMs = 5000, intervalMs = 100 } = {}) {
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    const value = await predicate();
+    if (value) {
+      return value;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(`Timed out after ${timeoutMs}ms waiting for condition.`);
+}
+
 test('parseFrontMatter extracts metadata and body', () => {
   const parsed = parseFrontMatter(`---\r\ntitle: Portfolio\r\norder: 2\r\ntags: [node, markdown]\r\nnav: false\r\n---\r\n# Heading`);
   assert.equal(parsed.metadata.title, 'Portfolio');
@@ -31,6 +48,31 @@ test('parseFrontMatter extracts metadata and body', () => {
   assert.deepEqual(parsed.metadata.tags, ['node', 'markdown']);
   assert.equal(parsed.metadata.nav, false);
   assert.equal(parsed.body, '# Heading');
+});
+
+test('parseCliArgs enables watch mode and custom intervals', () => {
+  const parsed = parseCliArgs(['content', 'dist', '--watch', '--watch-interval', '750']);
+  assert.equal(parsed.contentDir, 'content');
+  assert.equal(parsed.outputDir, 'dist');
+  assert.equal(parsed.options.watch, true);
+  assert.equal(parsed.options.watchIntervalMs, 750);
+});
+
+test('createWatchSnapshot changes when shared partial templates change', () => {
+  const contentDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, PARTIALS_DIR_NAME), { recursive: true });
+  fs.writeFileSync(path.join(contentDir, 'index.md'), '# Home', 'utf8');
+  fs.writeFileSync(path.join(contentDir, PARTIALS_DIR_NAME, 'header.html'), '<p>One</p>', 'utf8');
+
+  const before = createWatchSnapshot(contentDir);
+  const partialPath = path.join(contentDir, PARTIALS_DIR_NAME, 'header.html');
+  const stats = fs.statSync(partialPath);
+  fs.utimesSync(partialPath, stats.atime, new Date(Date.now() + 1500));
+  fs.writeFileSync(partialPath, '<p>Two</p>', 'utf8');
+  const after = createWatchSnapshot(contentDir);
+
+  assert.notEqual(before, after);
+  assert.match(after, /_partials\/header\.html/);
 });
 
 test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, images, and fenced blocks', () => {
@@ -274,7 +316,51 @@ tags: [docs]
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/docs.html">docs<\/a>/);
   assert.match(setupHtml, /<p class="source">Source: <code>guides\/setup.md<\/code><\/p>/);
   assert.match(setupHtml, /<a href="\.\.\/assets\/resume.pdf">Resume<\/a>/);
+  assert.match(docsTagHtml, /<p class="source">Source: <code>\(generated\)<\/code><\/p>/);
   assert.equal(fs.existsSync(path.join(outputDir, PARTIALS_DIR_NAME, 'header.html')), false);
+});
+
+test('watch CLI rebuilds generated pages after content changes', async (t) => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  const sourcePath = path.join(contentDir, 'index.md');
+  fs.writeFileSync(sourcePath, '# First version', 'utf8');
+
+  const child = spawn(process.execPath, ['sitegen.js', contentDir, outputDir, '--watch', '--watch-interval', '100'], {
+    cwd: __dirname,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const closePromise = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+
+  t.after(async () => {
+    if (!child.killed) {
+      child.kill('SIGTERM');
+    }
+    await closePromise;
+  });
+
+  await waitFor(() => fs.existsSync(path.join(outputDir, 'index.html')) && stdout.includes('Watching'));
+  await waitFor(() => fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8').includes('First version'));
+
+  const stats = fs.statSync(sourcePath);
+  fs.utimesSync(sourcePath, stats.atime, new Date(Date.now() + 1500));
+  fs.writeFileSync(sourcePath, '# Second version', 'utf8');
+
+  await waitFor(() => fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8').includes('Second version'));
+  assert.equal(stderr, '');
 });
 
 test('sanitizeHref still blocks unsafe protocols', () => {
@@ -282,4 +368,3 @@ test('sanitizeHref still blocks unsafe protocols', () => {
   assert.equal(sanitizeHref('student-projects.html'), 'student-projects.html');
   assert.equal(sanitizeHref('javascript:alert(1)'), '#');
 });
-
