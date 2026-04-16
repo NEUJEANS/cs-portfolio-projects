@@ -167,7 +167,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output plugin-benchmark-report.html
 ```
 
-Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, and benchmark families it exports:
+Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, concise hook doc summaries, source line numbers, and benchmark families it exports:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \

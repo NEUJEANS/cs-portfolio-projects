@@ -5,6 +5,7 @@ BENCHMARK_DATASET_FAMILIES = ["default", "exam-cram", "project-week"]
 
 
 def map_records(lines):
+    """Emit per-student sum/count records from comma-separated score lines."""
     for line in lines:
         if not line.strip():
             continue
@@ -13,18 +14,21 @@ def map_records(lines):
 
 
 def combine_values(_key, values):
+    """Merge shard-local sum/count objects before the final reduce step."""
     total = sum(item["sum"] for item in values)
     count = sum(item["count"] for item in values)
     return {"sum": total, "count": count}
 
 
 def reduce_key(_key, values):
+    """Return a rounded average score for one student key."""
     total = sum(item["sum"] for item in values)
     count = sum(item["count"] for item in values)
     return round(total / count, 3) if count else 0.0
 
 
 def benchmark_records(scenario, records, seed, dataset_family="default"):
+    """Generate deterministic cohort score fixtures for benchmark scenarios."""
     import random
 
     if records <= 0:

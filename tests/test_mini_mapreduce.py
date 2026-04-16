@@ -321,11 +321,13 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         csv_rows = result.to_csv().strip().splitlines()
         self.assertEqual(
             csv_rows[0],
-            "name,plugin,module_doc_summary,mapper,mapper_signature,reducer,reducer_signature,combiner,combiner_signature,benchmark_generator,benchmark_generator_signature,available_dataset_families",
+            "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,available_dataset_families",
         )
         self.assertIn("plugin-average-score", csv_rows[1])
         self.assertIn("Average-score analytics plugin with synthetic cohort benchmark families.", csv_rows[1])
         self.assertIn("map_records(lines)", csv_rows[1])
+        self.assertIn("Emit per-student sum/count records from comma-separated score lines.", csv_rows[1])
+        self.assertRegex(csv_rows[1], r",\d+,")
         self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
 
     def test_plugin_inspection_diffs_capture_contract_changes(self) -> None:
@@ -337,6 +339,8 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(len(diffs), 1)
         self.assertIn("name", diffs[0].changed_fields)
         self.assertIn("available_dataset_families", diffs[0].changed_fields)
+        self.assertEqual(diffs[0].changes["benchmark_generator_doc_summary"]["current"], None)
+        self.assertEqual(diffs[0].changes["benchmark_generator_source_line"]["current"], None)
 
     def test_inspect_plugins_can_include_diff_payload(self) -> None:
         batch = inspect_plugins(
@@ -355,8 +359,12 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertIn("plugin-average-score", markdown)
         self.assertIn("Average-score analytics plugin", markdown)
         self.assertIn("map_records(lines)", markdown)
+        self.assertIn("Emit per-student sum/count records from comma-separated score lines.", markdown)
+        self.assertIn("line ", markdown)
         self.assertIn("<h2>Diff 1:", html_output)
         self.assertIn("map_records(lines)", html_output)
+        self.assertIn("Emit per-student sum/count records from comma-separated score lines.", html_output)
+        self.assertIn("line ", html_output)
 
     def test_cli_inspect_plugin_supports_csv_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -386,7 +394,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(payload["name"], "plugin-average-score")
             self.assertEqual(
                 csv_rows[0],
-                "name,plugin,module_doc_summary,mapper,mapper_signature,reducer,reducer_signature,combiner,combiner_signature,benchmark_generator,benchmark_generator_signature,available_dataset_families",
+                "name,plugin,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,available_dataset_families",
             )
             self.assertIn("plugin-average-score", csv_rows[1])
             self.assertIn('"default,exam-cram,project-week"', csv_rows[1])

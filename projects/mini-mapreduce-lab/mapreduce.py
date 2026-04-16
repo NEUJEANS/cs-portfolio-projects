@@ -36,12 +36,20 @@ PLUGIN_INSPECTION_FIELDNAMES = [
     "module_doc_summary",
     "mapper",
     "mapper_signature",
+    "mapper_doc_summary",
+    "mapper_source_line",
     "reducer",
     "reducer_signature",
+    "reducer_doc_summary",
+    "reducer_source_line",
     "combiner",
     "combiner_signature",
+    "combiner_doc_summary",
+    "combiner_source_line",
     "benchmark_generator",
     "benchmark_generator_signature",
+    "benchmark_generator_doc_summary",
+    "benchmark_generator_source_line",
     "available_dataset_families",
 ]
 
@@ -51,12 +59,20 @@ PLUGIN_INSPECTION_DIFF_FIELDS = [
     "module_doc_summary",
     "mapper",
     "mapper_signature",
+    "mapper_doc_summary",
+    "mapper_source_line",
     "reducer",
     "reducer_signature",
+    "reducer_doc_summary",
+    "reducer_source_line",
     "combiner",
     "combiner_signature",
+    "combiner_doc_summary",
+    "combiner_source_line",
     "benchmark_generator",
     "benchmark_generator_signature",
+    "benchmark_generator_doc_summary",
+    "benchmark_generator_source_line",
     "available_dataset_families",
 ]
 
@@ -68,12 +84,20 @@ class PluginInspection:
     module_doc_summary: str | None
     mapper: str
     mapper_signature: str | None
+    mapper_doc_summary: str | None
+    mapper_source_line: int | None
     reducer: str
     reducer_signature: str | None
+    reducer_doc_summary: str | None
+    reducer_source_line: int | None
     combiner: str | None
     combiner_signature: str | None
+    combiner_doc_summary: str | None
+    combiner_source_line: int | None
     benchmark_generator: str | None
     benchmark_generator_signature: str | None
+    benchmark_generator_doc_summary: str | None
+    benchmark_generator_source_line: int | None
     available_dataset_families: list[str] | None
 
     def as_dict(self) -> dict[str, object]:
@@ -83,12 +107,20 @@ class PluginInspection:
             "module_doc_summary": self.module_doc_summary,
             "mapper": self.mapper,
             "mapper_signature": self.mapper_signature,
+            "mapper_doc_summary": self.mapper_doc_summary,
+            "mapper_source_line": self.mapper_source_line,
             "reducer": self.reducer,
             "reducer_signature": self.reducer_signature,
+            "reducer_doc_summary": self.reducer_doc_summary,
+            "reducer_source_line": self.reducer_source_line,
             "combiner": self.combiner,
             "combiner_signature": self.combiner_signature,
+            "combiner_doc_summary": self.combiner_doc_summary,
+            "combiner_source_line": self.combiner_source_line,
             "benchmark_generator": self.benchmark_generator,
             "benchmark_generator_signature": self.benchmark_generator_signature,
+            "benchmark_generator_doc_summary": self.benchmark_generator_doc_summary,
+            "benchmark_generator_source_line": self.benchmark_generator_source_line,
             "available_dataset_families": self.available_dataset_families,
         }
 
@@ -156,18 +188,36 @@ class PluginInspectionBatch:
         ]
         for plugin in self.plugins:
             dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
-            mapper_cell = f"`{plugin.mapper}`<br><small>`{plugin.mapper_signature or '-'}`</small>"
-            reducer_cell = f"`{plugin.reducer}`<br><small>`{plugin.reducer_signature or '-'}`</small>"
+            mapper_meta = [f"`{plugin.mapper_signature or '-'}`"]
+            if plugin.mapper_source_line is not None:
+                mapper_meta.append(f"line {plugin.mapper_source_line}")
+            if plugin.mapper_doc_summary:
+                mapper_meta.append(plugin.mapper_doc_summary)
+            mapper_cell = f"`{plugin.mapper}`<br><small>{'<br>'.join(mapper_meta)}</small>"
+            reducer_meta = [f"`{plugin.reducer_signature or '-'}`"]
+            if plugin.reducer_source_line is not None:
+                reducer_meta.append(f"line {plugin.reducer_source_line}")
+            if plugin.reducer_doc_summary:
+                reducer_meta.append(plugin.reducer_doc_summary)
+            reducer_cell = f"`{plugin.reducer}`<br><small>{'<br>'.join(reducer_meta)}</small>"
             combiner_name = plugin.combiner or '-'
-            combiner_signature = plugin.combiner_signature or '-'
-            combiner_cell = f"`{combiner_name}`<br><small>`{combiner_signature}`</small>" if plugin.combiner else "-"
+            combiner_cell = "-"
+            if plugin.combiner:
+                combiner_meta = [f"`{plugin.combiner_signature or '-'}`"]
+                if plugin.combiner_source_line is not None:
+                    combiner_meta.append(f"line {plugin.combiner_source_line}")
+                if plugin.combiner_doc_summary:
+                    combiner_meta.append(plugin.combiner_doc_summary)
+                combiner_cell = f"`{combiner_name}`<br><small>{'<br>'.join(combiner_meta)}</small>"
             benchmark_name = plugin.benchmark_generator or '-'
-            benchmark_signature = plugin.benchmark_generator_signature or '-'
-            benchmark_cell = (
-                f"`{benchmark_name}`<br><small>`{benchmark_signature}`</small>"
-                if plugin.benchmark_generator
-                else "-"
-            )
+            benchmark_cell = "-"
+            if plugin.benchmark_generator:
+                benchmark_meta = [f"`{plugin.benchmark_generator_signature or '-'}`"]
+                if plugin.benchmark_generator_source_line is not None:
+                    benchmark_meta.append(f"line {plugin.benchmark_generator_source_line}")
+                if plugin.benchmark_generator_doc_summary:
+                    benchmark_meta.append(plugin.benchmark_generator_doc_summary)
+                benchmark_cell = f"`{benchmark_name}`<br><small>{'<br>'.join(benchmark_meta)}</small>"
             lines.append(
                 f"| `{plugin.name}` | `{plugin.plugin}` | {plugin.module_doc_summary or '-'} | {mapper_cell} | {reducer_cell} | {combiner_cell} | {benchmark_cell} | `{dataset_families}` |"
             )
@@ -203,10 +253,10 @@ class PluginInspectionBatch:
                 f"<td><code>{esc(plugin.name)}</code></td>"
                 f"<td><code>{esc(plugin.plugin)}</code></td>"
                 f"<td>{esc(plugin.module_doc_summary or '-')}</td>"
-                f"<td><code>{esc(plugin.mapper)}</code><br><small><code>{esc(plugin.mapper_signature or '-')}</code></small></td>"
-                f"<td><code>{esc(plugin.reducer)}</code><br><small><code>{esc(plugin.reducer_signature or '-')}</code></small></td>"
-                f"<td><code>{esc(plugin.combiner or '-')}</code><br><small><code>{esc(plugin.combiner_signature or '-')}</code></small></td>"
-                f"<td><code>{esc(plugin.benchmark_generator or '-')}</code><br><small><code>{esc(plugin.benchmark_generator_signature or '-')}</code></small></td>"
+                f"<td>{_render_hook_html(plugin.mapper, plugin.mapper_signature, plugin.mapper_doc_summary, plugin.mapper_source_line)}</td>"
+                f"<td>{_render_hook_html(plugin.reducer, plugin.reducer_signature, plugin.reducer_doc_summary, plugin.reducer_source_line)}</td>"
+                f"<td>{_render_hook_html(plugin.combiner, plugin.combiner_signature, plugin.combiner_doc_summary, plugin.combiner_source_line)}</td>"
+                f"<td>{_render_hook_html(plugin.benchmark_generator, plugin.benchmark_generator_signature, plugin.benchmark_generator_doc_summary, plugin.benchmark_generator_source_line)}</td>"
                 f"<td><code>{esc(dataset_families)}</code></td>"
                 "</tr>"
             )
@@ -853,10 +903,36 @@ def _callable_signature(fn: Callable[..., Any] | None) -> str | None:
 
 
 def _doc_summary(value: object) -> str | None:
+    if value is None:
+        return None
     doc = inspect.getdoc(value)
     if not doc:
         return None
     return doc.strip().splitlines()[0]
+
+
+def _callable_source_line(fn: Callable[..., Any] | None) -> int | None:
+    if fn is None:
+        return None
+    try:
+        _, line_number = inspect.getsourcelines(fn)
+    except (OSError, TypeError):
+        return None
+    return line_number
+
+
+def _render_hook_html(name: str | None, signature: str | None, doc_summary: str | None, source_line: int | None) -> str:
+    def esc(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
+    if not name:
+        return "-"
+    meta = [f"<code>{esc(signature or '-')}</code>"]
+    if source_line is not None:
+        meta.append(f"line {esc(source_line)}")
+    if doc_summary:
+        meta.append(esc(doc_summary))
+    return f"<code>{esc(name)}</code><br><small>{'<br>'.join(meta)}</small>"
 
 
 def _module_doc_summary(module_path: Path) -> str | None:
@@ -880,12 +956,20 @@ def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
         module_doc_summary=_module_doc_summary(plugin.path),
         mapper=_callable_name(plugin.mapper) or "<unknown>",
         mapper_signature=_callable_signature(plugin.mapper),
+        mapper_doc_summary=_doc_summary(plugin.mapper),
+        mapper_source_line=_callable_source_line(plugin.mapper),
         reducer=_callable_name(plugin.reducer) or "<unknown>",
         reducer_signature=_callable_signature(plugin.reducer),
+        reducer_doc_summary=_doc_summary(plugin.reducer),
+        reducer_source_line=_callable_source_line(plugin.reducer),
         combiner=_callable_name(plugin.combiner),
         combiner_signature=_callable_signature(plugin.combiner),
+        combiner_doc_summary=_doc_summary(plugin.combiner),
+        combiner_source_line=_callable_source_line(plugin.combiner),
         benchmark_generator=_callable_name(plugin.benchmark_generator),
         benchmark_generator_signature=_callable_signature(plugin.benchmark_generator),
+        benchmark_generator_doc_summary=_doc_summary(plugin.benchmark_generator),
+        benchmark_generator_source_line=_callable_source_line(plugin.benchmark_generator),
         available_dataset_families=list(plugin.dataset_families) if plugin.dataset_families else None,
     )
 

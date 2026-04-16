@@ -4,6 +4,7 @@ JOB_NAME = "plugin-max-score"
 
 
 def map_records(lines):
+    """Parse comma-separated score rows into integer leaderboard updates."""
     for raw in lines:
         stripped = raw.strip()
         if not stripped:
@@ -13,8 +14,10 @@ def map_records(lines):
 
 
 def combine_values(_key, values):
+    """Keep the shard-local maximum score for one student key."""
     return max(values)
 
 
 def reduce_key(_key, values):
+    """Return the overall maximum score for one student key."""
     return max(values)
