@@ -1,6 +1,6 @@
 # Mini Shell Checklist
 
-Status: vertical slice 7 in progress
+Status: vertical slice 7 complete
 Last updated: 2026-04-16
 
 ## Vertical slice 2
@@ -101,5 +101,5 @@ Last updated: 2026-04-16
 - [x] perform review pass 1 and fix issues
 - [x] perform review pass 2 and fix issues
 - [x] perform review pass 3 and fix issues
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
