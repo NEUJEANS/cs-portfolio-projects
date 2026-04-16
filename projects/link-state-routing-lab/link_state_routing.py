@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import sys
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 MAX_AGE = 3600
+VALID_DISTANCE_VECTOR_MODES = ("classic", "split-horizon", "poison-reverse")
+VALID_DISTANCE_VECTOR_UPDATE_STRATEGIES = ("periodic", "triggered")
 DISTANCE_VECTOR_MODULE_PATH = (
     Path(__file__).resolve().parent.parent / "distance-vector-routing-lab" / "distance_vector_routing.py"
 )
@@ -231,6 +234,16 @@ def load_topology(path: str) -> dict[str, dict[str, int]]:
     return normalize_topology(json.loads(Path(path).read_text()))
 
 
+def _resolve_topology_spec(spec: object, *, base_dir: Path) -> dict[str, dict[str, int]]:
+    if spec is None:
+        raise ValueError("scenario topology is required")
+    if isinstance(spec, str):
+        return load_topology(str((base_dir / spec).resolve()))
+    if isinstance(spec, Mapping):
+        return normalize_topology(spec)
+    raise ValueError("scenario topology must be a relative path or topology mapping")
+
+
 def max_flood_round(result: SimulationResult) -> int:
     return max((step.round_index for step in result.flood_log), default=0)
 
@@ -253,6 +266,12 @@ def compare_with_distance_vector(
     remove_link: tuple[str, str] | None = None,
     max_rounds: int = 50,
 ) -> dict[str, object]:
+    if distance_vector_mode not in VALID_DISTANCE_VECTOR_MODES:
+        raise ValueError(f"unsupported distance_vector_mode: {distance_vector_mode!r}")
+    if distance_vector_update_strategy not in VALID_DISTANCE_VECTOR_UPDATE_STRATEGIES:
+        raise ValueError(
+            f"unsupported distance_vector_update_strategy: {distance_vector_update_strategy!r}"
+        )
     normalized = normalize_topology(topology)
     before_link_state = run_simulation(normalized)
     distance_vector = load_distance_vector_module()
@@ -336,9 +355,138 @@ def compare_with_distance_vector(
     return comparison
 
 
+
+def _comparison_suite_row(
+    *,
+    scenario_name: str,
+    comparison: Mapping[str, object],
+) -> dict[str, object]:
+    before = comparison["before"]
+    after = comparison.get("after")
+    row: dict[str, object] = {
+        "scenario": scenario_name,
+        "distance_vector_mode": comparison["distance_vector_mode"],
+        "distance_vector_update_strategy": comparison["distance_vector_update_strategy"],
+        "event_type": comparison.get("event", {}).get("type") if isinstance(comparison.get("event"), Mapping) else None,
+        "link_state_before_flood_rounds": before["link_state"]["flood_rounds"],
+        "link_state_before_flood_events": before["link_state"]["flood_events"],
+        "distance_vector_before_rounds": before["distance_vector"]["rounds"],
+        "distance_vector_before_converged": before["distance_vector"]["converged"],
+        "observation_count": len(comparison.get("observations", [])),
+    }
+    if isinstance(after, Mapping):
+        row.update({
+            "link_state_after_flood_rounds": after["link_state"]["flood_rounds"],
+            "link_state_after_flood_events": after["link_state"]["flood_events"],
+            "link_state_changed_routers": ",".join(after["link_state"].get("changed_routers", [])),
+            "distance_vector_after_rounds": after["distance_vector"]["rounds"],
+            "distance_vector_after_converged": after["distance_vector"]["converged"],
+        })
+    return row
+
+
+def run_comparison_suite(
+    suite_path: str,
+    *,
+    default_distance_vector_mode: str = "classic",
+    default_distance_vector_update_strategy: str = "periodic",
+    default_max_rounds: int = 50,
+) -> dict[str, object]:
+    suite_file = Path(suite_path).resolve()
+    payload = json.loads(suite_file.read_text())
+    scenarios = payload.get("scenarios")
+    if not isinstance(scenarios, list) or not scenarios:
+        raise ValueError("scenario suite must contain a non-empty 'scenarios' list")
+
+    suite_modes = payload.get("distance_vector_modes")
+    suite_update_strategies = payload.get("distance_vector_update_strategies")
+
+    comparisons: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
+    for index, scenario in enumerate(scenarios, start=1):
+        if not isinstance(scenario, Mapping):
+            raise ValueError("each scenario must be a mapping")
+        name = str(scenario.get("name") or f"scenario-{index}")
+        topology = _resolve_topology_spec(scenario.get("topology"), base_dir=suite_file.parent)
+        remove_link_value = scenario.get("remove_link")
+        remove_link = tuple(remove_link_value) if remove_link_value is not None else None
+        if remove_link is not None and len(remove_link) != 2:
+            raise ValueError("scenario remove_link must contain exactly two router names")
+        max_rounds = int(scenario.get("max_rounds", payload.get("max_rounds", default_max_rounds)))
+        if max_rounds <= 0:
+            raise ValueError("scenario max_rounds must be positive")
+
+        scenario_modes = scenario.get("distance_vector_modes", suite_modes) or [default_distance_vector_mode]
+        scenario_updates = scenario.get("distance_vector_update_strategies", suite_update_strategies) or [default_distance_vector_update_strategy]
+
+        scenario_comparisons: list[dict[str, object]] = []
+        for mode in scenario_modes:
+            for update_strategy in scenario_updates:
+                comparison = compare_with_distance_vector(
+                    topology,
+                    distance_vector_mode=str(mode),
+                    distance_vector_update_strategy=str(update_strategy),
+                    remove_link=remove_link,
+                    max_rounds=max_rounds,
+                )
+                comparison["scenario"] = {
+                    "name": name,
+                    "max_rounds": max_rounds,
+                    "remove_link": list(remove_link) if remove_link else None,
+                }
+                scenario_comparisons.append(comparison)
+                rows.append(_comparison_suite_row(scenario_name=name, comparison=comparison))
+
+        comparisons.append({"name": name, "runs": scenario_comparisons})
+
+    aggregate = {
+        "scenario_count": len(comparisons),
+        "run_count": len(rows),
+        "max_link_state_before_rounds": max((row["link_state_before_flood_rounds"] for row in rows), default=0),
+        "max_distance_vector_before_rounds": max((row["distance_vector_before_rounds"] for row in rows), default=0),
+        "max_distance_vector_after_rounds": max((row.get("distance_vector_after_rounds", 0) for row in rows), default=0),
+    }
+    return {
+        "suite_path": str(suite_file),
+        "scenarios": comparisons,
+        "rows": rows,
+        "aggregate": aggregate,
+    }
+
+
+def write_comparison_suite_csv(rows: Iterable[Mapping[str, object]], destination: str) -> None:
+    row_list = list(rows)
+    preferred_order = [
+        "scenario",
+        "event_type",
+        "distance_vector_mode",
+        "distance_vector_update_strategy",
+        "link_state_before_flood_rounds",
+        "link_state_before_flood_events",
+        "distance_vector_before_rounds",
+        "distance_vector_before_converged",
+        "link_state_after_flood_rounds",
+        "link_state_after_flood_events",
+        "link_state_changed_routers",
+        "distance_vector_after_rounds",
+        "distance_vector_after_converged",
+        "observation_count",
+    ]
+    fieldnames = [name for name in preferred_order if any(name in row for row in row_list)]
+    fieldnames.extend(sorted({key for row in row_list for key in row if key not in fieldnames}))
+    if not fieldnames:
+        raise ValueError("cannot write an empty comparison suite CSV")
+    output_path = Path(destination)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(row_list)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Simulate link-state routing with LSA flooding and SPF recomputation.")
-    parser.add_argument("topology", help="Path to a JSON topology map")
+    parser.add_argument("topology", nargs="?", help="Path to a JSON topology map")
     parser.add_argument(
         "--format",
         choices=("json", "pretty", "mermaid"),
@@ -356,13 +504,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--distance-vector-mode",
-        choices=("classic", "split-horizon", "poison-reverse"),
+        choices=VALID_DISTANCE_VECTOR_MODES,
         default="classic",
         help="Distance-vector mode to use when --compare-distance-vector is enabled",
     )
     parser.add_argument(
         "--distance-vector-update-strategy",
-        choices=("periodic", "triggered"),
+        choices=VALID_DISTANCE_VECTOR_UPDATE_STRATEGIES,
         default="periodic",
         help="Distance-vector update strategy to use when --compare-distance-vector is enabled",
     )
@@ -377,6 +525,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=50,
         help="Maximum rounds for the distance-vector comparison run",
+    )
+    parser.add_argument(
+        "--scenario-suite",
+        help="Path to a JSON scenario suite that runs multiple link-state vs distance-vector comparisons",
+    )
+    parser.add_argument(
+        "--csv-out",
+        help="Optional path to write scenario-suite summary rows as CSV",
     )
     return parser.parse_args()
 
@@ -451,6 +607,19 @@ def main() -> None:
     args = parse_args()
     if args.max_rounds <= 0:
         raise ValueError("max_rounds must be positive")
+    if args.scenario_suite:
+        payload = run_comparison_suite(
+            args.scenario_suite,
+            default_distance_vector_mode=args.distance_vector_mode,
+            default_distance_vector_update_strategy=args.distance_vector_update_strategy,
+            default_max_rounds=args.max_rounds,
+        )
+        if args.csv_out:
+            write_comparison_suite_csv(payload["rows"], args.csv_out)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    if not args.topology:
+        raise ValueError("topology is required unless --scenario-suite is used")
     topology = load_topology(args.topology)
     if args.compare_distance_vector:
         payload = compare_with_distance_vector(

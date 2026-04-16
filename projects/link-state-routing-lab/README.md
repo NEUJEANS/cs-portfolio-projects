@@ -17,7 +17,8 @@ A Python routing lab that simulates a small link-state protocol: routers origina
 - computes per-router forwarding tables with deterministic tie-breaking
 - renders Mermaid topology diagrams with optional source-rooted SPF tree overlays
 - compares link-state convergence directly against the distance-vector routing lab on the same topology and optional link-failure event
-- provides a CLI for human-readable, JSON, or Mermaid output
+- runs scenario suites that benchmark multiple topologies/failures across distance-vector modes and update strategies
+- provides a CLI for human-readable, JSON, Mermaid, and scenario-suite artifact export
 
 ## Usage
 ```bash
@@ -26,6 +27,7 @@ python3 link_state_routing.py sample_topology.json
 python3 link_state_routing.py sample_topology.json --source A --format json
 python3 link_state_routing.py sample_topology.json --source A --format mermaid
 python3 link_state_routing.py sample_topology.json --compare-distance-vector --remove-link B D
+python3 link_state_routing.py --scenario-suite sample_comparison_suite.json --csv-out ../../artifacts/link-state-routing-comparison-suite.csv
 pytest -q test_link_state_routing.py
 ```
 
@@ -75,6 +77,8 @@ python3 link_state_routing.py sample_topology.json \
 
 The comparison JSON summarizes how many flood rounds the link-state model needed, how many routing rounds the distance-vector model needed, and what changes after an optional failure event.
 
+For repeatable benchmarking, `sample_comparison_suite.json` shows how to run a matrix of scenarios and distance-vector settings in one command. The suite JSON supports either relative topology file paths or inline topology objects, optional `remove_link` events, per-suite or per-scenario `distance_vector_modes`, per-suite or per-scenario `distance_vector_update_strategies`, and per-suite or per-scenario `max_rounds`. When `--csv-out` is provided, the CLI writes a flat summary table that is easy to check into `artifacts/` or plot later.
+
 ## Key implementation ideas
 1. Each router originates an LSA that describes only its adjacent links.
 2. LSAs are accepted only if their sequence number is newer, or if an older copy has been aged out.
@@ -94,4 +98,4 @@ The comparison JSON summarizes how many flood rounds the link-state model needed
 - model partial flooding delays and retransmission acknowledgements
 - add area partitioning or designated-router style optimizations
 - render flood propagation timelines as sequence diagrams or animation-ready artifacts
-- export checked-in benchmark scenarios/artifacts from the new cross-lab comparison flow
+- add latency/jitter knobs so the suite can compare protocol behavior under delayed flooding or neighbor updates

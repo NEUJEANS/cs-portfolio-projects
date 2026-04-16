@@ -1,0 +1,1389 @@
+{
+  "aggregate": {
+    "max_distance_vector_after_rounds": 10,
+    "max_distance_vector_before_rounds": 6,
+    "max_link_state_before_rounds": 1,
+    "run_count": 18,
+    "scenario_count": 3
+  },
+  "rows": [
+    {
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 3,
+      "distance_vector_mode": "classic",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": null,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "observation_count": 1,
+      "scenario": "baseline-topology"
+    },
+    {
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "classic",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": null,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "observation_count": 1,
+      "scenario": "baseline-topology"
+    },
+    {
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 3,
+      "distance_vector_mode": "split-horizon",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": null,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "observation_count": 1,
+      "scenario": "baseline-topology"
+    },
+    {
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "split-horizon",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": null,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "observation_count": 1,
+      "scenario": "baseline-topology"
+    },
+    {
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 3,
+      "distance_vector_mode": "poison-reverse",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": null,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "observation_count": 1,
+      "scenario": "baseline-topology"
+    },
+    {
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "poison-reverse",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": null,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "observation_count": 1,
+      "scenario": "baseline-topology"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 1,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 3,
+      "distance_vector_mode": "classic",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 8,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 3,
+      "scenario": "link-failure-b-d"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 4,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "classic",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 8,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 3,
+      "scenario": "link-failure-b-d"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 1,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 3,
+      "distance_vector_mode": "split-horizon",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 8,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "link-failure-b-d"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 4,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "split-horizon",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 8,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "link-failure-b-d"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 1,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 3,
+      "distance_vector_mode": "poison-reverse",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 8,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "link-failure-b-d"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 4,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "poison-reverse",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 8,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 10,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "link-failure-b-d"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 4,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 2,
+      "distance_vector_mode": "classic",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 6,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 8,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 3,
+      "scenario": "inline-square-topology"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 10,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "classic",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 6,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 8,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 3,
+      "scenario": "inline-square-topology"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 4,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 2,
+      "distance_vector_mode": "split-horizon",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 6,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 8,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "inline-square-topology"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 10,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "split-horizon",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 6,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 8,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "inline-square-topology"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 4,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 2,
+      "distance_vector_mode": "poison-reverse",
+      "distance_vector_update_strategy": "periodic",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 6,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 8,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "inline-square-topology"
+    },
+    {
+      "distance_vector_after_converged": true,
+      "distance_vector_after_rounds": 10,
+      "distance_vector_before_converged": true,
+      "distance_vector_before_rounds": 6,
+      "distance_vector_mode": "poison-reverse",
+      "distance_vector_update_strategy": "triggered",
+      "event_type": "remove-link",
+      "link_state_after_flood_events": 6,
+      "link_state_after_flood_rounds": 1,
+      "link_state_before_flood_events": 8,
+      "link_state_before_flood_rounds": 1,
+      "link_state_changed_routers": "B,D",
+      "observation_count": 2,
+      "scenario": "inline-square-topology"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "baseline-topology",
+      "runs": [
+        {
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 3,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "classic",
+          "distance_vector_update_strategy": "periodic",
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "baseline-topology",
+            "remove_link": null
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "classic",
+          "distance_vector_update_strategy": "triggered",
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "baseline-topology",
+            "remove_link": null
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 3,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "split-horizon",
+          "distance_vector_update_strategy": "periodic",
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "baseline-topology",
+            "remove_link": null
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "split-horizon",
+          "distance_vector_update_strategy": "triggered",
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "baseline-topology",
+            "remove_link": null
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 3,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "poison-reverse",
+          "distance_vector_update_strategy": "periodic",
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "baseline-topology",
+            "remove_link": null
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "poison-reverse",
+          "distance_vector_update_strategy": "triggered",
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "baseline-topology",
+            "remove_link": null
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "link-failure-b-d",
+      "runs": [
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 1,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 8,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 3,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "classic",
+          "distance_vector_update_strategy": "periodic",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs",
+            "classic distance-vector can exhibit count-to-infinity-style behavior on some failures, which link-state avoids because every router recomputes from a refreshed global graph"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "link-failure-b-d",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 4,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 8,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "classic",
+          "distance_vector_update_strategy": "triggered",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs",
+            "classic distance-vector can exhibit count-to-infinity-style behavior on some failures, which link-state avoids because every router recomputes from a refreshed global graph"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "link-failure-b-d",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 1,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 8,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 3,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "split-horizon",
+          "distance_vector_update_strategy": "periodic",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "link-failure-b-d",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 4,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 8,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "split-horizon",
+          "distance_vector_update_strategy": "triggered",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "link-failure-b-d",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 1,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 8,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 3,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "poison-reverse",
+          "distance_vector_update_strategy": "periodic",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "link-failure-b-d",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 4,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 8,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 10,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "poison-reverse",
+          "distance_vector_update_strategy": "triggered",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 20,
+            "name": "link-failure-b-d",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 4
+            },
+            "B": {
+              "A": 1,
+              "C": 2,
+              "D": 7
+            },
+            "C": {
+              "A": 4,
+              "B": 2,
+              "D": 1
+            },
+            "D": {
+              "B": 7,
+              "C": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "inline-square-topology",
+      "runs": [
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 4,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 6,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 2,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 8,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "classic",
+          "distance_vector_update_strategy": "periodic",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs",
+            "classic distance-vector can exhibit count-to-infinity-style behavior on some failures, which link-state avoids because every router recomputes from a refreshed global graph"
+          ],
+          "scenario": {
+            "max_rounds": 15,
+            "name": "inline-square-topology",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 3
+            },
+            "B": {
+              "A": 1,
+              "D": 2
+            },
+            "C": {
+              "A": 3,
+              "D": 1
+            },
+            "D": {
+              "B": 2,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 10,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 6,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "classic",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 8,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "classic",
+          "distance_vector_update_strategy": "triggered",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs",
+            "classic distance-vector can exhibit count-to-infinity-style behavior on some failures, which link-state avoids because every router recomputes from a refreshed global graph"
+          ],
+          "scenario": {
+            "max_rounds": 15,
+            "name": "inline-square-topology",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 3
+            },
+            "B": {
+              "A": 1,
+              "D": 2
+            },
+            "C": {
+              "A": 3,
+              "D": 1
+            },
+            "D": {
+              "B": 2,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 4,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 6,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 2,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 8,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "split-horizon",
+          "distance_vector_update_strategy": "periodic",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 15,
+            "name": "inline-square-topology",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 3
+            },
+            "B": {
+              "A": 1,
+              "D": 2
+            },
+            "C": {
+              "A": 3,
+              "D": 1
+            },
+            "D": {
+              "B": 2,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 10,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 6,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "split-horizon",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 8,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "split-horizon",
+          "distance_vector_update_strategy": "triggered",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 15,
+            "name": "inline-square-topology",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 3
+            },
+            "B": {
+              "A": 1,
+              "D": 2
+            },
+            "C": {
+              "A": 3,
+              "D": 1
+            },
+            "D": {
+              "B": 2,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 4,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 6,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 2,
+              "update_strategy": "periodic"
+            },
+            "link_state": {
+              "flood_events": 8,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "poison-reverse",
+          "distance_vector_update_strategy": "periodic",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 15,
+            "name": "inline-square-topology",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 3
+            },
+            "B": {
+              "A": 1,
+              "D": 2
+            },
+            "C": {
+              "A": 3,
+              "D": 1
+            },
+            "D": {
+              "B": 2,
+              "C": 1
+            }
+          }
+        },
+        {
+          "after": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 10,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "changed_routers": [
+                "B",
+                "D"
+              ],
+              "flood_events": 6,
+              "flood_rounds": 1
+            }
+          },
+          "before": {
+            "distance_vector": {
+              "converged": true,
+              "mode": "poison-reverse",
+              "rounds": 6,
+              "update_strategy": "triggered"
+            },
+            "link_state": {
+              "flood_events": 8,
+              "flood_rounds": 1,
+              "lsa_count": 4
+            }
+          },
+          "distance_vector_mode": "poison-reverse",
+          "distance_vector_update_strategy": "triggered",
+          "event": {
+            "left": "B",
+            "right": "D",
+            "type": "remove-link"
+          },
+          "observations": [
+            "link-state converges by flooding whole-topology LSAs and then running local SPF, while distance-vector converges through neighbor table exchange over multiple rounds",
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+          ],
+          "scenario": {
+            "max_rounds": 15,
+            "name": "inline-square-topology",
+            "remove_link": [
+              "B",
+              "D"
+            ]
+          },
+          "topology": {
+            "A": {
+              "B": 1,
+              "C": 3
+            },
+            "B": {
+              "A": 1,
+              "D": 2
+            },
+            "C": {
+              "A": 3,
+              "D": 1
+            },
+            "D": {
+              "B": 2,
+              "C": 1
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "suite_path": "/home/user1_admin/.openclaw/workspace/cs-portfolio-projects/projects/link-state-routing-lab/sample_comparison_suite.json"
+}

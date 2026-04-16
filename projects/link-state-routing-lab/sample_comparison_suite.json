@@ -1,0 +1,27 @@
+{
+  "distance_vector_modes": ["classic", "split-horizon", "poison-reverse"],
+  "distance_vector_update_strategies": ["periodic", "triggered"],
+  "max_rounds": 20,
+  "scenarios": [
+    {
+      "name": "baseline-topology",
+      "topology": "sample_topology.json"
+    },
+    {
+      "name": "link-failure-b-d",
+      "topology": "sample_topology.json",
+      "remove_link": ["B", "D"]
+    },
+    {
+      "name": "inline-square-topology",
+      "topology": {
+        "A": {"B": 1, "C": 3},
+        "B": {"A": 1, "D": 2},
+        "C": {"A": 3, "D": 1},
+        "D": {"B": 2, "C": 1}
+      },
+      "remove_link": ["B", "D"],
+      "max_rounds": 15
+    }
+  ]
+}

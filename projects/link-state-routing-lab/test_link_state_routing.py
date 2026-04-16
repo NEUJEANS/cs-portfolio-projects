@@ -16,7 +16,9 @@ from link_state_routing import (
     normalize_topology,
     originate_lsas,
     render_mermaid,
+    run_comparison_suite,
     run_simulation,
+    write_comparison_suite_csv,
 )
 
 
@@ -184,3 +186,100 @@ def test_cli_compare_distance_vector_json_output(tmp_path: Path) -> None:
     assert payload["distance_vector_update_strategy"] == "triggered"
     assert payload["event"] == {"type": "remove-link", "left": "B", "right": "D"}
     assert payload["after"]["distance_vector"]["rounds"] >= 1
+
+
+def test_run_comparison_suite_supports_inline_and_file_topologies(tmp_path: Path) -> None:
+    suite_path = tmp_path / "suite.json"
+    topology_path = tmp_path / "topology.json"
+    topology_path.write_text(json.dumps(TOPOLOGY), encoding="utf-8")
+    suite_path.write_text(
+        json.dumps(
+            {
+                "distance_vector_modes": ["classic", "poison-reverse"],
+                "distance_vector_update_strategies": ["triggered"],
+                "max_rounds": 20,
+                "scenarios": [
+                    {"name": "file-topology", "topology": "topology.json", "remove_link": ["B", "D"]},
+                    {"name": "inline-topology", "topology": TOPOLOGY},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = run_comparison_suite(str(suite_path))
+
+    assert payload["aggregate"]["scenario_count"] == 2
+    assert payload["aggregate"]["run_count"] == 4
+    rows = payload["rows"]
+    assert any(row["scenario"] == "file-topology" and row["distance_vector_after_rounds"] >= 1 for row in rows)
+    assert any(row["scenario"] == "inline-topology" and row["distance_vector_mode"] == "classic" for row in rows)
+
+
+def test_write_comparison_suite_csv_writes_headers_and_rows(tmp_path: Path) -> None:
+    destination = tmp_path / "comparison.csv"
+    rows = [
+        {"scenario": "alpha", "distance_vector_mode": "classic", "distance_vector_before_rounds": 2},
+        {"scenario": "beta", "distance_vector_mode": "poison-reverse", "distance_vector_before_rounds": 3},
+    ]
+
+    write_comparison_suite_csv(rows, str(destination))
+
+    content = destination.read_text(encoding="utf-8")
+    assert "scenario" in content.splitlines()[0]
+    assert "alpha" in content
+    assert "poison-reverse" in content
+
+
+def test_cli_scenario_suite_json_and_csv_output(tmp_path: Path) -> None:
+    topology_path = tmp_path / "topology.json"
+    topology_path.write_text(json.dumps(TOPOLOGY), encoding="utf-8")
+    suite_path = tmp_path / "suite.json"
+    csv_path = tmp_path / "suite.csv"
+    suite_path.write_text(
+        json.dumps(
+            {
+                "distance_vector_modes": ["split-horizon"],
+                "distance_vector_update_strategies": ["triggered"],
+                "max_rounds": 20,
+                "scenarios": [
+                    {"name": "failure-check", "topology": "topology.json", "remove_link": ["B", "D"]}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "link_state_routing.py",
+            "--scenario-suite",
+            str(suite_path),
+            "--csv-out",
+            str(csv_path),
+        ],
+        cwd=Path(__file__).parent,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["aggregate"]["scenario_count"] == 1
+    assert payload["rows"][0]["distance_vector_mode"] == "split-horizon"
+    assert csv_path.exists()
+    assert "failure-check" in csv_path.read_text(encoding="utf-8")
+
+
+def test_run_comparison_suite_requires_scenario_topology(tmp_path: Path) -> None:
+    suite_path = tmp_path / "suite.json"
+    suite_path.write_text(json.dumps({"scenarios": [{"name": "broken"}]}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="scenario topology is required"):
+        run_comparison_suite(str(suite_path))
+
+
+def test_compare_with_distance_vector_rejects_unknown_mode() -> None:
+    with pytest.raises(ValueError, match="unsupported distance_vector_mode"):
+        compare_with_distance_vector(TOPOLOGY, distance_vector_mode="not-a-mode")
