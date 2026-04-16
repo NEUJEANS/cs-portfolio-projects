@@ -324,6 +324,6 @@
 - [x] add a `catalog-plugins` command that auto-discovers bundled plugins and emits the same JSON/CSV/Markdown/HTML inspection artifacts
 - [x] extend project-level and repo-level tests for plugin discovery, catalog output, and empty-match validation
 - [x] run tests and 3 review passes
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 - [ ] consider richer catalog landing pages such as per-plugin badges or docs-site navigation sidebars in a future run
