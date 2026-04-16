@@ -64,6 +64,7 @@
 - [x] model explicit node recovery/rejoin events inside churn scenarios
 - [x] export churn summaries as Markdown/CSV for portfolio write-ups or charts
 - [x] compare multiple churn workloads side by side so recovery sensitivity is easier to explain in portfolio notes
+- [x] export per-key variance summaries so benchmark-sample comparisons can show which lookups are most sensitive to start-node choice
 
 ## Recovery churn slice (2026-04-15 19:42 UTC run)
 - [x] confirm repo sync before editing
@@ -169,6 +170,22 @@
 - [x] update checklist/docs so the slice is resumable
 - [x] add seeded sample-comparison helpers and a dedicated export command for benchmark variance across start-node subsets
 - [x] extend automated coverage for comparison summaries, renderers, and CLI output
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
+
+## Benchmark key variance slice (2026-04-16 04:41 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current benchmark tooling for the weakest unfinished reporting gap
+- [x] skip web research because the README already called out per-key variance as the next direct extension
+- [x] do a short Python aggregation/reporting refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add per-key variance aggregation plus Markdown/CSV export for seeded benchmark samples
+- [x] extend automated coverage for variance summaries, renderers, and CLI output
 - [x] run tests locally
 - [x] perform review pass 1 and fix issues
 - [x] perform review pass 2 and fix issues

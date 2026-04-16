@@ -28,6 +28,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - optional seeded random sampling of benchmark start nodes so larger rings can be profiled without always biasing toward the first sorted nodes
 - JSON ring input for reproducible demos and unit tests
 - seeded sample-comparison export for measuring how lookup benchmark results vary across different random start-node subsets
+- per-key variance export that highlights which lookups are most sensitive to start-node selection across benchmark samples
 
 ## Usage
 
@@ -96,6 +97,29 @@ Export the same sample comparison as CSV for charts or spreadsheets:
 
 ```bash
 python3 projects/chord-dht-lab/chord_dht.py benchmark-sample-export \
+  projects/chord-dht-lab/ring.json \
+  compiler slides final-project \
+  --sample-size 3 \
+  --sample-seed 17 \
+  --sample-seed 29 \
+  --format csv
+```
+
+Summarize per-key variance so portfolio notes can call out the most start-node-sensitive lookups:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py benchmark-key-variance-export \
+  projects/chord-dht-lab/ring.json \
+  compiler slides final-project \
+  --sample-size 3 \
+  --sample-seed 17 \
+  --sample-seed 29
+```
+
+Export the same per-key variance summary as CSV for charts or spreadsheet pivots:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py benchmark-key-variance-export \
   projects/chord-dht-lab/ring.json \
   compiler slides final-project \
   --sample-size 3 \
@@ -323,4 +347,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - The benchmark uses the same ring and key identifiers for both lookup strategies so hop-count differences stay attributable to routing logic rather than input drift.
 
 ## Future improvements
-- export per-key variance summaries so the sample comparison can highlight which lookups are most sensitive to start-node choice
+- add artifact-output flags so sample and per-key variance reports can be written directly to committed docs/examples without shell redirection

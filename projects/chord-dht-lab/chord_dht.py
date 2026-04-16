@@ -1167,6 +1167,202 @@ def render_benchmark_sample_comparison_csv(comparison: dict[str, object]) -> str
     return output.getvalue().strip()
 
 
+def summarize_benchmark_key_variance(comparison: dict[str, object]) -> dict[str, object]:
+    sample_count = len(comparison["samples"])
+    if sample_count == 0:
+        raise ValueError("comparison must include at least one sample")
+
+    per_key: dict[str, dict[str, object]] = {}
+    for sample in comparison["samples"]:
+        for case in sample["benchmark"]["cases"]:
+            key_summary = per_key.setdefault(
+                case["key"],
+                {
+                    "key": case["key"],
+                    "key_id": case["key_id"],
+                    "responsible_node": case["responsible_node"],
+                    "sample_count": 0,
+                    "total_chord_hops": 0,
+                    "total_linear_hops": 0,
+                    "total_hop_savings": 0,
+                    "min_chord_hops": None,
+                    "max_chord_hops": None,
+                    "min_linear_hops": None,
+                    "max_linear_hops": None,
+                    "min_hop_savings": None,
+                    "max_hop_savings": None,
+                    "start_nodes": set(),
+                    "best_seed_cases": [],
+                    "worst_seed_cases": [],
+                },
+            )
+            key_summary["sample_count"] += 1
+            key_summary["total_chord_hops"] += case["chord_hops"]
+            key_summary["total_linear_hops"] += case["linear_hops"]
+            key_summary["total_hop_savings"] += case["hop_savings"]
+            key_summary["start_nodes"].add(case["start_node"])
+
+            for metric_name, value in (
+                ("chord_hops", case["chord_hops"]),
+                ("linear_hops", case["linear_hops"]),
+                ("hop_savings", case["hop_savings"]),
+            ):
+                min_key = f"min_{metric_name}"
+                max_key = f"max_{metric_name}"
+                if key_summary[min_key] is None or value < key_summary[min_key]:
+                    key_summary[min_key] = value
+                if key_summary[max_key] is None or value > key_summary[max_key]:
+                    key_summary[max_key] = value
+
+            seed_case = {
+                "seed": sample["seed"],
+                "start_node": case["start_node"],
+                "chord_hops": case["chord_hops"],
+                "linear_hops": case["linear_hops"],
+                "hop_savings": case["hop_savings"],
+            }
+            key_summary["best_seed_cases"].append(seed_case)
+            key_summary["worst_seed_cases"].append(seed_case)
+
+    summaries: list[dict[str, object]] = []
+    for key_summary in per_key.values():
+        key_summary["average_chord_hops"] = round(
+            key_summary["total_chord_hops"] / key_summary["sample_count"], 4
+        )
+        key_summary["average_linear_hops"] = round(
+            key_summary["total_linear_hops"] / key_summary["sample_count"], 4
+        )
+        key_summary["average_hop_savings"] = round(
+            key_summary["total_hop_savings"] / key_summary["sample_count"], 4
+        )
+        key_summary["chord_hop_spread"] = key_summary["max_chord_hops"] - key_summary["min_chord_hops"]
+        key_summary["linear_hop_spread"] = key_summary["max_linear_hops"] - key_summary["min_linear_hops"]
+        key_summary["hop_savings_spread"] = key_summary["max_hop_savings"] - key_summary["min_hop_savings"]
+        key_summary["start_nodes"] = sorted(key_summary["start_nodes"])
+        key_summary["start_node_count"] = len(key_summary["start_nodes"])
+        best_savings = key_summary["max_hop_savings"]
+        worst_savings = key_summary["min_hop_savings"]
+        key_summary["best_seed_cases"] = [
+            case for case in key_summary["best_seed_cases"] if case["hop_savings"] == best_savings
+        ]
+        key_summary["worst_seed_cases"] = [
+            case for case in key_summary["worst_seed_cases"] if case["hop_savings"] == worst_savings
+        ]
+        key_summary["best_seed_cases"].sort(key=lambda case: (case["seed"], case["start_node"]))
+        key_summary["worst_seed_cases"].sort(key=lambda case: (case["seed"], case["start_node"]))
+        summaries.append(key_summary)
+
+    summaries.sort(
+        key=lambda item: (
+            -item["hop_savings_spread"],
+            -item["chord_hop_spread"],
+            -item["average_hop_savings"],
+            item["key"],
+        )
+    )
+    highest_spread = summaries[0]["hop_savings_spread"]
+    most_sensitive_keys = [item["key"] for item in summaries if item["hop_savings_spread"] == highest_spread]
+    summary = {
+        "key_count": len(summaries),
+        "sample_count": sample_count,
+        "highest_hop_savings_spread": highest_spread,
+        "most_sensitive_keys": most_sensitive_keys,
+        "widest_chord_hop_spread": max(item["chord_hop_spread"] for item in summaries),
+        "widest_linear_hop_spread": max(item["linear_hop_spread"] for item in summaries),
+    }
+    return {
+        "m_bits": comparison["m_bits"],
+        "node_count": comparison["node_count"],
+        "keys": list(comparison["keys"]),
+        "sample_size": comparison["sample_size"],
+        "sample_seeds": list(comparison["sample_seeds"]),
+        "key_summaries": summaries,
+        "summary": summary,
+    }
+
+
+def render_benchmark_key_variance_markdown(variance: dict[str, object]) -> str:
+    summary = variance["summary"]
+    lines = [
+        "# Chord benchmark key variance",
+        "",
+        f"- Identifier bits: `{variance['m_bits']}`",
+        f"- Node count: `{variance['node_count']}`",
+        f"- Key count: `{summary['key_count']}`",
+        f"- Sample count: `{summary['sample_count']}`",
+        f"- Start nodes per sample: `{variance['sample_size']}`",
+        f"- Sample seeds: {', '.join(f'`{seed}`' for seed in variance['sample_seeds'])}",
+        f"- Highest hop-savings spread: `{summary['highest_hop_savings_spread']}`",
+        f"- Most sensitive key(s): {', '.join(f'`{key}`' for key in summary['most_sensitive_keys'])}",
+        "",
+        "| Key | Responsible node | Avg chord hops | Avg linear hops | Avg hop savings | Hop-savings spread | Chord spread | Start nodes seen | Best seed/start | Worst seed/start |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    ]
+    for item in variance["key_summaries"]:
+        best = ", ".join(
+            f"`{case['seed']}`/{case['start_node']} ({case['hop_savings']})" for case in item["best_seed_cases"]
+        )
+        worst = ", ".join(
+            f"`{case['seed']}`/{case['start_node']} ({case['hop_savings']})" for case in item["worst_seed_cases"]
+        )
+        lines.append(
+            f"| `{item['key']}` | `{item['responsible_node']}` | {item['average_chord_hops']} | {item['average_linear_hops']} | {item['average_hop_savings']} | {item['hop_savings_spread']} | {item['chord_hop_spread']} | {item['start_node_count']} | {best} | {worst} |"
+        )
+    return "\n".join(lines)
+
+
+def render_benchmark_key_variance_csv(variance: dict[str, object]) -> str:
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "key",
+        "key_id",
+        "responsible_node",
+        "sample_count",
+        "average_chord_hops",
+        "average_linear_hops",
+        "average_hop_savings",
+        "min_chord_hops",
+        "max_chord_hops",
+        "chord_hop_spread",
+        "min_linear_hops",
+        "max_linear_hops",
+        "linear_hop_spread",
+        "min_hop_savings",
+        "max_hop_savings",
+        "hop_savings_spread",
+        "start_nodes",
+        "best_seed_cases",
+        "worst_seed_cases",
+    ])
+    for item in variance["key_summaries"]:
+        writer.writerow([
+            item["key"],
+            item["key_id"],
+            item["responsible_node"],
+            item["sample_count"],
+            item["average_chord_hops"],
+            item["average_linear_hops"],
+            item["average_hop_savings"],
+            item["min_chord_hops"],
+            item["max_chord_hops"],
+            item["chord_hop_spread"],
+            item["min_linear_hops"],
+            item["max_linear_hops"],
+            item["linear_hop_spread"],
+            item["min_hop_savings"],
+            item["max_hop_savings"],
+            item["hop_savings_spread"],
+            "->".join(item["start_nodes"]),
+            ";".join(f"{case['seed']}:{case['start_node']}:{case['hop_savings']}" for case in item["best_seed_cases"]),
+            ";".join(f"{case['seed']}:{case['start_node']}:{case['hop_savings']}" for case in item["worst_seed_cases"]),
+        ])
+    return output.getvalue().strip()
+
+
 def render_stabilization_comparison_markdown(comparison: dict[str, object]) -> str:
     rows = comparison["comparison"]
     summary = comparison["summary"]
@@ -1665,6 +1861,33 @@ def parse_args() -> argparse.Namespace:
         help="report format for the rendered sample comparison",
     )
 
+    benchmark_key_variance_parser = subparsers.add_parser(
+        "benchmark-key-variance-export",
+        help="summarize per-key lookup variance across multiple random start-node samples",
+    )
+    benchmark_key_variance_parser.add_argument("ring_file", type=Path)
+    benchmark_key_variance_parser.add_argument("keys", nargs="+", help="keys to benchmark")
+    benchmark_key_variance_parser.add_argument(
+        "--sample-size",
+        type=int,
+        required=True,
+        help="number of start nodes to include in each seeded random sample",
+    )
+    benchmark_key_variance_parser.add_argument(
+        "--sample-seed",
+        dest="sample_seeds",
+        action="append",
+        type=int,
+        required=True,
+        help="seed for one benchmark sample; may be provided multiple times",
+    )
+    benchmark_key_variance_parser.add_argument(
+        "--format",
+        choices=["markdown", "csv"],
+        default="markdown",
+        help="report format for the rendered per-key variance summary",
+    )
+
     resilience_parser = subparsers.add_parser(
         "resilience",
         help="simulate successor-list replicas and key availability during node failures",
@@ -1997,6 +2220,22 @@ def main() -> None:
             return
         if args.format == "csv":
             print(render_benchmark_sample_comparison_csv(comparison))
+            return
+        raise ValueError(f"unsupported export format {args.format!r}")
+    elif args.command == "benchmark-key-variance-export":
+        ring = load_ring(args.ring_file)
+        comparison = compare_benchmark_start_node_samples(
+            ring,
+            args.keys,
+            sample_size=args.sample_size,
+            sample_seeds=args.sample_seeds,
+        )
+        variance = summarize_benchmark_key_variance(comparison)
+        if args.format == "markdown":
+            print(render_benchmark_key_variance_markdown(variance))
+            return
+        if args.format == "csv":
+            print(render_benchmark_key_variance_csv(variance))
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "resilience":

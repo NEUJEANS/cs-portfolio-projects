@@ -308,6 +308,57 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("seed,start_nodes,average_chord_hops,average_linear_hops,total_hop_savings,improved_cases,tied_cases,slower_cases,case_count", report)
         self.assertIn("17,", report)
 
+    def test_summarize_benchmark_key_variance_orders_most_sensitive_key_first(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = module.compare_benchmark_start_node_samples(
+            ring,
+            ["compiler", "slides", "final-project"],
+            sample_size=3,
+            sample_seeds=[17, 29],
+        )
+        variance = module.summarize_benchmark_key_variance(comparison)
+
+        self.assertEqual(variance["summary"]["sample_count"], 2)
+        self.assertEqual(variance["summary"]["key_count"], 3)
+        self.assertEqual(variance["key_summaries"][0]["hop_savings_spread"], variance["summary"]["highest_hop_savings_spread"])
+        self.assertIn(variance["key_summaries"][0]["key"], variance["summary"]["most_sensitive_keys"])
+        self.assertGreaterEqual(variance["key_summaries"][0]["sample_count"], 2)
+
+    def test_render_benchmark_key_variance_markdown_contains_best_and_worst_seed_rows(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = module.compare_benchmark_start_node_samples(
+            ring,
+            ["compiler", "slides"],
+            sample_size=3,
+            sample_seeds=[17, 29],
+        )
+        variance = module.summarize_benchmark_key_variance(comparison)
+        report = module.render_benchmark_key_variance_markdown(variance)
+
+        self.assertIn("# Chord benchmark key variance", report)
+        self.assertIn("- Most sensitive key(s):", report)
+        self.assertIn("| Key | Responsible node | Avg chord hops | Avg linear hops | Avg hop savings |", report)
+        self.assertIn("Best seed/start", report)
+        self.assertIn("Worst seed/start", report)
+
+    def test_render_benchmark_key_variance_csv_contains_machine_readable_rows(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+
+        comparison = module.compare_benchmark_start_node_samples(
+            ring,
+            ["compiler"],
+            sample_size=2,
+            sample_seeds=[17, 29],
+        )
+        variance = module.summarize_benchmark_key_variance(comparison)
+        report = module.render_benchmark_key_variance_csv(variance)
+
+        self.assertIn("key,key_id,responsible_node,sample_count,average_chord_hops,average_linear_hops,average_hop_savings", report)
+        self.assertIn("compiler,", report)
+        self.assertIn("best_seed_cases", report)
+
     def test_render_stabilization_comparison_markdown_contains_summary_table(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
 
@@ -564,6 +615,54 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("# Chord benchmark sample comparison", completed.stdout)
         self.assertIn("- Sample seeds: `17`, `29`", completed.stdout)
         self.assertIn("| Seed | Start nodes | Avg Chord hops | Avg linear hops | Total hop savings |", completed.stdout)
+
+    def test_cli_benchmark_key_variance_export_outputs_markdown_and_csv(self) -> None:
+        markdown = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "benchmark-key-variance-export",
+                str(RING_PATH),
+                "compiler",
+                "slides",
+                "--sample-size",
+                "3",
+                "--sample-seed",
+                "17",
+                "--sample-seed",
+                "29",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        csv_output = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "benchmark-key-variance-export",
+                str(RING_PATH),
+                "compiler",
+                "--sample-size",
+                "2",
+                "--sample-seed",
+                "17",
+                "--sample-seed",
+                "29",
+                "--format",
+                "csv",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("# Chord benchmark key variance", markdown.stdout)
+        self.assertIn("- Most sensitive key(s):", markdown.stdout)
+        self.assertIn("key,key_id,responsible_node,sample_count,average_chord_hops", csv_output.stdout)
+        self.assertIn("compiler,", csv_output.stdout)
 
     def test_cli_resilience_supports_failure_simulation(self) -> None:
         completed = subprocess.run(
