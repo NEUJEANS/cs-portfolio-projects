@@ -1,7 +1,7 @@
 # splay-tree-lab checklist
 
 ## Status
-- [x] vertical slice 5 complete
+- [x] vertical slice 6 complete
 
 ## Core functionality
 - [x] define portfolio goals for a self-adjusting BST lab with resumable snapshots
@@ -18,6 +18,6 @@
 - [x] append wrap-up notes for completed slices
 
 ## Next ideas
-- [ ] export benchmark sweeps across multiple tree sizes for chart-ready comparison series
+- [x] export benchmark sweeps across multiple tree sizes for chart-ready comparison series
 - [ ] add step-by-step trace snapshot export for slide decks or animation tooling
 - [ ] generate a Markdown benchmark report with interpretation and embedded artifact links

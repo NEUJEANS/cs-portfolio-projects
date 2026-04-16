@@ -457,6 +457,49 @@ def save_text(path: Path, content: str) -> None:
     path.write_text(content)
 
 
+BENCHMARK_CSV_FIELDNAMES = [
+    "size",
+    "seed",
+    "hot_set_size",
+    "workload",
+    "query_count",
+    "splay_hits",
+    "splay_comparisons_used",
+    "splay_rotations_used",
+    "splay_comparisons_per_query",
+    "splay_rotations_per_query",
+    "splay_root_after",
+    "red_black_hits",
+    "red_black_comparisons_used",
+    "red_black_comparisons_per_query",
+    "red_black_height",
+    "red_black_root",
+    "comparison_gap",
+]
+
+BENCHMARK_SERIES_CSV_FIELDNAMES = [
+    "series_index",
+    "size",
+    "seed",
+    "hot_set_size",
+    "hot_set_ratio",
+    "workload",
+    "query_count",
+    "splay_hits",
+    "splay_comparisons_used",
+    "splay_rotations_used",
+    "splay_comparisons_per_query",
+    "splay_rotations_per_query",
+    "splay_root_after",
+    "red_black_hits",
+    "red_black_comparisons_used",
+    "red_black_comparisons_per_query",
+    "red_black_height",
+    "red_black_root",
+    "comparison_gap",
+]
+
+
 def benchmark_csv_rows(payload: dict[str, object]) -> list[dict[str, object]]:
     workloads = payload["workloads"]
     hot_set_size = payload["hot_set_size"]
@@ -489,30 +532,34 @@ def benchmark_csv_rows(payload: dict[str, object]) -> list[dict[str, object]]:
     return rows
 
 
+def benchmark_series_csv_rows(payload: dict[str, object]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for index, entry in enumerate(payload["entries"]):
+        for row in benchmark_csv_rows(entry):
+            rows.append(
+                {
+                    "series_index": index,
+                    "hot_set_ratio": round(row["hot_set_size"] / row["size"], 4),
+                    **row,
+                }
+            )
+    return rows
+
+
 def save_benchmark_csv(path: Path, payload: dict[str, object]) -> None:
     rows = benchmark_csv_rows(payload)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "size",
-        "seed",
-        "hot_set_size",
-        "workload",
-        "query_count",
-        "splay_hits",
-        "splay_comparisons_used",
-        "splay_rotations_used",
-        "splay_comparisons_per_query",
-        "splay_rotations_per_query",
-        "splay_root_after",
-        "red_black_hits",
-        "red_black_comparisons_used",
-        "red_black_comparisons_per_query",
-        "red_black_height",
-        "red_black_root",
-        "comparison_gap",
-    ]
     with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=BENCHMARK_CSV_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def save_benchmark_series_csv(path: Path, payload: dict[str, object]) -> None:
+    rows = benchmark_series_csv_rows(payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=BENCHMARK_SERIES_CSV_FIELDNAMES)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -639,6 +686,76 @@ def benchmark_trees(*, size: int, hot_set_size: int, hot_queries: int, random_qu
     }
 
 
+def normalize_series_sizes(sizes: Iterable[int]) -> list[int]:
+    normalized: list[int] = []
+    seen: set[int] = set()
+    for size in sizes:
+        if size <= 0:
+            raise ValueError("sizes must be positive integers")
+        if size in seen:
+            continue
+        seen.add(size)
+        normalized.append(size)
+    if not normalized:
+        raise ValueError("at least one benchmark size is required")
+    return normalized
+
+
+def benchmark_series(*, sizes: Iterable[int], hot_set_size: int, hot_queries: int, random_queries: int, seed: int) -> dict[str, object]:
+    normalized_sizes = normalize_series_sizes(sizes)
+    if hot_set_size <= 0:
+        raise ValueError("hot-set-size must be positive")
+    if hot_queries <= 0 or random_queries <= 0:
+        raise ValueError("query counts must be positive")
+    if any(size < hot_set_size for size in normalized_sizes):
+        raise ValueError("every benchmark size must be at least as large as hot-set-size")
+
+    entries: list[dict[str, object]] = []
+    summary_rows: list[dict[str, object]] = []
+    for index, size in enumerate(normalized_sizes):
+        entry_seed = seed + index
+        entry = benchmark_trees(
+            size=size,
+            hot_set_size=hot_set_size,
+            hot_queries=hot_queries,
+            random_queries=random_queries,
+            seed=entry_seed,
+        )
+        entries.append(entry)
+        summary_rows.append(
+            {
+                "size": size,
+                "seed": entry_seed,
+                "hotset_comparison_gap": entry["takeaway"]["hotset_comparison_gap"],
+                "uniform_random_comparison_gap": entry["takeaway"]["uniform_random_comparison_gap"],
+                "hotset_splay_comparisons_per_query": entry["workloads"]["hotset"]["splay"]["comparisons_per_query"],
+                "hotset_red_black_comparisons_per_query": entry["workloads"]["hotset"]["red_black"]["comparisons_per_query"],
+                "uniform_random_splay_comparisons_per_query": entry["workloads"]["uniform_random"]["splay"]["comparisons_per_query"],
+                "uniform_random_red_black_comparisons_per_query": entry["workloads"]["uniform_random"]["red_black"]["comparisons_per_query"],
+            }
+        )
+
+    best_hotset = max(summary_rows, key=lambda row: row["hotset_comparison_gap"])
+    best_uniform_random = max(summary_rows, key=lambda row: row["uniform_random_comparison_gap"])
+
+    return {
+        "sizes": normalized_sizes,
+        "seed_base": seed,
+        "hot_set_size": hot_set_size,
+        "hot_queries": hot_queries,
+        "random_queries": random_queries,
+        "entries": entries,
+        "summary": summary_rows,
+        "takeaway": {
+            "best_hotset_gap": best_hotset,
+            "best_uniform_random_gap": best_uniform_random,
+            "interpretation": (
+                "positive gap means the splay tree used fewer key comparisons than the red-black tree at that size/workload"
+            ),
+        },
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Splay tree lab CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -701,6 +818,35 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--seed", type=int, default=42, help="deterministic seed for build order and queries")
     benchmark_parser.add_argument("--json-output", type=Path, help="optional path to save the benchmark payload as JSON")
     benchmark_parser.add_argument("--csv-output", type=Path, help="optional path to save chart-ready benchmark rows as CSV")
+
+    benchmark_series_parser = subparsers.add_parser(
+        "benchmark-series",
+        help="run the red-black comparison benchmark across multiple tree sizes and export chart-ready series data",
+    )
+    benchmark_series_parser.add_argument(
+        "sizes",
+        nargs="+",
+        type=int,
+        help="one or more tree sizes to sweep, for example: 63 127 255",
+    )
+    benchmark_series_parser.add_argument(
+        "--hot-set-size", type=int, default=8, help="number of hot keys reused inside each skewed workload"
+    )
+    benchmark_series_parser.add_argument(
+        "--hot-queries", type=int, default=256, help="number of skewed hot-set queries per tree size"
+    )
+    benchmark_series_parser.add_argument(
+        "--random-queries", type=int, default=256, help="number of uniformly random successful queries per tree size"
+    )
+    benchmark_series_parser.add_argument(
+        "--seed", type=int, default=42, help="deterministic base seed; each size increments the seed by its series index"
+    )
+    benchmark_series_parser.add_argument(
+        "--json-output", type=Path, help="optional path to save the full benchmark-series payload as JSON"
+    )
+    benchmark_series_parser.add_argument(
+        "--csv-output", type=Path, help="optional path to save flattened chart-ready series rows as CSV"
+    )
 
     return parser
 
@@ -787,6 +933,21 @@ def main(argv: list[str] | None = None) -> int:
                 save_snapshot_payload(args.json_output, payload)
             if args.csv_output is not None:
                 save_benchmark_csv(args.csv_output, payload)
+            print(json.dumps(payload, indent=2))
+            return 0
+
+        if args.command == "benchmark-series":
+            payload = benchmark_series(
+                sizes=args.sizes,
+                hot_set_size=args.hot_set_size,
+                hot_queries=args.hot_queries,
+                random_queries=args.random_queries,
+                seed=args.seed,
+            )
+            if args.json_output is not None:
+                save_snapshot_payload(args.json_output, payload)
+            if args.csv_output is not None:
+                save_benchmark_series_csv(args.csv_output, payload)
             print(json.dumps(payload, indent=2))
             return 0
     except ValueError as exc:

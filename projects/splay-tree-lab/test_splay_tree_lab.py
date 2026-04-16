@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from splay_tree_lab import SplayTree, benchmark_csv_rows, benchmark_trees
+from splay_tree_lab import SplayTree, benchmark_csv_rows, benchmark_series, benchmark_series_csv_rows, benchmark_trees
 
 
 class SplayTreeBehaviorTests(unittest.TestCase):
@@ -85,6 +85,33 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertEqual(rows[0]["query_count"], 64)
         self.assertIn("comparison_gap", rows[0])
         self.assertGreater(rows[0]["red_black_comparisons_used"], 0)
+
+    def test_benchmark_series_summarizes_multiple_sizes(self) -> None:
+        payload = benchmark_series(sizes=[31, 63, 127], hot_set_size=4, hot_queries=64, random_queries=64, seed=19)
+        self.assertEqual(payload["sizes"], [31, 63, 127])
+        self.assertEqual(len(payload["entries"]), 3)
+        self.assertEqual([row["size"] for row in payload["summary"]], [31, 63, 127])
+        self.assertEqual(payload["summary"][1]["seed"], 20)
+        self.assertIn(payload["takeaway"]["best_hotset_gap"]["size"], payload["sizes"])
+        self.assertIn(payload["takeaway"]["best_uniform_random_gap"]["size"], payload["sizes"])
+
+    def test_benchmark_series_csv_rows_flatten_sizes_and_workloads(self) -> None:
+        payload = benchmark_series(sizes=[31, 63], hot_set_size=4, hot_queries=64, random_queries=64, seed=23)
+        rows = benchmark_series_csv_rows(payload)
+        self.assertEqual(len(rows), 4)
+        self.assertEqual([(row["series_index"], row["size"], row["workload"]) for row in rows], [
+            (0, 31, "hotset"),
+            (0, 31, "uniform_random"),
+            (1, 63, "hotset"),
+            (1, 63, "uniform_random"),
+        ])
+        self.assertAlmostEqual(rows[0]["hot_set_ratio"], round(4 / 31, 4))
+        self.assertIn("comparison_gap", rows[-1])
+
+    def test_benchmark_series_deduplicates_sizes_preserving_order(self) -> None:
+        payload = benchmark_series(sizes=[63, 31, 63], hot_set_size=4, hot_queries=64, random_queries=64, seed=29)
+        self.assertEqual(payload["sizes"], [63, 31])
+        self.assertEqual([row["seed"] for row in payload["summary"]], [29, 30])
 
     def test_split_returns_values_around_missing_pivot(self) -> None:
         tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
@@ -316,6 +343,51 @@ class SplayTreeCliTests(unittest.TestCase):
             self.assertIn("workload", csv_lines[0])
             self.assertIn("hotset", csv_lines[1])
             self.assertIn("uniform_random", csv_lines[2])
+
+    def test_benchmark_series_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            json_output = tmp_path / "artifacts" / "benchmark-series.json"
+            csv_output = tmp_path / "artifacts" / "benchmark-series.csv"
+            benchmark = subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "benchmark-series",
+                    "31",
+                    "63",
+                    "127",
+                    "--hot-set-size",
+                    "4",
+                    "--hot-queries",
+                    "64",
+                    "--random-queries",
+                    "64",
+                    "--seed",
+                    "5",
+                    "--json-output",
+                    str(json_output),
+                    "--csv-output",
+                    str(csv_output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(benchmark.stdout)
+            self.assertEqual(payload["sizes"], [31, 63, 127])
+            self.assertEqual(len(payload["entries"]), 3)
+            self.assertEqual(payload["summary"][0]["seed"], 5)
+            self.assertEqual(payload["summary"][2]["seed"], 7)
+            self.assertTrue(json_output.exists())
+            self.assertTrue(csv_output.exists())
+            self.assertEqual(json.loads(json_output.read_text()), payload)
+            csv_lines = csv_output.read_text().strip().splitlines()
+            self.assertEqual(len(csv_lines), 7)
+            self.assertIn("series_index", csv_lines[0])
+            self.assertIn("hot_set_ratio", csv_lines[0])
+            self.assertIn(",31,5,4,0.129", csv_lines[1])
+            self.assertIn(",127,7,4,0.0315", csv_lines[-1])
 
     def test_split_and_join_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

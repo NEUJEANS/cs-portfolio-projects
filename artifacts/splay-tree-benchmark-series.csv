@@ -1,0 +1,7 @@
+series_index,size,seed,hot_set_size,hot_set_ratio,workload,query_count,splay_hits,splay_comparisons_used,splay_rotations_used,splay_comparisons_per_query,splay_rotations_per_query,splay_root_after,red_black_hits,red_black_comparisons_used,red_black_comparisons_per_query,red_black_height,red_black_root,comparison_gap
+0,63,42,8,0.127,hotset,256,256,803,547,3.137,2.137,20,256,1000,3.906,8,37,197
+0,63,42,8,0.127,uniform_random,256,256,1704,1448,6.656,5.656,18,256,1364,5.328,8,37,-340
+1,127,43,8,0.063,hotset,256,256,853,597,3.332,2.332,46,256,1018,3.977,9,54,165
+1,127,43,8,0.063,uniform_random,256,256,2186,1930,8.539,7.539,9,256,1597,6.238,9,54,-589
+2,255,44,8,0.0314,hotset,256,256,859,603,3.355,2.355,209,256,938,3.664,10,127,79
+2,255,44,8,0.0314,uniform_random,256,256,2445,2189,9.551,8.551,88,256,1835,7.168,10,127,-610
