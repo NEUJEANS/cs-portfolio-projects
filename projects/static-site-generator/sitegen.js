@@ -255,7 +255,10 @@ function markdownToHtml(markdown, page) {
   const lines = markdown.replace(/\r/g, '').split('\n');
   const parts = [];
   let paragraph = [];
-  let listItems = [];
+  let bulletListItems = [];
+  let orderedListItems = [];
+  let orderedListStart = 1;
+  let blockquoteLines = [];
   let codeFence = null;
   let codeLines = [];
 
@@ -265,10 +268,30 @@ function markdownToHtml(markdown, page) {
     paragraph = [];
   };
 
-  const flushList = () => {
-    if (!listItems.length) return;
-    parts.push(`<ul>${listItems.map((item) => `<li>${inlineMarkdown(item, page)}</li>`).join('')}</ul>`);
-    listItems = [];
+  const flushBulletList = () => {
+    if (!bulletListItems.length) return;
+    parts.push(`<ul>${bulletListItems.map((item) => `<li>${inlineMarkdown(item, page)}</li>`).join('')}</ul>`);
+    bulletListItems = [];
+  };
+
+  const flushOrderedList = () => {
+    if (!orderedListItems.length) return;
+    const startAttribute = orderedListStart !== 1 ? ` start="${orderedListStart}"` : '';
+    parts.push(`<ol${startAttribute}>${orderedListItems.map((item) => `<li>${inlineMarkdown(item, page)}</li>`).join('')}</ol>`);
+    orderedListItems = [];
+    orderedListStart = 1;
+  };
+
+  const flushLists = () => {
+    flushBulletList();
+    flushOrderedList();
+  };
+
+  const flushBlockquote = () => {
+    if (!blockquoteLines.length) return;
+    const innerHtml = markdownToHtml(blockquoteLines.join('\n'), page);
+    parts.push(`<blockquote>${innerHtml}</blockquote>`);
+    blockquoteLines = [];
   };
 
   const flushCodeBlock = () => {
@@ -286,7 +309,8 @@ function markdownToHtml(markdown, page) {
         flushCodeBlock();
       } else {
         flushParagraph();
-        flushList();
+        flushLists();
+        flushBlockquote();
         codeFence = fenceMatch[1].trim();
       }
       continue;
@@ -297,36 +321,61 @@ function markdownToHtml(markdown, page) {
       continue;
     }
 
+    const blockquoteMatch = /^>\s?(.*)$/.exec(rawLine.trimStart());
+    if (blockquoteMatch) {
+      flushParagraph();
+      flushLists();
+      blockquoteLines.push(blockquoteMatch[1]);
+      continue;
+    }
+
+    if (blockquoteLines.length) {
+      flushBlockquote();
+    }
+
     const line = rawLine.trim();
 
     if (!line) {
       flushParagraph();
-      flushList();
+      flushLists();
       continue;
     }
 
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       flushParagraph();
-      flushList();
+      flushLists();
       const level = heading[1].length;
       parts.push(`<h${level}>${inlineMarkdown(heading[2].trim(), page)}</h${level}>`);
       continue;
     }
 
-    const listMatch = /^[-*]\s+(.*)$/.exec(line);
-    if (listMatch) {
+    const bulletListMatch = /^[-*]\s+(.*)$/.exec(line);
+    if (bulletListMatch) {
       flushParagraph();
-      listItems.push(listMatch[1].trim());
+      flushOrderedList();
+      bulletListItems.push(bulletListMatch[1].trim());
       continue;
     }
 
-    flushList();
+    const orderedListMatch = /^(\d+)\.\s+(.*)$/.exec(line);
+    if (orderedListMatch) {
+      flushParagraph();
+      flushBulletList();
+      if (!orderedListItems.length) {
+        orderedListStart = Number(orderedListMatch[1]);
+      }
+      orderedListItems.push(orderedListMatch[2].trim());
+      continue;
+    }
+
+    flushLists();
     paragraph.push(line);
   }
 
+  flushBlockquote();
   flushParagraph();
-  flushList();
+  flushLists();
   flushCodeBlock();
 
   return parts.join('\n');
@@ -373,6 +422,9 @@ function renderTemplate(page, navigation, contentHtml) {
       code { background: #9992; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
       pre { overflow-x: auto; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 0.85rem; }
       pre code { display: block; background: transparent; padding: 0; border-radius: 0; }
+      blockquote { margin: 0; padding: 0.25rem 1rem; border-left: 4px solid #2563eb; background: #2563eb11; border-radius: 0 0.85rem 0.85rem 0; }
+      blockquote p:first-child { margin-top: 0; }
+      blockquote p:last-child { margin-bottom: 0; }
       .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
       .tags span { font-size: 0.9rem; background: #9992; padding: 0.2rem 0.55rem; border-radius: 999px; }
       footer { margin-top: 2rem; font-size: 0.9rem; color: #666; }

@@ -35,12 +35,19 @@ test('parseFrontMatter extracts metadata types and body', () => {
   assert.match(body, /# Hello/);
 });
 
-test('markdownToHtml handles headings paragraphs lists and inline formatting', () => {
+test('markdownToHtml handles headings paragraphs lists blockquotes and inline formatting', () => {
   const html = markdownToHtml(`# Title
 Paragraph with **bold**, *italics*, [link](https://example.com), and \`code\`.
 
 - alpha
-- beta`);
+- beta
+
+2. ship docs
+3. publish demos
+
+> quote line one
+>
+> quote line two`);
 
   assert.match(html, /<h1>Title<\/h1>/);
   assert.match(html, /<strong>bold<\/strong>/);
@@ -48,6 +55,8 @@ Paragraph with **bold**, *italics*, [link](https://example.com), and \`code\`.
   assert.match(html, /<a href="https:\/\/example.com">link<\/a>/);
   assert.match(html, /<code>code<\/code>/);
   assert.match(html, /<ul><li>alpha<\/li><li>beta<\/li><\/ul>/);
+  assert.match(html, /<ol start="2"><li>ship docs<\/li><li>publish demos<\/li><\/ol>/);
+  assert.match(html, /<blockquote><p>quote line one<\/p>\s*<p>quote line two<\/p><\/blockquote>/);
 });
 
 test('buildSite renders nested navigation and relative markdown links', () => {
@@ -77,6 +86,11 @@ slug: setup
 tags: [algorithms, systems]
 ---
 # Setup
+1. Install Node
+2. Build the site
+
+> Quote callout for the guide.
+
 Return [home](../home.md).`,
     'utf8'
   );
@@ -93,6 +107,8 @@ Return [home](../home.md).`,
   assert.match(homeHtml, /href="guides\/setup.html">guide<\/a>/i);
   assert.match(guideHtml, /<a href="\.\.\/home.html">Home<\/a>/);
   assert.match(guideHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
+  assert.match(guideHtml, /<ol><li>Install Node<\/li><li>Build the site<\/li><\/ol>/);
+  assert.match(guideHtml, /<blockquote><p>Quote callout for the guide\.<\/p><\/blockquote>/);
   assert.match(guideHtml, /href="\.\.\/home.html">home<\/a>/i);
   assert.match(guideHtml, /<span>algorithms<\/span><span>systems<\/span>/);
 });

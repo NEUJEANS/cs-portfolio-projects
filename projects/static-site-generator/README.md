@@ -15,7 +15,7 @@ This project shows practical compiler-style text processing, file-system automat
 - converts Markdown files into standalone HTML pages while preserving nested content folders
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
-- renders a focused Markdown subset: headings, paragraphs, bullet lists, links, images, inline code, fenced code blocks, bold, and italics
+- renders a focused Markdown subset: headings, paragraphs, bullet lists, ordered lists, blockquotes, links, images, inline code, fenced code blocks, bold, and italics
 - recursively copies non-Markdown assets into the output directory so screenshots, CSS files, and downloadable artifacts ship with the site
 - preserves nested page paths and rewrites internal Markdown `.md` links into working relative `.html` links across folders
 - applies a clean shared HTML layout and inline stylesheet
@@ -47,6 +47,11 @@ description: My CS portfolio
 
 - systems projects
 - web projects
+
+1. polish screenshots
+2. publish a project tour
+
+> Add short pull quotes or callouts for internship-ready case studies.
 ```
 
 Then build the site:
@@ -54,6 +59,8 @@ Then build the site:
 ```bash
 node sitegen.js content dist
 ```
+
+Ordered steps and pull-quote style callouts are also preserved, so project pages can mix tutorials, release notes, and narrative case studies without extra tooling.
 
 Fenced code blocks are preserved for technical write-ups:
 

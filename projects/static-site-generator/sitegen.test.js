@@ -32,11 +32,13 @@ test('parseFrontMatter extracts metadata and body', () => {
   assert.equal(parsed.body, '# Heading');
 });
 
-test('markdownToHtml renders headings, lists, emphasis, code, links, images, and fenced blocks', () => {
-  const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))\n\n```js\nconst x = 1 < 2;\nconsole.log(x);\n```');
+test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, images, and fenced blocks', () => {
+  const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\n3. third\n4. fourth\n\n> quoted **note**\n>\n> follow-up line\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))\n\n```js\nconst x = 1 < 2;\nconsole.log(x);\n```');
   assert.match(html, /<h1>Title<\/h1>/);
   assert.match(html, /<img src="assets\/graph.png" alt="Diagram" loading="lazy">/);
-  assert.match(html, /<ul>/);
+  assert.match(html, /<ul><li>one<\/li><li>two<\/li><\/ul>/);
+  assert.match(html, /<ol start="3"><li>third<\/li><li>fourth<\/li><\/ol>/);
+  assert.match(html, /<blockquote><p>quoted <strong>note<\/strong><\/p>\s*<p>follow-up line<\/p><\/blockquote>/);
   assert.match(html, /<strong>world<\/strong>/);
   assert.match(html, /<code>code<\/code>/);
   assert.match(html, /<a href="https:\/\/example.com">docs<\/a>/);
@@ -149,6 +151,10 @@ tags: [portfolio, docs]
 
 ![Hero](../images/hero.png)
 
+1. Install Node.js
+2. Run the builder
+
+> Tip: keep screenshots next to your Markdown files for easy copying.
 
 test command:
 
@@ -175,6 +181,8 @@ Return [home](../index.md).`,
   assert.match(setupHtml, /<a href="\.\.\/index.html">Home<\/a>/);
   assert.match(setupHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
   assert.match(setupHtml, /<img src="\.\.\/images\/hero.png" alt="Hero" loading="lazy">/);
+  assert.match(setupHtml, /<ol><li>Install Node\.js<\/li><li>Run the builder<\/li><\/ol>/);
+  assert.match(setupHtml, /<blockquote><p>Tip: keep screenshots next to your Markdown files for easy copying\.<\/p><\/blockquote>/);
   assert.match(setupHtml, /<pre><code class="language-bash">node sitegen\.js content dist<\/code><\/pre>/);
   assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
   assert.match(setupHtml, /<span>portfolio<\/span><span>docs<\/span>/);
