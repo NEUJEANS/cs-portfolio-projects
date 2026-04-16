@@ -10,4 +10,4 @@
 - [x] add tests covering strategies, free/merge, compaction, and failure cases
 - [x] complete three review passes and fix issues
 - [x] add workload visualization and Markdown-ready timeline export
-- [ ] consider internal-fragmentation or alignment-aware simulation in a future slice
+- [x] add internal-fragmentation and alignment-aware simulation in a follow-up slice

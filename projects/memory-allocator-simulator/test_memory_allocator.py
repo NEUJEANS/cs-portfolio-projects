@@ -47,7 +47,7 @@ class MemoryAllocatorTests(unittest.TestCase):
         moved = allocator.compact()
         after = allocator.metrics()
 
-        self.assertEqual(moved, [{"allocation_id": "C", "from": 10, "to": 5, "size": 4}])
+        self.assertEqual(moved, [{"allocation_id": "C", "from": 10, "to": 5, "size": 4, "requested_size": 4}])
         self.assertEqual(before["external_fragmentation"], 5)
         self.assertEqual(after["external_fragmentation"], 0)
         self.assertEqual(allocator.layout()[-1]["size"], 11)
@@ -77,7 +77,7 @@ class MemoryAllocatorTests(unittest.TestCase):
             [entry["render"] for entry in payload["timeline"]],
             ["........", "AAA.....", "AAABB...", "...BB..."],
         )
-        self.assertIn("| 3 | `free:A` | `...BB...` |", payload["timeline_markdown"])
+        self.assertIn("| 3 | `free:A` | `...BB...` | 2 | 2 | 0 | 6 | 2 |", payload["timeline_markdown"])
 
     def test_render_layout_ascii_scales_large_capacity(self):
         layout = [
@@ -87,6 +87,34 @@ class MemoryAllocatorTests(unittest.TestCase):
         ]
         rendered = render_layout_ascii(layout, capacity=128, width=8)
         self.assertEqual(rendered, "AA....BB")
+
+    def test_alignment_rounds_size_and_tracks_internal_fragmentation(self):
+        allocator = MemoryAllocator(capacity=24, strategy="first-fit", alignment=4)
+        allocator.allocate("A", 5)
+        allocator.allocate("B", 3)
+
+        layout = [segment for segment in allocator.layout() if segment["allocated"]]
+        metrics = allocator.metrics()
+        self.assertEqual(layout[0]["size"], 8)
+        self.assertEqual(layout[0]["requested_size"], 5)
+        self.assertEqual(layout[0]["internal_fragmentation"], 3)
+        self.assertEqual(layout[1]["size"], 4)
+        self.assertEqual(metrics["requested_bytes"], 8)
+        self.assertEqual(metrics["allocated_bytes"], 12)
+        self.assertEqual(metrics["internal_fragmentation"], 4)
+        self.assertEqual(metrics["payload_utilization"], round(8 / 24, 4))
+
+    def test_compaction_preserves_alignment_metadata(self):
+        allocator = MemoryAllocator(capacity=24, strategy="first-fit", alignment=4)
+        run_operations(allocator, ["alloc:A:5", "alloc:B:4", "free:A", "alloc:C:3"])
+        moved = allocator.compact()
+        layout = [segment for segment in allocator.layout() if segment["allocated"]]
+
+        self.assertEqual(moved, [{"allocation_id": "B", "from": 8, "to": 4, "size": 4, "requested_size": 4}])
+        self.assertEqual(layout[0]["allocation_id"], "C")
+        self.assertEqual(layout[0]["requested_size"], 3)
+        self.assertEqual(layout[0]["internal_fragmentation"], 1)
+        self.assertEqual(layout[1]["allocation_id"], "B")
 
     def test_cli_rejects_non_positive_timeline_width(self):
         result = subprocess.run(
@@ -113,6 +141,8 @@ class MemoryAllocatorTests(unittest.TestCase):
                 "16",
                 "--strategy",
                 "best-fit",
+                "--alignment",
+                "4",
                 "--op",
                 "alloc:A:4",
                 "--op",
@@ -132,9 +162,14 @@ class MemoryAllocatorTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["metrics"]["capacity"], 16)
         self.assertEqual(payload["metrics"]["strategy"], "best-fit")
+        self.assertEqual(payload["metrics"]["alignment"], 4)
+        self.assertEqual(payload["metrics"]["requested_bytes"], 6)
+        self.assertEqual(payload["metrics"]["allocated_bytes"], 8)
+        self.assertEqual(payload["metrics"]["internal_fragmentation"], 2)
         self.assertEqual(payload["layout"][0]["allocation_id"], "B")
+        self.assertEqual(payload["layout"][0]["requested_size"], 6)
         self.assertEqual(payload["timeline"][0]["render"], "................")
-        self.assertIn("Memory Allocation Timeline", payload["timeline_markdown"])
+        self.assertIn("Alignment: 4 byte(s)", payload["timeline_markdown"])
 
 
 if __name__ == "__main__":

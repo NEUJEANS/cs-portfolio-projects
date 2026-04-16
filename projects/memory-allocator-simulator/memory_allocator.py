@@ -12,10 +12,18 @@ class Segment:
     size: int
     allocated: bool = False
     allocation_id: str | None = None
+    requested_size: int | None = None
 
     @property
     def end(self) -> int:
         return self.start + self.size
+
+    @property
+    def internal_fragmentation(self) -> int:
+        if not self.allocated:
+            return 0
+        requested_size = self.requested_size if self.requested_size is not None else self.size
+        return self.size - requested_size
 
     def to_dict(self) -> dict:
         return {
@@ -24,6 +32,8 @@ class Segment:
             "size": self.size,
             "allocated": self.allocated,
             "allocation_id": self.allocation_id,
+            "requested_size": self.requested_size,
+            "internal_fragmentation": self.internal_fragmentation,
         }
 
 
@@ -31,14 +41,25 @@ VALID_STRATEGIES = {"first-fit", "best-fit", "worst-fit"}
 
 
 class MemoryAllocator:
-    def __init__(self, capacity: int, strategy: str = "first-fit"):
+    def __init__(self, capacity: int, strategy: str = "first-fit", alignment: int = 1):
         if capacity <= 0:
             raise ValueError("capacity must be positive")
         if strategy not in VALID_STRATEGIES:
             raise ValueError(f"unknown strategy: {strategy}")
+        if alignment <= 0:
+            raise ValueError("alignment must be positive")
         self.capacity = capacity
         self.strategy = strategy
+        self.alignment = alignment
         self.segments = [Segment(start=0, size=capacity, allocated=False)]
+
+    def _round_size(self, requested_size: int) -> int:
+        if requested_size <= 0:
+            raise ValueError("size must be positive")
+        remainder = requested_size % self.alignment
+        if remainder == 0:
+            return requested_size
+        return requested_size + (self.alignment - remainder)
 
     def _free_segments(self) -> list[tuple[int, Segment]]:
         return [
@@ -70,25 +91,27 @@ class MemoryAllocator:
         if any(seg.allocated and seg.allocation_id == allocation_id for seg in self.segments):
             raise ValueError(f"allocation id already exists: {allocation_id}")
 
-        index = self._pick_free_segment(size)
+        allocated_size = self._round_size(size)
+        index = self._pick_free_segment(allocated_size)
         if index is None:
             raise MemoryError(
-                f"unable to allocate {size} bytes with strategy {self.strategy}; "
+                f"unable to allocate requested={size} bytes aligned={allocated_size} bytes with strategy {self.strategy}; "
                 f"largest_free_block={self.metrics()['largest_free_block']}"
             )
 
         segment = self.segments[index]
         allocated = Segment(
             start=segment.start,
-            size=size,
+            size=allocated_size,
             allocated=True,
             allocation_id=allocation_id,
+            requested_size=size,
         )
-        remainder = segment.size - size
+        remainder = segment.size - allocated_size
 
         new_segments = self.segments[:index] + [allocated]
         if remainder:
-            new_segments.append(Segment(start=segment.start + size, size=remainder, allocated=False))
+            new_segments.append(Segment(start=segment.start + allocated_size, size=remainder, allocated=False))
         new_segments.extend(self.segments[index + 1 :])
         self.segments = new_segments
         return allocated.to_dict()
@@ -114,6 +137,7 @@ class MemoryAllocator:
                     "from": segment.start,
                     "to": next_start,
                     "size": segment.size,
+                    "requested_size": segment.requested_size,
                 })
             compacted.append(
                 Segment(
@@ -121,6 +145,7 @@ class MemoryAllocator:
                     size=segment.size,
                     allocated=True,
                     allocation_id=segment.allocation_id,
+                    requested_size=segment.requested_size,
                 )
             )
             next_start += segment.size
@@ -145,18 +170,25 @@ class MemoryAllocator:
 
     def metrics(self) -> dict:
         free_blocks = [segment.size for segment in self.segments if not segment.allocated]
-        allocated_bytes = sum(segment.size for segment in self.segments if segment.allocated)
+        allocated_segments = [segment for segment in self.segments if segment.allocated]
+        allocated_bytes = sum(segment.size for segment in allocated_segments)
+        requested_bytes = sum(segment.requested_size or 0 for segment in allocated_segments)
         free_bytes = sum(free_blocks)
         largest_free_block = max(free_blocks, default=0)
+        internal_fragmentation = sum(segment.internal_fragmentation for segment in allocated_segments)
         return {
             "capacity": self.capacity,
             "strategy": self.strategy,
+            "alignment": self.alignment,
+            "requested_bytes": requested_bytes,
             "allocated_bytes": allocated_bytes,
             "free_bytes": free_bytes,
             "utilization": round(allocated_bytes / self.capacity, 4),
+            "payload_utilization": round(requested_bytes / self.capacity, 4),
             "hole_count": len(free_blocks),
             "largest_free_block": largest_free_block,
             "external_fragmentation": free_bytes - largest_free_block,
+            "internal_fragmentation": internal_fragmentation,
         }
 
 
@@ -215,13 +247,20 @@ def export_timeline_markdown(timeline: list[dict], capacity: int) -> str:
     ruler_width = len(timeline[0]["render"]) if timeline else 0
     ruler = "0" + (" " * max(ruler_width - 2, 0)) + str(capacity)
     lines = ["# Memory Allocation Timeline", "", f"Capacity: {capacity} bytes", ""]
+    if timeline:
+        first_metrics = timeline[0]["metrics"]
+        lines.append(f"Alignment: {first_metrics['alignment']} byte(s)")
+        lines.append("")
     if ruler_width:
         lines.extend(["```text", ruler, "```", ""])
-    lines.extend(["| Step | Operation | Render | Free bytes | Holes |", "| --- | --- | --- | ---: | ---: |"])
+    lines.extend([
+        "| Step | Operation | Render | Requested | Allocated | Internal frag | Free bytes | Holes |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ])
     for entry in timeline:
         metrics = entry["metrics"]
         lines.append(
-            f"| {entry['step']} | `{entry['operation']}` | `{entry['render']}` | {metrics['free_bytes']} | {metrics['hole_count']} |"
+            f"| {entry['step']} | `{entry['operation']}` | `{entry['render']}` | {metrics['requested_bytes']} | {metrics['allocated_bytes']} | {metrics['internal_fragmentation']} | {metrics['free_bytes']} | {metrics['hole_count']} |"
         )
     return "\n".join(lines)
 
@@ -276,6 +315,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allocation strategy",
     )
     parser.add_argument(
+        "--alignment",
+        type=int,
+        default=1,
+        help="Round allocations up to this alignment quantum in bytes (default: 1)",
+    )
+    parser.add_argument(
         "--op",
         action="append",
         default=[],
@@ -301,7 +346,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.timeline_width <= 0:
         parser.error("--timeline-width must be positive")
-    allocator = MemoryAllocator(capacity=args.capacity, strategy=args.strategy)
+    if args.alignment <= 0:
+        parser.error("--alignment must be positive")
+    allocator = MemoryAllocator(capacity=args.capacity, strategy=args.strategy, alignment=args.alignment)
     result = run_operations(
         allocator,
         args.op,
