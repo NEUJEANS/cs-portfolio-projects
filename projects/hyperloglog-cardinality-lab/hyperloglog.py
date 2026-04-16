@@ -1,13 +1,15 @@
 import argparse
+import csv
 import hashlib
 import json
 import math
 import random
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 MAX_HASH_BITS = 64
 MAX_HASH_VALUE = 1 << MAX_HASH_BITS
+MISSING = object()
 
 
 class HyperLogLog:
@@ -84,7 +86,7 @@ class HyperLogLog:
 
     def raw_estimate(self) -> float:
         denominator = sum(2.0 ** (-register) for register in self.registers)
-        return self.alpha_m() * (self.register_count ** 2) / denominator
+        return self.alpha_m() * (self.register_count**2) / denominator
 
     def estimate(self) -> float:
         estimate = self.raw_estimate()
@@ -121,8 +123,155 @@ def save_hll(path: Path, sketch: HyperLogLog) -> None:
     path.write_text(json.dumps(sketch.to_dict(), indent=2) + "\n")
 
 
-def read_items(path: Path) -> list[str]:
-    return [line.strip() for line in path.read_text().splitlines() if line.strip()]
+def infer_input_format(path: Path, requested_format: str) -> str:
+    if requested_format != "auto":
+        return requested_format
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return "csv"
+    if suffix in {".jsonl", ".ndjson"}:
+        return "jsonl"
+    if suffix == ".json":
+        return "json"
+    return "lines"
+
+
+def _load_csv_records(path: Path, delimiter: str) -> tuple[list[dict[str, str]], list[str]]:
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        if not reader.fieldnames:
+            raise ValueError("CSV input requires a header row")
+        fieldnames = list(reader.fieldnames)
+        return list(reader), fieldnames
+
+
+def _load_jsonl_records(path: Path) -> list[Any]:
+    records: list[Any] = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            records.append(json.loads(stripped))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid JSON on line {line_number}: {exc.msg}") from exc
+    return records
+
+
+def _load_json_records(path: Path) -> list[Any]:
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON: {exc.msg}") from exc
+    if isinstance(data, list):
+        return data
+    return [data]
+
+
+def _lookup_field_path(record: Any, field: str) -> Any:
+    if isinstance(record, dict) and field in record:
+        return record[field]
+
+    current = record
+    for part in field.split("."):
+        if isinstance(current, dict):
+            if part not in current:
+                return MISSING
+            current = current[part]
+            continue
+        if isinstance(current, list):
+            if not part.isdigit():
+                return MISSING
+            index = int(part)
+            if index >= len(current):
+                return MISSING
+            current = current[index]
+            continue
+        return MISSING
+    return current
+
+
+def _coerce_record_value(value: Any) -> str | None:
+    if value is MISSING or value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized or None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    raise ValueError("field resolved to a non-scalar value; choose a scalar field path")
+
+
+def extract_items(
+    path: Path,
+    *,
+    input_format: str = "auto",
+    field: str | None = None,
+    csv_delimiter: str = ",",
+) -> tuple[list[str], dict[str, Any]]:
+    resolved_format = infer_input_format(path, input_format)
+
+    if resolved_format == "lines":
+        if field:
+            raise ValueError("--field is only supported for csv/json/jsonl inputs")
+        raw_lines = path.read_text().splitlines()
+        values = [line.strip() for line in raw_lines if line.strip()]
+        return values, {
+            "input_format": resolved_format,
+            "field": None,
+            "records_read": len(raw_lines),
+            "records_with_values": len(values),
+            "records_skipped": len(raw_lines) - len(values),
+            "records_missing_field": 0,
+        }
+
+    missing_field_count = 0
+    if resolved_format == "csv":
+        records, fieldnames = _load_csv_records(path, csv_delimiter)
+        if not field:
+            if len(fieldnames) != 1:
+                raise ValueError("csv input requires --field when the file has multiple columns")
+            field = fieldnames[0]
+        elif field not in fieldnames:
+            raise ValueError(f"field '{field}' not present in CSV header")
+    elif resolved_format == "jsonl":
+        records = _load_jsonl_records(path)
+    elif resolved_format == "json":
+        records = _load_json_records(path)
+    else:
+        raise ValueError(f"unsupported input format: {resolved_format}")
+
+    extracted: list[str] = []
+    skipped = 0
+    for record in records:
+        value = _lookup_field_path(record, field) if field else record
+        if value is MISSING:
+            missing_field_count += 1
+            skipped += 1
+            continue
+        try:
+            normalized = _coerce_record_value(value)
+        except ValueError as exc:
+            target = f"field '{field}'" if field else "record"
+            raise ValueError(f"{target} resolved to a non-scalar value") from exc
+        if normalized is None:
+            skipped += 1
+            continue
+        extracted.append(normalized)
+
+    if field and records and missing_field_count == len(records):
+        raise ValueError(f"field '{field}' not found in any input record")
+
+    return extracted, {
+        "input_format": resolved_format,
+        "field": field,
+        "records_read": len(records),
+        "records_with_values": len(extracted),
+        "records_skipped": skipped,
+        "records_missing_field": missing_field_count,
+    }
 
 
 def simulate_accuracy(precision: int, cardinality: int, trials: int, seed: int = 0) -> dict:
@@ -158,9 +307,15 @@ def simulate_accuracy(precision: int, cardinality: int, trials: int, seed: int =
 
 def build_command(args: argparse.Namespace) -> int:
     sketch = HyperLogLog(precision=args.precision)
-    inserted = sketch.extend(read_items(Path(args.input)))
+    items, extraction_summary = extract_items(
+        Path(args.input),
+        input_format=args.input_format,
+        field=args.field,
+        csv_delimiter=args.csv_delimiter,
+    )
+    inserted = sketch.extend(items)
     save_hll(Path(args.output), sketch)
-    print(json.dumps({"inserted": inserted, "output": args.output, **sketch.stats()}, indent=2))
+    print(json.dumps({"inserted": inserted, "output": args.output, **extraction_summary, **sketch.stats()}, indent=2))
     return 0
 
 
@@ -191,10 +346,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Estimate distinct counts with a HyperLogLog sketch")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    build_parser = subparsers.add_parser("build", help="build a sketch from newline-delimited input")
-    build_parser.add_argument("--input", required=True, help="newline-delimited input file")
+    build_parser = subparsers.add_parser("build", help="build a sketch from text, CSV, JSONL, or JSON input")
+    build_parser.add_argument("--input", required=True, help="input file to scan")
     build_parser.add_argument("--output", required=True, help="where to write sketch JSON")
     build_parser.add_argument("--precision", type=int, default=10, help="register precision between 4 and 16")
+    build_parser.add_argument(
+        "--input-format",
+        choices=["auto", "lines", "csv", "jsonl", "json"],
+        default="auto",
+        help="how to parse the input file (defaults to extension-based auto detection)",
+    )
+    build_parser.add_argument("--field", help="CSV column or dotted JSON field path to count")
+    build_parser.add_argument("--csv-delimiter", default=",", help="CSV delimiter when --input-format csv is used")
     build_parser.set_defaults(func=build_command)
 
     stats_parser = subparsers.add_parser("stats", help="inspect sketch statistics")
@@ -219,7 +382,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ValueError as exc:
+        parser.exit(2, f"error: {exc}\n")
 
 
 if __name__ == "__main__":

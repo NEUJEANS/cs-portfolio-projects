@@ -1,5 +1,6 @@
 # hyperloglog-cardinality-lab checklist
 
+## Initial ship
 - [x] choose a new project that adds probabilistic counting and distributed analytics depth
 - [x] capture compact HyperLogLog design notes
 - [x] do a short Python/probabilistic-data-structures refresh and self-test
@@ -13,3 +14,18 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 structured-input field-extraction slice
+- [x] do brief web research on HyperLogLog event-ingestion patterns for CSV/JSON sources
+- [x] do a short Python csv/json refresh and self-test for structured-input parsing
+- [x] add a resumable checklist entry for the structured-input slice
+- [x] implement CSV plus JSON/JSONL field extraction in `build`
+- [x] expose input-format metadata in build output and README examples
+- [x] add automated coverage for structured-input parsing and CLI flows
+- [x] run tests for the updated slice
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from hyperloglog import HyperLogLog, load_hll, save_hll, simulate_accuracy
+from hyperloglog import HyperLogLog, extract_items, infer_input_format, load_hll, save_hll, simulate_accuracy
 
 SCRIPT = ROOT / "hyperloglog.py"
 
@@ -73,17 +73,167 @@ class HyperLogLogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             simulate_accuracy(precision=8, cardinality=100, trials=0)
 
+    def test_infer_input_format_by_extension(self):
+        self.assertEqual(infer_input_format(Path("users.csv"), "auto"), "csv")
+        self.assertEqual(infer_input_format(Path("events.jsonl"), "auto"), "jsonl")
+        self.assertEqual(infer_input_format(Path("events.ndjson"), "auto"), "jsonl")
+        self.assertEqual(infer_input_format(Path("events.json"), "auto"), "json")
+        self.assertEqual(infer_input_format(Path("users.txt"), "auto"), "lines")
+
+    def test_extract_items_supports_csv_field_selection(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            source = temp_dir / "events.csv"
+            source.write_text("user_id,plan\nu1,free\nu2,pro\nu1,team\n,missing\n")
+            items, summary = extract_items(source, input_format="auto", field="user_id")
+            self.assertEqual(items, ["u1", "u2", "u1"])
+            self.assertEqual(summary["input_format"], "csv")
+            self.assertEqual(summary["records_read"], 4)
+            self.assertEqual(summary["records_skipped"], 1)
+            self.assertEqual(summary["records_missing_field"], 0)
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_extract_items_supports_jsonl_nested_field_selection(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            source = temp_dir / "events.jsonl"
+            source.write_text(
+                '{"actor": {"id": "u1"}}\n'
+                '{"actor": {"id": "u2"}}\n'
+                '{"actor": {"id": null}}\n'
+            )
+            items, summary = extract_items(source, field="actor.id")
+            self.assertEqual(items, ["u1", "u2"])
+            self.assertEqual(summary["input_format"], "jsonl")
+            self.assertEqual(summary["records_read"], 3)
+            self.assertEqual(summary["records_skipped"], 1)
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_extract_items_supports_json_array_field_selection(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            source = temp_dir / "events.json"
+            source.write_text(json.dumps([{"event": {"visitor": {"id": 101}}}, {"event": {"visitor": {"id": 102}}}]))
+            items, summary = extract_items(source, field="event.visitor.id")
+            self.assertEqual(items, ["101", "102"])
+            self.assertEqual(summary["input_format"], "json")
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_extract_items_requires_field_for_multicolumn_csv(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            source = temp_dir / "events.csv"
+            source.write_text("user_id,plan\nu1,free\n")
+            with self.assertRaises(ValueError):
+                extract_items(source, input_format="csv")
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_extract_items_rejects_unknown_csv_field(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            source = temp_dir / "events.csv"
+            source.write_text("user_id,plan\nu1,free\n")
+            with self.assertRaises(ValueError):
+                extract_items(source, input_format="csv", field="missing")
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_extract_items_rejects_non_scalar_field_values(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            source = temp_dir / "events.jsonl"
+            source.write_text('{"actor": {"tags": ["a", "b"]}}\n')
+            with self.assertRaises(ValueError):
+                extract_items(source, field="actor.tags")
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_extract_items_rejects_missing_json_field_when_no_records_match(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            source = temp_dir / "events.jsonl"
+            source.write_text('{"actor": {"id": "u1"}}\n{"actor": {"id": "u2"}}\n')
+            with self.assertRaises(ValueError):
+                extract_items(source, field="event.visitor.id")
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
+    def test_cli_reports_clean_error_for_unknown_csv_field(self):
+        temp_dir = ROOT / self._testMethodName
+        temp_dir.mkdir(exist_ok=True)
+        try:
+            csv_input = temp_dir / "events.csv"
+            csv_input.write_text("user_id,plan\nu1,free\n")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "build",
+                    "--input",
+                    str(csv_input),
+                    "--output",
+                    str(temp_dir / "out.json"),
+                    "--field",
+                    "missing",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("field 'missing' not present in CSV header", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+        finally:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
+
     def test_cli_build_stats_merge_and_simulate(self):
         temp_dir = ROOT / self._testMethodName
         temp_dir.mkdir(exist_ok=True)
         try:
             input_a = temp_dir / "a.txt"
             input_b = temp_dir / "b.txt"
+            csv_input = temp_dir / "events.csv"
+            jsonl_input = temp_dir / "events.jsonl"
             sketch_a = temp_dir / "a.json"
             sketch_b = temp_dir / "b.json"
+            sketch_csv = temp_dir / "csv.json"
+            sketch_jsonl = temp_dir / "jsonl.json"
             merged = temp_dir / "merged.json"
             input_a.write_text("apple\nbanana\ncarrot\n")
             input_b.write_text("banana\ndate\nelderberry\n")
+            csv_input.write_text("user_id,plan\nu1,free\nu2,pro\nu1,team\n")
+            jsonl_input.write_text(
+                '{"event": {"visitor": {"id": "u9"}}}\n'
+                '{"event": {"visitor": {"id": "u10"}}}\n'
+                '{"event": {"visitor": {"id": "u9"}}}\n'
+            )
 
             build_a = subprocess.run(
                 [sys.executable, str(SCRIPT), "build", "--input", str(input_a), "--output", str(sketch_a), "--precision", "8"],
@@ -97,10 +247,52 @@ class HyperLogLogTests(unittest.TestCase):
                 text=True,
                 check=True,
             )
+            build_csv = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "build",
+                    "--input",
+                    str(csv_input),
+                    "--output",
+                    str(sketch_csv),
+                    "--precision",
+                    "8",
+                    "--field",
+                    "user_id",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            build_jsonl = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "build",
+                    "--input",
+                    str(jsonl_input),
+                    "--output",
+                    str(sketch_jsonl),
+                    "--precision",
+                    "8",
+                    "--field",
+                    "event.visitor.id",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             data_a = json.loads(build_a.stdout)
             data_b = json.loads(build_b.stdout)
+            data_csv = json.loads(build_csv.stdout)
+            data_jsonl = json.loads(build_jsonl.stdout)
             self.assertEqual(data_a["inserted"], 3)
             self.assertEqual(data_b["inserted"], 3)
+            self.assertEqual(data_csv["input_format"], "csv")
+            self.assertEqual(data_csv["records_with_values"], 3)
+            self.assertEqual(data_jsonl["input_format"], "jsonl")
+            self.assertEqual(data_jsonl["records_with_values"], 3)
 
             stats = subprocess.run(
                 [sys.executable, str(SCRIPT), "stats", "--sketch", str(sketch_a)],
