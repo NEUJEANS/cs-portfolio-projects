@@ -13,4 +13,5 @@
 - [x] future slice: model explicit network partitions or link-level failures separately from process crashes
 - [x] future slice: add scripted partition-heal walkthrough assets or richer per-link visualization notes
 - [x] future slice: render walkthrough diagrams directly to SVG for project pages and slide decks
-- [ ] future slice: add PNG raster export for presentation tools that do not embed SVG cleanly
+- [x] future slice: add PNG raster export for presentation tools that do not embed SVG cleanly
+- [ ] future slice: generate a single-page HTML or PDF handout that bundles the walkthrough narrative with committed SVG/PNG assets

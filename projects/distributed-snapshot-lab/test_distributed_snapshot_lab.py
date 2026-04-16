@@ -1,12 +1,18 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import distributed_snapshot_lab as lab
 from distributed_snapshot_lab import (
     DistributedBank,
+    generate_walkthrough_png_assets,
     generate_walkthrough_svg_assets,
     parse_balances,
     parse_marker_delay,
@@ -430,6 +436,86 @@ class DistributedSnapshotLabTests(unittest.TestCase):
             )
             self.assertIn('### Snapshot `during \'partition\'` (script step 4)', markdown)
 
+    def test_render_svg_to_png_uses_headless_browser_command(self) -> None:
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"></svg>'
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "snapshot.png"
+
+            def fake_run(cmd: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                self.assertEqual(cmd[0], "/usr/bin/google-chrome")
+                self.assertIn("--headless", cmd)
+                self.assertIn("--window-size=320,180", cmd)
+                self.assertTrue(cmd[-1].startswith("file://"))
+                output_path.write_bytes(b"png")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+
+            with patch("distributed_snapshot_lab.shutil.which", side_effect=lambda name: "/usr/bin/google-chrome" if name == "google-chrome" else None):
+                with patch("distributed_snapshot_lab.subprocess.run", side_effect=fake_run):
+                    rendered = lab.render_svg_to_png(svg, output_path)
+
+            self.assertEqual(rendered, output_path)
+            self.assertTrue(output_path.exists())
+
+    def test_render_svg_to_png_requires_browser_on_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "snapshot.png"
+            with patch("distributed_snapshot_lab.shutil.which", return_value=None):
+                with self.assertRaisesRegex(ValueError, "headless browser"):
+                    lab.render_svg_to_png(
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>',
+                        output_path,
+                    )
+
+    def test_generate_walkthrough_png_assets_writes_snapshot_files(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        result = bank.run_script(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ],
+            marker_delay_overrides={"C->B": 2},
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            markdown_path = Path(temp_dir) / "walkthrough.md"
+            png_dir = Path(temp_dir) / "png"
+
+            def fake_render_svg_to_png(svg_text: str, output_path: Path, *, browser_binary: str | None = None) -> Path:
+                self.assertIn("<svg", svg_text)
+                self.assertIsNone(browser_binary)
+                output_path.write_bytes(b"png")
+                return output_path
+
+            with patch("distributed_snapshot_lab.render_svg_to_png", side_effect=fake_render_svg_to_png):
+                assets = generate_walkthrough_png_assets(
+                    result,
+                    bank.processes,
+                    output_dir=png_dir,
+                    title="Partition Heal Walkthrough",
+                    markdown_path=markdown_path,
+                    filename_prefix="partition-heal",
+                )
+
+            self.assertEqual(assets["during-partition"]["link"], "png/partition-heal-01-during-partition.png")
+            self.assertTrue((png_dir / "partition-heal-01-during-partition.png").exists())
+            self.assertTrue((png_dir / "partition-heal-02-after-heal.png").exists())
+
+            markdown = render_script_walkthrough(
+                result,
+                bank.processes,
+                title="Partition Heal Walkthrough",
+                png_assets=assets,
+            )
+            self.assertIn(
+                '- PNG asset: [partition-heal-01-during-partition.png](png/partition-heal-01-during-partition.png)',
+                markdown,
+            )
+            self.assertIn('![during-partition PNG](png/partition-heal-01-during-partition.png)', markdown)
+
     def test_cli_walkthrough_outputs_markdown_and_writes_file(self) -> None:
         script = json.dumps(
             [
@@ -498,6 +584,48 @@ class DistributedSnapshotLabTests(unittest.TestCase):
             self.assertIn("![after-heal SVG](svg/partition-heal-02-after-heal.svg)", completed.stdout)
             self.assertTrue((svg_dir / "partition-heal-01-during-partition.svg").exists())
             self.assertTrue((svg_dir / "partition-heal-02-after-heal.svg").exists())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), completed.stdout)
+
+    @unittest.skipUnless(
+        any(shutil.which(candidate) for candidate in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")),
+        "headless browser not available",
+    )
+    def test_cli_walkthrough_can_export_png_assets(self) -> None:
+        script = json.dumps(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "walkthrough.md"
+            png_dir = Path(temp_dir) / "png"
+            completed = run_cli(
+                "walkthrough",
+                "--balances",
+                '{"A": 10, "B": 10, "C": 10}',
+                "--marker-delay",
+                "C->B=2",
+                "--script",
+                script,
+                "--title",
+                "Partition Heal Walkthrough",
+                "--output",
+                str(output_path),
+                "--png-dir",
+                str(png_dir),
+                "--png-prefix",
+                "partition-heal",
+            )
+
+            self.assertIn("- PNG asset: [partition-heal-01-during-partition.png](png/partition-heal-01-during-partition.png)", completed.stdout)
+            self.assertIn("![after-heal PNG](png/partition-heal-02-after-heal.png)", completed.stdout)
+            self.assertTrue((png_dir / "partition-heal-01-during-partition.png").exists())
+            self.assertTrue((png_dir / "partition-heal-02-after-heal.png").exists())
             self.assertEqual(output_path.read_text(encoding="utf-8"), completed.stdout)
 
     def test_unknown_marker_delay_channel_is_rejected(self) -> None:

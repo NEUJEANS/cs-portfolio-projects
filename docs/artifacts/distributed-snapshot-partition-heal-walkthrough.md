@@ -27,6 +27,7 @@
 - down links: A->B
 - consistent totals: `True` (30 vs 30)
 - SVG asset: [distributed-snapshot-partition-heal-01-during-partition.svg](distributed-snapshot-partition-heal-svg/distributed-snapshot-partition-heal-01-during-partition.svg)
+- PNG asset: [distributed-snapshot-partition-heal-01-during-partition.png](distributed-snapshot-partition-heal-png/distributed-snapshot-partition-heal-01-during-partition.png)
 - recorded in-flight messages:
   - `C->B`: 2 (cb-1)
 
@@ -60,6 +61,7 @@ sequenceDiagram
 - down links: none
 - consistent totals: `True` (30 vs 30)
 - SVG asset: [distributed-snapshot-partition-heal-02-after-heal.svg](distributed-snapshot-partition-heal-svg/distributed-snapshot-partition-heal-02-after-heal.svg)
+- PNG asset: [distributed-snapshot-partition-heal-02-after-heal.png](distributed-snapshot-partition-heal-png/distributed-snapshot-partition-heal-02-after-heal.png)
 - recorded in-flight messages: none
 
 ![after-heal SVG](distributed-snapshot-partition-heal-svg/distributed-snapshot-partition-heal-02-after-heal.svg)

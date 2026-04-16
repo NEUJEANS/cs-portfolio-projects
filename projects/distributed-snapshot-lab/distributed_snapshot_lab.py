@@ -5,6 +5,9 @@ import html
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -869,6 +872,75 @@ def render_snapshot_svg(
     return "\n".join(svg_lines) + "\n"
 
 
+_HEADLESS_BROWSER_CANDIDATES = (
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium",
+    "chromium-browser",
+)
+
+
+def _extract_svg_dimensions(svg_text: str) -> tuple[int, int]:
+    match = re.search(
+        r"<svg[^>]*\bwidth=\"([0-9]+(?:\.[0-9]+)?)\"[^>]*\bheight=\"([0-9]+(?:\.[0-9]+)?)\"",
+        svg_text,
+    )
+    if match is None:
+        raise ValueError("could not determine SVG dimensions for PNG export")
+    width = max(1, int(float(match.group(1))))
+    height = max(1, int(float(match.group(2))))
+    return width, height
+
+
+def _find_headless_browser() -> str | None:
+    for candidate in _HEADLESS_BROWSER_CANDIDATES:
+        browser = shutil.which(candidate)
+        if browser is not None:
+            return browser
+    return None
+
+
+def render_svg_to_png(
+    svg_text: str,
+    output_path: Path,
+    *,
+    browser_binary: str | None = None,
+) -> Path:
+    browser = browser_binary or _find_headless_browser()
+    if browser is None:
+        raise ValueError(
+            "PNG export requires a headless browser such as google-chrome, google-chrome-stable, or chromium on PATH"
+        )
+
+    width, height = _extract_svg_dimensions(svg_text)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="distributed-snapshot-png-") as temp_dir:
+        svg_path = Path(temp_dir) / "snapshot.svg"
+        svg_path.write_text(svg_text, encoding="utf-8")
+        completed = subprocess.run(
+            [
+                browser,
+                "--headless",
+                "--disable-gpu",
+                "--hide-scrollbars",
+                "--default-background-color=ffffff",
+                f"--window-size={width},{height}",
+                f"--screenshot={output_path}",
+                svg_path.as_uri(),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if completed.returncode != 0:
+        stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown headless-browser error"
+        raise ValueError(f"PNG export failed: {stderr}")
+    if not output_path.exists():
+        raise ValueError("PNG export failed: browser did not produce an output file")
+    return output_path
+
+
 def _format_mapping(mapping: dict[str, object]) -> str:
     if not mapping:
         return "none"
@@ -947,12 +1019,49 @@ def generate_walkthrough_svg_assets(
     return assets
 
 
+def generate_walkthrough_png_assets(
+    result: dict[str, object],
+    processes: Iterable[str],
+    *,
+    output_dir: Path,
+    title: str = "Distributed Snapshot Walkthrough",
+    markdown_path: Path | None = None,
+    filename_prefix: str | None = None,
+    browser_binary: str | None = None,
+) -> dict[str, dict[str, str]]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    prefix = _slugify_filename(filename_prefix or title)
+    assets: dict[str, dict[str, str]] = {}
+    for index, snapshot in enumerate(result.get("snapshots") or [], start=1):
+        snapshot_id = _optional_text(snapshot.get("snapshot_id")) or f"snapshot-{index}"
+        filename = f"{prefix}-{index:02d}-{_slugify_filename(snapshot_id)}.png"
+        path = output_dir / filename
+        png_title = f"{title} — {snapshot_id}"
+        render_svg_to_png(
+            render_snapshot_svg(snapshot, processes, title=png_title),
+            path,
+            browser_binary=browser_binary,
+        )
+        if markdown_path is not None:
+            link = Path(os.path.relpath(path, markdown_path.parent)).as_posix()
+        else:
+            link = path.as_posix()
+        assets[snapshot_id] = {
+            "filename": filename,
+            "path": path.as_posix(),
+            "link": link,
+            "title": png_title,
+        }
+    return assets
+
+
 def render_script_walkthrough(
     result: dict[str, object],
     processes: Iterable[str],
     *,
     title: str = "Distributed Snapshot Walkthrough",
     svg_assets: dict[str, dict[str, str]] | None = None,
+    png_assets: dict[str, dict[str, str]] | None = None,
 ) -> str:
     ordered_processes = list(sorted(set(str(process) for process in processes)))
     final_channel_statuses = result.get("channel_statuses") or {}
@@ -1029,7 +1138,8 @@ def render_script_walkthrough(
                 for channel, status in sorted(snapshot_channel_statuses.items())
                 if status != "up"
             ]
-            asset = (svg_assets or {}).get(raw_snapshot_id)
+            svg_asset = (svg_assets or {}).get(raw_snapshot_id)
+            png_asset = (png_assets or {}).get(raw_snapshot_id)
             lines.extend(
                 [
                     "",
@@ -1041,8 +1151,10 @@ def render_script_walkthrough(
                     f"- consistent totals: `{snapshot['consistent']}` ({snapshot['snapshot_total']} vs {snapshot['system_total']})",
                 ]
             )
-            if asset:
-                lines.append(f"- SVG asset: [{asset['filename']}]({asset['link']})")
+            if svg_asset:
+                lines.append(f"- SVG asset: [{svg_asset['filename']}]({svg_asset['link']})")
+            if png_asset:
+                lines.append(f"- PNG asset: [{png_asset['filename']}]({png_asset['link']})")
             channel_messages = snapshot.get("channel_messages") or {}
             if channel_messages:
                 lines.append("- recorded in-flight messages:")
@@ -1054,8 +1166,10 @@ def render_script_walkthrough(
                     lines.append(f"  - `{channel}`: {summary}")
             else:
                 lines.append("- recorded in-flight messages: none")
-            if asset:
-                lines.extend(["", f"![{snapshot_id} SVG]({asset['link']})"])
+            if svg_asset:
+                lines.extend(["", f"![{snapshot_id} SVG]({svg_asset['link']})"])
+            elif png_asset:
+                lines.extend(["", f"![{snapshot_id} PNG]({png_asset['link']})"])
             lines.extend(["", "```mermaid", render_mermaid(snapshot, ordered_processes).rstrip(), "```"])
     else:
         lines.extend(["", "## Snapshot walkthrough", "- no snapshots were captured by this script"])
@@ -1164,6 +1278,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--svg-prefix",
         help="optional filename prefix for generated SVG asset names",
     )
+    walkthrough.add_argument(
+        "--png-dir",
+        help="optional directory where one PNG snapshot asset per walkthrough section will be written (requires google-chrome or chromium on PATH)",
+    )
+    walkthrough.add_argument(
+        "--png-prefix",
+        help="optional filename prefix for generated PNG asset names",
+    )
 
     return parser
 
@@ -1220,6 +1342,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_path = Path(output_path_text) if output_path_text else None
             svg_assets = None
             svg_dir_text = _optional_text(getattr(args, "svg_dir", None))
+            svg_prefix = _optional_text(getattr(args, "svg_prefix", None))
             if svg_dir_text:
                 svg_assets = generate_walkthrough_svg_assets(
                     result,
@@ -1227,13 +1350,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                     output_dir=Path(svg_dir_text),
                     title=args.title,
                     markdown_path=output_path,
-                    filename_prefix=_optional_text(getattr(args, "svg_prefix", None)),
+                    filename_prefix=svg_prefix,
+                )
+            png_assets = None
+            png_dir_text = _optional_text(getattr(args, "png_dir", None))
+            png_prefix = _optional_text(getattr(args, "png_prefix", None)) or svg_prefix
+            if png_dir_text:
+                png_assets = generate_walkthrough_png_assets(
+                    result,
+                    bank.processes,
+                    output_dir=Path(png_dir_text),
+                    title=args.title,
+                    markdown_path=output_path,
+                    filename_prefix=png_prefix,
                 )
             markdown = render_script_walkthrough(
                 result,
                 bank.processes,
                 title=args.title,
                 svg_assets=svg_assets,
+                png_assets=png_assets,
             )
             if output_path is not None:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
