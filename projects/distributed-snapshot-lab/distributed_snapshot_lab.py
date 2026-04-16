@@ -4,6 +4,7 @@ import argparse
 import json
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable, Sequence
 
 
@@ -581,6 +582,162 @@ def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_mapping(mapping: dict[str, object]) -> str:
+    if not mapping:
+        return "none"
+    return ", ".join(f"{key}={value}" for key, value in sorted(mapping.items()))
+
+
+def _format_in_flight(in_flight: dict[str, list[dict[str, object]]]) -> list[str]:
+    lines: list[str] = []
+    for channel, messages in sorted(in_flight.items()):
+        summary = ", ".join(
+            f"{message['amount']} ({_safe_mermaid_text(message['label'])})" for message in messages
+        )
+        lines.append(f"- `{channel}`: {summary}")
+    return lines
+
+
+def _describe_timeline_event(event: dict[str, object]) -> str:
+    kind = str(event.get("event", "")).strip().lower()
+    if kind == "send":
+        return (
+            f"sent `{event['label']}` carrying {event['amount']} from `{event['sender']}` to `{event['receiver']}`; "
+            f"balances now {_format_mapping(event.get('balances') or {})}"
+        )
+    if kind == "deliver":
+        return (
+            f"delivered `{event['label']}` from `{event['sender']}` to `{event['receiver']}`; "
+            f"balances now {_format_mapping(event.get('balances') or {})}"
+        )
+    if kind == "fail":
+        reason = _optional_text(event.get("reason"))
+        suffix = f" ({reason})" if reason else ""
+        return f"process `{event['process']}` failed{suffix}; statuses now {_format_mapping(event.get('process_statuses') or {})}"
+    if kind == "recover":
+        reason = _optional_text(event.get("reason"))
+        suffix = f" ({reason})" if reason else ""
+        return f"process `{event['process']}` recovered{suffix}; statuses now {_format_mapping(event.get('process_statuses') or {})}"
+    if kind == "link_fail":
+        reason = _optional_text(event.get("reason"))
+        suffix = f" ({reason})" if reason else ""
+        return f"link `{event['channel']}` failed{suffix}; channel statuses now {_format_mapping(event.get('channel_statuses') or {})}"
+    if kind == "link_recover":
+        reason = _optional_text(event.get("reason"))
+        suffix = f" ({reason})" if reason else ""
+        return f"link `{event['channel']}` recovered{suffix}; channel statuses now {_format_mapping(event.get('channel_statuses') or {})}"
+    return json.dumps(event, sort_keys=True)
+
+
+def render_script_walkthrough(
+    result: dict[str, object],
+    processes: Iterable[str],
+    *,
+    title: str = "Distributed Snapshot Walkthrough",
+) -> str:
+    ordered_processes = list(sorted(set(str(process) for process in processes)))
+    final_channel_statuses = result.get("channel_statuses") or {}
+    final_down_channels = [
+        channel for channel, status in sorted(final_channel_statuses.items()) if status != "up"
+    ]
+    in_flight = result.get("in_flight") or {}
+    snapshots = list(result.get("snapshots") or [])
+
+    lines = [
+        f"# {title}",
+        "",
+        "## Scenario summary",
+        f"- processes: {', '.join(ordered_processes)}",
+        f"- snapshots captured: {len(snapshots)}",
+        f"- final balances: {_format_mapping(result.get('balances') or {})}",
+        f"- final process statuses: {_format_mapping(result.get('process_statuses') or {})}",
+        f"- final down links: {', '.join(final_down_channels) if final_down_channels else 'none'}",
+        f"- system total: {result.get('system_total')}",
+        "",
+        "## Timeline",
+    ]
+
+    timeline = list(result.get("timeline") or [])
+    operations = list(result.get("operations") or [])
+    snapshots_by_step = {
+        int(snapshot["step"]): snapshot
+        for snapshot in snapshots
+        if snapshot.get("step") is not None
+    }
+    if operations:
+        timeline_iter = iter(timeline)
+        for index, operation in enumerate(operations, start=1):
+            op = str(operation.get("op", "")).strip().lower()
+            if op == "snapshot":
+                snapshot = snapshots_by_step.get(index, {})
+                snapshot_id = _safe_mermaid_text(
+                    snapshot.get("snapshot_id")
+                    or _optional_text(operation.get("snapshot_id"))
+                    or f"snapshot-{index}"
+                )
+                initiator = _safe_mermaid_text(snapshot.get("initiator") or operation.get("initiator") or "")
+                consistency = snapshot.get("consistent")
+                consistency_text = f"; consistent={consistency}" if consistency is not None else ""
+                lines.append(
+                    f"{index}. captured snapshot `{snapshot_id}` from `{initiator}`{consistency_text}"
+                )
+                continue
+            event = next(timeline_iter, None)
+            if event is None:
+                lines.append(f"{index}. {json.dumps(operation, sort_keys=True)}")
+            else:
+                lines.append(f"{index}. {_describe_timeline_event(event)}")
+    elif timeline:
+        for index, event in enumerate(timeline, start=1):
+            lines.append(f"{index}. {_describe_timeline_event(event)}")
+    else:
+        lines.append("- no events recorded")
+
+    if in_flight:
+        lines.extend(["", "## Remaining in-flight messages"])
+        lines.extend(_format_in_flight(in_flight))
+
+    if snapshots:
+        lines.extend(["", "## Snapshot walkthrough"])
+        for snapshot in snapshots:
+            snapshot_id = _safe_mermaid_text(snapshot.get("snapshot_id", "snapshot"))
+            step = snapshot.get("step")
+            step_suffix = f" (script step {step})" if step is not None else ""
+            snapshot_channel_statuses = snapshot.get("channel_statuses") or {}
+            snapshot_down_channels = [
+                channel
+                for channel, status in sorted(snapshot_channel_statuses.items())
+                if status != "up"
+            ]
+            lines.extend(
+                [
+                    "",
+                    f"### Snapshot `{snapshot_id}`{step_suffix}",
+                    f"- initiator: `{snapshot['initiator']}`",
+                    f"- balances: {_format_mapping(snapshot.get('balances') or {})}",
+                    f"- process statuses: {_format_mapping(snapshot.get('process_statuses') or {})}",
+                    f"- down links: {', '.join(snapshot_down_channels) if snapshot_down_channels else 'none'}",
+                    f"- consistent totals: `{snapshot['consistent']}` ({snapshot['snapshot_total']} vs {snapshot['system_total']})",
+                ]
+            )
+            channel_messages = snapshot.get("channel_messages") or {}
+            if channel_messages:
+                lines.append("- recorded in-flight messages:")
+                for channel, messages in sorted(channel_messages.items()):
+                    summary = ", ".join(
+                        f"{message['amount']} ({_safe_mermaid_text(message['label'])})"
+                        for message in messages
+                    )
+                    lines.append(f"  - `{channel}`: {summary}")
+            else:
+                lines.append("- recorded in-flight messages: none")
+            lines.extend(["", "```mermaid", render_mermaid(snapshot, ordered_processes).rstrip(), "```"])
+    else:
+        lines.extend(["", "## Snapshot walkthrough", "- no snapshots were captured by this script"])
+
+    return "\n".join(lines) + "\n"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Distributed snapshot lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -649,6 +806,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="sender->receiver=delay values applied to script snapshot steps",
     )
 
+    walkthrough = subparsers.add_parser(
+        "walkthrough",
+        help="turn a scripted scenario into a Markdown walkthrough with embedded Mermaid diagrams",
+    )
+    walkthrough.add_argument("--balances", required=True, help='JSON object like {"A": 10, "B": 10}')
+    walkthrough.add_argument(
+        "--script",
+        required=True,
+        help="JSON array of operation objects such as send/deliver/fail/recover/snapshot",
+    )
+    walkthrough.add_argument(
+        "--marker-delay",
+        action="append",
+        default=[],
+        help="sender->receiver=delay values applied to script snapshot steps",
+    )
+    walkthrough.add_argument(
+        "--title",
+        default="Distributed Snapshot Walkthrough",
+        help="Markdown heading used at the top of the walkthrough",
+    )
+    walkthrough.add_argument(
+        "--output",
+        help="optional Markdown file path for the generated walkthrough",
+    )
+
     return parser
 
 
@@ -695,11 +878,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
 
-    if args.command == "script":
+    if args.command in {"script", "walkthrough"}:
         operations = parse_script(args.script)
         marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
         result = bank.run_script(operations, marker_delay_overrides=marker_delays)
-        print(json.dumps(result, indent=2, sort_keys=True))
+        if args.command == "walkthrough":
+            markdown = render_script_walkthrough(result, bank.processes, title=args.title)
+            output_path = _optional_text(getattr(args, "output", None))
+            if output_path:
+                destination = Path(output_path)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(markdown, encoding="utf-8")
+            print(markdown, end="")
+        else:
+            print(json.dumps(result, indent=2, sort_keys=True))
         return 0
 
     raise ValueError(f"unsupported command: {args.command}")

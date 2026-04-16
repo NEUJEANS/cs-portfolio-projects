@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from distributed_snapshot_lab import (
     parse_snapshot_specs,
     parse_transfer,
     render_mermaid,
+    render_script_walkthrough,
 )
 
 
@@ -335,6 +337,66 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertTrue(completed.stdout.startswith("sequenceDiagram\n"))
         self.assertNotIn('"balances"', completed.stdout)
         self.assertIn("snapshot starts", completed.stdout)
+
+    def test_render_script_walkthrough_summarizes_partition_heal_scenario(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        result = bank.run_script(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "deliver", "sender": "A", "receiver": "B"},
+                {"op": "deliver", "sender": "C", "receiver": "B"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ],
+            marker_delay_overrides={"C->B": 2},
+        )
+
+        markdown = render_script_walkthrough(result, bank.processes, title="Partition Heal Walkthrough")
+
+        self.assertIn("# Partition Heal Walkthrough", markdown)
+        self.assertIn("## Timeline", markdown)
+        self.assertIn("link `A->B` failed (partition)", markdown)
+        self.assertIn("4. captured snapshot `during-partition` from `A`; consistent=True", markdown)
+        self.assertIn("### Snapshot `during-partition` (script step 4)", markdown)
+        self.assertIn("- down links: A->B", markdown)
+        self.assertIn("  - `C->B`: 2 (cb-1)", markdown)
+        self.assertIn("```mermaid", markdown)
+        self.assertIn("LINK RECOVER (heal)", markdown)
+
+    def test_cli_walkthrough_outputs_markdown_and_writes_file(self) -> None:
+        script = json.dumps(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "walkthrough.md"
+            completed = run_cli(
+                "walkthrough",
+                "--balances",
+                '{"A": 10, "B": 10, "C": 10}',
+                "--marker-delay",
+                "C->B=2",
+                "--script",
+                script,
+                "--title",
+                "Partition Heal Walkthrough",
+                "--output",
+                str(output_path),
+            )
+
+            self.assertTrue(completed.stdout.startswith("# Partition Heal Walkthrough\n"))
+            self.assertIn("```mermaid", completed.stdout)
+            self.assertTrue(output_path.exists())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), completed.stdout)
 
     def test_unknown_marker_delay_channel_is_rejected(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10})

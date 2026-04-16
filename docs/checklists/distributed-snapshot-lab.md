@@ -11,4 +11,5 @@
 - [x] support multiple concurrent snapshots with named snapshot IDs and isolated results
 - [x] add failure/recovery scripting with process liveness and scripted scenario playback
 - [x] future slice: model explicit network partitions or link-level failures separately from process crashes
-- [ ] future slice: add scripted partition-heal walkthrough assets or richer per-link visualization notes
+- [x] future slice: add scripted partition-heal walkthrough assets or richer per-link visualization notes
+- [ ] future slice: render walkthrough diagrams directly to SVG/PNG for project pages and slide decks

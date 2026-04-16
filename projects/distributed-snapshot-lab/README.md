@@ -21,6 +21,7 @@ A small distributed-systems simulation that demonstrates the Chandy-Lamport dist
 - scripted scenario playback with `send`, `deliver`, `fail`, `recover`, `link-fail`, `link-recover`, and `snapshot` steps
 - JSON CLI output that is easy to inspect or feed into follow-up tooling
 - Mermaid sequence-diagram export for presentation-ready visualization, including fail/recover notes
+- Markdown walkthrough export for scripted partition-heal case studies with embedded Mermaid diagrams
 - unit and CLI tests for core invariants and representative scenarios
 
 ## Project structure
@@ -103,6 +104,26 @@ python3 distributed_snapshot_lab.py script \
   ]'
 ```
 
+### Generate a Markdown partition-heal walkthrough asset
+```bash
+python3 distributed_snapshot_lab.py walkthrough \
+  --balances '{"A": 10, "B": 10, "C": 10}' \
+  --marker-delay 'C->B=2' \
+  --title 'Distributed Snapshot Partition-Heal Walkthrough' \
+  --output ../../docs/artifacts/distributed-snapshot-partition-heal-walkthrough.md \
+  --script '[
+    {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+    {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+    {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "uplink partition"},
+    {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+    {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "healed"},
+    {"op": "deliver", "sender": "A", "receiver": "B"},
+    {"op": "deliver", "sender": "C", "receiver": "B"},
+    {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"}
+  ]'
+```
+The repository ships one generated example at `docs/artifacts/distributed-snapshot-partition-heal-walkthrough.md` so the project already has a portfolio-ready walkthrough/blog asset.
+
 ## Output notes
 - `process_statuses` reports which processes were `up` or `down` when the snapshot was recorded.
 - `channel_statuses` reports which directed links were `up` or `down`, so a partitioned edge is visible in both JSON and Mermaid output.
@@ -110,6 +131,7 @@ python3 distributed_snapshot_lab.py script \
 - failed or partitioned directed links block both new sends and deliveries on that edge until recovery.
 - failed processes cannot send new transfers or initiate snapshots in this lightweight model.
 - scripted runs return the final balances, remaining in-flight messages, full timeline, and every snapshot captured during the script.
+- `walkthrough` turns a scripted scenario into Markdown with step summaries plus one Mermaid diagram per snapshot, and can write directly to a reusable artifact file.
 
 ## Testing
 ```bash
@@ -127,5 +149,5 @@ python3 -m unittest discover -s projects/distributed-snapshot-lab -p 'test_*.py'
 
 ## Future improvements
 - export richer Mermaid notes for per-process recorded state transitions
-- generate canned partition-heal walkthrough assets for README/blog screenshots
+- render the generated walkthrough diagrams to SVG/PNG automatically for project pages and slide decks
 - generate markdown-ready assets automatically for project pages
