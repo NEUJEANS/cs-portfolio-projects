@@ -119,7 +119,7 @@ test('markdownToHtml closes an unclosed fenced code block at end of document', (
   assert.match(html, /<pre><code class="language-python">print\(&quot;hi&quot;\)<\/code><\/pre>/);
 });
 
-test('buildSite writes nested pages, relative nav links, and copied assets', () => {
+test('buildSite writes nested pages, relative nav links, copied assets, and generated tag archives', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, 'images'), { recursive: true });
@@ -169,14 +169,21 @@ Return [home](../index.md).`,
   fs.writeFileSync(path.join(contentDir, 'images', 'hero.png'), 'png-data', 'utf8');
 
   const result = buildSite(contentDir, outputDir);
-  assert.equal(result.pages.length, 2);
+  assert.equal(result.pages.length, 5);
   assert.deepEqual(result.assets, [path.join('images', 'hero.png')]);
+  assert.deepEqual(
+    result.pages.map((page) => page.output).sort(),
+    ['guides/setup.html', 'index.html', 'tags/docs.html', 'tags/index.html', 'tags/portfolio.html']
+  );
 
   const homeHtml = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
   const setupHtml = fs.readFileSync(path.join(outputDir, 'guides', 'setup.html'), 'utf8');
+  const tagIndexHtml = fs.readFileSync(path.join(outputDir, 'tags', 'index.html'), 'utf8');
+  const docsTagHtml = fs.readFileSync(path.join(outputDir, 'tags', 'docs.html'), 'utf8');
 
   assert.match(homeHtml, /<a class="active" href="index.html">Home<\/a>/);
   assert.match(homeHtml, /<a href="guides\/setup.html">Setup Guide<\/a>/);
+  assert.match(homeHtml, /<a href="tags\/index.html">Tags<\/a>/);
   assert.match(homeHtml, /href="guides\/setup.html"/);
   assert.match(setupHtml, /<a href="\.\.\/index.html">Home<\/a>/);
   assert.match(setupHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
@@ -185,7 +192,13 @@ Return [home](../index.md).`,
   assert.match(setupHtml, /<blockquote><p>Tip: keep screenshots next to your Markdown files for easy copying\.<\/p><\/blockquote>/);
   assert.match(setupHtml, /<pre><code class="language-bash">node sitegen\.js content dist<\/code><\/pre>/);
   assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
-  assert.match(setupHtml, /<span>portfolio<\/span><span>docs<\/span>/);
+  assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/portfolio.html">portfolio<\/a>/);
+  assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/docs.html">docs<\/a>/);
+
+  assert.match(tagIndexHtml, /<a class="active" href="index.html">Tags<\/a>/);
+  assert.match(tagIndexHtml, /href="docs.html">docs<\/a> <span class="tag-count">1 page<\/span>/);
+  assert.match(docsTagHtml, /href="index.html">← All tags<\/a>/);
+  assert.match(docsTagHtml, /href="\.\.\/guides\/setup.html">Setup Guide<\/a>/);
   assert.equal(fs.readFileSync(path.join(outputDir, 'images', 'hero.png'), 'utf8'), 'png-data');
 });
 

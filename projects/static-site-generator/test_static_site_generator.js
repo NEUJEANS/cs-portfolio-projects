@@ -59,7 +59,7 @@ Paragraph with **bold**, *italics*, [link](https://example.com), and \`code\`.
   assert.match(html, /<blockquote><p>quote line one<\/p>\s*<p>quote line two<\/p><\/blockquote>/);
 });
 
-test('buildSite renders nested navigation and relative markdown links', () => {
+test('buildSite renders nested navigation, relative markdown links, and generated tag archives', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, 'guides'), { recursive: true });
@@ -71,6 +71,7 @@ title: Home
 order: 1
 description: Landing page
 nav: true
+tags: [portfolio, systems, systems]
 ---
 # Welcome
 See the [guide](guides/setup.md).`,
@@ -96,21 +97,50 @@ Return [home](../home.md).`,
   );
 
   const result = buildSite(contentDir, outputDir);
-  assert.equal(result.pages.length, 2);
+  assert.equal(result.pages.length, 6);
   assert.deepEqual(result.assets, []);
+
+  const outputs = result.pages.map((page) => page.output).sort();
+  assert.deepEqual(outputs, [
+    'guides/setup.html',
+    'home.html',
+    'tags/algorithms.html',
+    'tags/index.html',
+    'tags/portfolio.html',
+    'tags/systems.html',
+  ]);
 
   const homeHtml = fs.readFileSync(path.join(outputDir, 'home.html'), 'utf8');
   const guideHtml = fs.readFileSync(path.join(outputDir, 'guides', 'setup.html'), 'utf8');
+  const tagIndexHtml = fs.readFileSync(path.join(outputDir, 'tags', 'index.html'), 'utf8');
+  const systemsTagHtml = fs.readFileSync(path.join(outputDir, 'tags', 'systems.html'), 'utf8');
 
   assert.match(homeHtml, /<a class="active" href="home.html">Home<\/a>/);
   assert.match(homeHtml, /<a href="guides\/setup.html">Setup Guide<\/a>/);
+  assert.match(homeHtml, /<a class="tag-pill" href="tags\/portfolio.html">portfolio<\/a>/);
+  assert.match(homeHtml, /<a class="tag-pill" href="tags\/systems.html">systems<\/a>/);
+  assert.equal((homeHtml.match(/tags\/systems\.html/g) || []).length, 1);
   assert.match(homeHtml, /href="guides\/setup.html">guide<\/a>/i);
+  assert.match(homeHtml, /<a href="tags\/index.html">Tags<\/a>/);
+
   assert.match(guideHtml, /<a href="\.\.\/home.html">Home<\/a>/);
   assert.match(guideHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
   assert.match(guideHtml, /<ol><li>Install Node<\/li><li>Build the site<\/li><\/ol>/);
   assert.match(guideHtml, /<blockquote><p>Quote callout for the guide\.<\/p><\/blockquote>/);
   assert.match(guideHtml, /href="\.\.\/home.html">home<\/a>/i);
-  assert.match(guideHtml, /<span>algorithms<\/span><span>systems<\/span>/);
+  assert.match(guideHtml, /href="\.\.\/tags\/algorithms.html">algorithms<\/a>/);
+  assert.match(guideHtml, /href="\.\.\/tags\/systems.html">systems<\/a>/);
+
+  assert.match(tagIndexHtml, /<a class="active" href="index.html">Tags<\/a>/);
+  assert.match(tagIndexHtml, /href="algorithms.html">algorithms<\/a> <span class="tag-count">1 page<\/span>/);
+  assert.match(tagIndexHtml, /href="systems.html">systems<\/a> <span class="tag-count">2 pages<\/span>/);
+
+  assert.match(systemsTagHtml, /<a class="active" href="index.html">Tags<\/a>/);
+  assert.match(systemsTagHtml, /href="index.html">← All tags<\/a>/);
+  assert.match(systemsTagHtml, /href="\.\.\/home.html">Home<\/a>/);
+  assert.match(systemsTagHtml, /href="\.\.\/guides\/setup.html">Setup Guide<\/a>/);
+  assert.match(systemsTagHtml, /Source: <code>home\.md<\/code>/);
+  assert.match(systemsTagHtml, /Source: <code>guides\/setup\.md<\/code>/);
 });
 
 test('parseFrontMatter accepts leading whitespace and CRLF front matter fences', () => {
@@ -137,6 +167,84 @@ test('markdownToHtml consumes full link targets with nested parentheses', () => 
 test('slugify normalizes titles into clean filenames', () => {
   assert.equal(slugify(' My Cool Portfolio Page! '), 'my-cool-portfolio-page');
   assert.equal(slugify('###'), 'page');
+});
+
+test('buildSite rejects generated tag archive collisions with authored pages', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'tags'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, 'home.md'),
+    `---
+title: Home
+tags: [systems]
+---
+# Home`,
+    'utf8'
+  );
+  fs.writeFileSync(
+    path.join(contentDir, 'tags', 'index.md'),
+    `---
+title: Authored tags page
+---
+# Manual page`,
+    'utf8'
+  );
+
+  assert.throws(
+    () => buildSite(contentDir, outputDir),
+    /Generated tag archive path conflicts with source page output: tags\/index\.html/
+  );
+});
+
+test('buildSite allows authored tags pages when no generated tag archives are needed', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'tags'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, 'home.md'),
+    `---
+title: Home
+---
+# Home`,
+    'utf8'
+  );
+  fs.writeFileSync(
+    path.join(contentDir, 'tags', 'index.md'),
+    `---
+title: Authored tags page
+---
+# Manual page`,
+    'utf8'
+  );
+
+  const result = buildSite(contentDir, outputDir);
+  assert.equal(result.pages.length, 2);
+  assert.ok(fs.existsSync(path.join(outputDir, 'tags', 'index.html')));
+});
+
+test('buildSite rejects generated tag archive collisions with static assets', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'tags'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, 'home.md'),
+    `---
+title: Home
+tags: [systems]
+---
+# Home`,
+    'utf8'
+  );
+  fs.writeFileSync(path.join(contentDir, 'tags', 'systems.html'), '<!-- static asset -->', 'utf8');
+
+  assert.throws(
+    () => buildSite(contentDir, outputDir),
+    /Generated tag archive path conflicts with static asset output: tags\/systems\.html/
+  );
 });
 
 test('buildSite rejects missing content or empty input', () => {

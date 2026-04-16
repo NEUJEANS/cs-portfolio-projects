@@ -64,3 +64,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 vertical slice: generated tag archive pages
+- [x] identify `static-site-generator` as still weaker than the more mature portfolio projects because it lacked collection/archive navigation
+- [x] skip extra web research and language refresh because tag-archive generation is a direct extension of the current front matter and template flow
+- [x] add a resumable checklist for the slice
+- [x] implement generated `tags/` index and per-tag archive pages from front matter metadata
+- [x] link page-header tag pills into the generated archive pages and add a `Tags` nav entry when archives exist
+- [x] expand automated tests for generated tag pages, deduplicated tags, and relative links from nested content
+- [x] update README and project checklist with the new archive behavior
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

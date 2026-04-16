@@ -387,21 +387,117 @@ function relativeLink(fromOutputName, toOutputName) {
   return path.posix.relative(fromDir, target) || path.posix.basename(target);
 }
 
-function renderTemplate(page, navigation, contentHtml) {
+function normalizeTags(rawTags) {
+  const values = Array.isArray(rawTags) ? rawTags : [];
+  const seen = new Set();
+  const tags = [];
+
+  for (const value of values) {
+    const label = String(value).trim();
+    if (!label) continue;
+    const slug = slugify(label);
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    tags.push({ label, slug });
+  }
+
+  return tags;
+}
+
+function buildTagCollections(pages) {
+  const collections = new Map();
+
+  for (const page of pages) {
+    for (const tag of page.tags) {
+      if (!collections.has(tag.slug)) {
+        collections.set(tag.slug, {
+          label: tag.label,
+          slug: tag.slug,
+          outputName: `tags/${tag.slug}.html`,
+          pages: [],
+        });
+      }
+
+      collections.get(tag.slug).pages.push({
+        title: page.metadata.title || page.slug,
+        description: page.metadata.description || '',
+        outputName: page.outputName,
+        sourceName: page.sourceName,
+      });
+    }
+  }
+
+  return Array.from(collections.values()).sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function buildNavigation(pages, tagCollections) {
+  const navigation = pages
+    .filter((page) => page.metadata.nav !== false)
+    .map((page) => ({
+      title: page.metadata.title || page.slug,
+      outputName: page.outputName,
+      order: page.metadata.order,
+    }));
+
+  if (tagCollections.length) {
+    navigation.push({
+      title: 'Tags',
+      outputName: 'tags/index.html',
+      order: Number.MAX_SAFE_INTEGER,
+      section: 'tags',
+    });
+  }
+
+  return navigation;
+}
+
+function renderTagBadges(page, tagCollectionsBySlug) {
+  if (!page.tags || !page.tags.length) return '';
+
+  return `<p class="tags">${page.tags
+    .map((tag) => {
+      const archive = tagCollectionsBySlug.get(tag.slug);
+      const href = archive ? relativeLink(page.outputName, archive.outputName) : '#';
+      return `<a class="tag-pill" href="${escapeHtml(href)}">${escapeHtml(tag.label)}</a>`;
+    })
+    .join('')}</p>`;
+}
+
+function renderTagIndexContent(tagCollections, page) {
+  return `<section class="tag-index">
+  <p>Browse generated tag archive pages for portfolio themes, tools, and subject areas.</p>
+  <ul class="tag-directory">${tagCollections
+    .map(
+      (collection) => `<li><a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.label)}</a> <span class="tag-count">${collection.pages.length} page${collection.pages.length === 1 ? '' : 's'}</span></li>`
+    )
+    .join('')}</ul>
+</section>`;
+}
+
+function renderTagArchiveContent(collection, page) {
+  return `<section class="tag-archive">
+  <p><a href="${escapeHtml(relativeLink(page.outputName, 'tags/index.html'))}">← All tags</a></p>
+  <ul class="tag-archive-list">${collection.pages
+    .map(
+      (entry) => `<li><article><h2><a href="${escapeHtml(relativeLink(page.outputName, entry.outputName))}">${escapeHtml(entry.title)}</a></h2>${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ''}<p class="tag-source">Source: <code>${escapeHtml(entry.sourceName)}</code></p></article></li>`
+    )
+    .join('')}</ul>
+</section>`;
+}
+
+function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = new Map()) {
   const title = page.metadata.title || page.slug;
   const description = page.metadata.description || '';
-  const tags = Array.isArray(page.metadata.tags) ? page.metadata.tags : [];
   const navHtml = navigation.length
     ? `<nav><ul>${navigation
         .map((item) => {
-          const className = item.outputName === page.outputName ? ' class="active"' : '';
+          const isActive = item.outputName === page.outputName || (item.section && item.section === page.section);
+          const className = isActive ? ' class="active"' : '';
           return `<li><a${className} href="${escapeHtml(relativeLink(page.outputName, item.outputName))}">${escapeHtml(item.title)}</a></li>`;
         })
         .join('')}</ul></nav>`
     : '';
-  const tagsHtml = tags.length
-    ? `<p class="tags">${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</p>`
-    : '';
+  const tagsHtml = renderTagBadges(page, tagCollectionsBySlug);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -426,7 +522,12 @@ function renderTemplate(page, navigation, contentHtml) {
       blockquote p:first-child { margin-top: 0; }
       blockquote p:last-child { margin-bottom: 0; }
       .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-      .tags span { font-size: 0.9rem; background: #9992; padding: 0.2rem 0.55rem; border-radius: 999px; }
+      .tag-pill { display: inline-flex; align-items: center; font-size: 0.9rem; background: #9992; padding: 0.2rem 0.55rem; border-radius: 999px; color: inherit; text-decoration: none; }
+      .tag-directory, .tag-archive-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.85rem; }
+      .tag-directory li, .tag-archive-list li article { padding: 0.9rem 1rem; border: 1px solid #9993; border-radius: 0.85rem; background: #9991; }
+      .tag-directory a, .tag-archive-list a { color: inherit; }
+      .tag-count, .tag-source { color: #666; font-size: 0.95rem; }
+      .tag-archive-list h2 { margin-top: 0; margin-bottom: 0.4rem; }
       footer { margin-top: 2rem; font-size: 0.9rem; color: #666; }
     </style>
   </head>
@@ -483,6 +584,7 @@ function loadPages(contentDir) {
         slug,
         outputName: toOutputPath(sourceName, metadata),
         metadata,
+        tags: normalizeTags(metadata.tags),
         body,
       };
     })
@@ -492,6 +594,12 @@ function loadPages(contentDir) {
       if (leftOrder !== rightOrder) return leftOrder - rightOrder;
       return left.slug.localeCompare(right.slug);
     });
+}
+
+function listStaticAssetOutputNames(contentDir) {
+  return walkContentEntries(contentDir)
+    .filter((entry) => !entry.relativePath.endsWith('.md'))
+    .map((entry) => toPosixPath(entry.relativePath));
 }
 
 function copyStaticAssets(contentDir, outputDir) {
@@ -508,6 +616,28 @@ function copyStaticAssets(contentDir, outputDir) {
   return copied;
 }
 
+function writeRenderedPage(outputDir, outputName, html) {
+  const destination = path.join(outputDir, outputName);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.writeFileSync(destination, html, 'utf8');
+}
+
+function assertNoGeneratedPageConflicts(pages, generatedOutputNames) {
+  const authoredOutputs = new Set(pages.map((page) => page.outputName));
+  const conflicts = generatedOutputNames.filter((outputName) => authoredOutputs.has(outputName));
+  if (conflicts.length) {
+    throw new Error(`Generated tag archive path conflicts with source page output: ${conflicts.join(', ')}`);
+  }
+}
+
+function assertNoGeneratedAssetConflicts(assetOutputNames, generatedOutputNames) {
+  const authoredAssets = new Set(assetOutputNames);
+  const conflicts = generatedOutputNames.filter((outputName) => authoredAssets.has(outputName));
+  if (conflicts.length) {
+    throw new Error(`Generated tag archive path conflicts with static asset output: ${conflicts.join(', ')}`);
+  }
+}
+
 function buildSite(contentDir, outputDir) {
   if (!fs.existsSync(contentDir)) {
     throw new Error(`Content directory not found: ${contentDir}`);
@@ -520,30 +650,83 @@ function buildSite(contentDir, outputDir) {
 
   fs.mkdirSync(outputDir, { recursive: true });
 
-  const navigation = pages
-    .filter((page) => page.metadata.nav !== false)
-    .map((page) => ({
-      title: page.metadata.title || page.slug,
-      outputName: page.outputName,
-      order: page.metadata.order,
-    }));
-
+  const tagCollections = buildTagCollections(pages);
+  const tagCollectionsBySlug = new Map(tagCollections.map((collection) => [collection.slug, collection]));
+  if (tagCollections.length) {
+    const generatedTagOutputs = [
+      'tags/index.html',
+      ...tagCollections.map((collection) => collection.outputName),
+    ];
+    assertNoGeneratedPageConflicts(pages, generatedTagOutputs);
+    assertNoGeneratedAssetConflicts(listStaticAssetOutputNames(contentDir), generatedTagOutputs);
+  }
+  const navigation = buildNavigation(pages, tagCollections);
   const assets = copyStaticAssets(contentDir, outputDir);
 
   for (const page of pages) {
     const contentHtml = markdownToHtml(page.body.trim(), page);
-    const html = renderTemplate(page, navigation, contentHtml);
-    const destination = path.join(outputDir, page.outputName);
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.writeFileSync(destination, html, 'utf8');
+    const html = renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug);
+    writeRenderedPage(outputDir, page.outputName, html);
+  }
+
+  const generatedPages = [];
+  if (tagCollections.length) {
+    const tagIndexPage = {
+      slug: 'tags',
+      outputName: 'tags/index.html',
+      section: 'tags',
+      metadata: {
+        title: 'Tags',
+        description: 'Browse portfolio pages grouped by shared front matter tags.',
+      },
+      tags: [],
+    };
+
+    writeRenderedPage(
+      outputDir,
+      tagIndexPage.outputName,
+      renderTemplate(tagIndexPage, navigation, renderTagIndexContent(tagCollections, tagIndexPage), tagCollectionsBySlug)
+    );
+    generatedPages.push({
+      source: '(generated)',
+      output: tagIndexPage.outputName,
+      title: tagIndexPage.metadata.title,
+    });
+
+    for (const collection of tagCollections) {
+      const archivePage = {
+        slug: collection.slug,
+        outputName: collection.outputName,
+        section: 'tags',
+        metadata: {
+          title: `Tag: ${collection.label}`,
+          description: `${collection.pages.length} page${collection.pages.length === 1 ? '' : 's'} tagged \"${collection.label}\".`,
+        },
+        tags: [],
+      };
+
+      writeRenderedPage(
+        outputDir,
+        archivePage.outputName,
+        renderTemplate(archivePage, navigation, renderTagArchiveContent(collection, archivePage), tagCollectionsBySlug)
+      );
+      generatedPages.push({
+        source: '(generated)',
+        output: archivePage.outputName,
+        title: archivePage.metadata.title,
+      });
+    }
   }
 
   return {
-    pages: pages.map((page) => ({
-      source: page.sourceName,
-      output: page.outputName,
-      title: page.metadata.title || page.slug,
-    })),
+    pages: [
+      ...pages.map((page) => ({
+        source: page.sourceName,
+        output: page.outputName,
+        title: page.metadata.title || page.slug,
+      })),
+      ...generatedPages,
+    ],
     assets,
   };
 }
@@ -569,11 +752,17 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertNoGeneratedAssetConflicts,
+  assertNoGeneratedPageConflicts,
+  buildNavigation,
   buildSite,
+  buildTagCollections,
   copyStaticAssets,
   escapeHtml,
+  listStaticAssetOutputNames,
   loadPages,
   markdownToHtml,
+  normalizeTags,
   parseFrontMatter,
   relativeLink,
   replaceMarkdownImages,
