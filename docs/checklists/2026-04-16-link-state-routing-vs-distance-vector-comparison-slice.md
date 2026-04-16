@@ -13,5 +13,5 @@
   - pass 2: CLI smoke test for `--compare-distance-vector --remove-link B D`
   - pass 3: targeted diff review of changed files
   - fixes made: inserted dynamically loaded distance-vector module into `sys.modules` for Python 3.14 dataclass compatibility; tightened the link-state post-failure assertion to track changed routers rather than all re-originated sequence bumps
-- [ ] run secret scan before push
-- [ ] append a wrap-up note for resumability
+- [x] run secret scan before push
+- [x] append a wrap-up note for resumability
