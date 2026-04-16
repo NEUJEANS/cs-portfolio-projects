@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 
 BUILTINS = {"cd", "pwd", "exit", "echo", "history"}
 OPERATORS = {"|", "<", ">", ">>"}
+DEFAULT_HISTORY_FILE = "~/.mini_shell_history"
 
 
 @dataclass
@@ -15,6 +16,7 @@ class CommandSpec:
     stdin_path: Optional[str] = None
     stdout_path: Optional[str] = None
     append_stdout: bool = False
+
 
 def tokenize(command: str) -> List[str]:
     try:
@@ -27,6 +29,7 @@ def tokenize(command: str) -> List[str]:
         raise
 
     return [os.path.expandvars(token) if token not in OPERATORS else token for token in raw_tokens]
+
 
 def parse_command(command: str) -> List[CommandSpec]:
     tokens = tokenize(command)
@@ -81,11 +84,59 @@ def parse_command(command: str) -> List[CommandSpec]:
 
     return specs
 
+
 def resolve_path(path: str, cwd: str) -> str:
     expanded = os.path.expanduser(path)
     if os.path.isabs(expanded):
         return expanded
     return os.path.abspath(os.path.join(cwd, expanded))
+
+
+def normalize_history_path(path: str) -> str:
+    return os.path.abspath(os.path.expanduser(path))
+
+
+def load_history(history_path: Optional[str]) -> List[str]:
+    if not history_path:
+        return []
+
+    normalized_path = normalize_history_path(history_path)
+    try:
+        with open(normalized_path, encoding="utf-8") as handle:
+            return [line for line in handle.read().splitlines() if line]
+    except FileNotFoundError:
+        return []
+
+
+def append_history_entry(entry: str, history: List[str], history_path: Optional[str] = None) -> None:
+    history.append(entry)
+    if not history_path:
+        return
+
+    normalized_path = normalize_history_path(history_path)
+    os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
+    with open(normalized_path, "a", encoding="utf-8") as handle:
+        handle.write(entry)
+        handle.write("\n")
+
+
+def clear_history(history: List[str], history_path: Optional[str] = None) -> None:
+    history.clear()
+    if not history_path:
+        return
+
+    normalized_path = normalize_history_path(history_path)
+    os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
+    with open(normalized_path, "w", encoding="utf-8"):
+        pass
+
+
+def get_repl_history_path() -> Optional[str]:
+    configured_path = os.environ.get("MINI_SHELL_HISTORY_FILE")
+    if configured_path is None:
+        return DEFAULT_HISTORY_FILE
+    return configured_path or None
+
 
 def write_redirected_output(path: str, append: bool, output: str, cwd: str) -> None:
     file_mode = "a" if append else "w"
@@ -94,6 +145,7 @@ def write_redirected_output(path: str, append: bool, output: str, cwd: str) -> N
             handle.write(output)
             if not output.endswith("\n"):
                 handle.write("\n")
+
 
 def expand_history(command: str, history: List[str]) -> str:
     if command == "!!":
@@ -109,12 +161,20 @@ def expand_history(command: str, history: List[str]) -> str:
 
     return command
 
+
 def format_history(history: List[str]) -> str:
     return "\n".join(f"{index:>4}  {entry}" for index, entry in enumerate(history, start=1))
 
-def run_builtin(parts: List[str], cwd: Optional[str], history: Optional[List[str]] = None) -> Tuple[str, str]:
+
+def run_builtin(
+    parts: List[str],
+    cwd: Optional[str],
+    history: Optional[List[str]] = None,
+    history_path: Optional[str] = None,
+) -> Tuple[str, str]:
     current_cwd = cwd or os.getcwd()
     name = parts[0]
+    history_entries = history if history is not None else []
 
     if name == "cd":
         target = parts[1] if len(parts) > 1 else os.path.expanduser("~")
@@ -134,12 +194,18 @@ def run_builtin(parts: List[str], cwd: Optional[str], history: Optional[List[str
         return current_cwd, " ".join(parts[1:])
 
     if name == "history":
-        return current_cwd, format_history(history or [])
+        if len(parts) == 1:
+            return current_cwd, format_history(history_entries)
+        if len(parts) == 2 and parts[1] == "-c":
+            clear_history(history_entries, history_path)
+            return current_cwd, ""
+        raise ValueError("history: unsupported arguments")
 
     if name == "exit":
         raise SystemExit(0)
 
     raise ValueError(f"unsupported builtin: {name}")
+
 
 def run_pipeline(specs: List[CommandSpec], cwd: Optional[str]) -> str:
     current_cwd = cwd or os.getcwd()
@@ -207,6 +273,7 @@ def run_pipeline(specs: List[CommandSpec], cwd: Optional[str]) -> str:
             if process.stderr is not None and not process.stderr.closed:
                 process.stderr.close()
 
+
 def run_external(spec: CommandSpec, cwd: Optional[str]) -> str:
     current_cwd = cwd or os.getcwd()
 
@@ -247,7 +314,13 @@ def run_external(spec: CommandSpec, cwd: Optional[str]) -> str:
         return ""
     return result.stdout.rstrip("\n")
 
-def run_command(command: str, cwd: Optional[str] = None, history: Optional[List[str]] = None) -> Tuple[str, str]:
+
+def run_command(
+    command: str,
+    cwd: Optional[str] = None,
+    history: Optional[List[str]] = None,
+    history_path: Optional[str] = None,
+) -> Tuple[str, str]:
     current_cwd = cwd or os.getcwd()
     history_list = history if history is not None else []
     stripped = command.strip()
@@ -255,7 +328,7 @@ def run_command(command: str, cwd: Optional[str] = None, history: Optional[List[
         return current_cwd, ""
 
     expanded_command = expand_history(stripped, history_list)
-    history_list.append(expanded_command)
+    append_history_entry(expanded_command, history_list, history_path)
 
     specs = parse_command(expanded_command)
 
@@ -266,7 +339,7 @@ def run_command(command: str, cwd: Optional[str] = None, history: Optional[List[
     if spec.parts[0] in BUILTINS:
         if spec.stdin_path is not None:
             raise ValueError("input redirection is not supported for builtins")
-        new_cwd, output = run_builtin(spec.parts, current_cwd, history_list)
+        new_cwd, output = run_builtin(spec.parts, current_cwd, history_list, history_path)
         if spec.stdout_path is not None:
             write_redirected_output(spec.stdout_path, spec.append_stdout, output, current_cwd)
             return new_cwd, ""
@@ -274,13 +347,15 @@ def run_command(command: str, cwd: Optional[str] = None, history: Optional[List[
 
     return current_cwd, run_external(spec, current_cwd)
 
+
 def repl():
     cwd = os.getcwd()
-    history: List[str] = []
+    history_path = get_repl_history_path()
+    history = load_history(history_path)
     while True:
         try:
             command = input(f"{cwd}$ ")
-            cwd, output = run_command(command, cwd, history)
+            cwd, output = run_command(command, cwd, history, history_path)
             if output:
                 print(output)
         except (FileNotFoundError, NotADirectoryError, RuntimeError, ValueError) as exc:

@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from mini_shell import run_command
+from mini_shell import get_repl_history_path, load_history, run_command
 
 os.environ["MINI_SHELL_NAME"] = "portfolio-shell"
 
@@ -166,6 +166,81 @@ class MiniShellTests(unittest.TestCase):
                         f"   2  history > {output_path}",
                     ],
                 )
+
+    def test_load_history_returns_empty_for_missing_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "missing-history.txt")
+            self.assertEqual(load_history(history_path), [])
+
+    def test_repl_history_path_can_be_disabled_with_empty_env(self):
+        original_value = os.environ.get("MINI_SHELL_HISTORY_FILE")
+        os.environ["MINI_SHELL_HISTORY_FILE"] = ""
+        try:
+            self.assertIsNone(get_repl_history_path())
+        finally:
+            if original_value is None:
+                os.environ.pop("MINI_SHELL_HISTORY_FILE", None)
+            else:
+                os.environ["MINI_SHELL_HISTORY_FILE"] = original_value
+
+    def test_load_history_ignores_blank_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "mini-shell-history.txt")
+            with open(history_path, "w", encoding="utf-8") as handle:
+                handle.write("echo alpha\n\n history-like-gap\n")
+            self.assertEqual(load_history(history_path), ["echo alpha", " history-like-gap"])
+
+    def test_history_persists_across_sessions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "mini-shell-history.txt")
+            first_session_history = []
+
+            cwd, out = run_command(
+                "echo alpha",
+                tmp,
+                first_session_history,
+                history_path=history_path,
+            )
+            self.assertEqual(cwd, tmp)
+            self.assertEqual(out, "alpha")
+            self.assertEqual(load_history(history_path), ["echo alpha"])
+
+            second_session_history = load_history(history_path)
+            cwd, out = run_command(
+                "history",
+                tmp,
+                second_session_history,
+                history_path=history_path,
+            )
+            self.assertEqual(cwd, tmp)
+            self.assertEqual(
+                out.splitlines(),
+                [
+                    "   1  echo alpha",
+                    "   2  history",
+                ],
+            )
+            self.assertEqual(load_history(history_path), ["echo alpha", "history"])
+
+    def test_history_clear_empties_memory_and_history_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "mini-shell-history.txt")
+            history = []
+            run_command("echo alpha", tmp, history, history_path=history_path)
+            run_command("echo beta", tmp, history, history_path=history_path)
+
+            cwd, out = run_command("history -c", tmp, history, history_path=history_path)
+            self.assertEqual(cwd, tmp)
+            self.assertEqual(out, "")
+            self.assertEqual(history, [])
+            self.assertEqual(load_history(history_path), [])
+
+    def test_history_rejects_unsupported_arguments(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "mini-shell-history.txt")
+            with self.assertRaises(ValueError) as ctx:
+                run_command("history -z", tmp, [], history_path=history_path)
+            self.assertIn("history: unsupported arguments", str(ctx.exception))
 
     def test_rejects_builtin_inside_pipeline(self):
         with self.assertRaises(ValueError):

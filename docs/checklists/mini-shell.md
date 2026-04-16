@@ -1,6 +1,6 @@
 # Mini Shell Checklist
 
-Status: vertical slice 4 in progress
+Status: vertical slice 5 in progress
 Last updated: 2026-04-16
 
 ## Vertical slice 2
@@ -46,6 +46,23 @@ Last updated: 2026-04-16
 - [x] keep replayed commands predictable by storing expanded executed command lines in history
 - [x] update README usage, feature list, and future improvements
 - [x] expand automated tests for numbered history output, replay, redirects, and range errors
+- [x] run focused tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
+## 2026-04-16 persistent history slice
+- [x] re-check repo sync state before editing
+- [x] inspect `mini-shell` and confirm persistent history is the next meaningful shell upgrade after in-memory replay
+- [x] do brief web research against the GNU Bash manual for `HISTFILE` and `history -c`
+- [x] do a short Python file-I/O / state-sharing refresh with a quick self-test
+- [x] add a configurable persistent history file that loads at REPL startup and appends executed command lines
+- [x] support `MINI_SHELL_HISTORY_FILE` override and allow disabling persistence with an empty value
+- [x] add `history -c` to clear both in-memory and persisted history for this focused teaching shell
+- [x] update README usage, feature list, notes, and future improvements
+- [x] expand automated tests for missing history files, cross-session persistence, history clearing, and invalid history arguments
 - [x] run focused tests locally
 - [x] perform review pass 1 and fix issues
 - [x] perform review pass 2 and fix issues
