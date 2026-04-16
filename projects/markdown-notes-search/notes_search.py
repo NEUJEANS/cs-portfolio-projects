@@ -4,6 +4,7 @@ import os
 import re
 import shlex
 import subprocess
+import textwrap
 from pathlib import Path
 
 TAG_RE = re.compile(r'(?<!\w)#([A-Za-z0-9_-]+)')
@@ -549,6 +550,117 @@ def format_result(note, show_backlinks=False, show_section_match=False, show_ope
     return f"{note['path']} (score={note['score']}){tags}{snippet}{section}{backlinks}{open_command}"
 
 
+def truncate_for_width(text, width):
+    if width <= 0:
+        return ''
+    if len(text) <= width:
+        return text
+    if width == 1:
+        return '…'
+    return text[: width - 1] + '…'
+
+
+def summarize_result_line(note, width):
+    section = ''
+    if note.get('section_match'):
+        section_heading = note['section_match'].get('heading') or note['section_match'].get('anchor') or ''
+        if section_heading:
+            section = f' -> {section_heading}'
+    tags = f" [{' '.join('#' + tag for tag in note.get('tags', [])[:2])}]" if note.get('tags') else ''
+    return truncate_for_width(f"{note['path']} ({note['score']}){section}{tags}", width)
+
+
+def build_preview_lines(note, width):
+    width = max(10, width)
+    lines = [truncate_for_width(note['path'], width), truncate_for_width(f"score: {note['score']}", width)]
+    if note.get('tags'):
+        lines.extend(textwrap.wrap(f"tags: {' '.join('#' + tag for tag in note['tags'])}", width=width) or [''])
+    if note.get('section_match'):
+        section = note['section_match']
+        label = f"section: {section['path_with_anchor']}"
+        if section.get('line_number'):
+            label += f":{section['line_number']}"
+        lines.extend(textwrap.wrap(label, width=width) or [''])
+    if note.get('backlinks'):
+        lines.extend(textwrap.wrap(f"backlinks: {', '.join(note['backlinks'])}", width=width) or [''])
+    if note.get('snippet'):
+        lines.append('')
+        lines.extend(textwrap.wrap(note['snippet'], width=width) or [''])
+    return lines
+
+
+def launch_tui(results, editor=None, base_directory=None):
+    import curses
+
+    if not results:
+        print('No results to browse in TUI mode.')
+        return
+
+    def run(stdscr):
+        curses.curs_set(0)
+        stdscr.keypad(True)
+        selected = 0
+        scroll = 0
+
+        while True:
+            height, width = stdscr.getmaxyx()
+            stdscr.erase()
+
+            if height < 6 or width < 40:
+                message = 'Terminal too small for TUI. Resize to at least 40x6.'
+                stdscr.addnstr(0, 0, message, max(1, width - 1))
+                stdscr.addnstr(2, 0, 'Press q to quit.', max(1, width - 1))
+                stdscr.refresh()
+                key = stdscr.getch()
+                if key in (ord('q'), 27):
+                    return
+                continue
+
+            left_width = max(24, width // 3)
+            right_width = max(10, width - left_width - 3)
+            visible_rows = max(1, height - 2)
+            if selected < scroll:
+                scroll = selected
+            if selected >= scroll + visible_rows:
+                scroll = selected - visible_rows + 1
+
+            title = 'markdown-notes-search TUI  ↑/↓ or j/k move  Enter open  q quit'
+            stdscr.addnstr(0, 0, title, width - 1, curses.A_BOLD)
+
+            for row_index in range(visible_rows):
+                result_index = scroll + row_index
+                if result_index >= len(results):
+                    break
+                line = summarize_result_line(results[result_index], left_width - 1)
+                attr = curses.A_REVERSE if result_index == selected else curses.A_NORMAL
+                stdscr.addnstr(row_index + 1, 0, line, left_width - 1, attr)
+
+            divider_x = left_width
+            for y in range(1, height):
+                stdscr.addch(y, divider_x, '|')
+
+            preview_lines = build_preview_lines(results[selected], right_width)
+            for row_index, line in enumerate(preview_lines[:visible_rows]):
+                stdscr.addnstr(row_index + 1, divider_x + 2, line, right_width)
+
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key in (ord('q'), 27):
+                return
+            if key in (curses.KEY_UP, ord('k')):
+                selected = max(0, selected - 1)
+            elif key in (curses.KEY_DOWN, ord('j')):
+                selected = min(len(results) - 1, selected + 1)
+            elif key in (curses.KEY_PPAGE,):
+                selected = max(0, selected - visible_rows)
+            elif key in (curses.KEY_NPAGE,):
+                selected = min(len(results) - 1, selected + visible_rows)
+            elif key in (10, 13, curses.KEY_ENTER):
+                open_result_in_editor(results[selected], editor=editor, base_directory=base_directory)
+
+    curses.wrapper(run)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Markdown notes search')
     parser.add_argument('directory')
@@ -561,6 +673,7 @@ def main(argv=None):
     parser.add_argument('--show-open-command', action='store_true', help='include an editor command for each plain-text result')
     parser.add_argument('--editor', default=None, help='editor command to use for generated open commands or --open-result')
     parser.add_argument('--open-result', action='store_true', help='launch the top result in an editor after printing results')
+    parser.add_argument('--tui', action='store_true', help='browse results in a terminal UI with a preview pane')
     parser.add_argument(
         '--index-file',
         default=None,
@@ -594,6 +707,10 @@ def main(argv=None):
             for note in results
         ]
         print(json.dumps(payload, indent=2))
+        return
+
+    if args.tui:
+        launch_tui(results, editor=args.editor, base_directory=args.directory)
         return
 
     for note in results:

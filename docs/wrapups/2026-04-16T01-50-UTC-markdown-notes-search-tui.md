@@ -1,0 +1,23 @@
+# Wrap-up — markdown-notes-search TUI slice
+
+- Timestamp (UTC): 2026-04-16T01:50:00Z
+- Project: `markdown-notes-search`
+- Remote sync status: `main` was checked against `origin/main`, fetch completed, and there was no local/remote drift before edits
+- What changed:
+  - added `--tui` browsing mode with a ranked result list, preview pane, resize-safe fallback, and editor-open integration on `Enter`
+  - added pure helper functions for truncation, list summaries, and preview rendering so TUI behavior stays unit-testable
+  - updated the project README, checklist, research notes, learning log, and review log for the new slice
+- Tests run:
+  - `cd projects/markdown-notes-search && python3 -m unittest -v`
+  - targeted CLI smoke run covering plain output, JSON output, and `--help` discovery for `--tui`
+  - `cd /home/user1_admin/.openclaw/workspace/cs-portfolio-projects && python3 -m unittest tests.test_task_tracker tests.test_mini_mapreduce tests.test_minhash_near_duplicate tests.test_interval_tree_lab tests.test_red_black_tree_lab tests.test_network_flow_lab tests.test_chord_dht_lab tests.test_shamir_secret_sharing_lab`
+  - `python3 -m py_compile notes_search.py test_notes_search.py`
+- Reviews run:
+  - review pass 1: API and backward-compatibility audit
+  - review pass 2: terminal resilience and pane-layout audit
+  - review pass 3: test/docs audit
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
+- Commit hash: `c9abd9f`
+- Next step:
+  - add multi-result TUI actions such as bulk-open or export without breaking the existing dependency-light CLI design

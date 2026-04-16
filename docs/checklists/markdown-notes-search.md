@@ -1,7 +1,7 @@
 # Markdown Notes Search Checklist
 
-Status: vertical slice 4 complete
-Last updated: 2026-04-14
+Status: vertical slice 7 complete
+Last updated: 2026-04-16
 
 ## Vertical slice 1
 - [x] identify markdown-notes-search as one of the weakest portfolio projects due to minimal search quality and docs
@@ -65,11 +65,6 @@ Last updated: 2026-04-14
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
-## Next slice candidates
-- [ ] TUI browsing mode with preview panes
-- [ ] richer posting-list style incremental index rather than storing full note bodies in cache
-- [ ] section-scoped retrieval with heading anchors and open-in-editor actions
-
 ## Vertical slice 5 — section-scoped retrieval and anchor navigation
 - [x] identify markdown-notes-search as still worth another slice because results could rank a note correctly without showing the exact matching section to jump to
 - [x] do short heading-anchor and section-index refresh with self-test
@@ -84,8 +79,6 @@ Last updated: 2026-04-14
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-
-
 
 ## Vertical slice 6 — editor jump commands
 - [x] identify markdown-notes-search as still worth another slice because section anchors were exposed but terminal workflows still lacked a practical editor jump action
@@ -102,3 +95,23 @@ Last updated: 2026-04-14
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## Vertical slice 7 — TUI browsing mode with preview panes
+- [x] confirm markdown-notes-search still had a clear unfinished item: interactive browsing existed only as a future improvement
+- [x] do brief research on Python curses layout basics for list/detail terminal UIs
+- [x] do short Python text-wrapping and keyboard-loop refresh/self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--tui` mode with a left-side ranked result list and right-side preview pane
+- [x] keep plain-text, JSON, and editor-open workflows backward compatible
+- [x] add automated coverage for TUI-friendly result summarization and preview rendering helpers
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
+## Next slice candidates
+- [ ] richer posting-list style incremental index rather than storing full note bodies in cache
+- [ ] multi-result TUI actions such as bulk-open or export
+- [ ] section-scoped retrieval with heading anchors and open-in-editor actions for multiple selected hits

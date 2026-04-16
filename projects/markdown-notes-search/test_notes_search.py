@@ -7,7 +7,16 @@ import time
 import unittest
 from pathlib import Path
 
-from notes_search import DEFAULT_INDEX_FILENAME, INDEX_VERSION, build_editor_command, index_notes, search_notes
+from notes_search import (
+    DEFAULT_INDEX_FILENAME,
+    INDEX_VERSION,
+    build_editor_command,
+    build_preview_lines,
+    index_notes,
+    search_notes,
+    summarize_result_line,
+    truncate_for_width,
+)
 
 
 class NotesSearchTests(unittest.TestCase):
@@ -106,7 +115,6 @@ class NotesSearchTests(unittest.TestCase):
 
             self.assertTrue((root / 'cache' / 'index.json').exists())
 
-
     def test_section_indexing_builds_unique_heading_anchors(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -187,7 +195,6 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(search_notes(notes, '   '), [])
             with self.assertRaises(ValueError):
                 search_notes(notes, 'sql', limit=0)
-
 
     def test_search_results_include_best_matching_section_anchor(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -289,7 +296,6 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(payload[0]['headings'], ['SQL'])
             self.assertIn('sql', payload[0]['snippet'].lower())
 
-
     def test_cli_json_output_includes_section_match(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -360,10 +366,37 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(payload[0]['open_command'][1], '--goto')
             self.assertTrue(payload[0]['open_command'][2].endswith('systems.md:3'))
 
+    def test_tui_helpers_build_preview_and_result_summary(self):
+        note = {
+            'path': 'systems/distributed.md',
+            'score': 166,
+            'tags': ['distributed', 'systems', 'review'],
+            'snippet': 'Failure Detection (#failure-detection): Heartbeat timeout and phi accrual notes.',
+            'backlinks': ['hub.md'],
+            'section_match': {
+                'heading': 'Failure Detection',
+                'path_with_anchor': 'systems/distributed.md#failure-detection',
+                'line_number': 7,
+            },
+        }
+
+        summary = summarize_result_line(note, 48)
+        preview_lines = build_preview_lines(note, 32)
+
+        self.assertLessEqual(len(summary), 48)
+        self.assertIn('systems/distributed.md', summary)
+        self.assertTrue(any('section:' in line for line in preview_lines))
+        self.assertTrue(any('backlinks:' in line for line in preview_lines))
+        self.assertTrue(any('phi accrual' in line.lower() for line in preview_lines))
+
+    def test_truncate_for_width_uses_ellipsis(self):
+        self.assertEqual(truncate_for_width('abcdef', 4), 'abc…')
+        self.assertEqual(truncate_for_width('abcdef', 1), '…')
+        self.assertEqual(truncate_for_width('abc', 5), 'abc')
+
     def test_default_index_filename_constant(self):
         self.assertEqual(DEFAULT_INDEX_FILENAME, '.notes_search_index.json')
 
 
 if __name__ == '__main__':
     unittest.main()
-
