@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,7 +21,13 @@ spec.loader.exec_module(module)
 Edge = module.Edge
 KargerMinCutLab = module.KargerMinCutLab
 UndirectedMultiGraph = module.UndirectedMultiGraph
+benchmark_graph_families = module.benchmark_graph_families
+build_barbell_graph = module.build_barbell_graph
+build_complete_graph = module.build_complete_graph
+build_cycle_graph = module.build_cycle_graph
+build_erdos_renyi_graph = module.build_erdos_renyi_graph
 exact_min_cut_size = module.exact_min_cut_size
+is_connected = module.is_connected
 
 
 class KargerMinCutLabTests(unittest.TestCase):
@@ -64,6 +71,30 @@ class KargerMinCutLabTests(unittest.TestCase):
         )
         self.assertEqual(exact_min_cut_size(graph), 2)
 
+    def test_graph_family_builders_have_expected_min_cuts(self) -> None:
+        self.assertEqual(exact_min_cut_size(build_cycle_graph(5)), 2)
+        self.assertEqual(exact_min_cut_size(build_complete_graph(5)), 4)
+        self.assertEqual(exact_min_cut_size(build_barbell_graph(4)), 1)
+
+    def test_random_graph_builder_returns_connected_graph(self) -> None:
+        graph = build_erdos_renyi_graph(vertex_count=6, edge_probability=0.4, seed=7)
+        self.assertTrue(is_connected(graph))
+        self.assertGreaterEqual(len(graph.edges), len(graph.vertices) - 1)
+
+    def test_benchmark_graph_families_reports_exact_hits(self) -> None:
+        payload = benchmark_graph_families(
+            families=["cycle", "complete"],
+            sizes=[4],
+            trials=10,
+            instances_per_size=1,
+            seed=5,
+        )
+        self.assertEqual(payload["benchmark"]["total_instances"], 2)
+        self.assertEqual(len(payload["rows"]), 2)
+        self.assertEqual({row["family"] for row in payload["rows"]}, {"cycle", "complete"})
+        self.assertTrue(all("hit_exact_cut" in row for row in payload["rows"]))
+        self.assertEqual(len(payload["family_summary"]), 2)
+
     def test_cli_demo_outputs_exact_check_and_histogram(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "demo", "--trials", "6", "--seed", "2", "--exact-check"],
@@ -101,6 +132,53 @@ class KargerMinCutLabTests(unittest.TestCase):
         self.assertEqual(payload["graph_summary"]["vertices"], ["A", "B", "C", "D", "E", "F"])
         self.assertGreaterEqual(payload["best_cut_size"], payload["exact_min_cut_size"])
         self.assertEqual(payload["best_cut_size"], 2)
+
+    def test_cli_run_requires_graph_file(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "run"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--graph-file is required", completed.stderr)
+
+    def test_cli_benchmark_writes_json_and_csv_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "benchmark.json"
+            csv_path = Path(tmpdir) / "benchmark.csv"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--families",
+                    "cycle,barbell",
+                    "--sizes",
+                    "4",
+                    "--instances-per-size",
+                    "1",
+                    "--trials",
+                    "8",
+                    "--seed",
+                    "3",
+                    "--output-json",
+                    str(json_path),
+                    "--output-csv",
+                    str(csv_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["benchmark"]["total_instances"], 2)
+            self.assertTrue(json_path.exists())
+            self.assertTrue(csv_path.exists())
+            csv_text = csv_path.read_text()
+            self.assertIn("family,size_parameter", csv_text)
+            self.assertIn("barbell", csv_text)
 
 
 if __name__ == "__main__":

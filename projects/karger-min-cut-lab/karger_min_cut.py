@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import random
 from collections import Counter
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
+from statistics import mean
 from typing import Iterable
 
 
@@ -187,20 +189,241 @@ def build_sample_graph() -> UndirectedMultiGraph:
     )
 
 
+def build_cycle_graph(vertex_count: int) -> UndirectedMultiGraph:
+    if vertex_count < 3:
+        raise ValueError("cycle graphs require at least 3 vertices")
+    vertices = [f"v{i}" for i in range(vertex_count)]
+    edges = [(vertices[i], vertices[(i + 1) % vertex_count]) for i in range(vertex_count)]
+    return UndirectedMultiGraph(vertices=vertices, edges=edges)
+
+
+def build_complete_graph(vertex_count: int) -> UndirectedMultiGraph:
+    if vertex_count < 2:
+        raise ValueError("complete graphs require at least 2 vertices")
+    vertices = [f"v{i}" for i in range(vertex_count)]
+    edges = [(vertices[i], vertices[j]) for i in range(vertex_count) for j in range(i + 1, vertex_count)]
+    return UndirectedMultiGraph(vertices=vertices, edges=edges)
+
+
+def build_barbell_graph(clique_size: int) -> UndirectedMultiGraph:
+    if clique_size < 3:
+        raise ValueError("barbell graphs require clique size at least 3")
+    left_vertices = [f"L{i}" for i in range(clique_size)]
+    right_vertices = [f"R{i}" for i in range(clique_size)]
+    vertices = left_vertices + right_vertices
+    edges: list[tuple[str, str]] = []
+    for side_vertices in (left_vertices, right_vertices):
+        for i in range(len(side_vertices)):
+            for j in range(i + 1, len(side_vertices)):
+                edges.append((side_vertices[i], side_vertices[j]))
+    edges.append((left_vertices[-1], right_vertices[0]))
+    return UndirectedMultiGraph(vertices=vertices, edges=edges)
+
+
+def build_erdos_renyi_graph(vertex_count: int, edge_probability: float, seed: int) -> UndirectedMultiGraph:
+    if vertex_count < 2:
+        raise ValueError("random graphs require at least 2 vertices")
+    if not 0 < edge_probability <= 1:
+        raise ValueError("edge probability must be between 0 and 1")
+    rng = random.Random(seed)
+    vertices = [f"v{i}" for i in range(vertex_count)]
+    while True:
+        edges = [
+            (vertices[i], vertices[j])
+            for i in range(vertex_count)
+            for j in range(i + 1, vertex_count)
+            if rng.random() <= edge_probability
+        ]
+        if edges:
+            try:
+                graph = UndirectedMultiGraph(vertices=vertices, edges=edges)
+            except ValueError:
+                continue
+            if is_connected(graph):
+                return graph
+
+
+def is_connected(graph: UndirectedMultiGraph) -> bool:
+    adjacency: dict[str, set[str]] = {vertex: set() for vertex in graph.vertices}
+    for u, v in graph.edges:
+        adjacency[u].add(v)
+        adjacency[v].add(u)
+    start = graph.vertices[0]
+    seen = {start}
+    stack = [start]
+    while stack:
+        current = stack.pop()
+        for neighbor in adjacency[current]:
+            if neighbor not in seen:
+                seen.add(neighbor)
+                stack.append(neighbor)
+    return len(seen) == len(graph.vertices)
+
+
+def build_graph_family(name: str, size: int, instance_seed: int) -> UndirectedMultiGraph:
+    if name == "cycle":
+        return build_cycle_graph(size)
+    if name == "complete":
+        return build_complete_graph(size)
+    if name == "barbell":
+        return build_barbell_graph(size)
+    if name == "erdos-renyi":
+        edge_probability = min(0.75, max(0.35, 1.8 / max(2, size)))
+        return build_erdos_renyi_graph(size, edge_probability=edge_probability, seed=instance_seed)
+    raise ValueError(f"unsupported graph family: {name}")
+
+
+def benchmark_exact_cut(family: str, graph: UndirectedMultiGraph, size_parameter: int) -> int:
+    if family == "cycle":
+        return 2
+    if family == "complete":
+        return len(graph.vertices) - 1
+    if family == "barbell":
+        return 1
+    return exact_min_cut_size(graph)
+
+
+def benchmark_graph_families(
+    families: list[str],
+    sizes: list[int],
+    trials: int,
+    instances_per_size: int,
+    seed: int,
+) -> dict[str, object]:
+    if instances_per_size < 1:
+        raise ValueError("instances_per_size must be at least 1")
+    rows: list[dict[str, object]] = []
+    per_family_summary: list[dict[str, object]] = []
+    row_seed = seed
+
+    for family in families:
+        family_rows: list[dict[str, object]] = []
+        for size in sizes:
+            for instance_index in range(instances_per_size):
+                instance_seed = row_seed
+                row_seed += 1
+                graph = build_graph_family(family, size, instance_seed=instance_seed)
+                exact_cut = benchmark_exact_cut(family, graph, size)
+                result = KargerMinCutLab(graph).run_trials(trials=trials, seed=instance_seed)
+                hit = int(result["best_cut_size"]) == exact_cut
+                row = {
+                    "family": family,
+                    "size_parameter": size,
+                    "instance_index": instance_index + 1,
+                    "instance_seed": instance_seed,
+                    "vertex_count": len(graph.vertices),
+                    "edge_count": len(graph.edges),
+                    "trials": trials,
+                    "best_cut_size": int(result["best_cut_size"]),
+                    "exact_min_cut_size": exact_cut,
+                    "hit_exact_cut": hit,
+                    "histogram": result["histogram"],
+                    "recommended_trials": len(graph.vertices) ** 2,
+                }
+                rows.append(row)
+                family_rows.append(row)
+        per_family_summary.append(
+            {
+                "family": family,
+                "instances": len(family_rows),
+                "hit_rate": round(sum(1 for row in family_rows if row["hit_exact_cut"]) / len(family_rows), 4),
+                "average_best_cut": round(mean(int(row["best_cut_size"]) for row in family_rows), 4),
+                "average_exact_cut": round(mean(int(row["exact_min_cut_size"]) for row in family_rows), 4),
+                "average_vertex_count": round(mean(int(row["vertex_count"]) for row in family_rows), 2),
+            }
+        )
+
+    return {
+        "algorithm": "karger-random-contraction",
+        "benchmark": {
+            "families": families,
+            "sizes": sizes,
+            "trials": trials,
+            "instances_per_size": instances_per_size,
+            "base_seed": seed,
+            "total_instances": len(rows),
+        },
+        "rows": rows,
+        "family_summary": per_family_summary,
+    }
+
+
+def write_benchmark_csv(path: Path, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "family",
+        "size_parameter",
+        "instance_index",
+        "instance_seed",
+        "vertex_count",
+        "edge_count",
+        "trials",
+        "best_cut_size",
+        "exact_min_cut_size",
+        "hit_exact_cut",
+        "recommended_trials",
+    ]
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row[field] for field in fieldnames})
+
+
+def maybe_write_json(path: Path | None, payload: dict[str, object]) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def parse_csv_list(raw: str) -> list[str]:
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def parse_int_csv(raw: str) -> list[int]:
+    values = [int(item.strip()) for item in raw.split(",") if item.strip()]
+    if not values:
+        raise ValueError("expected at least one integer size")
+    return values
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Karger's randomized min-cut algorithm on a small undirected multigraph.")
+    parser.add_argument("command", nargs="?", default="demo", choices=["demo", "run", "benchmark"], help="demo uses the built-in sample graph")
     parser.add_argument("--graph-file", type=Path, help="path to a JSON file with vertices and edges")
     parser.add_argument("--trials", type=int, default=1, help="number of independent trials to run")
     parser.add_argument("--seed", type=int, help="starting seed for deterministic sequential trials")
     parser.add_argument("--include-trace", action="store_true", help="include contraction trace for the first reported trial")
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     parser.add_argument("--exact-check", action="store_true", help="also compute the exact min-cut size for small graphs")
-    parser.add_argument("command", nargs="?", default="demo", choices=["demo", "run"], help="demo uses the built-in sample graph")
+    parser.add_argument("--families", default="cycle,complete,barbell,erdos-renyi", help="comma-separated graph families for benchmark mode")
+    parser.add_argument("--sizes", default="4,6,8", help="comma-separated size parameters for benchmark mode")
+    parser.add_argument("--instances-per-size", type=int, default=2, help="number of instances per family/size pair in benchmark mode")
+    parser.add_argument("--output-json", type=Path, help="write benchmark JSON output to a file")
+    parser.add_argument("--output-csv", type=Path, help="write benchmark CSV summary to a file")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.command == "run" and args.graph_file is None:
+        raise SystemExit("--graph-file is required when command=run")
+    if args.command == "benchmark":
+        base_seed = 0 if args.seed is None else args.seed
+        payload = benchmark_graph_families(
+            families=parse_csv_list(args.families),
+            sizes=parse_int_csv(args.sizes),
+            trials=args.trials,
+            instances_per_size=args.instances_per_size,
+            seed=base_seed,
+        )
+        maybe_write_json(args.output_json, payload)
+        if args.output_csv is not None:
+            write_benchmark_csv(args.output_csv, payload["rows"])
+        print(json.dumps(payload, indent=2 if args.pretty else None, sort_keys=True))
+        return
+
     graph = build_sample_graph() if args.command == "demo" and args.graph_file is None else load_graph(args.graph_file)
     lab = KargerMinCutLab(graph)
     payload = lab.run_trials(trials=args.trials, seed=args.seed, include_trace=args.include_trace)

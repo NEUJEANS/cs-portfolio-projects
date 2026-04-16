@@ -1,0 +1,473 @@
+{
+  "algorithm": "karger-random-contraction",
+  "benchmark": {
+    "base_seed": 17,
+    "families": [
+      "cycle",
+      "complete",
+      "barbell",
+      "erdos-renyi"
+    ],
+    "instances_per_size": 2,
+    "sizes": [
+      4,
+      6,
+      8
+    ],
+    "total_instances": 24,
+    "trials": 32
+  },
+  "family_summary": [
+    {
+      "average_best_cut": 2,
+      "average_exact_cut": 2,
+      "average_vertex_count": 6,
+      "family": "cycle",
+      "hit_rate": 1.0,
+      "instances": 6
+    },
+    {
+      "average_best_cut": 5,
+      "average_exact_cut": 5,
+      "average_vertex_count": 6,
+      "family": "complete",
+      "hit_rate": 1.0,
+      "instances": 6
+    },
+    {
+      "average_best_cut": 1,
+      "average_exact_cut": 1,
+      "average_vertex_count": 12,
+      "family": "barbell",
+      "hit_rate": 1.0,
+      "instances": 6
+    },
+    {
+      "average_best_cut": 1,
+      "average_exact_cut": 1,
+      "average_vertex_count": 6,
+      "family": "erdos-renyi",
+      "hit_rate": 1.0,
+      "instances": 6
+    }
+  ],
+  "rows": [
+    {
+      "best_cut_size": 2,
+      "edge_count": 4,
+      "exact_min_cut_size": 2,
+      "family": "cycle",
+      "histogram": {
+        "2": 32
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 17,
+      "recommended_trials": 16,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 4
+    },
+    {
+      "best_cut_size": 2,
+      "edge_count": 4,
+      "exact_min_cut_size": 2,
+      "family": "cycle",
+      "histogram": {
+        "2": 32
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 18,
+      "recommended_trials": 16,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 4
+    },
+    {
+      "best_cut_size": 2,
+      "edge_count": 6,
+      "exact_min_cut_size": 2,
+      "family": "cycle",
+      "histogram": {
+        "2": 32
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 19,
+      "recommended_trials": 36,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 6
+    },
+    {
+      "best_cut_size": 2,
+      "edge_count": 6,
+      "exact_min_cut_size": 2,
+      "family": "cycle",
+      "histogram": {
+        "2": 32
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 20,
+      "recommended_trials": 36,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 6
+    },
+    {
+      "best_cut_size": 2,
+      "edge_count": 8,
+      "exact_min_cut_size": 2,
+      "family": "cycle",
+      "histogram": {
+        "2": 32
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 21,
+      "recommended_trials": 64,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 8
+    },
+    {
+      "best_cut_size": 2,
+      "edge_count": 8,
+      "exact_min_cut_size": 2,
+      "family": "cycle",
+      "histogram": {
+        "2": 32
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 22,
+      "recommended_trials": 64,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 8
+    },
+    {
+      "best_cut_size": 3,
+      "edge_count": 6,
+      "exact_min_cut_size": 3,
+      "family": "complete",
+      "histogram": {
+        "3": 26,
+        "4": 6
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 23,
+      "recommended_trials": 16,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 4
+    },
+    {
+      "best_cut_size": 3,
+      "edge_count": 6,
+      "exact_min_cut_size": 3,
+      "family": "complete",
+      "histogram": {
+        "3": 26,
+        "4": 6
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 24,
+      "recommended_trials": 16,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 4
+    },
+    {
+      "best_cut_size": 5,
+      "edge_count": 15,
+      "exact_min_cut_size": 5,
+      "family": "complete",
+      "histogram": {
+        "5": 24,
+        "8": 6,
+        "9": 2
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 25,
+      "recommended_trials": 36,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 6
+    },
+    {
+      "best_cut_size": 5,
+      "edge_count": 15,
+      "exact_min_cut_size": 5,
+      "family": "complete",
+      "histogram": {
+        "5": 24,
+        "8": 6,
+        "9": 2
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 26,
+      "recommended_trials": 36,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 6
+    },
+    {
+      "best_cut_size": 7,
+      "edge_count": 28,
+      "exact_min_cut_size": 7,
+      "family": "complete",
+      "histogram": {
+        "7": 20,
+        "12": 8,
+        "15": 3,
+        "16": 1
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 27,
+      "recommended_trials": 64,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 8
+    },
+    {
+      "best_cut_size": 7,
+      "edge_count": 28,
+      "exact_min_cut_size": 7,
+      "family": "complete",
+      "histogram": {
+        "7": 21,
+        "12": 8,
+        "15": 2,
+        "16": 1
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 28,
+      "recommended_trials": 64,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 8
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 13,
+      "exact_min_cut_size": 1,
+      "family": "barbell",
+      "histogram": {
+        "1": 18,
+        "3": 12,
+        "4": 2
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 29,
+      "recommended_trials": 64,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 8
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 13,
+      "exact_min_cut_size": 1,
+      "family": "barbell",
+      "histogram": {
+        "1": 18,
+        "3": 12,
+        "4": 2
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 30,
+      "recommended_trials": 64,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 8
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 31,
+      "exact_min_cut_size": 1,
+      "family": "barbell",
+      "histogram": {
+        "1": 21,
+        "5": 8,
+        "8": 3
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 31,
+      "recommended_trials": 144,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 12
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 31,
+      "exact_min_cut_size": 1,
+      "family": "barbell",
+      "histogram": {
+        "1": 22,
+        "5": 8,
+        "8": 2
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 32,
+      "recommended_trials": 144,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 12
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 57,
+      "exact_min_cut_size": 1,
+      "family": "barbell",
+      "histogram": {
+        "1": 21,
+        "7": 8,
+        "12": 3
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 33,
+      "recommended_trials": 256,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 16
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 57,
+      "exact_min_cut_size": 1,
+      "family": "barbell",
+      "histogram": {
+        "1": 21,
+        "7": 8,
+        "12": 3
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 34,
+      "recommended_trials": 256,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 16
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 4,
+      "exact_min_cut_size": 1,
+      "family": "erdos-renyi",
+      "histogram": {
+        "1": 14,
+        "2": 18
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 35,
+      "recommended_trials": 16,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 4
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 4,
+      "exact_min_cut_size": 1,
+      "family": "erdos-renyi",
+      "histogram": {
+        "1": 21,
+        "2": 11
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 36,
+      "recommended_trials": 16,
+      "size_parameter": 4,
+      "trials": 32,
+      "vertex_count": 4
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 6,
+      "exact_min_cut_size": 1,
+      "family": "erdos-renyi",
+      "histogram": {
+        "1": 16,
+        "2": 16
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 37,
+      "recommended_trials": 36,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 6
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 5,
+      "exact_min_cut_size": 1,
+      "family": "erdos-renyi",
+      "histogram": {
+        "1": 32
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 38,
+      "recommended_trials": 36,
+      "size_parameter": 6,
+      "trials": 32,
+      "vertex_count": 6
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 13,
+      "exact_min_cut_size": 1,
+      "family": "erdos-renyi",
+      "histogram": {
+        "1": 13,
+        "2": 4,
+        "3": 8,
+        "4": 6,
+        "5": 1
+      },
+      "hit_exact_cut": true,
+      "instance_index": 1,
+      "instance_seed": 39,
+      "recommended_trials": 64,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 8
+    },
+    {
+      "best_cut_size": 1,
+      "edge_count": 10,
+      "exact_min_cut_size": 1,
+      "family": "erdos-renyi",
+      "histogram": {
+        "1": 18,
+        "2": 7,
+        "3": 7
+      },
+      "hit_exact_cut": true,
+      "instance_index": 2,
+      "instance_seed": 40,
+      "recommended_trials": 64,
+      "size_parameter": 8,
+      "trials": 32,
+      "vertex_count": 8
+    }
+  ]
+}
