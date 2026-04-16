@@ -7,5 +7,5 @@
 - [x] add regression tests for preset generation, overwrite safety, and corpus scanning
 - [x] run the MinHash unit test suite after implementation
 - [x] perform 3 review passes and fix issues found
-- [ ] run secret scan before push
-- [ ] commit, push, and record wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and record wrap-up
