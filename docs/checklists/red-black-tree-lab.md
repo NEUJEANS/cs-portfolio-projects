@@ -20,6 +20,8 @@
 - [x] extend the benchmark workflow to sweep multiple input sizes in one run
 - [x] export benchmark-series rows as chart-ready CSV with per-size case labels
 - [x] cover benchmark-series aggregate metrics plus CLI CSV file output
+- [x] turn benchmark-series output into a portfolio-ready Markdown report with charts and talking points
+- [x] cover benchmark-report Markdown generation and file output
 - [x] add `explain-trace` Markdown walkthrough export for build/delete trace streams
 - [x] embed initial/final Graphviz DOT snapshots in trace walkthrough exports for before/after visuals
 - [x] cover Markdown walkthrough generation with CLI tests and file-output checks

@@ -477,6 +477,46 @@ class RedBlackTreeLabTests(unittest.TestCase):
             self.assertIn("7,ascending,7", csv_text)
             self.assertIn("15,shuffled,15", csv_text)
 
+    def test_benchmark_report_markdown_includes_table_charts_and_talking_points(self) -> None:
+        series = module._benchmark_series([7, 15], start=1, seed=11)
+        markdown = module._benchmark_report_markdown(series, seed=11, start=1)
+        self.assertIn("# Red-Black vs AVL Benchmark Report", markdown)
+        self.assertIn("| Count | RB mean height | AVL mean height |", markdown)
+        self.assertIn("```mermaid", markdown)
+        self.assertIn("Mean tree height by input size", markdown)
+        self.assertIn("Mean rotations by input size", markdown)
+        self.assertIn("Interview talking points", markdown)
+
+    def test_cli_benchmark_report_can_write_markdown_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "artifacts" / "red-black-benchmark-report.md"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark-report",
+                    "7",
+                    "15",
+                    "31",
+                    "--seed",
+                    "11",
+                    "--output",
+                    str(report_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "benchmark-report")
+            self.assertEqual(payload["counts"], [7, 15, 31])
+            self.assertEqual(payload["output"], str(report_path))
+            markdown = report_path.read_text(encoding="utf-8")
+            self.assertIn("# Red-Black vs AVL Benchmark Report", markdown)
+            self.assertIn("```mermaid", markdown)
+            self.assertIn("AVL-RB rotation gap", markdown)
+
     def test_cli_benchmark_series_rejects_non_positive_counts(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "benchmark-series", "7", "0"],

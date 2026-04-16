@@ -22,6 +22,7 @@ A portfolio-friendly balanced tree lab that implements red-black tree insertion 
 - deterministic benchmark mode that compares red-black and AVL tree height/rotation trade-offs on ascending, descending, and shuffled insert orders
 - multi-size benchmark-series mode for trend analysis across several input sizes in a single run
 - chart-ready benchmark CSV export for spreadsheet plots, README charts, or recruiter-facing artifacts
+- Markdown benchmark-report export that turns the same deterministic data into a portfolio-ready report with Mermaid charts and talking points
 - CLI commands for demo runs, custom builds, membership queries, rank queries, kth-smallest lookup, deletion checks, DOT export, trace-to-Markdown walkthrough export, and cross-tree benchmarking
 
 ## Usage
@@ -89,6 +90,13 @@ python3 projects/red-black-tree-lab/red_black_tree.py benchmark-series 7 15 31 -
 python3 projects/red-black-tree-lab/red_black_tree.py benchmark-series 7 15 31 --seed 7 --csv-file artifacts/red-black-vs-avl-series.csv
 ```
 
+Turn the multi-size benchmark into a recruiter-friendly Markdown report with Mermaid charts and interview-ready talking points:
+
+```bash
+python3 projects/red-black-tree-lab/red_black_tree.py benchmark-report 7 15 31 --seed 7
+python3 projects/red-black-tree-lab/red_black_tree.py benchmark-report 7 15 31 --seed 7 --output artifacts/red-black-vs-avl-report.md
+```
+
 Include a trace of rotations and fix-up cases for portfolio walkthroughs:
 
 ```bash
@@ -110,6 +118,7 @@ python3 -m unittest tests/test_red_black_tree_lab.py
 python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --seed 7
 python3 projects/red-black-tree-lab/red_black_tree.py benchmark --count 31 --seed 7 --csv-file artifacts/red-black-vs-avl.csv
 python3 projects/red-black-tree-lab/red_black_tree.py benchmark-series 7 15 31 --seed 7 --csv-file artifacts/red-black-vs-avl-series.csv
+python3 projects/red-black-tree-lab/red_black_tree.py benchmark-report 7 15 31 --seed 7 --output artifacts/red-black-vs-avl-report.md
 ```
 
 ## Design notes
@@ -125,8 +134,9 @@ python3 projects/red-black-tree-lab/red_black_tree.py benchmark-series 7 15 31 -
 - The benchmark command intentionally uses deterministic ascending, descending, and seeded shuffled sequences so the AVL-vs-red-black comparison is repeatable in README snippets, interviews, and CI runs.
 - `benchmark-series` reuses the same deterministic cases across several counts so it can show growth trends without introducing per-run randomness.
 - CSV export keeps the case-level metrics flat and spreadsheet-friendly so the project can produce quick charts without extra post-processing glue code.
+- `benchmark-report` reuses the deterministic benchmark-series pipeline so the checked-in narrative report stays consistent with the underlying raw metrics instead of drifting into hand-written claims.
 
 ## Future improvements
 - emit Graphviz diagrams after each insertion/deletion step
-- render the benchmark-series CSV into checked-in charts or SVG sparkline assets for the README
+- render the Mermaid benchmark report into checked-in SVG/PNG assets for portfolio sites that do not support Mermaid natively
 - render trace-event snapshots as SVG/PNG assets directly from the walkthrough export pipeline

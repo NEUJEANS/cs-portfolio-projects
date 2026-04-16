@@ -8,6 +8,7 @@ import json
 import random
 import statistics
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -698,6 +699,104 @@ def _benchmark_series(counts: list[int], start: int, seed: int) -> dict[str, obj
     return {"runs": runs, "rows": rows, "aggregate": aggregate}
 
 
+def _benchmark_report_markdown(series: dict[str, object], *, seed: int, start: int) -> str:
+    runs = series["runs"]
+    aggregate = series["aggregate"]
+    counts = [run["count"] for run in runs]
+    red_black_heights = [run["summary"]["red_black_height_mean"] for run in runs]
+    avl_heights = [run["summary"]["avl_height_mean"] for run in runs]
+    red_black_rotations = [run["summary"]["red_black_rotation_mean"] for run in runs]
+    avl_rotations = [run["summary"]["avl_rotation_mean"] for run in runs]
+
+    largest_height_gap_run = max(
+        runs,
+        key=lambda run: abs(run["summary"]["height_gap_avl_minus_red_black"]),
+    )
+    largest_rotation_gap_run = max(
+        runs,
+        key=lambda run: abs(run["summary"]["rotation_gap_avl_minus_red_black"]),
+    )
+
+    table_lines = [
+        "| Count | RB mean height | AVL mean height | AVL-RB height gap | RB mean rotations | AVL mean rotations | AVL-RB rotation gap |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for run in runs:
+        summary = run["summary"]
+        table_lines.append(
+            "| {count} | {rbh:.2f} | {avlh:.2f} | {hg:.2f} | {rbr:.2f} | {avlr:.2f} | {rg:.2f} |".format(
+                count=run["count"],
+                rbh=summary["red_black_height_mean"],
+                avlh=summary["avl_height_mean"],
+                hg=summary["height_gap_avl_minus_red_black"],
+                rbr=summary["red_black_rotation_mean"],
+                avlr=summary["avl_rotation_mean"],
+                rg=summary["rotation_gap_avl_minus_red_black"],
+            )
+        )
+
+    height_chart = textwrap.dedent(
+        f"""
+        ```mermaid
+        xychart-beta
+            title "Mean tree height by input size (line 1 = red-black, line 2 = AVL)"
+            x-axis "Inserted keys" [{", ".join(str(count) for count in counts)}]
+            y-axis "Mean height" 0 --> {max(max(red_black_heights), max(avl_heights)) + 1:.0f}
+            line [{", ".join(f"{value:.2f}" for value in red_black_heights)}]
+            line [{", ".join(f"{value:.2f}" for value in avl_heights)}]
+        ```
+        """
+    ).strip()
+    rotation_chart = textwrap.dedent(
+        f"""
+        ```mermaid
+        xychart-beta
+            title "Mean rotations by input size (line 1 = red-black, line 2 = AVL)"
+            x-axis "Inserted keys" [{", ".join(str(count) for count in counts)}]
+            y-axis "Mean rotations" 0 --> {max(max(red_black_rotations), max(avl_rotations)) + 1:.0f}
+            line [{", ".join(f"{value:.2f}" for value in red_black_rotations)}]
+            line [{", ".join(f"{value:.2f}" for value in avl_rotations)}]
+        ```
+        """
+    ).strip()
+
+    markdown = [
+        "# Red-Black vs AVL Benchmark Report",
+        "",
+        "## Setup",
+        "",
+        f"- counts: `{counts}`",
+        f"- start: `{start}`",
+        f"- seed: `{seed}`",
+        "- cases per count: `ascending`, `descending`, `shuffled`",
+        "",
+        "## Summary",
+        "",
+        f"- Across {aggregate['run_count']} benchmark sizes, red-black trees averaged `{aggregate['red_black_height_mean']:.2f}` height versus `{aggregate['avl_height_mean']:.2f}` for AVL.",
+        f"- The largest absolute height gap showed up at count `{largest_height_gap_run['count']}` with an AVL-minus-RB gap of `{largest_height_gap_run['summary']['height_gap_avl_minus_red_black']:.2f}` (negative means AVL was shorter).",
+        f"- The largest absolute rotation gap showed up at count `{largest_rotation_gap_run['count']}` with an AVL-minus-RB rotation gap of `{largest_rotation_gap_run['summary']['rotation_gap_avl_minus_red_black']:.2f}` (positive means AVL rotated more).",
+        "",
+        "## Per-size metrics",
+        "",
+        *table_lines,
+        "",
+        "## Height chart",
+        "",
+        height_chart,
+        "",
+        "## Rotation chart",
+        "",
+        rotation_chart,
+        "",
+        "## Interview talking points",
+        "",
+        "- AVL stays shorter on these runs, while rotation counts stay close enough to discuss the trade-off instead of claiming one tree always dominates.",
+        "- Ascending and descending inserts are still deterministic worst-style inputs, so the report makes a useful recruiter-facing stress test instead of a lucky random demo.",
+        "- The charts and table can be checked into the repo or pasted into a portfolio page without re-running ad-hoc spreadsheet tooling.",
+    ]
+    return "\n".join(markdown) + "\n"
+
+
 def _describe_trace_event(event: dict[str, object], index: int) -> str:
     name = str(event["event"])
     if name == "inserted":
@@ -969,6 +1068,25 @@ def command_benchmark_series(args: argparse.Namespace) -> dict[str, object]:
     return payload
 
 
+def command_benchmark_report(args: argparse.Namespace) -> dict[str, object]:
+    series = _benchmark_series(args.counts, start=args.start, seed=args.seed)
+    markdown = _benchmark_report_markdown(series, seed=args.seed, start=args.start)
+    payload = {
+        "command": "benchmark-report",
+        "counts": args.counts,
+        "seed": args.seed,
+        "start": args.start,
+        "aggregate": series["aggregate"],
+        "markdown": markdown,
+    }
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(markdown, encoding="utf-8")
+        payload["output"] = str(output_path)
+    return payload
+
+
 def add_trace_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--trace", action="store_true", help="include rotation and fix-up events in the JSON output")
 
@@ -1062,6 +1180,24 @@ def main() -> None:
         help="write the benchmark series rows to a CSV file for spreadsheet/chart tooling",
     )
     benchmark_series_parser.set_defaults(handler=command_benchmark_series)
+
+    benchmark_report_parser = subparsers.add_parser(
+        "benchmark-report",
+        help="turn a benchmark-series run into a Markdown report with recruiter-friendly charts and talking points",
+    )
+    benchmark_report_parser.add_argument(
+        "counts",
+        nargs="+",
+        type=int,
+        help="one or more input sizes to benchmark in ascending/descending/shuffled form",
+    )
+    benchmark_report_parser.add_argument("--start", type=int, default=1, help="starting integer for the benchmark range")
+    benchmark_report_parser.add_argument("--seed", type=int, default=7, help="random seed for the shuffled benchmark case")
+    benchmark_report_parser.add_argument(
+        "--output",
+        help="optional Markdown file path for the generated benchmark report",
+    )
+    benchmark_report_parser.set_defaults(handler=command_benchmark_report)
 
     args = parser.parse_args()
     if args.command == "explain-trace" and args.operation == "delete" and args.query is None:
