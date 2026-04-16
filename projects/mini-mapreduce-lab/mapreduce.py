@@ -20,6 +20,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from numbers import Number
 from pathlib import Path
+import fnmatch
 from types import ModuleType
 from typing import Any, Callable, Iterable, Iterator
 
@@ -467,6 +468,16 @@ class PluginInspectionBatch:
 </body>
 </html>
 """
+
+
+def discover_plugin_refs(search_root: Path | None = None, *, pattern: str = "plugins_*.py") -> list[str]:
+    root = (search_root or Path(__file__).resolve().parent).resolve()
+    if not root.exists():
+        raise ValueError(f"plugin search root does not exist: {root}")
+    matches = sorted(path for path in root.rglob("*.py") if fnmatch.fnmatch(path.name, pattern))
+    if not matches:
+        raise ValueError(f"no plugins matched pattern {pattern!r} under {root}")
+    return [str(path) for path in matches]
 
 
 def render_plugin_inspections_csv(plugins: list[PluginInspection]) -> str:
@@ -1615,6 +1626,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="include adjacent plugin metadata diffs in the JSON inspection payload when multiple plugins are provided",
     )
 
+    catalog_parser = subparsers.add_parser("catalog-plugins", help="discover local plugins and emit catalog artifacts")
+    catalog_parser.add_argument("--root", help="directory to search for plugin files (defaults to the project directory)")
+    catalog_parser.add_argument("--pattern", default="plugins_*.py", help="filename glob for plugin discovery")
+    catalog_parser.add_argument("--output", help="optional output JSON path")
+    catalog_parser.add_argument("--csv-output", help="optional plugin catalog CSV output path")
+    catalog_parser.add_argument("--report-output", help="optional Markdown plugin catalog report path")
+    catalog_parser.add_argument("--html-output", help="optional HTML plugin catalog report path")
+    catalog_parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="include adjacent plugin metadata diffs in the JSON/report catalog payload",
+    )
+
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
     benchmark_parser.add_argument("--job", choices=["wordcount", "plugin"], default="wordcount")
     benchmark_parser.add_argument("--scenario", choices=["balanced", "skewed"], default="skewed")
@@ -1670,6 +1694,25 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             parser.error(str(exc))
         rendered = result.plugins[0].to_json() if len(result.plugins) == 1 and not args.diff else result.to_json()
+        if args.output:
+            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+        elif not args.csv_output and not args.report_output and not args.html_output:
+            print(rendered)
+        if args.csv_output:
+            Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
+        if args.report_output:
+            Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
+        if args.html_output:
+            Path(args.html_output).write_text(result.to_html(), encoding="utf-8")
+        return 0
+
+    if args.command == "catalog-plugins":
+        try:
+            plugin_refs = discover_plugin_refs(Path(args.root) if args.root else None, pattern=args.pattern)
+            result = inspect_plugins(plugin_refs, include_diffs=args.diff)
+        except ValueError as exc:
+            parser.error(str(exc))
+        rendered = result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
         elif not args.csv_output and not args.report_output and not args.html_output:

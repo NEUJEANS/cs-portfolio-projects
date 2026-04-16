@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from mapreduce import benchmark_job, diff_plugin_inspections, execute_job, inspect_plugin, inspect_plugins, load_plugin, stable_partition
+from mapreduce import benchmark_job, diff_plugin_inspections, discover_plugin_refs, execute_job, inspect_plugin, inspect_plugins, load_plugin, stable_partition
 
 
 class MiniMapReduceTests(unittest.TestCase):
@@ -430,6 +430,72 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertIn("Repository commit:", html_payload)
             self.assertIn("plugin-max-score", html_payload)
             self.assertIn("def map_records(lines):", html_payload)
+
+    def test_discover_plugin_refs_finds_bundled_plugins(self) -> None:
+        refs = discover_plugin_refs(PROJECT_DIR)
+
+        self.assertEqual(
+            [Path(item).name for item in refs],
+            ["plugins_average_score.py", "plugins_top_score.py"],
+        )
+
+    def test_cli_catalog_plugins_writes_json_markdown_and_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-catalog.json"
+            report_output = Path(tmpdir) / "plugin-catalog.md"
+            html_output = Path(tmpdir) / "plugin-catalog.html"
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "catalog-plugins",
+                    "--root",
+                    "projects/mini-mapreduce-lab",
+                    "--diff",
+                    "--output",
+                    str(output),
+                    "--report-output",
+                    str(report_output),
+                    "--html-output",
+                    str(html_output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            markdown = report_output.read_text(encoding="utf-8")
+            html_payload = html_output.read_text(encoding="utf-8")
+            self.assertEqual(payload["plugin_count"], 2)
+            self.assertEqual([Path(item["plugin"]).name for item in payload["plugins"]], ["plugins_average_score.py", "plugins_top_score.py"])
+            self.assertEqual(len(payload["diffs"]), 1)
+            self.assertIn("# Mini MapReduce plugin inspection", markdown)
+            self.assertIn("plugin-average-score", markdown)
+            self.assertIn("plugin-max-score", markdown)
+            self.assertIn("<!DOCTYPE html>", html_payload)
+            self.assertIn("plugin-average-score", html_payload)
+            self.assertIn("plugin-max-score", html_payload)
+
+    def test_cli_catalog_plugins_rejects_empty_matches(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                "projects/mini-mapreduce-lab/mapreduce.py",
+                "catalog-plugins",
+                "--root",
+                "projects/mini-mapreduce-lab",
+                "--pattern",
+                "does-not-exist-*.py",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parents[2],
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("no plugins matched pattern", completed.stderr)
 
     def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
         completed = subprocess.run(

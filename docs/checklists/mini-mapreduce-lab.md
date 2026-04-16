@@ -314,3 +314,16 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 - [ ] consider repository-level inspection index pages or release-to-release comparison artifacts in a future run
+
+## Plugin catalog discovery slice (2026-04-16 07:01 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python `Path.rglob` / glob-filter refresh and self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add a `catalog-plugins` command that auto-discovers bundled plugins and emits the same JSON/CSV/Markdown/HTML inspection artifacts
+- [x] extend project-level and repo-level tests for plugin discovery, catalog output, and empty-match validation
+- [x] run tests and 3 review passes
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider richer catalog landing pages such as per-plugin badges or docs-site navigation sidebars in a future run

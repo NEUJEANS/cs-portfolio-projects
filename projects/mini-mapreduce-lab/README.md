@@ -30,6 +30,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - benchmark CSV summaries now carry plugin inspection metadata so spreadsheet artifacts stay self-describing without a separate JSON lookup
 - optional adjacent plugin metadata diffs for batched inspection runs so contract changes are reviewable without hand-comparing JSON snapshots
 - optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
+- plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts without repeating `--plugin` flags manually
 
 ## Usage
 
@@ -212,6 +213,17 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --diff \
   --report-output plugin-diff-report.md \
   --html-output plugin-diff-report.html
+```
+
+Auto-discover every bundled plugin under the project directory and generate a portfolio-ready catalog plus adjacent diffs in one step:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \
+  --root projects/mini-mapreduce-lab \
+  --diff \
+  --output plugin-catalog.json \
+  --report-output plugin-catalog.md \
+  --html-output plugin-catalog.html
 ```
 
 Switch benchmark dataset families to model different workload shapes. For example, the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
