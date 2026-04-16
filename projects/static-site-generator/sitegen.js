@@ -2,6 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const PARTIALS_DIR_NAME = '_partials';
+
 function parseFrontMatter(source) {
   const normalized = source.replace(/^\uFEFF/, '');
   const trimmedStart = normalized.trimStart();
@@ -89,6 +91,11 @@ function sanitizeHref(url) {
 
 function toPosixPath(value) {
   return String(value).split(path.sep).join('/');
+}
+
+function isReservedContentPath(relativePath) {
+  const normalized = toPosixPath(relativePath);
+  return normalized === PARTIALS_DIR_NAME || normalized.startsWith(`${PARTIALS_DIR_NAME}/`);
 }
 
 function splitHref(href) {
@@ -485,7 +492,44 @@ function renderTagArchiveContent(collection, page) {
 </section>`;
 }
 
-function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = new Map()) {
+function rootPathForPage(outputName) {
+  const normalized = toPosixPath(outputName);
+  const dirname = path.posix.dirname(normalized);
+  if (dirname === '.' || !dirname) {
+    return '';
+  }
+
+  return `${dirname.split('/').map(() => '..').join('/')}/`;
+}
+
+function loadTemplatePartials(contentDir) {
+  const partialsDir = path.join(contentDir, PARTIALS_DIR_NAME);
+  const partials = {
+    header: null,
+    footer: null,
+  };
+
+  for (const name of Object.keys(partials)) {
+    const partialPath = path.join(partialsDir, `${name}.html`);
+    if (fs.existsSync(partialPath) && fs.statSync(partialPath).isFile()) {
+      partials[name] = fs.readFileSync(partialPath, 'utf8');
+    }
+  }
+
+  return partials;
+}
+
+function renderPartial(template, context) {
+  if (!template) return '';
+  return template.replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (match, key) => {
+    if (!Object.prototype.hasOwnProperty.call(context, key)) {
+      return match;
+    }
+    return context[key];
+  });
+}
+
+function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = new Map(), partials = {}) {
   const title = page.metadata.title || page.slug;
   const description = page.metadata.description || '';
   const navHtml = navigation.length
@@ -498,6 +542,24 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
         .join('')}</ul></nav>`
     : '';
   const tagsHtml = renderTagBadges(page, tagCollectionsBySlug);
+  const partialContext = {
+    navigation: navHtml,
+    title: escapeHtml(title),
+    description: escapeHtml(description),
+    tags: tagsHtml,
+    rootPath: escapeHtml(rootPathForPage(page.outputName)),
+    outputPath: escapeHtml(page.outputName || ''),
+    sourcePath: escapeHtml(page.sourceName || '(generated)'),
+  };
+  const headerInnerHtml = partials.header
+    ? renderPartial(partials.header, partialContext)
+    : `${navHtml}
+      <h1>${escapeHtml(title)}</h1>
+      ${description ? `<p>${escapeHtml(description)}</p>` : ''}
+      ${tagsHtml}`;
+  const footerInnerHtml = partials.footer
+    ? renderPartial(partials.footer, partialContext)
+    : 'Built with static-site-generator.';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -533,16 +595,13 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
   </head>
   <body>
     <header>
-      ${navHtml}
-      <h1>${escapeHtml(title)}</h1>
-      ${description ? `<p>${escapeHtml(description)}</p>` : ''}
-      ${tagsHtml}
+      ${headerInnerHtml}
     </header>
     <main>
       ${contentHtml}
     </main>
     <footer>
-      Built with static-site-generator.
+      ${footerInnerHtml}
     </footer>
   </body>
 </html>`;
@@ -554,6 +613,11 @@ function walkContentEntries(contentDir, currentDir = contentDir) {
 
   for (const entry of entries) {
     const fullPath = path.join(currentDir, entry.name);
+    const relativePath = path.relative(contentDir, fullPath);
+    if (isReservedContentPath(relativePath)) {
+      continue;
+    }
+
     if (entry.isDirectory()) {
       files.push(...walkContentEntries(contentDir, fullPath));
       continue;
@@ -562,7 +626,7 @@ function walkContentEntries(contentDir, currentDir = contentDir) {
     if (!entry.isFile()) continue;
     files.push({
       fullPath,
-      relativePath: path.relative(contentDir, fullPath),
+      relativePath,
     });
   }
 
@@ -648,6 +712,7 @@ function buildSite(contentDir, outputDir) {
     throw new Error(`No markdown files found in: ${contentDir}`);
   }
 
+  const partials = loadTemplatePartials(contentDir);
   fs.mkdirSync(outputDir, { recursive: true });
 
   const tagCollections = buildTagCollections(pages);
@@ -665,7 +730,7 @@ function buildSite(contentDir, outputDir) {
 
   for (const page of pages) {
     const contentHtml = markdownToHtml(page.body.trim(), page);
-    const html = renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug);
+    const html = renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug, partials);
     writeRenderedPage(outputDir, page.outputName, html);
   }
 
@@ -685,7 +750,7 @@ function buildSite(contentDir, outputDir) {
     writeRenderedPage(
       outputDir,
       tagIndexPage.outputName,
-      renderTemplate(tagIndexPage, navigation, renderTagIndexContent(tagCollections, tagIndexPage), tagCollectionsBySlug)
+      renderTemplate(tagIndexPage, navigation, renderTagIndexContent(tagCollections, tagIndexPage), tagCollectionsBySlug, partials)
     );
     generatedPages.push({
       source: '(generated)',
@@ -708,7 +773,7 @@ function buildSite(contentDir, outputDir) {
       writeRenderedPage(
         outputDir,
         archivePage.outputName,
-        renderTemplate(archivePage, navigation, renderTagArchiveContent(collection, archivePage), tagCollectionsBySlug)
+        renderTemplate(archivePage, navigation, renderTagArchiveContent(collection, archivePage), tagCollectionsBySlug, partials)
       );
       generatedPages.push({
         source: '(generated)',
@@ -752,6 +817,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  PARTIALS_DIR_NAME,
   assertNoGeneratedAssetConflicts,
   assertNoGeneratedPageConflicts,
   buildNavigation,
@@ -759,14 +825,18 @@ module.exports = {
   buildTagCollections,
   copyStaticAssets,
   escapeHtml,
+  isReservedContentPath,
   listStaticAssetOutputNames,
   loadPages,
+  loadTemplatePartials,
   markdownToHtml,
   normalizeTags,
   parseFrontMatter,
   relativeLink,
+  renderPartial,
   replaceMarkdownImages,
   resolveDocumentHref,
+  rootPathForPage,
   sanitizeHref,
   slugify,
   toOutputPath,

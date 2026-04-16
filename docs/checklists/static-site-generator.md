@@ -80,3 +80,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 vertical slice: shared header/footer template partials
+- [x] identify `static-site-generator` as the next unfinished project because reusable layout chrome still required copy-pasting header/footer HTML into every page
+- [x] skip extra web research and language refresh because the slice extends the existing Node/CommonJS template pipeline directly
+- [x] add a resumable checklist for the slice
+- [x] reserve `content/_partials/` for shared `header.html` and `footer.html` templates
+- [x] inject page-aware placeholders such as `{{rootPath}}`, `{{navigation}}`, `{{tags}}`, `{{sourcePath}}`, and `{{outputPath}}` into shared partials
+- [x] keep `_partials/` out of page discovery and static-asset copying
+- [x] expand automated tests for reserved partial directories, shared header/footer rendering, generated tag pages, and nested relative links
+- [x] update README and project checklist with the new partial-template behavior
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [ ] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

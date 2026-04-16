@@ -15,6 +15,7 @@ This project shows practical compiler-style text processing, file-system automat
 - converts Markdown files into standalone HTML pages while preserving nested content folders
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
+- optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
 - builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
 - generates a `tags/` directory of archive pages from front matter tags, including a browsable tags index and per-tag page listings
 - renders a focused Markdown subset: headings, paragraphs, bullet lists, ordered lists, blockquotes, links, images, inline code, fenced code blocks, bold, and italics
@@ -62,6 +63,27 @@ Then build the site:
 node sitegen.js content dist
 ```
 
+If you want shared layout chrome across every page, add optional partials under `content/_partials/`:
+
+```html
+<!-- content/_partials/header.html -->
+<p class="brand"><a href="{{rootPath}}index.html">Student Portfolio</a></p>
+{{navigation}}
+<div class="hero">
+  <h1>{{title}}</h1>
+  <p>{{description}}</p>
+  {{tags}}
+</div>
+```
+
+```html
+<!-- content/_partials/footer.html -->
+<p>Source: <code>{{sourcePath}}</code></p>
+<p><a href="{{rootPath}}assets/resume.pdf">Resume</a></p>
+```
+
+Available partial placeholders are `{{rootPath}}`, `{{navigation}}`, `{{title}}`, `{{description}}`, `{{tags}}`, `{{sourcePath}}`, and `{{outputPath}}`. The reserved `_partials/` directory is ignored during page discovery and static-asset copying, so those template files never leak into the generated site.
+
 If pages include `tags`, the generator also creates `dist/tags/index.html` plus one archive page per tag, and the page-header tag pills link into those generated archives automatically. When tag archives are generated, `tags/` becomes reserved output space, so the builder will raise an error instead of silently overwriting an authored page or static asset that would land at the same path.
 
 Ordered steps and pull-quote style callouts are also preserved, so project pages can mix tutorials, release notes, and narrative case studies without extra tooling.
@@ -91,5 +113,4 @@ node --test test_static_site_generator.js
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
 - syntax highlighting themes and line-number support for fenced code blocks
-- shared header/footer partials loaded from template files
 - incremental rebuilds or a watch mode for faster authoring

@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const {
+  PARTIALS_DIR_NAME,
   buildSite,
   copyStaticAssets,
   loadPages,
@@ -80,9 +81,11 @@ test('relativeLink computes nav hrefs across nested pages', () => {
   assert.equal(relativeLink('posts/welcome.html', 'posts/welcome.html'), 'welcome.html');
 });
 
-test('walkContentEntries and loadPages include nested content in stable order', () => {
+test('walkContentEntries and loadPages ignore reserved partial templates and keep nested content in stable order', () => {
   const tmp = makeTempDir();
   fs.mkdirSync(path.join(tmp, 'nested'), { recursive: true });
+  fs.mkdirSync(path.join(tmp, PARTIALS_DIR_NAME), { recursive: true });
+  fs.writeFileSync(path.join(tmp, PARTIALS_DIR_NAME, 'header.html'), '<p>Shared header</p>', 'utf8');
   fs.writeFileSync(path.join(tmp, 'nested', 'diagram.png'), 'fake-image', 'utf8');
   fs.writeFileSync(path.join(tmp, 'b.md'), `---\ntitle: Beta\norder: 2\n---\nBody`, 'utf8');
   fs.writeFileSync(path.join(tmp, 'nested', 'a.md'), `---\ntitle: Alpha\norder: 1\n---\nBody`, 'utf8');
@@ -102,16 +105,19 @@ test('walkContentEntries and loadPages include nested content in stable order', 
   );
 });
 
-test('copyStaticAssets preserves nested asset paths', () => {
+test('copyStaticAssets preserves nested asset paths while excluding reserved partial files', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, 'assets'), { recursive: true });
+  fs.mkdirSync(path.join(contentDir, PARTIALS_DIR_NAME), { recursive: true });
   fs.writeFileSync(path.join(contentDir, 'index.md'), '# Home', 'utf8');
+  fs.writeFileSync(path.join(contentDir, PARTIALS_DIR_NAME, 'footer.html'), '<p>Footer</p>', 'utf8');
   fs.writeFileSync(path.join(contentDir, 'assets', 'styles.css'), 'body { color: red; }', 'utf8');
 
   const copied = copyStaticAssets(contentDir, outputDir);
   assert.deepEqual(copied, [path.join('assets', 'styles.css')]);
   assert.equal(fs.readFileSync(path.join(outputDir, 'assets', 'styles.css'), 'utf8'), 'body { color: red; }');
+  assert.equal(fs.existsSync(path.join(outputDir, PARTIALS_DIR_NAME, 'footer.html')), false);
 });
 
 test('markdownToHtml closes an unclosed fenced code block at end of document', () => {
@@ -200,6 +206,76 @@ Return [home](../index.md).`,
   assert.match(docsTagHtml, /href="index.html">← All tags<\/a>/);
   assert.match(docsTagHtml, /href="\.\.\/guides\/setup.html">Setup Guide<\/a>/);
   assert.equal(fs.readFileSync(path.join(outputDir, 'images', 'hero.png'), 'utf8'), 'png-data');
+});
+
+test('buildSite injects shared header and footer partials with page-aware root paths', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'assets'), { recursive: true });
+  fs.mkdirSync(path.join(contentDir, 'guides'), { recursive: true });
+  fs.mkdirSync(path.join(contentDir, PARTIALS_DIR_NAME), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, PARTIALS_DIR_NAME, 'header.html'),
+    [
+      '<p class="brand"><a href="{{rootPath}}index.html">Portfolio Home</a></p>',
+      '{{navigation}}',
+      '<div class="hero"><h1>{{title}}</h1><p>{{description}}</p>{{tags}}</div>',
+    ].join('\n'),
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, PARTIALS_DIR_NAME, 'footer.html'),
+    [
+      '<p class="source">Source: <code>{{sourcePath}}</code></p>',
+      '<p class="resume-link"><a href="{{rootPath}}assets/resume.pdf">Resume</a></p>',
+    ].join('\n'),
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Home
+order: 1
+description: Landing page
+---
+# Welcome`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'guides', 'setup.md'),
+    `---
+title: Setup Guide
+order: 2
+description: Nested page
+tags: [docs]
+---
+# Setup`,
+    'utf8'
+  );
+
+  fs.writeFileSync(path.join(contentDir, 'assets', 'resume.pdf'), 'pdf-data', 'utf8');
+
+  buildSite(contentDir, outputDir);
+
+  const homeHtml = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
+  const setupHtml = fs.readFileSync(path.join(outputDir, 'guides', 'setup-guide.html'), 'utf8');
+  const docsTagHtml = fs.readFileSync(path.join(outputDir, 'tags', 'docs.html'), 'utf8');
+
+  assert.match(homeHtml, /<a href="index.html">Portfolio Home<\/a>/);
+  assert.match(homeHtml, /<p class="source">Source: <code>index.md<\/code><\/p>/);
+  assert.match(homeHtml, /<a href="assets\/resume.pdf">Resume<\/a>/);
+
+  assert.match(setupHtml, /<a href="\.\.\/index.html">Portfolio Home<\/a>/);
+  assert.match(setupHtml, /<a class="active" href="setup-guide.html">Setup Guide<\/a>/);
+  assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/docs.html">docs<\/a>/);
+  assert.match(setupHtml, /<p class="source">Source: <code>guides\/setup.md<\/code><\/p>/);
+  assert.match(setupHtml, /<a href="\.\.\/assets\/resume.pdf">Resume<\/a>/);
+  assert.match(docsTagHtml, /<p class="source">Source: <code>\(generated\)<\/code><\/p>/);
+  assert.equal(fs.existsSync(path.join(outputDir, PARTIALS_DIR_NAME, 'header.html')), false);
 });
 
 test('sanitizeHref still blocks unsafe protocols', () => {
