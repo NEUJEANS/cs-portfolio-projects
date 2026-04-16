@@ -7,12 +7,12 @@
 - [x] code-mode identifier normalization added
 - [x] code-mode numeric literal normalization added
 - [x] code-mode string/boolean/None/float literal normalization added
-- [ ] mixed-language corpus presets for Markdown + code notebook demos
+- [x] mixed-language corpus presets for Markdown + code notebook demos
 - [ ] dry-run corpus diff summary before refresh for very large indexes
 - [ ] richer benchmark dataset pack with expected-recall scenarios
 
 ## This slice
-- [x] upgrade code tokenization to preserve quoted strings and floating-point literals
-- [x] normalize `True`/`False`, `None`, strings, floats, and integers into stable literal buckets
-- [x] add regression tests for literal tokenization and similarity gains
-- [x] refresh project README to document the broader literal normalization behavior
+- [x] add a curated `mixed-markdown-code-notebook` preset with Markdown, Python, and notebook files
+- [x] support comma-separated glob patterns so mixed-language corpora can be scanned and indexed in one run
+- [x] add regression tests for preset generation and mixed-glob corpus scans
+- [x] refresh project README to document the new preset workflow and mixed-language demo usage

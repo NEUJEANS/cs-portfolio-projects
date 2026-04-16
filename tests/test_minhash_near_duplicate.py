@@ -31,6 +31,8 @@ normalize_text = module.normalize_text
 refresh_signature_index = module.refresh_signature_index
 save_signature_index = module.save_signature_index
 benchmark_corpus = module.benchmark_corpus
+write_preset_corpus = module.write_preset_corpus
+_split_glob_patterns = module._split_glob_patterns
 
 
 class MinhashNearDuplicateRepoTests(unittest.TestCase):
@@ -373,6 +375,74 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with self.assertRaisesRegex(ValueError, "must end with"):
                 export_benchmark_report(payload, Path(tmpdir) / "bench.txt")
+
+    def test_split_glob_patterns_supports_comma_separated_values(self) -> None:
+        self.assertEqual(_split_glob_patterns("*.md, *.py,*.ipynb"), ["*.md", "*.py", "*.ipynb"])
+
+    def test_write_preset_corpus_creates_mixed_language_demo_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "preset"
+            written = write_preset_corpus("mixed-markdown-code-notebook", destination)
+
+            self.assertGreaterEqual(len(written), 5)
+            self.assertTrue((destination / "README.md").exists())
+            self.assertTrue((destination / "bfs_queue.py").exists())
+            self.assertTrue((destination / "bfs_demo.ipynb").exists())
+
+    def test_write_preset_corpus_requires_force_when_files_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "preset"
+            write_preset_corpus("mixed-markdown-code-notebook", destination)
+            with self.assertRaises(FileExistsError):
+                write_preset_corpus("mixed-markdown-code-notebook", destination)
+
+    def test_cli_write_preset_supports_mixed_language_corpus_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "preset"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "write-preset",
+                    "mixed-markdown-code-notebook",
+                    str(destination),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "write-preset")
+            self.assertGreaterEqual(payload["files_written"], 5)
+
+            corpus_completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "corpus",
+                    str(destination),
+                    "--glob",
+                    "*.md,*.py,*.ipynb",
+                    "--token-mode",
+                    "code",
+                    "--normalize-identifiers",
+                    "--normalize-literals",
+                    "--shingle-size",
+                    "4",
+                    "--threshold",
+                    "0.2",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            corpus_payload = json.loads(corpus_completed.stdout)
+            self.assertEqual(corpus_payload["documents_scanned"], payload["files_written"])
+            self.assertGreaterEqual(len(corpus_payload["pairs"]), 1)
 
     def test_cli_compare_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -24,7 +24,56 @@ STRING_LITERAL_RE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
 BOOLEAN_LITERAL_TOKENS = {"true", "false"}
 NONE_LITERAL_TOKEN = "none"
 PYTHON_KEYWORDS = set(keyword.kwlist)
-INDEX_VERSION = 4
+INDEX_VERSION = 5
+
+PRESET_CORPORA: dict[str, dict[str, str]] = {
+    "mixed-markdown-code-notebook": {
+        "README.md": "# Graph search notes\n\nBreadth-first search explores neighbors level by level and keeps a queue.\n",
+        "portfolio_reflection.md": "# BFS study guide\n\nBreadth-first search visits nodes layer by layer, stores the frontier in a queue, and finds shortest unweighted paths.\n",
+        "bfs_queue.py": "from collections import deque\n\n\ndef bfs_layers(graph, start):\n    queue = deque([(start, 0)])\n    seen = {start}\n    order = []\n    while queue:\n        node, depth = queue.popleft()\n        order.append((node, depth))\n        for neighbor in graph.get(node, []):\n            if neighbor not in seen:\n                seen.add(neighbor)\n                queue.append((neighbor, depth + 1))\n    return order\n",
+        "bfs_variant.py": "from collections import deque\n\n\ndef breadth_first_layers(adj, source):\n    pending = deque([(source, 0)])\n    visited = {source}\n    trace = []\n    while pending:\n        vertex, level = pending.popleft()\n        trace.append((vertex, level))\n        for nxt in adj.get(vertex, []):\n            if nxt not in visited:\n                visited.add(nxt)\n                pending.append((nxt, level + 1))\n    return trace\n",
+        "bfs_demo.ipynb": json.dumps({
+            "cells": [
+                {
+                    "cell_type": "markdown",
+                    "metadata": {},
+                    "source": [
+                        "# BFS notebook demo\n",
+                        "Breadth-first search expands the frontier level by level with a queue.\n",
+                    ],
+                },
+                {
+                    "cell_type": "code",
+                    "execution_count": None,
+                    "metadata": {},
+                    "outputs": [],
+                    "source": [
+                        "from collections import deque\n",
+                        "def bfs_path(graph, start):\n",
+                        "    queue = deque([start])\n",
+                        "    seen = {start}\n",
+                        "    order = []\n",
+                        "    while queue:\n",
+                        "        node = queue.popleft()\n",
+                        "        order.append(node)\n",
+                        "        for neighbor in graph.get(node, []):\n",
+                        "            if neighbor not in seen:\n",
+                        "                seen.add(neighbor)\n",
+                        "                queue.append(neighbor)\n",
+                        "    return order\n",
+                    ],
+                },
+            ],
+            "metadata": {
+                "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+                "language_info": {"name": "python", "version": "3.12"},
+            },
+            "nbformat": 4,
+            "nbformat_minor": 5,
+        }, indent=2) + "\n",
+        "distant_topic.md": "# Different topic\n\nBalanced binary search trees rebalance inserts with rotations instead of using a queue frontier.\n",
+    }
+}
 
 
 @dataclass(frozen=True)
@@ -367,8 +416,38 @@ def load_documents(paths: Iterable[Path]) -> dict[str, str]:
     return documents
 
 
+def _split_glob_patterns(patterns: str) -> list[str]:
+    values = [part.strip() for part in patterns.split(",") if part.strip()]
+    if not values:
+        raise ValueError("glob pattern must not be empty")
+    return values
+
+
 def _collect_paths(root: Path, pattern: str) -> list[Path]:
-    return sorted(path for path in root.rglob(pattern) if path.is_file())
+    seen: dict[str, Path] = {}
+    for item in _split_glob_patterns(pattern):
+        for path in root.rglob(item):
+            if path.is_file():
+                seen[str(path)] = path
+    return [seen[key] for key in sorted(seen)]
+
+
+def write_preset_corpus(preset_name: str, destination: Path, *, force: bool = False) -> list[Path]:
+    if preset_name not in PRESET_CORPORA:
+        raise ValueError(f"unknown preset: {preset_name}")
+    files = PRESET_CORPORA[preset_name]
+    existing = [destination / relative for relative in files if (destination / relative).exists()]
+    if existing and not force:
+        joined = ", ".join(str(path) for path in existing)
+        raise FileExistsError(f"destination already contains preset files: {joined}")
+    destination.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for relative, content in files.items():
+        path = destination / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        written.append(path)
+    return sorted(written)
 
 
 def _indexed_document_from_text(
@@ -724,11 +803,17 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--threshold", type=float, default=0.5)
     benchmark_parser.add_argument("--output", help="write benchmark summary to .json, .csv, or .md")
 
+    preset_parser = subparsers.add_parser("write-preset", help="write a curated mixed-language demo corpus")
+    preset_parser.add_argument("preset_name", choices=sorted(PRESET_CORPORA))
+    preset_parser.add_argument("destination")
+    preset_parser.add_argument("--force", action="store_true", help="overwrite preset files if they already exist")
+    preset_parser.add_argument("--json", action="store_true")
+
     for subparser in (compare_parser, corpus_parser, index_parser, benchmark_parser):
         subparser.add_argument("--shingle-size", type=int, default=3)
         subparser.add_argument("--token-mode", choices=["word", "code", "char"], default="word")
         subparser.add_argument("--normalize-identifiers", action="store_true", help="collapse non-keyword identifiers in code mode")
-        subparser.add_argument("--normalize-literals", action="store_true", help="collapse numeric literals in code mode")
+        subparser.add_argument("--normalize-literals", action="store_true", help="collapse numeric, string, boolean, and None literals in code mode")
         subparser.add_argument("--num-hashes", type=int, default=64)
         subparser.add_argument("--bands", type=int, default=8)
         subparser.add_argument("--seed", type=int, default=0)
@@ -758,6 +843,9 @@ def _emit(payload: dict[str, object], as_json: bool) -> int:
             f"Refreshed {payload['documents_seen']} documents in {payload['index_path']} "
             f"(reused={payload['reused']}, updated={payload['updated']}, added={payload['added']}, removed={payload['removed']})"
         )
+        return 0
+    if command == "write-preset":
+        print(f"Wrote preset {payload['preset_name']} with {payload['files_written']} files to {payload['destination']}")
         return 0
     if command == "benchmark":
         print(f"Documents scanned: {payload['documents_scanned']}")
@@ -919,6 +1007,20 @@ def main(argv: list[str] | None = None) -> int:
                 "normalize_identifiers": index.normalize_identifiers,
                 "normalize_literals": index.normalize_literals,
                 "pairs": [report.to_dict() for report in reports],
+            },
+            args.json,
+        )
+
+    if args.command == "write-preset":
+        destination = Path(args.destination)
+        written = write_preset_corpus(args.preset_name, destination, force=args.force)
+        return _emit(
+            {
+                "command": "write-preset",
+                "preset_name": args.preset_name,
+                "destination": str(destination),
+                "files_written": len(written),
+                "files": [str(path) for path in written],
             },
             args.json,
         )
