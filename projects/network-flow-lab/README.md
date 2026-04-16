@@ -22,6 +22,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - reproducible benchmark mode that generates random DAGs and compares Edmonds-Karp vs Dinic
 - Graphviz DOT export for solved flow graphs and bipartite matchings
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
+- standalone `--markdown-out` proof artifacts for flow and matching runs so portfolio screenshots do not require terminal capture
 - bundled sample flow graph and sample matching graph
 - unit tests for correctness, validation, CLI behavior, algorithm parity, and benchmark behavior
 
@@ -46,6 +47,7 @@ Export a DOT file for later rendering with Graphviz (the JSON response also incl
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py demo --dot-out /tmp/network-flow.dot
+python3 projects/network-flow-lab/network_flow.py demo --markdown-out /tmp/network-flow-proof.md
 # optional render step if graphviz is installed:
 # dot -Tpng /tmp/network-flow.dot -o /tmp/network-flow.png
 ```
@@ -61,6 +63,7 @@ Solve a custom bipartite-matching graph and export a DOT diagram. The JSON outpu
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --dot-out /tmp/matching.dot --pretty
+python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --markdown-out /tmp/matching-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --algorithm dinic --pretty
 ```
 
@@ -101,6 +104,10 @@ Bipartite matching format:
 }
 ```
 
+Committed sample proof artifacts:
+- `docs/artifacts/network-flow-lab/sample-flow-proof.md`
+- `docs/artifacts/network-flow-lab/sample-matching-proof.md`
+
 ## Test
 
 ```bash
@@ -121,6 +128,6 @@ python3 -m unittest tests/test_network_flow_lab.py
 
 ## Future improvements
 - add weighted assignment or min-cost flow as a follow-up advanced slice
-- export standalone Markdown/SVG proof artifacts built on top of the new `--explain` payload
+- ship more polished SVG proof cards built on top of the Markdown artifact pipeline
 - ship pre-rendered SVG examples in the docs for portfolio screenshots
 - expand the benchmark generator beyond DAGs to include denser residual-heavy stress cases

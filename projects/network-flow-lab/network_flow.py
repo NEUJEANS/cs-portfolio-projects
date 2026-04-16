@@ -5,6 +5,7 @@ import json
 import random
 import statistics
 import time
+from datetime import UTC, datetime
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -710,6 +711,92 @@ def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "b
     return "\n".join(lines)
 
 
+
+
+def render_flow_markdown(flow_result: FlowResult, *, graph_name: str = "network_flow") -> str:
+    explanation = build_flow_explanation(flow_result)
+    lines = [
+        f"# Max-flow proof artifact: `{graph_name}`",
+        "",
+        f"- Generated: {datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')}",
+        f"- Algorithm: `{flow_result.algorithm}`",
+        f"- Max flow: `{flow_result.max_flow}`",
+        f"- Augmenting paths recorded: `{len(flow_result.augmenting_paths)}`",
+    ]
+    if flow_result.phases is not None:
+        lines.append(f"- Dinic phases: `{flow_result.phases}`")
+    lines.extend(
+        [
+            "",
+            "## Min-cut certificate",
+            "",
+            f"- Source side: {', '.join(flow_result.min_cut['source_side'])}",
+            f"- Sink side: {', '.join(flow_result.min_cut['sink_side'])}",
+            f"- Cut capacity: `{explanation['min_cut_capacity']}`",
+            f"- Max-flow/min-cut check: `{explanation['max_flow_equals_min_cut_capacity']}`",
+            "",
+            "### Cut edges",
+            "",
+        ]
+    )
+    for edge in explanation['cut_edges']:
+        lines.append(
+            f"- `{edge['source']} -> {edge['target']}` carries `{edge['flow']}/{edge['capacity']}` (saturated={edge['saturated']})"
+        )
+    if not explanation['cut_edges']:
+        lines.append('- No cut edges cross the final partition because the sink is unreachable with zero total flow.')
+    lines.extend(["", "## Augmenting paths", ""])
+    if flow_result.augmenting_paths:
+        for index, step in enumerate(flow_result.augmenting_paths, start=1):
+            extras = []
+            if 'phase' in step:
+                extras.append(f"phase {step['phase']}")
+            extra_suffix = f" ({', '.join(extras)})" if extras else ''
+            lines.append(
+                f"{index}. `{ ' -> '.join(step['path']) }` | bottleneck `{step['bottleneck']}`{extra_suffix}"
+            )
+    else:
+        lines.append('- No augmenting paths were found.')
+    lines.extend(["", "## Narrative", ""])
+    lines.extend([f"- {item}" for item in explanation['narrative']])
+    return "\n".join(lines) + "\n"
+
+
+def render_matching_markdown(matching_result: MatchingResult, *, graph_name: str = "bipartite_matching") -> str:
+    explanation = build_matching_explanation(matching_result)
+    lines = [
+        f"# Bipartite matching proof artifact: `{graph_name}`",
+        "",
+        f"- Generated: {datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')}",
+        f"- Flow algorithm: `{matching_result.flow['algorithm']}`",
+        f"- Match count: `{len(matching_result.matches)}`",
+        f"- Minimum vertex cover size: `{matching_result.minimum_vertex_cover['size']}`",
+        f"- König check: `{matching_result.minimum_vertex_cover['konig_theorem_check']}`",
+        "",
+        "## Matches",
+        "",
+    ]
+    if matching_result.matches:
+        for pair in matching_result.matches:
+            lines.append(f"- `{pair['left']} -> {pair['right']}`")
+    else:
+        lines.append('- No matches were selected.')
+    lines.extend(["", "## Minimum vertex cover", ""])
+    cover = matching_result.minimum_vertex_cover
+    lines.append(f"- Left cover vertices: {', '.join(cover['left']) if cover['left'] else '(none)'}")
+    lines.append(f"- Right cover vertices: {', '.join(cover['right']) if cover['right'] else '(none)'}")
+    reach = cover['reachable_from_unmatched_left']
+    lines.append(f"- Reachable unmatched-left expansion (left): {', '.join(reach['left']) if reach['left'] else '(none)'}")
+    lines.append(f"- Reachable unmatched-left expansion (right): {', '.join(reach['right']) if reach['right'] else '(none)'}")
+    lines.extend(["", "## Narrative", ""])
+    lines.extend([f"- {item}" for item in explanation['narrative']])
+    return "\n".join(lines) + "\n"
+
+
+def write_markdown_output(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+
 def write_dot_output(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(contents + "\n", encoding="utf-8")
@@ -732,12 +819,14 @@ def build_parser() -> argparse.ArgumentParser:
     solve_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     solve_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     solve_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved flow graph")
+    solve_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved flow graph")
     add_explain_argument(solve_parser)
 
     demo_parser = subparsers.add_parser("demo", help="run the bundled sample graph")
     demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     demo_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample flow graph")
+    demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample flow graph")
     add_explain_argument(demo_parser)
 
     match_parser = subparsers.add_parser("match", help="solve a bipartite matching JSON file")
@@ -745,12 +834,14 @@ def build_parser() -> argparse.ArgumentParser:
     match_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     match_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     match_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved matching graph")
+    match_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved matching graph")
     add_explain_argument(match_parser)
 
     match_demo_parser = subparsers.add_parser("match-demo", help="run the bundled matching sample")
     match_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     match_demo_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     match_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample matching graph")
+    match_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample matching graph")
     add_explain_argument(match_demo_parser)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
@@ -775,6 +866,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if args.dot_out:
             write_dot_output(args.dot_out, render_flow_dot(flow_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(args.markdown_out, render_flow_markdown(flow_result, graph_name=graph_path.stem))
+            payload["markdown_output"] = str(args.markdown_out)
         return payload
 
     if args.command == "demo":
@@ -787,6 +881,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if args.dot_out:
             write_dot_output(args.dot_out, render_flow_dot(flow_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(args.markdown_out, render_flow_markdown(flow_result, graph_name=graph_path.stem))
+            payload["markdown_output"] = str(args.markdown_out)
         return payload
 
     if args.command == "match":
@@ -799,6 +896,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if args.dot_out:
             write_dot_output(args.dot_out, render_matching_dot(matching_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(args.markdown_out, render_matching_markdown(matching_result, graph_name=graph_path.stem))
+            payload["markdown_output"] = str(args.markdown_out)
         return payload
 
     if args.command == "match-demo":
@@ -811,6 +911,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if args.dot_out:
             write_dot_output(args.dot_out, render_matching_dot(matching_result, graph_name=graph_path.stem))
             payload["dot_output"] = str(args.dot_out)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(args.markdown_out, render_matching_markdown(matching_result, graph_name=graph_path.stem))
+            payload["markdown_output"] = str(args.markdown_out)
         return payload
 
     return benchmark_algorithms(

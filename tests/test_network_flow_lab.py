@@ -24,6 +24,8 @@ load_graph = module.load_graph
 load_bipartite_graph = module.load_bipartite_graph
 render_flow_dot = module.render_flow_dot
 render_matching_dot = module.render_matching_dot
+render_flow_markdown = module.render_flow_markdown
+render_matching_markdown = module.render_matching_markdown
 solve_max_flow = module.solve_max_flow
 derive_minimum_vertex_cover = module.derive_minimum_vertex_cover
 solve_bipartite_matching = module.solve_bipartite_matching
@@ -204,6 +206,30 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('"a" -> "t" [label="2/2", color="crimson", penwidth=2];', dot)
         self.assertIn('"s" [style="filled", fillcolor="lightblue", peripheries=2];', dot)
 
+    def test_render_flow_markdown_includes_certificate_details(self) -> None:
+        result = solve_max_flow(
+            ["s", "a", "b", "t"],
+            [Edge("s", "a", 3), Edge("a", "t", 2), Edge("s", "b", 1), Edge("b", "t", 1)],
+            "s",
+            "t",
+        )
+        artifact = render_flow_markdown(result, graph_name="tiny_flow")
+        self.assertIn('# Max-flow proof artifact: `tiny_flow`', artifact)
+        self.assertIn('## Min-cut certificate', artifact)
+        self.assertIn('`a -> t` carries `2/2`', artifact)
+        self.assertIn('## Augmenting paths', artifact)
+
+    def test_render_matching_markdown_includes_cover_details(self) -> None:
+        result = solve_bipartite_matching(
+            ["anna", "ben"],
+            ["api", "db"],
+            [("anna", "api"), ("ben", "api")],
+        )
+        artifact = render_matching_markdown(result, graph_name="tiny_matching")
+        self.assertIn('# Bipartite matching proof artifact: `tiny_matching`', artifact)
+        self.assertIn('## Minimum vertex cover', artifact)
+        self.assertIn('`anna -> api`', artifact)
+
     def test_render_matching_dot_highlights_matches(self) -> None:
         result = solve_bipartite_matching(
             ["anna", "ben"],
@@ -360,6 +386,40 @@ class NetworkFlowLabTests(unittest.TestCase):
             dot = dot_path.read_text(encoding="utf-8")
             self.assertIn('digraph "sample_graph"', dot)
             self.assertIn('label="10/10"', dot)
+
+    def test_cli_can_write_flow_markdown_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "flow-proof.md"
+            completed = subprocess.run(
+                ["python3", str(MODULE_PATH), "demo", "--markdown-out", str(output_path)],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "demo")
+            self.assertEqual(payload["markdown_output"], str(output_path))
+            artifact = output_path.read_text(encoding="utf-8")
+            self.assertIn('# Max-flow proof artifact: `sample_graph`', artifact)
+            self.assertIn('## Augmenting paths', artifact)
+
+    def test_cli_can_write_matching_markdown_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "matching-proof.md"
+            completed = subprocess.run(
+                ["python3", str(MODULE_PATH), "match-demo", "--markdown-out", str(output_path)],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "match-demo")
+            self.assertEqual(payload["markdown_output"], str(output_path))
+            artifact = output_path.read_text(encoding="utf-8")
+            self.assertIn('# Bipartite matching proof artifact: `sample_matching_graph`', artifact)
+            self.assertIn('## Minimum vertex cover', artifact)
 
     def test_cli_benchmark_outputs_reproducible_summary(self) -> None:
         completed = subprocess.run(
