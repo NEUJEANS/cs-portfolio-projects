@@ -1,0 +1,72 @@
+{
+  "size": 255,
+  "seed": 42,
+  "hot_set_size": 8,
+  "hot_keys": [
+    6,
+    10,
+    45,
+    46,
+    73,
+    74,
+    126,
+    182
+  ],
+  "build_preview": [
+    45,
+    10,
+    74,
+    73,
+    6,
+    46,
+    126,
+    182,
+    157,
+    131,
+    225,
+    4
+  ],
+  "workloads": {
+    "hotset": {
+      "queries": 256,
+      "splay": {
+        "hits": 256,
+        "comparisons_used": 831,
+        "rotations_used": 575,
+        "comparisons_per_query": 3.246,
+        "rotations_per_query": 2.246,
+        "root_after": 6
+      },
+      "red_black": {
+        "hits": 256,
+        "comparisons_used": 1580,
+        "comparisons_per_query": 6.172,
+        "height": 10,
+        "root": 157
+      }
+    },
+    "uniform_random": {
+      "queries": 256,
+      "splay": {
+        "hits": 256,
+        "comparisons_used": 2428,
+        "rotations_used": 2172,
+        "comparisons_per_query": 9.484,
+        "rotations_per_query": 8.484,
+        "root_after": 133
+      },
+      "red_black": {
+        "hits": 256,
+        "comparisons_used": 1847,
+        "comparisons_per_query": 7.215,
+        "height": 10,
+        "root": 157
+      }
+    }
+  },
+  "takeaway": {
+    "hotset_comparison_gap": 749,
+    "uniform_random_comparison_gap": -581,
+    "interpretation": "positive gap means the splay tree used fewer key comparisons than the red-black tree on that workload"
+  }
+}

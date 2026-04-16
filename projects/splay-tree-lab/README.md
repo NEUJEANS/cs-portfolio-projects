@@ -14,6 +14,7 @@ A portfolio-ready Python lab for splay trees: self-adjusting binary search trees
 - insert and delete keys while keeping snapshots resumable
 - split a tree around a pivot, optionally persist both sides as resumable snapshots, and join two disjoint sorted value sets into a new snapshot
 - benchmark skewed hot-set lookups against the `red-black-tree-lab` baseline using deterministic comparison counts
+- export benchmark payloads as JSON and chart-ready CSV artifacts for portfolio screenshots and write-ups
 - export Graphviz DOT and Mermaid diagrams before and after an access trace for easy portfolio visuals
 - deterministic unit tests for tree behavior, CLI workflows, and benchmark output
 
@@ -79,6 +80,14 @@ Compare hot-set and uniform-random workloads against the red-black tree lab:
 python3 splay_tree_lab.py benchmark --size 255 --hot-set-size 8 --hot-queries 256 --random-queries 256 --seed 42
 ```
 
+Export the same benchmark payload as JSON plus chart-ready CSV rows:
+
+```bash
+python3 splay_tree_lab.py benchmark --size 255 --hot-set-size 8 --hot-queries 256 --random-queries 256 --seed 42 \
+  --json-output ../../artifacts/splay-tree-benchmark.json \
+  --csv-output ../../artifacts/splay-tree-benchmark.csv
+```
+
 ## Test
 
 ```bash
@@ -92,4 +101,4 @@ python3 -m unittest projects/splay-tree-lab/test_splay_tree_lab.py
 
 ## Future improvements
 - render trace animations directly from saved step data or export per-step snapshots for slide decks
-- add benchmark artifact export helpers so README commands can write portfolio-ready comparison files in one step
+- sweep multiple tree sizes in one command and export a benchmark-series artifact for charts

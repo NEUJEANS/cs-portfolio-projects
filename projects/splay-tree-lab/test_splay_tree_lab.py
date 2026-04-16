@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from splay_tree_lab import SplayTree, benchmark_trees
+from splay_tree_lab import SplayTree, benchmark_csv_rows, benchmark_trees
 
 
 class SplayTreeBehaviorTests(unittest.TestCase):
@@ -75,6 +75,16 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertGreater(payload["takeaway"]["hotset_comparison_gap"], 0)
         self.assertIn("uniform_random", payload["workloads"])
         self.assertIn("hotset", payload["workloads"])
+
+    def test_benchmark_csv_rows_cover_both_workloads(self) -> None:
+        payload = benchmark_trees(size=63, hot_set_size=4, hot_queries=64, random_queries=64, seed=11)
+        rows = benchmark_csv_rows(payload)
+        self.assertEqual([row["workload"] for row in rows], ["hotset", "uniform_random"])
+        self.assertEqual(rows[0]["size"], 63)
+        self.assertEqual(rows[0]["hot_set_size"], 4)
+        self.assertEqual(rows[0]["query_count"], 64)
+        self.assertIn("comparison_gap", rows[0])
+        self.assertGreater(rows[0]["red_black_comparisons_used"], 0)
 
     def test_split_returns_values_around_missing_pivot(self) -> None:
         tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
@@ -267,29 +277,45 @@ class SplayTreeCliTests(unittest.TestCase):
             self.assertEqual(json.loads(updated.read_text())["size"], 7)
 
     def test_benchmark_cli(self) -> None:
-        benchmark = subprocess.run(
-            [
-                "python3",
-                str(PROJECT_DIR / "splay_tree_lab.py"),
-                "benchmark",
-                "--size",
-                "63",
-                "--hot-set-size",
-                "4",
-                "--hot-queries",
-                "128",
-                "--random-queries",
-                "128",
-                "--seed",
-                "7",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        payload = json.loads(benchmark.stdout)
-        self.assertEqual(payload["workloads"]["hotset"]["queries"], 128)
-        self.assertGreater(payload["takeaway"]["hotset_comparison_gap"], 0)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            json_output = tmp_path / "artifacts" / "benchmark.json"
+            csv_output = tmp_path / "artifacts" / "benchmark.csv"
+            benchmark = subprocess.run(
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "benchmark",
+                    "--size",
+                    "63",
+                    "--hot-set-size",
+                    "4",
+                    "--hot-queries",
+                    "128",
+                    "--random-queries",
+                    "128",
+                    "--seed",
+                    "7",
+                    "--json-output",
+                    str(json_output),
+                    "--csv-output",
+                    str(csv_output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(benchmark.stdout)
+            self.assertEqual(payload["workloads"]["hotset"]["queries"], 128)
+            self.assertGreater(payload["takeaway"]["hotset_comparison_gap"], 0)
+            self.assertTrue(json_output.exists())
+            self.assertTrue(csv_output.exists())
+            self.assertEqual(json.loads(json_output.read_text()), payload)
+            csv_lines = csv_output.read_text().strip().splitlines()
+            self.assertEqual(len(csv_lines), 3)
+            self.assertIn("workload", csv_lines[0])
+            self.assertIn("hotset", csv_lines[1])
+            self.assertIn("uniform_random", csv_lines[2])
 
     def test_split_and_join_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

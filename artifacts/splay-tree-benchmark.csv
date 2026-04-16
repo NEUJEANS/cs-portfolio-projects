@@ -1,0 +1,3 @@
+size,seed,hot_set_size,workload,query_count,splay_hits,splay_comparisons_used,splay_rotations_used,splay_comparisons_per_query,splay_rotations_per_query,splay_root_after,red_black_hits,red_black_comparisons_used,red_black_comparisons_per_query,red_black_height,red_black_root,comparison_gap
+255,42,8,hotset,256,256,831,575,3.246,2.246,6,256,1580,6.172,10,157,749
+255,42,8,uniform_random,256,256,2428,2172,9.484,8.484,133,256,1847,7.215,10,157,-581

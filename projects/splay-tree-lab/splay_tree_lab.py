@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import random
@@ -456,6 +457,66 @@ def save_text(path: Path, content: str) -> None:
     path.write_text(content)
 
 
+def benchmark_csv_rows(payload: dict[str, object]) -> list[dict[str, object]]:
+    workloads = payload["workloads"]
+    hot_set_size = payload["hot_set_size"]
+    rows: list[dict[str, object]] = []
+    for workload_name in ("hotset", "uniform_random"):
+        workload = workloads[workload_name]
+        splay = workload["splay"]
+        red_black = workload["red_black"]
+        rows.append(
+            {
+                "size": payload["size"],
+                "seed": payload["seed"],
+                "hot_set_size": hot_set_size,
+                "workload": workload_name,
+                "query_count": workload["queries"],
+                "splay_hits": splay["hits"],
+                "splay_comparisons_used": splay["comparisons_used"],
+                "splay_rotations_used": splay["rotations_used"],
+                "splay_comparisons_per_query": splay["comparisons_per_query"],
+                "splay_rotations_per_query": splay["rotations_per_query"],
+                "splay_root_after": splay["root_after"],
+                "red_black_hits": red_black["hits"],
+                "red_black_comparisons_used": red_black["comparisons_used"],
+                "red_black_comparisons_per_query": red_black["comparisons_per_query"],
+                "red_black_height": red_black["height"],
+                "red_black_root": red_black["root"],
+                "comparison_gap": red_black["comparisons_used"] - splay["comparisons_used"],
+            }
+        )
+    return rows
+
+
+def save_benchmark_csv(path: Path, payload: dict[str, object]) -> None:
+    rows = benchmark_csv_rows(payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "size",
+        "seed",
+        "hot_set_size",
+        "workload",
+        "query_count",
+        "splay_hits",
+        "splay_comparisons_used",
+        "splay_rotations_used",
+        "splay_comparisons_per_query",
+        "splay_rotations_per_query",
+        "splay_root_after",
+        "red_black_hits",
+        "red_black_comparisons_used",
+        "red_black_comparisons_per_query",
+        "red_black_height",
+        "red_black_root",
+        "comparison_gap",
+    ]
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def load_red_black_tree_class() -> type:
     module_path = Path(__file__).resolve().parents[1] / "red-black-tree-lab" / "red_black_tree.py"
     spec = importlib.util.spec_from_file_location("red_black_tree_lab_module", module_path)
@@ -638,6 +699,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--random-queries", type=int, default=256, help="number of uniformly random successful queries"
     )
     benchmark_parser.add_argument("--seed", type=int, default=42, help="deterministic seed for build order and queries")
+    benchmark_parser.add_argument("--json-output", type=Path, help="optional path to save the benchmark payload as JSON")
+    benchmark_parser.add_argument("--csv-output", type=Path, help="optional path to save chart-ready benchmark rows as CSV")
 
     return parser
 
@@ -720,6 +783,10 @@ def main(argv: list[str] | None = None) -> int:
                 random_queries=args.random_queries,
                 seed=args.seed,
             )
+            if args.json_output is not None:
+                save_snapshot_payload(args.json_output, payload)
+            if args.csv_output is not None:
+                save_benchmark_csv(args.csv_output, payload)
             print(json.dumps(payload, indent=2))
             return 0
     except ValueError as exc:
