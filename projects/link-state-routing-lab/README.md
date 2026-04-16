@@ -16,6 +16,7 @@ A Python routing lab that simulates a small link-state protocol: routers origina
 - discards stale LSAs and withdraws expired entries at max age
 - computes per-router forwarding tables with deterministic tie-breaking
 - renders Mermaid topology diagrams with optional source-rooted SPF tree overlays
+- compares link-state convergence directly against the distance-vector routing lab on the same topology and optional link-failure event
 - provides a CLI for human-readable, JSON, or Mermaid output
 
 ## Usage
@@ -24,6 +25,7 @@ cd projects/link-state-routing-lab
 python3 link_state_routing.py sample_topology.json
 python3 link_state_routing.py sample_topology.json --source A --format json
 python3 link_state_routing.py sample_topology.json --source A --format mermaid
+python3 link_state_routing.py sample_topology.json --compare-distance-vector --remove-link B D
 pytest -q test_link_state_routing.py
 ```
 
@@ -60,6 +62,19 @@ flowchart LR
     C -->|"SPF 1"| D
 ```
 
+Example cross-lab comparison command:
+
+```bash
+python3 link_state_routing.py sample_topology.json \
+  --compare-distance-vector \
+  --distance-vector-mode classic \
+  --distance-vector-update-strategy triggered \
+  --remove-link B D \
+  --max-rounds 20
+```
+
+The comparison JSON summarizes how many flood rounds the link-state model needed, how many routing rounds the distance-vector model needed, and what changes after an optional failure event.
+
 ## Key implementation ideas
 1. Each router originates an LSA that describes only its adjacent links.
 2. LSAs are accepted only if their sequence number is newer, or if an older copy has been aged out.
@@ -79,4 +94,4 @@ flowchart LR
 - model partial flooding delays and retransmission acknowledgements
 - add area partitioning or designated-router style optimizations
 - render flood propagation timelines as sequence diagrams or animation-ready artifacts
-- compare convergence behavior directly against the distance-vector lab
+- export checked-in benchmark scenarios/artifacts from the new cross-lab comparison flow

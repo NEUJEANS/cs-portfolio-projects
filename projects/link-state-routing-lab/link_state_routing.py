@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import sys
 from dataclasses import dataclass
 from heapq import heappop, heappush
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 MAX_AGE = 3600
+DISTANCE_VECTOR_MODULE_PATH = (
+    Path(__file__).resolve().parent.parent / "distance-vector-routing-lab" / "distance_vector_routing.py"
+)
 
 
 @dataclass(frozen=True)
@@ -226,6 +231,111 @@ def load_topology(path: str) -> dict[str, dict[str, int]]:
     return normalize_topology(json.loads(Path(path).read_text()))
 
 
+def max_flood_round(result: SimulationResult) -> int:
+    return max((step.round_index for step in result.flood_log), default=0)
+
+
+def load_distance_vector_module() -> Any:
+    spec = importlib.util.spec_from_file_location("distance_vector_routing_module", DISTANCE_VECTOR_MODULE_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load distance-vector module from {DISTANCE_VECTOR_MODULE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def compare_with_distance_vector(
+    topology: Mapping[str, Mapping[str, int]],
+    *,
+    distance_vector_mode: str = "classic",
+    distance_vector_update_strategy: str = "periodic",
+    remove_link: tuple[str, str] | None = None,
+    max_rounds: int = 50,
+) -> dict[str, object]:
+    normalized = normalize_topology(topology)
+    before_link_state = run_simulation(normalized)
+    distance_vector = load_distance_vector_module()
+    before_distance_vector = distance_vector.run_simulation(
+        normalized,
+        mode=distance_vector_mode,
+        max_rounds=max_rounds,
+        update_strategy=distance_vector_update_strategy,
+    )
+
+    comparison: dict[str, object] = {
+        "distance_vector_mode": distance_vector_mode,
+        "distance_vector_update_strategy": distance_vector_update_strategy,
+        "topology": {router: dict(neighbors) for router, neighbors in sorted(normalized.items())},
+        "before": {
+            "link_state": {
+                "flood_events": len(before_link_state.flood_log),
+                "flood_rounds": max_flood_round(before_link_state),
+                "lsa_count": len(before_link_state.lsdb),
+            },
+            "distance_vector": {
+                "rounds": before_distance_vector["rounds"],
+                "converged": before_distance_vector["converged"],
+                "mode": before_distance_vector["mode"],
+                "update_strategy": before_distance_vector["update_strategy"],
+            },
+        },
+        "observations": [
+            (
+                "link-state converges by flooding whole-topology LSAs and then running local SPF, "
+                "while distance-vector converges through neighbor table exchange over multiple rounds"
+            )
+        ],
+    }
+
+    if remove_link is not None:
+        left, right = remove_link
+        updated_topology = {
+            router: dict(neighbors) for router, neighbors in normalized.items()
+        }
+        if right not in updated_topology.get(left, {}) or left not in updated_topology.get(right, {}):
+            raise ValueError(f"link {left!r}<->{right!r} does not exist")
+        updated_topology[left].pop(right)
+        updated_topology[right].pop(left)
+        after_link_state = run_simulation(updated_topology, previous_lsdb=before_link_state.lsdb)
+        after_distance_vector = distance_vector.run_failure_simulation(
+            normalized,
+            left,
+            right,
+            mode=distance_vector_mode,
+            max_rounds=max_rounds,
+            update_strategy=distance_vector_update_strategy,
+        )["after"]
+        comparison["event"] = {"type": "remove-link", "left": left, "right": right}
+        comparison["after"] = {
+            "link_state": {
+                "flood_events": len(after_link_state.flood_log),
+                "flood_rounds": max_flood_round(after_link_state),
+                "changed_routers": sorted(
+                    router
+                    for router, lsa in after_link_state.lsdb.items()
+                    if before_link_state.lsdb.get(router) is None
+                    or lsa.neighbors != before_link_state.lsdb[router].neighbors
+                ),
+            },
+            "distance_vector": {
+                "rounds": after_distance_vector["rounds"],
+                "converged": after_distance_vector["converged"],
+                "mode": after_distance_vector["mode"],
+                "update_strategy": after_distance_vector["update_strategy"],
+            },
+        }
+        comparison["observations"].append(
+            "after a link failure, link-state re-floods fresh LSAs and recomputes SPF, while distance-vector may take extra rounds to propagate changed next-hop costs"
+        )
+        if distance_vector_mode == "classic":
+            comparison["observations"].append(
+                "classic distance-vector can exhibit count-to-infinity-style behavior on some failures, which link-state avoids because every router recomputes from a refreshed global graph"
+            )
+
+    return comparison
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Simulate link-state routing with LSA flooding and SPF recomputation.")
     parser.add_argument("topology", help="Path to a JSON topology map")
@@ -238,6 +348,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source",
         help="Optional router name to print only one forwarding table or SPF tree root",
+    )
+    parser.add_argument(
+        "--compare-distance-vector",
+        action="store_true",
+        help="Compare link-state convergence against the distance-vector lab on the same topology",
+    )
+    parser.add_argument(
+        "--distance-vector-mode",
+        choices=("classic", "split-horizon", "poison-reverse"),
+        default="classic",
+        help="Distance-vector mode to use when --compare-distance-vector is enabled",
+    )
+    parser.add_argument(
+        "--distance-vector-update-strategy",
+        choices=("periodic", "triggered"),
+        default="periodic",
+        help="Distance-vector update strategy to use when --compare-distance-vector is enabled",
+    )
+    parser.add_argument(
+        "--remove-link",
+        nargs=2,
+        metavar=("LEFT", "RIGHT"),
+        help="Optional link failure to compare after initial convergence",
+    )
+    parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=50,
+        help="Maximum rounds for the distance-vector comparison run",
     )
     return parser.parse_args()
 
@@ -310,7 +449,19 @@ def render_mermaid(result: SimulationResult, source: str | None = None) -> str:
 
 def main() -> None:
     args = parse_args()
+    if args.max_rounds <= 0:
+        raise ValueError("max_rounds must be positive")
     topology = load_topology(args.topology)
+    if args.compare_distance_vector:
+        payload = compare_with_distance_vector(
+            topology,
+            distance_vector_mode=args.distance_vector_mode,
+            distance_vector_update_strategy=args.distance_vector_update_strategy,
+            remove_link=tuple(args.remove_link) if args.remove_link else None,
+            max_rounds=args.max_rounds,
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
     result = run_simulation(topology)
     if args.format == "json":
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True))

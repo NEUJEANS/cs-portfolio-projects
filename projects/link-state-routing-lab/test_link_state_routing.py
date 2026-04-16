@@ -10,6 +10,7 @@ import pytest
 from link_state_routing import (
     LinkStateAdvertisement,
     MAX_AGE,
+    compare_with_distance_vector,
     compute_forwarding_tables,
     flood_lsas,
     normalize_topology,
@@ -139,3 +140,47 @@ def test_compute_forwarding_tables_requires_symmetric_lsdb() -> None:
                 "B": LinkStateAdvertisement(router="B", neighbors={}, sequence=1),
             }
         )
+
+
+def test_compare_with_distance_vector_reports_before_and_after_summary() -> None:
+    comparison = compare_with_distance_vector(TOPOLOGY, remove_link=("B", "D"), max_rounds=20)
+
+    assert comparison["before"]["link_state"]["flood_rounds"] >= 1
+    assert comparison["before"]["distance_vector"]["rounds"] >= 1
+    assert comparison["event"] == {"type": "remove-link", "left": "B", "right": "D"}
+    assert set(comparison["after"]["link_state"]["changed_routers"]) == {"B", "D"}
+    assert comparison["after"]["distance_vector"]["converged"] is True
+    assert len(comparison["observations"]) >= 2
+
+
+def test_cli_compare_distance_vector_json_output(tmp_path: Path) -> None:
+    topology_path = tmp_path / "topology.json"
+    topology_path.write_text(json.dumps(TOPOLOGY), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "link_state_routing.py",
+            str(topology_path),
+            "--compare-distance-vector",
+            "--remove-link",
+            "B",
+            "D",
+            "--distance-vector-mode",
+            "poison-reverse",
+            "--distance-vector-update-strategy",
+            "triggered",
+            "--max-rounds",
+            "20",
+        ],
+        cwd=Path(__file__).parent,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["distance_vector_mode"] == "poison-reverse"
+    assert payload["distance_vector_update_strategy"] == "triggered"
+    assert payload["event"] == {"type": "remove-link", "left": "B", "right": "D"}
+    assert payload["after"]["distance_vector"]["rounds"] >= 1
