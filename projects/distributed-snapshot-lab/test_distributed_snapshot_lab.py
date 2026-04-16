@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,7 @@ from distributed_snapshot_lab import (
     parse_transfer,
     render_mermaid,
     render_script_walkthrough,
+    render_script_walkthrough_html,
     render_snapshot_svg,
 )
 
@@ -392,6 +394,105 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertIn("```mermaid", markdown)
         self.assertIn("LINK RECOVER (heal)", markdown)
 
+    def test_render_script_walkthrough_html_includes_assets_and_mermaid_source(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        result = bank.run_script(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ],
+            marker_delay_overrides={"C->B": 2},
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "handout.html"
+            svg_dir = Path(temp_dir) / "svg"
+            png_dir = Path(temp_dir) / "png"
+            svg_assets = generate_walkthrough_svg_assets(
+                result,
+                bank.processes,
+                output_dir=svg_dir,
+                title="Partition Heal Walkthrough",
+                filename_prefix="partition-heal",
+            )
+
+            def fake_render_svg_to_png(svg_text: str, output_path: Path, *, browser_binary: str | None = None) -> Path:
+                self.assertIn("<svg", svg_text)
+                self.assertIsNone(browser_binary)
+                output_path.write_bytes(b"png")
+                return output_path
+
+            with patch("distributed_snapshot_lab.render_svg_to_png", side_effect=fake_render_svg_to_png):
+                png_assets = generate_walkthrough_png_assets(
+                    result,
+                    bank.processes,
+                    output_dir=png_dir,
+                    title="Partition Heal Walkthrough",
+                    filename_prefix="partition-heal",
+                )
+
+            html = render_script_walkthrough_html(
+                result,
+                bank.processes,
+                title="Partition Heal Walkthrough",
+                svg_assets=svg_assets,
+                png_assets=png_assets,
+                output_path=output_path,
+            )
+
+            self.assertIn("<!DOCTYPE html>", html)
+            self.assertIn("Partition Heal Walkthrough", html)
+            self.assertIn("Open SVG", html)
+            self.assertIn("Open PNG", html)
+            self.assertIn("Mermaid source", html)
+            self.assertIn("svg/partition-heal-01-during-partition.svg", html)
+            self.assertIn("png/partition-heal-01-during-partition.png", html)
+            self.assertIn("Remaining in-flight messages", html)
+
+    def test_render_script_walkthrough_html_resolves_relative_asset_paths_for_absolute_output(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        result = bank.run_script(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+            ],
+            marker_delay_overrides={"C->B": 2},
+        )
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(PROJECT_DIR)
+            with tempfile.TemporaryDirectory(dir=PROJECT_DIR) as temp_dir:
+                temp_root = Path(temp_dir)
+                output_path = temp_root / "handout.html"
+                relative_svg_dir = temp_root.relative_to(PROJECT_DIR) / "svg"
+                svg_assets = generate_walkthrough_svg_assets(
+                    result,
+                    bank.processes,
+                    output_dir=relative_svg_dir,
+                    title="Partition Heal Walkthrough",
+                    filename_prefix="partition-heal",
+                )
+
+                html = render_script_walkthrough_html(
+                    result,
+                    bank.processes,
+                    title="Partition Heal Walkthrough",
+                    svg_assets=svg_assets,
+                    output_path=output_path,
+                )
+        finally:
+            os.chdir(original_cwd)
+
+        self.assertIn("svg/partition-heal-01-during-partition.svg", html)
+        self.assertNotIn(str(PROJECT_DIR), html)
+
     def test_generate_walkthrough_svg_assets_writes_snapshot_files(self) -> None:
         bank = DistributedBank({"A": 10, "B": 10, "C": 10})
         result = bank.run_script(
@@ -585,6 +686,48 @@ class DistributedSnapshotLabTests(unittest.TestCase):
             self.assertTrue((svg_dir / "partition-heal-01-during-partition.svg").exists())
             self.assertTrue((svg_dir / "partition-heal-02-after-heal.svg").exists())
             self.assertEqual(output_path.read_text(encoding="utf-8"), completed.stdout)
+
+    def test_cli_walkthrough_can_export_html_handout(self) -> None:
+        script = json.dumps(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "walkthrough.md"
+            html_output = Path(temp_dir) / "handout.html"
+            svg_dir = Path(temp_dir) / "svg"
+            completed = run_cli(
+                "walkthrough",
+                "--balances",
+                '{"A": 10, "B": 10, "C": 10}',
+                "--marker-delay",
+                "C->B=2",
+                "--script",
+                script,
+                "--title",
+                "Partition Heal Walkthrough",
+                "--output",
+                str(output_path),
+                "--html-output",
+                str(html_output),
+                "--svg-dir",
+                str(svg_dir),
+                "--svg-prefix",
+                "partition-heal",
+            )
+
+            html_text = html_output.read_text(encoding="utf-8")
+            self.assertTrue(completed.stdout.startswith("# Partition Heal Walkthrough\n"))
+            self.assertIn("<!DOCTYPE html>", html_text)
+            self.assertIn("svg/partition-heal-01-during-partition.svg", html_text)
+            self.assertIn("Mermaid source", html_text)
+            self.assertTrue((svg_dir / "partition-heal-01-during-partition.svg").exists())
 
     @unittest.skipUnless(
         any(shutil.which(candidate) for candidate in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")),

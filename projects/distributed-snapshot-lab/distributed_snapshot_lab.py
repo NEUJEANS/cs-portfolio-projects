@@ -1055,6 +1055,31 @@ def generate_walkthrough_png_assets(
     return assets
 
 
+def _resolve_asset_href(
+    asset: dict[str, str] | None,
+    *,
+    reference_path: Path | None = None,
+) -> str | None:
+    if not asset:
+        return None
+    raw_path = _optional_text(asset.get("path"))
+    fallback = _optional_text(asset.get("link"))
+    if raw_path is None:
+        return fallback
+
+    asset_path = Path(raw_path)
+    if reference_path is None:
+        return fallback or asset_path.as_posix()
+
+    cwd = Path.cwd()
+    asset_anchor = asset_path if asset_path.is_absolute() else cwd / asset_path
+    reference_anchor = reference_path if reference_path.is_absolute() else cwd / reference_path
+    try:
+        return Path(os.path.relpath(asset_anchor, reference_anchor.parent)).as_posix()
+    except ValueError:
+        return fallback or asset_path.as_posix()
+
+
 def render_script_walkthrough(
     result: dict[str, object],
     processes: Iterable[str],
@@ -1177,6 +1202,269 @@ def render_script_walkthrough(
     return "\n".join(lines) + "\n"
 
 
+def render_script_walkthrough_html(
+    result: dict[str, object],
+    processes: Iterable[str],
+    *,
+    title: str = "Distributed Snapshot Walkthrough",
+    svg_assets: dict[str, dict[str, str]] | None = None,
+    png_assets: dict[str, dict[str, str]] | None = None,
+    output_path: Path | None = None,
+) -> str:
+    ordered_processes = list(sorted(set(str(process) for process in processes)))
+    final_channel_statuses = result.get("channel_statuses") or {}
+    final_down_channels = [
+        channel for channel, status in sorted(final_channel_statuses.items()) if status != "up"
+    ]
+    in_flight = result.get("in_flight") or {}
+    snapshots = list(result.get("snapshots") or [])
+    operations = list(result.get("operations") or [])
+    timeline = list(result.get("timeline") or [])
+    snapshots_by_step = {
+        int(snapshot["step"]): snapshot
+        for snapshot in snapshots
+        if snapshot.get("step") is not None
+    }
+
+    def escape(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
+    def format_message_summary(messages: list[dict[str, object]]) -> str:
+        return ", ".join(f"{message['amount']} ({message['label']})" for message in messages)
+
+    timeline_items: list[str] = []
+    if operations:
+        timeline_iter = iter(timeline)
+        for index, operation in enumerate(operations, start=1):
+            op = str(operation.get("op", "")).strip().lower()
+            if op == "snapshot":
+                snapshot = snapshots_by_step.get(index, {})
+                snapshot_id = (
+                    snapshot.get("snapshot_id")
+                    or _optional_text(operation.get("snapshot_id"))
+                    or f"snapshot-{index}"
+                )
+                initiator = snapshot.get("initiator") or operation.get("initiator") or ""
+                consistency = snapshot.get("consistent")
+                consistency_text = f"; consistent={consistency}" if consistency is not None else ""
+                description = f"captured snapshot `{snapshot_id}` from `{initiator}`{consistency_text}"
+            else:
+                event = next(timeline_iter, None)
+                description = (
+                    _describe_timeline_event(event)
+                    if event is not None
+                    else json.dumps(operation, sort_keys=True)
+                )
+            timeline_items.append(
+                f'<li><span class="step-index">{index}.</span> {escape(description)}</li>'
+            )
+    elif timeline:
+        for index, event in enumerate(timeline, start=1):
+            timeline_items.append(
+                f'<li><span class="step-index">{index}.</span> {escape(_describe_timeline_event(event))}</li>'
+            )
+    else:
+        timeline_items.append("<li>No events recorded.</li>")
+
+    remaining_in_flight_items = [
+        f'<li><code>{escape(channel)}</code>: {escape(format_message_summary(messages))}</li>'
+        for channel, messages in sorted(in_flight.items())
+    ]
+
+    snapshot_sections: list[str] = []
+    for snapshot in snapshots:
+        raw_snapshot_id = _optional_text(snapshot.get("snapshot_id")) or "snapshot"
+        step = snapshot.get("step")
+        step_suffix = f"Step {step}" if step is not None else "Snapshot"
+        snapshot_channel_statuses = snapshot.get("channel_statuses") or {}
+        snapshot_down_channels = [
+            channel
+            for channel, status in sorted(snapshot_channel_statuses.items())
+            if status != "up"
+        ]
+        svg_asset = (svg_assets or {}).get(raw_snapshot_id)
+        png_asset = (png_assets or {}).get(raw_snapshot_id)
+        svg_href = _resolve_asset_href(svg_asset, reference_path=output_path)
+        png_href = _resolve_asset_href(png_asset, reference_path=output_path)
+        primary_href = svg_href or png_href
+        asset_links: list[str] = []
+        if svg_href:
+            svg_label = escape(svg_asset["filename"] if svg_asset else "SVG asset")
+            asset_links.append(
+                f'<a href="{escape(svg_href)}">Open SVG</a> <span class="muted">({svg_label})</span>'
+            )
+        if png_href:
+            png_label = escape(png_asset["filename"] if png_asset else "PNG asset")
+            asset_links.append(
+                f'<a href="{escape(png_href)}">Open PNG</a> <span class="muted">({png_label})</span>'
+            )
+
+        media_block = ""
+        if primary_href:
+            if svg_href and png_href:
+                media = (
+                    f'<picture><source srcset="{escape(svg_href)}" type="image/svg+xml" />'
+                    f'<img src="{escape(png_href)}" alt="{escape(raw_snapshot_id)} snapshot diagram" loading="lazy" /></picture>'
+                )
+            else:
+                media = f'<img src="{escape(primary_href)}" alt="{escape(raw_snapshot_id)} snapshot diagram" loading="lazy" />'
+            caption = f"<strong>{escape(raw_snapshot_id)}</strong> snapshot diagram"
+            if asset_links:
+                caption = caption + " · " + " · ".join(asset_links)
+            media_block = (
+                '<figure class="snapshot-figure">'
+                f"{media}"
+                f"<figcaption>{caption}</figcaption>"
+                "</figure>"
+            )
+
+        channel_messages = snapshot.get("channel_messages") or {}
+        if channel_messages:
+            channel_message_items = "".join(
+                f'<li><code>{escape(channel)}</code>: {escape(format_message_summary(messages))}</li>'
+                for channel, messages in sorted(channel_messages.items())
+            )
+            channel_messages_html = f'<ul class="meta-list compact">{channel_message_items}</ul>'
+        else:
+            channel_messages_html = '<p class="muted">No recorded in-flight messages.</p>'
+
+        balances_text = _format_mapping(snapshot.get("balances") or {})
+        process_status_text = _format_mapping(snapshot.get("process_statuses") or {})
+        down_links_text = ", ".join(snapshot_down_channels) if snapshot_down_channels else "none"
+        consistency_text = f"{snapshot['consistent']} ({snapshot['snapshot_total']} vs {snapshot['system_total']})"
+        mermaid_source = escape(render_mermaid(snapshot, ordered_processes).rstrip())
+
+        snapshot_sections.append(
+            "".join(
+                [
+                    '<section class="snapshot-card">',
+                    f'<div class="section-eyebrow">{escape(step_suffix)}</div>',
+                    f'<h2>{escape(raw_snapshot_id)}</h2>',
+                    '<div class="snapshot-layout">',
+                    '<div class="snapshot-meta">',
+                    '<ul class="meta-list">',
+                    f'<li><strong>Initiator:</strong> <code>{escape(snapshot["initiator"])}</code></li>',
+                    f'<li><strong>Balances:</strong> {escape(balances_text)}</li>',
+                    f'<li><strong>Process status:</strong> {escape(process_status_text)}</li>',
+                    f'<li><strong>Down links:</strong> {escape(down_links_text)}</li>',
+                    f'<li><strong>Consistency:</strong> {escape(consistency_text)}</li>',
+                    '</ul>',
+                    '<h3>Recorded in-flight messages</h3>',
+                    channel_messages_html,
+                    '</div>',
+                    '<div class="snapshot-visuals">',
+                    media_block or '<div class="empty-media">No committed SVG/PNG asset supplied for this snapshot yet.</div>',
+                    '<details class="mermaid-source">',
+                    '<summary>Mermaid source</summary>',
+                    f'<pre><code>{mermaid_source}</code></pre>',
+                    '</details>',
+                    '</div>',
+                    '</div>',
+                    '</section>',
+                ]
+            )
+        )
+
+    if not snapshot_sections:
+        snapshot_sections.append(
+            '<section class="snapshot-card"><h2>No snapshots captured</h2><p class="muted">This script run did not record any snapshots.</p></section>'
+        )
+
+    summary_cards = [
+        ("Processes", ", ".join(ordered_processes)),
+        ("Snapshots captured", str(len(snapshots))),
+        ("Final balances", _format_mapping(result.get("balances") or {})),
+        ("Final process statuses", _format_mapping(result.get("process_statuses") or {})),
+        ("Final down links", ", ".join(final_down_channels) if final_down_channels else "none"),
+        ("System total", str(result.get("system_total"))),
+    ]
+    summary_cards_html = "".join(
+        f'<article class="summary-card"><div class="summary-label">{escape(label)}</div><div class="summary-value">{escape(value)}</div></article>'
+        for label, value in summary_cards
+    )
+    if remaining_in_flight_items:
+        summary_cards_html += (
+            '<article class="summary-card summary-card-wide"><div class="summary-label">Remaining in-flight messages</div>'
+            f'<ul class="meta-list compact">{"".join(remaining_in_flight_items)}</ul></article>'
+        )
+
+    return "\n".join(
+        [
+            '<!DOCTYPE html>',
+            '<html lang="en">',
+            '<head>',
+            '<meta charset="utf-8" />',
+            '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+            f'<title>{escape(title)}</title>',
+            '<style>',
+            '  :root { color-scheme: light; --bg: #f8fafc; --card: #ffffff; --ink: #0f172a; --muted: #475569; --line: #cbd5e1; --accent: #2563eb; }',
+            '  * { box-sizing: border-box; }',
+            '  body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }',
+            '  main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 56px; }',
+            '  header { margin-bottom: 28px; }',
+            '  h1, h2, h3 { margin: 0 0 12px; line-height: 1.2; }',
+            '  h1 { font-size: clamp(2rem, 4vw, 2.8rem); }',
+            '  h2 { font-size: 1.4rem; }',
+            '  h3 { font-size: 1rem; margin-top: 20px; }',
+            '  p { line-height: 1.65; }',
+            '  code, pre { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, Menlo, Consolas, monospace; }',
+            '  code { background: #e2e8f0; border-radius: 6px; padding: 0.12rem 0.35rem; }',
+            '  .lede { max-width: 72ch; color: var(--muted); font-size: 1.02rem; }',
+            '  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 24px 0 32px; }',
+            '  .summary-card, .snapshot-card, .timeline-card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06); }',
+            '  .summary-card { padding: 18px 18px 16px; }',
+            '  .summary-card-wide { grid-column: 1 / -1; }',
+            '  .summary-label { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }',
+            '  .summary-value { font-size: 1rem; line-height: 1.5; }',
+            '  .timeline-card { padding: 22px; margin-bottom: 24px; }',
+            '  .timeline { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 10px; }',
+            '  .timeline li { line-height: 1.55; color: var(--ink); }',
+            '  .step-index { color: var(--accent); font-weight: 700; display: inline-block; min-width: 2.1rem; }',
+            '  .snapshot-stack { display: grid; gap: 20px; }',
+            '  .snapshot-card { padding: 24px; }',
+            '  .section-eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.76rem; font-weight: 700; color: var(--accent); margin-bottom: 10px; }',
+            '  .snapshot-layout { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; }',
+            '  .meta-list { margin: 0; padding-left: 18px; display: grid; gap: 8px; }',
+            '  .meta-list.compact { gap: 6px; }',
+            '  .snapshot-figure { margin: 0; background: #f8fafc; border: 1px solid var(--line); border-radius: 18px; padding: 14px; }',
+            '  .snapshot-figure img { display: block; width: 100%; height: auto; border-radius: 12px; background: #fff; border: 1px solid #e2e8f0; }',
+            '  .snapshot-figure figcaption { margin-top: 10px; color: var(--muted); line-height: 1.5; }',
+            '  .snapshot-figure a { color: var(--accent); text-decoration: none; }',
+            '  .snapshot-figure a:hover { text-decoration: underline; }',
+            '  .empty-media { border: 1px dashed var(--line); border-radius: 18px; padding: 18px; color: var(--muted); background: #f8fafc; }',
+            '  .mermaid-source { margin-top: 14px; }',
+            '  .mermaid-source summary { cursor: pointer; font-weight: 600; color: var(--accent); }',
+            '  pre { margin: 10px 0 0; background: #0f172a; color: #e2e8f0; border-radius: 16px; padding: 16px; overflow-x: auto; line-height: 1.45; }',
+            '  .muted { color: var(--muted); }',
+            '  footer { margin-top: 32px; color: var(--muted); font-size: 0.95rem; }',
+            '  @media (max-width: 860px) { .snapshot-layout { grid-template-columns: 1fr; } main { padding-left: 16px; padding-right: 16px; } }',
+            '</style>',
+            '</head>',
+            '<body>',
+            '<main>',
+            '<header>',
+            f'<h1>{escape(title)}</h1>',
+            '<p class="lede">A single-page handout for the distributed snapshot partition/heal scenario. It bundles the scenario summary, ordered timeline, per-snapshot analysis, and links to the committed SVG/PNG artifacts so the lab is easy to publish or review without opening multiple files.</p>',
+            '</header>',
+            f'<section class="summary-grid">{summary_cards_html}</section>',
+            '<section class="timeline-card">',
+            '<div class="section-eyebrow">Scenario timeline</div>',
+            '<h2>Ordered execution</h2>',
+            f'<ol class="timeline">{"".join(timeline_items)}</ol>',
+            '</section>',
+            '<section class="snapshot-stack">',
+            '<div class="section-eyebrow">Snapshot breakdown</div>',
+            '<h2>Per-snapshot walkthrough</h2>',
+            ''.join(snapshot_sections),
+            '</section>',
+            '<footer>Generated from the same structured walkthrough result used by the CLI and tests, so the handout stays reproducible across reruns.</footer>',
+            '</main>',
+            '</body>',
+            '</html>',
+        ]
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Distributed snapshot lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1271,6 +1559,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional Markdown file path for the generated walkthrough",
     )
     walkthrough.add_argument(
+        "--html-output",
+        help="optional single-page HTML handout path generated from the same walkthrough result",
+    )
+    walkthrough.add_argument(
         "--svg-dir",
         help="optional directory where one SVG snapshot asset per walkthrough section will be written",
     )
@@ -1340,6 +1632,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "walkthrough":
             output_path_text = _optional_text(getattr(args, "output", None))
             output_path = Path(output_path_text) if output_path_text else None
+            html_output_text = _optional_text(getattr(args, "html_output", None))
+            html_output_path = Path(html_output_text) if html_output_text else None
             svg_assets = None
             svg_dir_text = _optional_text(getattr(args, "svg_dir", None))
             svg_prefix = _optional_text(getattr(args, "svg_prefix", None))
@@ -1374,6 +1668,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             if output_path is not None:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(markdown, encoding="utf-8")
+            if html_output_path is not None:
+                html_output_path.parent.mkdir(parents=True, exist_ok=True)
+                html_output_path.write_text(
+                    render_script_walkthrough_html(
+                        result,
+                        bank.processes,
+                        title=args.title,
+                        svg_assets=svg_assets,
+                        png_assets=png_assets,
+                        output_path=html_output_path,
+                    ),
+                    encoding="utf-8",
+                )
             print(markdown, end="")
         else:
             print(json.dumps(result, indent=2, sort_keys=True))

@@ -14,4 +14,21 @@
 - [x] future slice: add scripted partition-heal walkthrough assets or richer per-link visualization notes
 - [x] future slice: render walkthrough diagrams directly to SVG for project pages and slide decks
 - [x] future slice: add PNG raster export for presentation tools that do not embed SVG cleanly
-- [ ] future slice: generate a single-page HTML or PDF handout that bundles the walkthrough narrative with committed SVG/PNG assets
+- [x] future slice: generate a single-page HTML or PDF handout that bundles the walkthrough narrative with committed SVG/PNG assets
+
+## HTML handout slice (2026-04-16 20:47 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the remaining publishability gap from the distributed-snapshot checklist
+- [x] skip external web research because the HTML handout is a direct extension of the existing walkthrough + asset pipeline
+- [x] do a short HTML `picture` / relative-asset-link refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add optional `--html-output` support that renders a single-page handout from the same walkthrough result
+- [x] keep Markdown walkthrough output intact while bundling timeline, summary cards, per-snapshot notes, Mermaid source, and committed SVG/PNG links in the handout
+- [x] extend automated coverage for HTML rendering and CLI export behavior
+- [x] regenerate the committed partition-heal handout artifact
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
