@@ -1131,6 +1131,167 @@ def render_churn_report_markdown(report: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def compare_churn_workloads(
+    ring: ChordRing,
+    event_files: Iterable[Path],
+    *,
+    rounds: int = 3,
+    finger_repair_mode: FingerRepairMode = "single",
+    finger_repair_seed: int | None = None,
+) -> dict[str, object]:
+    workload_paths = list(dict.fromkeys(Path(path) for path in event_files))
+    if not workload_paths:
+        raise ValueError("churn comparison requires at least one events file")
+
+    workloads: list[dict[str, object]] = []
+    for event_path in workload_paths:
+        report = ring.churn_report(
+            load_churn_events(event_path),
+            rounds=rounds,
+            finger_repair_mode=finger_repair_mode,
+            finger_repair_seed=finger_repair_seed,
+        )
+        summary = report["summary"]
+        workloads.append(
+            {
+                "events_file": str(event_path),
+                "event_count": report["event_count"],
+                "fully_stabilized_steps": summary["fully_stabilized_steps"],
+                "partially_stabilized_steps": summary["partially_stabilized_steps"],
+                "stabilization_rate": round(
+                    summary["fully_stabilized_steps"] / max(report["event_count"], 1), 3
+                ),
+                "max_stabilized_round": summary["max_stabilized_round"],
+                "average_stabilized_round": summary["average_stabilized_round"],
+                "final_node_count": summary["final_node_count"],
+                "steps": [
+                    {
+                        "step": step["step"],
+                        "action": step["action"],
+                        "node": step["node"],
+                        "stabilized_round": step["stabilized_round"],
+                        "fully_stabilized": step["fully_stabilized"],
+                        "final_finger_progress_ratio": round(
+                            step["final_finger_matches"] / max(step["total_fingers"], 1), 3
+                        ),
+                    }
+                    for step in report["steps"]
+                ],
+                "report": report,
+            }
+        )
+
+    workloads.sort(
+        key=lambda workload: (
+            -float(workload["stabilization_rate"]),
+            workload["average_stabilized_round"] if workload["average_stabilized_round"] is not None else float("inf"),
+            -int(workload["fully_stabilized_steps"]),
+            workload["events_file"],
+        )
+    )
+    best = workloads[0]
+    return {
+        "m_bits": ring.m_bits,
+        "rounds_default": rounds,
+        "finger_repair_mode": finger_repair_mode,
+        "finger_repair_seed": finger_repair_seed,
+        "workloads": workloads,
+        "summary": {
+            "best_events_file": best["events_file"],
+            "best_fully_stabilized_steps": best["fully_stabilized_steps"],
+            "best_stabilization_rate": best["stabilization_rate"],
+            "best_average_stabilized_round": best["average_stabilized_round"],
+            "workload_count": len(workloads),
+        },
+    }
+
+
+def render_churn_comparison_markdown(comparison: dict[str, object]) -> str:
+    summary = comparison["summary"]
+    lines = [
+        "# Chord churn workload comparison",
+        "",
+        f"- Workloads compared: `{summary['workload_count']}`",
+        f"- Default rounds per event: `{comparison['rounds_default']}`",
+        f"- Finger repair mode: `{comparison['finger_repair_mode']}`",
+        f"- Finger repair seed: `{comparison['finger_repair_seed']}`" if comparison.get("finger_repair_seed") is not None else "- Finger repair seed: `none`",
+        f"- Best workload: `{summary['best_events_file']}`",
+        f"- Best stabilization rate: `{summary['best_stabilization_rate']}`",
+        f"- Best fully stabilized steps: `{summary['best_fully_stabilized_steps']}`",
+        f"- Best average stabilized round: `{summary['best_average_stabilized_round']}`",
+        "",
+        "| Events file | Events | Fully stabilized | Stabilization rate | Partially stabilized | Avg stabilized round | Max stabilized round | Final node count |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for workload in comparison["workloads"]:
+        avg_round = workload["average_stabilized_round"] if workload["average_stabilized_round"] is not None else "n/a"
+        max_round = workload["max_stabilized_round"] if workload["max_stabilized_round"] is not None else "n/a"
+        lines.append(
+            f"| `{workload['events_file']}` | {workload['event_count']} | {workload['fully_stabilized_steps']} | {workload['stabilization_rate']:.2%} | {workload['partially_stabilized_steps']} | {avg_round} | {max_round} | {workload['final_node_count']} |"
+        )
+    lines.extend([
+        "",
+        "## Step snapshots",
+        "",
+    ])
+    for workload in comparison["workloads"]:
+        lines.append(f"### `{workload['events_file']}`")
+        lines.append("")
+        lines.append("| Step | Action | Node | Stabilized round | Fully stabilized | Final finger progress |")
+        lines.append("| --- | --- | --- | ---: | --- | ---: |")
+        for step in workload["steps"]:
+            stabilized_round = step["stabilized_round"] if step["stabilized_round"] is not None else "not within budget"
+            fully = "yes" if step["fully_stabilized"] else "no"
+            lines.append(
+                f"| {step['step']} | `{step['action']}` | `{step['node']}` | {stabilized_round} | {fully} | {step['final_finger_progress_ratio']:.2%} |"
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render_churn_comparison_csv(comparison: dict[str, object]) -> str:
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "events_file",
+        "event_count",
+        "fully_stabilized_steps",
+        "partially_stabilized_steps",
+        "stabilization_rate",
+        "average_stabilized_round",
+        "max_stabilized_round",
+        "final_node_count",
+        "step",
+        "action",
+        "node",
+        "stabilized_round",
+        "fully_stabilized",
+        "final_finger_progress_ratio",
+    ])
+    for workload in comparison["workloads"]:
+        for step in workload["steps"]:
+            writer.writerow([
+                workload["events_file"],
+                workload["event_count"],
+                workload["fully_stabilized_steps"],
+                workload["partially_stabilized_steps"],
+                f"{workload['stabilization_rate']:.6f}",
+                workload["average_stabilized_round"],
+                workload["max_stabilized_round"],
+                workload["final_node_count"],
+                step["step"],
+                step["action"],
+                step["node"],
+                step["stabilized_round"],
+                str(step["fully_stabilized"]).lower(),
+                f"{step['final_finger_progress_ratio']:.6f}",
+            ])
+    return output.getvalue().strip()
+
+
 def render_churn_report_csv(report: dict[str, object]) -> str:
     import csv
     import io
@@ -1542,6 +1703,33 @@ def parse_args() -> argparse.Namespace:
         help="report format for the rendered churn summary",
     )
 
+
+    churn_compare_export_parser = subparsers.add_parser(
+        "churn-compare-export",
+        help="compare multiple churn event files and render a combined Markdown or CSV summary",
+    )
+    churn_compare_export_parser.add_argument("ring_file", type=Path)
+    churn_compare_export_parser.add_argument("events_files", nargs="+", type=Path)
+    churn_compare_export_parser.add_argument("--rounds", type=int, default=3)
+    churn_compare_export_parser.add_argument(
+        "--finger-repair-mode",
+        choices=["single", "all", "random"],
+        default="single",
+        help="finger repair policy to use for each churn workload",
+    )
+    churn_compare_export_parser.add_argument(
+        "--finger-repair-seed",
+        type=int,
+        default=None,
+        help="seed for random finger repair mode; required when random mode is used",
+    )
+    churn_compare_export_parser.add_argument(
+        "--format",
+        choices=["markdown", "csv"],
+        default="markdown",
+        help="report format for the rendered churn workload comparison",
+    )
+
     synth_parser = subparsers.add_parser(
         "synth-benchmark",
         help="generate a deterministic synthetic ring/workload and benchmark lookup hops",
@@ -1699,6 +1887,22 @@ def main() -> None:
                 finger_repair_seed=args.finger_repair_seed,
             ),
         }
+    elif args.command == "churn-compare-export":
+        ring = load_ring(args.ring_file)
+        comparison = compare_churn_workloads(
+            ring,
+            args.events_files,
+            rounds=args.rounds,
+            finger_repair_mode=args.finger_repair_mode,
+            finger_repair_seed=args.finger_repair_seed,
+        )
+        if args.format == "markdown":
+            print(render_churn_comparison_markdown(comparison))
+            return
+        if args.format == "csv":
+            print(render_churn_comparison_csv(comparison))
+            return
+        raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "compare-stabilize-export":
         ring = load_ring(args.ring_file)
         comparison = ring.compare_stabilization_modes(

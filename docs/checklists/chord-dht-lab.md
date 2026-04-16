@@ -63,6 +63,7 @@
 - [x] add a churn workload driver that chains multiple joins/failures and summarizes recovery over time
 - [x] model explicit node recovery/rejoin events inside churn scenarios
 - [x] export churn summaries as Markdown/CSV for portfolio write-ups or charts
+- [x] compare multiple churn workloads side by side so recovery sensitivity is easier to explain in portfolio notes
 
 ## Recovery churn slice (2026-04-15 19:42 UTC run)
 - [x] confirm repo sync before editing

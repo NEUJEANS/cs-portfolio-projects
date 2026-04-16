@@ -865,6 +865,83 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("step,action,node,rounds_requested,finger_repair_mode,stabilized_round,fully_stabilized", rendered)
         self.assertIn("1,fail,charlie,2,all,0,true,1.000000,4,4,4,32,32,4", rendered)
 
+    def test_compare_churn_workloads_sorts_best_workload_first(self) -> None:
+        ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fast_path = Path(tmpdir) / "fast.json"
+            slow_path = Path(tmpdir) / "slow.json"
+            fast_path.write_text(
+                json.dumps([
+                    {"action": "join", "node": "foxtrot", "rounds": 1},
+                    {"action": "fail", "node": "charlie", "rounds": 1},
+                ]),
+                encoding="utf-8",
+            )
+            slow_path.write_text(
+                json.dumps([
+                    {"action": "join", "node": "foxtrot", "rounds": 1},
+                    {"action": "fail", "node": "charlie", "rounds": 1},
+                    {"action": "recover", "node": "charlie", "rounds": 1},
+                ]),
+                encoding="utf-8",
+            )
+
+            comparison = module.compare_churn_workloads(
+                ring,
+                [slow_path, fast_path],
+                finger_repair_mode="all",
+            )
+
+        self.assertEqual(comparison["summary"]["workload_count"], 2)
+        self.assertEqual(comparison["summary"]["best_events_file"], str(fast_path))
+        self.assertEqual(comparison["summary"]["best_stabilization_rate"], 1.0)
+        self.assertEqual(comparison["workloads"][0]["fully_stabilized_steps"], 2)
+        self.assertEqual(comparison["workloads"][1]["fully_stabilized_steps"], 3)
+
+    def test_render_churn_comparison_markdown_and_csv_include_workloads(self) -> None:
+        comparison = {
+            "rounds_default": 3,
+            "finger_repair_mode": "all",
+            "finger_repair_seed": None,
+            "workloads": [
+                {
+                    "events_file": "events-a.json",
+                    "event_count": 2,
+                    "fully_stabilized_steps": 2,
+                    "partially_stabilized_steps": 0,
+                    "stabilization_rate": 1.0,
+                    "average_stabilized_round": 1.0,
+                    "max_stabilized_round": 1,
+                    "final_node_count": 5,
+                    "steps": [
+                        {
+                            "step": 1,
+                            "action": "join",
+                            "node": "foxtrot",
+                            "stabilized_round": 1,
+                            "fully_stabilized": True,
+                            "final_finger_progress_ratio": 1.0,
+                        }
+                    ],
+                }
+            ],
+            "summary": {
+                "best_events_file": "events-a.json",
+                "best_stabilization_rate": 1.0,
+                "best_fully_stabilized_steps": 2,
+                "best_average_stabilized_round": 1.0,
+                "workload_count": 1,
+            },
+        }
+
+        markdown = module.render_churn_comparison_markdown(comparison)
+        csv_output = module.render_churn_comparison_csv(comparison)
+
+        self.assertIn("# Chord churn workload comparison", markdown)
+        self.assertIn("| `events-a.json` | 2 | 2 | 100.00% | 0 | 1.0 | 1 | 5 |", markdown)
+        self.assertIn("events_file,event_count,fully_stabilized_steps,partially_stabilized_steps,stabilization_rate", csv_output)
+        self.assertIn("events-a.json,2,2,0,1.000000,1.0,1,5,1,join,foxtrot,1,true,1.000000", csv_output)
+
     def test_cli_churn_outputs_event_summary(self) -> None:
         churn_path = PROJECT_ROOT / "projects" / "chord-dht-lab" / "churn_events.json"
 
@@ -971,6 +1048,65 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertEqual(payload["event_count"], 2)
         self.assertEqual([step["action"] for step in payload["steps"]], ["fail", "recover"])
         self.assertEqual(payload["summary"]["fully_stabilized_steps"], 2)
+
+    def test_cli_churn_compare_export_outputs_markdown_and_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            events_a = Path(tmpdir) / "events-a.json"
+            events_b = Path(tmpdir) / "events-b.json"
+            events_a.write_text(
+                json.dumps([
+                    {"action": "join", "node": "foxtrot", "rounds": 1},
+                    {"action": "fail", "node": "charlie", "rounds": 1},
+                ]),
+                encoding="utf-8",
+            )
+            events_b.write_text(
+                json.dumps([
+                    {"action": "fail", "node": "charlie", "rounds": 1},
+                    {"action": "recover", "node": "charlie", "rounds": 1},
+                ]),
+                encoding="utf-8",
+            )
+
+            markdown = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "churn-compare-export",
+                    str(RING_PATH),
+                    str(events_a),
+                    str(events_b),
+                    "--finger-repair-mode",
+                    "all",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            csv_output = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "churn-compare-export",
+                    str(RING_PATH),
+                    str(events_a),
+                    str(events_b),
+                    "--finger-repair-mode",
+                    "all",
+                    "--format",
+                    "csv",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertIn("# Chord churn workload comparison", markdown.stdout)
+        self.assertIn(str(events_a), markdown.stdout)
+        self.assertIn("events_file,event_count,fully_stabilized_steps", csv_output.stdout)
+        self.assertIn(str(events_b), csv_output.stdout)
 
 
 if __name__ == "__main__":

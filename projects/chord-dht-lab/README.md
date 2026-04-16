@@ -21,6 +21,7 @@ A portfolio-friendly distributed-systems lab that simulates a Chord distributed 
 - Markdown/CSV export for stabilization comparison summaries so portfolio write-ups can reuse the results directly
 - churn workload driver that chains joins, failures, and recovery/rejoin events with stabilization summaries
 - Markdown/CSV export for churn summaries so portfolio write-ups and charts can reuse multi-event recovery results directly
+- side-by-side comparison export for multiple churn workload files so different recovery patterns can be contrasted quickly
 - Graphviz DOT export for the base ring, traced lookup routes, and stabilization progression diagrams
 - benchmark mode that summarizes hop savings across keys and start nodes
 - deterministic synthetic ring/workload generation for broader benchmark experiments without hand-writing JSON
@@ -229,6 +230,27 @@ python3 projects/chord-dht-lab/chord_dht.py churn-export \
   --format csv
 ```
 
+Compare multiple churn workloads side by side as Markdown:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py churn-compare-export \
+  projects/chord-dht-lab/ring.json \
+  projects/chord-dht-lab/churn_events.json \
+  projects/chord-dht-lab/churn_events_bursty.json \
+  --finger-repair-mode all
+```
+
+Export the same multi-workload comparison as CSV for charting or spreadsheet analysis:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py churn-compare-export \
+  projects/chord-dht-lab/ring.json \
+  projects/chord-dht-lab/churn_events.json \
+  projects/chord-dht-lab/churn_events_bursty.json \
+  --finger-repair-mode all \
+  --format csv
+```
+
 Export a Graphviz DOT diagram for a lookup route:
 
 ```bash
@@ -278,4 +300,3 @@ python3 -m unittest tests/test_chord_dht_lab.py
 
 ## Future improvements
 - compare benchmark summaries across multiple random start-node samples to show variance instead of a single seeded subset
-- compare multiple churn event files side by side to show workload sensitivity across different recovery patterns
