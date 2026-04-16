@@ -14,6 +14,8 @@ from url_shortener import (
     build_wsgi_app,
     validate_custom_code,
     validate_expiry_seconds,
+    validate_limit,
+    validate_owner,
     validate_url,
 )
 
@@ -28,6 +30,7 @@ class UrlShortenerStoreTests(unittest.TestCase):
             self.assertEqual(code_a, code_b)
             info = store.resolve(code_a)
             self.assertEqual(info['url'], 'https://example.com/docs')
+            self.assertEqual(info['owner'], 'public')
             self.assertEqual(info['status'], 'active')
             self.assertEqual(store.stats()['link_count'], 1)
 
@@ -50,11 +53,11 @@ class UrlShortenerStoreTests(unittest.TestCase):
             self.assertNotEqual(second, first)
             self.assertEqual(store.resolve(second)['url'], 'https://example.com/two')
 
-    def test_store_supports_custom_codes_and_tracks_clicks(self):
+    def test_store_supports_custom_codes_tracks_clicks_and_owner_views(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / 'shortener.db'
             store = Store(db)
-            code = store.shorten('https://example.com/portfolio', custom_code='portfolio')
+            code = store.shorten('https://example.com/portfolio', custom_code='portfolio', owner='alice')
             self.assertEqual(code, 'portfolio')
 
             first = store.resolve(code, record_click=True)
@@ -62,30 +65,37 @@ class UrlShortenerStoreTests(unittest.TestCase):
 
             self.assertEqual(first['clicks'], 1)
             self.assertEqual(second['clicks'], 2)
+            self.assertEqual(second['owner'], 'alice')
             self.assertIsNotNone(second['last_accessed_at'])
-            stats = store.stats()
+            stats = store.stats(owner='alice')
             self.assertEqual(stats['total_clicks'], 2)
             self.assertEqual(stats['top_links'][0]['code'], 'portfolio')
             self.assertEqual(stats['active_count'], 1)
+            self.assertEqual(stats['owner'], 'alice')
+            self.assertEqual(store.stats()['owners'][0]['owner'], 'alice')
+            self.assertEqual(store.list_links(owner='alice')[0]['code'], 'portfolio')
 
     def test_store_rejects_conflicting_custom_code_requests(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / 'shortener.db'
             store = Store(db)
-            store.shorten('https://example.com/a', custom_code='alpha')
+            store.shorten('https://example.com/a', custom_code='alpha', owner='alice')
 
             with self.assertRaisesRegex(ValueError, 'already in use'):
-                store.shorten('https://example.com/b', custom_code='alpha')
+                store.shorten('https://example.com/b', custom_code='alpha', owner='bob')
 
             with self.assertRaisesRegex(ValueError, 'already shortened'):
-                store.shorten('https://example.com/a', custom_code='beta')
+                store.shorten('https://example.com/a', custom_code='beta', owner='alice')
+
+            with self.assertRaisesRegex(ValueError, 'already shortened for owner alice'):
+                store.shorten('https://example.com/a', owner='bob')
 
     def test_store_marks_expired_and_deleted_links_in_stateful_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / 'shortener.db'
             store = Store(db)
-            expiring = store.shorten('https://example.com/expiring', custom_code='expiring', expires_in_seconds=1)
-            removed = store.shorten('https://example.com/remove-me', custom_code='remove-me')
+            expiring = store.shorten('https://example.com/expiring', custom_code='expiring', expires_in_seconds=1, owner='alice')
+            removed = store.shorten('https://example.com/remove-me', custom_code='remove-me', owner='bob')
 
             time.sleep(1.2)
             expired_info = store.get_link_info(expiring)
@@ -117,6 +127,16 @@ class UrlValidationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_custom_code(bad)
 
+    def test_validate_owner_and_limit_reject_bad_values(self):
+        self.assertEqual(validate_owner('alice-team'), 'alice-team')
+        self.assertEqual(validate_limit('25'), 25)
+        for bad in ['', 'x', 'with space', None]:
+            with self.assertRaises(ValueError):
+                validate_owner(bad)
+        for bad in [0, 201, 'bad', False]:
+            with self.assertRaises(ValueError):
+                validate_limit(bad)
+
     def test_validate_expiry_seconds_rejects_invalid_values(self):
         self.assertEqual(validate_expiry_seconds(30), 30)
         for bad in [0, -1, '60', False]:
@@ -128,7 +148,7 @@ class UrlShortenerHttpTests(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         db = Path(self.tmpdir.name) / 'server.db'
-        self.server = build_server(db, port=0)
+        self.server = build_server(db, port=0, admin_key='secret-key')
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.base_url = f'http://127.0.0.1:{self.server.server_port}'
@@ -139,13 +159,13 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.thread.join(timeout=2)
         self.tmpdir.cleanup()
 
-    def _request(self, path, method='GET', payload=None, raw_data=None):
+    def _request(self, path, method='GET', payload=None, raw_data=None, headers=None):
         data = raw_data
-        headers = {}
+        final_headers = dict(headers or {})
         if payload is not None:
             data = json.dumps(payload).encode('utf-8')
-            headers['Content-Type'] = 'application/json'
-        request = urllib.request.Request(f'{self.base_url}{path}', data=data, method=method, headers=headers)
+            final_headers['Content-Type'] = 'application/json'
+        request = urllib.request.Request(f'{self.base_url}{path}', data=data, method=method, headers=final_headers)
         opener = urllib.request.build_opener(NoRedirectHandler())
         try:
             with opener.open(request) as response:
@@ -169,11 +189,13 @@ class UrlShortenerHttpTests(unittest.TestCase):
         status, _, body = self._request(
             '/shorten',
             method='POST',
-            payload={'url': 'https://example.com/coursework', 'code': 'coursework'},
+            payload={'url': 'https://example.com/coursework', 'code': 'coursework', 'owner': 'alice'},
+            headers={'X-Admin-Key': 'secret-key'},
         )
         self.assertEqual(status, 201)
         payload = json.loads(body.decode('utf-8'))
         self.assertEqual(payload['code'], 'coursework')
+        self.assertEqual(payload['owner'], 'alice')
         self.assertEqual(payload['clicks'], 0)
         self.assertEqual(payload['status'], 'active')
         self.assertIsNone(payload['expires_at'])
@@ -184,24 +206,52 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(headers['Location'], 'https://example.com/coursework')
         self.assertEqual(body, b'')
 
-        status, _, body = self._request('/links/coursework')
+        status, _, body = self._request('/links/coursework', headers={'X-Admin-Key': 'secret-key'})
         self.assertEqual(status, 200)
         info = json.loads(body.decode('utf-8'))
         self.assertEqual(info['clicks'], 1)
         self.assertEqual(info['status'], 'active')
+        self.assertEqual(info['owner'], 'alice')
         self.assertIsNotNone(info['last_accessed_at'])
 
-        status, _, body = self._request('/stats')
+        status, _, body = self._request('/stats?owner=alice', headers={'X-Admin-Key': 'secret-key'})
         stats = json.loads(body.decode('utf-8'))
         self.assertEqual(status, 200)
+        self.assertEqual(stats['owner'], 'alice')
         self.assertEqual(stats['total_clicks'], 1)
         self.assertEqual(stats['top_links'][0]['code'], 'coursework')
+
+        status, _, body = self._request('/owners/alice/links?limit=5', headers={'X-Admin-Key': 'secret-key'})
+        listing = json.loads(body.decode('utf-8'))
+        self.assertEqual(status, 200)
+        self.assertEqual(listing['count'], 1)
+        self.assertEqual(listing['links'][0]['code'], 'coursework')
+
+    def test_admin_endpoints_require_api_key(self):
+        self._request('/shorten', method='POST', payload={'url': 'https://example.com/public', 'code': 'public1'})
+
+        status, headers, body = self._request('/stats')
+        self.assertEqual(status, 401)
+        self.assertIn('ApiKey', headers['WWW-Authenticate'])
+        self.assertIn('admin api key required', body.decode('utf-8'))
+
+        status, _, body = self._request(
+            '/shorten',
+            method='POST',
+            payload={'url': 'https://example.com/private', 'code': 'private1', 'owner': 'alice'},
+        )
+        self.assertEqual(status, 401)
+        self.assertIn('custom owner', body.decode('utf-8'))
+
+        status, _, _ = self._request('/links/public1', headers={'X-Admin-Key': 'secret-key'})
+        self.assertEqual(status, 200)
 
     def test_expired_and_deleted_links_return_gone_and_metadata(self):
         status, _, body = self._request(
             '/shorten',
             method='POST',
-            payload={'url': 'https://example.com/temp', 'code': 'temp123', 'expires_in_seconds': 1},
+            payload={'url': 'https://example.com/temp', 'code': 'temp123', 'expires_in_seconds': 1, 'owner': 'alice'},
+            headers={'X-Admin-Key': 'secret-key'},
         )
         self.assertEqual(status, 201)
         payload = json.loads(body.decode('utf-8'))
@@ -212,7 +262,7 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(status, 410)
         self.assertIn('expired', body.decode('utf-8'))
 
-        status, _, body = self._request('/links/temp123')
+        status, _, body = self._request('/links/temp123', headers={'X-Admin-Key': 'secret-key'})
         info = json.loads(body.decode('utf-8'))
         self.assertEqual(status, 200)
         self.assertEqual(info['status'], 'expired')
@@ -220,9 +270,10 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self._request(
             '/shorten',
             method='POST',
-            payload={'url': 'https://example.com/delete', 'code': 'delete-me'},
+            payload={'url': 'https://example.com/delete', 'code': 'delete-me', 'owner': 'alice'},
+            headers={'X-Admin-Key': 'secret-key'},
         )
-        status, _, body = self._request('/links/delete-me', method='DELETE')
+        status, _, body = self._request('/links/delete-me', method='DELETE', headers={'X-Admin-Key': 'secret-key'})
         self.assertEqual(status, 200)
         payload = json.loads(body.decode('utf-8'))
         self.assertTrue(payload['deleted'])
@@ -259,10 +310,14 @@ class UrlShortenerHttpTests(unittest.TestCase):
         self.assertEqual(headers['Allow'], 'POST')
         self.assertIn('method not allowed', body.decode('utf-8'))
 
-        status, headers, body = self._request('/links/ghost', method='POST', raw_data=b'{}')
+        status, headers, body = self._request('/links/ghost', method='POST', raw_data=b'{}', headers={'X-Admin-Key': 'secret-key'})
         self.assertEqual(status, 405)
         self.assertEqual(headers['Allow'], 'GET, DELETE')
         self.assertIn('method not allowed', body.decode('utf-8'))
+
+        status, _, body = self._request('/owners/alice/links/extra', headers={'X-Admin-Key': 'secret-key'})
+        self.assertEqual(status, 404)
+        self.assertIn('not found', body.decode('utf-8'))
 
         status, _, body = self._request('/missing-code')
         self.assertEqual(status, 404)
@@ -270,9 +325,10 @@ class UrlShortenerHttpTests(unittest.TestCase):
 
 
 class UrlShortenerWsgiTests(unittest.TestCase):
-    def _call_app(self, app, path='/', method='GET', payload=None, host='short.local'):
+    def _call_app(self, app, path='/', method='GET', payload=None, host='short.local', headers=None):
         body = b'' if payload is None else json.dumps(payload).encode('utf-8')
         captured = {}
+        final_headers = headers or {}
 
         def start_response(status, headers):
             captured['status'] = status
@@ -289,36 +345,45 @@ class UrlShortenerWsgiTests(unittest.TestCase):
             'SERVER_NAME': '127.0.0.1',
             'SERVER_PORT': '80',
         }
+        if 'X-Admin-Key' in final_headers:
+            environ['HTTP_X_ADMIN_KEY'] = final_headers['X-Admin-Key']
         response_body = b''.join(app(environ, start_response))
         return captured['status'], captured['headers'], response_body
 
     def test_wsgi_app_handles_post_and_redirect_flow(self):
         with tempfile.TemporaryDirectory() as tmp:
-            app = build_wsgi_app(Path(tmp) / 'wsgi.db')
+            app = build_wsgi_app(Path(tmp) / 'wsgi.db', admin_key='secret-key')
             status, headers, body = self._call_app(
                 app,
                 path='/shorten',
                 method='POST',
-                payload={'url': 'https://example.com/demo', 'code': 'demo-link'},
+                payload={'url': 'https://example.com/demo', 'code': 'demo-link', 'owner': 'alice'},
                 host='portfolio.local:9000',
+                headers={'X-Admin-Key': 'secret-key'},
             )
             self.assertEqual(status, '201 Created')
             self.assertIn('application/json', headers['Content-Type'])
             payload = json.loads(body.decode('utf-8'))
             self.assertEqual(payload['short_url'], 'http://portfolio.local:9000/demo-link')
+            self.assertEqual(payload['owner'], 'alice')
 
             status, headers, body = self._call_app(app, path='/demo-link', method='GET', host='portfolio.local:9000')
             self.assertEqual(status, '302 Found')
             self.assertEqual(headers['Location'], 'https://example.com/demo')
             self.assertEqual(body, b'')
 
-    def test_wsgi_app_returns_json_errors_for_bad_requests(self):
+    def test_wsgi_app_returns_json_errors_for_bad_requests_and_auth(self):
         with tempfile.TemporaryDirectory() as tmp:
-            app = build_wsgi_app(Path(tmp) / 'wsgi-errors.db')
+            app = build_wsgi_app(Path(tmp) / 'wsgi-errors.db', admin_key='secret-key')
             status, headers, body = self._call_app(app, path='/shorten', method='POST', payload={'url': 'ftp://bad.example'})
             self.assertEqual(status, '400 Bad Request')
             self.assertIn('application/json', headers['Content-Type'])
             self.assertIn('http or https', body.decode('utf-8'))
+
+            status, headers, body = self._call_app(app, path='/stats', method='GET')
+            self.assertEqual(status, '401 Unauthorized')
+            self.assertIn('WWW-Authenticate', headers)
+            self.assertIn('admin api key required', body.decode('utf-8'))
 
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):

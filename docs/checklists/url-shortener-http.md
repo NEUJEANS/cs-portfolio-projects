@@ -61,4 +61,21 @@
 ## Future improvements
 - [x] expiration / deletion support
 - [x] deployable WSGI/ASGI wrapper plus Docker packaging
-- [ ] admin/auth layer for multi-user management
+- [x] admin/auth layer for multi-user management
+
+
+## Vertical slice 5 — admin API key + owner-scoped management
+- [x] confirm `url-shortener-http` still needed a portfolio-grade admin/auth layer for safer multi-user management
+- [x] do brief research on API key header handling plus `401` vs `403` semantics
+- [x] do short Python/WSGI/header parsing refresh and self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add optional admin API key protection for management endpoints
+- [x] add owner tagging plus owner-scoped link listing/stat summaries
+- [x] keep public redirects backward-compatible while protecting admin metadata operations
+- [x] expand automated coverage for auth gating, owner validation, WSGI propagation, and owner stats/listing
+- [x] run tests locally
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up

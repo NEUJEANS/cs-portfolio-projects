@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import http.server
 import json
+import os
 import re
 import sqlite3
 from contextlib import closing
@@ -10,7 +11,9 @@ from urllib.parse import urlparse, urlsplit
 
 DEFAULT_CODE_LENGTH = 7
 CUSTOM_CODE_PATTERN = re.compile(r'^[A-Za-z0-9_-]{3,32}$')
-RESERVED_CODES = {'shorten', 'stats', 'links'}
+OWNER_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{1,31}$')
+RESERVED_CODES = {'shorten', 'stats', 'links', 'owners'}
+ADMIN_KEY_HEADER = 'X-Admin-Key'
 
 
 def _request_path(path):
@@ -33,6 +36,7 @@ class Store:
                 'CREATE TABLE IF NOT EXISTS links ('
                 'code TEXT PRIMARY KEY, '
                 'url TEXT NOT NULL UNIQUE, '
+                'owner TEXT NOT NULL DEFAULT \'public\', '
                 'created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
                 'clicks INTEGER NOT NULL DEFAULT 0, '
                 'last_accessed_at TEXT, '
@@ -40,6 +44,7 @@ class Store:
                 'deleted_at TEXT'
                 ')'
             )
+            self._ensure_column(conn, 'owner', "TEXT NOT NULL DEFAULT 'public'")
             self._ensure_column(conn, 'clicks', 'INTEGER NOT NULL DEFAULT 0')
             self._ensure_column(conn, 'last_accessed_at', 'TEXT')
             self._ensure_column(conn, 'expires_at', 'TEXT')
@@ -47,10 +52,7 @@ class Store:
             conn.commit()
 
     def _ensure_column(self, conn, column_name, definition):
-        columns = {
-            row['name']
-            for row in conn.execute('PRAGMA table_info(links)').fetchall()
-        }
+        columns = {row['name'] for row in conn.execute('PRAGMA table_info(links)').fetchall()}
         if column_name not in columns:
             conn.execute(f'ALTER TABLE links ADD COLUMN {column_name} {definition}')
 
@@ -68,21 +70,24 @@ class Store:
             return 'expired'
         return 'active'
 
-    def shorten(self, url, custom_code=None, expires_in_seconds=None):
+    def shorten(self, url, custom_code=None, expires_in_seconds=None, owner='public'):
         normalized_url = validate_url(url)
+        owner = validate_owner(owner)
         if custom_code is not None:
             custom_code = validate_custom_code(custom_code)
         expiry_seconds = validate_expiry_seconds(expires_in_seconds)
 
         with closing(self._connect()) as conn:
             existing_for_url = conn.execute(
-                'SELECT code FROM links WHERE url = ?',
+                'SELECT code, owner FROM links WHERE url = ?',
                 (normalized_url,),
             ).fetchone()
             if existing_for_url:
                 existing_code = existing_for_url['code']
                 if custom_code and existing_code != custom_code:
                     raise ValueError(f'url already shortened with code {existing_code}')
+                if existing_for_url['owner'] != owner:
+                    raise ValueError(f'url already shortened for owner {existing_for_url["owner"]}')
                 return existing_code
 
             if custom_code:
@@ -92,7 +97,7 @@ class Store:
                 ).fetchone()
                 if existing_for_code and existing_for_code['url'] != normalized_url:
                     raise ValueError('custom code is already in use')
-                self._insert_link(conn, custom_code, normalized_url, expiry_seconds)
+                self._insert_link(conn, custom_code, normalized_url, expiry_seconds, owner)
                 conn.commit()
                 return custom_code
 
@@ -101,26 +106,26 @@ class Store:
                 code = self._candidate_code(normalized_url, attempt)
                 row = conn.execute('SELECT url FROM links WHERE code = ?', (code,)).fetchone()
                 if row is None:
-                    self._insert_link(conn, code, normalized_url, expiry_seconds)
+                    self._insert_link(conn, code, normalized_url, expiry_seconds, owner)
                     conn.commit()
                     return code
                 if row['url'] == normalized_url:
                     return code
                 attempt += 1
 
-    def _insert_link(self, conn, code, url, expiry_seconds):
+    def _insert_link(self, conn, code, url, expiry_seconds, owner):
         if expiry_seconds is None:
-            conn.execute('INSERT INTO links(code, url) VALUES (?, ?)', (code, url))
+            conn.execute('INSERT INTO links(code, url, owner) VALUES (?, ?, ?)', (code, url, owner))
             return
         conn.execute(
-            "INSERT INTO links(code, url, expires_at) VALUES (?, ?, datetime(CURRENT_TIMESTAMP, ?))",
-            (code, url, f'+{expiry_seconds} seconds'),
+            "INSERT INTO links(code, url, owner, expires_at) VALUES (?, ?, ?, datetime(CURRENT_TIMESTAMP, ?))",
+            (code, url, owner, f'+{expiry_seconds} seconds'),
         )
 
     def resolve(self, code, record_click=False):
         with closing(self._connect()) as conn:
             row = conn.execute(
-                'SELECT code, url, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                'SELECT code, url, owner, clicks, created_at, last_accessed_at, expires_at, deleted_at '
                 'FROM links WHERE code = ?',
                 (code,),
             ).fetchone()
@@ -131,14 +136,12 @@ class Store:
             status = self._status_from_row(row, now=current_time)
             if record_click and status == 'active':
                 conn.execute(
-                    'UPDATE links '
-                    'SET clicks = clicks + 1, last_accessed_at = CURRENT_TIMESTAMP '
-                    'WHERE code = ?',
+                    'UPDATE links SET clicks = clicks + 1, last_accessed_at = CURRENT_TIMESTAMP WHERE code = ?',
                     (code,),
                 )
                 conn.commit()
                 row = conn.execute(
-                    'SELECT code, url, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                    'SELECT code, url, owner, clicks, created_at, last_accessed_at, expires_at, deleted_at '
                     'FROM links WHERE code = ?',
                     (code,),
                 ).fetchone()
@@ -152,22 +155,25 @@ class Store:
     def delete_link(self, code):
         with closing(self._connect()) as conn:
             row = conn.execute(
-                'SELECT code, url, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                'SELECT code, url, owner, clicks, created_at, last_accessed_at, expires_at, deleted_at '
                 'FROM links WHERE code = ?',
                 (code,),
             ).fetchone()
             if not row:
                 return None
             if row['deleted_at'] is None:
-                conn.execute(
-                    'UPDATE links SET deleted_at = CURRENT_TIMESTAMP WHERE code = ?',
-                    (code,),
-                )
+                conn.execute('UPDATE links SET deleted_at = CURRENT_TIMESTAMP WHERE code = ?', (code,))
                 conn.commit()
             return self.get_link_info(code)
 
-    def stats(self):
+    def stats(self, owner=None):
+        owner = validate_owner(owner) if owner is not None else None
         with closing(self._connect()) as conn:
+            where = ''
+            params = ()
+            if owner is not None:
+                where = ' WHERE owner = ?'
+                params = (owner,)
             row = conn.execute(
                 'SELECT '
                 'COUNT(*) AS link_count, '
@@ -175,23 +181,35 @@ class Store:
                 "SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END) AS deleted_count, "
                 "SUM(CASE WHEN deleted_at IS NULL AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS expired_count, "
                 "SUM(CASE WHEN deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) THEN 1 ELSE 0 END) AS active_count "
-                'FROM links'
+                'FROM links' + where,
+                params,
             ).fetchone()
             current_time = self._current_timestamp(conn)
             top_links = [
                 {
                     'code': link['code'],
                     'url': link['url'],
+                    'owner': link['owner'],
                     'clicks': link['clicks'],
                     'status': self._status_from_row(link, now=current_time),
                     'expires_at': link['expires_at'],
                 }
                 for link in conn.execute(
-                    'SELECT code, url, clicks, expires_at, deleted_at FROM links '
-                    'ORDER BY clicks DESC, code ASC LIMIT 5'
+                    'SELECT code, url, owner, clicks, expires_at, deleted_at FROM links'
+                    + where
+                    + ' ORDER BY clicks DESC, code ASC LIMIT 5',
+                    params,
                 ).fetchall()
             ]
-            return {
+            owners = [
+                {'owner': item['owner'], 'link_count': item['link_count'], 'total_clicks': item['total_clicks']}
+                for item in conn.execute(
+                    'SELECT owner, COUNT(*) AS link_count, COALESCE(SUM(clicks), 0) AS total_clicks '
+                    'FROM links' + where + ' GROUP BY owner ORDER BY owner ASC',
+                    params,
+                ).fetchall()
+            ]
+            payload = {
                 'link_count': row['link_count'],
                 'active_count': row['active_count'] or 0,
                 'expired_count': row['expired_count'] or 0,
@@ -199,6 +217,35 @@ class Store:
                 'total_clicks': row['total_clicks'],
                 'top_links': top_links,
             }
+            if owner is None:
+                payload['owners'] = owners
+            else:
+                payload['owner'] = owner
+            return payload
+
+    def list_links(self, owner=None, limit=50):
+        owner = validate_owner(owner) if owner is not None else None
+        limit = validate_limit(limit)
+        with closing(self._connect()) as conn:
+            current_time = self._current_timestamp(conn)
+            if owner is None:
+                rows = conn.execute(
+                    'SELECT code, url, owner, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                    'FROM links ORDER BY created_at DESC, code ASC LIMIT ?',
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    'SELECT code, url, owner, clicks, created_at, last_accessed_at, expires_at, deleted_at '
+                    'FROM links WHERE owner = ? ORDER BY created_at DESC, code ASC LIMIT ?',
+                    (owner, limit),
+                ).fetchall()
+            links = []
+            for row in rows:
+                payload = dict(row)
+                payload['status'] = self._status_from_row(row, now=current_time)
+                links.append(payload)
+            return links
 
     def get_link_info(self, code):
         return self.resolve(code, record_click=False)
@@ -232,6 +279,17 @@ def validate_custom_code(code):
     return candidate
 
 
+def validate_owner(owner):
+    if not isinstance(owner, str):
+        raise ValueError('owner must be a string')
+    candidate = owner.strip()
+    if not candidate:
+        raise ValueError('owner must not be empty')
+    if not OWNER_PATTERN.fullmatch(candidate):
+        raise ValueError('owner must be 2-32 chars using letters, numbers, hyphen, or underscore')
+    return candidate
+
+
 def validate_expiry_seconds(value):
     if value is None:
         return None
@@ -242,9 +300,25 @@ def validate_expiry_seconds(value):
     return value
 
 
+def validate_limit(value):
+    if isinstance(value, bool):
+        raise ValueError('limit must be an integer')
+    if isinstance(value, str):
+        try:
+            value = int(value)
+        except ValueError as exc:
+            raise ValueError('limit must be an integer') from exc
+    if not isinstance(value, int):
+        raise ValueError('limit must be an integer')
+    if value <= 0 or value > 200:
+        raise ValueError('limit must be between 1 and 200')
+    return value
+
+
 class UrlShortenerApp:
-    def __init__(self, store):
+    def __init__(self, store, admin_key=None):
         self.store = store
+        self.admin_key = admin_key
 
     def _json_bytes(self, payload):
         return json.dumps(payload).encode('utf-8')
@@ -273,9 +347,26 @@ class UrlShortenerApp:
     def _short_url(self, base_url, code):
         return f'{base_url.rstrip("/")}/{code}'
 
+    def _is_admin(self, headers):
+        if not self.admin_key:
+            return True
+        supplied = headers.get(ADMIN_KEY_HEADER) or headers.get(ADMIN_KEY_HEADER.lower())
+        return supplied == self.admin_key
+
+    def _require_admin(self, headers):
+        if self._is_admin(headers):
+            return None
+        return self._response(
+            401,
+            {'error': 'admin api key required'},
+            {'WWW-Authenticate': 'ApiKey realm="url-shortener-admin"'},
+        )
+
     def handle_request(self, method, path, headers=None, body=b'', base_url='http://127.0.0.1:8000'):
         headers = headers or {}
         request_path = _request_path(path)
+        query = urlsplit(path).query
+        query_params = dict(item.split('=', 1) if '=' in item else (item, '') for item in query.split('&') if item)
 
         if method == 'POST' and request_path == '/shorten':
             try:
@@ -283,10 +374,18 @@ class UrlShortenerApp:
                 if 'url' not in payload:
                     raise ValueError('JSON body must include url')
                 normalized_url = validate_url(payload['url'])
+                owner = payload.get('owner', 'public')
+                if owner != 'public' and not self._is_admin(headers):
+                    return self._response(
+                        401,
+                        {'error': 'admin api key required to assign a custom owner'},
+                        {'WWW-Authenticate': 'ApiKey realm="url-shortener-admin"'},
+                    )
                 code = self.store.shorten(
                     normalized_url,
                     custom_code=payload.get('code'),
                     expires_in_seconds=payload.get('expires_in_seconds'),
+                    owner=owner,
                 )
                 info = self.store.get_link_info(code)
             except ValueError as exc:
@@ -297,6 +396,7 @@ class UrlShortenerApp:
                     'code': code,
                     'short_url': self._short_url(base_url, code),
                     'url': normalized_url,
+                    'owner': info['owner'],
                     'clicks': info['clicks'],
                     'status': info['status'],
                     'expires_at': info['expires_at'],
@@ -308,8 +408,35 @@ class UrlShortenerApp:
         if request_path == '/shorten' and method in {'GET', 'PUT', 'DELETE'}:
             return self._response(405, {'error': 'method not allowed'}, {'Allow': 'POST'})
         if method == 'GET' and request_path == '/stats':
-            return self._response(200, self.store.stats())
+            auth = self._require_admin(headers)
+            if auth:
+                return auth
+            owner = query_params.get('owner')
+            try:
+                return self._response(200, self.store.stats(owner=owner))
+            except ValueError as exc:
+                return self._response(400, {'error': str(exc)})
+        if request_path.startswith('/owners/'):
+            auth = self._require_admin(headers)
+            if auth:
+                return auth
+            suffix = request_path.removeprefix('/owners/')
+            if not suffix.endswith('/links'):
+                return self._response(404, {'error': 'not found'})
+            owner = suffix[:-len('/links')].strip('/')
+            if not owner or '/' in owner:
+                return self._response(404, {'error': 'not found'})
+            try:
+                limit = query_params.get('limit', 50)
+                validated_owner = validate_owner(owner)
+                links = self.store.list_links(owner=validated_owner, limit=limit)
+                return self._response(200, {'owner': validated_owner, 'links': links, 'count': len(links)})
+            except ValueError as exc:
+                return self._response(400, {'error': str(exc)})
         if request_path.startswith('/links/'):
+            auth = self._require_admin(headers)
+            if auth:
+                return auth
             code = request_path.removeprefix('/links/').strip('/')
             if not code:
                 return self._response(404, {'error': 'not found'})
@@ -343,7 +470,8 @@ class UrlShortenerApp:
 
 class Handler(http.server.BaseHTTPRequestHandler):
     store = None
-    server_version = 'UrlShortener/1.3'
+    admin_key = None
+    server_version = 'UrlShortener/1.4'
 
     def _base_url(self):
         host = self.headers.get('Host') or f'{self.server.server_name}:{self.server.server_port}'
@@ -360,7 +488,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _dispatch(self, method):
         length = int(self.headers.get('Content-Length', '0'))
         body = self.rfile.read(length) if length else b''
-        app = UrlShortenerApp(self.store)
+        app = UrlShortenerApp(self.store, admin_key=self.admin_key)
         response = app.handle_request(
             method,
             self.path,
@@ -387,8 +515,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 class WsgiUrlShortenerApp:
-    def __init__(self, store):
-        self.app = UrlShortenerApp(store)
+    def __init__(self, store, admin_key=None):
+        self.app = UrlShortenerApp(store, admin_key=admin_key)
 
     def __call__(self, environ, start_response):
         body_length = environ.get('CONTENT_LENGTH') or '0'
@@ -403,9 +531,13 @@ class WsgiUrlShortenerApp:
         if port and ':' not in host and port not in {'80', '443'}:
             host = f'{host}:{port}'
         path = (environ.get('PATH_INFO') or '/') + (f"?{environ.get('QUERY_STRING')}" if environ.get('QUERY_STRING') else '')
+        headers = {}
+        if 'HTTP_X_ADMIN_KEY' in environ:
+            headers[ADMIN_KEY_HEADER] = environ['HTTP_X_ADMIN_KEY']
         response = self.app.handle_request(
             environ.get('REQUEST_METHOD', 'GET'),
             path,
+            headers=headers,
             body=body,
             base_url=f'{scheme}://{host}',
         )
@@ -420,23 +552,27 @@ def _http_status_phrase(status_code):
         201: 'Created',
         302: 'Found',
         400: 'Bad Request',
+        401: 'Unauthorized',
         404: 'Not Found',
         405: 'Method Not Allowed',
         410: 'Gone',
     }.get(status_code, 'OK')
 
 
-def build_wsgi_app(db_path='shortener.db'):
-    return WsgiUrlShortenerApp(Store(db_path))
+def build_wsgi_app(db_path='shortener.db', admin_key=None):
+    if admin_key is None:
+        admin_key = os.environ.get('SHORTENER_ADMIN_KEY')
+    return WsgiUrlShortenerApp(Store(db_path), admin_key=admin_key)
 
 
-def build_server(db_path, port=8000, host='127.0.0.1'):
+def build_server(db_path, port=8000, host='127.0.0.1', admin_key=None):
     Handler.store = Store(db_path)
+    Handler.admin_key = admin_key if admin_key is not None else os.environ.get('SHORTENER_ADMIN_KEY')
     return http.server.ThreadingHTTPServer((host, port), Handler)
 
 
-def serve(db_path, port=8000, host='127.0.0.1'):
-    server = build_server(db_path, port=port, host=host)
+def serve(db_path, port=8000, host='127.0.0.1', admin_key=None):
+    server = build_server(db_path, port=port, host=host, admin_key=admin_key)
     server.serve_forever()
 
 
@@ -445,8 +581,9 @@ def main(argv=None):
     parser.add_argument('--db', default='shortener.db')
     parser.add_argument('--port', type=int, default=8000)
     parser.add_argument('--host', default='127.0.0.1')
+    parser.add_argument('--admin-key', default=os.environ.get('SHORTENER_ADMIN_KEY'))
     args = parser.parse_args(argv)
-    serve(args.db, port=args.port, host=args.host)
+    serve(args.db, port=args.port, host=args.host, admin_key=args.admin_key)
 
 
 if __name__ == '__main__':
