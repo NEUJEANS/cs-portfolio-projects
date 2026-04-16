@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from typing import Iterable
+from pathlib import Path
+from typing import Any, Iterable
 
 
 @dataclass
@@ -271,6 +272,34 @@ def parse_operation(raw: str) -> tuple[str, list[str]]:
     return command, parts[1:]
 
 
+def load_trace(path: str | Path) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text())
+    if isinstance(payload, list):
+        operations = payload
+        trace = {}
+    elif isinstance(payload, dict):
+        operations = payload.get("operations", [])
+        trace = {
+            "capacity": payload.get("capacity"),
+            "strategy": payload.get("strategy"),
+            "alignment": payload.get("alignment"),
+            "timeline": payload.get("timeline"),
+            "timeline_width": payload.get("timeline_width"),
+            "operations": operations,
+        }
+    else:
+        raise ValueError("trace must be a JSON object or list")
+
+    if not isinstance(operations, list) or not all(isinstance(item, str) for item in operations):
+        raise ValueError("trace operations must be a list of strings")
+    trace["operations"] = operations
+    return trace
+
+
+def write_trace(path: str | Path, trace: dict[str, Any]) -> None:
+    Path(path).write_text(json.dumps(trace, indent=2) + "\n")
+
+
 def run_operations(
     allocator: MemoryAllocator,
     operations: Iterable[str],
@@ -307,17 +336,17 @@ def run_operations(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate contiguous memory allocation strategies.")
-    parser.add_argument("--capacity", type=int, required=True, help="Total capacity in bytes")
+    parser.add_argument("--capacity", type=int, help="Total capacity in bytes (or provide it in --trace-in)")
     parser.add_argument(
         "--strategy",
         choices=["first-fit", "best-fit", "worst-fit"],
-        default="first-fit",
-        help="Allocation strategy",
+        default=None,
+        help="Allocation strategy (default: first-fit)",
     )
     parser.add_argument(
         "--alignment",
         type=int,
-        default=1,
+        default=None,
         help="Round allocations up to this alignment quantum in bytes (default: 1)",
     )
     parser.add_argument(
@@ -327,6 +356,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Operation: alloc:ID:SIZE, free:ID, compact",
     )
     parser.add_argument(
+        "--trace-in",
+        help="Load a JSON trace file containing operations and optional default capacity/strategy/alignment/timeline settings",
+    )
+    parser.add_argument(
+        "--trace-out",
+        help="Write a replayable JSON trace file with the resolved configuration and operations",
+    )
+    parser.add_argument(
         "--timeline",
         action="store_true",
         help="Include per-step timeline snapshots and a Markdown timeline export",
@@ -334,7 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeline-width",
         type=int,
-        default=32,
+        default=None,
         help="Rendered timeline width in characters (default: 32)",
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
@@ -344,17 +381,41 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.timeline_width <= 0:
+
+    trace = load_trace(args.trace_in) if args.trace_in else {}
+    capacity = args.capacity if args.capacity is not None else trace.get("capacity")
+    strategy = args.strategy if args.strategy is not None else trace.get("strategy", "first-fit")
+    alignment = args.alignment if args.alignment is not None else trace.get("alignment", 1)
+    include_timeline = args.timeline or bool(trace.get("timeline"))
+    timeline_width = args.timeline_width if args.timeline_width is not None else trace.get("timeline_width", 32)
+    operations = [*trace.get("operations", []), *args.op]
+
+    if capacity is None:
+        parser.error("--capacity is required unless provided by --trace-in")
+    if timeline_width <= 0:
         parser.error("--timeline-width must be positive")
-    if args.alignment <= 0:
+    if alignment <= 0:
         parser.error("--alignment must be positive")
-    allocator = MemoryAllocator(capacity=args.capacity, strategy=args.strategy, alignment=args.alignment)
+
+    allocator = MemoryAllocator(capacity=capacity, strategy=strategy, alignment=alignment)
     result = run_operations(
         allocator,
-        args.op,
-        include_timeline=args.timeline,
-        timeline_width=args.timeline_width,
+        operations,
+        include_timeline=include_timeline,
+        timeline_width=timeline_width,
     )
+    if args.trace_out:
+        write_trace(
+            args.trace_out,
+            {
+                "capacity": capacity,
+                "strategy": strategy,
+                "alignment": alignment,
+                "timeline": include_timeline,
+                "timeline_width": timeline_width,
+                "operations": operations,
+            },
+        )
     if args.pretty:
         print(json.dumps(result, indent=2))
     else:

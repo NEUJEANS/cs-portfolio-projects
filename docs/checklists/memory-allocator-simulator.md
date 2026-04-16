@@ -11,3 +11,4 @@
 - [x] complete three review passes and fix issues
 - [x] add workload visualization and Markdown-ready timeline export
 - [x] add internal-fragmentation and alignment-aware simulation in a follow-up slice
+- [x] add replayable trace import/export for workload sharing and resume-friendly reruns

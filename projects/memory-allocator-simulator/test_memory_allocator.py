@@ -116,6 +116,75 @@ class MemoryAllocatorTests(unittest.TestCase):
         self.assertEqual(layout[0]["internal_fragmentation"], 1)
         self.assertEqual(layout[1]["allocation_id"], "B")
 
+
+    def test_load_trace_accepts_object_defaults(self):
+        trace_path = PROJECT_DIR / "test_trace.json"
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "capacity": 18,
+                    "strategy": "worst-fit",
+                    "alignment": 2,
+                    "timeline": True,
+                    "timeline_width": 18,
+                    "operations": ["alloc:A:5", "alloc:B:3", "free:A"],
+                }
+            )
+        )
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(PROJECT_DIR / "memory_allocator.py"),
+                    "--trace-in",
+                    str(trace_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            trace_path.unlink(missing_ok=True)
+
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["metrics"]["capacity"], 18)
+        self.assertEqual(payload["metrics"]["strategy"], "worst-fit")
+        self.assertEqual(payload["metrics"]["alignment"], 2)
+        self.assertEqual(payload["timeline"][-1]["render"], "......BBBB........")
+
+    def test_cli_trace_out_writes_replayable_bundle(self):
+        trace_path = PROJECT_DIR / "exported_trace.json"
+        try:
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(PROJECT_DIR / "memory_allocator.py"),
+                    "--capacity",
+                    "20",
+                    "--strategy",
+                    "best-fit",
+                    "--alignment",
+                    "4",
+                    "--op",
+                    "alloc:A:5",
+                    "--op",
+                    "alloc:B:6",
+                    "--trace-out",
+                    str(trace_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            trace_payload = json.loads(trace_path.read_text())
+        finally:
+            trace_path.unlink(missing_ok=True)
+
+        self.assertEqual(trace_payload["capacity"], 20)
+        self.assertEqual(trace_payload["strategy"], "best-fit")
+        self.assertEqual(trace_payload["alignment"], 4)
+        self.assertEqual(trace_payload["operations"], ["alloc:A:5", "alloc:B:6"])
+
     def test_cli_rejects_non_positive_timeline_width(self):
         result = subprocess.run(
             [

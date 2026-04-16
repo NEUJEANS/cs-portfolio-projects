@@ -17,6 +17,7 @@ A Python CLI that simulates contiguous memory allocation with **first-fit**, **b
 - inspect memory layout and metrics as JSON
 - export per-step workload timelines as ASCII snapshots plus Markdown-ready summaries
 - script repeatable workloads from the command line
+- import/export replayable JSON traces for demos, regression cases, and resume-friendly reruns
 
 ## Quick start
 ```bash
@@ -74,6 +75,32 @@ Use `--timeline` to capture a snapshot after every operation. The JSON payload i
 
 The ASCII render uses `.` for free space and the first alphanumeric character of each allocation ID for occupied bytes (scaled down automatically for larger capacities).
 
+## Replayable trace files
+Use `--trace-out PATH` to save the resolved configuration and operations as a replayable JSON bundle:
+
+```bash
+python3 memory_allocator.py \
+  --capacity 24 \
+  --strategy best-fit \
+  --alignment 4 \
+  --op alloc:A:5 \
+  --op alloc:B:6 \
+  --op free:A \
+  --trace-out traces/alignment-demo.json
+```
+
+Later, replay the same workload with `--trace-in`:
+
+```bash
+python3 memory_allocator.py --trace-in traces/alignment-demo.json --pretty
+```
+
+Trace files can be either:
+- a JSON object with `operations` plus optional defaults like `capacity`, `strategy`, `alignment`, `timeline`, and `timeline_width`
+- a bare JSON array of operation strings when you only want to preload the workload steps
+
+CLI `--op` flags are appended after imported trace operations, so you can resume a saved workload without editing the original file.
+
 ## Alignment mode
 Use `--alignment N` to round every allocation up to a multiple of `N` bytes.
 
@@ -101,6 +128,6 @@ python3 -m unittest projects/memory-allocator-simulator/test_memory_allocator.py
 ```
 
 ## Future improvements
-- workload trace import/export
 - terminal visualization of address-space evolution
 - page-size constraints and fixed-partition modes beyond simple alignment rounding
+- placement-policy comparison dashboards built from exported traces
