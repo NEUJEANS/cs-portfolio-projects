@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Interval tree point-query benchmark series</title>
+  <desc id="desc">Line chart comparing interval-tree and naive point-query timings as interval counts grow.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" rx="24" />
+  <text x="90" y="42" font-size="28" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Interval tree point-query benchmark series</text>
+  <text x="90" y="68" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="#475569">4 point workload sizes • avg speedup 6.42× over naive scan</text>
+  <rect x="90" y="90" width="830" height="360" fill="#ffffff" stroke="#cbd5e1" rx="18" />
+  <line x1="90" y1="90.0" x2="920" y2="90.0" stroke="#e2e8f0" stroke-width="1" /><text x="78" y="94.0" font-size="12" text-anchor="end" fill="#475569">0.0422 ms</text><line x1="90" y1="180.0" x2="920" y2="180.0" stroke="#e2e8f0" stroke-width="1" /><text x="78" y="184.0" font-size="12" text-anchor="end" fill="#475569">0.0323 ms</text><line x1="90" y1="270.0" x2="920" y2="270.0" stroke="#e2e8f0" stroke-width="1" /><text x="78" y="274.0" font-size="12" text-anchor="end" fill="#475569">0.0223 ms</text><line x1="90" y1="360.0" x2="920" y2="360.0" stroke="#e2e8f0" stroke-width="1" /><text x="78" y="364.0" font-size="12" text-anchor="end" fill="#475569">0.0123 ms</text><line x1="90" y1="450.0" x2="920" y2="450.0" stroke="#e2e8f0" stroke-width="1" /><text x="78" y="454.0" font-size="12" text-anchor="end" fill="#475569">0.0024 ms</text>
+  <line x1="90.0" y1="90" x2="90.0" y2="450" stroke="#f1f5f9" stroke-width="1" /><text x="90.0" y="474" font-size="12" text-anchor="middle" fill="#475569">100</text><line x1="366.7" y1="90" x2="366.7" y2="450" stroke="#f1f5f9" stroke-width="1" /><text x="366.7" y="474" font-size="12" text-anchor="middle" fill="#475569">250</text><line x1="643.3" y1="90" x2="643.3" y2="450" stroke="#f1f5f9" stroke-width="1" /><text x="643.3" y="474" font-size="12" text-anchor="middle" fill="#475569">500</text><line x1="920.0" y1="90" x2="920.0" y2="450" stroke="#f1f5f9" stroke-width="1" /><text x="920.0" y="474" font-size="12" text-anchor="middle" fill="#475569">1000</text>
+  <line x1="90" y1="450" x2="920" y2="450" stroke="#0f172a" stroke-width="1.5" />
+  <line x1="90" y1="90" x2="90" y2="450" stroke="#0f172a" stroke-width="1.5" />
+  <polyline fill="none" stroke="#dc2626" stroke-width="3" points="90.0,430.4 366.7,373.0 643.3,283.7 920.0,90.0" /><circle cx="90.0" cy="430.4" r="4.5" fill="#dc2626" /><circle cx="366.7" cy="373.0" r="4.5" fill="#dc2626" /><circle cx="643.3" cy="283.7" r="4.5" fill="#dc2626" /><circle cx="920.0" cy="90.0" r="4.5" fill="#dc2626" />
+  <polyline fill="none" stroke="#2563eb" stroke-width="3" points="90.0,450.0 366.7,448.0 643.3,445.5 920.0,440.8" /><circle cx="90.0" cy="450.0" r="4.5" fill="#2563eb" /><circle cx="366.7" cy="448.0" r="4.5" fill="#2563eb" /><circle cx="643.3" cy="445.5" r="4.5" fill="#2563eb" /><circle cx="920.0" cy="440.8" r="4.5" fill="#2563eb" />
+  <rect x="700" y="28" width="214" height="58" rx="12" fill="#ffffff" stroke="#cbd5e1" />
+  <line x1="720" y1="50" x2="760" y2="50" stroke="#2563eb" stroke-width="3" />
+  <circle cx="740" cy="50" r="4.5" fill="#2563eb" />
+  <text x="770" y="55" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="#0f172a">interval tree</text>
+  <line x1="720" y1="71" x2="760" y2="71" stroke="#dc2626" stroke-width="3" />
+  <circle cx="740" cy="71" r="4.5" fill="#dc2626" />
+  <text x="770" y="76" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="#0f172a">naive scan</text>
+  <text x="505.0" y="512" font-size="14" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" fill="#334155">interval count</text>
+  <text x="24" y="270.0" font-size="14" font-family="Helvetica, Arial, sans-serif" fill="#334155" transform="rotate(-90 24 270.0)">average query time (ms)</text>
+</svg>

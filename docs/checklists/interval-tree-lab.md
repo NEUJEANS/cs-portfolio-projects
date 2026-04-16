@@ -26,4 +26,20 @@
 - [x] Plot CSV benchmark output into a small chart artifact for README embedding
 - [x] Add an `explain` mode that narrates why branches were pruned for a single query
 - [ ] Add workloads that model schedule windows vs random intervals for more realistic comparisons
-- [ ] Add point-query benchmark mode so stabbing queries have the same portfolio evidence as overlap queries
+- [x] Add point-query benchmark mode so stabbing queries have the same portfolio evidence as overlap queries
+
+## Point-query benchmark slice (2026-04-16 03:11 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current interval-tree lab for the weakest unfinished benchmarking gap
+- [x] skip web research because point stabbing benchmarks are a direct extension of the existing overlap benchmark harness
+- [x] do a short Python CLI/benchmark self-check while planning the slice
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--mode overlap|point` support to benchmark and benchmark-series flows
+- [x] include query mode metadata plus point samples in JSON/CSV outputs for reproducible portfolio evidence
+- [x] extend automated coverage for point benchmark helpers, CLI output, and CSV parsing
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up

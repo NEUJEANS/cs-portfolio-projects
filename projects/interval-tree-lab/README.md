@@ -13,8 +13,8 @@ A portfolio-friendly interval tree lab that supports overlap queries and point s
 - balanced bulk build from sorted unique intervals for stable demos
 - incremental insert and deletion with `max_end` metadata refresh
 - find any overlap, find all overlaps, and point stabbing queries
-- reproducible synthetic benchmark that compares pruned interval-tree searches versus naive scans
-- benchmark-series command that scales workloads across multiple interval counts and can write JSON/CSV artifacts for portfolio evidence
+- reproducible synthetic benchmark that compares pruned interval-tree searches versus naive scans for both overlap and point-stabbing workloads
+- benchmark-series command that scales overlap or point workloads across multiple interval counts and can write JSON/CSV artifacts for portfolio evidence
 - benchmark-chart command that turns a checked-in CSV benchmark snapshot into a small SVG chart for README/portfolio embedding
 - per-query node-visit stats for making pruning behavior visible in JSON output
 - bundled `sample_intervals.json` artifact for quick inspection and demo data
@@ -68,10 +68,16 @@ Benchmark interval-tree pruning against a naive scan:
 python3 projects/interval-tree-lab/interval_tree_lab.py benchmark --intervals 800 --queries 400 --seed 11
 ```
 
-Generate a portfolio-ready benchmark series with JSON and CSV artifacts:
+Generate a portfolio-ready overlap benchmark series with JSON and CSV artifacts:
 
 ```bash
 python3 projects/interval-tree-lab/interval_tree_lab.py benchmark-series --interval-counts 100,250,500,1000 --queries 250 --output-json artifacts/interval-tree-benchmark-series.json --output-csv artifacts/interval-tree-benchmark-series.csv
+```
+
+Run the same benchmark harness in point-stabbing mode:
+
+```bash
+python3 projects/interval-tree-lab/interval_tree_lab.py benchmark --mode point --intervals 800 --queries 400 --seed 11
 ```
 
 Render a lightweight SVG chart from a benchmark-series CSV artifact:
@@ -102,7 +108,11 @@ python3 projects/interval-tree-lab/interval_tree_lab.py explain 7-18 0-3:warmup 
 
 ![Interval tree benchmark chart](../../docs/artifacts/interval-tree-benchmark-series.svg)
 
-The benchmark chart turns the checked-in CSV series into a simple SVG you can embed directly in a portfolio write-up without extra plotting dependencies.
+The overlap benchmark chart turns the checked-in CSV series into a simple SVG you can embed directly in a portfolio write-up without extra plotting dependencies.
+
+![Interval tree point benchmark chart](../../docs/artifacts/interval-tree-point-benchmark-series.svg)
+
+The point-query chart gives the same kind of portfolio evidence for stabbing workloads, which helps show that the augmentation helps more than one query shape.
 
 ![Interval tree trace example](../../docs/artifacts/interval-tree-trace-example.svg)
 
@@ -128,7 +138,8 @@ python3 scripts/audit_interval_tree_readme_commands.py
 - Each node stores the maximum `end` value in its subtree. During overlap search, if the left subtree's `max_end` is below the query start, that entire subtree can be skipped.
 - Bulk builds use median splitting on the sorted interval list to avoid obviously skewed demo trees.
 - Validation checks both BST ordering and `max_end` propagation so augmentation bugs are easy to catch.
-- The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan overlap results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
+- The benchmark uses a deterministic random seed, verifies interval-tree and naive-scan results match, and reports average node visits to make pruning effectiveness inspectable instead of hand-wavy.
+- The `benchmark` and `benchmark-series` commands support both interval-overlap and point-stabbing workloads through `--mode`, so you can show the same augmentation paying off in two query styles.
 - The `benchmark-series` command intentionally increments the seed per row so each interval count gets a reproducible but non-identical workload snapshot.
 - The `benchmark-chart` command can either render directly from a fresh benchmark run or reuse a checked-in CSV artifact, which keeps the portfolio evidence reproducible and lightweight.
 - The `trace` command still emits DOT inline in JSON output, but can now also write DOT/SVG/PNG artifacts to disk when you want concrete portfolio assets.

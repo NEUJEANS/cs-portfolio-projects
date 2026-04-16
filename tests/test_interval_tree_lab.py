@@ -17,8 +17,8 @@ spec.loader.exec_module(interval_tree_lab)
 
 Interval = interval_tree_lab.Interval
 IntervalTree = interval_tree_lab.IntervalTree
-benchmark_overlap_queries = interval_tree_lab.benchmark_overlap_queries
-benchmark_overlap_series = interval_tree_lab.benchmark_overlap_series
+benchmark_queries = interval_tree_lab.benchmark_queries
+benchmark_series = interval_tree_lab.benchmark_series
 parse_interval_spec = interval_tree_lab.parse_interval_spec
 render_benchmark_series_csv = interval_tree_lab.render_benchmark_series_csv
 parse_benchmark_series_csv = interval_tree_lab.parse_benchmark_series_csv
@@ -99,7 +99,7 @@ class IntervalTreeLabTests(unittest.TestCase):
             parse_interval_spec("9-4:broken")
 
     def test_benchmark_summary_reports_matching_results(self) -> None:
-        summary = benchmark_overlap_queries(
+        summary = benchmark_queries(
             interval_count=120,
             query_count=40,
             seed=11,
@@ -108,9 +108,28 @@ class IntervalTreeLabTests(unittest.TestCase):
             query_width_max=20,
         )
         self.assertTrue(summary["same_results"])
+        self.assertEqual(summary["query_mode"], "overlap")
         self.assertEqual(summary["interval_count"], 120)
         self.assertEqual(summary["query_count"], 40)
         self.assertIsNotNone(summary["sample_query"])
+        self.assertIsNone(summary["sample_point"])
+        self.assertEqual(summary["sample_tree_hits"], summary["sample_naive_hits"])
+        self.assertLessEqual(summary["average_visit_ratio"], 1.0)
+
+    def test_point_benchmark_summary_reports_matching_results(self) -> None:
+        summary = benchmark_queries(
+            interval_count=120,
+            query_count=40,
+            seed=17,
+            start_max=400,
+            width_max=15,
+            query_width_max=20,
+            query_mode="point",
+        )
+        self.assertTrue(summary["same_results"])
+        self.assertEqual(summary["query_mode"], "point")
+        self.assertIsNone(summary["sample_query"])
+        self.assertIsInstance(summary["sample_point"], int)
         self.assertEqual(summary["sample_tree_hits"], summary["sample_naive_hits"])
         self.assertLessEqual(summary["average_visit_ratio"], 1.0)
 
@@ -159,12 +178,39 @@ class IntervalTreeLabTests(unittest.TestCase):
         )
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["query_mode"], "overlap")
         self.assertTrue(payload["same_results"])
         self.assertEqual(payload["interval_count"], 150)
         self.assertEqual(payload["query_count"], 30)
         self.assertIn("tree_height", payload)
         self.assertNotIn("inorder", payload)
         self.assertLessEqual(payload["worst_nodes_visited"], payload["interval_count"])
+
+    def test_cli_point_benchmark_output(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "projects/interval-tree-lab/interval_tree_lab.py",
+                "benchmark",
+                "--intervals",
+                "150",
+                "--queries",
+                "30",
+                "--seed",
+                "5",
+                "--mode",
+                "point",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "benchmark")
+        self.assertEqual(payload["query_mode"], "point")
+        self.assertTrue(payload["same_results"])
+        self.assertIsNone(payload["sample_query"])
+        self.assertIsInstance(payload["sample_point"], int)
 
     def test_cli_benchmark_rejects_non_positive_counts(self) -> None:
         completed = subprocess.run(
@@ -182,7 +228,7 @@ class IntervalTreeLabTests(unittest.TestCase):
         self.assertIn("--intervals must be positive", completed.stderr)
 
     def test_benchmark_series_rows_stay_valid(self) -> None:
-        rows = benchmark_overlap_series(
+        rows = benchmark_series(
             interval_counts=[8, 16],
             query_count=6,
             seed=13,
@@ -190,6 +236,7 @@ class IntervalTreeLabTests(unittest.TestCase):
             width_max=5,
             query_width_max=6,
         )
+        self.assertEqual([row["query_mode"] for row in rows], ["overlap", "overlap"])
         self.assertEqual([row["interval_count"] for row in rows], [8, 16])
         self.assertEqual([row["seed"] for row in rows], [13, 14])
         self.assertTrue(all(row["same_results"] for row in rows))
@@ -199,6 +246,7 @@ class IntervalTreeLabTests(unittest.TestCase):
         csv_text = render_benchmark_series_csv(
             [
                 {
+                    "query_mode": "overlap",
                     "interval_count": 8,
                     "query_count": 6,
                     "seed": 13,
@@ -217,13 +265,14 @@ class IntervalTreeLabTests(unittest.TestCase):
         lines = csv_text.strip().splitlines()
         self.assertEqual(
             lines[0],
-            "interval_count,query_count,seed,tree_height,tree_average_ms,naive_average_ms,speedup_vs_naive,average_nodes_visited,worst_nodes_visited,average_visit_ratio,same_results,valid",
+            "query_mode,interval_count,query_count,seed,tree_height,tree_average_ms,naive_average_ms,speedup_vs_naive,average_nodes_visited,worst_nodes_visited,average_visit_ratio,same_results,valid",
         )
-        self.assertEqual(lines[1], "8,6,13,4,0.001,0.003,3.0,2.5,4,0.312,true,true")
+        self.assertEqual(lines[1], "overlap,8,6,13,4,0.001,0.003,3.0,2.5,4,0.312,true,true")
     def test_parse_benchmark_series_csv_round_trips_typed_rows(self) -> None:
         csv_text = render_benchmark_series_csv(
             [
                 {
+                    "query_mode": "overlap",
                     "interval_count": 8,
                     "query_count": 6,
                     "seed": 13,
@@ -240,6 +289,7 @@ class IntervalTreeLabTests(unittest.TestCase):
             ]
         )
         rows = parse_benchmark_series_csv(csv_text)
+        self.assertEqual(rows[0]["query_mode"], "overlap")
         self.assertEqual(rows[0]["interval_count"], 8)
         self.assertEqual(rows[0]["query_count"], 6)
         self.assertEqual(rows[0]["speedup_vs_naive"], 3.0)
@@ -249,6 +299,7 @@ class IntervalTreeLabTests(unittest.TestCase):
         svg = render_benchmark_series_svg(
             [
                 {
+                    "query_mode": "overlap",
                     "interval_count": 100,
                     "query_count": 40,
                     "seed": 11,
@@ -263,6 +314,7 @@ class IntervalTreeLabTests(unittest.TestCase):
                     "valid": True,
                 },
                 {
+                    "query_mode": "overlap",
                     "interval_count": 250,
                     "query_count": 40,
                     "seed": 12,

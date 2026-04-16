@@ -436,7 +436,7 @@ def generate_synthetic_intervals(
     return intervals
 
 
-def benchmark_overlap_queries(
+def benchmark_queries(
     *,
     interval_count: int,
     query_count: int,
@@ -444,7 +444,11 @@ def benchmark_overlap_queries(
     start_max: int,
     width_max: int,
     query_width_max: int,
+    query_mode: str = "overlap",
 ) -> dict[str, object]:
+    if query_mode not in {"overlap", "point"}:
+        raise ValueError("--mode must be overlap or point")
+
     intervals = generate_synthetic_intervals(
         count=interval_count,
         seed=seed,
@@ -452,6 +456,7 @@ def benchmark_overlap_queries(
         width_max=width_max,
     )
     tree = IntervalTree(intervals)
+    naive_intervals = tree.inorder()
     randomizer = random.Random(seed + 1)
 
     tree_elapsed_ns = 0
@@ -459,29 +464,39 @@ def benchmark_overlap_queries(
     total_nodes_visited = 0
     worst_nodes_visited = 0
     all_matched = True
-    sample_query: Interval | None = None
+    sample_probe: Interval | int | None = None
     sample_tree_hits: list[Interval] = []
     sample_naive_hits: list[Interval] = []
 
     for query_index in range(query_count):
-        query_start = randomizer.randint(0, start_max)
-        query_end = query_start + randomizer.randint(0, query_width_max)
-        query = Interval(query_start, query_end, f"query-{query_index}")
+        if query_mode == "point":
+            probe = randomizer.randint(0, start_max + width_max)
+            started = time.perf_counter_ns()
+            tree_hits, stats = tree.find_overlaps_with_stats(Interval(probe, probe, f"point-{query_index}"))
+            tree_elapsed_ns += time.perf_counter_ns() - started
 
-        started = time.perf_counter_ns()
-        tree_hits, stats = tree.find_overlaps_with_stats(query)
-        tree_elapsed_ns += time.perf_counter_ns() - started
+            started = time.perf_counter_ns()
+            naive_hits = [interval for interval in naive_intervals if interval.contains_point(probe)]
+            naive_elapsed_ns += time.perf_counter_ns() - started
+        else:
+            query_start = randomizer.randint(0, start_max)
+            query_end = query_start + randomizer.randint(0, query_width_max)
+            probe = Interval(query_start, query_end, f"query-{query_index}")
 
-        started = time.perf_counter_ns()
-        naive_hits = tree.naive_find_overlaps(query)
-        naive_elapsed_ns += time.perf_counter_ns() - started
+            started = time.perf_counter_ns()
+            tree_hits, stats = tree.find_overlaps_with_stats(probe)
+            tree_elapsed_ns += time.perf_counter_ns() - started
+
+            started = time.perf_counter_ns()
+            naive_hits = tree.naive_find_overlaps(probe)
+            naive_elapsed_ns += time.perf_counter_ns() - started
 
         total_nodes_visited += stats.nodes_visited
         worst_nodes_visited = max(worst_nodes_visited, stats.nodes_visited)
         if tree_hits != naive_hits:
             all_matched = False
-        if sample_query is None:
-            sample_query = query
+        if sample_probe is None:
+            sample_probe = probe
             sample_tree_hits = tree_hits
             sample_naive_hits = naive_hits
 
@@ -491,6 +506,7 @@ def benchmark_overlap_queries(
     valid, errors = tree.validate()
 
     return {
+        "query_mode": query_mode,
         "interval_count": tree.size,
         "query_count": query_count,
         "seed": seed,
@@ -509,7 +525,8 @@ def benchmark_overlap_queries(
         "worst_nodes_visited": worst_nodes_visited,
         "average_visit_ratio": None if tree.size == 0 else round(average_nodes_visited / tree.size, 3),
         "same_results": all_matched,
-        "sample_query": None if sample_query is None else sample_query.to_dict(),
+        "sample_query": sample_probe.to_dict() if isinstance(sample_probe, Interval) else None,
+        "sample_point": sample_probe if isinstance(sample_probe, int) else None,
         "sample_tree_hits": [interval.to_dict() for interval in sample_tree_hits],
         "sample_naive_hits": [interval.to_dict() for interval in sample_naive_hits],
     }
@@ -528,7 +545,7 @@ def validate_benchmark_args(*, intervals: int, queries: int, start_max: int, wid
         raise ValueError("--query-width-max must be non-negative")
 
 
-def benchmark_overlap_series(
+def benchmark_series(
     *,
     interval_counts: Sequence[int],
     query_count: int,
@@ -536,6 +553,7 @@ def benchmark_overlap_series(
     start_max: int,
     width_max: int,
     query_width_max: int,
+    query_mode: str = "overlap",
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for offset, interval_count in enumerate(interval_counts):
@@ -546,13 +564,14 @@ def benchmark_overlap_series(
             width_max=width_max,
             query_width_max=query_width_max,
         )
-        row = benchmark_overlap_queries(
+        row = benchmark_queries(
             interval_count=interval_count,
             query_count=query_count,
             seed=seed + offset,
             start_max=start_max,
             width_max=width_max,
             query_width_max=query_width_max,
+            query_mode=query_mode,
         )
         rows.append(row)
     return rows
@@ -560,6 +579,7 @@ def benchmark_overlap_series(
 
 def render_benchmark_series_csv(rows: Sequence[dict[str, object]]) -> str:
     headers = [
+        "query_mode",
         "interval_count",
         "query_count",
         "seed",
@@ -611,6 +631,8 @@ def render_benchmark_series_svg(rows: Sequence[dict[str, object]], *, title: str
     if not rows:
         raise ValueError("benchmark chart requires at least one row")
 
+    query_modes = {str(row.get("query_mode", "overlap")) for row in rows}
+    query_mode_label = query_modes.pop() if len(query_modes) == 1 else "mixed"
     interval_counts = [int(row["interval_count"]) for row in rows]
     tree_values = [float(row["tree_average_ms"]) for row in rows]
     naive_values = [float(row["naive_average_ms"]) for row in rows]
@@ -668,14 +690,14 @@ def render_benchmark_series_svg(rows: Sequence[dict[str, object]], *, title: str
         )
 
     subtitle = (
-        f"{len(rows)} workload sizes • avg speedup {sum(speedups)/len(speedups):.2f}× over naive scan"
+        f"{len(rows)} {query_mode_label} workload sizes • avg speedup {sum(speedups)/len(speedups):.2f}× over naive scan"
         if speedups else
-        f"{len(rows)} workload sizes"
+        f"{len(rows)} {query_mode_label} workload sizes"
     )
 
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">
   <title id="title">{xml_escape(title)}</title>
-  <desc id="desc">Line chart comparing interval-tree and naive overlap-query timings as interval counts grow.</desc>
+  <desc id="desc">Line chart comparing interval-tree and naive {xml_escape(query_mode_label)}-query timings as interval counts grow.</desc>
   <rect width="100%" height="100%" fill="#f8fafc" rx="24" />
   <text x="{left}" y="42" font-size="28" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">{xml_escape(title)}</text>
   <text x="{left}" y="68" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="#475569">{xml_escape(subtitle)}</text>
@@ -802,13 +824,14 @@ def command_benchmark(args: argparse.Namespace) -> dict[str, object]:
     )
     return {
         "command": "benchmark",
-        **benchmark_overlap_queries(
+        **benchmark_queries(
             interval_count=args.intervals,
             query_count=args.queries,
             seed=args.seed,
             start_max=args.start_max,
             width_max=args.width_max,
             query_width_max=args.query_width_max,
+            query_mode=args.mode,
         ),
     }
 
@@ -818,13 +841,14 @@ def command_benchmark_series(args: argparse.Namespace) -> dict[str, object]:
     if not interval_counts:
         raise ValueError("--interval-counts must include at least one positive integer")
 
-    rows = benchmark_overlap_series(
+    rows = benchmark_series(
         interval_counts=interval_counts,
         query_count=args.queries,
         seed=args.seed,
         start_max=args.start_max,
         width_max=args.width_max,
         query_width_max=args.query_width_max,
+        query_mode=args.mode,
     )
     payload: dict[str, object] = {
         "command": "benchmark-series",
@@ -834,6 +858,7 @@ def command_benchmark_series(args: argparse.Namespace) -> dict[str, object]:
         "start_max": args.start_max,
         "width_max": args.width_max,
         "query_width_max": args.query_width_max,
+        "query_mode": args.mode,
         "rows": rows,
     }
 
@@ -857,13 +882,14 @@ def command_benchmark_chart(args: argparse.Namespace) -> dict[str, object]:
         interval_counts = [int(part.strip()) for part in args.interval_counts.split(",") if part.strip()]
         if not interval_counts:
             raise ValueError("--interval-counts must include at least one positive integer")
-        rows = benchmark_overlap_series(
+        rows = benchmark_series(
             interval_counts=interval_counts,
             query_count=args.queries,
             seed=args.seed,
             start_max=args.start_max,
             width_max=args.width_max,
             query_width_max=args.query_width_max,
+            query_mode=args.mode,
         )
     artifact = write_benchmark_chart_from_rows(rows, output_path, title=args.title)
     return {
@@ -982,6 +1008,12 @@ def main() -> None:
     benchmark_parser.add_argument("--start-max", type=int, default=5000, help="max generated interval/query start")
     benchmark_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
     benchmark_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
+    benchmark_parser.add_argument(
+        "--mode",
+        choices=("overlap", "point"),
+        default="overlap",
+        help="benchmark overlap intervals or point stabbing queries (default: overlap)",
+    )
     benchmark_parser.set_defaults(handler=command_benchmark)
 
     benchmark_series_parser = subparsers.add_parser(
@@ -998,6 +1030,12 @@ def main() -> None:
     benchmark_series_parser.add_argument("--start-max", type=int, default=5000, help="max generated interval/query start")
     benchmark_series_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
     benchmark_series_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
+    benchmark_series_parser.add_argument(
+        "--mode",
+        choices=("overlap", "point"),
+        default="overlap",
+        help="benchmark overlap intervals or point stabbing queries across the series (default: overlap)",
+    )
     benchmark_series_parser.add_argument("--output-json", help="optional path to write the full JSON payload")
     benchmark_series_parser.add_argument("--output-csv", help="optional path to write a compact CSV summary")
     benchmark_series_parser.set_defaults(handler=command_benchmark_series)
@@ -1017,6 +1055,12 @@ def main() -> None:
     benchmark_chart_parser.add_argument("--start-max", type=int, default=5000, help="max generated interval/query start")
     benchmark_chart_parser.add_argument("--width-max", type=int, default=40, help="max generated interval width")
     benchmark_chart_parser.add_argument("--query-width-max", type=int, default=60, help="max generated query width")
+    benchmark_chart_parser.add_argument(
+        "--mode",
+        choices=("overlap", "point"),
+        default="overlap",
+        help="benchmark overlap intervals or point stabbing queries when generating fresh rows (default: overlap)",
+    )
     benchmark_chart_parser.add_argument("--title", default="Interval tree benchmark series", help="chart title")
     benchmark_chart_parser.add_argument("--output-svg", required=True, help="path to write the SVG chart artifact")
     benchmark_chart_parser.set_defaults(handler=command_benchmark_chart)
