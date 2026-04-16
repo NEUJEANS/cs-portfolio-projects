@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from mini_shell import get_repl_history_path, load_history, run_command
+from mini_shell import get_repl_history_limit, get_repl_history_path, load_history, run_command
 
 os.environ["MINI_SHELL_NAME"] = "portfolio-shell"
 
@@ -183,6 +183,43 @@ class MiniShellTests(unittest.TestCase):
             else:
                 os.environ["MINI_SHELL_HISTORY_FILE"] = original_value
 
+    def test_repl_history_limit_uses_env_override(self):
+        original_value = os.environ.get("MINI_SHELL_HISTORY_LIMIT")
+        os.environ["MINI_SHELL_HISTORY_LIMIT"] = "3"
+        try:
+            self.assertEqual(get_repl_history_limit(), 3)
+        finally:
+            if original_value is None:
+                os.environ.pop("MINI_SHELL_HISTORY_LIMIT", None)
+            else:
+                os.environ["MINI_SHELL_HISTORY_LIMIT"] = original_value
+
+    def test_repl_history_limit_rejects_negative_env_value(self):
+        original_value = os.environ.get("MINI_SHELL_HISTORY_LIMIT")
+        os.environ["MINI_SHELL_HISTORY_LIMIT"] = "-1"
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                get_repl_history_limit()
+            self.assertIn("non-negative integer", str(ctx.exception))
+        finally:
+            if original_value is None:
+                os.environ.pop("MINI_SHELL_HISTORY_LIMIT", None)
+            else:
+                os.environ["MINI_SHELL_HISTORY_LIMIT"] = original_value
+
+    def test_repl_history_limit_rejects_non_numeric_env_value(self):
+        original_value = os.environ.get("MINI_SHELL_HISTORY_LIMIT")
+        os.environ["MINI_SHELL_HISTORY_LIMIT"] = "many"
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                get_repl_history_limit()
+            self.assertIn("non-negative integer", str(ctx.exception))
+        finally:
+            if original_value is None:
+                os.environ.pop("MINI_SHELL_HISTORY_LIMIT", None)
+            else:
+                os.environ["MINI_SHELL_HISTORY_LIMIT"] = original_value
+
     def test_load_history_ignores_blank_lines(self):
         with tempfile.TemporaryDirectory() as tmp:
             history_path = os.path.join(tmp, "mini-shell-history.txt")
@@ -221,6 +258,48 @@ class MiniShellTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(load_history(history_path), ["echo alpha", "history"])
+
+    def test_history_limit_trims_memory_and_history_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "mini-shell-history.txt")
+            history = []
+            run_command("echo alpha", tmp, history, history_path=history_path, history_limit=2)
+            run_command("echo beta", tmp, history, history_path=history_path, history_limit=2)
+            run_command("echo gamma", tmp, history, history_path=history_path, history_limit=2)
+            self.assertEqual(history, ["echo beta", "echo gamma"])
+            self.assertEqual(load_history(history_path), ["echo beta", "echo gamma"])
+
+    def test_load_history_can_trim_existing_file_to_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "mini-shell-history.txt")
+            with open(history_path, "w", encoding="utf-8") as handle:
+                handle.write("echo alpha\necho beta\necho gamma\n")
+
+            loaded_history = load_history(history_path, history_limit=2, trim_file=True)
+            self.assertEqual(loaded_history, ["echo beta", "echo gamma"])
+            self.assertEqual(load_history(history_path), ["echo beta", "echo gamma"])
+
+    def test_zero_history_limit_disables_retention(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = os.path.join(tmp, "mini-shell-history.txt")
+            history = []
+
+            cwd, out = run_command(
+                "echo alpha",
+                tmp,
+                history,
+                history_path=history_path,
+                history_limit=0,
+            )
+            self.assertEqual(cwd, tmp)
+            self.assertEqual(out, "alpha")
+            self.assertEqual(history, [])
+            self.assertEqual(load_history(history_path), [])
+
+    def test_negative_history_limit_is_rejected_for_direct_calls(self):
+        with self.assertRaises(ValueError) as ctx:
+            run_command("echo alpha", "/tmp", [], history_limit=-1)
+        self.assertIn("history limit must be a non-negative integer", str(ctx.exception))
 
     def test_history_clear_empties_memory_and_history_file(self):
         with tempfile.TemporaryDirectory() as tmp:

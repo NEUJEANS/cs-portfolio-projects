@@ -96,28 +96,71 @@ def normalize_history_path(path: str) -> str:
     return os.path.abspath(os.path.expanduser(path))
 
 
-def load_history(history_path: Optional[str]) -> List[str]:
+def validate_history_limit(history_limit: Optional[int]) -> None:
+    if history_limit is not None and history_limit < 0:
+        raise ValueError("history limit must be a non-negative integer")
+
+
+def trim_history_entries(entries: List[str], history_limit: Optional[int]) -> List[str]:
+    validate_history_limit(history_limit)
+    if history_limit is None:
+        return list(entries)
+    if history_limit == 0:
+        return []
+    return list(entries[-history_limit:])
+
+
+def persist_history(history: List[str], history_path: str) -> None:
+    normalized_path = normalize_history_path(history_path)
+    os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
+    with open(normalized_path, "w", encoding="utf-8") as handle:
+        for entry in history:
+            handle.write(entry)
+            handle.write("\n")
+
+
+def load_history(
+    history_path: Optional[str],
+    history_limit: Optional[int] = None,
+    trim_file: bool = False,
+) -> List[str]:
+    validate_history_limit(history_limit)
     if not history_path:
         return []
 
     normalized_path = normalize_history_path(history_path)
     try:
         with open(normalized_path, encoding="utf-8") as handle:
-            return [line for line in handle.read().splitlines() if line]
+            entries = [line for line in handle.read().splitlines() if line]
     except FileNotFoundError:
         return []
 
+    trimmed_entries = trim_history_entries(entries, history_limit)
+    if trim_file and trimmed_entries != entries:
+        persist_history(trimmed_entries, normalized_path)
+    return trimmed_entries
 
-def append_history_entry(entry: str, history: List[str], history_path: Optional[str] = None) -> None:
-    history.append(entry)
+
+def append_history_entry(
+    entry: str,
+    history: List[str],
+    history_path: Optional[str] = None,
+    history_limit: Optional[int] = None,
+) -> None:
+    updated_history = trim_history_entries([*history, entry], history_limit)
+    history[:] = updated_history
     if not history_path:
         return
 
-    normalized_path = normalize_history_path(history_path)
-    os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
-    with open(normalized_path, "a", encoding="utf-8") as handle:
-        handle.write(entry)
-        handle.write("\n")
+    if history_limit is None:
+        normalized_path = normalize_history_path(history_path)
+        os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
+        with open(normalized_path, "a", encoding="utf-8") as handle:
+            handle.write(entry)
+            handle.write("\n")
+        return
+
+    persist_history(updated_history, history_path)
 
 
 def clear_history(history: List[str], history_path: Optional[str] = None) -> None:
@@ -125,10 +168,7 @@ def clear_history(history: List[str], history_path: Optional[str] = None) -> Non
     if not history_path:
         return
 
-    normalized_path = normalize_history_path(history_path)
-    os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
-    with open(normalized_path, "w", encoding="utf-8"):
-        pass
+    persist_history([], history_path)
 
 
 def get_repl_history_path() -> Optional[str]:
@@ -136,6 +176,20 @@ def get_repl_history_path() -> Optional[str]:
     if configured_path is None:
         return DEFAULT_HISTORY_FILE
     return configured_path or None
+
+
+def get_repl_history_limit() -> Optional[int]:
+    configured_limit = os.environ.get("MINI_SHELL_HISTORY_LIMIT")
+    if configured_limit in {None, ""}:
+        return None
+
+    try:
+        history_limit = int(configured_limit)
+    except ValueError as exc:
+        raise ValueError("MINI_SHELL_HISTORY_LIMIT must be a non-negative integer") from exc
+
+    validate_history_limit(history_limit)
+    return history_limit
 
 
 def write_redirected_output(path: str, append: bool, output: str, cwd: str) -> None:
@@ -320,6 +374,7 @@ def run_command(
     cwd: Optional[str] = None,
     history: Optional[List[str]] = None,
     history_path: Optional[str] = None,
+    history_limit: Optional[int] = None,
 ) -> Tuple[str, str]:
     current_cwd = cwd or os.getcwd()
     history_list = history if history is not None else []
@@ -328,7 +383,7 @@ def run_command(
         return current_cwd, ""
 
     expanded_command = expand_history(stripped, history_list)
-    append_history_entry(expanded_command, history_list, history_path)
+    append_history_entry(expanded_command, history_list, history_path, history_limit)
 
     specs = parse_command(expanded_command)
 
@@ -351,11 +406,12 @@ def run_command(
 def repl():
     cwd = os.getcwd()
     history_path = get_repl_history_path()
-    history = load_history(history_path)
+    history_limit = get_repl_history_limit()
+    history = load_history(history_path, history_limit=history_limit, trim_file=True)
     while True:
         try:
             command = input(f"{cwd}$ ")
-            cwd, output = run_command(command, cwd, history, history_path)
+            cwd, output = run_command(command, cwd, history, history_path, history_limit)
             if output:
                 print(output)
         except (FileNotFoundError, NotADirectoryError, RuntimeError, ValueError) as exc:

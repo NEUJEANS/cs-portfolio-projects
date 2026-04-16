@@ -1,6 +1,6 @@
 # Mini Shell Checklist
 
-Status: vertical slice 5 in progress
+Status: vertical slice 6 in progress
 Last updated: 2026-04-16
 
 ## Vertical slice 2
@@ -69,3 +69,20 @@ Last updated: 2026-04-16
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## 2026-04-16 history size limit slice
+- [x] re-check repo sync state before editing
+- [x] inspect `mini-shell` and confirm configurable history size limits are the next meaningful shell upgrade after persistent history
+- [x] do brief web research against the GNU Bash manual for `HISTSIZE` / `HISTFILESIZE`
+- [x] do a short Python list-trimming / file-rewrite refresh with a quick self-test
+- [x] add a configurable history size limit for REPL memory and persisted history retention
+- [x] support `MINI_SHELL_HISTORY_LIMIT`, including `0` to disable retention and load-time trimming for oversized history files
+- [x] keep the educational shell predictable by using one limit for both in-memory and file-backed history
+- [x] update README usage, feature list, notes, and future improvements
+- [x] expand automated tests for env parsing, startup trimming, zero-limit retention, and invalid direct-call limits
+- [x] run focused tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
