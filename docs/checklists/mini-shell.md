@@ -1,7 +1,7 @@
 # Mini Shell Checklist
 
-Status: vertical slice 2 in progress
-Last updated: 2026-04-14
+Status: vertical slice 3 in progress
+Last updated: 2026-04-16
 
 ## Vertical slice 2
 - [x] identify mini-shell as one of the weakest current projects
@@ -18,3 +18,20 @@ Last updated: 2026-04-14
 - [x] perform review pass 3 and fix issues
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
+
+## 2026-04-16 redirection slice
+- [x] re-check repo sync state before editing
+- [x] inspect `mini-shell` and confirm I/O redirection is the next meaningful unfinished shell feature
+- [x] skip external web research because the redirection slice is already well-scoped from the existing README/checklist
+- [x] do a short `shlex` / `subprocess` / file-handle refresh with a quick self-test
+- [x] support input redirection with `<` for standalone external commands and pipeline entrypoints
+- [x] support output redirection with `>` / `>>` for standalone commands and pipeline final output
+- [x] validate unsupported redirection layouts clearly for pipeline middle stages and builtin stdin
+- [x] update README usage, feature list, and future improvements
+- [x] expand automated tests for redirect parsing, append mode, builtin output redirect, and pipeline edge redirects
+- [x] run focused tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
