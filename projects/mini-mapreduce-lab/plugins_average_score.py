@@ -58,3 +58,28 @@ def benchmark_records(scenario, records, seed, dataset_family="default"):
             return [f"{rng.choice(hot_students)},{68 + rng.randint(0, 28)}" for _ in range(records)]
 
     raise ValueError(f"unsupported plugin benchmark scenario/family: {scenario}/{dataset_family}")
+
+
+def benchmark_notes(scenario, dataset_family="default"):
+    """Describe the intended hot keys for each synthetic benchmark family."""
+    notes = {
+        ("balanced", "default"): [
+            "The default balanced cohort rotates evenly across team labels, so average-score aggregation stays spread out and mostly tests framework overhead rather than hot students.",
+        ],
+        ("skewed", "default"): [
+            "`capstone-core` is the dominant student key here, so the hottest reducer should look like one heavy project lead soaking up repeated score updates.",
+        ],
+        ("balanced", "exam-cram"): [
+            "Balanced exam-cram fixtures distribute scores across study groups, which makes them a clean baseline before simulating deadline pressure.",
+        ],
+        ("skewed", "exam-cram"): [
+            "`midterm-sprint` is intentionally overrepresented, so the report should surface one study cohort as the obvious hotspot during cram-week traffic.",
+        ],
+        ("balanced", "project-week"): [
+            "Balanced project-week fixtures rotate across studio squads so reducer load stays close even though the labels feel more portfolio-realistic than generic teams.",
+        ],
+        ("skewed", "project-week"): [
+            "`demo-day-core` is the main hotspot here, with integration and feature tails behind it, so you can narrate the skew as a deadline-driven project crunch.",
+        ],
+    }
+    return notes.get((scenario, dataset_family), [])

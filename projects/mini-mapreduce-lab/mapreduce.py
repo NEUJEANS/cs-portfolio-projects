@@ -30,6 +30,7 @@ KeyValue = tuple[str, JSONValue]
 Mapper = Callable[[Iterable[str]], Iterator[KeyValue]]
 Reducer = Callable[[str, list[JSONValue]], JSONValue]
 BenchmarkGenerator = Callable[..., list[str]]
+BenchmarkNoteHook = Callable[..., list[str] | tuple[str, ...] | None]
 
 
 PLUGIN_INSPECTION_FIELDNAMES = [
@@ -65,6 +66,13 @@ PLUGIN_INSPECTION_FIELDNAMES = [
     "benchmark_generator_source_anchor",
     "benchmark_generator_source_url",
     "benchmark_generator_source_commit_url",
+    "benchmark_note_hook",
+    "benchmark_note_hook_signature",
+    "benchmark_note_hook_doc_summary",
+    "benchmark_note_hook_source_line",
+    "benchmark_note_hook_source_anchor",
+    "benchmark_note_hook_source_url",
+    "benchmark_note_hook_source_commit_url",
     "available_dataset_families",
 ]
 
@@ -105,6 +113,14 @@ PLUGIN_INSPECTION_DIFF_FIELDS = [
     "benchmark_generator_source_url",
     "benchmark_generator_source_commit_url",
     "benchmark_generator_source_excerpt",
+    "benchmark_note_hook",
+    "benchmark_note_hook_signature",
+    "benchmark_note_hook_doc_summary",
+    "benchmark_note_hook_source_line",
+    "benchmark_note_hook_source_anchor",
+    "benchmark_note_hook_source_url",
+    "benchmark_note_hook_source_commit_url",
+    "benchmark_note_hook_source_excerpt",
     "available_dataset_families",
 ]
 
@@ -147,6 +163,14 @@ class PluginInspection:
     benchmark_generator_source_url: str | None
     benchmark_generator_source_commit_url: str | None
     benchmark_generator_source_excerpt: str | None
+    benchmark_note_hook: str | None
+    benchmark_note_hook_signature: str | None
+    benchmark_note_hook_doc_summary: str | None
+    benchmark_note_hook_source_line: int | None
+    benchmark_note_hook_source_anchor: str | None
+    benchmark_note_hook_source_url: str | None
+    benchmark_note_hook_source_commit_url: str | None
+    benchmark_note_hook_source_excerpt: str | None
     available_dataset_families: list[str] | None
 
     def as_dict(self) -> dict[str, object]:
@@ -187,6 +211,14 @@ class PluginInspection:
             "benchmark_generator_source_url": self.benchmark_generator_source_url,
             "benchmark_generator_source_commit_url": self.benchmark_generator_source_commit_url,
             "benchmark_generator_source_excerpt": self.benchmark_generator_source_excerpt,
+            "benchmark_note_hook": self.benchmark_note_hook,
+            "benchmark_note_hook_signature": self.benchmark_note_hook_signature,
+            "benchmark_note_hook_doc_summary": self.benchmark_note_hook_doc_summary,
+            "benchmark_note_hook_source_line": self.benchmark_note_hook_source_line,
+            "benchmark_note_hook_source_anchor": self.benchmark_note_hook_source_anchor,
+            "benchmark_note_hook_source_url": self.benchmark_note_hook_source_url,
+            "benchmark_note_hook_source_commit_url": self.benchmark_note_hook_source_commit_url,
+            "benchmark_note_hook_source_excerpt": self.benchmark_note_hook_source_excerpt,
             "available_dataset_families": self.available_dataset_families,
         }
 
@@ -261,8 +293,8 @@ class PluginInspectionBatch:
             "",
             "## Plugin summary",
             "",
-            "| Name | Plugin | Commit | Summary | Mapper | Reducer | Combiner | Benchmark generator | Dataset families |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| Name | Plugin | Commit | Summary | Mapper | Reducer | Combiner | Benchmark generator | Benchmark note hook | Dataset families |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ])
         for plugin in self.plugins:
             dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
@@ -320,9 +352,24 @@ class PluginInspectionBatch:
                 if plugin.benchmark_generator_doc_summary:
                     benchmark_meta.append(plugin.benchmark_generator_doc_summary)
                 benchmark_cell = f"`{benchmark_name}`<br><small>{'<br>'.join(benchmark_meta)}</small>"
+            benchmark_note_name = plugin.benchmark_note_hook or '-'
+            benchmark_note_cell = "-"
+            if plugin.benchmark_note_hook:
+                benchmark_note_meta = [f"`{plugin.benchmark_note_hook_signature or '-'}`"]
+                if plugin.benchmark_note_hook_source_line is not None:
+                    benchmark_note_meta.append(f"line {plugin.benchmark_note_hook_source_line}")
+                if plugin.benchmark_note_hook_source_anchor:
+                    benchmark_note_meta.append(plugin.benchmark_note_hook_source_anchor)
+                if plugin.benchmark_note_hook_source_url:
+                    benchmark_note_meta.append(f"[github]({plugin.benchmark_note_hook_source_url})")
+                if plugin.benchmark_note_hook_source_commit_url:
+                    benchmark_note_meta.append(f"[commit]({plugin.benchmark_note_hook_source_commit_url})")
+                if plugin.benchmark_note_hook_doc_summary:
+                    benchmark_note_meta.append(plugin.benchmark_note_hook_doc_summary)
+                benchmark_note_cell = f"`{benchmark_note_name}`<br><small>{'<br>'.join(benchmark_note_meta)}</small>"
             commit_cell = f"`{plugin.plugin_repo_commit[:12]}`" if plugin.plugin_repo_commit else "-"
             lines.append(
-                f"| `{plugin.name}` | `{plugin.plugin}` | {commit_cell} | {plugin.module_doc_summary or '-'} | {mapper_cell} | {reducer_cell} | {combiner_cell} | {benchmark_cell} | `{dataset_families}` |"
+                f"| `{plugin.name}` | `{plugin.plugin}` | {commit_cell} | {plugin.module_doc_summary or '-'} | {mapper_cell} | {reducer_cell} | {combiner_cell} | {benchmark_cell} | {benchmark_note_cell} | `{dataset_families}` |"
             )
         lines.extend(["", "## Hook source excerpts", ""])
         for plugin in self.plugins:
@@ -335,6 +382,7 @@ class PluginInspectionBatch:
                 ("Reducer", plugin.reducer, plugin.reducer_source_anchor, plugin.reducer_source_url, plugin.reducer_source_commit_url, plugin.reducer_source_excerpt),
                 ("Combiner", plugin.combiner, plugin.combiner_source_anchor, plugin.combiner_source_url, plugin.combiner_source_commit_url, plugin.combiner_source_excerpt),
                 ("Benchmark generator", plugin.benchmark_generator, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_url, plugin.benchmark_generator_source_commit_url, plugin.benchmark_generator_source_excerpt),
+                ("Benchmark note hook", plugin.benchmark_note_hook, plugin.benchmark_note_hook_source_anchor, plugin.benchmark_note_hook_source_url, plugin.benchmark_note_hook_source_commit_url, plugin.benchmark_note_hook_source_excerpt),
             ]
             for label, hook_name, source_anchor, source_url, source_commit_url, excerpt in hook_sections:
                 if not hook_name or not excerpt:
@@ -394,6 +442,7 @@ class PluginInspectionBatch:
                 f"<td>{_render_hook_html(plugin.reducer, plugin.reducer_signature, plugin.reducer_doc_summary, plugin.reducer_source_line, plugin.reducer_source_anchor, plugin.reducer_source_url, plugin.reducer_source_commit_url)}</td>"
                 f"<td>{_render_hook_html(plugin.combiner, plugin.combiner_signature, plugin.combiner_doc_summary, plugin.combiner_source_line, plugin.combiner_source_anchor, plugin.combiner_source_url, plugin.combiner_source_commit_url)}</td>"
                 f"<td>{_render_hook_html(plugin.benchmark_generator, plugin.benchmark_generator_signature, plugin.benchmark_generator_doc_summary, plugin.benchmark_generator_source_line, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_url, plugin.benchmark_generator_source_commit_url)}</td>"
+                f"<td>{_render_hook_html(plugin.benchmark_note_hook, plugin.benchmark_note_hook_signature, plugin.benchmark_note_hook_doc_summary, plugin.benchmark_note_hook_source_line, plugin.benchmark_note_hook_source_anchor, plugin.benchmark_note_hook_source_url, plugin.benchmark_note_hook_source_commit_url)}</td>"
                 f"<td><code>{esc(dataset_families)}</code></td>"
                 "</tr>"
             )
@@ -406,6 +455,7 @@ class PluginInspectionBatch:
                 ("Reducer", plugin.reducer, plugin.reducer_source_anchor, plugin.reducer_source_url, plugin.reducer_source_commit_url, plugin.reducer_source_excerpt),
                 ("Combiner", plugin.combiner, plugin.combiner_source_anchor, plugin.combiner_source_url, plugin.combiner_source_commit_url, plugin.combiner_source_excerpt),
                 ("Benchmark generator", plugin.benchmark_generator, plugin.benchmark_generator_source_anchor, plugin.benchmark_generator_source_url, plugin.benchmark_generator_source_commit_url, plugin.benchmark_generator_source_excerpt),
+                ("Benchmark note hook", plugin.benchmark_note_hook, plugin.benchmark_note_hook_source_anchor, plugin.benchmark_note_hook_source_url, plugin.benchmark_note_hook_source_commit_url, plugin.benchmark_note_hook_source_excerpt),
             ]:
                 if not hook_name or not excerpt:
                     continue
@@ -489,7 +539,7 @@ class PluginInspectionBatch:
   <section>
     <h2>Plugin summary</h2>
     <table>
-      <thead><tr><th>Name</th><th>Plugin</th><th>Commit</th><th>Summary</th><th>Mapper</th><th>Reducer</th><th>Combiner</th><th>Benchmark generator</th><th>Dataset families</th></tr></thead>
+      <thead><tr><th>Name</th><th>Plugin</th><th>Commit</th><th>Summary</th><th>Mapper</th><th>Reducer</th><th>Combiner</th><th>Benchmark generator</th><th>Benchmark note hook</th><th>Dataset families</th></tr></thead>
       <tbody>{''.join(plugin_rows)}</tbody>
     </table>
   </section>
@@ -506,7 +556,7 @@ def plugin_anchor_id(plugin: PluginInspection) -> str:
 
 
 def plugin_catalog_badges(plugin: PluginInspection) -> list[str]:
-    hook_count = 2 + int(bool(plugin.combiner)) + int(bool(plugin.benchmark_generator))
+    hook_count = 2 + int(bool(plugin.combiner)) + int(bool(plugin.benchmark_generator)) + int(bool(plugin.benchmark_note_hook))
     badges = [f"{hook_count} hooks"]
     if plugin.available_dataset_families:
         badges.append(f"{len(plugin.available_dataset_families)} dataset families")
@@ -608,6 +658,7 @@ class BenchmarkResult:
     plugin_reducer: str | None = None
     plugin_combiner: str | None = None
     plugin_benchmark_generator: str | None = None
+    plugin_benchmark_note_hook: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(
@@ -629,6 +680,7 @@ class BenchmarkResult:
                 "plugin_reducer": self.plugin_reducer,
                 "plugin_combiner": self.plugin_combiner,
                 "plugin_benchmark_generator": self.plugin_benchmark_generator,
+                "plugin_benchmark_note_hook": self.plugin_benchmark_note_hook,
             },
             indent=2,
             sort_keys=True,
@@ -645,6 +697,7 @@ class BenchmarkResult:
             "plugin_reducer",
             "plugin_combiner",
             "plugin_benchmark_generator",
+            "plugin_benchmark_note_hook",
             "seed",
             "total_records",
             "shard_size",
@@ -668,6 +721,7 @@ class BenchmarkResult:
                 "plugin_reducer": self.plugin_reducer,
                 "plugin_combiner": self.plugin_combiner,
                 "plugin_benchmark_generator": self.plugin_benchmark_generator,
+                "plugin_benchmark_note_hook": self.plugin_benchmark_note_hook,
                 "seed": self.seed,
                 "total_records": self.total_records,
                 "shard_size": self.shard_size,
@@ -997,6 +1051,7 @@ class PluginJob:
     reducer: Reducer
     path: Path
     benchmark_generator: BenchmarkGenerator | None = None
+    benchmark_note_hook: BenchmarkNoteHook | None = None
     dataset_families: list[str] | None = None
 
 
@@ -1068,30 +1123,61 @@ BUILTIN_JOB_BENCHMARK_NOTES: dict[tuple[str, str, str], list[str]] = {
 }
 
 
-def benchmark_notes_for(job: str, scenario: str, dataset_family: str, plugin: PluginJob | None = None) -> list[str]:
+def call_benchmark_note_hook(
+    hook: BenchmarkNoteHook,
+    *,
+    scenario: str,
+    dataset_family: str,
+    records: int,
+    seed: int,
+) -> list[str]:
+    signature = inspect.signature(hook)
+    positional_params = [
+        parameter
+        for parameter in signature.parameters.values()
+        if parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    has_varargs = any(parameter.kind == inspect.Parameter.VAR_POSITIONAL for parameter in signature.parameters.values())
+    if not positional_params and not has_varargs:
+        raise ValueError("plugin benchmark_notes must accept at least a scenario parameter")
+    if not has_varargs and len(positional_params) > 4:
+        raise ValueError("plugin benchmark_notes supports at most 4 positional parameters")
+    required_keyword_only = [
+        parameter.name
+        for parameter in signature.parameters.values()
+        if parameter.kind == inspect.Parameter.KEYWORD_ONLY and parameter.default is inspect._empty
+    ]
+    if required_keyword_only:
+        raise ValueError("plugin benchmark_notes cannot require keyword-only parameters")
+    args = [scenario, dataset_family, records, seed]
+    note_values = hook(*args if has_varargs else args[: len(positional_params)])
+    if note_values is None:
+        return []
+    if not isinstance(note_values, (list, tuple)) or not all(isinstance(item, str) and item.strip() for item in note_values):
+        raise ValueError("plugin benchmark_notes must return a list/tuple of non-empty strings")
+    return [item.strip() for item in note_values]
+
+
+def benchmark_notes_for(
+    job: str,
+    scenario: str,
+    dataset_family: str,
+    *,
+    records: int,
+    seed: int,
+    plugin: PluginJob | None = None,
+) -> list[str]:
     notes = list(BUILTIN_JOB_BENCHMARK_NOTES.get((job, scenario, dataset_family), []))
-    if job == "plugin" and plugin is not None and plugin.name == "plugin-average-score":
-        plugin_notes = {
-            ("balanced", "default"): [
-                "The default balanced cohort rotates evenly across team labels, so average-score aggregation stays spread out and mostly tests framework overhead rather than hot students.",
-            ],
-            ("skewed", "default"): [
-                "`capstone-core` is the dominant student key here, so the hottest reducer should look like one heavy project lead soaking up repeated score updates.",
-            ],
-            ("balanced", "exam-cram"): [
-                "Balanced exam-cram fixtures distribute scores across study groups, which makes them a clean baseline before simulating deadline pressure.",
-            ],
-            ("skewed", "exam-cram"): [
-                "`midterm-sprint` is intentionally overrepresented, so the report should surface one study cohort as the obvious hotspot during cram-week traffic.",
-            ],
-            ("balanced", "project-week"): [
-                "Balanced project-week fixtures rotate across studio squads so reducer load stays close even though the labels feel more portfolio-realistic than generic teams.",
-            ],
-            ("skewed", "project-week"): [
-                "`demo-day-core` is the main hotspot here, with integration and feature tails behind it, so you can narrate the skew as a deadline-driven project crunch.",
-            ],
-        }
-        notes.extend(plugin_notes.get((scenario, dataset_family), []))
+    if job == "plugin" and plugin is not None and plugin.benchmark_note_hook is not None:
+        notes.extend(
+            call_benchmark_note_hook(
+                plugin.benchmark_note_hook,
+                scenario=scenario,
+                dataset_family=dataset_family,
+                records=records,
+                seed=seed,
+            )
+        )
     return notes
 
 
@@ -1153,6 +1239,7 @@ def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> Pl
     reducer = getattr(module, "reduce_key", None)
     name = getattr(module, "JOB_NAME", fallback_name)
     benchmark_generator = getattr(module, "benchmark_records", None)
+    benchmark_note_hook = getattr(module, "benchmark_notes", None)
     dataset_families = normalize_dataset_families(getattr(module, "BENCHMARK_DATASET_FAMILIES", None))
     if not callable(mapper):
         raise ValueError("plugin must define callable map_records(lines)")
@@ -1162,6 +1249,8 @@ def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> Pl
         raise ValueError("plugin must define callable reduce_key(key, values)")
     if benchmark_generator is not None and not callable(benchmark_generator):
         raise ValueError("plugin benchmark_records must be callable when provided")
+    if benchmark_note_hook is not None and not callable(benchmark_note_hook):
+        raise ValueError("plugin benchmark_notes must be callable when provided")
     return PluginJob(
         name=str(name),
         mapper=mapper,
@@ -1169,6 +1258,7 @@ def build_plugin_job(module: ModuleType, origin: Path, fallback_name: str) -> Pl
         reducer=reducer,
         path=origin,
         benchmark_generator=benchmark_generator,
+        benchmark_note_hook=benchmark_note_hook,
         dataset_families=dataset_families,
     )
 
@@ -1388,6 +1478,14 @@ def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
         benchmark_generator_source_url=_callable_source_url(plugin.benchmark_generator, ref="BRANCH"),
         benchmark_generator_source_commit_url=_callable_source_url(plugin.benchmark_generator, ref=plugin_repo_commit or "HEAD"),
         benchmark_generator_source_excerpt=_callable_source_excerpt(plugin.benchmark_generator),
+        benchmark_note_hook=_callable_name(plugin.benchmark_note_hook),
+        benchmark_note_hook_signature=_callable_signature(plugin.benchmark_note_hook),
+        benchmark_note_hook_doc_summary=_doc_summary(plugin.benchmark_note_hook),
+        benchmark_note_hook_source_line=_callable_source_line(plugin.benchmark_note_hook),
+        benchmark_note_hook_source_anchor=_callable_source_anchor(plugin.benchmark_note_hook),
+        benchmark_note_hook_source_url=_callable_source_url(plugin.benchmark_note_hook, ref="BRANCH"),
+        benchmark_note_hook_source_commit_url=_callable_source_url(plugin.benchmark_note_hook, ref=plugin_repo_commit or "HEAD"),
+        benchmark_note_hook_source_excerpt=_callable_source_excerpt(plugin.benchmark_note_hook),
         available_dataset_families=list(plugin.dataset_families) if plugin.dataset_families else None,
     )
 
@@ -1777,11 +1875,12 @@ def benchmark_job(
             if benchmark_plugin and benchmark_plugin.dataset_families
             else (["default", "news", "logs"] if job == "wordcount" else (["default", "incidents", "deployments"] if job == "json-group-count" else None))
         ),
-        benchmark_notes=benchmark_notes_for(job, scenario, dataset_family, plugin=benchmark_plugin),
+        benchmark_notes=benchmark_notes_for(job, scenario, dataset_family, records=records, seed=seed, plugin=benchmark_plugin),
         plugin_mapper=inspection.mapper if inspection else None,
         plugin_reducer=inspection.reducer if inspection else None,
         plugin_combiner=inspection.combiner if inspection else None,
         plugin_benchmark_generator=inspection.benchmark_generator if inspection else None,
+        plugin_benchmark_note_hook=inspection.benchmark_note_hook if inspection else None,
         scenario=scenario,
         dataset_family=dataset_family,
         seed=seed,

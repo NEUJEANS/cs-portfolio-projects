@@ -365,4 +365,17 @@
 - [x] add dataset-specific benchmark notes to JSON, Markdown, and HTML benchmark artifacts for built-in families plus the bundled average-score plugin
 - [x] extend project-level and repo-level tests for the richer benchmark report output
 - [x] run targeted tests and 3 review passes
-- [ ] consider plugin-defined benchmark note hooks for third-party generators in a future run
+- [x] consider plugin-defined benchmark note hooks for third-party generators in a future run
+
+## Plugin benchmark note hook slice (2026-04-16 09:21 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up is already explicitly scoped in the local README/checklist
+- [x] do a short Python callable-signature refresh and self-test for optional plugin benchmark note hooks
+- [x] update checklist/docs so the slice is resumable
+- [x] add a plugin-defined benchmark note hook so third-party generators can describe hotspot narratives without touching the core runner
+- [x] surface the new note hook in plugin inspection/catalog metadata and docs
+- [x] extend project-level and repo-level tests for the richer plugin benchmark note flow
+- [x] run targeted tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up

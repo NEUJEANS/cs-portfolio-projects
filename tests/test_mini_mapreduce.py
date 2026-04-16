@@ -337,6 +337,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.plugin_reducer, "plugins_average_score.reduce_key")
         self.assertEqual(result.plugin_combiner, "plugins_average_score.combine_values")
         self.assertEqual(result.plugin_benchmark_generator, "plugins_average_score.benchmark_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_average_score.benchmark_notes")
         payload = json.loads(result.to_json())
         self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
         self.assertIn("studio squads", " ".join(payload["benchmark_notes"]))
@@ -344,8 +345,9 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(payload["plugin_reducer"], "plugins_average_score.reduce_key")
         self.assertEqual(payload["plugin_combiner"], "plugins_average_score.combine_values")
         self.assertEqual(payload["plugin_benchmark_generator"], "plugins_average_score.benchmark_records")
+        self.assertEqual(payload["plugin_benchmark_note_hook"], "plugins_average_score.benchmark_notes")
         csv_rows = result.to_csv().strip().splitlines()
-        self.assertIn('"default,exam-cram,project-week",plugins_average_score.map_records,plugins_average_score.reduce_key,plugins_average_score.combine_values,plugins_average_score.benchmark_records', csv_rows[1])
+        self.assertIn('"default,exam-cram,project-week",plugins_average_score.map_records,plugins_average_score.reduce_key,plugins_average_score.combine_values,plugins_average_score.benchmark_records,plugins_average_score.benchmark_notes', csv_rows[1])
         report = result.to_markdown()
         html_report = result.to_html()
         self.assertIn("- Available dataset families: `default, exam-cram, project-week`", report)
@@ -388,13 +390,68 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "exactly records lines"):
                 benchmark_job("plugin", "balanced", records=3, shard_size=1, reducers=[1], plugin_path=plugin)
 
+    def test_plugin_benchmark_supports_plugin_defined_note_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plugin = Path(tmpdir) / "custom_notes.py"
+            plugin.write_text(
+                "JOB_NAME = 'custom-notes'\n"
+                "BENCHMARK_DATASET_FAMILIES = ['default', 'lab']\n"
+                "def map_records(lines):\n"
+                "    for line in lines:\n"
+                "        key, value = line.strip().split(',')\n"
+                "        yield key, int(value)\n"
+                "def reduce_key(key, values):\n"
+                "    return sum(values)\n"
+                "def benchmark_records(scenario, records, seed, dataset_family='default'):\n"
+                "    hot = 'office-hours' if dataset_family == 'lab' else 'recitation'\n"
+                "    return [f\"{hot if index % 3 else 'quiz'},1\" for index in range(records)]\n"
+                "def benchmark_notes(scenario, dataset_family, records, seed):\n"
+                "    return [f\"{dataset_family}:{scenario}:{records}:{seed}: hotspot=office-hours\"]\n",
+                encoding="utf-8",
+            )
+
+            result = benchmark_job(
+                "plugin",
+                "skewed",
+                records=9,
+                shard_size=3,
+                reducers=[1],
+                seed=7,
+                plugin_path=plugin,
+                dataset_family="lab",
+            )
+
+            self.assertEqual(result.plugin_benchmark_note_hook, "custom_notes.benchmark_notes")
+            self.assertIn("lab:skewed:9:7: hotspot=office-hours", result.benchmark_notes)
+
+    def test_plugin_benchmark_rejects_invalid_note_hook_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plugin = Path(tmpdir) / "bad_notes.py"
+            plugin.write_text(
+                "JOB_NAME = 'bad-notes'\n"
+                "def map_records(lines):\n"
+                "    for line in lines:\n"
+                "        if line.strip():\n"
+                "            yield 'x', 1\n"
+                "def reduce_key(key, values):\n"
+                "    return sum(values)\n"
+                "def benchmark_records(scenario, records, seed):\n"
+                "    return ['x,1' for _ in range(records)]\n"
+                "def benchmark_notes(scenario):\n"
+                "    return 'not-a-list'\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "plugin benchmark_notes must return a list/tuple of non-empty strings"):
+                benchmark_job("plugin", "balanced", records=3, shard_size=1, reducers=[1], seed=5, plugin_path=plugin)
+
     def test_plugin_inspection_can_render_csv(self) -> None:
         result = inspect_plugin(PROJECT_DIR / "plugins_average_score.py")
 
         csv_rows = result.to_csv().strip().splitlines()
         self.assertEqual(
             csv_rows[0],
-            "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,available_dataset_families",
+            "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,benchmark_note_hook,benchmark_note_hook_signature,benchmark_note_hook_doc_summary,benchmark_note_hook_source_line,benchmark_note_hook_source_anchor,benchmark_note_hook_source_url,benchmark_note_hook_source_commit_url,available_dataset_families",
         )
         self.assertIn("plugin-average-score", csv_rows[1])
         self.assertIn("Average-score analytics plugin with synthetic cohort benchmark families.", csv_rows[1])
@@ -412,6 +469,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             csv_rows[1],
         )
         self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
+        self.assertIn("plugins_average_score.benchmark_notes", csv_rows[1])
 
     def test_plugin_inspection_diffs_capture_contract_changes(self) -> None:
         diffs = diff_plugin_inspections([
@@ -422,8 +480,10 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(len(diffs), 1)
         self.assertIn("name", diffs[0].changed_fields)
         self.assertIn("available_dataset_families", diffs[0].changed_fields)
+        self.assertIn("benchmark_note_hook", diffs[0].changed_fields)
         self.assertEqual(diffs[0].changes["benchmark_generator_doc_summary"]["current"], None)
         self.assertEqual(diffs[0].changes["benchmark_generator_source_line"]["current"], None)
+        self.assertEqual(diffs[0].changes["benchmark_note_hook"]["current"], None)
 
     def test_inspect_plugins_can_include_diff_payload(self) -> None:
         batch = inspect_plugins(
@@ -435,6 +495,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(payload["plugin_count"], 2)
         self.assertEqual(len(payload["diffs"]), 1)
         self.assertIn("benchmark_generator", payload["diffs"][0]["changes"])
+        self.assertIn("benchmark_note_hook", payload["diffs"][0]["changes"])
 
         markdown = batch.to_markdown()
         html_output = batch.to_html()
@@ -496,9 +557,10 @@ class MiniMapReduceRepoTests(unittest.TestCase):
                 payload["mapper_source_commit_url"],
                 f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13",
             )
+            self.assertEqual(payload["benchmark_note_hook"], "plugins_average_score.benchmark_notes")
             self.assertEqual(
                 csv_rows[0],
-                "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,available_dataset_families",
+                "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,benchmark_note_hook,benchmark_note_hook_signature,benchmark_note_hook_doc_summary,benchmark_note_hook_source_line,benchmark_note_hook_source_anchor,benchmark_note_hook_source_url,benchmark_note_hook_source_commit_url,available_dataset_families",
             )
             self.assertIn("plugin-average-score", csv_rows[1])
             self.assertIn('"default,exam-cram,project-week"', csv_rows[1])

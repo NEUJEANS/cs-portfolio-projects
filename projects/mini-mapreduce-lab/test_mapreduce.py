@@ -187,6 +187,14 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertTrue(inspection.benchmark_generator_source_url and inspection.benchmark_generator_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
         self.assertTrue(inspection.benchmark_generator_source_commit_url and inspection.benchmark_generator_source_commit_url.startswith(f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/"))
         self.assertIn('def benchmark_records(', inspection.benchmark_generator_source_excerpt)
+        self.assertTrue(inspection.benchmark_note_hook and inspection.benchmark_note_hook.endswith(".benchmark_notes"))
+        self.assertEqual(inspection.benchmark_note_hook_signature, "benchmark_notes(scenario, dataset_family='default')")
+        self.assertEqual(inspection.benchmark_note_hook_doc_summary, "Describe the intended hot keys for each synthetic benchmark family.")
+        self.assertIsInstance(inspection.benchmark_note_hook_source_line, int)
+        self.assertTrue(inspection.benchmark_note_hook_source_anchor and '#L' in inspection.benchmark_note_hook_source_anchor)
+        self.assertTrue(inspection.benchmark_note_hook_source_url and inspection.benchmark_note_hook_source_url.startswith("https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/"))
+        self.assertTrue(inspection.benchmark_note_hook_source_commit_url and inspection.benchmark_note_hook_source_commit_url.startswith(f"https://github.com/NEUJEANS/cs-portfolio-projects/blob/{expected_commit}/"))
+        self.assertIn('def benchmark_notes(', inspection.benchmark_note_hook_source_excerpt)
 
 
     def test_inspect_plugins_batches_multiple_plugins(self) -> None:
@@ -199,7 +207,7 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual([item.name for item in batch.plugins], ["plugin-average-score", "plugin-max-score"])
 
         csv_lines = batch.to_csv().strip().splitlines()
-        self.assertEqual(csv_lines[0], "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,available_dataset_families")
+        self.assertEqual(csv_lines[0], "name,plugin,plugin_repo_commit,module_doc_summary,mapper,mapper_signature,mapper_doc_summary,mapper_source_line,mapper_source_anchor,mapper_source_url,mapper_source_commit_url,reducer,reducer_signature,reducer_doc_summary,reducer_source_line,reducer_source_anchor,reducer_source_url,reducer_source_commit_url,combiner,combiner_signature,combiner_doc_summary,combiner_source_line,combiner_source_anchor,combiner_source_url,combiner_source_commit_url,benchmark_generator,benchmark_generator_signature,benchmark_generator_doc_summary,benchmark_generator_source_line,benchmark_generator_source_anchor,benchmark_generator_source_url,benchmark_generator_source_commit_url,benchmark_note_hook,benchmark_note_hook_signature,benchmark_note_hook_doc_summary,benchmark_note_hook_source_line,benchmark_note_hook_source_anchor,benchmark_note_hook_source_url,benchmark_note_hook_source_commit_url,available_dataset_families")
         self.assertEqual(len(csv_lines), 3)
         self.assertIn("plugin-average-score", csv_lines[1])
         self.assertIn("plugin-max-score", csv_lines[2])
@@ -213,9 +221,11 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(len(diffs), 1)
         self.assertIn("name", diffs[0].changed_fields)
         self.assertIn("benchmark_generator", diffs[0].changed_fields)
+        self.assertIn("benchmark_note_hook", diffs[0].changed_fields)
         self.assertEqual(diffs[0].changes["benchmark_generator"]["current"], None)
         self.assertEqual(diffs[0].changes["benchmark_generator_doc_summary"]["current"], None)
         self.assertEqual(diffs[0].changes["benchmark_generator_source_line"]["current"], None)
+        self.assertEqual(diffs[0].changes["benchmark_note_hook"]["current"], None)
 
     def test_inspect_plugins_can_include_adjacent_diffs(self) -> None:
         batch = inspect_plugins(
@@ -235,7 +245,7 @@ class MiniMapReduceTests(unittest.TestCase):
         markdown = batch.to_markdown()
         self.assertIn("## Catalog quick links", markdown)
         self.assertIn("[`plugin-average-score`](#plugin-average-score)", markdown)
-        self.assertIn("`4 hooks`", markdown)
+        self.assertIn("`5 hooks`", markdown)
         self.assertIn("## Adjacent diffs", markdown)
         self.assertIn("plugin-average-score", markdown)
         self.assertIn("Average-score analytics plugin", markdown)
@@ -254,7 +264,7 @@ class MiniMapReduceTests(unittest.TestCase):
         html_output = batch.to_html()
         self.assertIn("<h2>Catalog quick links</h2>", html_output)
         self.assertIn('href="#plugin-average-score"', html_output)
-        self.assertIn("4 hooks", html_output)
+        self.assertIn("5 hooks", html_output)
         self.assertIn("<h2>Diff 1:", html_output)
         self.assertIn("plugin-max-score", html_output)
         self.assertIn("map_records(lines)", html_output)
@@ -340,6 +350,12 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertIsInstance(payload["benchmark_generator_source_line"], int)
             self.assertTrue('#L' in payload["benchmark_generator_source_anchor"])
             self.assertIn('def benchmark_records(', payload["benchmark_generator_source_excerpt"])
+            self.assertTrue(payload["benchmark_note_hook"].endswith(".benchmark_notes"))
+            self.assertEqual(payload["benchmark_note_hook_signature"], "benchmark_notes(scenario, dataset_family='default')")
+            self.assertEqual(payload["benchmark_note_hook_doc_summary"], "Describe the intended hot keys for each synthetic benchmark family.")
+            self.assertIsInstance(payload["benchmark_note_hook_source_line"], int)
+            self.assertTrue('#L' in payload["benchmark_note_hook_source_anchor"])
+            self.assertIn('def benchmark_notes(', payload["benchmark_note_hook_source_excerpt"])
 
     def test_cli_inspect_plugin_batches_multiple_plugins_to_json_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -540,10 +556,10 @@ class MiniMapReduceTests(unittest.TestCase):
 
         csv_output = result.to_csv().strip().splitlines()
 
-        self.assertEqual(csv_output[0], "job,plugin,scenario,dataset_family,available_dataset_families,plugin_mapper,plugin_reducer,plugin_combiner,plugin_benchmark_generator,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+        self.assertEqual(csv_output[0], "job,plugin,scenario,dataset_family,available_dataset_families,plugin_mapper,plugin_reducer,plugin_combiner,plugin_benchmark_generator,plugin_benchmark_note_hook,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
         self.assertEqual(len(csv_output), 3)
-        self.assertTrue(csv_output[1].startswith('wordcount,,balanced,default,"default,news,logs",,,,,5,120,20,1,'))
-        self.assertTrue(csv_output[2].startswith('wordcount,,balanced,default,"default,news,logs",,,,,5,120,20,3,'))
+        self.assertTrue(csv_output[1].startswith('wordcount,,balanced,default,"default,news,logs",,,,,,5,120,20,1,'))
+        self.assertTrue(csv_output[2].startswith('wordcount,,balanced,default,"default,news,logs",,,,,,5,120,20,3,'))
 
     def test_benchmark_wordcount_can_render_heatmap_csv_rows(self) -> None:
         result = benchmark_job("wordcount", "balanced", records=120, shard_size=20, reducers=[2], seed=5)
@@ -839,7 +855,7 @@ class MiniMapReduceTests(unittest.TestCase):
             report = report_output.read_text(encoding="utf-8")
             html_report = html_output.read_text(encoding="utf-8")
             self.assertEqual(payload["reducers"], [1, 3])
-            self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,available_dataset_families,plugin_mapper,plugin_reducer,plugin_combiner,plugin_benchmark_generator,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+            self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,available_dataset_families,plugin_mapper,plugin_reducer,plugin_combiner,plugin_benchmark_generator,plugin_benchmark_note_hook,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
             self.assertEqual(len(rows), 3)
             self.assertEqual(heatmap_rows[0], "job,plugin,scenario,dataset_family,seed,reducers,shard_index,reducer,records,unique_keys")
             self.assertGreater(len(heatmap_rows), 3)
@@ -949,14 +965,16 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(result.plugin_reducer, "plugins_average_score.reduce_key")
         self.assertEqual(result.plugin_combiner, "plugins_average_score.combine_values")
         self.assertEqual(result.plugin_benchmark_generator, "plugins_average_score.benchmark_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_average_score.benchmark_notes")
         payload = json.loads(result.to_json())
         self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
         self.assertEqual(payload["plugin_mapper"], "plugins_average_score.map_records")
         self.assertEqual(payload["plugin_reducer"], "plugins_average_score.reduce_key")
         self.assertEqual(payload["plugin_combiner"], "plugins_average_score.combine_values")
         self.assertEqual(payload["plugin_benchmark_generator"], "plugins_average_score.benchmark_records")
+        self.assertEqual(payload["plugin_benchmark_note_hook"], "plugins_average_score.benchmark_notes")
         csv_rows = result.to_csv().strip().splitlines()
-        self.assertIn('"default,exam-cram,project-week",plugins_average_score.map_records,plugins_average_score.reduce_key,plugins_average_score.combine_values,plugins_average_score.benchmark_records', csv_rows[1])
+        self.assertIn('"default,exam-cram,project-week",plugins_average_score.map_records,plugins_average_score.reduce_key,plugins_average_score.combine_values,plugins_average_score.benchmark_records,plugins_average_score.benchmark_notes', csv_rows[1])
         report = result.to_markdown()
         html_report = result.to_html()
         self.assertIn("- Available dataset families: `default, exam-cram, project-week`", report)
@@ -1034,7 +1052,7 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(payload["dataset_family"], "project-week")
             self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
             self.assertEqual(payload["reducers"], [2, 4])
-            self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,available_dataset_families,plugin_mapper,plugin_reducer,plugin_combiner,plugin_benchmark_generator,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
+            self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,available_dataset_families,plugin_mapper,plugin_reducer,plugin_combiner,plugin_benchmark_generator,plugin_benchmark_note_hook,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
             self.assertTrue(rows[1].startswith("plugin-max-score,"))
             self.assertIn("plugins_top_score.map_records", rows[1])
             self.assertIn("plugins_top_score.reduce_key", rows[1])

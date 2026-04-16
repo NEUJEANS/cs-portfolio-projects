@@ -265,12 +265,13 @@ A plugin is a Python file with:
 - `reduce_key(key, values)` → returns a JSON-serializable result for that key
 - `benchmark_records(scenario, records, seed)` → optional synthetic input generator for plugin benchmarks
 - `benchmark_records(scenario, records, seed, dataset_family)` → optional extended form when a plugin wants multiple workload families
+- `benchmark_notes(scenario)` / `benchmark_notes(scenario, dataset_family)` / `benchmark_notes(scenario, dataset_family, records, seed)` → optional benchmark hotspot narrative hook whose returned list of strings is appended to benchmark JSON/Markdown/HTML artifacts
 
 Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/plugins_top_score.py` or as a dotted module path like `demo_plugins.topscore` when the package is importable on `PYTHONPATH`.
 
 The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation.
 
-The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, and the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks. It now supports named dataset families such as `exam-cram` and `project-week`, and advertises them via `BENCHMARK_DATASET_FAMILIES` so benchmark artifacts can surface the supported families automatically. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
+The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks, and the optional `benchmark_notes()` hook explains which synthetic cohort should become the hotspot in each family. It now supports named dataset families such as `exam-cram` and `project-week`, advertises them via `BENCHMARK_DATASET_FAMILIES`, and exposes both the generator and note hook through `inspect-plugin` / `catalog-plugins` metadata so benchmark artifacts can surface the supported families automatically. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
 
 ## Output shape
 
@@ -295,7 +296,7 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, dataset-specific `benchmark_notes`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
+`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, dataset-specific `benchmark_notes`, and `plugin_benchmark_note_hook`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `inspect-plugin` / `catalog-plugins` artifacts likewise surface the optional benchmark note hook alongside the mapper/reducer/combiner/generator metadata. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
 
 ```json
 {
@@ -333,5 +334,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
-- add plugin-extensible benchmark note hooks so third-party generators can describe their own hot keys without editing the core runner
+- add richer note-hook contracts for plugins that want structured benchmark annotations, not just short narrative bullet lists
 - add repository-level inspection summaries that compare multiple plugin snapshots across releases, not just adjacent runs
