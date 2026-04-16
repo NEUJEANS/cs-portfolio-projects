@@ -294,7 +294,16 @@ def render_pretty(report: RoutingReport) -> str:
 
 
 def _sanitize_identifier(value: str) -> str:
-    return "".join(character if character.isalnum() else "_" for character in value)
+    sanitized = "".join(character if character.isalnum() else "_" for character in value)
+    if not sanitized:
+        return "_"
+    if sanitized[0].isdigit():
+        return f"_{sanitized}"
+    return sanitized
+
+
+def _dot_quote(value: str) -> str:
+    return json.dumps(value)
 
 
 def _format_cost(value: float) -> str:
@@ -368,6 +377,65 @@ def export_mermaid(report: RoutingReport, output_path: str | Path) -> Path:
     return output
 
 
+def export_dot(report: RoutingReport, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    highlighted_path_edges: set[tuple[str, str]] = set()
+    shortest_path_nodes: set[str] = set()
+    negative_cycle_edges: set[tuple[str, str]] = set()
+    negative_cycle_nodes: set[str] = set()
+
+    if report.bellman_ford:
+        for node, result in build_shortest_path_results(report.bellman_ford).items():
+            shortest_path_nodes.update(result.path)
+            highlighted_path_edges.update(_path_edges(result.path))
+        if report.bellman_ford.negative_cycle:
+            negative_cycle_nodes.update(report.bellman_ford.negative_cycle)
+            negative_cycle_edges.update(_cycle_edges(report.bellman_ford.negative_cycle))
+
+    lines = [
+        f"digraph {_sanitize_identifier(report.graph_name)} {{",
+        "    rankdir=LR;",
+        f"    graph [label={_dot_quote(report.graph_name)}, labelloc=\"t\", bgcolor=\"white\"];",
+        "    node [shape=box, style=\"rounded,filled\", fillcolor=\"#f8fafc\", color=\"#475569\", fontcolor=\"#0f172a\"];",
+        "    edge [color=\"#94a3b8\", fontcolor=\"#334155\"];",
+    ]
+
+    for node in report.nodes:
+        identifier = _sanitize_identifier(node)
+        label = node
+        if report.bellman_ford:
+            label += f"\\ndist={_format_cost(report.bellman_ford.distances[node])}"
+        if node in negative_cycle_nodes:
+            attrs = 'fillcolor="#fee2e2", color="#dc2626", fontcolor="#7f1d1d", penwidth=3'
+        elif node in shortest_path_nodes:
+            attrs = 'fillcolor="#dbeafe", color="#2563eb", fontcolor="#1e3a8a", penwidth=2'
+        else:
+            attrs = None
+        attribute_text = f", {attrs}" if attrs else ""
+        lines.append(f"    {identifier} [label={_dot_quote(label)}{attribute_text}];")
+
+    for edge in report.edges:
+        edge_key = (edge.source, edge.target)
+        if edge_key in negative_cycle_edges:
+            attrs = 'color="#dc2626", fontcolor="#7f1d1d", penwidth=3'
+        elif edge_key in highlighted_path_edges:
+            attrs = 'color="#2563eb", fontcolor="#1e3a8a", penwidth=2'
+        else:
+            attrs = 'style=dashed'
+        lines.append(
+            f"    {_sanitize_identifier(edge.source)} -> {_sanitize_identifier(edge.target)} "
+            f"[label={_dot_quote(str(edge.weight))}, {attrs}];"
+        )
+
+    if report.bellman_ford and report.bellman_ford.negative_cycle:
+        lines.append(f"    // negative cycle: {' -> '.join(report.bellman_ford.negative_cycle)}")
+    lines.append("}")
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return output
+
+
 def build_shortest_path_results(result: BellmanFordResult) -> dict[str, PathResult]:
     paths: dict[str, PathResult] = {}
     for node, distance in result.distances.items():
@@ -421,6 +489,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--format", choices=("json", "pretty"), default="pretty")
     parser.add_argument("--export-mermaid", help="Write a Mermaid flowchart artifact for the selected report")
+    parser.add_argument("--export-dot", help="Write a Graphviz DOT artifact for the selected report")
     return parser.parse_args()
 
 
@@ -430,6 +499,8 @@ def main() -> None:
     report = build_report(graph_name, nodes, edges, source=args.source, mode=args.mode)
     if args.export_mermaid:
         export_mermaid(report, args.export_mermaid)
+    if args.export_dot:
+        export_dot(report, args.export_dot)
     if args.format == "json":
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return

@@ -1,0 +1,16 @@
+digraph routing_demo {
+    rankdir=LR;
+    graph [label="routing_demo", labelloc="t", bgcolor="white"];
+    node [shape=box, style="rounded,filled", fillcolor="#f8fafc", color="#475569", fontcolor="#0f172a"];
+    edge [color="#94a3b8", fontcolor="#334155"];
+    A [label="A\\ndist=0", fillcolor="#dbeafe", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    B [label="B\\ndist=1", fillcolor="#dbeafe", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    C [label="C\\ndist=2", fillcolor="#dbeafe", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    D [label="D\\ndist=3", fillcolor="#dbeafe", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    A -> B [label="4", style=dashed];
+    A -> C [label="2", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    C -> B [label="-1", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    B -> D [label="2", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    C -> D [label="5", style=dashed];
+    D -> A [label="1", style=dashed];
+}

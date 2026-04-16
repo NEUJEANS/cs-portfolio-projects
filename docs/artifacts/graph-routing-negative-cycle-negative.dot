@@ -1,0 +1,15 @@
+digraph negative_cycle_demo {
+    rankdir=LR;
+    graph [label="negative_cycle_demo", labelloc="t", bgcolor="white"];
+    node [shape=box, style="rounded,filled", fillcolor="#f8fafc", color="#475569", fontcolor="#0f172a"];
+    edge [color="#94a3b8", fontcolor="#334155"];
+    A [label="A\\ndist=-9", fillcolor="#fee2e2", color="#dc2626", fontcolor="#7f1d1d", penwidth=3];
+    B [label="B\\ndist=-3", fillcolor="#fee2e2", color="#dc2626", fontcolor="#7f1d1d", penwidth=3];
+    C [label="C\\ndist=-1", fillcolor="#fee2e2", color="#dc2626", fontcolor="#7f1d1d", penwidth=3];
+    D [label="D\\ndist=3", fillcolor="#dbeafe", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    A -> B [label="3", color="#dc2626", fontcolor="#7f1d1d", penwidth=3];
+    B -> C [label="2", color="#dc2626", fontcolor="#7f1d1d", penwidth=3];
+    C -> A [label="-8", color="#dc2626", fontcolor="#7f1d1d", penwidth=3];
+    C -> D [label="4", color="#2563eb", fontcolor="#1e3a8a", penwidth=2];
+    // negative cycle: A -> B -> C -> A
+}

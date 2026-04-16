@@ -22,6 +22,7 @@ spec.loader.exec_module(module)
 bellman_ford = module.bellman_ford
 build_report = module.build_report
 build_shortest_path_results = module.build_shortest_path_results
+export_dot = module.export_dot
 export_mermaid = module.export_mermaid
 johnson = module.johnson
 load_graph = module.load_graph
@@ -117,6 +118,28 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn("%% negative cycle:", rendered_negative)
             self.assertIn('A ==>|"3"| B', rendered_negative)
 
+    def test_export_dot_writes_graphviz_styles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "routing.dot"
+
+            graph_name, nodes, edges = load_graph(SAMPLE_PATH)
+            report = build_report(graph_name, nodes, edges, source="A", mode="bellman-ford")
+            export_dot(report, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn("digraph routing_demo {", rendered)
+            self.assertIn("rankdir=LR;", rendered)
+            self.assertIn('A [label="A\\\\ndist=0", fillcolor="#dbeafe"', rendered)
+            self.assertIn('C -> B [label="-1", color="#2563eb"', rendered)
+            self.assertIn('A -> B [label="4", style=dashed];', rendered)
+
+            negative_report = build_report(*load_graph(NEGATIVE_PATH), source="A", mode="bellman-ford")
+            export_dot(negative_report, output_path)
+            rendered_negative = output_path.read_text(encoding="utf-8")
+            self.assertIn('A [label="A\\\\ndist=', rendered_negative)
+            self.assertIn('fillcolor="#fee2e2"', rendered_negative)
+            self.assertIn('A -> B [label="3", color="#dc2626"', rendered_negative)
+            self.assertIn("// negative cycle:", rendered_negative)
+
     def test_cli_json_mode_emits_johnson_payload(self) -> None:
         completed = subprocess.run(
             [
@@ -180,6 +203,30 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn("Bellman-Ford from A", completed.stdout)
             self.assertTrue(output_path.exists())
             self.assertIn("shortest", output_path.read_text(encoding="utf-8"))
+
+    def test_cli_can_export_dot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "cli-routing.dot"
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    str(SAMPLE_PATH),
+                    "--source",
+                    "A",
+                    "--mode",
+                    "bellman-ford",
+                    "--export-dot",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("Bellman-Ford from A", completed.stdout)
+            self.assertTrue(output_path.exists())
+            self.assertIn("digraph routing_demo {", output_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
