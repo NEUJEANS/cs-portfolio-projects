@@ -14,6 +14,7 @@ from link_state_routing import (
     flood_lsas,
     normalize_topology,
     originate_lsas,
+    render_mermaid,
     run_simulation,
 )
 
@@ -40,7 +41,6 @@ def test_run_simulation_builds_forwarding_tables() -> None:
     assert d_to_a.path == ("D", "C", "B", "A")
 
 
-
 def test_stale_lsa_is_ignored_during_flooding() -> None:
     topology = normalize_topology(TOPOLOGY)
     initial = originate_lsas(topology)
@@ -55,7 +55,6 @@ def test_stale_lsa_is_ignored_during_flooding() -> None:
     assert any(step.accepted is False and step.router == "B" and step.sequence == 1 for step in log)
 
 
-
 def test_max_age_lsa_withdraws_router_entry() -> None:
     topology = normalize_topology(TOPOLOGY)
     initial = originate_lsas(topology)
@@ -65,7 +64,6 @@ def test_max_age_lsa_withdraws_router_entry() -> None:
     lsdb, _ = flood_lsas(topology, [withdrawn], initial_lsdb=lsdb)
 
     assert "C" not in lsdb
-
 
 
 def test_reconverges_after_link_failure() -> None:
@@ -85,6 +83,19 @@ def test_reconverges_after_link_failure() -> None:
     assert updated.lsdb["D"].sequence == initial.lsdb["D"].sequence + 1
 
 
+def test_render_mermaid_includes_weighted_edges_and_spf_tree() -> None:
+    result = run_simulation(TOPOLOGY)
+
+    diagram = render_mermaid(result, source="A")
+
+    assert diagram.startswith("flowchart LR")
+    assert 'A <-->|"1"| B' in diagram
+    assert 'B <-->|"2"| C' in diagram
+    assert 'A -->|"SPF 1"| B' in diagram
+    assert 'B -->|"SPF 2"| C' in diagram
+    assert 'C -->|"SPF 1"| D' in diagram
+    assert 'class A root' in diagram
+
 
 def test_cli_json_output(tmp_path: Path) -> None:
     topology_path = tmp_path / "topology.json"
@@ -102,6 +113,22 @@ def test_cli_json_output(tmp_path: Path) -> None:
     assert payload["routes"]["A"]["D"]["cost"] == 4
     assert payload["lsdb"]["A"]["sequence"] == 1
 
+
+def test_cli_mermaid_output(tmp_path: Path) -> None:
+    topology_path = tmp_path / "topology.json"
+    topology_path.write_text(json.dumps(TOPOLOGY), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "link_state_routing.py", str(topology_path), "--format", "mermaid", "--source", "A"],
+        cwd=Path(__file__).parent,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.startswith("flowchart LR")
+    assert '%% SPF tree rooted at A' in result.stdout
+    assert 'A -->|"SPF 1"| B' in result.stdout
 
 
 def test_compute_forwarding_tables_requires_symmetric_lsdb() -> None:

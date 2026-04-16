@@ -79,7 +79,6 @@ class SimulationResult:
         }
 
 
-
 def normalize_topology(topology: Mapping[str, Mapping[str, int]]) -> dict[str, dict[str, int]]:
     normalized: dict[str, dict[str, int]] = {}
     for router, neighbors in topology.items():
@@ -101,7 +100,6 @@ def normalize_topology(topology: Mapping[str, Mapping[str, int]]) -> dict[str, d
     return {router: dict(sorted(neighbors.items())) for router, neighbors in sorted(normalized.items())}
 
 
-
 def originate_lsas(
     topology: Mapping[str, Mapping[str, int]],
     previous: Mapping[str, LinkStateAdvertisement] | None = None,
@@ -121,7 +119,6 @@ def originate_lsas(
     return lsas
 
 
-
 def install_lsa(
     lsdb: dict[str, LinkStateAdvertisement],
     lsa: LinkStateAdvertisement,
@@ -134,7 +131,6 @@ def install_lsa(
         lsdb[lsa.router] = lsa
         return True
     return False
-
 
 
 def flood_lsas(
@@ -176,10 +172,8 @@ def flood_lsas(
     return lsdb, tuple(log)
 
 
-
 def _path_metric(path: tuple[str, ...]) -> tuple[int, tuple[str, ...]]:
     return len(path), path
-
 
 
 def shortest_paths(topology: Mapping[str, Mapping[str, int]], source: str) -> dict[str, Route]:
@@ -211,11 +205,9 @@ def shortest_paths(topology: Mapping[str, Mapping[str, int]], source: str) -> di
     return dict(sorted(routes.items()))
 
 
-
 def compute_forwarding_tables(lsdb: Mapping[str, LinkStateAdvertisement]) -> dict[str, dict[str, Route]]:
     topology = normalize_topology({router: lsa.neighbors for router, lsa in lsdb.items()})
     return {router: shortest_paths(topology, router) for router in sorted(topology)}
-
 
 
 def run_simulation(
@@ -230,10 +222,8 @@ def run_simulation(
     return SimulationResult(lsdb=lsdb, routes=routes, flood_log=flood_log)
 
 
-
 def load_topology(path: str) -> dict[str, dict[str, int]]:
     return normalize_topology(json.loads(Path(path).read_text()))
-
 
 
 def parse_args() -> argparse.Namespace:
@@ -241,16 +231,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("topology", help="Path to a JSON topology map")
     parser.add_argument(
         "--format",
-        choices=("json", "pretty"),
+        choices=("json", "pretty", "mermaid"),
         default="pretty",
         help="Output format",
     )
     parser.add_argument(
         "--source",
-        help="Optional router name to print only one forwarding table",
+        help="Optional router name to print only one forwarding table or SPF tree root",
     )
     return parser.parse_args()
-
 
 
 def render_pretty(result: SimulationResult, source: str | None = None) -> str:
@@ -276,6 +265,48 @@ def render_pretty(result: SimulationResult, source: str | None = None) -> str:
     return "\n".join(lines)
 
 
+def render_mermaid(result: SimulationResult, source: str | None = None) -> str:
+    topology = normalize_topology({router: lsa.neighbors for router, lsa in result.lsdb.items()})
+    routers = sorted(topology)
+    if source and source not in topology:
+        raise ValueError(f"unknown router {source!r}")
+
+    lines: list[str] = ["flowchart LR"]
+    for router in routers:
+        lines.append(f"    {router}[\"{router}\"]")
+
+    emitted_edges: set[tuple[str, str]] = set()
+    for router in routers:
+        for neighbor, cost in sorted(topology[router].items()):
+            edge = tuple(sorted((router, neighbor)))
+            if edge in emitted_edges:
+                continue
+            emitted_edges.add(edge)
+            left, right = edge
+            lines.append(f"    {left} <-->|\"{cost}\"| {right}")
+
+    if source:
+        lines.append("")
+        lines.append(f"    %% SPF tree rooted at {source}")
+        lines.append(f"    classDef root fill:#fde68a,stroke:#92400e,stroke-width:2px")
+        lines.append(f"    class {source} root")
+
+        tree_edges: set[tuple[str, str]] = set()
+        for destination, route in sorted(result.routes[source].items()):
+            if destination == source or len(route.path) < 2:
+                continue
+            for left, right in zip(route.path, route.path[1:]):
+                tree_edges.add((left, right))
+
+        edge_index = 0
+        for left, right in sorted(tree_edges):
+            edge_index += 1
+            cost = topology[left][right]
+            lines.append(f"    {left} -->|\"SPF {cost}\"| {right}")
+            lines.append(f"    linkStyle {len(emitted_edges) + edge_index - 1} stroke:#dc2626,stroke-width:3px")
+
+    return "\n".join(lines)
+
 
 def main() -> None:
     args = parse_args()
@@ -283,6 +314,9 @@ def main() -> None:
     result = run_simulation(topology)
     if args.format == "json":
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        return
+    if args.format == "mermaid":
+        print(render_mermaid(result, source=args.source))
         return
     print(render_pretty(result, source=args.source))
 
