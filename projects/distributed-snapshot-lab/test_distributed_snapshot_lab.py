@@ -7,6 +7,7 @@ from pathlib import Path
 
 from distributed_snapshot_lab import (
     DistributedBank,
+    generate_walkthrough_svg_assets,
     parse_balances,
     parse_marker_delay,
     parse_scoped_marker_delay,
@@ -16,6 +17,7 @@ from distributed_snapshot_lab import (
     parse_transfer,
     render_mermaid,
     render_script_walkthrough,
+    render_snapshot_svg,
 )
 
 
@@ -321,6 +323,24 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertIn("Note over A,B,C: process status A=up, B=up, C=down", diagram)
         self.assertIn("Note over C,B: recorded in-flight on C->B 2 (cb-1)", diagram)
 
+    def test_render_snapshot_svg_contains_svg_markup_and_summary(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        bank.transfer("A", "B", 3, "ab-1")
+        bank.transfer("C", "B", 2, "cb-1")
+        bank.fail_link("A", "B", reason="partition")
+        result = bank.snapshot("A", marker_delay_overrides={"C->B": 2})
+        result["snapshot_id"] = "during-partition"
+
+        svg = render_snapshot_svg(result, bank.processes, title="Partition Heal Snapshot")
+
+        self.assertIn("<svg", svg)
+        self.assertIn("Partition Heal Snapshot", svg)
+        self.assertIn("transfer 3 (ab-1)", svg)
+        self.assertIn("marker t=0", svg)
+        self.assertIn("Snapshot summary", svg)
+        self.assertIn("consistent=True", svg)
+        self.assertIn("Recorded in-flight", svg)
+
     def test_cli_mermaid_output_switches_format(self) -> None:
         completed = run_cli(
             "simulate",
@@ -366,6 +386,50 @@ class DistributedSnapshotLabTests(unittest.TestCase):
         self.assertIn("```mermaid", markdown)
         self.assertIn("LINK RECOVER (heal)", markdown)
 
+    def test_generate_walkthrough_svg_assets_writes_snapshot_files(self) -> None:
+        bank = DistributedBank({"A": 10, "B": 10, "C": 10})
+        result = bank.run_script(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": 'during "partition"', "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ],
+            marker_delay_overrides={"C->B": 2},
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            markdown_path = Path(temp_dir) / "walkthrough.md"
+            svg_dir = Path(temp_dir) / "svg"
+            assets = generate_walkthrough_svg_assets(
+                result,
+                bank.processes,
+                output_dir=svg_dir,
+                title="Partition Heal Walkthrough",
+                markdown_path=markdown_path,
+                filename_prefix="partition-heal",
+            )
+
+            self.assertIn('during "partition"', assets)
+            self.assertIn("after-heal", assets)
+            self.assertEqual(assets['during "partition"']["link"], "svg/partition-heal-01-during-partition.svg")
+            self.assertTrue((svg_dir / "partition-heal-01-during-partition.svg").exists())
+            self.assertTrue((svg_dir / "partition-heal-02-after-heal.svg").exists())
+
+            markdown = render_script_walkthrough(
+                result,
+                bank.processes,
+                title="Partition Heal Walkthrough",
+                svg_assets=assets,
+            )
+            self.assertIn(
+                '- SVG asset: [partition-heal-01-during-partition.svg](svg/partition-heal-01-during-partition.svg)',
+                markdown,
+            )
+            self.assertIn('### Snapshot `during \'partition\'` (script step 4)', markdown)
+
     def test_cli_walkthrough_outputs_markdown_and_writes_file(self) -> None:
         script = json.dumps(
             [
@@ -396,6 +460,44 @@ class DistributedSnapshotLabTests(unittest.TestCase):
             self.assertTrue(completed.stdout.startswith("# Partition Heal Walkthrough\n"))
             self.assertIn("```mermaid", completed.stdout)
             self.assertTrue(output_path.exists())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), completed.stdout)
+
+    def test_cli_walkthrough_can_export_svg_assets(self) -> None:
+        script = json.dumps(
+            [
+                {"op": "send", "sender": "A", "receiver": "B", "amount": 3, "label": "ab-1"},
+                {"op": "send", "sender": "C", "receiver": "B", "amount": 2, "label": "cb-1"},
+                {"op": "link-fail", "sender": "A", "receiver": "B", "reason": "partition"},
+                {"op": "snapshot", "snapshot_id": "during-partition", "initiator": "A"},
+                {"op": "link-recover", "sender": "A", "receiver": "B", "reason": "heal"},
+                {"op": "snapshot", "snapshot_id": "after-heal", "initiator": "A"},
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "walkthrough.md"
+            svg_dir = Path(temp_dir) / "svg"
+            completed = run_cli(
+                "walkthrough",
+                "--balances",
+                '{"A": 10, "B": 10, "C": 10}',
+                "--marker-delay",
+                "C->B=2",
+                "--script",
+                script,
+                "--title",
+                "Partition Heal Walkthrough",
+                "--output",
+                str(output_path),
+                "--svg-dir",
+                str(svg_dir),
+                "--svg-prefix",
+                "partition-heal",
+            )
+
+            self.assertIn("- SVG asset: [partition-heal-01-during-partition.svg](svg/partition-heal-01-during-partition.svg)", completed.stdout)
+            self.assertIn("![after-heal SVG](svg/partition-heal-02-after-heal.svg)", completed.stdout)
+            self.assertTrue((svg_dir / "partition-heal-01-during-partition.svg").exists())
+            self.assertTrue((svg_dir / "partition-heal-02-after-heal.svg").exists())
             self.assertEqual(output_path.read_text(encoding="utf-8"), completed.stdout)
 
     def test_unknown_marker_delay_channel_is_rejected(self) -> None:

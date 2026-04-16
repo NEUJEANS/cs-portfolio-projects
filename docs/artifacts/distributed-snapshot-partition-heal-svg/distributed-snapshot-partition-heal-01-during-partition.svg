@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="588" height="782" viewBox="0 0 588 782" role="img" aria-labelledby="title desc">
+<title id="title">Distributed Snapshot Partition-Heal Walkthrough — during-partition</title>
+<desc id="desc">Distributed snapshot sequence diagram rendered as SVG.</desc>
+<defs>
+  <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+    <path d="M0,0 L10,4 L0,8 Z" fill="#1f2937" />
+  </marker>
+</defs>
+<rect x="0" y="0" width="100%" height="100%" fill="#ffffff" />
+<text x="36" y="30" font-size="18" font-weight="700" fill="#0f172a">Distributed Snapshot Partition-Heal Walkthrough — during-partition</text>
+<rect x="30.0" y="56.0" width="84.0" height="32.0" rx="10" ry="10" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.2" />
+<text x="72.0" y="77.0" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">A</text>
+<line x1="72.0" y1="88.0" x2="72.0" y2="598.0" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 6" />
+<rect x="210.0" y="56.0" width="84.0" height="32.0" rx="10" ry="10" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.2" />
+<text x="252.0" y="77.0" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">B</text>
+<line x1="252.0" y1="88.0" x2="252.0" y2="598.0" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 6" />
+<rect x="390.0" y="56.0" width="84.0" height="32.0" rx="10" ry="10" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.2" />
+<text x="432.0" y="77.0" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">C</text>
+<line x1="432.0" y1="88.0" x2="432.0" y2="598.0" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 6" />
+<line x1="72.0" y1="124.0" x2="252.0" y2="124.0" stroke="#1d4ed8" stroke-width="2.2" marker-end="url(#arrowhead)"  />
+<rect x="93.5" y="102.0" width="137.0" height="18" rx="9" ry="9" fill="#ffffff" opacity="0.88" />
+<text x="162.0" y="115.0" text-anchor="middle" font-size="11" font-weight="400" fill="#0f172a">transfer 3 (ab-1)</text>
+<line x1="432.0" y1="180.0" x2="252.0" y2="180.0" stroke="#1d4ed8" stroke-width="2.2" marker-end="url(#arrowhead)"  />
+<rect x="273.5" y="158.0" width="137.0" height="18" rx="9" ry="9" fill="#ffffff" opacity="0.88" />
+<text x="342.0" y="171.0" text-anchor="middle" font-size="11" font-weight="400" fill="#0f172a">transfer 2 (cb-1)</text>
+<rect x="50.0" y="218.0" width="224.0" height="36.0" rx="12" ry="12" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" />
+<text x="162.0" y="236.0" text-anchor="middle" font-size="12" fill="#0f172a"><tspan x="162.0" dy="0">LINK FAIL (uplink partition)</tspan></text>
+<rect x="18.0" y="274.0" width="189.0" height="36.0" rx="12" ry="12" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5" />
+<text x="112.5" y="292.0" text-anchor="middle" font-size="12" fill="#0f172a"><tspan x="112.5" dy="0">during-partition starts</tspan></text>
+<line x1="72.0" y1="348.0" x2="432.0" y2="348.0" stroke="#475569" stroke-width="2.2" marker-end="url(#arrowhead)" stroke-dasharray="8 6" />
+<rect x="192.0" y="326.0" width="120.0" height="18" rx="9" ry="9" fill="#ffffff" opacity="0.88" />
+<text x="252.0" y="339.0" text-anchor="middle" font-size="11" font-weight="400" fill="#0f172a">marker t=0</text>
+<line x1="432.0" y1="400.0" x2="72.0" y2="400.0" stroke="#475569" stroke-width="2.2" marker-end="url(#arrowhead)" stroke-dasharray="8 6" />
+<rect x="192.0" y="378.0" width="120.0" height="18" rx="9" ry="9" fill="#ffffff" opacity="0.88" />
+<text x="252.0" y="391.0" text-anchor="middle" font-size="11" font-weight="400" fill="#0f172a">marker t=0</text>
+<line x1="432.0" y1="452.0" x2="252.0" y2="452.0" stroke="#475569" stroke-width="2.2" marker-end="url(#arrowhead)" stroke-dasharray="8 6" />
+<rect x="282.0" y="430.0" width="120.0" height="18" rx="9" ry="9" fill="#ffffff" opacity="0.88" />
+<text x="342.0" y="443.0" text-anchor="middle" font-size="11" font-weight="400" fill="#0f172a">marker t=0</text>
+<line x1="252.0" y1="504.0" x2="72.0" y2="504.0" stroke="#475569" stroke-width="2.2" marker-end="url(#arrowhead)" stroke-dasharray="8 6" />
+<rect x="102.0" y="482.0" width="120.0" height="18" rx="9" ry="9" fill="#ffffff" opacity="0.88" />
+<text x="162.0" y="495.0" text-anchor="middle" font-size="11" font-weight="400" fill="#0f172a">marker t=2</text>
+<line x1="252.0" y1="556.0" x2="432.0" y2="556.0" stroke="#475569" stroke-width="2.2" marker-end="url(#arrowhead)" stroke-dasharray="8 6" />
+<rect x="282.0" y="534.0" width="120.0" height="18" rx="9" ry="9" fill="#ffffff" opacity="0.88" />
+<text x="342.0" y="547.0" text-anchor="middle" font-size="11" font-weight="400" fill="#0f172a">marker t=2</text>
+<rect x="36" y="616.0" width="516.0" height="126.0" rx="16" ry="16" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
+<text x="56.0" y="640.0" text-anchor="start" font-size="14" font-weight="700" fill="#0f172a">Snapshot summary</text>
+<text x="56.0" y="662.0" text-anchor="start" font-size="12" font-weight="400" fill="#0f172a">Balances: A=7, B=13, C=8</text>
+<text x="56.0" y="680.0" text-anchor="start" font-size="12" font-weight="400" fill="#0f172a">Process status: A=up, B=up, C=up</text>
+<text x="56.0" y="698.0" text-anchor="start" font-size="12" font-weight="400" fill="#0f172a">Down links: A-&gt;B</text>
+<text x="56.0" y="716.0" text-anchor="start" font-size="12" font-weight="400" fill="#0f172a">Recorded in-flight: C-&gt;B = 2 (cb-1)</text>
+<text x="56.0" y="734.0" text-anchor="start" font-size="12" font-weight="400" fill="#0f172a">Totals: consistent=True snapshot_total=30 system_total=30</text>
+</svg>

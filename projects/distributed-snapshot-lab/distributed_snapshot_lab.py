@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import os
+import re
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -426,6 +429,37 @@ def _optional_text(value: object) -> str | None:
     return text or None
 
 
+def _safe_mermaid_text(value: object) -> str:
+    text = str(value)
+    return text.replace("\n", " ").replace('"', "'")
+
+
+def _svg_escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _slugify_filename(value: object) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
+    return normalized or "snapshot"
+
+
+def _wrap_svg_text(text: object, *, max_chars: int = 30) -> list[str]:
+    words = str(text).split()
+    if not words:
+        return [""]
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
 def parse_balances(raw: str) -> dict[str, int]:
     payload = json.loads(raw)
     if not isinstance(payload, dict) or not payload:
@@ -486,11 +520,6 @@ def parse_script(raw: str) -> list[dict[str, object]]:
             raise ValueError("each script operation must be a JSON object")
         normalized.append(item)
     return normalized
-
-
-def _safe_mermaid_text(value: object) -> str:
-    text = str(value)
-    return text.replace("\n", " ").replace('"', "'")
 
 
 def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
@@ -582,6 +611,264 @@ def render_mermaid(result: dict[str, object], processes: Iterable[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_snapshot_svg(
+    result: dict[str, object],
+    processes: Iterable[str],
+    *,
+    title: str | None = None,
+) -> str:
+    ordered_processes = list(sorted(set(str(process) for process in processes)))
+    lane_gap = 180
+    lane_header_width = 84
+    margin_x = 72
+    header_top = 56
+    header_height = 32
+    row_gap = 56
+    summary_line_height = 18
+    summary_padding = 18
+    lane_positions = {
+        process: margin_x + index * lane_gap
+        for index, process in enumerate(ordered_processes)
+    }
+    width = margin_x * 2 + lane_gap * max(len(ordered_processes) - 1, 0)
+    width += lane_header_width
+
+    body: list[str] = []
+    y = header_top + header_height + 36
+
+    def add_text(
+        x: float,
+        y_pos: float,
+        text: object,
+        *,
+        anchor: str = "middle",
+        size: int = 13,
+        weight: str = "400",
+        fill: str = "#0f172a",
+    ) -> str:
+        return (
+            f'<text x="{x:.1f}" y="{y_pos:.1f}" text-anchor="{anchor}" '
+            f'font-size="{size}" font-weight="{weight}" fill="{fill}">{_svg_escape(text)}</text>'
+        )
+
+    def add_multiline_text(
+        x: float,
+        y_pos: float,
+        lines: Sequence[str],
+        *,
+        anchor: str = "middle",
+        size: int = 13,
+        fill: str = "#0f172a",
+    ) -> str:
+        tspans = []
+        for index, line in enumerate(lines):
+            dy = 0 if index == 0 else size + 5
+            tspans.append(
+                f'<tspan x="{x:.1f}" dy="{dy}">{_svg_escape(line)}</tspan>'
+            )
+        return (
+            f'<text x="{x:.1f}" y="{y_pos:.1f}" text-anchor="{anchor}" '
+            f'font-size="{size}" fill="{fill}">' + "".join(tspans) + "</text>"
+        )
+
+    def estimate_box_width(lines: Sequence[str], minimum: int = 140, maximum: int = 260) -> int:
+        longest = max((len(line) for line in lines), default=0)
+        return min(maximum, max(minimum, longest * 7 + 28))
+
+    def add_note(center_x: float, center_y: float, text: object, *, fill: str = "#dbeafe", stroke: str = "#2563eb") -> None:
+        wrapped = _wrap_svg_text(text, max_chars=28)
+        box_width = estimate_box_width(wrapped)
+        box_height = 18 + len(wrapped) * 18
+        x = center_x - box_width / 2
+        x = max(18, min(x, width - box_width - 18))
+        text_x = x + box_width / 2
+        y_top = center_y - box_height / 2
+        body.append(
+            f'<rect x="{x:.1f}" y="{y_top:.1f}" width="{box_width:.1f}" height="{box_height:.1f}" '
+            f'rx="12" ry="12" fill="{fill}" stroke="{stroke}" stroke-width="1.5" />'
+        )
+        body.append(add_multiline_text(text_x, y_top + 18, wrapped, size=12))
+
+    def add_arrow(
+        sender: str,
+        receiver: str,
+        y_pos: float,
+        label: str,
+        *,
+        dashed: bool = False,
+        color: str = "#1d4ed8",
+    ) -> None:
+        x1 = lane_positions[sender]
+        x2 = lane_positions[receiver]
+        body.append(
+            f'<line x1="{x1:.1f}" y1="{y_pos:.1f}" x2="{x2:.1f}" y2="{y_pos:.1f}" '
+            f'stroke="{color}" stroke-width="2.2" marker-end="url(#arrowhead)" '
+            f'{"stroke-dasharray=\"8 6\"" if dashed else ""} />'
+        )
+        label_x = (x1 + x2) / 2
+        label_width = min(280, max(120, len(label) * 7 + 18))
+        body.append(
+            f'<rect x="{label_x - label_width / 2:.1f}" y="{y_pos - 22:.1f}" width="{label_width:.1f}" height="18" '
+            f'rx="9" ry="9" fill="#ffffff" opacity="0.88" />'
+        )
+        body.append(add_text(label_x, y_pos - 9, label, size=11))
+
+    for event in result.get("timeline", []):
+        kind = str(event.get("event", "")).strip().lower()
+        if kind == "send":
+            add_arrow(
+                str(event["sender"]),
+                str(event["receiver"]),
+                y,
+                f"transfer {event['amount']} ({event['label']})",
+            )
+        elif kind == "deliver":
+            add_note(
+                lane_positions[str(event["receiver"])],
+                y,
+                f"apply {event['amount']} from {event['sender']} ({event['label']})",
+                fill="#ecfccb",
+                stroke="#65a30d",
+            )
+        elif kind == "fail":
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({reason})" if reason else ""
+            add_note(
+                lane_positions[str(event["process"])],
+                y,
+                f"FAIL{suffix}",
+                fill="#fee2e2",
+                stroke="#dc2626",
+            )
+        elif kind == "recover":
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({reason})" if reason else ""
+            add_note(
+                lane_positions[str(event["process"])],
+                y,
+                f"RECOVER{suffix}",
+                fill="#dcfce7",
+                stroke="#16a34a",
+            )
+        elif kind == "link_fail":
+            sender, receiver = str(event["channel"]).split("->", 1)
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({reason})" if reason else ""
+            add_note(
+                (lane_positions[sender] + lane_positions[receiver]) / 2,
+                y,
+                f"LINK FAIL{suffix}",
+                fill="#fee2e2",
+                stroke="#dc2626",
+            )
+        elif kind == "link_recover":
+            sender, receiver = str(event["channel"]).split("->", 1)
+            reason = _optional_text(event.get("reason"))
+            suffix = f" ({reason})" if reason else ""
+            add_note(
+                (lane_positions[sender] + lane_positions[receiver]) / 2,
+                y,
+                f"LINK RECOVER{suffix}",
+                fill="#dcfce7",
+                stroke="#16a34a",
+            )
+        y += row_gap
+
+    snapshot_label = _optional_text(result.get("snapshot_id")) or "snapshot"
+    add_note(
+        lane_positions[str(result["initiator"])],
+        y,
+        f"{snapshot_label} starts",
+        fill="#ede9fe",
+        stroke="#7c3aed",
+    )
+    y += row_gap
+
+    for marker in result.get("markers", []):
+        add_arrow(
+            str(marker["sender"]),
+            str(marker["receiver"]),
+            y,
+            f"marker t={marker['time']}",
+            dashed=True,
+            color="#475569",
+        )
+        y += row_gap - 4
+
+    balances = ", ".join(
+        f"{process}={balance}"
+        for process, balance in sorted((result.get("balances") or {}).items())
+    ) or "none"
+    process_statuses = ", ".join(
+        f"{process}={status}"
+        for process, status in sorted((result.get("process_statuses") or {}).items())
+    ) or "none"
+    down_channels = [
+        channel for channel, status in sorted((result.get("channel_statuses") or {}).items()) if status != "up"
+    ]
+    channel_messages = result.get("channel_messages") or {}
+    if channel_messages:
+        message_summary = "; ".join(
+            f"{channel} = " + ", ".join(
+                f"{message['amount']} ({message['label']})" for message in messages
+            )
+            for channel, messages in sorted(channel_messages.items())
+        )
+    else:
+        message_summary = "none"
+
+    summary_lines = [
+        f"Balances: {balances}",
+        f"Process status: {process_statuses}",
+        f"Down links: {', '.join(down_channels) if down_channels else 'none'}",
+        f"Recorded in-flight: {message_summary}",
+        f"Totals: consistent={result['consistent']} snapshot_total={result['snapshot_total']} system_total={result['system_total']}",
+    ]
+    summary_height = summary_padding * 2 + summary_line_height * len(summary_lines)
+    summary_y = y + 8
+    body.append(
+        f'<rect x="36" y="{summary_y:.1f}" width="{width - 72:.1f}" height="{summary_height:.1f}" '
+        f'rx="16" ry="16" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />'
+    )
+    body.append(add_text(56, summary_y + 24, "Snapshot summary", anchor="start", size=14, weight="700"))
+    summary_text_y = summary_y + 46
+    for line in summary_lines:
+        body.append(add_text(56, summary_text_y, line, anchor="start", size=12))
+        summary_text_y += summary_line_height
+
+    height = int(summary_y + summary_height + 40)
+    title_text = title or f"Distributed Snapshot — {snapshot_label}"
+    lane_bottom = summary_y - 18
+
+    svg_lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        f"<title id=\"title\">{_svg_escape(title_text)}</title>",
+        f"<desc id=\"desc\">{_svg_escape('Distributed snapshot sequence diagram rendered as SVG.')}</desc>",
+        "<defs>",
+        '  <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">',
+        '    <path d="M0,0 L10,4 L0,8 Z" fill="#1f2937" />',
+        "  </marker>",
+        "</defs>",
+        '<rect x="0" y="0" width="100%" height="100%" fill="#ffffff" />',
+        f'<text x="36" y="30" font-size="18" font-weight="700" fill="#0f172a">{_svg_escape(title_text)}</text>',
+    ]
+
+    for process, x in lane_positions.items():
+        svg_lines.append(
+            f'<rect x="{x - lane_header_width / 2:.1f}" y="{header_top:.1f}" width="{lane_header_width:.1f}" height="{header_height:.1f}" '
+            f'rx="10" ry="10" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.2" />'
+        )
+        svg_lines.append(add_text(x, header_top + 21, process, size=13, weight="700"))
+        svg_lines.append(
+            f'<line x1="{x:.1f}" y1="{header_top + header_height:.1f}" x2="{x:.1f}" y2="{lane_bottom:.1f}" '
+            f'stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 6" />'
+        )
+
+    svg_lines.extend(body)
+    svg_lines.append("</svg>")
+    return "\n".join(svg_lines) + "\n"
+
+
 def _format_mapping(mapping: dict[str, object]) -> str:
     if not mapping:
         return "none"
@@ -629,11 +916,43 @@ def _describe_timeline_event(event: dict[str, object]) -> str:
     return json.dumps(event, sort_keys=True)
 
 
+def generate_walkthrough_svg_assets(
+    result: dict[str, object],
+    processes: Iterable[str],
+    *,
+    output_dir: Path,
+    title: str = "Distributed Snapshot Walkthrough",
+    markdown_path: Path | None = None,
+    filename_prefix: str | None = None,
+) -> dict[str, dict[str, str]]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    prefix = _slugify_filename(filename_prefix or title)
+    assets: dict[str, dict[str, str]] = {}
+    for index, snapshot in enumerate(result.get("snapshots") or [], start=1):
+        snapshot_id = _optional_text(snapshot.get("snapshot_id")) or f"snapshot-{index}"
+        filename = f"{prefix}-{index:02d}-{_slugify_filename(snapshot_id)}.svg"
+        path = output_dir / filename
+        svg_title = f"{title} — {snapshot_id}"
+        path.write_text(render_snapshot_svg(snapshot, processes, title=svg_title), encoding="utf-8")
+        if markdown_path is not None:
+            link = Path(os.path.relpath(path, markdown_path.parent)).as_posix()
+        else:
+            link = path.as_posix()
+        assets[snapshot_id] = {
+            "filename": filename,
+            "path": path.as_posix(),
+            "link": link,
+            "title": svg_title,
+        }
+    return assets
+
+
 def render_script_walkthrough(
     result: dict[str, object],
     processes: Iterable[str],
     *,
     title: str = "Distributed Snapshot Walkthrough",
+    svg_assets: dict[str, dict[str, str]] | None = None,
 ) -> str:
     ordered_processes = list(sorted(set(str(process) for process in processes)))
     final_channel_statuses = result.get("channel_statuses") or {}
@@ -700,7 +1019,8 @@ def render_script_walkthrough(
     if snapshots:
         lines.extend(["", "## Snapshot walkthrough"])
         for snapshot in snapshots:
-            snapshot_id = _safe_mermaid_text(snapshot.get("snapshot_id", "snapshot"))
+            raw_snapshot_id = _optional_text(snapshot.get("snapshot_id")) or "snapshot"
+            snapshot_id = _safe_mermaid_text(raw_snapshot_id)
             step = snapshot.get("step")
             step_suffix = f" (script step {step})" if step is not None else ""
             snapshot_channel_statuses = snapshot.get("channel_statuses") or {}
@@ -709,6 +1029,7 @@ def render_script_walkthrough(
                 for channel, status in sorted(snapshot_channel_statuses.items())
                 if status != "up"
             ]
+            asset = (svg_assets or {}).get(raw_snapshot_id)
             lines.extend(
                 [
                     "",
@@ -720,6 +1041,8 @@ def render_script_walkthrough(
                     f"- consistent totals: `{snapshot['consistent']}` ({snapshot['snapshot_total']} vs {snapshot['system_total']})",
                 ]
             )
+            if asset:
+                lines.append(f"- SVG asset: [{asset['filename']}]({asset['link']})")
             channel_messages = snapshot.get("channel_messages") or {}
             if channel_messages:
                 lines.append("- recorded in-flight messages:")
@@ -731,6 +1054,8 @@ def render_script_walkthrough(
                     lines.append(f"  - `{channel}`: {summary}")
             else:
                 lines.append("- recorded in-flight messages: none")
+            if asset:
+                lines.extend(["", f"![{snapshot_id} SVG]({asset['link']})"])
             lines.extend(["", "```mermaid", render_mermaid(snapshot, ordered_processes).rstrip(), "```"])
     else:
         lines.extend(["", "## Snapshot walkthrough", "- no snapshots were captured by this script"])
@@ -831,6 +1156,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         help="optional Markdown file path for the generated walkthrough",
     )
+    walkthrough.add_argument(
+        "--svg-dir",
+        help="optional directory where one SVG snapshot asset per walkthrough section will be written",
+    )
+    walkthrough.add_argument(
+        "--svg-prefix",
+        help="optional filename prefix for generated SVG asset names",
+    )
 
     return parser
 
@@ -883,12 +1216,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         marker_delays = dict(parse_marker_delay(raw) for raw in args.marker_delay)
         result = bank.run_script(operations, marker_delay_overrides=marker_delays)
         if args.command == "walkthrough":
-            markdown = render_script_walkthrough(result, bank.processes, title=args.title)
-            output_path = _optional_text(getattr(args, "output", None))
-            if output_path:
-                destination = Path(output_path)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_text(markdown, encoding="utf-8")
+            output_path_text = _optional_text(getattr(args, "output", None))
+            output_path = Path(output_path_text) if output_path_text else None
+            svg_assets = None
+            svg_dir_text = _optional_text(getattr(args, "svg_dir", None))
+            if svg_dir_text:
+                svg_assets = generate_walkthrough_svg_assets(
+                    result,
+                    bank.processes,
+                    output_dir=Path(svg_dir_text),
+                    title=args.title,
+                    markdown_path=output_path,
+                    filename_prefix=_optional_text(getattr(args, "svg_prefix", None)),
+                )
+            markdown = render_script_walkthrough(
+                result,
+                bank.processes,
+                title=args.title,
+                svg_assets=svg_assets,
+            )
+            if output_path is not None:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(markdown, encoding="utf-8")
             print(markdown, end="")
         else:
             print(json.dumps(result, indent=2, sort_keys=True))

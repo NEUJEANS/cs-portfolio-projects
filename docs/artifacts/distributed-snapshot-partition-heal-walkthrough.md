@@ -26,8 +26,11 @@
 - process statuses: A=up, B=up, C=up
 - down links: A->B
 - consistent totals: `True` (30 vs 30)
+- SVG asset: [distributed-snapshot-partition-heal-01-during-partition.svg](distributed-snapshot-partition-heal-svg/distributed-snapshot-partition-heal-01-during-partition.svg)
 - recorded in-flight messages:
   - `C->B`: 2 (cb-1)
+
+![during-partition SVG](distributed-snapshot-partition-heal-svg/distributed-snapshot-partition-heal-01-during-partition.svg)
 
 ```mermaid
 sequenceDiagram
@@ -56,7 +59,10 @@ sequenceDiagram
 - process statuses: A=up, B=up, C=up
 - down links: none
 - consistent totals: `True` (30 vs 30)
+- SVG asset: [distributed-snapshot-partition-heal-02-after-heal.svg](distributed-snapshot-partition-heal-svg/distributed-snapshot-partition-heal-02-after-heal.svg)
 - recorded in-flight messages: none
+
+![after-heal SVG](distributed-snapshot-partition-heal-svg/distributed-snapshot-partition-heal-02-after-heal.svg)
 
 ```mermaid
 sequenceDiagram

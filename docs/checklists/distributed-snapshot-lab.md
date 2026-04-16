@@ -12,4 +12,5 @@
 - [x] add failure/recovery scripting with process liveness and scripted scenario playback
 - [x] future slice: model explicit network partitions or link-level failures separately from process crashes
 - [x] future slice: add scripted partition-heal walkthrough assets or richer per-link visualization notes
-- [ ] future slice: render walkthrough diagrams directly to SVG/PNG for project pages and slide decks
+- [x] future slice: render walkthrough diagrams directly to SVG for project pages and slide decks
+- [ ] future slice: add PNG raster export for presentation tools that do not embed SVG cleanly
