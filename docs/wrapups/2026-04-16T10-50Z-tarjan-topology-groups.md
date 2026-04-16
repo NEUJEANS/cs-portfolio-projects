@@ -2,7 +2,7 @@
 
 - Timestamp: 2026-04-16 10:50 UTC
 - Project: `tarjan-scc-lab`
-- Commit shipped: `f57f569`
+- Commit shipped: `8fcc898`
 
 ## What changed
 - added `topology_groups` to the Tarjan SCC `scc` and `condensation` JSON outputs so downstream tools get pre-grouped level layers directly
