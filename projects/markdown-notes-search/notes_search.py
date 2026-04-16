@@ -391,29 +391,60 @@ def is_boolean_query(query):
     return bool(re.search(r'\b(?:AND|OR|NOT)\b|["()]', query, re.IGNORECASE))
 
 
+def section_score_for_query(section, query):
+    q = query.lower().strip()
+    if not q:
+        return 0
+
+    heading_lower = section['heading'].lower()
+    anchor_lower = section['anchor'].lower()
+    content_lower = section['content'].lower()
+    score = 0
+
+    if q == heading_lower:
+        score += 100
+    elif q in heading_lower:
+        score += 70
+    if q == anchor_lower:
+        score += 90
+    elif q in anchor_lower:
+        score += 40
+    if q in content_lower:
+        word_hits = len(re.findall(rf'(?<!\w){re.escape(q)}(?!\w)', content_lower))
+        substring_hits = content_lower.count(q)
+        score += 25 + word_hits * 10 + max(0, substring_hits - word_hits) * 3
+    return score
+
+
 def best_section_for_query(note, query):
-    q = query.lower()
     best = None
     best_score = -1
     for section in note.get('sections', []):
-        heading_lower = section['heading'].lower()
-        anchor_lower = section['anchor'].lower()
-        content_lower = section['content'].lower()
-        score = 0
-        if q == heading_lower:
-            score += 100
-        elif q in heading_lower:
-            score += 70
-        if q == anchor_lower:
-            score += 90
-        elif q in anchor_lower:
-            score += 40
-        if q in content_lower:
-            score += 25 + len(re.findall(rf'(?<!\w){re.escape(q)}(?!\w)', content_lower)) * 10
+        score = section_score_for_query(section, query)
         if score > best_score:
             best_score = score
             best = section
     return best if best_score > 0 else None
+
+
+def build_section_match(note, section):
+    return {
+        'heading': section['heading'],
+        'anchor': section['anchor'],
+        'path': note['path'],
+        'path_with_anchor': f"{note['path']}#{section['anchor']}",
+        'line_number': section.get('start_line'),
+    }
+
+
+def best_snippet_for_section(section, query):
+    query_lower = query.lower()
+    if query_lower in section['heading'].lower() or query_lower in section['anchor'].lower():
+        return f"Section: {section['heading']} (#{section['anchor']})"
+    snippet = extract_snippet(section['content'], query)
+    if snippet:
+        return f"{section['heading']} (#{section['anchor']}): {snippet}" if section['heading'] else snippet
+    return f"Section: {section['heading']} (#{section['anchor']})"
 
 
 def best_snippet_for_query(note, query):
@@ -422,11 +453,7 @@ def best_snippet_for_query(note, query):
             return f'Heading: {heading}'
     section = best_section_for_query(note, query)
     if section:
-        if query.lower() in section['heading'].lower() or query.lower() in section['anchor'].lower():
-            return f"Section: {section['heading']} (#{section['anchor']})"
-        snippet = extract_snippet(section['content'], query)
-        if snippet:
-            return f"{section['heading']} (#{section['anchor']}): {snippet}" if section['heading'] else snippet
+        return best_snippet_for_section(section, query)
     snippet = extract_snippet(note['text'], query)
     if snippet:
         return snippet
@@ -436,7 +463,89 @@ def best_snippet_for_query(note, query):
     return ''
 
 
-def search_notes(notes, query, limit=None):
+def build_matching_terms(note, query, boolean_mode, postfix):
+    if not boolean_mode:
+        matched = score_note(note, query) > 0
+        return matched, ([query] if matched else [])
+
+    matched, positive_terms = evaluate_postfix(postfix, note)
+    if not matched:
+        return False, []
+
+    matched_terms = []
+    seen = set()
+    for term in positive_terms:
+        normalized = term.lower()
+        if normalized in seen or not query_term_matches(note, term):
+            continue
+        seen.add(normalized)
+        matched_terms.append(term)
+    return True, matched_terms
+
+
+def collect_matching_sections(note, terms):
+    matches = []
+    for section in note.get('sections', []):
+        matched_terms = []
+        score = 0
+        for term in terms:
+            section_score = section_score_for_query(section, term)
+            if section_score <= 0:
+                continue
+            matched_terms.append(term)
+            score += section_score
+        if not matched_terms:
+            continue
+        score += len(matched_terms) * 10
+        snippet = ''
+        for term in matched_terms:
+            snippet = best_snippet_for_section(section, term)
+            if snippet:
+                break
+        matches.append(
+            {
+                'section': section,
+                'score': score,
+                'matched_terms': matched_terms,
+                'snippet': snippet,
+            }
+        )
+    return matches
+
+
+def result_display_path(note):
+    if note.get('scope') == 'section' and note.get('section_match'):
+        return note['section_match']['path_with_anchor']
+    return note['path']
+
+
+def expand_results_to_sections(results):
+    expanded = []
+    for note in results:
+        section_hits = collect_matching_sections(note, note.get('matched_terms', []))
+        if not section_hits:
+            expanded.append(note)
+            continue
+
+        for section_hit in section_hits:
+            result = dict(note)
+            result['score'] = note['score'] + section_hit['score']
+            result['snippet'] = section_hit['snippet']
+            result['section_match'] = build_section_match(note, section_hit['section'])
+            result['matched_terms'] = section_hit['matched_terms']
+            result['scope'] = 'section'
+            expanded.append(result)
+    return expanded
+
+
+def result_sort_key(note):
+    line_number = None
+    if note.get('section_match'):
+        line_number = note['section_match'].get('line_number')
+    return (-note['score'], result_display_path(note).lower(), line_number or 0)
+
+
+def search_notes(notes, query, limit=None, section_results=False):
     query = query.strip()
     if not query:
         return []
@@ -444,42 +553,37 @@ def search_notes(notes, query, limit=None):
         raise ValueError('limit must be positive when provided')
 
     results = []
-    postfix = None
     boolean_mode = is_boolean_query(query)
-    if boolean_mode:
-        postfix = to_postfix(tokenize_query(query))
+    postfix = to_postfix(tokenize_query(query)) if boolean_mode else None
 
     for note in notes:
+        matched, matched_terms = build_matching_terms(note, query, boolean_mode, postfix)
+        if not matched:
+            continue
+
         if boolean_mode:
-            matched, positive_terms = evaluate_postfix(postfix, note)
-            if not matched:
-                continue
-            matched_terms = []
-            seen = set()
-            for term in positive_terms:
-                normalized = term.lower()
-                if normalized in seen or not query_term_matches(note, term):
-                    continue
-                seen.add(normalized)
-                matched_terms.append(term)
-            score = sum(score_note(note, term) for term in matched_terms) + len(matched_terms) * 10
             if not matched_terms:
-                score = max(score, 1 + len(note['tags']))
-            snippet = ''
-            best_section = None
-            for term in matched_terms:
-                section = best_section_for_query(note, term)
-                if section and best_section is None:
-                    best_section = section
-                snippet = best_snippet_for_query(note, term)
-                if snippet:
-                    break
+                score = 1 + len(note['tags'])
+                best_section = None
+                snippet = ''
+            else:
+                score = sum(score_note(note, term) for term in matched_terms) + len(matched_terms) * 10
+                best_section = None
+                snippet = ''
+                for term in matched_terms:
+                    section = best_section_for_query(note, term)
+                    if section and best_section is None:
+                        best_section = section
+                    snippet = best_snippet_for_query(note, term)
+                    if snippet:
+                        break
         else:
             score = score_note(note, query)
             if score <= 0:
                 continue
             best_section = best_section_for_query(note, query)
             snippet = best_snippet_for_query(note, query)
+            matched_terms = [query]
 
         if not boolean_mode and score <= 0:
             continue
@@ -487,18 +591,14 @@ def search_notes(notes, query, limit=None):
         result = dict(note)
         result['score'] = score
         result['snippet'] = snippet
-        result['section_match'] = None
-        if best_section:
-            result['section_match'] = {
-                'heading': best_section['heading'],
-                'anchor': best_section['anchor'],
-                'path': note['path'],
-                'path_with_anchor': f"{note['path']}#{best_section['anchor']}",
-                'line_number': best_section.get('start_line'),
-            }
+        result['matched_terms'] = matched_terms
+        result['scope'] = 'note'
+        result['section_match'] = build_section_match(note, best_section) if best_section else None
         results.append(result)
 
-    results.sort(key=lambda note: (-note['score'], note['path'].lower()))
+    if section_results:
+        results = expand_results_to_sections(results)
+    results.sort(key=result_sort_key)
     if limit is not None:
         return results[:limit]
     return results
@@ -547,7 +647,7 @@ def format_result(note, show_backlinks=False, show_section_match=False, show_ope
     if show_open_command:
         command = build_editor_command(note, editor=editor, base_directory=base_directory)
         open_command = f"\n  open: {' '.join(shlex.quote(part) for part in command)}"
-    return f"{note['path']} (score={note['score']}){tags}{snippet}{section}{backlinks}{open_command}"
+    return f"{result_display_path(note)} (score={note['score']}){tags}{snippet}{section}{backlinks}{open_command}"
 
 
 def truncate_for_width(text, width):
@@ -561,18 +661,21 @@ def truncate_for_width(text, width):
 
 
 def summarize_result_line(note, width):
+    display_path = result_display_path(note)
     section = ''
-    if note.get('section_match'):
+    if note.get('scope') != 'section' and note.get('section_match'):
         section_heading = note['section_match'].get('heading') or note['section_match'].get('anchor') or ''
         if section_heading:
             section = f' -> {section_heading}'
     tags = f" [{' '.join('#' + tag for tag in note.get('tags', [])[:2])}]" if note.get('tags') else ''
-    return truncate_for_width(f"{note['path']} ({note['score']}){section}{tags}", width)
+    return truncate_for_width(f"{display_path} ({note['score']}){section}{tags}", width)
 
 
 def build_preview_lines(note, width):
     width = max(10, width)
-    lines = [truncate_for_width(note['path'], width), truncate_for_width(f"score: {note['score']}", width)]
+    lines = [truncate_for_width(result_display_path(note), width), truncate_for_width(f"score: {note['score']}", width)]
+    if note.get('scope') == 'section':
+        lines.append(truncate_for_width('scope: section result', width))
     if note.get('tags'):
         lines.extend(textwrap.wrap(f"tags: {' '.join('#' + tag for tag in note['tags'])}", width=width) or [''])
     if note.get('section_match'):
@@ -587,8 +690,6 @@ def build_preview_lines(note, width):
         lines.append('')
         lines.extend(textwrap.wrap(note['snippet'], width=width) or [''])
     return lines
-
-
 
 
 def selection_label(results, selected_indices):
@@ -614,6 +715,8 @@ def export_results(results, destination, export_format='markdown', editor=None, 
     for note in results:
         payload = {
             'path': note['path'],
+            'path_display': result_display_path(note),
+            'scope': note.get('scope', 'note'),
             'score': note['score'],
             'tags': note.get('tags', []),
             'snippet': note.get('snippet', ''),
@@ -630,7 +733,10 @@ def export_results(results, destination, export_format='markdown', editor=None, 
 
     lines = ['# Exported markdown-notes-search results', '']
     for note in selected:
-        lines.append(f"## `{note['path']}`")
+        lines.append(f"## `{note['path_display']}`")
+        if note['path_display'] != note['path']:
+            lines.append(f"- note: `{note['path']}`")
+        lines.append(f"- scope: {note['scope']}")
         lines.append(f"- score: {note['score']}")
         if note['tags']:
             lines.append(f"- tags: {' '.join('#' + tag for tag in note['tags'])}")
@@ -693,7 +799,7 @@ def launch_tui(results, editor=None, base_directory=None, export_file=None, expo
                 result_index = scroll + row_index
                 if result_index >= len(results):
                     break
-                marker = '*' if result_index in marked else ' ' 
+                marker = '*' if result_index in marked else ' '
                 summary = summarize_result_line(results[result_index], max(1, left_width - 4))
                 line = f'{marker} {summary}'
                 attr = curses.A_REVERSE if result_index == selected else curses.A_NORMAL
@@ -761,6 +867,7 @@ def main(argv=None):
     parser.add_argument('--export-results', default=None, help='write search results to a Markdown or JSON file for sharing or follow-up review')
     parser.add_argument('--export-format', choices=('markdown', 'json'), default='markdown', help='export format for --export-results')
     parser.add_argument('--tui', action='store_true', help='browse results in a terminal UI with a preview pane')
+    parser.add_argument('--section-results', action='store_true', help='expand ranked note matches into section-level results when headings or bodies contain the query')
     parser.add_argument(
         '--index-file',
         default=None,
@@ -776,18 +883,21 @@ def main(argv=None):
         index_file=args.index_file if use_index else None,
         rebuild_index=args.rebuild_index,
     )
-    results = search_notes(notes, args.query, limit=args.limit)
+    results = search_notes(notes, args.query, limit=args.limit, section_results=args.section_results)
     if args.json:
         payload = [
             {
                 'name': note['name'],
                 'path': note['path'],
+                'path_display': result_display_path(note),
+                'scope': note.get('scope', 'note'),
                 'tags': note['tags'],
                 'headings': note['headings'],
                 'sections': note['sections'],
                 'backlinks': note['backlinks'],
                 'score': note['score'],
                 'snippet': note['snippet'],
+                'matched_terms': note.get('matched_terms', []),
                 'section_match': note.get('section_match'),
                 'open_command': build_editor_command(note, editor=args.editor, base_directory=args.directory),
             }

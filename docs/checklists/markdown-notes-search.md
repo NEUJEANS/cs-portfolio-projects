@@ -1,6 +1,6 @@
 # Markdown Notes Search Checklist
 
-Status: vertical slice 8 complete
+Status: vertical slice 9 complete
 Last updated: 2026-04-16
 
 ## Vertical slice 1
@@ -128,7 +128,23 @@ Last updated: 2026-04-16
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Vertical slice 9 — section-scoped result expansion
+- [x] identify markdown-notes-search as still worth another slice because a single best section per note limited multi-anchor follow-up workflows
+- [x] skip external web research because the existing checklist, README, and code structure already scoped the next section-results slice clearly
+- [x] do short Python result-shaping and line-aware editor-command refresh with a small self-test note before editing
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--section-results` so ranked note hits can expand into multiple section-scoped results from the same note
+- [x] preserve section-aware editor commands, JSON output, export bundles, and TUI previews for section-scoped results
+- [x] expand automated coverage for section-result expansion, JSON output, and Markdown export bundles
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Next slice candidates
 - [ ] richer posting-list style incremental index rather than storing full note bodies in cache
 - [x] multi-result TUI actions such as bulk-open or export
-- [ ] section-scoped retrieval with heading anchors and open-in-editor actions for multiple selected hits
+- [x] section-scoped retrieval with heading anchors and open-in-editor actions for multiple selected hits
+- [ ] collapse/group dense section-result clusters from the same note in TUI mode

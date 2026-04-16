@@ -369,6 +369,83 @@ class NotesSearchTests(unittest.TestCase):
             self.assertEqual(payload[0]['open_command'][1], '--goto')
             self.assertTrue(payload[0]['open_command'][2].endswith('systems.md:3'))
 
+    def test_section_results_expand_multiple_matching_sections_from_one_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\n## Failure Detection\nHeartbeat timeout and phi accrual.\n## Failure Recovery\nFailure detection retries and timers.',
+                encoding='utf-8',
+            )
+
+            results = search_notes(index_notes(root), 'failure', section_results=True)
+
+            self.assertEqual([result['scope'] for result in results[:2]], ['section', 'section'])
+            self.assertEqual(
+                sorted(result['section_match']['path_with_anchor'] for result in results[:2]),
+                ['systems.md#failure-detection', 'systems.md#failure-recovery'],
+            )
+            self.assertEqual(sorted(result['section_match']['line_number'] for result in results[:2]), [2, 4])
+
+    def test_cli_json_output_can_emit_section_scoped_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\n## Failure Detection\nHeartbeat timeout and phi accrual.\n## Failure Recovery\nFailure detection retries and timers.',
+                encoding='utf-8',
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'notes_search.py',
+                    str(root),
+                    'failure',
+                    '--json',
+                    '--section-results',
+                    '--editor',
+                    'code',
+                ],
+                cwd=Path(__file__).resolve().parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload[0]['scope'], 'section')
+            self.assertEqual(
+                sorted(item['path_display'] for item in payload[:2]),
+                ['systems.md#failure-detection', 'systems.md#failure-recovery'],
+            )
+            self.assertEqual(sorted(item['section_match']['line_number'] for item in payload[:2]), [2, 4])
+            self.assertTrue(all(item['open_command'][0] == 'code' for item in payload[:2]))
+
+    def test_export_results_writes_section_scoped_markdown_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            note = {
+                'path': 'systems.md',
+                'scope': 'section',
+                'score': 155,
+                'tags': ['systems'],
+                'snippet': 'Failure detection notes.',
+                'section_match': {
+                    'heading': 'Failure Detection',
+                    'anchor': 'failure-detection',
+                    'path': 'systems.md',
+                    'path_with_anchor': 'systems.md#failure-detection',
+                    'line_number': 8,
+                },
+            }
+
+            destination = root / 'exports' / 'section-results.md'
+            export_results([note], destination, editor='code', base_directory=root)
+            payload = destination.read_text(encoding='utf-8')
+
+            self.assertIn('## `systems.md#failure-detection`', payload)
+            self.assertIn('- note: `systems.md`', payload)
+            self.assertIn('- scope: section', payload)
+
     def test_tui_helpers_build_preview_and_result_summary(self):
         note = {
             'path': 'systems/distributed.md',
