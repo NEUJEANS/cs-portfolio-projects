@@ -14,6 +14,6 @@
   3. targeted diff regression check confirming missing benchmark hook doc/source fields stay `None`
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
-- Commit hash: `b44d18c`
+- Commit hash: `220c778`
 - Next step:
   - add optional source-code excerpt output or file-anchor links so inspection artifacts can point reviewers straight to the relevant hook implementation
