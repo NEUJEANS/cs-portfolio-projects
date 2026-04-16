@@ -18,6 +18,6 @@
   - review pass 3: test/docs audit
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
-- Commit hash: `c9abd9f`
+- Implementation commit hash: `a07d8fb`
 - Next step:
   - add multi-result TUI actions such as bulk-open or export without breaking the existing dependency-light CLI design
