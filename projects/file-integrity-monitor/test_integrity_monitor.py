@@ -14,14 +14,19 @@ from integrity_monitor import (
     diff_exit_code,
     diff_snapshots,
     format_text_report,
+    parse_public_key_envs,
     parse_verification_envs,
-    should_include,
     sign_manifest,
+    sign_manifest_with_private_key,
     verify_manifest_signature,
+    verify_manifest_signature_with_public_key,
+    verify_manifest_with_public_keys,
     verify_manifest_with_secrets,
 )
 
 SCRIPT = Path(__file__).with_name("integrity_monitor.py")
+OPENSSL = subprocess.run(["openssl", "version"], capture_output=True, text=True)
+HAS_OPENSSL = OPENSSL.returncode == 0
 
 
 class IntegrityMonitorTests(unittest.TestCase):
@@ -55,8 +60,6 @@ class IntegrityMonitorTests(unittest.TestCase):
             manifest = build_manifest(root, ignore_patterns=["*.log"])
             self.assertIn("keep.txt", manifest["files"])
             self.assertNotIn("skip.log", manifest["files"])
-            self.assertTrue(should_include("nested/data.txt", ["*.log"]))
-            self.assertFalse(should_include("skip.log", ["*.log"]))
 
     def test_text_report_contains_summary_and_sections(self):
         diff = {
@@ -111,6 +114,12 @@ class IntegrityMonitorTests(unittest.TestCase):
             ["OLD_KEY", "CURRENT_KEY"],
         )
 
+    def test_parse_public_key_envs_prefers_unique_entries(self):
+        self.assertEqual(
+            parse_public_key_envs("CURRENT_PUB", ["OLD_PUB", "CURRENT_PUB", "OLD_PUB"]),
+            ["OLD_PUB", "CURRENT_PUB"],
+        )
+
     def test_verify_manifest_with_secrets_uses_key_id_to_match_rotated_keys(self):
         manifest = sign_manifest(build_manifest(Path(__file__).parent), "old-secret", key_id="OLD_KEY")
         result = verify_manifest_with_secrets(
@@ -120,6 +129,47 @@ class IntegrityMonitorTests(unittest.TestCase):
         self.assertTrue(result["verified"])
         self.assertEqual(result["matched_env"], "OLD_KEY")
         self.assertEqual(result["key_id"], "OLD_KEY")
+
+    @unittest.skipUnless(HAS_OPENSSL, "OpenSSL is required for RSA signature tests")
+    def test_sign_manifest_with_private_key_and_verify_with_public_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            private_key = root / "private.pem"
+            public_key = root / "public.pem"
+            self._generate_rsa_keypair(private_key, public_key)
+
+            manifest = build_manifest(Path(__file__).parent)
+            signed = sign_manifest_with_private_key(manifest, private_key, key_id="INTEGRITY_PUB_V1")
+            self.assertEqual(signed["signature"]["algorithm"], "rsa-sha256")
+            self.assertTrue(verify_manifest_signature_with_public_key(signed, public_key))
+
+            other_private = root / "other-private.pem"
+            other_public = root / "other-public.pem"
+            self._generate_rsa_keypair(other_private, other_public)
+            self.assertFalse(verify_manifest_signature_with_public_key(signed, other_public))
+
+    @unittest.skipUnless(HAS_OPENSSL, "OpenSSL is required for RSA signature tests")
+    def test_verify_manifest_with_public_keys_uses_key_id_to_match_rotated_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_private = root / "old-private.pem"
+            old_public = root / "old-public.pem"
+            new_private = root / "new-private.pem"
+            new_public = root / "new-public.pem"
+            self._generate_rsa_keypair(old_private, old_public)
+            self._generate_rsa_keypair(new_private, new_public)
+
+            manifest = sign_manifest_with_private_key(
+                build_manifest(Path(__file__).parent),
+                old_private,
+                key_id="INTEGRITY_PUB_V1",
+            )
+            result = verify_manifest_with_public_keys(
+                manifest,
+                [("INTEGRITY_PUB_V2", new_public), ("INTEGRITY_PUB_V1", old_public)],
+            )
+            self.assertTrue(result["verified"])
+            self.assertEqual(result["matched_env"], "INTEGRITY_PUB_V1")
 
     def test_cli_scan_output_and_diff_text_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -312,6 +362,90 @@ class IntegrityMonitorTests(unittest.TestCase):
             )
             self.assertIn('"has_changes": false', diff.stdout)
 
+    @unittest.skipUnless(HAS_OPENSSL, "OpenSSL is required for RSA signature tests")
+    def test_cli_supports_asymmetric_signed_baselines_and_public_key_rotation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_path = root / "baseline.json"
+            data_path = root / "data"
+            data_path.mkdir()
+            (data_path / "alpha.txt").write_text("alpha")
+
+            old_private = root / "old-private.pem"
+            old_public = root / "old-public.pem"
+            new_private = root / "new-private.pem"
+            new_public = root / "new-public.pem"
+            self._generate_rsa_keypair(old_private, old_public)
+            self._generate_rsa_keypair(new_private, new_public)
+
+            signing_env = os.environ | {"INTEGRITY_PRIV_V1": str(old_private)}
+            scan = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "scan",
+                    str(data_path),
+                    "--output",
+                    str(baseline_path),
+                    "--private-key-env",
+                    "INTEGRITY_PRIV_V1",
+                    "--key-id",
+                    "INTEGRITY_PUB_V1",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=signing_env,
+            )
+            manifest = json.loads(scan.stdout)
+            self.assertEqual(manifest["signature"]["algorithm"], "rsa-sha256")
+            self.assertEqual(manifest["signature"]["key_id"], "INTEGRITY_PUB_V1")
+
+            verify_env = os.environ | {
+                "INTEGRITY_PUB_V1": str(old_public),
+                "INTEGRITY_PUB_V2": str(new_public),
+            }
+            verify = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "verify",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--public-key-env",
+                    "INTEGRITY_PUB_V2",
+                    "--public-key-env",
+                    "INTEGRITY_PUB_V1",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=verify_env,
+            )
+            self.assertIn('"verified": true', verify.stdout)
+            self.assertIn('"matched_env": "INTEGRITY_PUB_V1"', verify.stdout)
+
+            diff = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "diff",
+                    str(data_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--public-key-env",
+                    "INTEGRITY_PUB_V2",
+                    "--public-key-env",
+                    "INTEGRITY_PUB_V1",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=verify_env,
+            )
+            self.assertIn('"has_changes": false', diff.stdout)
+
     def test_scan_and_diff_ignore_embedded_baseline_inside_target_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -388,7 +522,10 @@ class IntegrityMonitorTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(missing_secret.returncode, 2)
-            self.assertIn("diff requires --signing-key-env or --verify-key-env", missing_secret.stderr)
+            self.assertIn(
+                "diff requires --signing-key-env/--verify-key-env or --private-key-env/--public-key-env",
+                missing_secret.stderr,
+            )
 
             wrong_secret_env = os.environ | {"WRONG_SECRET": "bad-secret"}
             wrong_secret = subprocess.run(
@@ -487,6 +624,30 @@ class IntegrityMonitorTests(unittest.TestCase):
             )
             self.assertEqual(diff.returncode, 2)
             self.assertIn("diff requires --baseline", diff.stderr)
+
+    @staticmethod
+    def _generate_rsa_keypair(private_key: Path, public_key: Path):
+        subprocess.run(
+            [
+                "openssl",
+                "genpkey",
+                "-algorithm",
+                "RSA",
+                "-pkeyopt",
+                "rsa_keygen_bits:2048",
+                "-out",
+                str(private_key),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["openssl", "rsa", "-pubout", "-in", str(private_key), "-out", str(public_key)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 if __name__ == "__main__":

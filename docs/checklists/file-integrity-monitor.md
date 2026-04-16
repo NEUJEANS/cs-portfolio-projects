@@ -9,4 +9,4 @@
 - [x] add CI-friendly exit codes for diff automation workflows
 - [x] add tamper-evident signed manifests with verification support
 - [x] add rotation-friendly signed baseline verification with key identifiers and multiple accepted secrets
-- [ ] consider asymmetric signing and verification in a future pass
+- [x] add optional asymmetric signing and verification with PEM key material and public-key rotation support

@@ -1,16 +1,21 @@
 import argparse
+import base64
 import fnmatch
 import hashlib
 import hmac
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 SUPPORTED_ALGORITHMS = {"sha256": hashlib.sha256, "sha1": hashlib.sha1, "md5": hashlib.md5}
-SIGNATURE_ALGORITHM = "hmac-sha256"
+HMAC_SIGNATURE_ALGORITHM = "hmac-sha256"
+RSA_SIGNATURE_ALGORITHM = "rsa-sha256"
 
 EXIT_OK = 0
 EXIT_CHANGES_FOUND = 1
@@ -86,7 +91,7 @@ def build_manifest(
         embedded_paths=embedded_paths,
     )
     return {
-        "version": 4,
+        "version": 5,
         "algorithm": algorithm,
         "root": str(Path(directory).resolve()),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -109,7 +114,7 @@ def sign_manifest(manifest, secret: str, key_id: str | None = None):
     signature = hmac.new(secret.encode("utf-8"), canonicalize_manifest(manifest), hashlib.sha256).hexdigest()
     signed_manifest = dict(manifest)
     signed_manifest["signature"] = {
-        "algorithm": SIGNATURE_ALGORITHM,
+        "algorithm": HMAC_SIGNATURE_ALGORITHM,
         "value": signature,
     }
     if key_id:
@@ -121,11 +126,88 @@ def verify_manifest_signature(manifest, secret: str) -> bool:
     signature = manifest.get("signature")
     if not signature:
         return False
-    if signature.get("algorithm") != SIGNATURE_ALGORITHM:
+    if signature.get("algorithm") != HMAC_SIGNATURE_ALGORITHM:
         return False
 
     expected = hmac.new(secret.encode("utf-8"), canonicalize_manifest(manifest), hashlib.sha256).hexdigest()
     return hmac.compare_digest(signature.get("value", ""), expected)
+
+
+def require_openssl() -> str:
+    openssl = shutil.which("openssl")
+    if not openssl:
+        raise ValueError("OpenSSL is required for asymmetric signing and verification")
+    return openssl
+
+
+def sign_manifest_with_private_key(manifest, private_key_path: Path, key_id: str | None = None):
+    openssl = require_openssl()
+    private_key = private_key_path.resolve()
+    if not private_key.is_file():
+        raise ValueError(f"Private key file does not exist: {private_key}")
+
+    payload = canonicalize_manifest(manifest)
+    with tempfile.NamedTemporaryFile(delete=False) as payload_file, tempfile.NamedTemporaryFile(delete=False) as sig_file:
+        payload_path = Path(payload_file.name)
+        sig_path = Path(sig_file.name)
+        payload_file.write(payload)
+
+    try:
+        result = subprocess.run(
+            [openssl, "dgst", "-sha256", "-sign", str(private_key), "-out", str(sig_path), str(payload_path)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.strip() or result.stdout.strip() or "unknown openssl error"
+            raise ValueError(f"OpenSSL signing failed: {stderr}")
+        signed_manifest = dict(manifest)
+        signed_manifest["signature"] = {
+            "algorithm": RSA_SIGNATURE_ALGORITHM,
+            "value": base64.b64encode(sig_path.read_bytes()).decode("ascii"),
+        }
+        if key_id:
+            signed_manifest["signature"]["key_id"] = key_id
+        return signed_manifest
+    finally:
+        payload_path.unlink(missing_ok=True)
+        sig_path.unlink(missing_ok=True)
+
+
+def verify_manifest_signature_with_public_key(manifest, public_key_path: Path) -> bool:
+    signature = manifest.get("signature")
+    if not signature:
+        return False
+    if signature.get("algorithm") != RSA_SIGNATURE_ALGORITHM:
+        return False
+
+    openssl = require_openssl()
+    public_key = public_key_path.resolve()
+    if not public_key.is_file():
+        raise ValueError(f"Public key file does not exist: {public_key}")
+
+    try:
+        signature_bytes = base64.b64decode(signature.get("value", ""), validate=True)
+    except Exception as exc:  # pragma: no cover - defensive parsing path
+        raise ValueError("Signature value is not valid base64") from exc
+
+    payload = canonicalize_manifest(manifest)
+    with tempfile.NamedTemporaryFile(delete=False) as payload_file, tempfile.NamedTemporaryFile(delete=False) as sig_file:
+        payload_path = Path(payload_file.name)
+        sig_path = Path(sig_file.name)
+        payload_file.write(payload)
+        sig_file.write(signature_bytes)
+
+    try:
+        result = subprocess.run(
+            [openssl, "dgst", "-sha256", "-verify", str(public_key), "-signature", str(sig_path), str(payload_path)],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+    finally:
+        payload_path.unlink(missing_ok=True)
+        sig_path.unlink(missing_ok=True)
 
 
 def load_signing_secret(env_name: str | None):
@@ -137,6 +219,20 @@ def load_signing_secret(env_name: str | None):
     if not secret:
         raise ValueError(f"Signing key env var {env_name!r} is empty")
     return secret
+
+
+def load_key_path(env_name: str | None, label: str):
+    if not env_name:
+        return None
+    value = os.environ.get(env_name)
+    if value is None:
+        raise ValueError(f"{label} env var {env_name!r} is not set")
+    if not value:
+        raise ValueError(f"{label} env var {env_name!r} is empty")
+    path = Path(value).expanduser()
+    if not path.is_file():
+        raise ValueError(f"{label} file from env var {env_name!r} does not exist: {path}")
+    return path
 
 
 def load_verification_secrets(env_names: Iterable[str] | None):
@@ -151,6 +247,18 @@ def load_verification_secrets(env_names: Iterable[str] | None):
     return secrets
 
 
+def load_public_keys(env_names: Iterable[str] | None):
+    public_keys = []
+    seen = set()
+    for env_name in env_names or []:
+        if env_name in seen:
+            continue
+        seen.add(env_name)
+        public_key = load_key_path(env_name, "Public key")
+        public_keys.append((env_name, public_key))
+    return public_keys
+
+
 def parse_verification_envs(signing_key_env: str | None, verify_key_envs: Iterable[str] | None):
     env_names = []
     for env_name in verify_key_envs or []:
@@ -158,6 +266,16 @@ def parse_verification_envs(signing_key_env: str | None, verify_key_envs: Iterab
             env_names.append(env_name)
     if signing_key_env and signing_key_env not in env_names:
         env_names.append(signing_key_env)
+    return env_names
+
+
+def parse_public_key_envs(signing_public_key_env: str | None, verify_public_key_envs: Iterable[str] | None):
+    env_names = []
+    for env_name in verify_public_key_envs or []:
+        if env_name and env_name not in env_names:
+            env_names.append(env_name)
+    if signing_public_key_env and signing_public_key_env not in env_names:
+        env_names.append(signing_public_key_env)
     return env_names
 
 
@@ -178,6 +296,42 @@ def verify_manifest_with_secrets(manifest, verification_secrets):
         "algorithm": signature.get("algorithm"),
         "key_id": desired_key_id,
         "matched_env": matched_env,
+    }
+
+
+def verify_manifest_with_public_keys(manifest, public_keys):
+    signature = manifest.get("signature") or {}
+    desired_key_id = signature.get("key_id")
+    matched_env = None
+
+    for env_name, public_key_path in public_keys:
+        if desired_key_id and env_name != desired_key_id:
+            continue
+        if verify_manifest_signature_with_public_key(manifest, public_key_path):
+            matched_env = env_name
+            break
+
+    return {
+        "verified": matched_env is not None,
+        "algorithm": signature.get("algorithm"),
+        "key_id": desired_key_id,
+        "matched_env": matched_env,
+    }
+
+
+def verify_signed_manifest(manifest, verification_secrets, public_keys):
+    signature = manifest.get("signature") or {}
+    algorithm = signature.get("algorithm")
+    if algorithm == HMAC_SIGNATURE_ALGORITHM:
+        return verify_manifest_with_secrets(manifest, verification_secrets)
+    if algorithm == RSA_SIGNATURE_ALGORITHM:
+        return verify_manifest_with_public_keys(manifest, public_keys)
+    return {
+        "verified": False,
+        "algorithm": algorithm,
+        "key_id": signature.get("key_id"),
+        "matched_env": None,
+        "reason": "unsupported signature algorithm",
     }
 
 
@@ -274,8 +428,18 @@ def parse_args(argv=None):
         help="Environment variable containing an accepted verification secret; repeat to support key rotation",
     )
     parser.add_argument(
+        "--private-key-env",
+        help="Environment variable containing a PEM private key path for asymmetric signing",
+    )
+    parser.add_argument(
+        "--public-key-env",
+        action="append",
+        default=[],
+        help="Environment variable containing an accepted PEM public key path for asymmetric verification",
+    )
+    parser.add_argument(
         "--key-id",
-        help="Stable key identifier to embed in the signature metadata (defaults to --signing-key-env when omitted)",
+        help="Stable key identifier to embed in the signature metadata (defaults to the signing env name when omitted)",
     )
     return parser.parse_args(argv)
 
@@ -286,10 +450,16 @@ def main(argv=None):
     baseline_path = Path(args.baseline).resolve() if args.baseline else None
     output_path = Path(args.output).resolve() if args.output else None
 
+    if args.signing_key_env and args.private_key_env:
+        return fail_usage("choose either --signing-key-env or --private-key-env, not both")
+
     try:
         signing_secret = load_signing_secret(args.signing_key_env)
+        private_key_path = load_key_path(args.private_key_env, "Private key")
         verification_envs = parse_verification_envs(args.signing_key_env, args.verify_key_env)
         verification_secrets = load_verification_secrets(verification_envs)
+        public_key_envs = parse_public_key_envs(args.private_key_env, args.public_key_env)
+        public_keys = load_public_keys(public_key_envs)
     except ValueError as exc:
         return fail_usage(str(exc))
 
@@ -307,6 +477,9 @@ def main(argv=None):
         if signing_secret:
             key_id = args.key_id or args.signing_key_env
             manifest = sign_manifest(manifest, signing_secret, key_id=key_id)
+        elif private_key_path:
+            key_id = args.key_id or args.private_key_env
+            manifest = sign_manifest_with_private_key(manifest, private_key_path, key_id=key_id)
         payload = json.dumps(manifest, indent=2)
         if output_path:
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -323,22 +496,26 @@ def main(argv=None):
     if args.command == "verify":
         if not signature_present:
             return fail_usage("verify requires a baseline with a signature")
-        if not verification_secrets:
-            return fail_usage("verify requires --signing-key-env or --verify-key-env")
-        verification_result = verify_manifest_with_secrets(baseline, verification_secrets)
+        if not verification_secrets and not public_keys:
+            return fail_usage(
+                "verify requires --signing-key-env/--verify-key-env or --private-key-env/--public-key-env"
+            )
+        verification_result = verify_signed_manifest(baseline, verification_secrets, public_keys)
         if verification_result["verified"]:
             print(json.dumps(verification_result, indent=2))
             return EXIT_OK
-        verification_result["reason"] = "signature mismatch"
+        verification_result.setdefault("reason", "signature mismatch")
         print(json.dumps(verification_result, indent=2))
         return EXIT_SIGNATURE_INVALID
 
     if signature_present:
-        if not verification_secrets:
-            return fail_usage("diff requires --signing-key-env or --verify-key-env when the baseline is signed")
-        verification_result = verify_manifest_with_secrets(baseline, verification_secrets)
+        if not verification_secrets and not public_keys:
+            return fail_usage(
+                "diff requires --signing-key-env/--verify-key-env or --private-key-env/--public-key-env when the baseline is signed"
+            )
+        verification_result = verify_signed_manifest(baseline, verification_secrets, public_keys)
         if not verification_result["verified"]:
-            verification_result["reason"] = "signature mismatch"
+            verification_result.setdefault("reason", "signature mismatch")
             print(json.dumps(verification_result, indent=2))
             return EXIT_SIGNATURE_INVALID
 
