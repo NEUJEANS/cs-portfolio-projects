@@ -82,6 +82,17 @@ class SplayTreeBehaviorTests(unittest.TestCase):
         self.assertFalse(result.found)
         self.assertEqual(result.left, [2, 4, 7, 10])
         self.assertEqual(result.right, [12, 15, 18])
+        self.assertIn(result.left_root, result.left)
+        self.assertIn(result.right_root, result.right)
+
+    def test_split_tracks_empty_partition_roots(self) -> None:
+        tree = SplayTree([10, 4, 15, 2, 7, 12, 18])
+        result = tree.split(2)
+        self.assertTrue(result.found)
+        self.assertEqual(result.left, [])
+        self.assertEqual(result.left_root, None)
+        self.assertEqual(result.right, [4, 7, 10, 12, 15, 18])
+        self.assertIn(result.right_root, result.right)
 
     def test_join_from_values_rebuilds_valid_tree(self) -> None:
         tree = SplayTree.join_from_values([1, 3, 5], [8, 13, 21])
@@ -298,8 +309,21 @@ class SplayTreeCliTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
+            left_snapshot = tmp_path / "split-left.json"
+            right_snapshot = tmp_path / "split-right.json"
             split = subprocess.run(
-                ["python3", str(PROJECT_DIR / "splay_tree_lab.py"), "split", "--snapshot", str(snapshot), "11"],
+                [
+                    "python3",
+                    str(PROJECT_DIR / "splay_tree_lab.py"),
+                    "split",
+                    "--snapshot",
+                    str(snapshot),
+                    "--left-output",
+                    str(left_snapshot),
+                    "--right-output",
+                    str(right_snapshot),
+                    "11",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -307,6 +331,14 @@ class SplayTreeCliTests(unittest.TestCase):
             split_payload = json.loads(split.stdout)
             self.assertEqual(split_payload["left"], [2, 4, 7, 10])
             self.assertEqual(split_payload["right"], [12, 15, 18])
+            self.assertIn(split_payload["left_root"], split_payload["left"])
+            self.assertIn(split_payload["right_root"], split_payload["right"])
+            left_payload = json.loads(left_snapshot.read_text())
+            right_payload = json.loads(right_snapshot.read_text())
+            self.assertEqual(left_payload["root"], split_payload["left_root"])
+            self.assertEqual(right_payload["root"], split_payload["right_root"])
+            self.assertEqual(left_payload["values"], [2, 4, 7, 10])
+            self.assertEqual(right_payload["values"], [12, 15, 18])
 
             left_input = tmp_path / "left.txt"
             right_input = tmp_path / "right.txt"

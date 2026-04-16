@@ -16,6 +16,8 @@ class SplitResult:
     found: bool
     left: list[int]
     right: list[int]
+    left_root: int | None = None
+    right_root: int | None = None
 
 
 @dataclass
@@ -181,6 +183,8 @@ class SplayTree:
                 found=True,
                 left=SplayTree._inorder_from(left_root),
                 right=SplayTree._inorder_from(right_root),
+                left_root=None if left_root is None else left_root.key,
+                right_root=None if right_root is None else right_root.key,
             )
 
         root = self.root
@@ -195,6 +199,8 @@ class SplayTree:
                 found=False,
                 left=SplayTree._inorder_from(left_root),
                 right=SplayTree._inorder_from(right_root),
+                left_root=left_root.key,
+                right_root=None if right_root is None else right_root.key,
             )
 
         right_root = root
@@ -207,6 +213,8 @@ class SplayTree:
             found=False,
             left=SplayTree._inorder_from(left_root),
             right=SplayTree._inorder_from(right_root),
+            left_root=None if left_root is None else left_root.key,
+            right_root=right_root.key,
         )
 
     @classmethod
@@ -427,6 +435,22 @@ def save_tree(path: Path, tree: SplayTree) -> None:
     path.write_text(json.dumps(tree.snapshot(), indent=2) + "\n")
 
 
+def save_snapshot_payload(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def split_result_snapshot(values: list[int], *, root: int | None) -> dict[str, object]:
+    return {
+        "values": values,
+        "root": root,
+        "size": len(values),
+        "rotation_count": 0,
+        "splay_steps": 0,
+        "comparison_count": 0,
+    }
+
+
 def save_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
@@ -591,6 +615,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     split_parser = subparsers.add_parser("split", help="split a snapshot into values below and above a pivot")
     split_parser.add_argument("--snapshot", required=True, type=Path)
+    split_parser.add_argument("--left-output", type=Path, help="optional snapshot path for values below the pivot")
+    split_parser.add_argument("--right-output", type=Path, help="optional snapshot path for values above the pivot")
     split_parser.add_argument("pivot", type=int)
 
     join_parser = subparsers.add_parser("join", help="join two sorted disjoint value sets into a single snapshot")
@@ -667,7 +693,12 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "split":
             tree = load_tree(args.snapshot)
-            print(json.dumps(tree.split(args.pivot).__dict__, indent=2))
+            result = tree.split(args.pivot)
+            if args.left_output is not None:
+                save_snapshot_payload(args.left_output, split_result_snapshot(result.left, root=result.left_root))
+            if args.right_output is not None:
+                save_snapshot_payload(args.right_output, split_result_snapshot(result.right, root=result.right_root))
+            print(json.dumps(result.__dict__, indent=2))
             return 0
 
         if args.command == "join":
