@@ -9,5 +9,5 @@
 - [x] update README usage and future-work notes
 - [x] run tests and manual CLI checks
 - [x] complete at least 3 review passes and fix issues found
-- [ ] run secret scan before push
-- [ ] append wrap-up after commit/push
+- [x] run secret scan before push
+- [x] append wrap-up after commit/push
