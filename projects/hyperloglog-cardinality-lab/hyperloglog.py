@@ -305,6 +305,142 @@ def simulate_accuracy(precision: int, cardinality: int, trials: int, seed: int =
     }
 
 
+def parse_int_list(raw: str, *, argument_name: str) -> list[int]:
+    values: list[int] = []
+    for part in raw.split(","):
+        normalized = part.strip()
+        if not normalized:
+            continue
+        try:
+            values.append(int(normalized))
+        except ValueError as exc:
+            raise ValueError(f"{argument_name} must contain only integers") from exc
+    if not values:
+        raise ValueError(f"{argument_name} must include at least one integer")
+    return list(dict.fromkeys(values))
+
+
+def _trial_items(cardinality: int, trial: int, seed: int) -> list[str]:
+    rng = random.Random(f"{seed}:{cardinality}:{trial}")
+    return [
+        f"cardinality-{cardinality}-trial-{trial}-item-{index}-{rng.getrandbits(64):016x}"
+        for index in range(cardinality)
+    ]
+
+
+def benchmark_accuracy(precisions: list[int], cardinalities: list[int], trials: int, seed: int = 0) -> dict:
+    if trials <= 0:
+        raise ValueError("trials must be greater than 0")
+    if not precisions:
+        raise ValueError("at least one precision is required")
+    if not cardinalities:
+        raise ValueError("at least one cardinality is required")
+
+    normalized_precisions = list(dict.fromkeys(precisions))
+    normalized_cardinalities = list(dict.fromkeys(cardinalities))
+    for precision in normalized_precisions:
+        HyperLogLog(precision=precision)
+    for cardinality in normalized_cardinalities:
+        if cardinality <= 0:
+            raise ValueError("cardinalities must be greater than 0")
+
+    rows: list[dict[str, Any]] = []
+    best_by_cardinality: list[dict[str, Any]] = []
+    for cardinality in normalized_cardinalities:
+        estimates_by_precision = {precision: [] for precision in normalized_precisions}
+        for trial in range(trials):
+            items = _trial_items(cardinality, trial, seed)
+            for precision in normalized_precisions:
+                sketch = HyperLogLog(precision=precision)
+                sketch.extend(items)
+                estimates_by_precision[precision].append(sketch.estimate())
+
+        cardinality_rows: list[dict[str, Any]] = []
+        for precision in normalized_precisions:
+            estimates = estimates_by_precision[precision]
+            absolute_errors = [abs(estimate - cardinality) for estimate in estimates]
+            relative_errors = [error / cardinality for error in absolute_errors]
+            row = {
+                "precision": precision,
+                "register_count": 1 << precision,
+                "dense_register_bytes": 1 << precision,
+                "dense_register_kib": round((1 << precision) / 1024, 3),
+                "cardinality": cardinality,
+                "trials": trials,
+                "seed": seed,
+                "mean_estimate": sum(estimates) / len(estimates),
+                "min_estimate": min(estimates),
+                "max_estimate": max(estimates),
+                "mean_absolute_error": sum(absolute_errors) / len(absolute_errors),
+                "mean_relative_error": sum(relative_errors) / len(relative_errors),
+                "max_relative_error": max(relative_errors),
+                "theoretical_error_bound": 1.04 / math.sqrt(1 << precision),
+            }
+            cardinality_rows.append(row)
+            rows.append(row)
+
+        best_row = min(cardinality_rows, key=lambda row: (row["mean_relative_error"], row["dense_register_bytes"]))
+        best_by_cardinality.append(
+            {
+                "cardinality": cardinality,
+                "recommended_precision": best_row["precision"],
+                "mean_relative_error": best_row["mean_relative_error"],
+                "dense_register_bytes": best_row["dense_register_bytes"],
+            }
+        )
+
+    return {
+        "precisions": normalized_precisions,
+        "cardinalities": normalized_cardinalities,
+        "trials": trials,
+        "seed": seed,
+        "rows": rows,
+        "best_by_cardinality": best_by_cardinality,
+    }
+
+
+def render_benchmark_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# HyperLogLog benchmark report",
+        "",
+        f"- Precisions: {', '.join(str(value) for value in report['precisions'])}",
+        f"- Cardinalities: {', '.join(str(value) for value in report['cardinalities'])}",
+        f"- Trials per combination: {report['trials']}",
+        f"- Seed: {report['seed']}",
+        "- Dense register bytes assume one byte per register in this educational implementation.",
+        "",
+    ]
+
+    recommendations = {item['cardinality']: item for item in report['best_by_cardinality']}
+    for cardinality in report['cardinalities']:
+        lines.extend([f"## Cardinality {cardinality}", ""])
+        recommendation = recommendations[cardinality]
+        lines.append(
+            "Lowest observed mean error in this sweep: precision "
+            f"`{recommendation['recommended_precision']}` at "
+            f"`{recommendation['dense_register_bytes']}` dense bytes with "
+            f"mean relative error `{recommendation['mean_relative_error'] * 100:.2f}%`."
+        )
+        lines.extend(
+            [
+                "",
+                "| precision | registers | dense bytes | mean estimate | mean abs error | mean rel error | max rel error | theory bound |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for row in [entry for entry in report['rows'] if entry['cardinality'] == cardinality]:
+            lines.append(
+                "| "
+                f"{row['precision']} | {row['register_count']} | {row['dense_register_bytes']} | "
+                f"{row['mean_estimate']:.2f} | {row['mean_absolute_error']:.2f} | "
+                f"{row['mean_relative_error'] * 100:.2f}% | {row['max_relative_error'] * 100:.2f}% | "
+                f"{row['theoretical_error_bound'] * 100:.2f}% |"
+            )
+        lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
 def build_command(args: argparse.Namespace) -> int:
     sketch = HyperLogLog(precision=args.precision)
     items, extraction_summary = extract_items(
@@ -342,6 +478,34 @@ def simulate_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def benchmark_command(args: argparse.Namespace) -> int:
+    report = benchmark_accuracy(
+        parse_int_list(args.precisions, argument_name="--precisions"),
+        parse_int_list(args.cardinalities, argument_name="--cardinalities"),
+        args.trials,
+        args.seed,
+    )
+    if args.json_output:
+        output_path = Path(args.json_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(report, indent=2) + "\n")
+    if args.markdown_output:
+        output_path = Path(args.markdown_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(render_benchmark_markdown(report))
+    print(
+        json.dumps(
+            {
+                **report,
+                "json_output": args.json_output,
+                "markdown_output": args.markdown_output,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Estimate distinct counts with a HyperLogLog sketch")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -375,6 +539,26 @@ def build_parser() -> argparse.ArgumentParser:
     simulate_parser.add_argument("--trials", type=int, default=10, help="number of synthetic trials to run")
     simulate_parser.add_argument("--seed", type=int, default=0, help="deterministic seed")
     simulate_parser.set_defaults(func=simulate_command)
+
+    benchmark_parser = subparsers.add_parser(
+        "benchmark",
+        help="compare precision/error tradeoffs across multiple cardinalities",
+    )
+    benchmark_parser.add_argument(
+        "--precisions",
+        default="8,10,12",
+        help="comma-separated precision values between 4 and 16 (default: 8,10,12)",
+    )
+    benchmark_parser.add_argument(
+        "--cardinalities",
+        default="100,1000,10000",
+        help="comma-separated true cardinalities to simulate (default: 100,1000,10000)",
+    )
+    benchmark_parser.add_argument("--trials", type=int, default=10, help="number of synthetic trials per combination")
+    benchmark_parser.add_argument("--seed", type=int, default=0, help="deterministic seed")
+    benchmark_parser.add_argument("--json-output", help="optional path for the full JSON benchmark report")
+    benchmark_parser.add_argument("--markdown-output", help="optional path for a Markdown summary report")
+    benchmark_parser.set_defaults(func=benchmark_command)
 
     return parser
 

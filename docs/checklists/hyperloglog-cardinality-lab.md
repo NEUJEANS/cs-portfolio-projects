@@ -27,5 +27,21 @@
 - [x] complete review pass 2 and fix issues found
 - [x] complete review pass 3 and fix issues found
 - [x] run secret scan
+- [x] commit and push
+- [ ] append wrap-up
+
+## 2026-04-16 benchmark-report slice
+- [x] do brief web research on HyperLogLog accuracy/storage reporting patterns
+- [x] do a short Python CLI/report refresh and self-test for deterministic benchmark sweeps
+- [x] add a resumable checklist entry for the benchmark-report slice
+- [x] implement a `benchmark` CLI that compares precision vs error across multiple cardinalities
+- [x] generate publishable JSON/Markdown benchmark artifacts
+- [x] update README usage and future-slice notes for the new benchmark/report workflow
+- [x] add automated coverage for benchmark helpers and CLI outputs
+- [x] run tests for the updated slice
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
 - [ ] commit and push
 - [ ] append wrap-up

@@ -18,6 +18,7 @@ A portfolio-friendly Python project that implements a HyperLogLog sketch for app
 - distinct-count estimation with small-range correction
 - sketch merge support for combining partial counts
 - simulation mode to compare observed error with the theoretical error bound
+- benchmark/report mode for precision-vs-error-vs-memory sweeps across multiple cardinalities
 
 ## Usage
 
@@ -95,6 +96,20 @@ python3 projects/hyperloglog-cardinality-lab/hyperloglog.py simulate \
   --seed 42
 ```
 
+Generate a benchmark sweep and a publishable Markdown report:
+
+```bash
+python3 projects/hyperloglog-cardinality-lab/hyperloglog.py benchmark \
+  --precisions 8,10,12 \
+  --cardinalities 200,2000,20000 \
+  --trials 8 \
+  --seed 7 \
+  --json-output artifacts/hyperloglog-benchmark-report.json \
+  --markdown-output docs/artifacts/hyperloglog-benchmark-report.md
+```
+
+The generated Markdown report is handy for portfolio write-ups because it summarizes the lowest-error sampled precision for each target cardinality in a GitHub-friendly table.
+
 ## Example build output
 
 ```json
@@ -123,6 +138,7 @@ python3 projects/hyperloglog-cardinality-lab/hyperloglog.py simulate \
 python3 -m unittest projects/hyperloglog-cardinality-lab/test_hyperloglog.py
 python3 projects/hyperloglog-cardinality-lab/hyperloglog.py build --input artifacts/events.csv --field user_id --output artifacts/events_users_hll.json
 python3 projects/hyperloglog-cardinality-lab/hyperloglog.py build --input artifacts/events.jsonl --field event.visitor.id --output artifacts/events_visitors_hll.json
+python3 projects/hyperloglog-cardinality-lab/hyperloglog.py benchmark --precisions 8,10 --cardinalities 200,2000 --trials 4 --seed 7
 ```
 
 ## Design notes
@@ -134,5 +150,5 @@ python3 projects/hyperloglog-cardinality-lab/hyperloglog.py build --input artifa
 
 ## Future improvements
 - add register compression to compare dense vs sparse storage
-- add benchmark/report mode for precision-vs-error-vs-memory sweeps across several cardinalities
+- add CSV/chart export or plotted visuals derived from benchmark report rows
 - add side-by-side Bloom filter and HyperLogLog demos for probabilistic data structure interviews

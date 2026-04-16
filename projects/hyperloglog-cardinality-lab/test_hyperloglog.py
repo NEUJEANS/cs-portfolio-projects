@@ -7,7 +7,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from hyperloglog import HyperLogLog, extract_items, infer_input_format, load_hll, save_hll, simulate_accuracy
+from hyperloglog import (
+    HyperLogLog,
+    benchmark_accuracy,
+    extract_items,
+    infer_input_format,
+    load_hll,
+    parse_int_list,
+    render_benchmark_markdown,
+    save_hll,
+    simulate_accuracy,
+)
 
 SCRIPT = ROOT / "hyperloglog.py"
 
@@ -72,6 +82,37 @@ class HyperLogLogTests(unittest.TestCase):
             simulate_accuracy(precision=8, cardinality=0, trials=5)
         with self.assertRaises(ValueError):
             simulate_accuracy(precision=8, cardinality=100, trials=0)
+
+    def test_parse_int_list_rejects_non_numeric_values(self):
+        self.assertEqual(parse_int_list("8, 10, 10, 12", argument_name="--precisions"), [8, 10, 12])
+        with self.assertRaises(ValueError):
+            parse_int_list("8,ten", argument_name="--precisions")
+        with self.assertRaises(ValueError):
+            parse_int_list(", ,", argument_name="--precisions")
+
+    def test_benchmark_accuracy_is_deterministic(self):
+        first = benchmark_accuracy([8, 10], [200, 2000], trials=4, seed=7)
+        second = benchmark_accuracy([8, 10], [200, 2000], trials=4, seed=7)
+        self.assertEqual(first, second)
+        self.assertEqual(len(first["rows"]), 4)
+        self.assertEqual(first["best_by_cardinality"][0]["cardinality"], 200)
+
+    def test_benchmark_accuracy_rejects_invalid_inputs(self):
+        with self.assertRaises(ValueError):
+            benchmark_accuracy([], [100], trials=3)
+        with self.assertRaises(ValueError):
+            benchmark_accuracy([8], [], trials=3)
+        with self.assertRaises(ValueError):
+            benchmark_accuracy([8], [0], trials=3)
+        with self.assertRaises(ValueError):
+            benchmark_accuracy([8], [100], trials=0)
+
+    def test_render_benchmark_markdown_includes_tables(self):
+        report = benchmark_accuracy([8], [250], trials=3, seed=5)
+        markdown = render_benchmark_markdown(report)
+        self.assertIn("# HyperLogLog benchmark report", markdown)
+        self.assertIn("## Cardinality 250", markdown)
+        self.assertIn("| precision | registers | dense bytes |", markdown)
 
     def test_infer_input_format_by_extension(self):
         self.assertEqual(infer_input_format(Path("users.csv"), "auto"), "csv")
@@ -213,7 +254,18 @@ class HyperLogLogTests(unittest.TestCase):
                 child.unlink()
             temp_dir.rmdir()
 
-    def test_cli_build_stats_merge_and_simulate(self):
+    def test_cli_reports_clean_error_for_invalid_benchmark_precisions(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "benchmark", "--precisions", "8,ten", "--cardinalities", "200"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--precisions must contain only integers", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_build_stats_merge_simulate_and_benchmark(self):
         temp_dir = ROOT / self._testMethodName
         temp_dir.mkdir(exist_ok=True)
         try:
@@ -226,6 +278,8 @@ class HyperLogLogTests(unittest.TestCase):
             sketch_csv = temp_dir / "csv.json"
             sketch_jsonl = temp_dir / "jsonl.json"
             merged = temp_dir / "merged.json"
+            benchmark_json = temp_dir / "benchmark.json"
+            benchmark_md = temp_dir / "benchmark.md"
             input_a.write_text("apple\nbanana\ncarrot\n")
             input_b.write_text("banana\ndate\nelderberry\n")
             csv_input.write_text("user_id,plan\nu1,free\nu2,pro\nu1,team\n")
@@ -324,6 +378,36 @@ class HyperLogLogTests(unittest.TestCase):
             simulate_data = json.loads(simulate.stdout)
             self.assertEqual(simulate_data["cardinality"], 200)
             self.assertEqual(simulate_data["trials"], 5)
+
+            benchmark = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "benchmark",
+                    "--precisions",
+                    "8,10",
+                    "--cardinalities",
+                    "200,2000",
+                    "--trials",
+                    "4",
+                    "--seed",
+                    "7",
+                    "--json-output",
+                    str(benchmark_json),
+                    "--markdown-output",
+                    str(benchmark_md),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            benchmark_data = json.loads(benchmark.stdout)
+            self.assertEqual(benchmark_data["precisions"], [8, 10])
+            self.assertEqual(benchmark_data["cardinalities"], [200, 2000])
+            self.assertEqual(len(benchmark_data["rows"]), 4)
+            self.assertTrue(benchmark_json.exists())
+            self.assertTrue(benchmark_md.exists())
+            self.assertIn("HyperLogLog benchmark report", benchmark_md.read_text())
         finally:
             for child in temp_dir.iterdir():
                 child.unlink()

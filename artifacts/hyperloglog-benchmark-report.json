@@ -1,0 +1,180 @@
+{
+  "precisions": [
+    8,
+    10,
+    12
+  ],
+  "cardinalities": [
+    200,
+    2000,
+    20000
+  ],
+  "trials": 8,
+  "seed": 7,
+  "rows": [
+    {
+      "precision": 8,
+      "register_count": 256,
+      "dense_register_bytes": 256,
+      "dense_register_kib": 0.25,
+      "cardinality": 200,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 204.34466942480154,
+      "min_estimate": 179.45353165336863,
+      "max_estimate": 216.24245214390942,
+      "mean_absolute_error": 12.047276927695801,
+      "mean_relative_error": 0.060236384638479,
+      "max_relative_error": 0.10273234173315686,
+      "theoretical_error_bound": 0.065
+    },
+    {
+      "precision": 10,
+      "register_count": 1024,
+      "dense_register_bytes": 1024,
+      "dense_register_kib": 1.0,
+      "cardinality": 200,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 202.0711971611636,
+      "min_estimate": 195.53530469706732,
+      "max_estimate": 208.93704268656396,
+      "mean_absolute_error": 4.000765356873298,
+      "mean_relative_error": 0.02000382678436649,
+      "max_relative_error": 0.04468521343281978,
+      "theoretical_error_bound": 0.0325
+    },
+    {
+      "precision": 12,
+      "register_count": 4096,
+      "dense_register_bytes": 4096,
+      "dense_register_kib": 4.0,
+      "cardinality": 200,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 200.58230600257693,
+      "min_estimate": 197.69507651063296,
+      "max_estimate": 202.94568612592656,
+      "mean_absolute_error": 1.2099086891270012,
+      "mean_relative_error": 0.0060495434456350064,
+      "max_relative_error": 0.014728430629632782,
+      "theoretical_error_bound": 0.01625
+    },
+    {
+      "precision": 8,
+      "register_count": 256,
+      "dense_register_bytes": 256,
+      "dense_register_kib": 0.25,
+      "cardinality": 2000,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 2024.0602344200297,
+      "min_estimate": 1908.4035860048732,
+      "max_estimate": 2271.4775762077725,
+      "mean_absolute_error": 88.37720790705507,
+      "mean_relative_error": 0.044188603953527535,
+      "max_relative_error": 0.13573878810388623,
+      "theoretical_error_bound": 0.065
+    },
+    {
+      "precision": 10,
+      "register_count": 1024,
+      "dense_register_bytes": 1024,
+      "dense_register_kib": 1.0,
+      "cardinality": 2000,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 2010.38258073486,
+      "min_estimate": 1888.1284816558787,
+      "max_estimate": 2129.348138680152,
+      "mean_absolute_error": 56.12625886966467,
+      "mean_relative_error": 0.028063129434832332,
+      "max_relative_error": 0.0646740693400759,
+      "theoretical_error_bound": 0.0325
+    },
+    {
+      "precision": 12,
+      "register_count": 4096,
+      "dense_register_bytes": 4096,
+      "dense_register_kib": 4.0,
+      "cardinality": 2000,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 2013.5110412912177,
+      "min_estimate": 1988.0150611207123,
+      "max_estimate": 2030.4779613541361,
+      "mean_absolute_error": 17.87746830899522,
+      "mean_relative_error": 0.00893873415449761,
+      "max_relative_error": 0.015238980677068071,
+      "theoretical_error_bound": 0.01625
+    },
+    {
+      "precision": 8,
+      "register_count": 256,
+      "dense_register_bytes": 256,
+      "dense_register_kib": 0.25,
+      "cardinality": 20000,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 19969.534604625096,
+      "min_estimate": 18915.558170713957,
+      "max_estimate": 20520.85987663972,
+      "mean_absolute_error": 462.6632666552564,
+      "mean_relative_error": 0.02313316333276282,
+      "max_relative_error": 0.05422209146430214,
+      "theoretical_error_bound": 0.065
+    },
+    {
+      "precision": 10,
+      "register_count": 1024,
+      "dense_register_bytes": 1024,
+      "dense_register_kib": 1.0,
+      "cardinality": 20000,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 20137.096895229646,
+      "min_estimate": 19236.376713348684,
+      "max_estimate": 20915.551531880028,
+      "mean_absolute_error": 363.11687035412115,
+      "mean_relative_error": 0.018155843517706056,
+      "max_relative_error": 0.045777576594001404,
+      "theoretical_error_bound": 0.0325
+    },
+    {
+      "precision": 12,
+      "register_count": 4096,
+      "dense_register_bytes": 4096,
+      "dense_register_kib": 4.0,
+      "cardinality": 20000,
+      "trials": 8,
+      "seed": 7,
+      "mean_estimate": 20037.837755791414,
+      "min_estimate": 19429.847079797582,
+      "max_estimate": 20443.59128736167,
+      "mean_absolute_error": 223.36861922177422,
+      "mean_relative_error": 0.011168430961088712,
+      "max_relative_error": 0.02850764601012088,
+      "theoretical_error_bound": 0.01625
+    }
+  ],
+  "best_by_cardinality": [
+    {
+      "cardinality": 200,
+      "recommended_precision": 12,
+      "mean_relative_error": 0.0060495434456350064,
+      "dense_register_bytes": 4096
+    },
+    {
+      "cardinality": 2000,
+      "recommended_precision": 12,
+      "mean_relative_error": 0.00893873415449761,
+      "dense_register_bytes": 4096
+    },
+    {
+      "cardinality": 20000,
+      "recommended_precision": 12,
+      "mean_relative_error": 0.011168430961088712,
+      "dense_register_bytes": 4096
+    }
+  ]
+}
