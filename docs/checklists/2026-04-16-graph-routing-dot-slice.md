@@ -9,4 +9,4 @@
 - [x] extend tests for DOT export helpers and CLI behavior
 - [x] update README and project checklist entries
 - [x] complete 3 review passes and fix issues found
-- [ ] run tests, secret scan, commit, push, and write the wrap-up
+- [x] run tests, secret scan, commit, push, and write the wrap-up
