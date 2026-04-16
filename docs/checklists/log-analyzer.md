@@ -10,4 +10,6 @@
 - [x] expand automated tests
 - [x] run tests
 - [x] run 3 review passes and fix issues found
-- [ ] future slice: support combined logs and latency-aware fields
+- [x] add support for combined logs with referrer/user-agent capture
+- [x] add optional latency summaries when logs include response-time fields
+- [ ] future slice: export CSV summaries or per-path latency breakdowns for spreadsheet/chart workflows
