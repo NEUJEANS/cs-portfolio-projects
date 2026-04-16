@@ -18,6 +18,7 @@ This project shows practical compiler-style text processing, file-system automat
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
 - supports a dependency-free `--watch` mode with a configurable polling interval so content edits, new files, and shared partial updates trigger rebuilds during local authoring
 - can serve the generated `dist/` folder through a built-in local preview server, including browser auto-refresh when `--serve` is combined with `--watch`
+- generates a default `404.html` fallback and lets authors override it with `404.md`, including preview-only placeholders such as `{{requestedPath}}`
 - builds top navigation automatically from page metadata while allowing hidden pages via `nav: false`
 - generates a `tags/` directory of archive pages from front matter tags, including a browsable tags index and per-tag page listings
 - renders a focused Markdown subset: headings, paragraphs, bullet lists, ordered lists, blockquotes, links, images, inline code, fenced code blocks, bold, and italics
@@ -85,6 +86,8 @@ node sitegen.js content dist --watch --serve --watch-interval 250 --serve-port 4
 
 Watch mode uses a small polling snapshot instead of platform-specific recursive file watching, so it also catches newly added Markdown files and `_partials/` template edits on Linux without extra dependencies. When `--serve` is enabled without `--watch`, the preview server serves the current `dist/` snapshot without injecting the live-reload client.
 
+The generator now always produces a root-level `404.html`. If you do nothing, it emits a default fallback page that points visitors back into the portfolio. If you want a branded fallback, add `content/404.md`; it renders to `404.html` automatically and stays out of navigation unless you explicitly set `nav: true`. During local preview, missing-route responses can interpolate `{{requestedPath}}`, `{{requestedUrl}}`, and `{{statusCode}}` inside that custom page so authors can show friendlier diagnostics while testing broken links.
+
 If you want shared layout chrome across every page, add optional partials under `content/_partials/`:
 
 ```html
@@ -135,4 +138,4 @@ node --test test_static_site_generator.js
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
 - syntax highlighting themes and line-number support for fenced code blocks
-- custom 404 pages and friendlier preview error surfaces for missing routes
+- sitemap.xml or RSS feed generation for blog-style portfolio sites

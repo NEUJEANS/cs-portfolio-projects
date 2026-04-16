@@ -11,4 +11,5 @@
 - [x] Support shared external template partials for header/footer reuse
 - [x] Add a watch mode for faster local authoring
 - [x] Add an optional live preview server with browser auto-refresh
-- [ ] Add custom 404 pages and friendlier preview error surfaces for missing routes
+- [x] Add custom 404 pages and friendlier preview error surfaces for missing routes
+- [ ] Add syntax highlighting themes or richer code-block presentation

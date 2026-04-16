@@ -7,6 +7,7 @@ const PARTIALS_DIR_NAME = '_partials';
 const LIVE_RELOAD_PATH = '/__sitegen/live';
 const DEFAULT_SERVE_HOST = '127.0.0.1';
 const DEFAULT_SERVE_PORT = 4173;
+const NOT_FOUND_OUTPUT_NAME = '404.html';
 
 function parseFrontMatter(source) {
   const normalized = source.replace(/^\uFEFF/, '');
@@ -124,7 +125,7 @@ function toOutputPath(relativeMarkdownPath, metadata = {}) {
 
   const dirname = path.posix.dirname(normalized);
   const baseName = path.posix.basename(normalized, '.md');
-  const derivedName = metadata.slug || (baseName === 'index' ? 'index' : slugify(metadata.title || baseName));
+  const derivedName = metadata.slug || (baseName === 'index' || baseName === '404' ? baseName : slugify(metadata.title || baseName));
   const fileName = `${derivedName}.html`;
   return dirname === '.' ? fileName : path.posix.join(dirname, fileName);
 }
@@ -398,6 +399,10 @@ function relativeLink(fromOutputName, toOutputName) {
   return path.posix.relative(fromDir, target) || path.posix.basename(target);
 }
 
+function isNotFoundOutputName(outputName) {
+  return toPosixPath(outputName) === NOT_FOUND_OUTPUT_NAME;
+}
+
 function normalizeTags(rawTags) {
   const values = Array.isArray(rawTags) ? rawTags : [];
   const seen = new Set();
@@ -496,6 +501,21 @@ function renderTagArchiveContent(collection, page) {
 </section>`;
 }
 
+function selectFallbackHomePage(pages) {
+  return pages.find((page) => page.outputName === 'index.html') || pages.find((page) => page.metadata.nav !== false) || null;
+}
+
+function renderDefaultNotFoundContent(page, pages) {
+  const homePage = selectFallbackHomePage(pages);
+  const homeLink = homePage ? relativeLink(page.outputName, homePage.outputName) : null;
+  const homeLabel = homePage ? homePage.metadata.title || homePage.slug : 'home page';
+
+  return `<section class="not-found">
+  <p>The page you requested could not be found in this generated site.</p>
+  <p>Use the navigation above to jump back into the portfolio${homeLink ? `, or return to <a href="${escapeHtml(homeLink)}">${escapeHtml(homeLabel)}</a>.` : '.'}</p>
+</section>`;
+}
+
 function rootPathForPage(outputName) {
   const normalized = toPosixPath(outputName);
   const dirname = path.posix.dirname(normalized);
@@ -590,10 +610,12 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
       .tag-pill { display: inline-flex; align-items: center; font-size: 0.9rem; background: #9992; padding: 0.2rem 0.55rem; border-radius: 999px; color: inherit; text-decoration: none; }
       .tag-directory, .tag-archive-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.85rem; }
-      .tag-directory li, .tag-archive-list li article { padding: 0.9rem 1rem; border: 1px solid #9993; border-radius: 0.85rem; background: #9991; }
-      .tag-directory a, .tag-archive-list a { color: inherit; }
+      .tag-directory li, .tag-archive-list li article, .not-found { padding: 0.9rem 1rem; border: 1px solid #9993; border-radius: 0.85rem; background: #9991; }
+      .tag-directory a, .tag-archive-list a, .not-found a { color: inherit; }
       .tag-count, .tag-source { color: #666; font-size: 0.95rem; }
       .tag-archive-list h2 { margin-top: 0; margin-bottom: 0.4rem; }
+      .not-found p:first-child { margin-top: 0; }
+      .not-found p:last-child { margin-bottom: 0; }
       footer { margin-top: 2rem; font-size: 0.9rem; color: #666; }
     </style>
   </head>
@@ -642,10 +664,22 @@ function loadPages(contentDir) {
     .filter((entry) => entry.relativePath.endsWith('.md'))
     .map((entry) => {
       const raw = fs.readFileSync(entry.fullPath, 'utf8');
-      const { metadata, body } = parseFrontMatter(raw);
+      const parsed = parseFrontMatter(raw);
+      const metadata = { ...parsed.metadata };
+      const sourceName = toPosixPath(entry.relativePath);
+      if (sourceName === '404.md') {
+        if (!Object.prototype.hasOwnProperty.call(metadata, 'title')) {
+          metadata.title = 'Page Not Found';
+        }
+        if (!Object.prototype.hasOwnProperty.call(metadata, 'description')) {
+          metadata.description = 'Friendly fallback page for missing portfolio routes.';
+        }
+        if (!Object.prototype.hasOwnProperty.call(metadata, 'nav')) {
+          metadata.nav = false;
+        }
+      }
       const baseName = path.basename(entry.relativePath, '.md');
       const slug = metadata.slug || slugify(metadata.title || baseName);
-      const sourceName = toPosixPath(entry.relativePath);
       return {
         sourcePath: entry.fullPath,
         sourceName,
@@ -653,7 +687,7 @@ function loadPages(contentDir) {
         outputName: toOutputPath(sourceName, metadata),
         metadata,
         tags: normalizeTags(metadata.tags),
-        body,
+        body: parsed.body,
       };
     })
     .sort((left, right) => {
@@ -721,13 +755,17 @@ function buildSite(contentDir, outputDir) {
 
   const tagCollections = buildTagCollections(pages);
   const tagCollectionsBySlug = new Map(tagCollections.map((collection) => [collection.slug, collection]));
+  const hasAuthoredNotFoundPage = pages.some((page) => isNotFoundOutputName(page.outputName));
+  const generatedOutputNames = [];
+  if (!hasAuthoredNotFoundPage) {
+    generatedOutputNames.push(NOT_FOUND_OUTPUT_NAME);
+  }
   if (tagCollections.length) {
-    const generatedTagOutputs = [
-      'tags/index.html',
-      ...tagCollections.map((collection) => collection.outputName),
-    ];
-    assertNoGeneratedPageConflicts(pages, generatedTagOutputs);
-    assertNoGeneratedAssetConflicts(listStaticAssetOutputNames(contentDir), generatedTagOutputs);
+    generatedOutputNames.push('tags/index.html', ...tagCollections.map((collection) => collection.outputName));
+  }
+  if (generatedOutputNames.length) {
+    assertNoGeneratedPageConflicts(pages, generatedOutputNames);
+    assertNoGeneratedAssetConflicts(listStaticAssetOutputNames(contentDir), generatedOutputNames);
   }
   const navigation = buildNavigation(pages, tagCollections);
   const assets = copyStaticAssets(contentDir, outputDir);
@@ -739,6 +777,31 @@ function buildSite(contentDir, outputDir) {
   }
 
   const generatedPages = [];
+  if (!hasAuthoredNotFoundPage) {
+    const notFoundPage = {
+      slug: '404',
+      outputName: NOT_FOUND_OUTPUT_NAME,
+      metadata: {
+        title: 'Page Not Found',
+        description: 'Friendly fallback page for missing portfolio routes.',
+        nav: false,
+      },
+      sourceName: '(generated)',
+      tags: [],
+    };
+
+    writeRenderedPage(
+      outputDir,
+      notFoundPage.outputName,
+      renderTemplate(notFoundPage, navigation, renderDefaultNotFoundContent(notFoundPage, pages), tagCollectionsBySlug, partials)
+    );
+    generatedPages.push({
+      source: '(generated)',
+      output: notFoundPage.outputName,
+      title: notFoundPage.metadata.title,
+    });
+  }
+
   if (tagCollections.length) {
     const tagIndexPage = {
       slug: 'tags',
@@ -1024,6 +1087,71 @@ function detectContentType(filePath) {
   return types[ext] || 'application/octet-stream';
 }
 
+function applyPreviewPlaceholders(html, requestUrl, statusCode) {
+  const request = new URL(requestUrl, 'http://127.0.0.1');
+  let requestedPath = request.pathname || '/';
+  try {
+    requestedPath = decodeURIComponent(requestedPath);
+  } catch {
+    requestedPath = request.pathname || '/';
+  }
+  const requestedUrl = `${requestedPath}${request.search || ''}${request.hash || ''}`;
+  const replacements = {
+    requestedPath: escapeHtml(requestedPath),
+    requestedUrl: escapeHtml(requestedUrl),
+    statusCode: escapeHtml(String(statusCode)),
+  };
+
+  return html.replace(/\{\{\s*(requestedPath|requestedUrl|statusCode)\s*\}\}/g, (match, key) => replacements[key] || match);
+}
+
+function resolvePreviewNotFoundPath(outputDir) {
+  const candidate = path.resolve(outputDir, NOT_FOUND_OUTPUT_NAME);
+  if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) {
+    return null;
+  }
+  return candidate;
+}
+
+function sendPreviewFile(res, request, filePath, options = {}) {
+  const statusCode = options.statusCode || 200;
+  const liveReload = options.liveReload === true;
+  const previewPlaceholders = options.previewPlaceholders === true;
+  const contentType = detectContentType(filePath);
+  const raw = fs.readFileSync(filePath);
+
+  if (contentType.startsWith('text/html')) {
+    let html = raw.toString('utf8');
+    if (previewPlaceholders) {
+      html = applyPreviewPlaceholders(html, request.url || '/', statusCode);
+    }
+    if (liveReload) {
+      html = injectLiveReloadClient(html);
+    }
+    res.writeHead(statusCode, {
+      'Cache-Control': 'no-cache',
+      'Content-Length': Buffer.byteLength(html),
+      'Content-Type': contentType,
+    });
+    if (request.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    res.end(html);
+    return;
+  }
+
+  res.writeHead(statusCode, {
+    'Content-Length': raw.length,
+    'Content-Type': contentType,
+  });
+  if (request.method === 'HEAD') {
+    res.end();
+    return;
+  }
+  res.end(raw);
+}
+
 function startPreviewServer(outputDir, options = {}) {
   const host = options.host || DEFAULT_SERVE_HOST;
   const port = options.port ?? DEFAULT_SERVE_PORT;
@@ -1059,37 +1187,29 @@ function startPreviewServer(outputDir, options = {}) {
 
     const filePath = resolvePreviewRequestPath(outputDir, req.url);
     if (!filePath) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Not found');
-      return;
-    }
+      const notFoundPath = resolvePreviewNotFoundPath(outputDir);
+      if (notFoundPath) {
+        sendPreviewFile(res, req, notFoundPath, {
+          statusCode: 404,
+          liveReload,
+          previewPlaceholders: true,
+        });
+        return;
+      }
 
-    const contentType = detectContentType(filePath);
-    const raw = fs.readFileSync(filePath);
-    if (contentType.startsWith('text/html') && liveReload) {
-      const html = injectLiveReloadClient(raw.toString('utf8'));
-      res.writeHead(200, {
-        'Cache-Control': 'no-cache',
-        'Content-Length': Buffer.byteLength(html),
-        'Content-Type': contentType,
-      });
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       if (req.method === 'HEAD') {
         res.end();
         return;
       }
-      res.end(html);
+      res.end('Not found');
       return;
     }
 
-    res.writeHead(200, {
-      'Content-Length': raw.length,
-      'Content-Type': contentType,
+    sendPreviewFile(res, req, filePath, {
+      statusCode: 200,
+      liveReload,
     });
-    if (req.method === 'HEAD') {
-      res.end();
-      return;
-    }
-    res.end(raw);
   });
 
   const heartbeat = setInterval(() => {
@@ -1286,7 +1406,9 @@ module.exports = {
   DEFAULT_SERVE_HOST,
   DEFAULT_SERVE_PORT,
   LIVE_RELOAD_PATH,
+  NOT_FOUND_OUTPUT_NAME,
   PARTIALS_DIR_NAME,
+  applyPreviewPlaceholders,
   assertNoGeneratedAssetConflicts,
   assertNoGeneratedPageConflicts,
   buildNavigation,
@@ -1300,6 +1422,7 @@ module.exports = {
   escapeHtml,
   formatBuildSummary,
   injectLiveReloadClient,
+  isNotFoundOutputName,
   isReservedContentPath,
   listStaticAssetOutputNames,
   loadPages,
@@ -1312,13 +1435,17 @@ module.exports = {
   parseServePort,
   parseWatchInterval,
   relativeLink,
+  renderDefaultNotFoundContent,
   renderPartial,
   replaceMarkdownImages,
   replaceMarkdownLinks,
   resolveDocumentHref,
+  resolvePreviewNotFoundPath,
   resolvePreviewRequestPath,
   rootPathForPage,
   sanitizeHref,
+  selectFallbackHomePage,
+  sendPreviewFile,
   slugify,
   startPreviewServer,
   toOutputPath,

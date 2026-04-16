@@ -9,7 +9,9 @@ const { spawn } = require('child_process');
 const {
   DEFAULT_SERVE_HOST,
   LIVE_RELOAD_PATH,
+  NOT_FOUND_OUTPUT_NAME,
   PARTIALS_DIR_NAME,
+  applyPreviewPlaceholders,
   buildSite,
   copyStaticAssets,
   createWatchSnapshot,
@@ -107,6 +109,16 @@ test('injectLiveReloadClient adds an EventSource script before </body>', () => {
   assert.match(html, new RegExp(LIVE_RELOAD_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
+test('applyPreviewPlaceholders escapes missing-route context for custom 404 pages', () => {
+  const html = applyPreviewPlaceholders('<p>{{statusCode}} {{requestedPath}} {{requestedUrl}}</p>', '/missing/%3Cdemo%3E?from=preview', 404);
+  assert.equal(html, '<p>404 /missing/<demo> /missing/<demo>?from=preview</p>'.replaceAll('<demo>', '&lt;demo&gt;'));
+});
+
+test('applyPreviewPlaceholders tolerates malformed escape sequences', () => {
+  const html = applyPreviewPlaceholders('<p>{{requestedPath}}</p>', '/broken/%E0%A4%A', 404);
+  assert.equal(html, '<p>/broken/%E0%A4%A</p>');
+});
+
 test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, images, and fenced blocks', () => {
   const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\n3. third\n4. fourth\n\n> quoted **note**\n>\n> follow-up line\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))\n\n```js\nconst x = 1 < 2;\nconsole.log(x);\n```');
   assert.match(html, /<h1>Title<\/h1>/);
@@ -134,6 +146,7 @@ test('slugify normalizes custom output names', () => {
 
 test('toOutputPath keeps nested directories and rewrites markdown extension', () => {
   assert.equal(toOutputPath('index.md'), 'index.html');
+  assert.equal(toOutputPath('404.md', { title: 'Page Not Found' }), '404.html');
   assert.equal(toOutputPath('guides/setup.md'), 'guides/setup.html');
   assert.equal(toOutputPath('posts/hello-world.md', { slug: 'intro-post' }), 'posts/intro-post.html');
 });
@@ -249,15 +262,16 @@ Return [home](../index.md).`,
   fs.writeFileSync(path.join(contentDir, 'images', 'hero.png'), 'png-data', 'utf8');
 
   const result = buildSite(contentDir, outputDir);
-  assert.equal(result.pages.length, 5);
+  assert.equal(result.pages.length, 6);
   assert.deepEqual(result.assets, [path.join('images', 'hero.png')]);
   assert.deepEqual(
     result.pages.map((page) => page.output).sort(),
-    ['guides/setup.html', 'index.html', 'tags/docs.html', 'tags/index.html', 'tags/portfolio.html']
+    ['404.html', 'guides/setup.html', 'index.html', 'tags/docs.html', 'tags/index.html', 'tags/portfolio.html']
   );
 
   const homeHtml = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
   const setupHtml = fs.readFileSync(path.join(outputDir, 'guides', 'setup.html'), 'utf8');
+  const notFoundHtml = fs.readFileSync(path.join(outputDir, NOT_FOUND_OUTPUT_NAME), 'utf8');
   const tagIndexHtml = fs.readFileSync(path.join(outputDir, 'tags', 'index.html'), 'utf8');
   const docsTagHtml = fs.readFileSync(path.join(outputDir, 'tags', 'docs.html'), 'utf8');
 
@@ -274,6 +288,9 @@ Return [home](../index.md).`,
   assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/portfolio.html">portfolio<\/a>/);
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/docs.html">docs<\/a>/);
+  assert.match(notFoundHtml, /Page Not Found/);
+  assert.match(notFoundHtml, /href="index.html">Home<\/a>/);
+  assert.doesNotMatch(notFoundHtml, /href="404.html">Page Not Found<\/a>/);
 
   assert.match(tagIndexHtml, /<a class="active" href="index.html">Tags<\/a>/);
   assert.match(tagIndexHtml, /href="docs.html">docs<\/a> <span class="tag-count">1 page<\/span>/);
@@ -352,6 +369,37 @@ tags: [docs]
   assert.equal(fs.existsSync(path.join(outputDir, PARTIALS_DIR_NAME, 'header.html')), false);
 });
 
+test('buildSite lets authors provide a custom 404 page without adding it to navigation by default', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Home
+order: 1
+---
+# Welcome`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, '404.md'),
+    '# Missing page\n\nTried: `{{requestedPath}}`\n',
+    'utf8'
+  );
+
+  const result = buildSite(contentDir, outputDir);
+  const notFoundEntries = result.pages.filter((page) => page.output === NOT_FOUND_OUTPUT_NAME);
+  const notFoundHtml = fs.readFileSync(path.join(outputDir, NOT_FOUND_OUTPUT_NAME), 'utf8');
+
+  assert.equal(notFoundEntries.length, 1);
+  assert.equal(notFoundEntries[0].source, '404.md');
+  assert.match(notFoundHtml, /<title>Page Not Found<\/title>/);
+  assert.match(notFoundHtml, /Tried: <code>\{\{requestedPath\}\}<\/code>/);
+  assert.doesNotMatch(notFoundHtml, /href="404.html">Page Not Found<\/a>/);
+});
+
 test('resolvePreviewRequestPath maps extensionless routes and blocks traversal', () => {
   const outputDir = makeTempDir();
   fs.mkdirSync(path.join(outputDir, 'guides'), { recursive: true });
@@ -389,6 +437,57 @@ test('preview server serves extensionless html routes and injects live reload on
   assert.equal(scriptAsset.statusCode, 200);
   assert.equal(scriptAsset.body, 'console.log("ok");');
   assert.doesNotMatch(scriptAsset.body, /EventSource/);
+});
+
+test('preview server serves custom html 404 pages with request placeholders on missing routes', async (t) => {
+  const outputDir = makeTempDir();
+  fs.writeFileSync(
+    path.join(outputDir, NOT_FOUND_OUTPUT_NAME),
+    '<html><body><h1>Missing</h1><p>{{statusCode}} {{requestedPath}}</p></body></html>',
+    'utf8'
+  );
+
+  const preview = await startPreviewServer(outputDir, { port: 0, liveReload: true });
+  t.after(async () => {
+    await preview.close();
+  });
+
+  const response = await httpRequest({ port: preview.port, path: '/docs/missing' });
+  assert.equal(response.statusCode, 404);
+  assert.match(response.body, /<h1>Missing<\/h1>/);
+  assert.match(response.body, /<p>404 \/docs\/missing<\/p>/);
+  assert.match(response.body, /EventSource/);
+});
+
+test('preview server leaves 404 placeholders untouched on regular html routes', async (t) => {
+  const outputDir = makeTempDir();
+  fs.writeFileSync(
+    path.join(outputDir, 'index.html'),
+    '<html><body><p>{{requestedPath}}</p></body></html>',
+    'utf8'
+  );
+
+  const preview = await startPreviewServer(outputDir, { port: 0, liveReload: true });
+  t.after(async () => {
+    await preview.close();
+  });
+
+  const response = await httpRequest({ port: preview.port, path: '/' });
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /<p>\{\{requestedPath\}\}<\/p>/);
+  assert.match(response.body, /EventSource/);
+});
+
+test('preview server returns an empty body for HEAD misses without a custom 404 page', async (t) => {
+  const outputDir = makeTempDir();
+  const preview = await startPreviewServer(outputDir, { port: 0, liveReload: false });
+  t.after(async () => {
+    await preview.close();
+  });
+
+  const response = await httpRequest({ port: preview.port, path: '/missing', method: 'HEAD' });
+  assert.equal(response.statusCode, 404);
+  assert.equal(response.body, '');
 });
 
 test('preview server can serve static output without injecting live reload when watch mode is off', async (t) => {
