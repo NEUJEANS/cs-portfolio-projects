@@ -24,5 +24,5 @@
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail`
   - Result: no verified or unknown secrets found
-- Commit: `1fd1106` (`Add commit-pinned plugin inspection links`)
+- Implementation commit hash: `9d20c59` (`Add commit-pinned plugin inspection links`)
 - Next step: Build a repository-level inspection index or release-to-release comparison artifact so multiple plugin inspection snapshots can be browsed together.
