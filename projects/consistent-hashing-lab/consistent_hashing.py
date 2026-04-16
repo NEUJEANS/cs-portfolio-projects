@@ -190,6 +190,67 @@ def simulate_remap(
     }
 
 
+def benchmark_virtual_nodes(
+    nodes: Sequence[str],
+    key_count: int,
+    virtual_node_counts: Sequence[int],
+    key_prefix: str = "key",
+    replication_factor: int = 1,
+    add: str | None = None,
+    remove: str | None = None,
+) -> dict[str, object]:
+    if not virtual_node_counts:
+        raise ValueError("virtual_node_counts must not be empty")
+
+    keys = generate_keys(key_count, prefix=key_prefix)
+    benchmark_points: list[dict[str, object]] = []
+    seen_counts: set[int] = set()
+    for virtual_nodes in virtual_node_counts:
+        if virtual_nodes in seen_counts:
+            continue
+        seen_counts.add(virtual_nodes)
+        ring = ConsistentHashRing(nodes, virtual_nodes=virtual_nodes)
+        load_report = ring.load_report(keys, replication_factor=replication_factor)
+        point: dict[str, object] = {
+            "virtual_nodes": virtual_nodes,
+            "max_load": load_report["max_load"],
+            "min_load": load_report["min_load"],
+            "average_load": load_report["average_load"],
+            "imbalance_ratio": load_report["imbalance_ratio"],
+        }
+        if add or remove:
+            remap_summary = simulate_remap(
+                nodes,
+                keys,
+                virtual_nodes=virtual_nodes,
+                add=add,
+                remove=remove,
+                replication_factor=replication_factor,
+            )
+            point["moved_keys"] = remap_summary["moved_keys"]
+            point["movement_ratio"] = remap_summary["movement_ratio"]
+            point["replica_placement_changes"] = remap_summary["replica_placement_changes"]
+        benchmark_points.append(point)
+
+    best_imbalance = min(benchmark_points, key=lambda item: (item["imbalance_ratio"], item["virtual_nodes"]))
+    payload: dict[str, object] = {
+        "nodes": list(nodes),
+        "node_count": len(nodes),
+        "key_count": key_count,
+        "replication_factor": replication_factor,
+        "key_prefix": key_prefix,
+        "virtual_node_counts": [point["virtual_nodes"] for point in benchmark_points],
+        "series": benchmark_points,
+        "best_imbalance_virtual_nodes": best_imbalance["virtual_nodes"],
+        "best_imbalance_ratio": best_imbalance["imbalance_ratio"],
+    }
+    if add:
+        payload["topology_change"] = {"action": "add", "node": add}
+    elif remove:
+        payload["topology_change"] = {"action": "remove", "node": remove}
+    return payload
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Consistent hashing ring lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -213,8 +274,22 @@ def build_parser() -> argparse.ArgumentParser:
     remap.add_argument("--key-prefix", default="key")
     remap.add_argument("--virtual-nodes", type=positive_int, default=128)
     remap.add_argument("--replication-factor", type=positive_int, default=1)
-    remap.add_argument("--add-node")
-    remap.add_argument("--remove-node")
+    remap_change = remap.add_mutually_exclusive_group(required=True)
+    remap_change.add_argument("--add-node")
+    remap_change.add_argument("--remove-node")
+
+    benchmark = subparsers.add_parser(
+        "benchmark",
+        help="compare multiple virtual-node counts for load balance and optional remapping",
+    )
+    benchmark.add_argument("--nodes", nargs="+", required=True)
+    benchmark.add_argument("--key-count", type=int, required=True)
+    benchmark.add_argument("--key-prefix", default="key")
+    benchmark.add_argument("--virtual-node-counts", nargs="+", type=positive_int, required=True)
+    benchmark.add_argument("--replication-factor", type=positive_int, default=1)
+    benchmark_change = benchmark.add_mutually_exclusive_group()
+    benchmark_change.add_argument("--add-node")
+    benchmark_change.add_argument("--remove-node")
 
     return parser
 
@@ -232,7 +307,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             generate_keys(args.key_count, args.key_prefix),
             replication_factor=args.replication_factor,
         )
-    else:
+    elif args.command == "remap":
         payload = simulate_remap(
             args.nodes,
             generate_keys(args.key_count, args.key_prefix),
@@ -240,6 +315,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             add=args.add_node,
             remove=args.remove_node,
             replication_factor=args.replication_factor,
+        )
+    else:
+        payload = benchmark_virtual_nodes(
+            args.nodes,
+            key_count=args.key_count,
+            virtual_node_counts=args.virtual_node_counts,
+            key_prefix=args.key_prefix,
+            replication_factor=args.replication_factor,
+            add=args.add_node,
+            remove=args.remove_node,
         )
 
     print(json.dumps(payload, indent=2, sort_keys=True))

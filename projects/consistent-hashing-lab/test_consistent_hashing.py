@@ -7,7 +7,7 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-from consistent_hashing import ConsistentHashRing, generate_keys, simulate_remap
+from consistent_hashing import ConsistentHashRing, benchmark_virtual_nodes, generate_keys, simulate_remap
 
 
 SCRIPT = PROJECT_DIR / "consistent_hashing.py"
@@ -71,6 +71,39 @@ class ConsistentHashRingTests(unittest.TestCase):
         self.assertGreater(summary["replica_placement_changes"], 0)
         self.assertLess(summary["movement_ratio"], 0.8)
 
+    def test_benchmark_virtual_nodes_reports_series(self):
+        payload = benchmark_virtual_nodes(
+            ["node-a", "node-b", "node-c", "node-d"],
+            key_count=2000,
+            virtual_node_counts=[1, 8, 64],
+        )
+        self.assertEqual(payload["virtual_node_counts"], [1, 8, 64])
+        self.assertEqual(len(payload["series"]), 3)
+        self.assertEqual(payload["best_imbalance_virtual_nodes"], 64)
+        self.assertLess(payload["best_imbalance_ratio"], 1.2)
+
+    def test_benchmark_virtual_nodes_can_include_remap_metrics(self):
+        payload = benchmark_virtual_nodes(
+            ["node-a", "node-b", "node-c"],
+            key_count=1500,
+            virtual_node_counts=[8, 64],
+            add="node-d",
+            replication_factor=2,
+        )
+        self.assertEqual(payload["topology_change"], {"action": "add", "node": "node-d"})
+        for point in payload["series"]:
+            self.assertGreater(point["moved_keys"], 0)
+            self.assertGreater(point["replica_placement_changes"], 0)
+            self.assertGreater(point["movement_ratio"], 0.0)
+
+    def test_benchmark_deduplicates_virtual_node_counts(self):
+        payload = benchmark_virtual_nodes(
+            ["node-a", "node-b", "node-c"],
+            key_count=100,
+            virtual_node_counts=[8, 8, 32],
+        )
+        self.assertEqual(payload["virtual_node_counts"], [8, 32])
+
     def test_removing_unknown_node_raises(self):
         with self.assertRaises(ValueError):
             simulate_remap(["node-a", "node-b"], generate_keys(10), virtual_nodes=16, remove="node-z")
@@ -106,6 +139,61 @@ class ConsistentHashRingTests(unittest.TestCase):
         self.assertEqual(payload["nodes"], 3)
         self.assertEqual(payload["replication_factor"], 2)
         self.assertEqual(payload["effective_replication_factor"], 2)
+
+    def test_cli_benchmark_outputs_json(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "benchmark",
+                "--nodes",
+                "node-a",
+                "node-b",
+                "node-c",
+                "--key-count",
+                "2000",
+                "--virtual-node-counts",
+                "1",
+                "16",
+                "128",
+                "--add-node",
+                "node-d",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["node_count"], 3)
+        self.assertEqual(payload["virtual_node_counts"], [1, 16, 128])
+        self.assertEqual(payload["topology_change"], {"action": "add", "node": "node-d"})
+        self.assertIn("movement_ratio", payload["series"][0])
+
+    def test_cli_rejects_conflicting_benchmark_topology_changes(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "benchmark",
+                "--nodes",
+                "node-a",
+                "node-b",
+                "node-c",
+                "--key-count",
+                "10",
+                "--virtual-node-counts",
+                "8",
+                "32",
+                "--add-node",
+                "node-d",
+                "--remove-node",
+                "node-a",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not allowed with argument", result.stderr)
 
     def test_cli_rejects_non_positive_replication_factor(self):
         result = subprocess.run(

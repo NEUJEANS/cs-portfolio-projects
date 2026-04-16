@@ -29,3 +29,18 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-16 virtual-node benchmark slice
+- [x] capture brief benchmark research note
+- [x] capture short benchmark refresh and self-test
+- [x] extend checklist and README scope for benchmark support
+- [x] add a benchmark command that compares multiple virtual-node counts
+- [x] report imbalance metrics and optional topology-change movement metrics per ring size
+- [x] add tests for benchmark helpers and CLI output
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

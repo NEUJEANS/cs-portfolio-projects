@@ -15,6 +15,7 @@ A distributed-systems portfolio project that simulates a consistent hashing ring
 - distribution/load report for generated key sets
 - effective replication reporting when requested replicas exceed available nodes
 - node add/remove remap simulation with movement ratio and replica-placement change output
+- virtual-node benchmark mode that compares imbalance and optional remap behavior across multiple ring sizes
 
 ## Usage
 
@@ -68,9 +69,30 @@ python3 consistent_hashing.py remap \
   --add-node node-d
 ```
 
+Benchmark several virtual-node counts to see how they affect balance:
+
+```bash
+python3 consistent_hashing.py benchmark \
+  --nodes node-a node-b node-c node-d \
+  --key-count 5000 \
+  --virtual-node-counts 1 8 32 128 512
+```
+
+Benchmark virtual-node counts while also measuring how many keys move when a node joins:
+
+```bash
+python3 consistent_hashing.py benchmark \
+  --nodes node-a node-b node-c \
+  --key-count 5000 \
+  --virtual-node-counts 1 8 32 128 \
+  --add-node node-d
+```
+
 ## Notes
 - Replica selection always returns distinct physical nodes.
 - If `--replication-factor` is larger than the number of physical nodes, the report exposes the capped `effective_replication_factor`.
+- `benchmark` returns `best_imbalance_virtual_nodes` so the most balanced tested ring size is easy to spot in screenshots or follow-up exports.
+- `benchmark` accepts either `--add-node` or `--remove-node` when you want movement metrics, but not both in the same run.
 
 ## Test
 
@@ -80,5 +102,5 @@ python3 -m unittest projects/consistent-hashing-lab/test_consistent_hashing.py
 
 ## Future improvements
 - render the ring visually for before/after topology screenshots
-- benchmark how virtual node counts change imbalance and movement ratios
+- export benchmark series to CSV or Markdown for portfolio-ready charts
 - simulate rack/zone-aware replica placement constraints
