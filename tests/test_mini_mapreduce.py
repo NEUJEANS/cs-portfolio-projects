@@ -321,9 +321,11 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         csv_rows = result.to_csv().strip().splitlines()
         self.assertEqual(
             csv_rows[0],
-            "name,plugin,mapper,reducer,combiner,benchmark_generator,available_dataset_families",
+            "name,plugin,module_doc_summary,mapper,mapper_signature,reducer,reducer_signature,combiner,combiner_signature,benchmark_generator,benchmark_generator_signature,available_dataset_families",
         )
         self.assertIn("plugin-average-score", csv_rows[1])
+        self.assertIn("Average-score analytics plugin with synthetic cohort benchmark families.", csv_rows[1])
+        self.assertIn("map_records(lines)", csv_rows[1])
         self.assertIn('"default,exam-cram,project-week"', csv_rows[1])
 
     def test_plugin_inspection_diffs_capture_contract_changes(self) -> None:
@@ -351,7 +353,10 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         html_output = batch.to_html()
         self.assertIn("## Adjacent diffs", markdown)
         self.assertIn("plugin-average-score", markdown)
+        self.assertIn("Average-score analytics plugin", markdown)
+        self.assertIn("map_records(lines)", markdown)
         self.assertIn("<h2>Diff 1:", html_output)
+        self.assertIn("map_records(lines)", html_output)
 
     def test_cli_inspect_plugin_supports_csv_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -381,7 +386,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(payload["name"], "plugin-average-score")
             self.assertEqual(
                 csv_rows[0],
-                "name,plugin,mapper,reducer,combiner,benchmark_generator,available_dataset_families",
+                "name,plugin,module_doc_summary,mapper,mapper_signature,reducer,reducer_signature,combiner,combiner_signature,benchmark_generator,benchmark_generator_signature,available_dataset_families",
             )
             self.assertIn("plugin-average-score", csv_rows[1])
             self.assertIn('"default,exam-cram,project-week"', csv_rows[1])

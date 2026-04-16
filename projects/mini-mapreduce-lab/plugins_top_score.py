@@ -1,3 +1,5 @@
+"""Maximum-score reducer plugin for simple leaderboard-style demos."""
+
 JOB_NAME = "plugin-max-score"
 
 

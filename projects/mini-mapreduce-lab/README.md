@@ -25,11 +25,11 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional plugin-defined synthetic benchmark generators for domain-specific benchmark fixtures
 - dataset-family selection so benchmarks can simulate different plugin or wordcount workload shapes without changing the runner
 - plugin-advertised dataset-family metadata surfaced automatically in benchmark JSON/Markdown/HTML artifacts
-- plugin inspection command for surfacing exported hooks and dataset-family support before running benchmarks
+- plugin inspection command for surfacing exported hooks, concise plugin summaries, and dataset-family support before running benchmarks
 - optional CSV export for plugin inspection snapshots so metadata can land in docs/spreadsheets without a JSON-only step
 - benchmark CSV summaries now carry plugin inspection metadata so spreadsheet artifacts stay self-describing without a separate JSON lookup
 - optional adjacent plugin metadata diffs for batched inspection runs so contract changes are reviewable without hand-comparing JSON snapshots
-- optional Markdown and HTML inspection reports so plugin contract comparisons can be published as portfolio-ready artifacts
+- optional Markdown and HTML inspection reports with hook signatures so plugin contract comparisons can be published as portfolio-ready artifacts
 
 ## Usage
 
@@ -167,7 +167,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output plugin-benchmark-report.html
 ```
 
-Inspect a plugin before running it so portfolio reviewers can see which hooks and benchmark families it exports:
+Inspect a plugin before running it so portfolio reviewers can see which hooks, call signatures, and benchmark families it exports:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
@@ -307,4 +307,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add richer built-in benchmark families for JSON/event workloads, not just wordcount-style text streams
-- add richer plugin-summary metrics such as hook signatures or docstring excerpts in inspection artifacts
+- surface per-hook docstring excerpts or source line numbers in inspection artifacts for faster review handoffs

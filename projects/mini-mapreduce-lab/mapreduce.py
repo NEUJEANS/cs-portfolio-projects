@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 from io import StringIO
 import hashlib
@@ -32,20 +33,30 @@ BenchmarkGenerator = Callable[..., list[str]]
 PLUGIN_INSPECTION_FIELDNAMES = [
     "name",
     "plugin",
+    "module_doc_summary",
     "mapper",
+    "mapper_signature",
     "reducer",
+    "reducer_signature",
     "combiner",
+    "combiner_signature",
     "benchmark_generator",
+    "benchmark_generator_signature",
     "available_dataset_families",
 ]
 
 PLUGIN_INSPECTION_DIFF_FIELDS = [
     "name",
     "plugin",
+    "module_doc_summary",
     "mapper",
+    "mapper_signature",
     "reducer",
+    "reducer_signature",
     "combiner",
+    "combiner_signature",
     "benchmark_generator",
+    "benchmark_generator_signature",
     "available_dataset_families",
 ]
 
@@ -54,20 +65,30 @@ PLUGIN_INSPECTION_DIFF_FIELDS = [
 class PluginInspection:
     name: str
     plugin: str
+    module_doc_summary: str | None
     mapper: str
+    mapper_signature: str | None
     reducer: str
+    reducer_signature: str | None
     combiner: str | None
+    combiner_signature: str | None
     benchmark_generator: str | None
+    benchmark_generator_signature: str | None
     available_dataset_families: list[str] | None
 
     def as_dict(self) -> dict[str, object]:
         return {
             "name": self.name,
             "plugin": self.plugin,
+            "module_doc_summary": self.module_doc_summary,
             "mapper": self.mapper,
+            "mapper_signature": self.mapper_signature,
             "reducer": self.reducer,
+            "reducer_signature": self.reducer_signature,
             "combiner": self.combiner,
+            "combiner_signature": self.combiner_signature,
             "benchmark_generator": self.benchmark_generator,
+            "benchmark_generator_signature": self.benchmark_generator_signature,
             "available_dataset_families": self.available_dataset_families,
         }
 
@@ -130,13 +151,25 @@ class PluginInspectionBatch:
             "",
             "## Plugin summary",
             "",
-            "| Name | Plugin | Mapper | Reducer | Combiner | Benchmark generator | Dataset families |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| Name | Plugin | Summary | Mapper | Reducer | Combiner | Benchmark generator | Dataset families |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for plugin in self.plugins:
             dataset_families = ", ".join(plugin.available_dataset_families) if plugin.available_dataset_families else "-"
+            mapper_cell = f"`{plugin.mapper}`<br><small>`{plugin.mapper_signature or '-'}`</small>"
+            reducer_cell = f"`{plugin.reducer}`<br><small>`{plugin.reducer_signature or '-'}`</small>"
+            combiner_name = plugin.combiner or '-'
+            combiner_signature = plugin.combiner_signature or '-'
+            combiner_cell = f"`{combiner_name}`<br><small>`{combiner_signature}`</small>" if plugin.combiner else "-"
+            benchmark_name = plugin.benchmark_generator or '-'
+            benchmark_signature = plugin.benchmark_generator_signature or '-'
+            benchmark_cell = (
+                f"`{benchmark_name}`<br><small>`{benchmark_signature}`</small>"
+                if plugin.benchmark_generator
+                else "-"
+            )
             lines.append(
-                f"| `{plugin.name}` | `{plugin.plugin}` | `{plugin.mapper}` | `{plugin.reducer}` | `{plugin.combiner or '-'}` | `{plugin.benchmark_generator or '-'}` | `{dataset_families}` |"
+                f"| `{plugin.name}` | `{plugin.plugin}` | {plugin.module_doc_summary or '-'} | {mapper_cell} | {reducer_cell} | {combiner_cell} | {benchmark_cell} | `{dataset_families}` |"
             )
         if self.diffs:
             lines.extend(["", "## Adjacent diffs", ""])
@@ -169,10 +202,11 @@ class PluginInspectionBatch:
                 "<tr>"
                 f"<td><code>{esc(plugin.name)}</code></td>"
                 f"<td><code>{esc(plugin.plugin)}</code></td>"
-                f"<td><code>{esc(plugin.mapper)}</code></td>"
-                f"<td><code>{esc(plugin.reducer)}</code></td>"
-                f"<td><code>{esc(plugin.combiner or '-')}</code></td>"
-                f"<td><code>{esc(plugin.benchmark_generator or '-')}</code></td>"
+                f"<td>{esc(plugin.module_doc_summary or '-')}</td>"
+                f"<td><code>{esc(plugin.mapper)}</code><br><small><code>{esc(plugin.mapper_signature or '-')}</code></small></td>"
+                f"<td><code>{esc(plugin.reducer)}</code><br><small><code>{esc(plugin.reducer_signature or '-')}</code></small></td>"
+                f"<td><code>{esc(plugin.combiner or '-')}</code><br><small><code>{esc(plugin.combiner_signature or '-')}</code></small></td>"
+                f"<td><code>{esc(plugin.benchmark_generator or '-')}</code><br><small><code>{esc(plugin.benchmark_generator_signature or '-')}</code></small></td>"
                 f"<td><code>{esc(dataset_families)}</code></td>"
                 "</tr>"
             )
@@ -230,7 +264,7 @@ class PluginInspectionBatch:
   <section>
     <h2>Plugin summary</h2>
     <table>
-      <thead><tr><th>Name</th><th>Plugin</th><th>Mapper</th><th>Reducer</th><th>Combiner</th><th>Benchmark generator</th><th>Dataset families</th></tr></thead>
+      <thead><tr><th>Name</th><th>Plugin</th><th>Summary</th><th>Mapper</th><th>Reducer</th><th>Combiner</th><th>Benchmark generator</th><th>Dataset families</th></tr></thead>
       <tbody>{''.join(plugin_rows)}</tbody>
     </table>
   </section>
@@ -809,15 +843,49 @@ def _callable_name(fn: Callable[..., Any] | None) -> str | None:
     return f"{module}.{qualname}"
 
 
+def _callable_signature(fn: Callable[..., Any] | None) -> str | None:
+    if fn is None:
+        return None
+    try:
+        return f"{getattr(fn, '__name__', fn.__class__.__name__)}{inspect.signature(fn)}"
+    except (TypeError, ValueError):
+        return None
+
+
+def _doc_summary(value: object) -> str | None:
+    doc = inspect.getdoc(value)
+    if not doc:
+        return None
+    return doc.strip().splitlines()[0]
+
+
+def _module_doc_summary(module_path: Path) -> str | None:
+    if not module_path.exists() or module_path.suffix != ".py":
+        return None
+    try:
+        tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return None
+    doc = ast.get_docstring(tree)
+    if not doc:
+        return None
+    return doc.strip().splitlines()[0]
+
+
 def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
     plugin = load_plugin(plugin_ref)
     return PluginInspection(
         name=plugin.name,
         plugin=str(plugin.path),
+        module_doc_summary=_module_doc_summary(plugin.path),
         mapper=_callable_name(plugin.mapper) or "<unknown>",
+        mapper_signature=_callable_signature(plugin.mapper),
         reducer=_callable_name(plugin.reducer) or "<unknown>",
+        reducer_signature=_callable_signature(plugin.reducer),
         combiner=_callable_name(plugin.combiner),
+        combiner_signature=_callable_signature(plugin.combiner),
         benchmark_generator=_callable_name(plugin.benchmark_generator),
+        benchmark_generator_signature=_callable_signature(plugin.benchmark_generator),
         available_dataset_families=list(plugin.dataset_families) if plugin.dataset_families else None,
     )
 

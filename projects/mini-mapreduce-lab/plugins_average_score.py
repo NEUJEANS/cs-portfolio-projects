@@ -1,3 +1,5 @@
+"""Average-score analytics plugin with synthetic cohort benchmark families."""
+
 JOB_NAME = "plugin-average-score"
 BENCHMARK_DATASET_FAMILIES = ["default", "exam-cram", "project-week"]
 

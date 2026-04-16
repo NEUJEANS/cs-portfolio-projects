@@ -248,4 +248,18 @@
 - [x] run tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider richer inspection summaries such as signatures/docstring excerpts in a future run
+- [x] consider richer inspection summaries such as signatures/docstring excerpts in a future run
+
+## Inspection signatures/doc summaries slice (2026-04-16 02:21 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the remaining follow-up was already explicitly scoped in the local README/checklist
+- [x] do a short Python `inspect.signature` and module-docstring refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] extend `inspect-plugin` JSON/CSV/Markdown/HTML artifacts with hook signatures and a concise module doc summary
+- [x] add concise module docstrings to the built-in example plugins so inspection reports show reviewer-friendly summaries
+- [x] extend project-level and repo-level tests for programmatic and CLI inspection artifacts with the richer metadata
+- [x] run tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider surfacing per-hook docstring excerpts or source line numbers in a future run
