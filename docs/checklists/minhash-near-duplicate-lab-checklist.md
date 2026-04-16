@@ -8,11 +8,12 @@
 - [x] code-mode numeric literal normalization added
 - [x] code-mode string/boolean/None/float literal normalization added
 - [x] mixed-language corpus presets for Markdown + code notebook demos
+- [x] richer preset families for data-science and systems-programming style clone-detection demos
 - [x] dry-run corpus diff summary before refresh for very large indexes
 - [ ] richer benchmark dataset pack with expected-recall scenarios
 
 ## This slice
-- [x] add `refresh-index --dry-run` to preview reused, updated, added, and removed files before rewriting the index
-- [x] expose path-level dry-run summaries in JSON and readable CLI output for resumable large-corpus maintenance
-- [x] add regression tests covering summary helpers and dry-run CLI behavior without mutating the saved index
-- [x] refresh project README to document the dry-run refresh workflow and interview framing
+- [x] add `data-science-feature-pipeline` preset for feature-engineering / notebook portfolio demos
+- [x] add `systems-churn-reconciliation` preset for replica lag / WAL catch-up style systems demos
+- [x] add regression tests covering new preset generation and corpus scans across the added families
+- [x] refresh project README examples and future-improvement notes for the broader preset catalog

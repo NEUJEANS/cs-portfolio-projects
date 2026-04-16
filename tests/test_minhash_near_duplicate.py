@@ -425,6 +425,24 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertTrue((destination / "bfs_queue.py").exists())
             self.assertTrue((destination / "bfs_demo.ipynb").exists())
 
+    def test_write_preset_corpus_creates_data_science_demo_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "data-science"
+            written = write_preset_corpus("data-science-feature-pipeline", destination)
+
+            self.assertGreaterEqual(len(written), 5)
+            self.assertTrue((destination / "feature_pipeline.py").exists())
+            self.assertTrue((destination / "feature_demo.ipynb").exists())
+
+    def test_write_preset_corpus_creates_systems_demo_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "systems"
+            written = write_preset_corpus("systems-churn-reconciliation", destination)
+
+            self.assertGreaterEqual(len(written), 6)
+            self.assertTrue((destination / "replica_sync.py").exists())
+            self.assertTrue((destination / "lag_demo.json").exists())
+
     def test_write_preset_corpus_requires_force_when_files_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             destination = Path(tmpdir) / "preset"
@@ -469,6 +487,98 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
                     "4",
                     "--threshold",
                     "0.2",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            corpus_payload = json.loads(corpus_completed.stdout)
+            self.assertEqual(corpus_payload["documents_scanned"], payload["files_written"])
+            self.assertGreaterEqual(len(corpus_payload["pairs"]), 1)
+
+    def test_cli_write_preset_supports_data_science_corpus_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "preset"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "write-preset",
+                    "data-science-feature-pipeline",
+                    str(destination),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertGreaterEqual(payload["files_written"], 5)
+
+            corpus_completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "corpus",
+                    str(destination),
+                    "--glob",
+                    "*.md,*.py,*.ipynb",
+                    "--token-mode",
+                    "code",
+                    "--normalize-identifiers",
+                    "--shingle-size",
+                    "4",
+                    "--threshold",
+                    "0.15",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            corpus_payload = json.loads(corpus_completed.stdout)
+            self.assertEqual(corpus_payload["documents_scanned"], payload["files_written"])
+            self.assertGreaterEqual(len(corpus_payload["pairs"]), 1)
+
+    def test_cli_write_preset_supports_systems_corpus_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "preset"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "write-preset",
+                    "systems-churn-reconciliation",
+                    str(destination),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertGreaterEqual(payload["files_written"], 6)
+
+            corpus_completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "corpus",
+                    str(destination),
+                    "--glob",
+                    "*.md,*.py,*.json",
+                    "--token-mode",
+                    "code",
+                    "--normalize-identifiers",
+                    "--shingle-size",
+                    "3",
+                    "--threshold",
+                    "0.15",
                     "--json",
                 ],
                 cwd=PROJECT_ROOT,

@@ -23,7 +23,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - optional literal normalization for `code` mode so integer, float, string, boolean, and `None`-only edits can be grouped into stronger clone-detection demos
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - benchmark export support for JSON, CSV, or Markdown portfolio summaries
-- curated mixed-language demo corpus preset for Markdown, Python, and notebook-style files
+- curated demo corpus presets for mixed Markdown/code notebooks, data-science feature pipelines, and systems reconciliation stories
 - comma-separated glob support so one run can scan `.md`, `.py`, and `.ipynb` files together
 - CLI output in human-readable or JSON form
 - repository-level tests for API behavior and CLI workflows
@@ -99,6 +99,24 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus \
   --normalize-literals \
   --shingle-size 4 \
   --threshold 0.2 \
+  --json
+```
+
+Generate a data-science-flavored feature-engineering preset for notebook screenshots and model-pipeline clone demos:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-preset \
+  data-science-feature-pipeline \
+  tmp/minhash-data-science-demo \
+  --json
+```
+
+Generate a systems-programming preset centered on replica lag / WAL reconciliation stories:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-preset \
+  systems-churn-reconciliation \
+  tmp/minhash-systems-demo \
   --json
 ```
 
@@ -202,5 +220,5 @@ python3 -m unittest tests.test_minhash_near_duplicate
 
 ## Future improvements
 - add richer benchmark dataset packs with expected-recall scenarios across tiny, medium, and noisy corpora
-- add richer mixed-language preset families for data-science, web-dev, and systems-programming demos
+- add a web-dev flavored preset family so clone-detection demos cover frontend/component portfolios too
 - add language-aware literal buckets for lists, dicts, and f-strings in code mode

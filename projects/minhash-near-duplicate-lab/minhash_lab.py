@@ -72,7 +72,37 @@ PRESET_CORPORA: dict[str, dict[str, str]] = {
             "nbformat_minor": 5,
         }, indent=2) + "\n",
         "distant_topic.md": "# Different topic\n\nBalanced binary search trees rebalance inserts with rotations instead of using a queue frontier.\n",
-    }
+    },
+    "data-science-feature-pipeline": {
+        "README.md": "# Feature engineering notes\n\nWe standardize numeric features, cap outliers, and keep a reproducible pipeline for training demos.\n",
+        "feature_pipeline.py": "def normalize_rows(rows):\n    cleaned = []\n    for row in rows:\n        clicks = min(row['clicks'], 500) / 500\n        dwell = min(row['dwell_seconds'], 300) / 300\n        cleaned.append({'click_rate': clicks, 'dwell_rate': dwell, 'converted': row['converted']})\n    return cleaned\n",
+        "feature_pipeline_variant.py": "def build_features(events):\n    normalized = []\n    for sample in events:\n        click_ratio = min(sample['clicks'], 500) / 500\n        watch_ratio = min(sample['dwell_seconds'], 300) / 300\n        normalized.append({'click_rate': click_ratio, 'dwell_rate': watch_ratio, 'converted': sample['converted']})\n    return normalized\n",
+        "experiment_notes.md": "# Experiment notes\n\nThe pipeline trims large click spikes, rescales dwell time, and preserves the conversion label for modeling.\n",
+        "feature_demo.ipynb": json.dumps({
+            "cells": [
+                {"cell_type": "markdown", "metadata": {}, "source": ["# Feature pipeline demo\n", "Notebook version of the same preprocessing steps for portfolio screenshots.\n"]},
+                {"cell_type": "code", "execution_count": None, "metadata": {}, "outputs": [], "source": ["def engineer_features(rows):\n", "    output = []\n", "    for row in rows:\n", "        click_rate = min(row['clicks'], 500) / 500\n", "        dwell_rate = min(row['dwell_seconds'], 300) / 300\n", "        output.append({'click_rate': click_rate, 'dwell_rate': dwell_rate, 'converted': row['converted']})\n", "    return output\n"]},
+            ],
+            "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}, "language_info": {"name": "python", "version": "3.12"}},
+            "nbformat": 4,
+            "nbformat_minor": 5,
+        }, indent=2) + "\n",
+        "outlier_memo.md": "# Different topic\n\nDecision trees can absorb raw thresholds directly without emphasizing the exact same scaling story.\n",
+    },
+    "systems-churn-reconciliation": {
+        "README.md": "# Replica reconciliation notes\n\nA storage replica tracks WAL offsets, detects lag, and schedules catch-up work after a failover.\n",
+        "replica_sync.py": "def reconciliation_plan(status_rows):\n    actions = []\n    for row in status_rows:\n        lag = max(row['leader_offset'] - row['replica_offset'], 0)\n        if lag == 0:\n            actions.append((row['node'], 'healthy'))\n        elif lag < 128:\n            actions.append((row['node'], 'stream'))\n        else:\n            actions.append((row['node'], 'snapshot'))\n    return actions\n",
+        "replica_sync_variant.py": "def catchup_actions(nodes):\n    plan = []\n    for item in nodes:\n        lag = max(item['leader_offset'] - item['replica_offset'], 0)\n        if lag == 0:\n            plan.append((item['node'], 'healthy'))\n        elif lag < 128:\n            plan.append((item['node'], 'stream'))\n        else:\n            plan.append((item['node'], 'snapshot'))\n    return plan\n",
+        "runbook.md": "# Replica lag runbook\n\nHealthy replicas keep up with the leader log, small lag streams missing entries, and large lag falls back to snapshot restore.\n",
+        "incident_timeline.md": "# Incident timeline\n\nNode blue recovered by replaying missing WAL segments before requesting a full snapshot.\n",
+        "lag_demo.json": json.dumps({
+            "nodes": [
+                {"node": "blue", "leader_offset": 1024, "replica_offset": 1001},
+                {"node": "green", "leader_offset": 1024, "replica_offset": 740}
+            ]
+        }, indent=2) + "\n",
+        "different_domain.md": "# Different topic\n\nBrowser layout thrashing and paint timing do not describe replica catch-up planning.\n",
+    },
 }
 
 
