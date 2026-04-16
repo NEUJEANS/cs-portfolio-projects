@@ -453,6 +453,14 @@ class ChordDhtLabTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "nodes"):
                 module.load_ring(path)
 
+    def test_emit_text_output_writes_file_and_creates_parent_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "nested" / "reports" / "sample.md"
+            module.emit_text_output("# hello", output_path)
+
+            self.assertTrue(output_path.exists())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), "# hello\n")
+
     def test_graphviz_ring_export_contains_successor_edges(self) -> None:
         ring = ChordRing(8, ["alpha", "bravo", "charlie", "delta", "echo"])
 
@@ -590,6 +598,34 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("start_node,key,key_id,responsible_node,chord_hops,linear_hops,hop_savings,chord_route,linear_route", completed.stdout)
         self.assertIn("alpha,compiler", completed.stdout)
 
+    def test_cli_benchmark_export_supports_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "docs" / "examples" / "benchmark.md"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark-export",
+                    str(RING_PATH),
+                    "compiler",
+                    "slides",
+                    "--start-node",
+                    "alpha",
+                    "--output",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.stdout, "")
+            self.assertTrue(output_path.exists())
+            written = output_path.read_text(encoding="utf-8")
+            self.assertIn("# Chord lookup benchmark", written)
+            self.assertIn("`alpha`", written)
+
     def test_cli_benchmark_sample_export_outputs_markdown(self) -> None:
         completed = subprocess.run(
             [
@@ -663,6 +699,37 @@ class ChordDhtLabTests(unittest.TestCase):
         self.assertIn("- Most sensitive key(s):", markdown.stdout)
         self.assertIn("key,key_id,responsible_node,sample_count,average_chord_hops", csv_output.stdout)
         self.assertIn("compiler,", csv_output.stdout)
+
+    def test_cli_benchmark_key_variance_export_supports_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "artifacts" / "variance.csv"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark-key-variance-export",
+                    str(RING_PATH),
+                    "compiler",
+                    "--sample-size",
+                    "2",
+                    "--sample-seed",
+                    "17",
+                    "--sample-seed",
+                    "29",
+                    "--format",
+                    "csv",
+                    "--output",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.stdout, "")
+            self.assertTrue(output_path.exists())
+            self.assertIn("key,key_id,responsible_node,sample_count", output_path.read_text(encoding="utf-8"))
 
     def test_cli_resilience_supports_failure_simulation(self) -> None:
         completed = subprocess.run(
@@ -1279,11 +1346,33 @@ class ChordDhtLabTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
+            file_output = Path(tmpdir) / "reports" / "churn-comparison.md"
+            file_completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "churn-compare-export",
+                    str(RING_PATH),
+                    str(events_a),
+                    str(events_b),
+                    "--finger-repair-mode",
+                    "all",
+                    "--output",
+                    str(file_output),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
-        self.assertIn("# Chord churn workload comparison", markdown.stdout)
-        self.assertIn(str(events_a), markdown.stdout)
-        self.assertIn("events_file,event_count,fully_stabilized_steps", csv_output.stdout)
-        self.assertIn(str(events_b), csv_output.stdout)
+            self.assertIn("# Chord churn workload comparison", markdown.stdout)
+            self.assertIn(str(events_a), markdown.stdout)
+            self.assertIn("events_file,event_count,fully_stabilized_steps", csv_output.stdout)
+            self.assertIn(str(events_b), csv_output.stdout)
+            self.assertEqual(file_completed.stdout, "")
+            self.assertTrue(file_output.exists())
+            self.assertIn("# Chord churn workload comparison", file_output.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

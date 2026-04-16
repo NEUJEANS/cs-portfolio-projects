@@ -128,6 +128,18 @@ python3 projects/chord-dht-lab/chord_dht.py benchmark-key-variance-export \
   --format csv
 ```
 
+Write a benchmark variance artifact directly into the repo without shell redirection:
+
+```bash
+python3 projects/chord-dht-lab/chord_dht.py benchmark-key-variance-export \
+  projects/chord-dht-lab/ring.json \
+  compiler slides final-project \
+  --sample-size 3 \
+  --sample-seed 17 \
+  --sample-seed 29 \
+  --output docs/examples/chord-benchmark-key-variance.md
+```
+
 Generate a larger deterministic synthetic ring and workload for benchmark experiments:
 
 ```bash
@@ -347,4 +359,4 @@ python3 -m unittest tests/test_chord_dht_lab.py
 - The benchmark uses the same ring and key identifiers for both lookup strategies so hop-count differences stay attributable to routing logic rather than input drift.
 
 ## Future improvements
-- add artifact-output flags so sample and per-key variance reports can be written directly to committed docs/examples without shell redirection
+- add direct artifact helpers that bundle benchmark, sample-variance, and churn exports into one command for portfolio snapshot generation

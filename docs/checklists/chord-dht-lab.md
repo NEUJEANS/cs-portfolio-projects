@@ -65,6 +65,23 @@
 - [x] export churn summaries as Markdown/CSV for portfolio write-ups or charts
 - [x] compare multiple churn workloads side by side so recovery sensitivity is easier to explain in portfolio notes
 - [x] export per-key variance summaries so benchmark-sample comparisons can show which lookups are most sensitive to start-node choice
+- [x] let Markdown/CSV export commands write directly to committed artifact files with `--output`
+
+## Direct artifact output slice (2026-04-16 06:21 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current export commands for the weakest remaining portfolio-usability gap
+- [x] skip web research because direct file output is a straightforward extension of the existing Markdown/CSV exporters
+- [x] do a short Python file-output self-test
+- [x] update checklist/docs so the slice is resumable
+- [x] add a shared helper for writing rendered reports to stdout or a file path
+- [x] expose `--output` for benchmark, sample comparison, per-key variance, stabilization comparison, churn summary, and churn comparison exports
+- [x] extend automated coverage for file output, parent-directory creation, and stdout compatibility
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up
 
 ## Recovery churn slice (2026-04-15 19:42 UTC run)
 - [x] confirm repo sync before editing

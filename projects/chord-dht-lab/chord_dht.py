@@ -1772,6 +1772,14 @@ def load_churn_events(path: Path) -> list[dict[str, object]]:
     return normalized
 
 
+def emit_text_output(text: str, output_path: Path | None = None) -> None:
+    if output_path is None:
+        print(text)
+        return
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(text + ("" if text.endswith("\n") else "\n"), encoding="utf-8")
+
+
 def load_ring(path: Path) -> ChordRing:
     payload = json.loads(path.read_text(encoding="utf-8"))
     m_bits = payload["m_bits"]
@@ -1833,6 +1841,11 @@ def parse_args() -> argparse.Namespace:
         default="markdown",
         help="report format for the rendered lookup benchmark",
     )
+    benchmark_export_parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional file path to write the rendered benchmark report",
+    )
 
     benchmark_sample_export_parser = subparsers.add_parser(
         "benchmark-sample-export",
@@ -1860,6 +1873,11 @@ def parse_args() -> argparse.Namespace:
         default="markdown",
         help="report format for the rendered sample comparison",
     )
+    benchmark_sample_export_parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional file path to write the rendered sample comparison report",
+    )
 
     benchmark_key_variance_parser = subparsers.add_parser(
         "benchmark-key-variance-export",
@@ -1886,6 +1904,11 @@ def parse_args() -> argparse.Namespace:
         choices=["markdown", "csv"],
         default="markdown",
         help="report format for the rendered per-key variance summary",
+    )
+    benchmark_key_variance_parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional file path to write the rendered per-key variance summary",
     )
 
     resilience_parser = subparsers.add_parser(
@@ -2025,6 +2048,11 @@ def parse_args() -> argparse.Namespace:
         default="markdown",
         help="report format for the rendered comparison summary",
     )
+    compare_export_parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional file path to write the rendered stabilization comparison summary",
+    )
 
     churn_parser = subparsers.add_parser(
         "churn",
@@ -2081,6 +2109,11 @@ def parse_args() -> argparse.Namespace:
         default="markdown",
         help="report format for the rendered churn summary",
     )
+    churn_export_parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional file path to write the rendered churn summary",
+    )
 
 
     churn_compare_export_parser = subparsers.add_parser(
@@ -2107,6 +2140,11 @@ def parse_args() -> argparse.Namespace:
         choices=["markdown", "csv"],
         default="markdown",
         help="report format for the rendered churn workload comparison",
+    )
+    churn_compare_export_parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional file path to write the rendered churn workload comparison",
     )
 
     synth_parser = subparsers.add_parser(
@@ -2201,10 +2239,10 @@ def main() -> None:
         ring = load_ring(args.ring_file)
         benchmark = ring.benchmark_lookups(args.keys, start_nodes=args.start_nodes)
         if args.format == "markdown":
-            print(render_benchmark_report_markdown(benchmark))
+            emit_text_output(render_benchmark_report_markdown(benchmark), args.output)
             return
         if args.format == "csv":
-            print(render_benchmark_report_csv(benchmark))
+            emit_text_output(render_benchmark_report_csv(benchmark), args.output)
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "benchmark-sample-export":
@@ -2216,10 +2254,10 @@ def main() -> None:
             sample_seeds=args.sample_seeds,
         )
         if args.format == "markdown":
-            print(render_benchmark_sample_comparison_markdown(comparison))
+            emit_text_output(render_benchmark_sample_comparison_markdown(comparison), args.output)
             return
         if args.format == "csv":
-            print(render_benchmark_sample_comparison_csv(comparison))
+            emit_text_output(render_benchmark_sample_comparison_csv(comparison), args.output)
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "benchmark-key-variance-export":
@@ -2232,10 +2270,10 @@ def main() -> None:
         )
         variance = summarize_benchmark_key_variance(comparison)
         if args.format == "markdown":
-            print(render_benchmark_key_variance_markdown(variance))
+            emit_text_output(render_benchmark_key_variance_markdown(variance), args.output)
             return
         if args.format == "csv":
-            print(render_benchmark_key_variance_csv(variance))
+            emit_text_output(render_benchmark_key_variance_csv(variance), args.output)
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "resilience":
@@ -2307,10 +2345,10 @@ def main() -> None:
             finger_repair_seed=args.finger_repair_seed,
         )
         if args.format == "markdown":
-            print(render_churn_comparison_markdown(comparison))
+            emit_text_output(render_churn_comparison_markdown(comparison), args.output)
             return
         if args.format == "csv":
-            print(render_churn_comparison_csv(comparison))
+            emit_text_output(render_churn_comparison_csv(comparison), args.output)
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "compare-stabilize-export":
@@ -2323,10 +2361,10 @@ def main() -> None:
             random_seed=args.random_seed,
         )
         if args.format == "markdown":
-            print(render_stabilization_comparison_markdown(comparison))
+            emit_text_output(render_stabilization_comparison_markdown(comparison), args.output)
             return
         if args.format == "csv":
-            print(render_stabilization_comparison_csv(comparison))
+            emit_text_output(render_stabilization_comparison_csv(comparison), args.output)
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "churn-export":
@@ -2338,10 +2376,10 @@ def main() -> None:
             finger_repair_seed=args.finger_repair_seed,
         )
         if args.format == "markdown":
-            print(render_churn_report_markdown(report))
+            emit_text_output(render_churn_report_markdown(report), args.output)
             return
         if args.format == "csv":
-            print(render_churn_report_csv(report))
+            emit_text_output(render_churn_report_csv(report), args.output)
             return
         raise ValueError(f"unsupported export format {args.format!r}")
     elif args.command == "graphviz":
