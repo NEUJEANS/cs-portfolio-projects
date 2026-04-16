@@ -12,4 +12,7 @@
 - [x] expose a CLI switch for resumable sorted-dataset builds
 - [x] add regression tests for bulk loading success and failure paths
 - [x] benchmark sorted bulk loading against generic inserts and expose the comparison in the CLI
-- [ ] future slice: fixed-size page encoding for more realistic on-disk pages
+- [x] future slice: fixed-size page encoding for more realistic on-disk pages
+- [x] add binary fixed-size page save/load support with explicit page-layout validation
+- [x] expose `page-layout`, `save-pages`, and `--page-file` CLI flows for storage-oriented demos
+- [x] add tests covering paged round-trips, slot-capacity failures, and CLI fixed-page workflows

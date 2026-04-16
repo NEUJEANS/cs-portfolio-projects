@@ -2,11 +2,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import time
 from bisect import bisect_left
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Sequence
+
+
+FILE_MAGIC = b"BTRE"
+FILE_VERSION = 1
+HEADER_STRUCT = struct.Struct(">4sBHIHIII8x")
+PAGE_HEADER_STRUCT = struct.Struct(">BHIH8x")
+CHILD_POINTER_STRUCT = struct.Struct(">I")
+EMPTY_CHILD_POINTER = 0xFFFFFFFF
+DEFAULT_PAGE_SIZE = 512
+DEFAULT_VALUE_BYTES = 32
 
 
 @dataclass
@@ -32,6 +44,10 @@ class BTreeIndex:
     @property
     def min_keys(self) -> int:
         return self.minimum_degree - 1
+
+    @property
+    def max_children(self) -> int:
+        return 2 * self.minimum_degree
 
     def search(self, key: int) -> str | None:
         return self._search(self.root, key)
@@ -258,6 +274,7 @@ class BTreeIndex:
 
         while True:
             index = bisect_left(node.keys, key)
+
             if index < len(node.keys) and node.keys[index] == key:
                 return {"key": node.keys[index], "value": node.values[index]}
 
@@ -384,6 +401,216 @@ class BTreeIndex:
     def load(cls, path: Path) -> "BTreeIndex":
         return cls.from_dict(json.loads(path.read_text()))
 
+    def page_layout(self, *, page_size: int = DEFAULT_PAGE_SIZE, value_bytes: int = DEFAULT_VALUE_BYTES) -> dict[str, int]:
+        if page_size <= 0:
+            raise ValueError("page_size must be positive")
+        if value_bytes < 2:
+            raise ValueError("value_bytes must be at least 2")
+        required = (
+            PAGE_HEADER_STRUCT.size
+            + (self.max_keys * 8)
+            + (self.max_keys * value_bytes)
+            + (self.max_children * CHILD_POINTER_STRUCT.size)
+        )
+        if required > page_size:
+            raise ValueError(
+                f"page_size={page_size} is too small for minimum_degree={self.minimum_degree}; need at least {required} bytes"
+            )
+        return {
+            "minimum_degree": self.minimum_degree,
+            "page_size": page_size,
+            "value_bytes": value_bytes,
+            "max_keys": self.max_keys,
+            "max_children": self.max_children,
+            "header_bytes": HEADER_STRUCT.size,
+            "page_header_bytes": PAGE_HEADER_STRUCT.size,
+            "required_page_bytes": required,
+            "padding_bytes": page_size - required,
+        }
+
+    def save_paged(
+        self,
+        path: Path,
+        *,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        value_bytes: int = DEFAULT_VALUE_BYTES,
+    ) -> Path:
+        layout = self.page_layout(page_size=page_size, value_bytes=value_bytes)
+        pages: list[tuple[int, BTreeNode]] = []
+        page_ids: dict[int, int] = {}
+        queue = deque([self.root])
+        while queue:
+            node = queue.popleft()
+            marker = id(node)
+            if marker in page_ids:
+                continue
+            page_id = len(pages)
+            page_ids[marker] = page_id
+            pages.append((page_id, node))
+            queue.extend(node.children)
+
+        blob = bytearray()
+        blob.extend(
+            HEADER_STRUCT.pack(
+                FILE_MAGIC,
+                FILE_VERSION,
+                self.minimum_degree,
+                page_size,
+                value_bytes,
+                page_ids[id(self.root)],
+                len(pages),
+                self.item_count,
+            )
+        )
+        for page_id, node in pages:
+            blob.extend(self._encode_page(node, page_id=page_id, page_size=page_size, value_bytes=value_bytes, page_ids=page_ids))
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(bytes(blob))
+        return path
+
+    def _encode_page(
+        self,
+        node: BTreeNode,
+        *,
+        page_id: int,
+        page_size: int,
+        value_bytes: int,
+        page_ids: dict[int, int],
+    ) -> bytes:
+        payload = bytearray(PAGE_HEADER_STRUCT.pack(1 if node.leaf else 0, len(node.keys), page_id, len(node.children)))
+        for index in range(self.max_keys):
+            key = node.keys[index] if index < len(node.keys) else 0
+            payload.extend(struct.pack(">q", key))
+        slot_payload_bytes = value_bytes - 2
+        for index in range(self.max_keys):
+            raw = node.values[index].encode("utf-8") if index < len(node.values) else b""
+            if len(raw) > slot_payload_bytes:
+                raise ValueError(
+                    f"value '{node.values[index]}' exceeds fixed slot capacity of {slot_payload_bytes} UTF-8 bytes"
+                )
+            payload.extend(struct.pack(">H", len(raw)))
+            payload.extend(raw)
+            payload.extend(b"\x00" * (slot_payload_bytes - len(raw)))
+        child_ids = [page_ids[id(child)] for child in node.children]
+        for index in range(self.max_children):
+            child_id = child_ids[index] if index < len(child_ids) else EMPTY_CHILD_POINTER
+            payload.extend(CHILD_POINTER_STRUCT.pack(child_id))
+        if len(payload) > page_size:
+            raise ValueError("encoded page exceeded page_size after validation")
+        payload.extend(b"\x00" * (page_size - len(payload)))
+        return bytes(payload)
+
+    @classmethod
+    def load_paged(cls, path: Path) -> "BTreeIndex":
+        raw = path.read_bytes()
+        if len(raw) < HEADER_STRUCT.size:
+            raise ValueError("paged tree file is too small to contain a header")
+        magic, version, minimum_degree, page_size, value_bytes, root_page_id, page_count, item_count = HEADER_STRUCT.unpack(
+            raw[: HEADER_STRUCT.size]
+        )
+        if magic != FILE_MAGIC:
+            raise ValueError("paged tree file has an invalid magic header")
+        if version != FILE_VERSION:
+            raise ValueError(f"unsupported paged tree version: {version}")
+        tree = cls(minimum_degree=minimum_degree)
+        layout = tree.page_layout(page_size=page_size, value_bytes=value_bytes)
+        expected_size = HEADER_STRUCT.size + (page_count * page_size)
+        if len(raw) != expected_size:
+            raise ValueError("paged tree file length does not match header metadata")
+        if root_page_id >= page_count:
+            raise ValueError("root page id is outside the page table")
+
+        page_records: list[dict[str, Any]] = []
+        offset = HEADER_STRUCT.size
+        for _ in range(page_count):
+            page_records.append(tree._decode_page(raw[offset : offset + page_size], value_bytes=value_bytes, layout=layout))
+            offset += page_size
+
+        nodes_by_page_id: dict[int, BTreeNode] = {}
+        seen_page_ids: set[int] = set()
+        for record in page_records:
+            page_id = record["page_id"]
+            if page_id in seen_page_ids:
+                raise ValueError("paged tree file contains duplicate page ids")
+            seen_page_ids.add(page_id)
+            if page_id >= page_count:
+                raise ValueError("page id is outside the page table")
+            nodes_by_page_id[page_id] = BTreeNode(leaf=record["leaf"], keys=record["keys"], values=record["values"])
+
+        for record in page_records:
+            page_id = record["page_id"]
+            node = nodes_by_page_id[page_id]
+            child_ids = record["child_ids"]
+            if node.leaf and child_ids:
+                raise ValueError("leaf pages cannot contain child pointers")
+            if not node.leaf and len(child_ids) != len(node.keys) + 1:
+                raise ValueError("internal page must have len(children) == len(keys) + 1")
+            try:
+                node.children = [nodes_by_page_id[child_id] for child_id in child_ids]
+            except KeyError as error:
+                raise ValueError("paged tree file references a missing child page") from error
+
+        if seen_page_ids != set(range(page_count)):
+            raise ValueError("paged tree file must contain contiguous page ids starting at zero")
+
+        tree.root = nodes_by_page_id[root_page_id]
+        tree.item_count = item_count
+        tree._validate_structure()
+        if tree.item_count != len(tree.items()):
+            raise ValueError("paged item_count does not match stored keys")
+        return tree
+
+    def _decode_page(self, page: bytes, *, value_bytes: int, layout: dict[str, int]) -> dict[str, Any]:
+        leaf_flag, key_count, page_id, child_count = PAGE_HEADER_STRUCT.unpack(page[: PAGE_HEADER_STRUCT.size])
+        if key_count > self.max_keys:
+            raise ValueError("page key_count exceeds B-tree capacity")
+        if child_count > self.max_children:
+            raise ValueError("page child_count exceeds B-tree capacity")
+        if leaf_flag and child_count != 0:
+            raise ValueError("leaf page must not advertise children")
+        if not leaf_flag and child_count == 0 and key_count > 0:
+            raise ValueError("internal page must advertise child pointers")
+
+        offset = PAGE_HEADER_STRUCT.size
+        keys = []
+        for index in range(self.max_keys):
+            (key,) = struct.unpack(">q", page[offset : offset + 8])
+            if index < key_count:
+                keys.append(key)
+            offset += 8
+
+        values = []
+        slot_payload_bytes = value_bytes - 2
+        for index in range(self.max_keys):
+            (length,) = struct.unpack(">H", page[offset : offset + 2])
+            if length > slot_payload_bytes:
+                raise ValueError("page contains an oversized value slot")
+            offset += 2
+            raw_value = page[offset : offset + slot_payload_bytes]
+            if index < key_count:
+                values.append(raw_value[:length].decode("utf-8"))
+            offset += slot_payload_bytes
+
+        child_ids = []
+        for index in range(self.max_children):
+            (child_id,) = CHILD_POINTER_STRUCT.unpack(page[offset : offset + CHILD_POINTER_STRUCT.size])
+            if index < child_count:
+                if child_id == EMPTY_CHILD_POINTER:
+                    raise ValueError("active child pointer cannot use the empty sentinel")
+                child_ids.append(child_id)
+            offset += CHILD_POINTER_STRUCT.size
+
+        if offset != layout["required_page_bytes"]:
+            raise ValueError("page layout decoding drift detected")
+        return {
+            "leaf": bool(leaf_flag),
+            "page_id": page_id,
+            "keys": keys,
+            "values": values,
+            "child_ids": child_ids,
+        }
+
     @staticmethod
     def _normalize_record(record: dict[str, object]) -> tuple[int, str]:
         if "key" not in record or "value" not in record:
@@ -502,26 +729,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="B-tree index lab")
     parser.add_argument("--dataset", type=Path, help="JSON file of [{\"key\": int, \"value\": str}] records")
     parser.add_argument("--tree-file", type=Path, help="Serialized B-tree JSON generated by the save command")
+    parser.add_argument("--page-file", type=Path, help="Binary fixed-size page file generated by the save-pages command")
     parser.add_argument("--degree", type=int, default=2, help="Minimum B-tree degree (default: 2)")
     parser.add_argument("--bulk-load", action="store_true", help="Treat dataset as strictly sorted and build via append-only bulk loading")
     parser.add_argument("--benchmark-repeats", type=int, default=5, help="Benchmark repetitions for the benchmark-build command (default: 5)")
+    parser.add_argument("--page-size", type=int, default=DEFAULT_PAGE_SIZE, help=f"Fixed page size in bytes for save-pages/page-layout (default: {DEFAULT_PAGE_SIZE})")
+    parser.add_argument("--value-bytes", type=int, default=DEFAULT_VALUE_BYTES, help=f"Fixed bytes reserved per value, including a 2-byte length prefix (default: {DEFAULT_VALUE_BYTES})")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     parser.add_argument(
         "command",
         nargs="*",
-        help="search KEY | range START END | floor KEY | ceil KEY | neighbors KEY | delete KEY | save PATH | snapshot | stats | benchmark-build | dump",
+        help="search KEY | range START END | floor KEY | ceil KEY | neighbors KEY | delete KEY | save PATH | save-pages PATH | page-layout | snapshot | stats | benchmark-build | dump",
     )
     return parser
 
 
 
 def _load_tree(args: argparse.Namespace) -> BTreeIndex:
-    if args.dataset and args.tree_file:
-        raise ValueError("use either --dataset or --tree-file, not both")
+    selected_sources = [args.dataset is not None, args.tree_file is not None, args.page_file is not None]
+    if sum(selected_sources) > 1:
+        raise ValueError("use exactly one of --dataset, --tree-file, or --page-file")
     if args.bulk_load and not args.dataset:
         raise ValueError("--bulk-load requires --dataset")
     if args.tree_file:
         return BTreeIndex.load(args.tree_file)
+    if args.page_file:
+        return BTreeIndex.load_paged(args.page_file)
     records = json.loads(args.dataset.read_text()) if args.dataset else []
     return BTreeIndex.from_records(records, minimum_degree=args.degree, presorted=args.bulk_load)
 
@@ -568,6 +801,22 @@ def _run_command(tree: BTreeIndex, command: Sequence[str], args: argparse.Namesp
         output_path = Path(command[1])
         tree.save(output_path)
         return {"saved": str(output_path), "stats": tree.stats()}
+    if action == "save-pages":
+        if len(command) != 2:
+            raise ValueError("save-pages requires exactly 1 output path")
+        if args is None:
+            raise ValueError("save-pages requires parser args")
+        output_path = Path(command[1])
+        tree.save_paged(output_path, page_size=args.page_size, value_bytes=args.value_bytes)
+        return {
+            "saved": str(output_path),
+            "encoding": tree.page_layout(page_size=args.page_size, value_bytes=args.value_bytes),
+            "stats": tree.stats(),
+        }
+    if action == "page-layout":
+        if args is None:
+            raise ValueError("page-layout requires parser args")
+        return {"layout": tree.page_layout(page_size=args.page_size, value_bytes=args.value_bytes), "stats": tree.stats()}
     if action == "snapshot":
         return {"tree": tree.to_dict(), "stats": tree.stats()}
     if action == "stats":
@@ -584,7 +833,7 @@ def main() -> int:
     args = parser.parse_args()
     tree = _load_tree(args)
     result = _run_command(tree, args.command, args)
-    if args.json or args.dataset or args.tree_file:
+    if args.json or args.dataset or args.tree_file or args.page_file:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
         print(result)

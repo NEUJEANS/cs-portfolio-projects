@@ -216,6 +216,47 @@ class BTreeIndexTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             BTreeIndex.from_dict(payload)
 
+    def test_page_layout_reports_required_bytes_and_padding(self) -> None:
+        tree = build_sample_tree()
+
+        layout = tree.page_layout(page_size=256, value_bytes=20)
+
+        self.assertEqual(layout["minimum_degree"], 2)
+        self.assertEqual(layout["page_size"], 256)
+        self.assertEqual(layout["value_bytes"], 20)
+        self.assertGreater(layout["required_page_bytes"], 0)
+        self.assertGreaterEqual(layout["padding_bytes"], 0)
+
+    def test_page_layout_rejects_too_small_page_or_value_slots(self) -> None:
+        tree = build_sample_tree()
+
+        with self.assertRaises(ValueError):
+            tree.page_layout(page_size=64, value_bytes=20)
+
+        with self.assertRaises(ValueError):
+            tree.page_layout(page_size=256, value_bytes=1)
+
+    def test_paged_round_trip_restores_items_and_stats(self) -> None:
+        tree = build_sample_tree()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            page_file = Path(temp_dir) / "tree.pages"
+            tree.save_paged(page_file, page_size=256, value_bytes=24)
+            restored = BTreeIndex.load_paged(page_file)
+
+        self.assertEqual(restored.items(), tree.items())
+        self.assertEqual(restored.stats(), tree.stats())
+        self.assertEqual(restored.search(20), "twenty")
+
+    def test_paged_save_rejects_values_that_exceed_slot_capacity(self) -> None:
+        tree = BTreeIndex(minimum_degree=2)
+        tree.insert(1, "x" * 40)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            page_file = Path(temp_dir) / "tree.pages"
+            with self.assertRaises(ValueError):
+                tree.save_paged(page_file, page_size=256, value_bytes=16)
+
     def test_benchmark_builds_reports_bulk_load_vs_insert_timings(self) -> None:
         records = [
             {"key": key, "value": f"value-{key}"}
@@ -327,6 +368,75 @@ class BTreeIndexTests(unittest.TestCase):
 
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("--bulk-load requires --dataset", completed.stderr)
+
+    def test_cli_page_layout_and_save_pages_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            dataset = temp_path / "records.json"
+            page_file = temp_path / "tree.pages"
+            dataset.write_text(
+                json.dumps(
+                    [
+                        {"key": 9, "value": "nine"},
+                        {"key": 1, "value": "one"},
+                        {"key": 14, "value": "fourteen"},
+                        {"key": 3, "value": "three"},
+                    ]
+                )
+            )
+
+            layout_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--dataset",
+                    str(dataset),
+                    "--page-size",
+                    "256",
+                    "--value-bytes",
+                    "24",
+                    "--json",
+                    "page-layout",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+            save_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--dataset",
+                    str(dataset),
+                    "--page-size",
+                    "256",
+                    "--value-bytes",
+                    "24",
+                    "--json",
+                    "save-pages",
+                    str(page_file),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+            search_completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--page-file", str(page_file), "--json", "search", "14"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_DIR,
+            )
+
+        layout_payload = json.loads(layout_completed.stdout)
+        save_payload = json.loads(save_completed.stdout)
+        search_payload = json.loads(search_completed.stdout)
+        self.assertEqual(layout_payload["layout"]["page_size"], 256)
+        self.assertEqual(save_payload["encoding"]["value_bytes"], 24)
+        self.assertEqual(save_payload["saved"], str(page_file))
+        self.assertEqual(search_payload, {"key": 14, "value": "fourteen"})
 
     def test_cli_range_command_outputs_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
