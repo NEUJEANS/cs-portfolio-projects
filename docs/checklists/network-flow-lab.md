@@ -13,3 +13,4 @@
 - [x] add a reproducible benchmark command that compares Edmonds-Karp vs Dinic
 - [x] derive a minimum vertex cover from bipartite matching output via König's theorem
 - [x] expand the benchmark generator with dense and layered stress-case families
+- [x] export benchmark runs as committed Markdown/SVG report cards

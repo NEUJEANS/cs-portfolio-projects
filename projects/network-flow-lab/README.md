@@ -20,6 +20,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - bipartite-matching mode that reduces assignments to unit-capacity flow
 - minimum vertex cover recovery for bipartite graphs using alternating paths after the matching is found
 - reproducible benchmark mode that compares Edmonds-Karp vs Dinic on random DAGs, dense residual-style meshes, or layered cut-stress graphs
+- standalone benchmark report-card export in Markdown and SVG for quick portfolio screenshots and README embeds
 - Graphviz DOT export for solved flow graphs and bipartite matchings
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--markdown-out` proof artifacts for flow and matching runs so portfolio screenshots do not require terminal capture
@@ -73,6 +74,7 @@ Run reproducible benchmarks that compare Edmonds-Karp against Dinic across diffe
 python3 projects/network-flow-lab/network_flow.py benchmark --nodes 24 --edge-probability 0.18 --trials 5 --seed 42 --pretty
 python3 projects/network-flow-lab/network_flow.py benchmark --graph-family dense --nodes 18 --edge-probability 0.30 --trials 3 --seed 7 --pretty
 python3 projects/network-flow-lab/network_flow.py benchmark --graph-family layered --nodes 18 --edge-probability 0.20 --trials 3 --seed 7 --pretty
+python3 projects/network-flow-lab/network_flow.py benchmark --graph-family layered --nodes 18 --edge-probability 0.20 --trials 3 --seed 7 --markdown-out /tmp/network-flow-benchmark.md --svg-out /tmp/network-flow-benchmark.svg
 ```
 
 Benchmark graph families:
@@ -114,6 +116,12 @@ Bipartite matching format:
 Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/sample-flow-proof.md`
 - `docs/artifacts/network-flow-lab/sample-matching-proof.md`
+- `docs/artifacts/network-flow-lab/benchmark-dag-report.md`
+- `docs/artifacts/network-flow-lab/benchmark-dag-report.svg`
+- `docs/artifacts/network-flow-lab/benchmark-dense-report.md`
+- `docs/artifacts/network-flow-lab/benchmark-dense-report.svg`
+- `docs/artifacts/network-flow-lab/benchmark-layered-report.md`
+- `docs/artifacts/network-flow-lab/benchmark-layered-report.svg`
 
 ## Test
 
@@ -131,10 +139,11 @@ python3 -m unittest tests/test_network_flow_lab.py
 - Once a maximum matching is known, the lab derives a minimum vertex cover by alternating-path reachability from unmatched left-side vertices, giving a constructive König's theorem witness.
 - In matching mode, `--explain` surfaces the alternating-path reachability sets and the recovered cover vertices so the proof can be demoed without reading code.
 - The benchmark mode generates reproducible graph families for three different stories: random DAGs, dense cyclic residual meshes, and layered cut-stress networks; it verifies both algorithms return the same max-flow value and summarizes elapsed time plus augmentation/phase counts.
+- Benchmark report-card export turns one benchmark run into committed Markdown/SVG artifacts with setup details, trial tables, and interview-ready headline metrics.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
 - add weighted assignment or min-cost flow as a follow-up advanced slice
 - ship more polished SVG proof cards built on top of the Markdown artifact pipeline
 - ship pre-rendered SVG examples in the docs for portfolio screenshots
-- export benchmark runs as committed Markdown/SVG report cards for quick portfolio browsing
+- add a small artifact index page that compares DAG, dense, and layered benchmark cards side by side

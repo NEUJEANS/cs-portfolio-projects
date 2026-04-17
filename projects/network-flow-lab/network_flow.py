@@ -874,6 +874,230 @@ def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "b
     return "\n".join(lines)
 
 
+def _svg_escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _svg_text(x: float, y: float, text: str, *, size: int = 14, weight: str = "normal", fill: str = "#111827") -> str:
+    font_family = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    return (
+        f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" font-weight="{weight}" '
+        f'fill="{fill}" font-family=\'{font_family}\'>{_svg_escape(text)}</text>'
+    )
+
+
+def render_benchmark_markdown(report: dict[str, Any]) -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    generator = report["generator"]
+    summary = report["summary"]
+    trials = report["trials"]
+    graph_family = generator["graph_family"]
+    family_story = {
+        "dag": "acyclic baseline graphs that keep the benchmark easy to reason about",
+        "dense": "residual-heavy dense meshes that create more rerouting pressure",
+        "layered": "cut-stress layered networks that highlight blocking-flow phases",
+    }[graph_family]
+    mean_density = round(statistics.fmean(trial["edge_density"] for trial in trials), 3)
+    mean_flow = round(statistics.fmean(report["trial_flows"]), 2)
+    speedup_ratio = summary["speedup_ratio"]
+    ek_summary = summary["edmonds-karp"]
+    dinic_summary = summary["dinic"]
+    ek_aug = float(ek_summary["mean_augmentations"])
+    dinic_aug = float(dinic_summary["mean_augmentations"])
+    if dinic_aug < ek_aug:
+        augmentation_story = "fewer augmenting-path pushes"
+    elif dinic_aug > ek_aug:
+        augmentation_story = "more augmenting-path pushes despite the runtime trade-off"
+    else:
+        augmentation_story = "the same average augmenting-path count"
+
+    if speedup_ratio is None:
+        headline = "Timing resolution was too small to compute a stable speedup ratio, so use the raw timing rows instead."
+    elif speedup_ratio > 1.05:
+        headline = (
+            f"Dinic averaged {speedup_ratio:.2f}x faster than Edmonds-Karp on this {graph_family} suite while using {augmentation_story}."
+        )
+    elif speedup_ratio < 0.95:
+        headline = (
+            f"Edmonds-Karp averaged {1 / speedup_ratio:.2f}x faster than Dinic on this {graph_family} suite, which is a useful reminder that small pure-Python workloads can invert the asymptotic story."
+        )
+    else:
+        headline = (
+            f"Edmonds-Karp and Dinic landed within about {abs(1 - speedup_ratio) * 100:.1f}% of each other on this {graph_family} suite, so the structural metrics matter as much as raw wall-clock time."
+        )
+
+    lines = [
+        "# Network-flow benchmark report card",
+        "",
+        f"- Generated: {generated}",
+        f"- Graph family: `{graph_family}`",
+        f"- Setup: `{generator['node_count']}` nodes · edge probability `{generator['edge_probability']}` · capacity range `{generator['capacity_range'][0]}-{generator['capacity_range'][1]}` · `{generator['trials']}` trial(s) · seed `{generator['seed']}`",
+        f"- Family focus: {family_story}",
+        "",
+        "## Headline",
+        "",
+        f"- {headline}",
+        f"- Mean max flow across trials: `{mean_flow}` with mean edge density `{mean_density}`.",
+        f"- Edmonds-Karp mean runtime: `{ek_summary['mean_ms']}` ms with `{ek_summary['mean_augmentations']}` mean augmentations.",
+        f"- Dinic mean runtime: `{dinic_summary['mean_ms']}` ms with `{dinic_summary['mean_augmentations']}` mean augmentations and `{dinic_summary.get('mean_phases', 0)}` mean phases.",
+        "",
+        "## Trial table",
+        "",
+        "| Trial | Seed | Edges | Density | Max flow | Edmonds-Karp ms | EK augmentations | Dinic ms | Dinic augmentations | Dinic phases |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for trial in trials:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(trial["trial"]),
+                    str(trial["seed"]),
+                    str(trial["edge_count"]),
+                    str(trial["edge_density"]),
+                    str(trial["edmonds-karp"]["max_flow"]),
+                    str(trial["edmonds-karp"]["elapsed_ms"]),
+                    str(trial["edmonds-karp"]["augmentations"]),
+                    str(trial["dinic"]["elapsed_ms"]),
+                    str(trial["dinic"]["augmentations"]),
+                    str(trial["dinic"].get("phases", 0)),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Portfolio talking points",
+            "",
+            f"- `{graph_family}` gives you a concrete benchmark story: {family_story}.",
+            "- The trial rows verify both algorithms agreed on every max-flow value, so the timing comparison is paired with a correctness cross-check.",
+            "- Augmentation counts and Dinic phase counts make the runtime story easier to explain than a single speed number in isolation.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def render_benchmark_svg(report: dict[str, Any]) -> str:
+    generator = report["generator"]
+    summary = report["summary"]
+    trials = report["trials"]
+    graph_family = generator["graph_family"]
+    ek_summary = summary["edmonds-karp"]
+    dinic_summary = summary["dinic"]
+    mean_density = statistics.fmean(trial["edge_density"] for trial in trials)
+    mean_flow = statistics.fmean(report["trial_flows"])
+    speedup_ratio = summary["speedup_ratio"]
+
+    width = 960
+    height = 580
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Network-flow benchmark report card</title>',
+        f'<desc id="desc">Benchmark summary for the {graph_family} graph family comparing Edmonds-Karp and Dinic.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 40, "Network-flow benchmark report card", size=28, weight="700"),
+        _svg_text(
+            28,
+            66,
+            (
+                f"Family: {graph_family} · nodes={generator['node_count']} · edge probability={generator['edge_probability']} "
+                f"· trials={generator['trials']} · seed={generator['seed']}"
+            ),
+            size=14,
+            fill="#334155",
+        ),
+    ]
+
+    cards = [
+        (28, "Mean speedup", f"{speedup_ratio:.2f}x" if speedup_ratio is not None else "n/a", "EK mean / Dinic mean"),
+        (258, "Mean max flow", f"{mean_flow:.2f}", "across benchmark trials"),
+        (488, "Mean edge density", f"{mean_density:.3f}", "directed edge count / n(n-1)"),
+        (718, "Dinic mean phases", f"{dinic_summary.get('mean_phases', 0):.2f}", "blocking-flow rounds"),
+    ]
+    for x, label, value, subtitle in cards:
+        parts.append(f'<rect x="{x}" y="92" width="214" height="86" rx="16" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(x + 18, 120, label, size=13, weight="700", fill="#475569"))
+        parts.append(_svg_text(x + 18, 152, value, size=28, weight="700", fill="#0f172a"))
+        parts.append(_svg_text(x + 18, 170, subtitle, size=11, fill="#64748b"))
+
+    def add_bar_panel(
+        *,
+        x: int,
+        y: int,
+        title: str,
+        left_label: str,
+        left_value: float,
+        right_label: str,
+        right_value: float,
+        value_suffix: str,
+    ) -> None:
+        panel_width = 430
+        panel_height = 292
+        chart_left = x + 46
+        chart_right = x + panel_width - 28
+        chart_top = y + 58
+        chart_bottom = y + panel_height - 54
+        chart_height = chart_bottom - chart_top
+        bar_width = 88
+        max_value = max(left_value, right_value, 1.0)
+        scale_max = max_value * 1.15
+        left_bar_height = chart_height * (left_value / scale_max)
+        right_bar_height = chart_height * (right_value / scale_max)
+        left_x = chart_left + 54
+        right_x = chart_left + 214
+        left_y = chart_bottom - left_bar_height
+        right_y = chart_bottom - right_bar_height
+
+        parts.append(f'<rect x="{x}" y="{y}" width="{panel_width}" height="{panel_height}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(x + 20, y + 34, title, size=18, weight="700"))
+        parts.append(f'<line x1="{chart_left}" y1="{chart_top}" x2="{chart_left}" y2="{chart_bottom}" stroke="#94a3b8" stroke-width="1.5" />')
+        parts.append(f'<line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_right}" y2="{chart_bottom}" stroke="#94a3b8" stroke-width="1.5" />')
+        for tick in range(5):
+            value = scale_max * tick / 4
+            tick_y = chart_bottom - chart_height * tick / 4
+            parts.append(f'<line x1="{chart_left}" y1="{tick_y:.1f}" x2="{chart_right}" y2="{tick_y:.1f}" stroke="#e2e8f0" stroke-width="1" />')
+            parts.append(_svg_text(x + 8, tick_y + 4, f"{value:.2f}", size=10, fill="#64748b"))
+        parts.append(f'<rect x="{left_x}" y="{left_y:.1f}" width="{bar_width}" height="{left_bar_height:.1f}" rx="10" fill="#2563eb" />')
+        parts.append(f'<rect x="{right_x}" y="{right_y:.1f}" width="{bar_width}" height="{right_bar_height:.1f}" rx="10" fill="#0f766e" />')
+        parts.append(_svg_text(left_x - 6, max(left_y - 8, chart_top + 12), f"{left_value:.2f}{value_suffix}", size=11, fill="#1d4ed8"))
+        parts.append(_svg_text(right_x - 6, max(right_y - 8, chart_top + 12), f"{right_value:.2f}{value_suffix}", size=11, fill="#0f766e"))
+        parts.append(_svg_text(left_x + 2, chart_bottom + 24, left_label, size=12, weight="700"))
+        parts.append(_svg_text(right_x + 16, chart_bottom + 24, right_label, size=12, weight="700"))
+
+    add_bar_panel(
+        x=28,
+        y=214,
+        title="Elapsed time (mean ms)",
+        left_label="Edmonds-Karp",
+        left_value=float(ek_summary["mean_ms"]),
+        right_label="Dinic",
+        right_value=float(dinic_summary["mean_ms"]),
+        value_suffix=" ms",
+    )
+    add_bar_panel(
+        x=502,
+        y=214,
+        title="Augmenting paths (mean)",
+        left_label="Edmonds-Karp",
+        left_value=float(ek_summary["mean_augmentations"]),
+        right_label="Dinic",
+        right_value=float(dinic_summary["mean_augmentations"]),
+        value_suffix="",
+    )
+
+    footer = (
+        f"Flow values stayed in sync across {len(trials)} trial(s). Dinic mean phases: {dinic_summary.get('mean_phases', 0):.2f}."
+    )
+    parts.append(_svg_text(28, 532, footer, size=13, fill="#334155"))
+    parts.append(_svg_text(28, 554, "Use this card alongside the Markdown report for interview-ready benchmark commentary.", size=12, fill="#64748b"))
+    parts.append('</svg>')
+    return "".join(parts) + "\n"
 
 
 def render_flow_markdown(flow_result: FlowResult, *, graph_name: str = "network_flow") -> str:
@@ -960,9 +1184,15 @@ def write_markdown_output(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(contents, encoding="utf-8")
 
+
 def write_dot_output(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(contents + "\n", encoding="utf-8")
+
+
+def write_svg_output(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
 
 
 def add_explain_argument(parser: argparse.ArgumentParser) -> None:
@@ -1020,6 +1250,8 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--seed", type=int, default=42, help="base RNG seed for reproducible graphs")
     benchmark_parser.add_argument("--capacity-min", type=int, default=1)
     benchmark_parser.add_argument("--capacity-max", type=int, default=20)
+    benchmark_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown benchmark report card")
+    benchmark_parser.add_argument("--svg-out", type=Path, help="write an SVG benchmark report card")
     benchmark_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     return parser
 
@@ -1103,7 +1335,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             payload["markdown_output"] = str(args.markdown_out)
         return payload
 
-    return benchmark_algorithms(
+    payload = benchmark_algorithms(
         node_count=args.nodes,
         edge_probability=args.edge_probability,
         trials=args.trials,
@@ -1112,6 +1344,13 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         capacity_max=args.capacity_max,
         graph_family=args.graph_family,
     )
+    if getattr(args, "markdown_out", None):
+        write_markdown_output(args.markdown_out, render_benchmark_markdown(payload))
+        payload["markdown_output"] = str(args.markdown_out)
+    if getattr(args, "svg_out", None):
+        write_svg_output(args.svg_out, render_benchmark_svg(payload))
+        payload["svg_output"] = str(args.svg_out)
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:

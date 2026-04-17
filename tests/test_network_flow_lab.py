@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,8 @@ render_flow_dot = module.render_flow_dot
 render_matching_dot = module.render_matching_dot
 render_flow_markdown = module.render_flow_markdown
 render_matching_markdown = module.render_matching_markdown
+render_benchmark_markdown = module.render_benchmark_markdown
+render_benchmark_svg = module.render_benchmark_svg
 solve_max_flow = module.solve_max_flow
 derive_minimum_vertex_cover = module.derive_minimum_vertex_cover
 solve_bipartite_matching = module.solve_bipartite_matching
@@ -346,6 +349,36 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertTrue(all(trial["graph_family"] == "dense" for trial in payload["trials"]))
         self.assertTrue(all(trial["edge_density"] > 0 for trial in payload["trials"]))
 
+    def test_render_benchmark_markdown_includes_setup_and_trial_table(self) -> None:
+        payload = benchmark_algorithms(
+            node_count=10,
+            edge_probability=0.25,
+            trials=2,
+            seed=3,
+            graph_family="layered",
+        )
+        artifact = render_benchmark_markdown(payload)
+        self.assertIn("# Network-flow benchmark report card", artifact)
+        self.assertIn("- Graph family: `layered`", artifact)
+        self.assertIn("## Trial table", artifact)
+        self.assertIn("| Trial | Seed | Edges | Density | Max flow |", artifact)
+        self.assertIn("## Portfolio talking points", artifact)
+
+    def test_render_benchmark_svg_includes_labels_and_valid_xml(self) -> None:
+        payload = benchmark_algorithms(
+            node_count=10,
+            edge_probability=0.25,
+            trials=2,
+            seed=3,
+            graph_family="dense",
+        )
+        svg = render_benchmark_svg(payload)
+        self.assertIn("<svg", svg)
+        self.assertIn("Network-flow benchmark report card", svg)
+        self.assertIn("Elapsed time (mean ms)", svg)
+        self.assertIn("Augmenting paths (mean)", svg)
+        self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
+
     def test_benchmark_rejects_too_few_nodes_for_layered_family(self) -> None:
         with self.assertRaisesRegex(ValueError, "layered benchmark family requires at least 6 nodes"):
             benchmark_algorithms(
@@ -525,6 +558,45 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertEqual(len(payload["trials"]), 2)
         self.assertTrue(all(trial["graph_family"] == "layered" for trial in payload["trials"]))
         self.assertIn("speedup_ratio", payload["summary"])
+
+    def test_cli_benchmark_can_write_markdown_and_svg_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "benchmark-report.md"
+            svg_path = Path(tmpdir) / "benchmark-report.svg"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--nodes",
+                    "10",
+                    "--edge-probability",
+                    "0.25",
+                    "--trials",
+                    "2",
+                    "--seed",
+                    "5",
+                    "--graph-family",
+                    "dense",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertIn("# Network-flow benchmark report card", markdown_path.read_text(encoding="utf-8"))
+            svg_text = svg_path.read_text(encoding="utf-8")
+            self.assertIn("Network-flow benchmark report card", svg_text)
+            self.assertEqual(ET.fromstring(svg_text).tag, "{http://www.w3.org/2000/svg}svg")
 
 
 if __name__ == "__main__":
