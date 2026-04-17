@@ -14,5 +14,5 @@
 - [x] run review pass 2
 - [x] run review pass 3
 - [x] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up under `docs/wrapups/`
+- [x] commit and push
+- [x] append wrap-up under `docs/wrapups/`
