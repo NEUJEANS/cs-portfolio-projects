@@ -1,0 +1,136 @@
+{
+  "command": "benchmark",
+  "generator": {
+    "graph_family": "dag",
+    "node_count": 24,
+    "edge_probability": 0.18,
+    "capacity_range": [
+      1,
+      20
+    ],
+    "trials": 5,
+    "seed": 42
+  },
+  "algorithms": [
+    "edmonds-karp",
+    "dinic"
+  ],
+  "trial_flows": [
+    28,
+    23,
+    21,
+    34,
+    25
+  ],
+  "trials": [
+    {
+      "trial": 1,
+      "seed": 42,
+      "graph_family": "dag",
+      "edge_count": 78,
+      "edge_density": 0.141,
+      "edmonds-karp": {
+        "max_flow": 28,
+        "elapsed_ms": 0.287,
+        "augmentations": 7
+      },
+      "dinic": {
+        "max_flow": 28,
+        "elapsed_ms": 0.374,
+        "augmentations": 7,
+        "phases": 3
+      }
+    },
+    {
+      "trial": 2,
+      "seed": 43,
+      "graph_family": "dag",
+      "edge_count": 73,
+      "edge_density": 0.132,
+      "edmonds-karp": {
+        "max_flow": 23,
+        "elapsed_ms": 0.243,
+        "augmentations": 5
+      },
+      "dinic": {
+        "max_flow": 23,
+        "elapsed_ms": 0.279,
+        "augmentations": 5,
+        "phases": 2
+      }
+    },
+    {
+      "trial": 3,
+      "seed": 44,
+      "graph_family": "dag",
+      "edge_count": 74,
+      "edge_density": 0.134,
+      "edmonds-karp": {
+        "max_flow": 21,
+        "elapsed_ms": 0.174,
+        "augmentations": 3
+      },
+      "dinic": {
+        "max_flow": 21,
+        "elapsed_ms": 0.27,
+        "augmentations": 3,
+        "phases": 2
+      }
+    },
+    {
+      "trial": 4,
+      "seed": 45,
+      "graph_family": "dag",
+      "edge_count": 66,
+      "edge_density": 0.12,
+      "edmonds-karp": {
+        "max_flow": 34,
+        "elapsed_ms": 0.312,
+        "augmentations": 12
+      },
+      "dinic": {
+        "max_flow": 34,
+        "elapsed_ms": 0.451,
+        "augmentations": 12,
+        "phases": 6
+      }
+    },
+    {
+      "trial": 5,
+      "seed": 46,
+      "graph_family": "dag",
+      "edge_count": 70,
+      "edge_density": 0.127,
+      "edmonds-karp": {
+        "max_flow": 25,
+        "elapsed_ms": 0.231,
+        "augmentations": 8
+      },
+      "dinic": {
+        "max_flow": 25,
+        "elapsed_ms": 0.347,
+        "augmentations": 8,
+        "phases": 4
+      }
+    }
+  ],
+  "summary": {
+    "edmonds-karp": {
+      "min_ms": 0.174,
+      "median_ms": 0.243,
+      "max_ms": 0.312,
+      "mean_ms": 0.249,
+      "mean_augmentations": 7.0
+    },
+    "dinic": {
+      "min_ms": 0.27,
+      "median_ms": 0.347,
+      "max_ms": 0.451,
+      "mean_ms": 0.344,
+      "mean_augmentations": 7.0,
+      "mean_phases": 3.4
+    },
+    "speedup_ratio": 0.724
+  },
+  "json_output": "benchmark-dag-report.json"
+}

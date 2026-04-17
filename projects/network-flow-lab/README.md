@@ -27,9 +27,10 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - reproducible benchmark mode that compares Edmonds-Karp vs Dinic on random DAGs, dense residual-style meshes, or layered cut-stress graphs
 - standalone benchmark report-card export in Markdown and SVG for quick portfolio screenshots and README embeds
 - standalone `benchmark-gallery-demo --html-out` landing page that makes the committed benchmark cards browsable beside the optimization walkthrough gallery
-- standalone `showcase-demo --html-out` filterable hub that lets reviewers jump between proof cards, HTML walkthroughs, benchmark reports, and companion Markdown/DOT files from one page
+- standalone `showcase-demo --html-out` filterable hub that lets reviewers jump between proof cards, HTML walkthroughs, benchmark reports, and companion Markdown/DOT/JSON files from one page
 - Graphviz DOT export for solved flow graphs, bipartite matchings, weighted assignments, and generic min-cost-flow graphs
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
+- standalone `--json-out` machine-readable companions for flow, matching, assignment, generic min-cost-flow, and benchmark runs so the published galleries can link back to exact solver payloads without leaking absolute local paths
 - standalone `--markdown-out` proof artifacts for flow, matching, assignment, and generic min-cost-flow runs so portfolio screenshots do not require terminal capture
 - standalone `--svg-out` proof cards for flow, matching, assignment, and generic min-cost-flow runs so the project ships screenshot-ready visual summaries without Graphviz
 - standalone `--html-out` assignment artifact pages that place a DOT-style weighted-assignment diagram next to the proof card for GitHub Pages or portfolio browsing
@@ -61,6 +62,7 @@ Export DOT, Markdown, or a standalone SVG proof card for later sharing (the JSON
 python3 projects/network-flow-lab/network_flow.py demo --dot-out /tmp/network-flow.dot
 python3 projects/network-flow-lab/network_flow.py demo --markdown-out /tmp/network-flow-proof.md
 python3 projects/network-flow-lab/network_flow.py demo --svg-out /tmp/network-flow-proof.svg
+python3 projects/network-flow-lab/network_flow.py demo --json-out /tmp/network-flow-result.json
 # optional render step if graphviz is installed:
 # dot -Tpng /tmp/network-flow.dot -o /tmp/network-flow.png
 ```
@@ -78,6 +80,7 @@ Solve a custom bipartite-matching graph and export a DOT diagram, Markdown proof
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --dot-out /tmp/matching.dot --pretty
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --markdown-out /tmp/matching-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --svg-out /tmp/matching-proof.svg --pretty
+python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --json-out /tmp/matching-result.json --pretty
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --algorithm dinic --pretty
 ```
 
@@ -92,6 +95,7 @@ python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-l
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --markdown-out /tmp/assignment-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --svg-out /tmp/assignment-proof.svg --pretty
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --html-out /tmp/assignment-artifact-page.html --pretty
+python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --json-out /tmp/assignment-result.json --pretty
 ```
 
 Run the bundled generic min-cost-flow sample or solve a custom costed network. This mode keeps the same min-cost engine but drops the bipartite-only assumptions, so it works for small shipping/routing-style source/sink graphs too:
@@ -104,6 +108,7 @@ python3 projects/network-flow-lab/network_flow.py cost-demo --html-out /tmp/cost
 python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --markdown-out /tmp/cost-flow-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --svg-out /tmp/cost-flow-proof.svg --pretty
 python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --html-out /tmp/cost-flow-artifact-page.html --pretty
+python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --json-out /tmp/cost-flow-result.json --pretty
 ```
 
 Build a tiny browser landing page that links both optimization walkthroughs together (expects the committed sample artifacts to already exist in `--artifact-dir`):
@@ -164,6 +169,7 @@ python3 projects/network-flow-lab/network_flow.py benchmark --nodes 24 --edge-pr
 python3 projects/network-flow-lab/network_flow.py benchmark --graph-family dense --nodes 18 --edge-probability 0.30 --trials 3 --seed 7 --pretty
 python3 projects/network-flow-lab/network_flow.py benchmark --graph-family layered --nodes 18 --edge-probability 0.20 --trials 3 --seed 7 --pretty
 python3 projects/network-flow-lab/network_flow.py benchmark --graph-family layered --nodes 18 --edge-probability 0.20 --trials 3 --seed 7 --markdown-out /tmp/network-flow-benchmark.md --svg-out /tmp/network-flow-benchmark.svg
+python3 projects/network-flow-lab/network_flow.py benchmark --graph-family layered --nodes 18 --edge-probability 0.20 --trials 3 --seed 7 --json-out /tmp/network-flow-benchmark.json
 ```
 
 Benchmark graph families:
@@ -219,12 +225,19 @@ Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.md`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.svg`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-artifact-page.html`
+- `docs/artifacts/network-flow-lab/sample-flow-result.json`
+- `docs/artifacts/network-flow-lab/sample-matching-result.json`
+- `docs/artifacts/network-flow-lab/sample-assignment-result.json`
+- `docs/artifacts/network-flow-lab/sample-cost-flow-result.json`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.md`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.svg`
+- `docs/artifacts/network-flow-lab/benchmark-dag-report.json`
 - `docs/artifacts/network-flow-lab/benchmark-dense-report.md`
 - `docs/artifacts/network-flow-lab/benchmark-dense-report.svg`
+- `docs/artifacts/network-flow-lab/benchmark-dense-report.json`
 - `docs/artifacts/network-flow-lab/benchmark-layered-report.md`
 - `docs/artifacts/network-flow-lab/benchmark-layered-report.svg`
+- `docs/artifacts/network-flow-lab/benchmark-layered-report.json`
 
 ## Test
 
@@ -252,10 +265,10 @@ python3 -m unittest tests/test_network_flow_lab.py
 - The generic min-cost-flow HTML artifact page gives the shipping/routing example the same browser-friendly treatment, pairing the chosen shipment diagram with the proof card and augmenting-path summary.
 - `gallery-demo` produces a compact landing page that frames those two HTML walkthroughs together, keeps proof/DOT companions nearby, and uses relative links so the committed gallery stays portable.
 - `benchmark-gallery-demo` does the same for the committed benchmark cards, giving the performance story its own browser-friendly page and linking back to the optimization gallery when both live side by side.
-- `showcase-demo` layers a filterable hub on top of both galleries so reviewers can jump straight to proof cards, HTML walkthroughs, benchmarks, Markdown companions, or DOT diagrams from one page.
+- `showcase-demo` layers a filterable hub on top of both galleries so reviewers can jump straight to proof cards, HTML walkthroughs, benchmarks, Markdown companions, DOT diagrams, or raw JSON payloads from one page.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
 - render actual node-link SVG layouts for solved flow, matching, assignment, and generic min-cost-flow proofs instead of card-style summaries
-- add raw JSON companions to the showcase hub so reviewers can drill into machine-readable solver output alongside the Markdown/SVG/DOT/HTML artifacts
+- add an input editor / replay form to the showcase hub so reviewers can tweak a sample graph and compare the new JSON payload against the committed artifacts
 - add downloadable PNG snapshots for the benchmark and optimization galleries so README embeds can reuse the browser-friendly layouts directly

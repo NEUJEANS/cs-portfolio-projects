@@ -42,9 +42,9 @@
       <h1>Network-flow lab showcase</h1>
       <p>A single browser-friendly hub for the committed <code>network-flow-lab</code> artifacts. Use the filters to jump between proof cards, HTML walkthroughs, DOT-backed optimization demos, and benchmark reports without digging through the repo tree. The two gallery pages are still linked directly when you want a broader optimization-only or benchmark-only view.</p>
       <div class="hero-meta">
-        <span>Generated <strong>2026-04-17T14:20:44Z</strong></span>
+        <span>Generated <strong>2026-04-17T14:45:08Z</strong></span>
         <span>Includes <strong>7</strong> artifact groups</span>
-        <span>Filters: proof / html / benchmark / markdown / dot</span>
+        <span>Filters: proof / html / benchmark / markdown / dot / json</span>
       </div>
       <div class="hero-links">
         <a class="hero-link" href="artifact-gallery.html">Open optimization gallery</a>
@@ -59,65 +59,66 @@
           <button type="button" class="filter-button" data-filter="benchmark" aria-pressed="false">Benchmark reports</button>
           <button type="button" class="filter-button" data-filter="markdown" aria-pressed="false">Markdown companions</button>
           <button type="button" class="filter-button" data-filter="dot" aria-pressed="false">DOT diagrams</button>
+          <button type="button" class="filter-button" data-filter="json" aria-pressed="false">JSON payloads</button>
         </div>
       </section>
     </section>
     <section class="showcase-grid" id="showcase-grid">
-<article class="showcase-card" data-tags="proof svg markdown">
+<article class="showcase-card" data-tags="proof svg markdown json">
       <p class="eyebrow">Core proof</p>
       <h2>Max-flow proof card</h2>
       <p>Lead with this when you want the pure Edmonds-Karp / Dinic correctness story without extra reductions.</p>
-      <div class="badge-row"><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span></div>
+      <div class="badge-row"><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">json</span></div>
       <a class="preview-frame" href="sample-flow-proof.svg" aria-label="Max-flow proof SVG preview"><img src="sample-flow-proof.svg" alt="Max-flow proof SVG preview" loading="lazy" /></a>
-      <div class="chip-row"><a class="chip" href="sample-flow-proof.svg">Open SVG card</a><a class="chip" href="sample-flow-proof.md">Open Markdown proof</a></div>
+      <div class="chip-row"><a class="chip" href="sample-flow-proof.svg">Open SVG card</a><a class="chip" href="sample-flow-proof.md">Open Markdown proof</a><a class="chip" href="sample-flow-result.json">Open raw JSON payload</a></div>
     </article>
-<article class="showcase-card" data-tags="proof svg markdown">
+<article class="showcase-card" data-tags="proof svg markdown json">
       <p class="eyebrow">Core proof</p>
       <h2>Bipartite matching proof card</h2>
       <p>Shows the matching-to-flow reduction and the minimum vertex-cover follow-up in one interviewer-friendly artifact.</p>
-      <div class="badge-row"><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span></div>
+      <div class="badge-row"><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">json</span></div>
       <a class="preview-frame" href="sample-matching-proof.svg" aria-label="Matching proof SVG preview"><img src="sample-matching-proof.svg" alt="Matching proof SVG preview" loading="lazy" /></a>
-      <div class="chip-row"><a class="chip" href="sample-matching-proof.svg">Open SVG card</a><a class="chip" href="sample-matching-proof.md">Open Markdown proof</a></div>
+      <div class="chip-row"><a class="chip" href="sample-matching-proof.svg">Open SVG card</a><a class="chip" href="sample-matching-proof.md">Open Markdown proof</a><a class="chip" href="sample-matching-result.json">Open raw JSON payload</a></div>
     </article>
-<article class="showcase-card" data-tags="walkthrough html proof svg markdown dot">
+<article class="showcase-card" data-tags="walkthrough html proof svg markdown dot json">
       <p class="eyebrow">Optimization walkthrough</p>
       <h2>Weighted assignment walkthrough</h2>
       <p>Browser-friendly assignment story with the HTML walkthrough, proof SVG, Markdown explanation, and DOT diagram grouped together.</p>
-      <div class="badge-row"><span class="badge">walkthrough</span><span class="badge">html</span><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">dot</span></div>
+      <div class="badge-row"><span class="badge">walkthrough</span><span class="badge">html</span><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">dot</span><span class="badge">json</span></div>
       <iframe src="sample-assignment-artifact-page.html" title="Weighted assignment walkthrough preview" loading="lazy"></iframe>
-      <div class="chip-row"><a class="chip" href="sample-assignment-artifact-page.html">Open HTML walkthrough</a><a class="chip" href="sample-assignment-proof.svg">Open SVG card</a><a class="chip" href="sample-assignment-proof.md">Open Markdown proof</a><a class="chip" href="sample-assignment.dot">Open DOT diagram</a></div>
+      <div class="chip-row"><a class="chip" href="sample-assignment-artifact-page.html">Open HTML walkthrough</a><a class="chip" href="sample-assignment-proof.svg">Open SVG card</a><a class="chip" href="sample-assignment-proof.md">Open Markdown proof</a><a class="chip" href="sample-assignment.dot">Open DOT diagram</a><a class="chip" href="sample-assignment-result.json">Open raw JSON payload</a></div>
     </article>
-<article class="showcase-card" data-tags="walkthrough html proof svg markdown dot">
+<article class="showcase-card" data-tags="walkthrough html proof svg markdown dot json">
       <p class="eyebrow">Optimization walkthrough</p>
       <h2>Generic min-cost-flow walkthrough</h2>
       <p>Use this when the same engine needs to look like a shipping/routing optimization demo instead of a bipartite assignment reduction.</p>
-      <div class="badge-row"><span class="badge">walkthrough</span><span class="badge">html</span><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">dot</span></div>
+      <div class="badge-row"><span class="badge">walkthrough</span><span class="badge">html</span><span class="badge">proof</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">dot</span><span class="badge">json</span></div>
       <iframe src="sample-cost-flow-artifact-page.html" title="Generic min-cost-flow walkthrough preview" loading="lazy"></iframe>
-      <div class="chip-row"><a class="chip" href="sample-cost-flow-artifact-page.html">Open HTML walkthrough</a><a class="chip" href="sample-cost-flow-proof.svg">Open SVG card</a><a class="chip" href="sample-cost-flow-proof.md">Open Markdown proof</a><a class="chip" href="sample-cost-flow.dot">Open DOT diagram</a></div>
+      <div class="chip-row"><a class="chip" href="sample-cost-flow-artifact-page.html">Open HTML walkthrough</a><a class="chip" href="sample-cost-flow-proof.svg">Open SVG card</a><a class="chip" href="sample-cost-flow-proof.md">Open Markdown proof</a><a class="chip" href="sample-cost-flow.dot">Open DOT diagram</a><a class="chip" href="sample-cost-flow-result.json">Open raw JSON payload</a></div>
     </article>
-<article class="showcase-card" data-tags="benchmark svg markdown">
+<article class="showcase-card" data-tags="benchmark svg markdown json">
       <p class="eyebrow">Benchmark report</p>
       <h2>DAG baseline benchmark</h2>
       <p>The simplest performance story: a clean acyclic baseline before the denser residual-heavy families.</p>
-      <div class="badge-row"><span class="badge">benchmark</span><span class="badge">svg</span><span class="badge">markdown</span></div>
+      <div class="badge-row"><span class="badge">benchmark</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">json</span></div>
       <a class="preview-frame" href="benchmark-dag-report.svg" aria-label="DAG benchmark SVG preview"><img src="benchmark-dag-report.svg" alt="DAG benchmark SVG preview" loading="lazy" /></a>
-      <div class="chip-row"><a class="chip" href="benchmark-dag-report.svg">Open SVG card</a><a class="chip" href="benchmark-dag-report.md">Open Markdown report</a></div>
+      <div class="chip-row"><a class="chip" href="benchmark-dag-report.svg">Open SVG card</a><a class="chip" href="benchmark-dag-report.md">Open Markdown report</a><a class="chip" href="benchmark-dag-report.json">Open raw JSON payload</a></div>
     </article>
-<article class="showcase-card" data-tags="benchmark svg markdown">
+<article class="showcase-card" data-tags="benchmark svg markdown json">
       <p class="eyebrow">Benchmark report</p>
       <h2>Dense residual benchmark</h2>
       <p>Best for showing rerouting pressure and how the algorithm traces diverge once the graph gets messy.</p>
-      <div class="badge-row"><span class="badge">benchmark</span><span class="badge">svg</span><span class="badge">markdown</span></div>
+      <div class="badge-row"><span class="badge">benchmark</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">json</span></div>
       <a class="preview-frame" href="benchmark-dense-report.svg" aria-label="Dense benchmark SVG preview"><img src="benchmark-dense-report.svg" alt="Dense benchmark SVG preview" loading="lazy" /></a>
-      <div class="chip-row"><a class="chip" href="benchmark-dense-report.svg">Open SVG card</a><a class="chip" href="benchmark-dense-report.md">Open Markdown report</a></div>
+      <div class="chip-row"><a class="chip" href="benchmark-dense-report.svg">Open SVG card</a><a class="chip" href="benchmark-dense-report.md">Open Markdown report</a><a class="chip" href="benchmark-dense-report.json">Open raw JSON payload</a></div>
     </article>
-<article class="showcase-card" data-tags="benchmark svg markdown">
+<article class="showcase-card" data-tags="benchmark svg markdown json">
       <p class="eyebrow">Benchmark report</p>
       <h2>Layered cut-stress benchmark</h2>
       <p>The strongest companion when you want a blocking-flow / cut-heavy performance follow-up beside the optimization walkthroughs.</p>
-      <div class="badge-row"><span class="badge">benchmark</span><span class="badge">svg</span><span class="badge">markdown</span></div>
+      <div class="badge-row"><span class="badge">benchmark</span><span class="badge">svg</span><span class="badge">markdown</span><span class="badge">json</span></div>
       <a class="preview-frame" href="benchmark-layered-report.svg" aria-label="Layered benchmark SVG preview"><img src="benchmark-layered-report.svg" alt="Layered benchmark SVG preview" loading="lazy" /></a>
-      <div class="chip-row"><a class="chip" href="benchmark-layered-report.svg">Open SVG card</a><a class="chip" href="benchmark-layered-report.md">Open Markdown report</a></div>
+      <div class="chip-row"><a class="chip" href="benchmark-layered-report.svg">Open SVG card</a><a class="chip" href="benchmark-layered-report.md">Open Markdown report</a><a class="chip" href="benchmark-layered-report.json">Open raw JSON payload</a></div>
     </article>
     </section>
   </main>

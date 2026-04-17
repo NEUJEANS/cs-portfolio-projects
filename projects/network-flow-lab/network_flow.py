@@ -1492,10 +1492,12 @@ def build_artifact_gallery_paths(*, html_out: Path, artifact_dir: Path | None = 
         "assignment_proof_svg": base_dir / "sample-assignment-proof.svg",
         "assignment_markdown": base_dir / "sample-assignment-proof.md",
         "assignment_dot": base_dir / "sample-assignment.dot",
+        "assignment_json": base_dir / "sample-assignment-result.json",
         "cost_page": base_dir / "sample-cost-flow-artifact-page.html",
         "cost_proof_svg": base_dir / "sample-cost-flow-proof.svg",
         "cost_markdown": base_dir / "sample-cost-flow-proof.md",
         "cost_dot": base_dir / "sample-cost-flow.dot",
+        "cost_json": base_dir / "sample-cost-flow-result.json",
     }
 
 
@@ -1504,10 +1506,13 @@ def build_benchmark_gallery_paths(*, html_out: Path, artifact_dir: Path | None =
     return {
         "dag_svg": base_dir / "benchmark-dag-report.svg",
         "dag_markdown": base_dir / "benchmark-dag-report.md",
+        "dag_json": base_dir / "benchmark-dag-report.json",
         "dense_svg": base_dir / "benchmark-dense-report.svg",
         "dense_markdown": base_dir / "benchmark-dense-report.md",
+        "dense_json": base_dir / "benchmark-dense-report.json",
         "layered_svg": base_dir / "benchmark-layered-report.svg",
         "layered_markdown": base_dir / "benchmark-layered-report.md",
+        "layered_json": base_dir / "benchmark-layered-report.json",
     }
 
 
@@ -1518,22 +1523,29 @@ def build_showcase_paths(*, html_out: Path, artifact_dir: Path | None = None) ->
         "benchmark_gallery": base_dir / "benchmark-gallery.html",
         "flow_svg": base_dir / "sample-flow-proof.svg",
         "flow_markdown": base_dir / "sample-flow-proof.md",
+        "flow_json": base_dir / "sample-flow-result.json",
         "matching_svg": base_dir / "sample-matching-proof.svg",
         "matching_markdown": base_dir / "sample-matching-proof.md",
+        "matching_json": base_dir / "sample-matching-result.json",
         "assignment_page": base_dir / "sample-assignment-artifact-page.html",
         "assignment_svg": base_dir / "sample-assignment-proof.svg",
         "assignment_markdown": base_dir / "sample-assignment-proof.md",
         "assignment_dot": base_dir / "sample-assignment.dot",
+        "assignment_json": base_dir / "sample-assignment-result.json",
         "cost_page": base_dir / "sample-cost-flow-artifact-page.html",
         "cost_svg": base_dir / "sample-cost-flow-proof.svg",
         "cost_markdown": base_dir / "sample-cost-flow-proof.md",
         "cost_dot": base_dir / "sample-cost-flow.dot",
+        "cost_json": base_dir / "sample-cost-flow-result.json",
         "dag_svg": base_dir / "benchmark-dag-report.svg",
         "dag_markdown": base_dir / "benchmark-dag-report.md",
+        "dag_json": base_dir / "benchmark-dag-report.json",
         "dense_svg": base_dir / "benchmark-dense-report.svg",
         "dense_markdown": base_dir / "benchmark-dense-report.md",
+        "dense_json": base_dir / "benchmark-dense-report.json",
         "layered_svg": base_dir / "benchmark-layered-report.svg",
         "layered_markdown": base_dir / "benchmark-layered-report.md",
+        "layered_json": base_dir / "benchmark-layered-report.json",
     }
 
 
@@ -2261,6 +2273,7 @@ def render_min_cost_flow_artifact_html(
         "dot": "DOT source",
         "markdown": "Markdown proof",
         "svg": "Standalone proof SVG",
+        "json": "Raw JSON payload",
     }
     companion_links_html = "".join(
         f'<li><a href="{_html_escape(path)}">{_html_escape(link_labels[key])}</a></li>'
@@ -2268,7 +2281,7 @@ def render_min_cost_flow_artifact_html(
         if key in link_labels
     )
     if not companion_links_html:
-        companion_links_html = "<li>This HTML file is self-contained; add --dot-out, --markdown-out, or --svg-out if you want companion artifacts too.</li>"
+        companion_links_html = "<li>This HTML file is self-contained; add --dot-out, --markdown-out, --svg-out, or --json-out if you want companion artifacts too.</li>"
 
     requested_flow = target_flow if target_flow is not None else "maximize"
     return f'''<!DOCTYPE html>
@@ -2348,10 +2361,12 @@ def render_artifact_gallery_html(
     assignment_proof_svg: str,
     assignment_markdown: str,
     assignment_dot: str,
+    assignment_json: str,
     cost_page: str,
     cost_proof_svg: str,
     cost_markdown: str,
     cost_dot: str,
+    cost_json: str,
 ) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
     sections = [
@@ -2366,6 +2381,7 @@ def render_artifact_gallery_html(
                 ("Standalone proof SVG", assignment_proof_svg),
                 ("Markdown proof", assignment_markdown),
                 ("DOT source", assignment_dot),
+                ("Raw JSON payload", assignment_json),
             ],
         },
         {
@@ -2379,6 +2395,7 @@ def render_artifact_gallery_html(
                 ("Standalone proof SVG", cost_proof_svg),
                 ("Markdown proof", cost_markdown),
                 ("DOT source", cost_dot),
+                ("Raw JSON payload", cost_json),
             ],
         },
     ]
@@ -2455,10 +2472,13 @@ def render_benchmark_gallery_html(
     *,
     dag_svg: str,
     dag_markdown: str,
+    dag_json: str,
     dense_svg: str,
     dense_markdown: str,
+    dense_json: str,
     layered_svg: str,
     layered_markdown: str,
+    layered_json: str,
     artifact_gallery: str | None = None,
 ) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
@@ -2472,6 +2492,7 @@ def render_benchmark_gallery_html(
             "links": [
                 ("Open SVG card", dag_svg),
                 ("Open Markdown report", dag_markdown),
+                ("Open raw JSON payload", dag_json),
             ],
         },
         {
@@ -2483,6 +2504,7 @@ def render_benchmark_gallery_html(
             "links": [
                 ("Open SVG card", dense_svg),
                 ("Open Markdown report", dense_markdown),
+                ("Open raw JSON payload", dense_json),
             ],
         },
         {
@@ -2494,6 +2516,7 @@ def render_benchmark_gallery_html(
             "links": [
                 ("Open SVG card", layered_svg),
                 ("Open Markdown report", layered_markdown),
+                ("Open raw JSON payload", layered_json),
             ],
         },
     ]
@@ -2583,22 +2606,29 @@ def render_showcase_html(
     benchmark_gallery: str,
     flow_svg: str,
     flow_markdown: str,
+    flow_json: str,
     matching_svg: str,
     matching_markdown: str,
+    matching_json: str,
     assignment_page: str,
     assignment_svg: str,
     assignment_markdown: str,
     assignment_dot: str,
+    assignment_json: str,
     cost_page: str,
     cost_svg: str,
     cost_markdown: str,
     cost_dot: str,
+    cost_json: str,
     dag_svg: str,
     dag_markdown: str,
+    dag_json: str,
     dense_svg: str,
     dense_markdown: str,
+    dense_json: str,
     layered_svg: str,
     layered_markdown: str,
+    layered_json: str,
 ) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
     cards = [
@@ -2609,8 +2639,8 @@ def render_showcase_html(
             "preview_kind": "image",
             "preview": flow_svg,
             "preview_title": "Max-flow proof SVG preview",
-            "tags": ["proof", "svg", "markdown"],
-            "links": [("Open SVG card", flow_svg), ("Open Markdown proof", flow_markdown)],
+            "tags": ["proof", "svg", "markdown", "json"],
+            "links": [("Open SVG card", flow_svg), ("Open Markdown proof", flow_markdown), ("Open raw JSON payload", flow_json)],
         },
         {
             "title": "Bipartite matching proof card",
@@ -2619,8 +2649,8 @@ def render_showcase_html(
             "preview_kind": "image",
             "preview": matching_svg,
             "preview_title": "Matching proof SVG preview",
-            "tags": ["proof", "svg", "markdown"],
-            "links": [("Open SVG card", matching_svg), ("Open Markdown proof", matching_markdown)],
+            "tags": ["proof", "svg", "markdown", "json"],
+            "links": [("Open SVG card", matching_svg), ("Open Markdown proof", matching_markdown), ("Open raw JSON payload", matching_json)],
         },
         {
             "title": "Weighted assignment walkthrough",
@@ -2629,12 +2659,13 @@ def render_showcase_html(
             "preview_kind": "iframe",
             "preview": assignment_page,
             "preview_title": "Weighted assignment walkthrough preview",
-            "tags": ["walkthrough", "html", "proof", "svg", "markdown", "dot"],
+            "tags": ["walkthrough", "html", "proof", "svg", "markdown", "dot", "json"],
             "links": [
                 ("Open HTML walkthrough", assignment_page),
                 ("Open SVG card", assignment_svg),
                 ("Open Markdown proof", assignment_markdown),
                 ("Open DOT diagram", assignment_dot),
+                ("Open raw JSON payload", assignment_json),
             ],
         },
         {
@@ -2644,12 +2675,13 @@ def render_showcase_html(
             "preview_kind": "iframe",
             "preview": cost_page,
             "preview_title": "Generic min-cost-flow walkthrough preview",
-            "tags": ["walkthrough", "html", "proof", "svg", "markdown", "dot"],
+            "tags": ["walkthrough", "html", "proof", "svg", "markdown", "dot", "json"],
             "links": [
                 ("Open HTML walkthrough", cost_page),
                 ("Open SVG card", cost_svg),
                 ("Open Markdown proof", cost_markdown),
                 ("Open DOT diagram", cost_dot),
+                ("Open raw JSON payload", cost_json),
             ],
         },
         {
@@ -2659,8 +2691,8 @@ def render_showcase_html(
             "preview_kind": "image",
             "preview": dag_svg,
             "preview_title": "DAG benchmark SVG preview",
-            "tags": ["benchmark", "svg", "markdown"],
-            "links": [("Open SVG card", dag_svg), ("Open Markdown report", dag_markdown)],
+            "tags": ["benchmark", "svg", "markdown", "json"],
+            "links": [("Open SVG card", dag_svg), ("Open Markdown report", dag_markdown), ("Open raw JSON payload", dag_json)],
         },
         {
             "title": "Dense residual benchmark",
@@ -2669,8 +2701,8 @@ def render_showcase_html(
             "preview_kind": "image",
             "preview": dense_svg,
             "preview_title": "Dense benchmark SVG preview",
-            "tags": ["benchmark", "svg", "markdown"],
-            "links": [("Open SVG card", dense_svg), ("Open Markdown report", dense_markdown)],
+            "tags": ["benchmark", "svg", "markdown", "json"],
+            "links": [("Open SVG card", dense_svg), ("Open Markdown report", dense_markdown), ("Open raw JSON payload", dense_json)],
         },
         {
             "title": "Layered cut-stress benchmark",
@@ -2679,8 +2711,8 @@ def render_showcase_html(
             "preview_kind": "image",
             "preview": layered_svg,
             "preview_title": "Layered benchmark SVG preview",
-            "tags": ["benchmark", "svg", "markdown"],
-            "links": [("Open SVG card", layered_svg), ("Open Markdown report", layered_markdown)],
+            "tags": ["benchmark", "svg", "markdown", "json"],
+            "links": [("Open SVG card", layered_svg), ("Open Markdown report", layered_markdown), ("Open raw JSON payload", layered_json)],
         },
     ]
 
@@ -2764,7 +2796,7 @@ def render_showcase_html(
       <div class="hero-meta">
         <span>Generated <strong>{generated}</strong></span>
         <span>Includes <strong>7</strong> artifact groups</span>
-        <span>Filters: proof / html / benchmark / markdown / dot</span>
+        <span>Filters: proof / html / benchmark / markdown / dot / json</span>
       </div>
       <div class="hero-links">
         <a class="hero-link" href="{_html_escape(artifact_gallery)}">Open optimization gallery</a>
@@ -2779,6 +2811,7 @@ def render_showcase_html(
           <button type="button" class="filter-button" data-filter="benchmark" aria-pressed="false">Benchmark reports</button>
           <button type="button" class="filter-button" data-filter="markdown" aria-pressed="false">Markdown companions</button>
           <button type="button" class="filter-button" data-filter="dot" aria-pressed="false">DOT diagrams</button>
+          <button type="button" class="filter-button" data-filter="json" aria-pressed="false">JSON payloads</button>
         </div>
       </section>
     </section>
@@ -3081,6 +3114,7 @@ def render_assignment_artifact_html(
         "dot": "DOT source",
         "markdown": "Markdown proof",
         "svg": "Standalone proof SVG",
+        "json": "Raw JSON payload",
     }
     companion_links_html = "".join(
         f'<li><a href="{_html_escape(path)}">{_html_escape(link_labels[key])}</a></li>'
@@ -3088,7 +3122,7 @@ def render_assignment_artifact_html(
         if key in link_labels
     )
     if not companion_links_html:
-        companion_links_html = "<li>This HTML file is self-contained; add --dot-out, --markdown-out, or --svg-out if you want companion artifacts too.</li>"
+        companion_links_html = "<li>This HTML file is self-contained; add --dot-out, --markdown-out, --svg-out, or --json-out if you want companion artifacts too.</li>"
 
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -3346,12 +3380,46 @@ def write_html_output(path: Path, contents: str) -> None:
     path.write_text(contents, encoding="utf-8")
 
 
+def _relativize_paths_for_serialization(value: Any, *, base_dir: Path, field_name: str | None = None) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _relativize_paths_for_serialization(item, base_dir=base_dir, field_name=key)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_relativize_paths_for_serialization(item, base_dir=base_dir) for item in value]
+    if isinstance(value, str) and field_name is not None and (field_name == "graph" or field_name.endswith("_output")):
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return _relative_output_path(candidate, base_dir)
+        return _relative_output_path((Path.cwd() / candidate).resolve(), base_dir)
+    return value
+
+
+def write_json_output(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    portable_payload = _relativize_paths_for_serialization(payload, base_dir=path.parent)
+    path.write_text(json.dumps(portable_payload, indent=2) + "\n", encoding="utf-8")
+
+
+def maybe_write_json_output(args: argparse.Namespace, payload: dict[str, Any]) -> None:
+    json_out = getattr(args, "json_out", None)
+    if json_out is None:
+        return
+    payload["json_output"] = str(json_out)
+    write_json_output(json_out, payload)
+
+
 def add_explain_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--explain",
         action="store_true",
         help="include a compact proof-style explanation of the computed result",
     )
+
+
+def add_json_out_argument(parser: argparse.ArgumentParser, help_text: str) -> None:
+    parser.add_argument("--json-out", type=Path, help=help_text)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -3365,6 +3433,7 @@ def build_parser() -> argparse.ArgumentParser:
     solve_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved flow graph")
     solve_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved flow graph")
     solve_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved flow graph")
+    add_json_out_argument(solve_parser, "write a machine-readable JSON companion file for the solved flow graph")
     add_explain_argument(solve_parser)
 
     demo_parser = subparsers.add_parser("demo", help="run the bundled sample graph")
@@ -3373,6 +3442,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample flow graph")
     demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample flow graph")
     demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample flow graph")
+    add_json_out_argument(demo_parser, "write a machine-readable JSON companion file for the sample flow graph")
     add_explain_argument(demo_parser)
 
     match_parser = subparsers.add_parser("match", help="solve a bipartite matching JSON file")
@@ -3382,6 +3452,7 @@ def build_parser() -> argparse.ArgumentParser:
     match_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved matching graph")
     match_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved matching graph")
     match_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved matching graph")
+    add_json_out_argument(match_parser, "write a machine-readable JSON companion file for the solved matching graph")
     add_explain_argument(match_parser)
 
     match_demo_parser = subparsers.add_parser("match-demo", help="run the bundled matching sample")
@@ -3390,6 +3461,7 @@ def build_parser() -> argparse.ArgumentParser:
     match_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample matching graph")
     match_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample matching graph")
     match_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample matching graph")
+    add_json_out_argument(match_demo_parser, "write a machine-readable JSON companion file for the sample matching graph")
     add_explain_argument(match_demo_parser)
 
     assign_parser = subparsers.add_parser("assign", help="solve a weighted assignment JSON file")
@@ -3399,6 +3471,7 @@ def build_parser() -> argparse.ArgumentParser:
     assign_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved assignment graph")
     assign_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved assignment graph")
     assign_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the assignment diagram next to the proof card")
+    add_json_out_argument(assign_parser, "write a machine-readable JSON companion file for the solved assignment graph")
     add_explain_argument(assign_parser)
 
     assign_demo_parser = subparsers.add_parser("assign-demo", help="run the bundled weighted assignment sample")
@@ -3407,6 +3480,7 @@ def build_parser() -> argparse.ArgumentParser:
     assign_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample assignment graph")
     assign_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample assignment graph")
     assign_demo_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the assignment diagram next to the proof card")
+    add_json_out_argument(assign_demo_parser, "write a machine-readable JSON companion file for the sample assignment graph")
     add_explain_argument(assign_demo_parser)
 
     cost_parser = subparsers.add_parser("cost-solve", help="solve a generic min-cost-flow JSON file")
@@ -3416,6 +3490,7 @@ def build_parser() -> argparse.ArgumentParser:
     cost_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved costed flow graph")
     cost_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved costed flow graph")
     cost_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the shipping/routing diagram next to the proof card")
+    add_json_out_argument(cost_parser, "write a machine-readable JSON companion file for the solved costed flow graph")
     add_explain_argument(cost_parser)
 
     cost_demo_parser = subparsers.add_parser("cost-demo", help="run the bundled generic min-cost-flow sample")
@@ -3424,6 +3499,7 @@ def build_parser() -> argparse.ArgumentParser:
     cost_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample costed flow graph")
     cost_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample costed flow graph")
     cost_demo_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the shipping/routing diagram next to the proof card")
+    add_json_out_argument(cost_demo_parser, "write a machine-readable JSON companion file for the sample costed flow graph")
     add_explain_argument(cost_demo_parser)
 
     gallery_demo_parser = subparsers.add_parser("gallery-demo", help="write a tiny HTML gallery that links the bundled assignment and min-cost-flow artifact pages")
@@ -3456,6 +3532,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--capacity-max", type=int, default=20)
     benchmark_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown benchmark report card")
     benchmark_parser.add_argument("--svg-out", type=Path, help="write an SVG benchmark report card")
+    add_json_out_argument(benchmark_parser, "write a machine-readable JSON companion file for the benchmark report")
     benchmark_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     return parser
 
@@ -3534,6 +3611,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_flow_svg(flow_result, graph_name=graph_path.stem))
             payload["svg_output"] = str(args.svg_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     if args.command == "demo":
@@ -3552,6 +3630,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_flow_svg(flow_result, graph_name=graph_path.stem))
             payload["svg_output"] = str(args.svg_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     if args.command == "match":
@@ -3570,6 +3649,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_matching_svg(matching_result, graph_name=graph_path.stem))
             payload["svg_output"] = str(args.svg_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     if args.command == "match-demo":
@@ -3588,6 +3668,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_matching_svg(matching_result, graph_name=graph_path.stem))
             payload["svg_output"] = str(args.svg_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     if args.command == "assign":
@@ -3613,6 +3694,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                     "dot": payload.get("dot_output"),
                     "markdown": payload.get("markdown_output"),
                     "svg": payload.get("svg_output"),
+                    "json": str(args.json_out) if getattr(args, "json_out", None) else None,
                 }.items()
                 if value is not None
             }
@@ -3625,6 +3707,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 ),
             )
             payload["html_output"] = str(args.html_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     if args.command == "assign-demo":
@@ -3650,6 +3733,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                     "dot": payload.get("dot_output"),
                     "markdown": payload.get("markdown_output"),
                     "svg": payload.get("svg_output"),
+                    "json": str(args.json_out) if getattr(args, "json_out", None) else None,
                 }.items()
                 if value is not None
             }
@@ -3662,6 +3746,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 ),
             )
             payload["html_output"] = str(args.html_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     if args.command == "cost-solve":
@@ -3702,6 +3787,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                     "dot": payload.get("dot_output"),
                     "markdown": payload.get("markdown_output"),
                     "svg": payload.get("svg_output"),
+                    "json": str(args.json_out) if getattr(args, "json_out", None) else None,
                 }.items()
                 if value is not None
             }
@@ -3715,6 +3801,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 ),
             )
             payload["html_output"] = str(args.html_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     if args.command == "gallery-demo":
@@ -3733,10 +3820,12 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 assignment_proof_svg=relative_paths["assignment_proof_svg"],
                 assignment_markdown=relative_paths["assignment_markdown"],
                 assignment_dot=relative_paths["assignment_dot"],
+                assignment_json=relative_paths["assignment_json"],
                 cost_page=relative_paths["cost_page"],
                 cost_proof_svg=relative_paths["cost_proof_svg"],
                 cost_markdown=relative_paths["cost_markdown"],
                 cost_dot=relative_paths["cost_dot"],
+                cost_json=relative_paths["cost_json"],
             ),
         )
         return {
@@ -3766,10 +3855,13 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             render_benchmark_gallery_html(
                 dag_svg=relative_paths["dag_svg"],
                 dag_markdown=relative_paths["dag_markdown"],
+                dag_json=relative_paths["dag_json"],
                 dense_svg=relative_paths["dense_svg"],
                 dense_markdown=relative_paths["dense_markdown"],
+                dense_json=relative_paths["dense_json"],
                 layered_svg=relative_paths["layered_svg"],
                 layered_markdown=relative_paths["layered_markdown"],
+                layered_json=relative_paths["layered_json"],
                 artifact_gallery=optimization_gallery_relative,
             ),
         )
@@ -3796,22 +3888,29 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 benchmark_gallery=relative_paths["benchmark_gallery"],
                 flow_svg=relative_paths["flow_svg"],
                 flow_markdown=relative_paths["flow_markdown"],
+                flow_json=relative_paths["flow_json"],
                 matching_svg=relative_paths["matching_svg"],
                 matching_markdown=relative_paths["matching_markdown"],
+                matching_json=relative_paths["matching_json"],
                 assignment_page=relative_paths["assignment_page"],
                 assignment_svg=relative_paths["assignment_svg"],
                 assignment_markdown=relative_paths["assignment_markdown"],
                 assignment_dot=relative_paths["assignment_dot"],
+                assignment_json=relative_paths["assignment_json"],
                 cost_page=relative_paths["cost_page"],
                 cost_svg=relative_paths["cost_svg"],
                 cost_markdown=relative_paths["cost_markdown"],
                 cost_dot=relative_paths["cost_dot"],
+                cost_json=relative_paths["cost_json"],
                 dag_svg=relative_paths["dag_svg"],
                 dag_markdown=relative_paths["dag_markdown"],
+                dag_json=relative_paths["dag_json"],
                 dense_svg=relative_paths["dense_svg"],
                 dense_markdown=relative_paths["dense_markdown"],
+                dense_json=relative_paths["dense_json"],
                 layered_svg=relative_paths["layered_svg"],
                 layered_markdown=relative_paths["layered_markdown"],
+                layered_json=relative_paths["layered_json"],
             ),
         )
         return {
@@ -3859,6 +3958,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                     "dot": payload.get("dot_output"),
                     "markdown": payload.get("markdown_output"),
                     "svg": payload.get("svg_output"),
+                    "json": str(args.json_out) if getattr(args, "json_out", None) else None,
                 }.items()
                 if value is not None
             }
@@ -3872,6 +3972,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 ),
             )
             payload["html_output"] = str(args.html_out)
+        maybe_write_json_output(args, payload)
         return payload
 
     payload = benchmark_algorithms(
@@ -3889,6 +3990,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
     if getattr(args, "svg_out", None):
         write_svg_output(args.svg_out, render_benchmark_svg(payload))
         payload["svg_output"] = str(args.svg_out)
+    maybe_write_json_output(args, payload)
     return payload
 
 

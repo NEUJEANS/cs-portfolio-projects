@@ -1,0 +1,200 @@
+{
+  "command": "assign-demo",
+  "graph": "../../../projects/network-flow-lab/sample_assignment_graph.json",
+  "left_partition": [
+    "anna",
+    "ben",
+    "chloe",
+    "david"
+  ],
+  "right_partition": [
+    "api",
+    "compiler",
+    "database"
+  ],
+  "assignments": [
+    {
+      "left": "anna",
+      "right": "compiler",
+      "cost": 4
+    },
+    {
+      "left": "ben",
+      "right": "api",
+      "cost": 2
+    },
+    {
+      "left": "david",
+      "right": "database",
+      "cost": 6
+    }
+  ],
+  "assignment_count": 3,
+  "unmatched_left": [
+    "chloe"
+  ],
+  "unmatched_right": [],
+  "total_cost": 12,
+  "covers_smaller_partition": true,
+  "flow": {
+    "source": "__assignment_source__",
+    "sink": "__assignment_sink__",
+    "algorithm": "successive-shortest-path",
+    "total_flow": 3,
+    "total_cost": 12,
+    "augmenting_paths": [
+      {
+        "path": [
+          "__assignment_source__",
+          "ben",
+          "api",
+          "__assignment_sink__"
+        ],
+        "bottleneck": 1,
+        "cost_per_unit": 2,
+        "path_cost": 2
+      },
+      {
+        "path": [
+          "__assignment_source__",
+          "anna",
+          "compiler",
+          "__assignment_sink__"
+        ],
+        "bottleneck": 1,
+        "cost_per_unit": 4,
+        "path_cost": 4
+      },
+      {
+        "path": [
+          "__assignment_source__",
+          "david",
+          "database",
+          "__assignment_sink__"
+        ],
+        "bottleneck": 1,
+        "cost_per_unit": 6,
+        "path_cost": 6
+      }
+    ],
+    "edge_flows": [
+      {
+        "source": "__assignment_source__",
+        "target": "anna",
+        "capacity": 1,
+        "cost": 0,
+        "flow": 1
+      },
+      {
+        "source": "__assignment_source__",
+        "target": "ben",
+        "capacity": 1,
+        "cost": 0,
+        "flow": 1
+      },
+      {
+        "source": "__assignment_source__",
+        "target": "chloe",
+        "capacity": 1,
+        "cost": 0,
+        "flow": 0
+      },
+      {
+        "source": "__assignment_source__",
+        "target": "david",
+        "capacity": 1,
+        "cost": 0,
+        "flow": 1
+      },
+      {
+        "source": "anna",
+        "target": "api",
+        "capacity": 1,
+        "cost": 8,
+        "flow": 0
+      },
+      {
+        "source": "anna",
+        "target": "compiler",
+        "capacity": 1,
+        "cost": 4,
+        "flow": 1
+      },
+      {
+        "source": "anna",
+        "target": "database",
+        "capacity": 1,
+        "cost": 7,
+        "flow": 0
+      },
+      {
+        "source": "api",
+        "target": "__assignment_sink__",
+        "capacity": 1,
+        "cost": 0,
+        "flow": 1
+      },
+      {
+        "source": "ben",
+        "target": "api",
+        "capacity": 1,
+        "cost": 2,
+        "flow": 1
+      },
+      {
+        "source": "ben",
+        "target": "compiler",
+        "capacity": 1,
+        "cost": 6,
+        "flow": 0
+      },
+      {
+        "source": "chloe",
+        "target": "compiler",
+        "capacity": 1,
+        "cost": 5,
+        "flow": 0
+      },
+      {
+        "source": "chloe",
+        "target": "database",
+        "capacity": 1,
+        "cost": 9,
+        "flow": 0
+      },
+      {
+        "source": "compiler",
+        "target": "__assignment_sink__",
+        "capacity": 1,
+        "cost": 0,
+        "flow": 1
+      },
+      {
+        "source": "database",
+        "target": "__assignment_sink__",
+        "capacity": 1,
+        "cost": 0,
+        "flow": 1
+      },
+      {
+        "source": "david",
+        "target": "api",
+        "capacity": 1,
+        "cost": 9,
+        "flow": 0
+      },
+      {
+        "source": "david",
+        "target": "database",
+        "capacity": 1,
+        "cost": 6,
+        "flow": 1
+      }
+    ]
+  },
+  "dot_output": "sample-assignment.dot",
+  "markdown_output": "sample-assignment-proof.md",
+  "svg_output": "sample-assignment-proof.svg",
+  "html_output": "sample-assignment-artifact-page.html",
+  "json_output": "sample-assignment-result.json"
+}

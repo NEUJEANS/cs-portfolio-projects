@@ -1,0 +1,98 @@
+{
+  "command": "cost-demo",
+  "graph": "../../../projects/network-flow-lab/sample_cost_flow_graph.json",
+  "target_flow": 2,
+  "target_reached": true,
+  "source": "s",
+  "sink": "t",
+  "algorithm": "successive-shortest-path",
+  "total_flow": 2,
+  "total_cost": 5,
+  "augmenting_paths": [
+    {
+      "path": [
+        "s",
+        "b",
+        "c",
+        "t"
+      ],
+      "bottleneck": 1,
+      "cost_per_unit": 2,
+      "path_cost": 2
+    },
+    {
+      "path": [
+        "s",
+        "a",
+        "c",
+        "t"
+      ],
+      "bottleneck": 1,
+      "cost_per_unit": 3,
+      "path_cost": 3
+    }
+  ],
+  "edge_flows": [
+    {
+      "source": "a",
+      "target": "b",
+      "capacity": 1,
+      "cost": 1,
+      "flow": 0
+    },
+    {
+      "source": "a",
+      "target": "c",
+      "capacity": 1,
+      "cost": 2,
+      "flow": 1
+    },
+    {
+      "source": "a",
+      "target": "t",
+      "capacity": 1,
+      "cost": 7,
+      "flow": 0
+    },
+    {
+      "source": "b",
+      "target": "c",
+      "capacity": 1,
+      "cost": 1,
+      "flow": 1
+    },
+    {
+      "source": "b",
+      "target": "t",
+      "capacity": 1,
+      "cost": 3,
+      "flow": 0
+    },
+    {
+      "source": "c",
+      "target": "t",
+      "capacity": 2,
+      "cost": 1,
+      "flow": 2
+    },
+    {
+      "source": "s",
+      "target": "a",
+      "capacity": 2,
+      "cost": 0,
+      "flow": 1
+    },
+    {
+      "source": "s",
+      "target": "b",
+      "capacity": 1,
+      "cost": 0,
+      "flow": 1
+    }
+  ],
+  "dot_output": "sample-cost-flow.dot",
+  "markdown_output": "sample-cost-flow-proof.md",
+  "svg_output": "sample-cost-flow-proof.svg",
+  "html_output": "sample-cost-flow-artifact-page.html",
+  "json_output": "sample-cost-flow-result.json"
+}

@@ -1,0 +1,98 @@
+{
+  "command": "benchmark",
+  "generator": {
+    "graph_family": "layered",
+    "node_count": 18,
+    "edge_probability": 0.2,
+    "capacity_range": [
+      1,
+      20
+    ],
+    "trials": 3,
+    "seed": 7
+  },
+  "algorithms": [
+    "edmonds-karp",
+    "dinic"
+  ],
+  "trial_flows": [
+    27,
+    32,
+    28
+  ],
+  "trials": [
+    {
+      "trial": 1,
+      "seed": 7,
+      "graph_family": "layered",
+      "edge_count": 63,
+      "edge_density": 0.206,
+      "edmonds-karp": {
+        "max_flow": 27,
+        "elapsed_ms": 0.379,
+        "augmentations": 20
+      },
+      "dinic": {
+        "max_flow": 27,
+        "elapsed_ms": 0.317,
+        "augmentations": 20,
+        "phases": 3
+      }
+    },
+    {
+      "trial": 2,
+      "seed": 8,
+      "graph_family": "layered",
+      "edge_count": 68,
+      "edge_density": 0.222,
+      "edmonds-karp": {
+        "max_flow": 32,
+        "elapsed_ms": 0.419,
+        "augmentations": 25
+      },
+      "dinic": {
+        "max_flow": 32,
+        "elapsed_ms": 0.302,
+        "augmentations": 25,
+        "phases": 3
+      }
+    },
+    {
+      "trial": 3,
+      "seed": 9,
+      "graph_family": "layered",
+      "edge_count": 73,
+      "edge_density": 0.239,
+      "edmonds-karp": {
+        "max_flow": 28,
+        "elapsed_ms": 0.388,
+        "augmentations": 18
+      },
+      "dinic": {
+        "max_flow": 28,
+        "elapsed_ms": 0.337,
+        "augmentations": 18,
+        "phases": 3
+      }
+    }
+  ],
+  "summary": {
+    "edmonds-karp": {
+      "min_ms": 0.379,
+      "median_ms": 0.388,
+      "max_ms": 0.419,
+      "mean_ms": 0.395,
+      "mean_augmentations": 21.0
+    },
+    "dinic": {
+      "min_ms": 0.302,
+      "median_ms": 0.317,
+      "max_ms": 0.337,
+      "mean_ms": 0.319,
+      "mean_augmentations": 21.0,
+      "mean_phases": 3.0
+    },
+    "speedup_ratio": 1.239
+  },
+  "json_output": "benchmark-layered-report.json"
+}

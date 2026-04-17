@@ -523,7 +523,7 @@ class NetworkFlowLabTests(unittest.TestCase):
         html = render_assignment_artifact_html(
             result,
             graph_name="weighted_assignment",
-            companion_links={"dot": "assignment.dot", "markdown": "assignment-proof.md", "svg": "assignment-proof.svg"},
+            companion_links={"dot": "assignment.dot", "markdown": "assignment-proof.md", "svg": "assignment-proof.svg", "json": "assignment-result.json"},
         )
         self.assertIn("<!DOCTYPE html>", html)
         self.assertIn("Weighted assignment artifact page", html)
@@ -532,6 +532,7 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('href="assignment.dot"', html)
         self.assertIn('href="assignment-proof.md"', html)
         self.assertIn('href="assignment-proof.svg"', html)
+        self.assertIn('href="assignment-result.json"', html)
         self.assertIn('id="assignment-diagram-title"', html)
         self.assertIn('id="assignment-proof-title"', html)
         self.assertNotIn('id="title"', html)
@@ -687,7 +688,7 @@ class NetworkFlowLabTests(unittest.TestCase):
             result,
             graph_name="tiny_cost_flow",
             target_flow=2,
-            companion_links={"dot": "cost-flow.dot", "markdown": "cost-flow-proof.md", "svg": "cost-flow-proof.svg"},
+            companion_links={"dot": "cost-flow.dot", "markdown": "cost-flow-proof.md", "svg": "cost-flow-proof.svg", "json": "cost-flow-result.json"},
         )
         self.assertIn("<!DOCTYPE html>", html)
         self.assertIn("Generic min-cost-flow artifact page", html)
@@ -696,6 +697,7 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('href="cost-flow.dot"', html)
         self.assertIn('href="cost-flow-proof.md"', html)
         self.assertIn('href="cost-flow-proof.svg"', html)
+        self.assertIn('href="cost-flow-result.json"', html)
         self.assertIn('id="cost-diagram-title"', html)
         self.assertIn('id="cost-proof-title"', html)
         self.assertNotIn('id="title"', html)
@@ -709,17 +711,21 @@ class NetworkFlowLabTests(unittest.TestCase):
             assignment_proof_svg="sample-assignment-proof.svg",
             assignment_markdown="sample-assignment-proof.md",
             assignment_dot="sample-assignment.dot",
+            assignment_json="sample-assignment-result.json",
             cost_page="sample-cost-flow-artifact-page.html",
             cost_proof_svg="sample-cost-flow-proof.svg",
             cost_markdown="sample-cost-flow-proof.md",
             cost_dot="sample-cost-flow.dot",
+            cost_json="sample-cost-flow-result.json",
         )
         self.assertIn("<!DOCTYPE html>", html)
         self.assertIn("Network-flow lab artifact gallery", html)
         self.assertIn('href="sample-assignment-artifact-page.html"', html)
         self.assertIn('href="sample-cost-flow-artifact-page.html"', html)
         self.assertIn('href="sample-assignment-proof.svg"', html)
+        self.assertIn('href="sample-assignment-result.json"', html)
         self.assertIn('href="sample-cost-flow.dot"', html)
+        self.assertIn('href="sample-cost-flow-result.json"', html)
         self.assertIn('iframe src="sample-assignment-artifact-page.html"', html)
         self.assertIn('iframe src="sample-cost-flow-artifact-page.html"', html)
 
@@ -947,10 +953,12 @@ class NetworkFlowLabTests(unittest.TestCase):
                 "sample-assignment-proof.svg",
                 "sample-assignment-proof.md",
                 "sample-assignment.dot",
+                "sample-assignment-result.json",
                 "sample-cost-flow-artifact-page.html",
                 "sample-cost-flow-proof.svg",
                 "sample-cost-flow-proof.md",
                 "sample-cost-flow.dot",
+                "sample-cost-flow-result.json",
             ]:
                 (artifact_dir / name).write_text(f"placeholder for {name}\n", encoding="utf-8")
 
@@ -976,6 +984,7 @@ class NetworkFlowLabTests(unittest.TestCase):
             self.assertIn("Network-flow lab artifact gallery", html)
             self.assertIn('href="sample-assignment-artifact-page.html"', html)
             self.assertIn('href="sample-cost-flow-proof.svg"', html)
+            self.assertIn('href="sample-cost-flow-result.json"', html)
             self.assertIn('iframe src="sample-cost-flow-artifact-page.html"', html)
 
     def test_cli_gallery_demo_requires_existing_artifacts(self) -> None:
@@ -1008,10 +1017,13 @@ class NetworkFlowLabTests(unittest.TestCase):
             for name in [
                 "benchmark-dag-report.svg",
                 "benchmark-dag-report.md",
+                "benchmark-dag-report.json",
                 "benchmark-dense-report.svg",
                 "benchmark-dense-report.md",
+                "benchmark-dense-report.json",
                 "benchmark-layered-report.svg",
                 "benchmark-layered-report.md",
+                "benchmark-layered-report.json",
                 "artifact-gallery.html",
             ]:
                 (artifact_dir / name).write_text(f"placeholder for {name}\n", encoding="utf-8")
@@ -1037,6 +1049,7 @@ class NetworkFlowLabTests(unittest.TestCase):
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("Network-flow lab benchmark gallery", html)
             self.assertIn('href="benchmark-dag-report.svg"', html)
+            self.assertIn('href="benchmark-dag-report.json"', html)
             self.assertIn('href="benchmark-layered-report.md"', html)
             self.assertIn('href="artifact-gallery.html"', html)
             self.assertIn('<img src="benchmark-dense-report.svg"', html)
@@ -1073,22 +1086,29 @@ class NetworkFlowLabTests(unittest.TestCase):
                 "benchmark-gallery.html",
                 "sample-flow-proof.svg",
                 "sample-flow-proof.md",
+                "sample-flow-result.json",
                 "sample-matching-proof.svg",
                 "sample-matching-proof.md",
+                "sample-matching-result.json",
                 "sample-assignment-artifact-page.html",
                 "sample-assignment-proof.svg",
                 "sample-assignment-proof.md",
                 "sample-assignment.dot",
+                "sample-assignment-result.json",
                 "sample-cost-flow-artifact-page.html",
                 "sample-cost-flow-proof.svg",
                 "sample-cost-flow-proof.md",
                 "sample-cost-flow.dot",
+                "sample-cost-flow-result.json",
                 "benchmark-dag-report.svg",
                 "benchmark-dag-report.md",
+                "benchmark-dag-report.json",
                 "benchmark-dense-report.svg",
                 "benchmark-dense-report.md",
+                "benchmark-dense-report.json",
                 "benchmark-layered-report.svg",
                 "benchmark-layered-report.md",
+                "benchmark-layered-report.json",
             ]:
                 (artifact_dir / name).write_text(f"placeholder for {name}\\n", encoding="utf-8")
 
@@ -1113,8 +1133,10 @@ class NetworkFlowLabTests(unittest.TestCase):
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("Network-flow lab showcase", html)
             self.assertIn('data-filter="html"', html)
+            self.assertIn('data-filter="json"', html)
             self.assertIn('href="artifact-gallery.html"', html)
             self.assertIn('href="sample-assignment.dot"', html)
+            self.assertIn('href="sample-assignment-result.json"', html)
             self.assertIn('iframe src="sample-cost-flow-artifact-page.html"', html)
             self.assertIn('img src="benchmark-layered-report.svg"', html)
 
@@ -1400,6 +1422,24 @@ class NetworkFlowLabTests(unittest.TestCase):
             self.assertIn("Max-flow proof card", svg)
             self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
 
+    def test_cli_demo_can_write_portable_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "flow-result.json"
+            completed = subprocess.run(
+                ["python3", str(MODULE_PATH), "demo", "--json-out", str(output_path)],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "demo")
+            self.assertEqual(payload["json_output"], str(output_path))
+            saved = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["json_output"], "flow-result.json")
+            self.assertFalse(saved["graph"].startswith("/"))
+            self.assertTrue(saved["graph"].endswith("projects/network-flow-lab/sample_graph.json"))
+
     def test_cli_can_write_matching_svg_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "matching-proof.svg"
@@ -1485,6 +1525,39 @@ class NetworkFlowLabTests(unittest.TestCase):
             svg_text = svg_path.read_text(encoding="utf-8")
             self.assertIn("Network-flow benchmark report card", svg_text)
             self.assertEqual(ET.fromstring(svg_text).tag, "{http://www.w3.org/2000/svg}svg")
+
+    def test_cli_benchmark_can_write_portable_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "benchmark-report.json"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--nodes",
+                    "10",
+                    "--edge-probability",
+                    "0.25",
+                    "--trials",
+                    "2",
+                    "--seed",
+                    "5",
+                    "--graph-family",
+                    "dense",
+                    "--json-out",
+                    str(json_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["json_output"], str(json_path))
+            saved = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["json_output"], "benchmark-report.json")
+            self.assertEqual(saved["generator"]["graph_family"], "dense")
+            self.assertEqual(len(saved["trials"]), 2)
 
 
 if __name__ == "__main__":

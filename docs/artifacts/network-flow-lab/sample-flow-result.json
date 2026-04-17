@@ -1,0 +1,121 @@
+{
+  "command": "demo",
+  "graph": "../../../projects/network-flow-lab/sample_graph.json",
+  "source": "s",
+  "sink": "t",
+  "algorithm": "dinic",
+  "max_flow": 19,
+  "augmenting_paths": [
+    {
+      "path": [
+        "s",
+        "a",
+        "b",
+        "t"
+      ],
+      "bottleneck": 4,
+      "phase": 1
+    },
+    {
+      "path": [
+        "s",
+        "a",
+        "d",
+        "t"
+      ],
+      "bottleneck": 6,
+      "phase": 1
+    },
+    {
+      "path": [
+        "s",
+        "c",
+        "d",
+        "t"
+      ],
+      "bottleneck": 4,
+      "phase": 1
+    },
+    {
+      "path": [
+        "s",
+        "c",
+        "d",
+        "b",
+        "t"
+      ],
+      "bottleneck": 5,
+      "phase": 2
+    }
+  ],
+  "edge_flows": [
+    {
+      "source": "a",
+      "target": "b",
+      "capacity": 4,
+      "flow": 4
+    },
+    {
+      "source": "a",
+      "target": "c",
+      "capacity": 2,
+      "flow": 0
+    },
+    {
+      "source": "a",
+      "target": "d",
+      "capacity": 8,
+      "flow": 6
+    },
+    {
+      "source": "b",
+      "target": "t",
+      "capacity": 10,
+      "flow": 9
+    },
+    {
+      "source": "c",
+      "target": "d",
+      "capacity": 9,
+      "flow": 9
+    },
+    {
+      "source": "d",
+      "target": "b",
+      "capacity": 6,
+      "flow": 5
+    },
+    {
+      "source": "d",
+      "target": "t",
+      "capacity": 10,
+      "flow": 10
+    },
+    {
+      "source": "s",
+      "target": "a",
+      "capacity": 10,
+      "flow": 10
+    },
+    {
+      "source": "s",
+      "target": "c",
+      "capacity": 10,
+      "flow": 9
+    }
+  ],
+  "min_cut": {
+    "source_side": [
+      "c",
+      "s"
+    ],
+    "sink_side": [
+      "a",
+      "b",
+      "d",
+      "t"
+    ]
+  },
+  "phases": 2,
+  "json_output": "sample-flow-result.json"
+}
