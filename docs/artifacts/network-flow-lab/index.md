@@ -12,7 +12,7 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 | Weighted assignment proof card | Generic min-cost-flow proof card |
 | --- | --- |
 | ![Weighted assignment proof card](./sample-assignment-proof.svg) | ![Min-cost flow proof card](./sample-cost-flow-proof.svg) |
-| [Markdown proof](./sample-assignment-proof.md) · [DOT diagram source](./sample-assignment.dot) | [Markdown proof](./sample-cost-flow-proof.md) · [DOT diagram source](./sample-cost-flow.dot) |
+| [Markdown proof](./sample-assignment-proof.md) · [DOT diagram source](./sample-assignment.dot) · [Side-by-side artifact page](./sample-assignment-artifact-page.html) | [Markdown proof](./sample-cost-flow-proof.md) · [DOT diagram source](./sample-cost-flow.dot) |
 
 ## Benchmark report cards
 

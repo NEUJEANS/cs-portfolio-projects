@@ -30,6 +30,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--markdown-out` proof artifacts for flow, matching, assignment, and generic min-cost-flow runs so portfolio screenshots do not require terminal capture
 - standalone `--svg-out` proof cards for flow, matching, assignment, and generic min-cost-flow runs so the project ships screenshot-ready visual summaries without Graphviz
+- standalone `--html-out` assignment artifact pages that place a DOT-style weighted-assignment diagram next to the proof card for GitHub Pages or portfolio browsing
 - bundled sample flow, matching, weighted-assignment, and generic cost-flow graphs
 - unit tests for correctness, validation, CLI behavior, algorithm parity, min-cost-flow behavior, and benchmark behavior
 
@@ -82,9 +83,11 @@ Run the bundled weighted-assignment sample or solve a custom weighted bipartite 
 python3 projects/network-flow-lab/network_flow.py assign-demo --pretty
 python3 projects/network-flow-lab/network_flow.py assign-demo --explain --pretty
 python3 projects/network-flow-lab/network_flow.py assign-demo --dot-out /tmp/assignment.dot
+python3 projects/network-flow-lab/network_flow.py assign-demo --html-out /tmp/assignment-artifact-page.html
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --dot-out /tmp/custom-assignment.dot --pretty
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --markdown-out /tmp/assignment-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --svg-out /tmp/assignment-proof.svg --pretty
+python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --html-out /tmp/assignment-artifact-page.html --pretty
 ```
 
 Run the bundled generic min-cost-flow sample or solve a custom costed network. This mode keeps the same min-cost engine but drops the bipartite-only assumptions, so it works for small shipping/routing-style source/sink graphs too:
@@ -184,6 +187,7 @@ Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/sample-assignment.dot`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.md`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.svg`
+- `docs/artifacts/network-flow-lab/sample-assignment-artifact-page.html`
 - `docs/artifacts/network-flow-lab/sample-cost-flow.dot`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.md`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.svg`
@@ -216,9 +220,10 @@ python3 -m unittest tests/test_network_flow_lab.py
 - Benchmark report-card export turns one benchmark run into committed Markdown/SVG artifacts with setup details, trial tables, and interview-ready headline metrics.
 - The standalone proof-card SVG export gives you screenshot-ready correctness summaries for both raw max-flow runs and bipartite-match reductions without requiring Graphviz.
 - Weighted-assignment DOT export keeps the left/right partitions on aligned ranks, highlights selected pairs in green, and leaves unmatched endpoints obvious for quick portfolio screenshots.
+- The assignment HTML artifact page mirrors that same DOT story as an inline browser-friendly SVG diagram next to the proof card, so GitHub Pages viewers do not need Graphviz installed to browse it.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
-- add a side-by-side artifact page that embeds the weighted-assignment DOT diagram next to the Markdown/SVG proof cards
+- add a similar side-by-side artifact page for the generic min-cost-flow sample so the shipping/routing story gets the same browser-friendly treatment
 - render actual node-link SVG layouts for solved flow, matching, assignment, and generic min-cost-flow proofs instead of card-style summaries
 - add a tiny static web gallery that lets viewers toggle between Markdown, SVG, DOT, and raw JSON artifacts

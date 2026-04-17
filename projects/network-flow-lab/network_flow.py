@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import heapq
+import html
 import json
 import math
+import os
 import random
 import statistics
 import textwrap
@@ -1467,6 +1469,23 @@ def _svg_add_wrapped_text(
     return y + max(0, len(lines) - 1) * line_height
 
 
+def _html_escape(text: str) -> str:
+    return html.escape(text, quote=True)
+
+
+def _relative_output_path(target: Path, base_dir: Path) -> str:
+    return Path(os.path.relpath(target, start=base_dir)).as_posix()
+
+
+def _compute_vertical_positions(count: int, *, top: float, bottom: float) -> list[float]:
+    if count <= 0:
+        return []
+    if count == 1:
+        return [(top + bottom) / 2]
+    step = (bottom - top) / (count - 1)
+    return [top + step * index for index in range(count)]
+
+
 def render_benchmark_markdown(report: dict[str, Any]) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
     generator = report["generator"]
@@ -2027,6 +2046,268 @@ def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: st
 
 
 
+def render_assignment_diagram_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
+    width = 920
+    rows = max(len(assignment_result.left_partition), len(assignment_result.right_partition), 1)
+    height = max(420, 220 + rows * 92)
+    left_x = 286
+    right_x = 634
+    source_x = 96
+    sink_x = 824
+    top_y = 176
+    bottom_y = height - 106
+    circle_radius = 28
+    right_box_width = 110
+    right_box_height = 46
+    diamond_half = 30
+    label_font = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
+    flow_edges = {
+        (item["source"], item["target"]): item
+        for item in assignment_result.flow["edge_flows"]
+    }
+    selected_pairs = {
+        (item["left"], item["right"]): item["cost"]
+        for item in assignment_result.assignments
+    }
+    selected_left = {item["left"] for item in assignment_result.assignments}
+    selected_right = {item["right"] for item in assignment_result.assignments}
+
+    left_positions = {
+        node: (left_x, y)
+        for node, y in zip(
+            assignment_result.left_partition,
+            _compute_vertical_positions(len(assignment_result.left_partition), top=top_y, bottom=bottom_y),
+        )
+    }
+    right_positions = {
+        node: (right_x, y)
+        for node, y in zip(
+            assignment_result.right_partition,
+            _compute_vertical_positions(len(assignment_result.right_partition), top=top_y, bottom=bottom_y),
+        )
+    }
+    center_y = (top_y + bottom_y) / 2
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Weighted assignment diagram</title>',
+        f'<desc id="desc">DOT-style weighted assignment diagram for {graph_name} showing selected pairs, unmatched vertices, and source or sink capacities.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" rx="26" fill="#f8fafc" />',
+        f'<rect x="188" y="118" width="196" height="{height - 214}" rx="26" fill="#eff6ff" stroke="#64748b" stroke-dasharray="8 6" />',
+        f'<rect x="540" y="118" width="196" height="{height - 214}" rx="26" fill="#ecfdf5" stroke="#4d7c0f" stroke-dasharray="8 6" />',
+        _svg_text(40, 42, "Weighted assignment diagram", size=28, weight="700"),
+        _svg_text(40, 68, f"Graph: {graph_name} · selected={len(assignment_result.assignments)} · cost={assignment_result.total_cost} · full coverage={assignment_result.covers_smaller_partition}", size=14, fill="#334155"),
+        _svg_text(226, 106, "left partition", size=15, weight="700", fill="#334155"),
+        _svg_text(580, 106, "right partition", size=15, weight="700", fill="#334155"),
+    ]
+
+    def add_label(x: float, y: float, text: str, *, fill: str = "#475569", size: int = 12, weight: str = "600") -> None:
+        parts.append(
+            f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="middle" font-size="{size}" font-weight="{weight}" '
+            f'fill="{fill}" font-family=\'{label_font}\'>{_svg_escape(text)}</text>'
+        )
+
+    def add_diamond(x: float, y: float, label: str) -> None:
+        points = f"{x:.1f},{y - diamond_half:.1f} {x + diamond_half:.1f},{y:.1f} {x:.1f},{y + diamond_half:.1f} {x - diamond_half:.1f},{y:.1f}"
+        parts.append(f'<polygon points="{points}" fill="#ffffff" stroke="#0f172a" stroke-width="2" />')
+        add_label(x, y + 5, label, fill="#0f172a", size=14, weight="700")
+
+    def edge_anchor(point: tuple[float, float], *, direction: str, box: bool = False) -> tuple[float, float]:
+        x, y = point
+        if box:
+            offset = right_box_width / 2
+        else:
+            offset = circle_radius
+        if direction == "left":
+            return (x - offset, y)
+        if direction == "right":
+            return (x + offset, y)
+        return (x, y)
+
+    def line_label_position(x1: float, y1: float, x2: float, y2: float, *, offset: float = 0) -> tuple[float, float]:
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        slope_offset = -14 if y2 < y1 else (18 if y2 > y1 else -10)
+        return (mid_x, mid_y + slope_offset + offset)
+
+    add_diamond(source_x, center_y, "source")
+    add_diamond(sink_x, center_y, "sink")
+
+    for node in assignment_result.left_partition:
+        x, y = left_positions[node]
+        edge = flow_edges.get((ASSIGN_SOURCE, node))
+        selected = bool(edge and edge["flow"] == 1)
+        start_x = source_x + diamond_half
+        end_x = x - circle_radius
+        parts.append(
+            f'<line x1="{start_x:.1f}" y1="{center_y:.1f}" x2="{end_x:.1f}" y2="{y:.1f}" '
+            f'stroke="{"#6b7280" if selected else "#cbd5e1"}" stroke-width="{2.4 if selected else 1.6}" stroke-dasharray="8 6" />'
+        )
+        label_x, label_y = line_label_position(start_x, center_y, end_x, y, offset=-8)
+        add_label(label_x, label_y, "1" if selected else "0/1", fill="#64748b", size=11)
+
+    for node in assignment_result.right_partition:
+        x, y = right_positions[node]
+        edge = flow_edges.get((node, ASSIGN_SINK))
+        selected = bool(edge and edge["flow"] == 1)
+        start_x = x + right_box_width / 2
+        end_x = sink_x - diamond_half
+        parts.append(
+            f'<line x1="{start_x:.1f}" y1="{y:.1f}" x2="{end_x:.1f}" y2="{center_y:.1f}" '
+            f'stroke="{"#6b7280" if selected else "#cbd5e1"}" stroke-width="{2.4 if selected else 1.6}" stroke-dasharray="8 6" />'
+        )
+        label_x, label_y = line_label_position(start_x, y, end_x, center_y, offset=-8)
+        add_label(label_x, label_y, "1" if selected else "0/1", fill="#64748b", size=11)
+
+    for edge in sorted(
+        (
+            item
+            for item in assignment_result.flow["edge_flows"]
+            if item["source"] in left_positions and item["target"] in right_positions
+        ),
+        key=lambda item: (item["source"], item["target"], item["cost"], item["capacity"]),
+    ):
+        start_x, start_y = edge_anchor(left_positions[edge["source"]], direction="right")
+        end_x, end_y = edge_anchor(right_positions[edge["target"]], direction="left", box=True)
+        selected = (edge["source"], edge["target"]) in selected_pairs
+        stroke = "#15803d" if selected else "#94a3b8"
+        stroke_width = 4 if selected else 1.5
+        stroke_opacity = 0.95 if selected else 0.72
+        parts.append(
+            f'<line x1="{start_x:.1f}" y1="{start_y:.1f}" x2="{end_x:.1f}" y2="{end_y:.1f}" '
+            f'stroke="{stroke}" stroke-width="{stroke_width}" stroke-opacity="{stroke_opacity}" />'
+        )
+        label_x, label_y = line_label_position(start_x, start_y, end_x, end_y)
+        label_text = f"selected @ {edge['cost']}" if selected else f"cost {edge['cost']}"
+        add_label(label_x, label_y, label_text, fill="#166534" if selected else "#64748b", size=11, weight="700" if selected else "500")
+
+    for node in assignment_result.left_partition:
+        x, y = left_positions[node]
+        fill = "#fda4af" if node in assignment_result.unmatched_left else ("#dcfce7" if node in selected_left else "#dbeafe")
+        stroke = "#b91c1c" if node in assignment_result.unmatched_left else "#2563eb"
+        parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{circle_radius}" fill="{fill}" stroke="{stroke}" stroke-width="2.4" />')
+        add_label(x, y + 4, node, fill="#0f172a", size=13, weight="700")
+
+    for node in assignment_result.right_partition:
+        x, y = right_positions[node]
+        fill = "#ffedd5" if node in assignment_result.unmatched_right else "#ecfccb"
+        stroke_width = 3 if node in selected_right else 2
+        stroke = "#b45309" if node in assignment_result.unmatched_right else "#15803d"
+        parts.append(
+            f'<rect x="{x - right_box_width / 2:.1f}" y="{y - right_box_height / 2:.1f}" width="{right_box_width}" height="{right_box_height}" '
+            f'rx="14" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" />'
+        )
+        add_label(x, y + 4, node, fill="#0f172a", size=13, weight="700")
+
+    parts.append(f'<rect x="34" y="{height - 76}" width="852" height="42" rx="16" fill="#ffffff" stroke="#dbe4ee" />')
+    add_label(194, height - 50, "green edge = selected pair", fill="#166534", size=12)
+    add_label(474, height - 50, "pink or orange node = unmatched vertex", fill="#7c2d12", size=12)
+    add_label(730, height - 50, "dashed source or sink edges show unit-capacity usage", fill="#475569", size=12)
+    parts.append('</svg>')
+    return "\n".join(parts) + "\n"
+
+
+
+def render_assignment_artifact_html(
+    assignment_result: AssignmentResult,
+    *,
+    graph_name: str = "weighted_assignment",
+    companion_links: dict[str, str] | None = None,
+) -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    explanation = build_assignment_explanation(assignment_result)
+    diagram_svg = render_assignment_diagram_svg(assignment_result, graph_name=graph_name)
+    proof_svg = render_assignment_svg(assignment_result, graph_name=graph_name)
+    selected_assignment_items = "".join(
+        f"<li><code>{_html_escape(item['left'])} -&gt; {_html_escape(item['right'])}</code> · cost <code>{item['cost']}</code></li>"
+        for item in assignment_result.assignments
+    ) or "<li>No assignment edges carried flow.</li>"
+    narrative_items = "".join(
+        f"<li>{_html_escape(line)}</li>"
+        for line in explanation["narrative"]
+    )
+    companion_links = companion_links or {}
+    link_labels = {
+        "dot": "DOT source",
+        "markdown": "Markdown proof",
+        "svg": "Standalone proof SVG",
+    }
+    companion_links_html = "".join(
+        f'<li><a href="{_html_escape(path)}">{_html_escape(link_labels[key])}</a></li>'
+        for key, path in companion_links.items()
+        if key in link_labels
+    )
+    if not companion_links_html:
+        companion_links_html = "<li>This HTML file is self-contained; add --dot-out, --markdown-out, or --svg-out if you want companion artifacts too.</li>"
+
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Weighted assignment artifact page ({_html_escape(graph_name)})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1500px; padding: 0 1rem 3rem; line-height: 1.5; }}
+    h1, h2, h3 {{ line-height: 1.2; }}
+    code, pre {{ font-family: 'SFMono-Regular', Consolas, monospace; }}
+    .meta, .links {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 2rem; padding: 0; }}
+    .meta li, .links li {{ list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.9rem; background: rgba(255, 255, 255, 0.45); }}
+    .artifact-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(540px, 1fr)); gap: 1.25rem; margin: 1.5rem 0 2rem; }}
+    .artifact-card {{ border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.52); }}
+    .artifact-card h2 {{ margin-top: 0; }}
+    svg {{ width: 100%; height: auto; display: block; }}
+    .detail-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem; }}
+    .detail-card {{ padding: 1rem; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1rem; background: rgba(248, 250, 252, 0.82); }}
+    .detail-card h3 {{ margin-top: 0; margin-bottom: 0.75rem; }}
+    ul {{ padding-left: 1.2rem; }}
+    p.caption {{ margin-top: 0.75rem; color: #475569; }}
+  </style>
+</head>
+<body>
+  <h1>Weighted assignment artifact page</h1>
+  <p>This page pairs the DOT-style assignment diagram with the proof card so the weighted bipartite min-cost-flow story is easy to browse on GitHub Pages without terminal screenshots.</p>
+  <ul class=\"meta\">
+    <li><strong>Graph</strong><br><code>{_html_escape(graph_name)}</code></li>
+    <li><strong>Generated</strong><br><code>{generated}</code></li>
+    <li><strong>Assignments</strong><br><code>{len(assignment_result.assignments)}</code></li>
+    <li><strong>Total cost</strong><br><code>{assignment_result.total_cost}</code></li>
+    <li><strong>Full coverage</strong><br><code>{str(assignment_result.covers_smaller_partition).lower()}</code></li>
+    <li><strong>Solver</strong><br><code>{_html_escape(str(assignment_result.flow['algorithm']))}</code></li>
+  </ul>
+  <div class=\"artifact-grid\">
+    <section class=\"artifact-card\">
+      <h2>DOT-style assignment diagram</h2>
+      {diagram_svg}
+      <p class=\"caption\">Selected pairs stay green and unmatched vertices are highlighted, matching the same story as the DOT export without depending on Graphviz during browsing.</p>
+    </section>
+    <section class=\"artifact-card\">
+      <h2>Proof card</h2>
+      {proof_svg}
+      <p class=\"caption\">Use this card when you want the optimization certificate, augmenting-path evidence, and coverage summary in one screenshot-friendly block.</p>
+    </section>
+  </div>
+  <div class=\"detail-grid\">
+    <section class=\"detail-card\">
+      <h3>Selected assignments</h3>
+      <ul>{selected_assignment_items}</ul>
+    </section>
+    <section class=\"detail-card\">
+      <h3>Why the certificate works</h3>
+      <ul>{narrative_items}</ul>
+    </section>
+    <section class=\"detail-card\">
+      <h3>Companion artifacts</h3>
+      <ul class=\"links\">{companion_links_html}</ul>
+    </section>
+  </div>
+</body>
+</html>
+"""
+
+
+
 def render_min_cost_flow_markdown(
     flow_result: MinCostFlowResult,
     *,
@@ -2211,6 +2492,11 @@ def write_svg_output(path: Path, contents: str) -> None:
     path.write_text(contents, encoding="utf-8")
 
 
+def write_html_output(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+
+
 def add_explain_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--explain",
@@ -2263,6 +2549,7 @@ def build_parser() -> argparse.ArgumentParser:
     assign_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved weighted assignment graph")
     assign_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved assignment graph")
     assign_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved assignment graph")
+    assign_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the assignment diagram next to the proof card")
     add_explain_argument(assign_parser)
 
     assign_demo_parser = subparsers.add_parser("assign-demo", help="run the bundled weighted assignment sample")
@@ -2270,6 +2557,7 @@ def build_parser() -> argparse.ArgumentParser:
     assign_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample weighted assignment graph")
     assign_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample assignment graph")
     assign_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample assignment graph")
+    assign_demo_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the assignment diagram next to the proof card")
     add_explain_argument(assign_demo_parser)
 
     cost_parser = subparsers.add_parser("cost-solve", help="solve a generic min-cost-flow JSON file")
@@ -2413,6 +2701,25 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_assignment_svg(assignment_result, graph_name=graph_path.stem))
             payload["svg_output"] = str(args.svg_out)
+        if getattr(args, "html_out", None):
+            companion_links = {
+                key: _relative_output_path(Path(value), args.html_out.parent)
+                for key, value in {
+                    "dot": payload.get("dot_output"),
+                    "markdown": payload.get("markdown_output"),
+                    "svg": payload.get("svg_output"),
+                }.items()
+                if value is not None
+            }
+            write_html_output(
+                args.html_out,
+                render_assignment_artifact_html(
+                    assignment_result,
+                    graph_name=graph_path.stem,
+                    companion_links=companion_links,
+                ),
+            )
+            payload["html_output"] = str(args.html_out)
         return payload
 
     if args.command == "assign-demo":
@@ -2431,6 +2738,25 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_assignment_svg(assignment_result, graph_name=graph_path.stem))
             payload["svg_output"] = str(args.svg_out)
+        if getattr(args, "html_out", None):
+            companion_links = {
+                key: _relative_output_path(Path(value), args.html_out.parent)
+                for key, value in {
+                    "dot": payload.get("dot_output"),
+                    "markdown": payload.get("markdown_output"),
+                    "svg": payload.get("svg_output"),
+                }.items()
+                if value is not None
+            }
+            write_html_output(
+                args.html_out,
+                render_assignment_artifact_html(
+                    assignment_result,
+                    graph_name=graph_path.stem,
+                    companion_links=companion_links,
+                ),
+            )
+            payload["html_output"] = str(args.html_out)
         return payload
 
     if args.command == "cost-solve":
