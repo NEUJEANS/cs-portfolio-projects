@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network-flow lab artifact gallery</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1600px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    h1, h2 { line-height: 1.15; }
+    p { line-height: 1.55; }
+    .hero { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(219, 234, 254, 0.9), rgba(236, 253, 245, 0.92)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }
+    .hero p { max-width: 72ch; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+    .hero-meta span { padding: 0.55rem 0.85rem; border-radius: 999px; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(148, 163, 184, 0.35); font-size: 0.95rem; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }
+    .gallery-card { border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1.2rem; padding: 1.1rem; background: rgba(255, 255, 255, 0.86); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }
+    .gallery-card h2 { margin: 0.2rem 0 0.7rem; }
+    .eyebrow { margin: 0; font-size: 0.86rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #0f766e; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 1rem 0 1.1rem; }
+    .chip { display: inline-flex; align-items: center; padding: 0.55rem 0.85rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 600; }
+    .chip:hover { background: rgba(219, 234, 254, 1); }
+    iframe { width: 100%; min-height: 760px; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; }
+    @media (max-width: 760px) {
+      main { padding: 1rem 0.75rem 2rem; }
+      iframe { min-height: 560px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Network-flow lab artifact gallery</h1>
+      <p>One browser landing page for the two portfolio-friendly optimization stories in this lab: the weighted assignment walkthrough and the generic min-cost-flow shipping walkthrough. Each card keeps the full HTML artifact, proof SVG, Markdown explanation, and DOT source close together so reviewers can browse without hunting through the repo tree.</p>
+      <div class="hero-meta">
+        <span>Generated <strong>2026-04-17T13:30:33Z</strong></span>
+        <span>Includes <strong>2</strong> interactive HTML walkthroughs</span>
+        <span>Built for GitHub Pages / quick recruiter demos</span>
+      </div>
+    </section>
+    <div class="gallery-grid">
+<section class="gallery-card">
+      <p class="eyebrow">Optimization story #1</p>
+      <h2>Weighted assignment walkthrough</h2>
+      <p>Start here when you want the bipartite min-cost-flow story in recruiter-friendly form: chosen student/project pairs, proof card, and DOT-style diagram all stay one click away.</p>
+      <div class="chip-row"><a class="chip" href="sample-assignment-artifact-page.html">Open full artifact page</a><a class="chip" href="sample-assignment-proof.svg">Standalone proof SVG</a><a class="chip" href="sample-assignment-proof.md">Markdown proof</a><a class="chip" href="sample-assignment.dot">DOT source</a></div>
+      <iframe src="sample-assignment-artifact-page.html" title="Weighted assignment artifact page preview" loading="lazy"></iframe>
+    </section>
+<section class="gallery-card">
+      <p class="eyebrow">Optimization story #2</p>
+      <h2>Generic min-cost-flow walkthrough</h2>
+      <p>Use this when you want the same engine framed as a shipping/routing example, with shipped edges, path costs, and the browser-friendly proof card side by side.</p>
+      <div class="chip-row"><a class="chip" href="sample-cost-flow-artifact-page.html">Open full artifact page</a><a class="chip" href="sample-cost-flow-proof.svg">Standalone proof SVG</a><a class="chip" href="sample-cost-flow-proof.md">Markdown proof</a><a class="chip" href="sample-cost-flow.dot">DOT source</a></div>
+      <iframe src="sample-cost-flow-artifact-page.html" title="Generic min-cost-flow artifact page preview" loading="lazy"></iframe>
+    </section>
+    </div>
+  </main>
+</body>
+</html>

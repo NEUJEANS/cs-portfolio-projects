@@ -1477,6 +1477,20 @@ def _relative_output_path(target: Path, base_dir: Path) -> str:
     return Path(os.path.relpath(target, start=base_dir)).as_posix()
 
 
+def build_artifact_gallery_paths(*, html_out: Path, artifact_dir: Path | None = None) -> dict[str, Path]:
+    base_dir = artifact_dir if artifact_dir is not None else html_out.parent
+    return {
+        "assignment_page": base_dir / "sample-assignment-artifact-page.html",
+        "assignment_proof_svg": base_dir / "sample-assignment-proof.svg",
+        "assignment_markdown": base_dir / "sample-assignment-proof.md",
+        "assignment_dot": base_dir / "sample-assignment.dot",
+        "cost_page": base_dir / "sample-cost-flow-artifact-page.html",
+        "cost_proof_svg": base_dir / "sample-cost-flow-proof.svg",
+        "cost_markdown": base_dir / "sample-cost-flow-proof.md",
+        "cost_dot": base_dir / "sample-cost-flow.dot",
+    }
+
+
 def _compute_vertical_positions(count: int, *, top: float, bottom: float) -> list[float]:
     if count <= 0:
         return []
@@ -2276,6 +2290,114 @@ def render_min_cost_flow_artifact_html(
 
 
 
+def render_artifact_gallery_html(
+    *,
+    assignment_page: str,
+    assignment_proof_svg: str,
+    assignment_markdown: str,
+    assignment_dot: str,
+    cost_page: str,
+    cost_proof_svg: str,
+    cost_markdown: str,
+    cost_dot: str,
+) -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    sections = [
+        {
+            "eyebrow": "Optimization story #1",
+            "title": "Weighted assignment walkthrough",
+            "summary": "Start here when you want the bipartite min-cost-flow story in recruiter-friendly form: chosen student/project pairs, proof card, and DOT-style diagram all stay one click away.",
+            "preview": assignment_page,
+            "preview_title": "Weighted assignment artifact page preview",
+            "links": [
+                ("Open full artifact page", assignment_page),
+                ("Standalone proof SVG", assignment_proof_svg),
+                ("Markdown proof", assignment_markdown),
+                ("DOT source", assignment_dot),
+            ],
+        },
+        {
+            "eyebrow": "Optimization story #2",
+            "title": "Generic min-cost-flow walkthrough",
+            "summary": "Use this when you want the same engine framed as a shipping/routing example, with shipped edges, path costs, and the browser-friendly proof card side by side.",
+            "preview": cost_page,
+            "preview_title": "Generic min-cost-flow artifact page preview",
+            "links": [
+                ("Open full artifact page", cost_page),
+                ("Standalone proof SVG", cost_proof_svg),
+                ("Markdown proof", cost_markdown),
+                ("DOT source", cost_dot),
+            ],
+        },
+    ]
+
+    cards = []
+    for section in sections:
+        links_html = "".join(
+            f'<a class="chip" href="{_html_escape(path)}">{_html_escape(label)}</a>'
+            for label, path in section["links"]
+        )
+        cards.append(
+            f'''<section class="gallery-card">
+      <p class="eyebrow">{_html_escape(section["eyebrow"])}</p>
+      <h2>{_html_escape(section["title"])}</h2>
+      <p>{_html_escape(section["summary"])}</p>
+      <div class="chip-row">{links_html}</div>
+      <iframe src="{_html_escape(section["preview"])}" title="{_html_escape(section["preview_title"])}" loading="lazy"></iframe>
+    </section>'''
+        )
+    cards_html = "\n".join(cards)
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network-flow lab artifact gallery</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1600px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2 {{ line-height: 1.15; }}
+    p {{ line-height: 1.55; }}
+    .hero {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(219, 234, 254, 0.9), rgba(236, 253, 245, 0.92)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
+    .hero p {{ max-width: 72ch; }}
+    .hero-meta {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }}
+    .hero-meta span {{ padding: 0.55rem 0.85rem; border-radius: 999px; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(148, 163, 184, 0.35); font-size: 0.95rem; }}
+    .gallery-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }}
+    .gallery-card {{ border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1.2rem; padding: 1.1rem; background: rgba(255, 255, 255, 0.86); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }}
+    .gallery-card h2 {{ margin: 0.2rem 0 0.7rem; }}
+    .eyebrow {{ margin: 0; font-size: 0.86rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #0f766e; }}
+    .chip-row {{ display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 1rem 0 1.1rem; }}
+    .chip {{ display: inline-flex; align-items: center; padding: 0.55rem 0.85rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 600; }}
+    .chip:hover {{ background: rgba(219, 234, 254, 1); }}
+    iframe {{ width: 100%; min-height: 760px; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; }}
+    @media (max-width: 760px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+      iframe {{ min-height: 560px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Network-flow lab artifact gallery</h1>
+      <p>One browser landing page for the two portfolio-friendly optimization stories in this lab: the weighted assignment walkthrough and the generic min-cost-flow shipping walkthrough. Each card keeps the full HTML artifact, proof SVG, Markdown explanation, and DOT source close together so reviewers can browse without hunting through the repo tree.</p>
+      <div class="hero-meta">
+        <span>Generated <strong>{generated}</strong></span>
+        <span>Includes <strong>2</strong> interactive HTML walkthroughs</span>
+        <span>Built for GitHub Pages / quick recruiter demos</span>
+      </div>
+    </section>
+    <div class="gallery-grid">
+{cards_html}
+    </div>
+  </main>
+</body>
+</html>
+'''
+
+
 def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
     explanation = build_assignment_explanation(assignment_result)
     width = 960
@@ -2893,6 +3015,11 @@ def build_parser() -> argparse.ArgumentParser:
     cost_demo_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the shipping/routing diagram next to the proof card")
     add_explain_argument(cost_demo_parser)
 
+    gallery_demo_parser = subparsers.add_parser("gallery-demo", help="write a tiny HTML gallery that links the bundled assignment and min-cost-flow artifact pages")
+    gallery_demo_parser.add_argument("--html-out", type=Path, required=True, help="write a static HTML gallery that links the committed assignment and cost-flow artifact pages")
+    gallery_demo_parser.add_argument("--artifact-dir", type=Path, help="directory that already contains the sample assignment/cost-flow HTML pages plus their proof companions; defaults to the output directory")
+    gallery_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
     benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated benchmark graph")
     benchmark_parser.add_argument(
@@ -2913,6 +3040,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.command == "gallery-demo":
+        artifact_paths = build_artifact_gallery_paths(
+            html_out=args.html_out,
+            artifact_dir=getattr(args, "artifact_dir", None),
+        )
+        missing = [path.name for path in artifact_paths.values() if not path.exists()]
+        if missing:
+            parser.error(
+                "gallery-demo requires the bundled assignment/cost-flow artifacts to exist first; missing: "
+                + ", ".join(sorted(missing))
+            )
+        return
+
     if args.command != "benchmark":
         return
     try:
@@ -3129,6 +3269,35 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             )
             payload["html_output"] = str(args.html_out)
         return payload
+
+    if args.command == "gallery-demo":
+        artifact_paths = build_artifact_gallery_paths(
+            html_out=args.html_out,
+            artifact_dir=getattr(args, "artifact_dir", None),
+        )
+        relative_paths = {
+            key: _relative_output_path(path, args.html_out.parent)
+            for key, path in artifact_paths.items()
+        }
+        write_html_output(
+            args.html_out,
+            render_artifact_gallery_html(
+                assignment_page=relative_paths["assignment_page"],
+                assignment_proof_svg=relative_paths["assignment_proof_svg"],
+                assignment_markdown=relative_paths["assignment_markdown"],
+                assignment_dot=relative_paths["assignment_dot"],
+                cost_page=relative_paths["cost_page"],
+                cost_proof_svg=relative_paths["cost_proof_svg"],
+                cost_markdown=relative_paths["cost_markdown"],
+                cost_dot=relative_paths["cost_dot"],
+            ),
+        )
+        return {
+            "command": args.command,
+            "artifact_dir": str((getattr(args, "artifact_dir", None) or args.html_out.parent)),
+            "html_output": str(args.html_out),
+            **{key: str(path) for key, path in artifact_paths.items()},
+        }
 
     if args.command == "cost-demo":
         graph_path = Path(__file__).with_name("sample_cost_flow_graph.json")

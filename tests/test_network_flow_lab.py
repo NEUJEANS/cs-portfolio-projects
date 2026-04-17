@@ -43,6 +43,7 @@ render_min_cost_flow_markdown = module.render_min_cost_flow_markdown
 render_min_cost_flow_svg = module.render_min_cost_flow_svg
 render_min_cost_flow_diagram_svg = module.render_min_cost_flow_diagram_svg
 render_min_cost_flow_artifact_html = module.render_min_cost_flow_artifact_html
+render_artifact_gallery_html = module.render_artifact_gallery_html
 render_benchmark_markdown = module.render_benchmark_markdown
 render_benchmark_svg = module.render_benchmark_svg
 solve_max_flow = module.solve_max_flow
@@ -691,6 +692,26 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('href="cost-flow-proof.md"', html)
         self.assertIn('href="cost-flow-proof.svg"', html)
 
+    def test_render_artifact_gallery_html_links_assignment_and_cost_pages(self) -> None:
+        html = render_artifact_gallery_html(
+            assignment_page="sample-assignment-artifact-page.html",
+            assignment_proof_svg="sample-assignment-proof.svg",
+            assignment_markdown="sample-assignment-proof.md",
+            assignment_dot="sample-assignment.dot",
+            cost_page="sample-cost-flow-artifact-page.html",
+            cost_proof_svg="sample-cost-flow-proof.svg",
+            cost_markdown="sample-cost-flow-proof.md",
+            cost_dot="sample-cost-flow.dot",
+        )
+        self.assertIn("<!DOCTYPE html>", html)
+        self.assertIn("Network-flow lab artifact gallery", html)
+        self.assertIn('href="sample-assignment-artifact-page.html"', html)
+        self.assertIn('href="sample-cost-flow-artifact-page.html"', html)
+        self.assertIn('href="sample-assignment-proof.svg"', html)
+        self.assertIn('href="sample-cost-flow.dot"', html)
+        self.assertIn('iframe src="sample-assignment-artifact-page.html"', html)
+        self.assertIn('iframe src="sample-cost-flow-artifact-page.html"', html)
+
     def test_cli_assign_demo_outputs_assignment_payload(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "assign-demo", "--explain"],
@@ -905,6 +926,69 @@ class NetworkFlowLabTests(unittest.TestCase):
             self.assertIn("Generic min-cost-flow artifact page", html)
             self.assertIn("self-contained", html)
             self.assertNotIn('href="cost-flow.dot"', html)
+
+    def test_cli_gallery_demo_writes_bundled_artifact_gallery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "artifacts"
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            for name in [
+                "sample-assignment-artifact-page.html",
+                "sample-assignment-proof.svg",
+                "sample-assignment-proof.md",
+                "sample-assignment.dot",
+                "sample-cost-flow-artifact-page.html",
+                "sample-cost-flow-proof.svg",
+                "sample-cost-flow-proof.md",
+                "sample-cost-flow.dot",
+            ]:
+                (artifact_dir / name).write_text(f"placeholder for {name}\n", encoding="utf-8")
+
+            html_path = artifact_dir / "artifact-gallery.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "gallery-demo",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--html-out",
+                    str(html_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["html_output"], str(html_path))
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("Network-flow lab artifact gallery", html)
+            self.assertIn('href="sample-assignment-artifact-page.html"', html)
+            self.assertIn('href="sample-cost-flow-proof.svg"', html)
+            self.assertIn('iframe src="sample-cost-flow-artifact-page.html"', html)
+
+    def test_cli_gallery_demo_requires_existing_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "artifacts"
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            html_path = artifact_dir / "artifact-gallery.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "gallery-demo",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--html-out",
+                    str(html_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("gallery-demo requires the bundled assignment/cost-flow artifacts to exist first", completed.stderr)
 
     def test_random_graph_generator_is_reproducible_and_connected(self) -> None:
         graph_a = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)

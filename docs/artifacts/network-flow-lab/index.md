@@ -2,6 +2,11 @@
 
 A compact index of the committed artifacts for `network-flow-lab`, aimed at quick README linking, recruiter-friendly browsing, and fast screenshot selection.
 
+## Browser landing page
+
+- [Open the combined HTML artifact gallery](./artifact-gallery.html)
+- Use it when you want the weighted-assignment and generic min-cost-flow walkthroughs in one browser tab before drilling into the individual proof/DOT files.
+
 ## Proof cards
 
 | Flow proof card | Matching proof card |
