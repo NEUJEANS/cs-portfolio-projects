@@ -13,6 +13,7 @@ const {
   formatTextReport,
   uniqueDestination,
   loadBucketConfig,
+  lintBucketConfig,
   listPresetCatalog,
   loadPresetBucketConfig,
   writePresetConfig,
@@ -68,6 +69,81 @@ test('loadBucketConfig reads JSON config files from disk', async () => {
   assert.equal(bucketConfig.configPath, path.resolve(configPath));
   assert.equal(bucketFor('values.tsv', bucketConfig), 'datasets');
   assert.equal(bucketFor('mystery.bin', bucketConfig), 'misc');
+});
+
+test('loadBucketConfig rejects invalid extendDefaults values and normalized bucket collisions', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-invalid-'));
+  const invalidExtendDefaultsPath = path.join(tmp, 'invalid-extend-defaults.json');
+  await fs.writeFile(invalidExtendDefaultsPath, JSON.stringify({
+    buckets: {
+      datasets: ['csv'],
+    },
+    extendDefaults: 'yes please',
+  }));
+
+  await assert.rejects(
+    loadBucketConfig(invalidExtendDefaultsPath),
+    /Field "extendDefaults" must be true or false when provided\./,
+  );
+
+  const duplicateBucketNamesPath = path.join(tmp, 'duplicate-bucket-names.json');
+  await fs.writeFile(duplicateBucketNamesPath, JSON.stringify({
+    buckets: {
+      datasets: ['csv'],
+      ' datasets ': ['tsv'],
+    },
+  }));
+
+  await assert.rejects(
+    loadBucketConfig(duplicateBucketNamesPath),
+    /Bucket names normalize to the same directory name/,
+  );
+});
+
+test('lintBucketConfig reports normalized-extension warnings for shareable configs', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-lint-'));
+  const configPath = path.join(tmp, 'shared-buckets.json');
+  await fs.writeFile(configPath, JSON.stringify({
+    buckets: {
+      ' datasets ': ['CSV', '.csv'],
+      slides: ['pptx'],
+    },
+    fallbackBucket: ' misc ',
+    extraMetadata: 'ignored by organize runs',
+  }, null, 2));
+
+  const result = await lintBucketConfig(configPath);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.warnings.length, 6);
+  assert.match(result.warnings[0], /Unknown top-level key "extraMetadata" will be ignored/);
+  assert.match(result.warnings[1], /Fallback bucket " misc " will normalize to "misc"\./);
+  assert.match(result.warnings[2], /Bucket name " datasets " will normalize to "datasets"\./);
+  assert.match(result.warnings[3], /Bucket datasets extension "CSV" will normalize to "\.csv"\./);
+  assert.match(result.warnings[4], /Bucket datasets repeats extension "\.csv"/);
+  assert.match(result.warnings[5], /Bucket slides extension "pptx" will normalize to "\.pptx"\./);
+  assert.equal(result.normalizedConfig.fallbackBucket, 'misc');
+  assert.deepEqual(result.normalizedConfig.buckets.datasets, ['.csv']);
+});
+
+test('lintBucketConfig returns CI-friendly invalid results for broken shared configs', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-lint-invalid-'));
+  const configPath = path.join(tmp, 'broken-buckets.json');
+  await fs.writeFile(configPath, JSON.stringify({
+    buckets: {
+      datasets: ['csv'],
+      archives: ['.csv'],
+    },
+    extendDefaults: 'false',
+  }, null, 2));
+
+  const result = await lintBucketConfig(configPath);
+
+  assert.equal(result.valid, false);
+  assert.equal(result.normalizedConfig, null);
+  assert.match(result.errors[0], /Field "extendDefaults" must be true or false when provided\./);
+  assert.match(result.errors[1], /Extension \.csv is assigned to multiple custom buckets/);
 });
 
 test('listPresetCatalog exposes named bucket presets', () => {
@@ -326,6 +402,7 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     manifestOut: 'runs/latest.json',
     undoManifest: null,
     configPath: 'buckets.json',
+    lintConfigPath: null,
     presetName: null,
     listPresets: false,
     writePresetName: null,
@@ -341,6 +418,7 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     manifestOut: 'runs/latest.json',
     undoManifest: null,
     configPath: null,
+    lintConfigPath: null,
     presetName: 'coursework',
     listPresets: false,
     writePresetName: null,
@@ -357,6 +435,7 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     manifestOut: null,
     undoManifest: 'runs/latest.json',
     configPath: null,
+    lintConfigPath: null,
     presetName: null,
     listPresets: false,
     writePresetName: null,
@@ -376,11 +455,28 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     manifestOut: null,
     undoManifest: null,
     configPath: null,
+    lintConfigPath: null,
     presetName: null,
     listPresets: false,
     writePresetName: 'data-science',
     writePresetDestination: 'presets/data-science.json',
     force: true,
+  });
+
+  const lintArgs = parseArgs(['--lint-config', 'shared/buckets.json', '--json']);
+  assert.deepEqual(lintArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: true,
+    manifestOut: null,
+    undoManifest: null,
+    configPath: null,
+    lintConfigPath: 'shared/buckets.json',
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
   });
 
   assert.throws(
@@ -406,6 +502,11 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
   assert.throws(
     () => parseArgs(['--list-presets', '--dry-run']),
     /--list-presets only supports optional --json output/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--lint-config', 'shared/buckets.json', '--config', 'other.json']),
+    /--lint-config cannot be combined with organize, undo, or preset-export flags/,
   );
 
   assert.throws(
@@ -461,6 +562,19 @@ test('formatTextReport includes config, preset, and manifest details for support
     bucketNames: ['datasets', 'slides'],
   });
 
+  const lintConfigReport = formatTextReport({
+    action: 'lint-config',
+    configPath: '/tmp/demo/shared-buckets.json',
+    valid: true,
+    warnings: ['Bucket datasets extension "CSV" will normalize to ".csv".'],
+    errors: [],
+    normalizedConfig: {
+      buckets: { datasets: ['.csv'] },
+      fallbackBucket: 'misc',
+      extendDefaults: true,
+    },
+  });
+
   assert.match(organizeReport, /preset: coursework/);
   assert.match(organizeReport, /config: \/tmp\/demo\/buckets\.json/);
   assert.match(organizeReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
@@ -472,4 +586,8 @@ test('formatTextReport includes config, preset, and manifest details for support
   assert.match(listPresetsReport, /extends defaults: yes/);
   assert.match(writePresetReport, /destination: \/tmp\/demo\/coursework\.json/);
   assert.match(writePresetReport, /extends defaults: yes/);
+  assert.match(lintConfigReport, /action: lint-config/);
+  assert.match(lintConfigReport, /status: valid/);
+  assert.match(lintConfigReport, /warning 1: Bucket datasets extension "CSV" will normalize to "\.csv"\./);
+  assert.match(lintConfigReport, /No errors found\./);
 });

@@ -50,6 +50,7 @@ const PRESET_LIBRARY = Object.freeze({
     }),
   }),
 });
+const CONFIG_ALLOWED_KEYS = Object.freeze(['buckets', 'fallbackBucket', 'extendDefaults']);
 
 function normalizeBucketName(name, label = 'bucket name') {
   if (typeof name !== 'string') {
@@ -81,6 +82,18 @@ function normalizeExtension(extension, bucketName) {
   return trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
 }
 
+function normalizeExtendDefaults(value) {
+  if (value == null) {
+    return true;
+  }
+
+  if (typeof value !== 'boolean') {
+    throw new Error('Field "extendDefaults" must be true or false when provided.');
+  }
+
+  return value;
+}
+
 function normalizeCustomBuckets(buckets) {
   if (buckets == null) {
     return {};
@@ -92,9 +105,15 @@ function normalizeCustomBuckets(buckets) {
 
   const normalized = {};
   const extensionOwners = new Map();
+  const bucketNameOwners = new Map();
 
   for (const [rawBucketName, rawExtensions] of Object.entries(buckets)) {
     const bucketName = normalizeBucketName(rawBucketName, 'bucket name');
+    const normalizedOwner = bucketNameOwners.get(bucketName);
+    if (normalizedOwner && normalizedOwner !== rawBucketName) {
+      throw new Error(`Bucket names normalize to the same directory name (${normalizedOwner}, ${rawBucketName} -> ${bucketName}).`);
+    }
+    bucketNameOwners.set(bucketName, rawBucketName);
 
     if (!Array.isArray(rawExtensions) || rawExtensions.length === 0) {
       throw new Error(`Bucket ${bucketName} must list at least one extension.`);
@@ -124,7 +143,7 @@ function buildBucketConfig(config = {}) {
     throw new Error('Bucket config must be a JSON object.');
   }
 
-  const extendDefaults = config.extendDefaults !== false;
+  const extendDefaults = normalizeExtendDefaults(config.extendDefaults);
   const fallbackBucket = normalizeBucketName(
     config.fallbackBucket || DEFAULT_FALLBACK_BUCKET,
     'fallback bucket',
@@ -174,7 +193,7 @@ function cloneBucketTemplate(config = {}) {
       Object.entries(config.buckets || {}).map(([bucketName, extensions]) => [bucketName, [...extensions]]),
     ),
     fallbackBucket: config.fallbackBucket || DEFAULT_FALLBACK_BUCKET,
-    extendDefaults: config.extendDefaults !== false,
+    extendDefaults: normalizeExtendDefaults(config.extendDefaults),
   };
 }
 
@@ -266,6 +285,150 @@ async function loadBucketConfig(configPath) {
   return {
     ...buildBucketConfig(parsed),
     configPath: resolvedPath,
+  };
+}
+
+async function lintBucketConfig(configPath) {
+  const resolvedPath = path.resolve(configPath);
+  let raw;
+
+  try {
+    raw = await fs.readFile(resolvedPath, 'utf8');
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return {
+        action: 'lint-config',
+        configPath: resolvedPath,
+        valid: false,
+        errors: [`Bucket config file not found: ${resolvedPath}`],
+        warnings: [],
+        normalizedConfig: null,
+      };
+    }
+    throw error;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return {
+      action: 'lint-config',
+      configPath: resolvedPath,
+      valid: false,
+      errors: [`Bucket config file must contain valid JSON: ${resolvedPath}`],
+      warnings: [],
+      normalizedConfig: null,
+    };
+  }
+
+  const errors = [];
+  const warnings = [];
+
+  if (parsed == null || Array.isArray(parsed) || typeof parsed !== 'object') {
+    errors.push('Bucket config must be a JSON object.');
+  } else {
+    for (const key of Object.keys(parsed)) {
+      if (!CONFIG_ALLOWED_KEYS.includes(key)) {
+        warnings.push(`Unknown top-level key "${key}" will be ignored by the organizer.`);
+      }
+    }
+
+    if (parsed.extendDefaults != null && typeof parsed.extendDefaults !== 'boolean') {
+      errors.push('Field "extendDefaults" must be true or false when provided.');
+    }
+
+    if (parsed.fallbackBucket != null) {
+      try {
+        const normalizedFallbackBucket = normalizeBucketName(parsed.fallbackBucket, 'fallback bucket');
+        if (parsed.fallbackBucket !== normalizedFallbackBucket) {
+          warnings.push(`Fallback bucket "${parsed.fallbackBucket}" will normalize to "${normalizedFallbackBucket}".`);
+        }
+      } catch (error) {
+        errors.push(error.message);
+      }
+    }
+
+    if (parsed.buckets != null) {
+      if (Array.isArray(parsed.buckets) || typeof parsed.buckets !== 'object') {
+        errors.push('Bucket config field "buckets" must be a JSON object that maps bucket names to extension arrays.');
+      } else {
+        const extensionOwners = new Map();
+        const normalizedBucketNames = new Map();
+
+        for (const [rawBucketName, rawExtensions] of Object.entries(parsed.buckets)) {
+          let bucketName;
+          try {
+            bucketName = normalizeBucketName(rawBucketName, 'bucket name');
+            if (rawBucketName !== bucketName) {
+              warnings.push(`Bucket name "${rawBucketName}" will normalize to "${bucketName}".`);
+            }
+          } catch (error) {
+            errors.push(error.message);
+            continue;
+          }
+
+          const normalizedOwner = normalizedBucketNames.get(bucketName);
+          if (normalizedOwner && normalizedOwner !== rawBucketName) {
+            errors.push(`Bucket names normalize to the same directory name (${normalizedOwner}, ${rawBucketName} -> ${bucketName}).`);
+          } else {
+            normalizedBucketNames.set(bucketName, rawBucketName);
+          }
+
+          if (!Array.isArray(rawExtensions) || rawExtensions.length === 0) {
+            errors.push(`Bucket ${bucketName} must list at least one extension.`);
+            continue;
+          }
+
+          const bucketExtensions = new Set();
+          for (const rawExtension of rawExtensions) {
+            let normalizedExtension;
+            try {
+              normalizedExtension = normalizeExtension(rawExtension, bucketName);
+              if (typeof rawExtension === 'string' && rawExtension !== normalizedExtension) {
+                warnings.push(`Bucket ${bucketName} extension "${rawExtension}" will normalize to "${normalizedExtension}".`);
+              }
+            } catch (error) {
+              errors.push(error.message);
+              continue;
+            }
+
+            if (bucketExtensions.has(normalizedExtension)) {
+              warnings.push(`Bucket ${bucketName} repeats extension "${normalizedExtension}"; duplicate entries are ignored.`);
+              continue;
+            }
+            bucketExtensions.add(normalizedExtension);
+
+            const owner = extensionOwners.get(normalizedExtension);
+            if (owner && owner !== bucketName) {
+              errors.push(`Extension ${normalizedExtension} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+            } else {
+              extensionOwners.set(normalizedExtension, bucketName);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  let normalizedConfig = null;
+  if (errors.length === 0) {
+    const builtConfig = buildBucketConfig(parsed);
+    normalizedConfig = {
+      buckets: builtConfig.customBuckets,
+      fallbackBucket: builtConfig.fallbackBucket,
+      extendDefaults: builtConfig.extendDefaults,
+      bucketNames: builtConfig.bucketNames,
+    };
+  }
+
+  return {
+    action: 'lint-config',
+    configPath: resolvedPath,
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    normalizedConfig,
   };
 }
 
@@ -557,6 +720,7 @@ function parseArgs(argv) {
     manifestOut: null,
     undoManifest: null,
     configPath: null,
+    lintConfigPath: null,
     presetName: null,
     listPresets: false,
     writePresetName: null,
@@ -595,6 +759,13 @@ function parseArgs(argv) {
         throw new Error('Expected a path after --config');
       }
       options.configPath = nextArg;
+      index += 1;
+    } else if (arg === '--lint-config') {
+      const nextArg = args[index + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Expected a path after --lint-config');
+      }
+      options.lintConfigPath = nextArg;
       index += 1;
     } else if (arg === '--preset') {
       const nextArg = args[index + 1];
@@ -654,6 +825,14 @@ function parseArgs(argv) {
 
   if (options.configPath && options.presetName) {
     throw new Error('--config cannot be combined with --preset');
+  }
+
+  if (options.lintConfigPath && targetDirExplicit) {
+    throw new Error('Target directory cannot be combined with --lint-config');
+  }
+
+  if (options.lintConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+    throw new Error('--lint-config cannot be combined with organize, undo, or preset-export flags');
   }
 
   if (options.listPresets && targetDirExplicit) {
@@ -766,6 +945,35 @@ function formatWritePresetTextReport(result) {
   ].join('\n');
 }
 
+function formatLintConfigTextReport(result) {
+  const lines = [
+    'action: lint-config',
+    `config: ${result.configPath}`,
+    `status: ${result.valid ? 'valid' : 'invalid'}`,
+    `warnings: ${result.warnings.length}`,
+    `errors: ${result.errors.length}`,
+  ];
+
+  if (result.normalizedConfig) {
+    lines.push(`normalized fallback bucket: ${result.normalizedConfig.fallbackBucket}`);
+    lines.push(`extends defaults: ${result.normalizedConfig.extendDefaults ? 'yes' : 'no'}`);
+    lines.push(`custom buckets: ${Object.keys(result.normalizedConfig.buckets).join(', ') || '(none)'}`);
+  }
+
+  result.warnings.forEach((warning, index) => {
+    lines.push(`warning ${index + 1}: ${warning}`);
+  });
+  result.errors.forEach((error, index) => {
+    lines.push(`error ${index + 1}: ${error}`);
+  });
+
+  if (result.valid) {
+    lines.push('No errors found.');
+  }
+
+  return lines.join('\n');
+}
+
 function formatTextReport(result) {
   if (result.action === 'undo') {
     return formatUndoTextReport(result);
@@ -775,6 +983,9 @@ function formatTextReport(result) {
   }
   if (result.action === 'write-preset') {
     return formatWritePresetTextReport(result);
+  }
+  if (result.action === 'lint-config') {
+    return formatLintConfigTextReport(result);
   }
   return formatOrganizeTextReport(result);
 }
@@ -787,6 +998,7 @@ async function main(argv = process.argv.slice(2)) {
     console.log('       node organizer.js --undo manifest.json [--dry-run] [--json]');
     console.log('       node organizer.js --list-presets [--json]');
     console.log('       node organizer.js --write-preset preset-name destination.json [--force] [--json]');
+    console.log('       node organizer.js --lint-config buckets.json [--json]');
     return;
   }
 
@@ -800,6 +1012,8 @@ async function main(argv = process.argv.slice(2)) {
     result = await writePresetConfig(options.writePresetName, options.writePresetDestination, {
       force: options.force,
     });
+  } else if (options.lintConfigPath) {
+    result = await lintBucketConfig(options.lintConfigPath);
   } else if (options.undoManifest) {
     result = await undoFromManifest(options.undoManifest, { dryRun: options.dryRun });
   } else {
@@ -823,6 +1037,10 @@ async function main(argv = process.argv.slice(2)) {
   } else {
     console.log(formatTextReport(result));
   }
+
+  if (result.action === 'lint-config' && !result.valid) {
+    process.exitCode = 1;
+  }
 }
 
 if (require.main === module) {
@@ -840,6 +1058,7 @@ module.exports = {
   RESERVED_BUCKETS,
   normalizeBucketName,
   normalizeExtension,
+  normalizeExtendDefaults,
   normalizeCustomBuckets,
   buildBucketConfig,
   cloneBucketTemplate,
@@ -849,6 +1068,7 @@ module.exports = {
   loadPresetBucketConfig,
   writePresetConfig,
   loadBucketConfig,
+  lintBucketConfig,
   describeBucketConfig,
   bucketFor,
   pathExists,

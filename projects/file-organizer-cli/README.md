@@ -1,12 +1,12 @@
 # file-organizer-cli
 
 ## Overview
-A Node.js CLI that organizes loose files into extension-based folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, and manifest-driven undo support.
+A Node.js CLI that organizes loose files into extension-based folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, CI-friendly config linting, and manifest-driven undo support.
 
 ## Why it is portfolio-worthy
 - demonstrates practical file-system automation with a real CLI workflow
-- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom categorization rules, and safe rollback after a bulk organize pass
-- includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing, manifest writing, and undo/restore flows
+- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom categorization rules, CI-ready config validation, and safe rollback after a bulk organize pass
+- includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing/linting, manifest writing, and undo/restore flows
 - easy to demo with realistic folders like `Downloads`, class assets, screenshots, or project exports
 
 ## Stack
@@ -18,6 +18,7 @@ A Node.js CLI that organizes loose files into extension-based folders with colli
 - supports `--preset <name>` for built-in portfolio-ready bucket presets such as `coursework`, `data-science`, and `frontend-assets`
 - supports `--list-presets` and `--write-preset <name> <path>` so teams can export and share reusable bucket JSON files
 - supports `--config buckets.json` for custom buckets, extension overrides, and custom fallback bucket names
+- supports `--lint-config buckets.json` so shared bucket JSON can be validated in CI before teammates run a real organize pass
 - preserves existing files by renaming collisions like `notes (1).txt`
 - supports `--dry-run` to preview work without changing the file system
 - supports `--recursive` to organize nested folders while skipping already-organized bucket folders
@@ -36,6 +37,8 @@ node organizer.js --write-preset data-science ./presets/data-science.json
 node organizer.js --write-preset data-science ./presets/data-science.json --force
 node organizer.js ~/Downloads --config ./buckets.json --recursive
 node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json
+node organizer.js --lint-config ./shared/coursework-buckets.json
+node organizer.js --lint-config ./shared/coursework-buckets.json --json
 node organizer.js --undo ./artifacts/downloads-run.json
 node organizer.js --undo ./artifacts/downloads-run.json --dry-run --json
 ```
@@ -109,6 +112,35 @@ bucket images: 2
 /home/student/Downloads/photo-copy.png -> /home/student/Downloads/images/photo-copy (1).png [renamed]
 ```
 
+## Shared config linting
+Use `--lint-config` to validate a shareable bucket JSON file without touching any real folders. This is useful in CI, pre-commit hooks, or review scripts before someone runs the organizer on a real `Downloads/` or project asset directory.
+
+```bash
+node organizer.js --lint-config ./shared/coursework-buckets.json
+node organizer.js --lint-config ./shared/coursework-buckets.json --json
+```
+
+The lint report:
+- exits cleanly for valid configs and returns exit code `1` for invalid configs
+- reports normalization warnings for bucket names, fallback buckets, and extension spellings like `CSV` -> `.csv`
+- flags duplicate custom extensions or invalid `extendDefaults` values before the config is used in a live organize run
+- warns about unknown top-level keys so teams notice stray metadata that the organizer will ignore
+
+Example lint output:
+```text
+action: lint-config
+config: /home/student/shared/coursework-buckets.json
+status: valid
+warnings: 2
+errors: 0
+normalized fallback bucket: misc
+extends defaults: yes
+custom buckets: datasets, slides
+warning 1: Bucket datasets extension "CSV" will normalize to ".csv".
+warning 2: Unknown top-level key "owner" will be ignored by the organizer.
+No errors found.
+```
+
 Example undo output:
 ```text
 root: /home/student/Downloads
@@ -135,4 +167,4 @@ npm test
 ## Future Improvements
 - add file-type detection beyond extensions for better categorization
 - optionally sign or checksum manifests for tamper-evident bulk-operation history
-- add team-specific preset validation or linting so shared JSON configs can be checked in CI before they are used on real folders
+- optionally auto-write a normalized config file so teams can clean up lint warnings in one step before committing shared presets
