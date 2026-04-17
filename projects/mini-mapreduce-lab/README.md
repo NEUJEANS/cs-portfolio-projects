@@ -236,6 +236,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
   --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
   --plugin projects/mini-mapreduce-lab/plugins_sessionization.py \
+  --plugin projects/mini-mapreduce-lab/plugins_streaming_window.py \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
   --diff \
   --report-output plugin-diff-report.md \

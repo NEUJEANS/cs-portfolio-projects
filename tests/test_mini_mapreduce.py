@@ -28,6 +28,7 @@ discover_mini_mapreduce_docs_index = module.discover_mini_mapreduce_docs_index
 execute_job = module.execute_job
 inspect_plugin = module.inspect_plugin
 inspect_plugins = module.inspect_plugins
+humanize_docs_slug = module.humanize_docs_slug
 load_plugin = module.load_plugin
 plugin_display_path = module.plugin_display_path
 stable_partition = module.stable_partition

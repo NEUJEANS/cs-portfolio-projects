@@ -2480,7 +2480,7 @@ def humanize_docs_slug(slug: str) -> str:
     if _is_dated_slug(parts):
         date_prefix = "-".join(parts[:3])
         body_parts = parts[3:]
-    special = {"json": "JSON", "csv": "CSV", "html": "HTML", "api": "API"}
+    special = {"json": "JSON", "csv": "CSV", "html": "HTML", "api": "API", "iot": "IoT"}
     label = " ".join(special.get(part.lower(), part.capitalize()) for part in body_parts) or slug
     return f"{date_prefix} · {label}" if date_prefix else label
 

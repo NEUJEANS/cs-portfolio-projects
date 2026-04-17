@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin doc — plugin-streaming-window</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1080px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.8rem; }
+    .badge { display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }
+    article { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin doc: <code>plugin-streaming-window</code></h1>
+  <ul class="meta"><li><strong>Plugin path</strong><br><code>projects/mini-mapreduce-lab/plugins_streaming_window.py</code></li><li><strong>Summary</strong><br>Streaming-window aggregation plugin for telemetry-style benchmark demos.</li><li><strong>Dataset families</strong><br><code>default, iot-burst, live-ops</code></li><li><strong>Catalog badges</strong><br><span class="badge">5 hooks</span><span class="badge">3 dataset families</span><span class="badge">commit pinned</span><span class="badge">github linked</span></li><li><strong>Repository commit</strong><br><code>1a9d76c8641bfd14dfa216fa6236e65807bd27d7</code></li><li><strong>Catalog index</strong><br><a href="../plugin-catalog.html">plugin catalog</a></li><li><strong>Alternate format</strong><br><a href="plugin-streaming-window.md">Markdown</a></li></ul>
+  <section>
+    <h2>Hook summary</h2>
+    <table>
+      <thead><tr><th>Hook</th><th>Export</th><th>Signature</th><th>Details</th><th>Source</th></tr></thead>
+      <tbody><tr><td>Mapper</td><td><code>plugins_streaming_window.map_records</code></td><td><code>map_records(lines)</code></td><td>Emit per-stream, per-window summary objects from stream,timestamp,value rows.<br>line 73<br>anchor <code>plugins_streaming_window.py#L73-L90</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90">commit</a></td></tr><tr><td>Reducer</td><td><code>plugins_streaming_window.reduce_key</code></td><td><code>reduce_key(key, values)</code></td><td>Return window-level count, range, and rate metrics for one stream bucket.<br>line 98<br>anchor <code>plugins_streaming_window.py#L98-L123</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123">commit</a></td></tr><tr><td>Combiner</td><td><code>plugins_streaming_window.combine_values</code></td><td><code>combine_values(_key, values)</code></td><td>Merge shard-local window summaries before the final reduce step.<br>line 93<br>anchor <code>plugins_streaming_window.py#L93-L95</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95">commit</a></td></tr><tr><td>Benchmark generator</td><td><code>plugins_streaming_window.benchmark_records</code></td><td><code>benchmark_records(scenario, records, seed, dataset_family=&#x27;default&#x27;)</code></td><td>Generate deterministic windowed telemetry fixtures for benchmark scenarios.<br>line 139<br>anchor <code>plugins_streaming_window.py#L139-L212</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212">commit</a></td></tr><tr><td>Benchmark note hook</td><td><code>plugins_streaming_window.benchmark_notes</code></td><td><code>benchmark_notes(scenario, dataset_family=&#x27;default&#x27;)</code></td><td>Describe the intended hot windows and portfolio story for each family.<br>line 215<br>anchor <code>plugins_streaming_window.py#L215-L284</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284">commit</a></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Hook source excerpts</h2>
+    <article><h2>Mapper: <code>plugins_streaming_window.map_records</code></h2><p><strong>Summary:</strong> Emit per-stream, per-window summary objects from stream,timestamp,value rows.</p><p><strong>Source line:</strong> <code>73</code></p><p><strong>Source anchor:</strong> <code>plugins_streaming_window.py#L73-L90</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90">https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90</a></p><pre><code>def map_records(lines):
+    &quot;&quot;&quot;Emit per-stream, per-window summary objects from stream,timestamp,value rows.&quot;&quot;&quot;
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        stream, timestamp, value = [part.strip() for part in stripped.split(&quot;,&quot;, maxsplit=2)]
+        parsed_timestamp = _parse_timestamp(timestamp)
+        window_start = _window_start(parsed_timestamp)
+        numeric_value = round(float(value), 3)
+        yield f&quot;{stream.lower()}@{_isoformat_z(window_start)}&quot;, {
+            &quot;count&quot;: 1,
+            &quot;sum&quot;: numeric_value,
+            &quot;min&quot;: numeric_value,
+            &quot;max&quot;: numeric_value,
+            &quot;first_event_at&quot;: _isoformat_z(parsed_timestamp),
+            &quot;last_event_at&quot;: _isoformat_z(parsed_timestamp),
+        }</code></pre></article><article><h2>Reducer: <code>plugins_streaming_window.reduce_key</code></h2><p><strong>Summary:</strong> Return window-level count, range, and rate metrics for one stream bucket.</p><p><strong>Source line:</strong> <code>98</code></p><p><strong>Source anchor:</strong> <code>plugins_streaming_window.py#L98-L123</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123">https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123</a></p><pre><code>def reduce_key(key, values):
+    &quot;&quot;&quot;Return window-level count, range, and rate metrics for one stream bucket.&quot;&quot;&quot;
+    stream, window_start = _split_window_key(key)
+    merged = _merge_window_values(values)
+    count = int(merged[&quot;count&quot;])
+    first_event_at = merged[&quot;first_event_at&quot;]
+    last_event_at = merged[&quot;last_event_at&quot;]
+    span_minutes = 0.0
+    if first_event_at and last_event_at:
+        span_minutes = round(
+            (_parse_timestamp(last_event_at) - _parse_timestamp(first_event_at)).total_seconds() / 60,
+            3,
+        )
+    return {
+        &quot;stream&quot;: stream,
+        &quot;window_start&quot;: window_start,
+        &quot;window_end&quot;: _isoformat_z(_parse_timestamp(window_start) + timedelta(minutes=WINDOW_MINUTES)),
+        &quot;count&quot;: count,
+        &quot;avg_value&quot;: round(float(merged[&quot;sum&quot;]) / count, 3) if count else 0.0,
+        &quot;min_value&quot;: round(float(merged[&quot;min&quot;]), 3) if count else 0.0,
+        &quot;max_value&quot;: round(float(merged[&quot;max&quot;]), 3) if count else 0.0,
+        &quot;event_rate_per_minute&quot;: round(count / WINDOW_MINUTES, 3) if count else 0.0,
+        &quot;first_event_at&quot;: first_event_at,
+        &quot;last_event_at&quot;: last_event_at,
+        &quot;span_minutes&quot;: span_minutes,
+    }</code></pre></article><article><h2>Combiner: <code>plugins_streaming_window.combine_values</code></h2><p><strong>Summary:</strong> Merge shard-local window summaries before the final reduce step.</p><p><strong>Source line:</strong> <code>93</code></p><p><strong>Source anchor:</strong> <code>plugins_streaming_window.py#L93-L95</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95">https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95</a></p><pre><code>def combine_values(_key, values):
+    &quot;&quot;&quot;Merge shard-local window summaries before the final reduce step.&quot;&quot;&quot;
+    return _merge_window_values(values)</code></pre></article><article><h2>Benchmark generator: <code>plugins_streaming_window.benchmark_records</code></h2><p><strong>Summary:</strong> Generate deterministic windowed telemetry fixtures for benchmark scenarios.</p><p><strong>Source line:</strong> <code>139</code></p><p><strong>Source anchor:</strong> <code>plugins_streaming_window.py#L139-L212</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212">https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212</a></p><pre><code>def benchmark_records(scenario, records, seed, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Generate deterministic windowed telemetry fixtures for benchmark scenarios.&quot;&quot;&quot;
+    if records &lt;= 0:
+        raise ValueError(&quot;records must be positive&quot;)
+    rng = random.Random(seed)
+    base_time = datetime(2026, 4, 17, 9, 0, tzinfo=timezone.utc)
+
+    families = {
+        &quot;default&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;stream&quot;: &quot;sensor-alpha&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 21.5, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.3},
+                {&quot;stream&quot;: &quot;sensor-beta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 23.2, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2},
+                {&quot;stream&quot;: &quot;sensor-gamma&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 19.8, &quot;spread&quot;: 1.2, &quot;drift&quot;: 0.4},
+                {&quot;stream&quot;: &quot;sensor-delta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 24.0, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.2},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;stream&quot;: &quot;sensor-alpha&quot;, &quot;weight&quot;: 3.6, &quot;window_offsets&quot;: [5, 5, 10], &quot;base_value&quot;: 27.5, &quot;spread&quot;: 1.4, &quot;drift&quot;: 0.5, &quot;hotspot_offsets&quot;: [5], &quot;hotspot_bonus&quot;: 4.5},
+                {&quot;stream&quot;: &quot;sensor-beta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 15], &quot;base_value&quot;: 23.0, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.2},
+                {&quot;stream&quot;: &quot;sensor-gamma&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [0, 10, 15], &quot;base_value&quot;: 20.1, &quot;spread&quot;: 1.2, &quot;drift&quot;: 0.3},
+                {&quot;stream&quot;: &quot;sensor-delta&quot;, &quot;weight&quot;: 0.8, &quot;window_offsets&quot;: [5, 15], &quot;base_value&quot;: 22.7, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.3},
+            ],
+        },
+        &quot;iot-burst&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;stream&quot;: &quot;turnstile-east&quot;, &quot;weight&quot;: 1.1, &quot;window_offsets&quot;: [5, 10, 15], &quot;base_value&quot;: 31.0, &quot;spread&quot;: 1.5, &quot;drift&quot;: 0.6},
+                {&quot;stream&quot;: &quot;camera-lobby&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 10, 15], &quot;base_value&quot;: 28.5, &quot;spread&quot;: 1.3, &quot;drift&quot;: 0.4},
+                {&quot;stream&quot;: &quot;hvac-north&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 20], &quot;base_value&quot;: 24.3, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2},
+                {&quot;stream&quot;: &quot;badge-reader&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [0, 5, 15], &quot;base_value&quot;: 26.0, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.3},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;stream&quot;: &quot;turnstile-east&quot;, &quot;weight&quot;: 4.2, &quot;window_offsets&quot;: [10, 10, 15], &quot;base_value&quot;: 36.0, &quot;spread&quot;: 1.8, &quot;drift&quot;: 0.8, &quot;hotspot_offsets&quot;: [10], &quot;hotspot_bonus&quot;: 14.0},
+                {&quot;stream&quot;: &quot;camera-lobby&quot;, &quot;weight&quot;: 1.5, &quot;window_offsets&quot;: [15, 15, 20], &quot;base_value&quot;: 30.5, &quot;spread&quot;: 1.5, &quot;drift&quot;: 0.5, &quot;hotspot_offsets&quot;: [15], &quot;hotspot_bonus&quot;: 6.5},
+                {&quot;stream&quot;: &quot;hvac-north&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 20], &quot;base_value&quot;: 24.8, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2},
+                {&quot;stream&quot;: &quot;badge-reader&quot;, &quot;weight&quot;: 0.8, &quot;window_offsets&quot;: [5, 20], &quot;base_value&quot;: 26.4, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.3},
+            ],
+        },
+        &quot;live-ops&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;stream&quot;: &quot;ingest-primary&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 42.0, &quot;spread&quot;: 1.8, &quot;drift&quot;: 0.7},
+                {&quot;stream&quot;: &quot;chat-presence&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 38.0, &quot;spread&quot;: 1.6, &quot;drift&quot;: 0.5},
+                {&quot;stream&quot;: &quot;moderation-queue&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 35.5, &quot;spread&quot;: 1.4, &quot;drift&quot;: 0.4},
+                {&quot;stream&quot;: &quot;reaction-fanout&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10, 15], &quot;base_value&quot;: 39.0, &quot;spread&quot;: 1.7, &quot;drift&quot;: 0.6},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;stream&quot;: &quot;moderation-queue&quot;, &quot;weight&quot;: 3.9, &quot;window_offsets&quot;: [20, 20, 25], &quot;base_value&quot;: 49.0, &quot;spread&quot;: 2.1, &quot;drift&quot;: 0.9, &quot;hotspot_offsets&quot;: [20], &quot;hotspot_bonus&quot;: 11.0},
+                {&quot;stream&quot;: &quot;reaction-fanout&quot;, &quot;weight&quot;: 1.6, &quot;window_offsets&quot;: [15, 15, 20], &quot;base_value&quot;: 43.0, &quot;spread&quot;: 1.8, &quot;drift&quot;: 0.7, &quot;hotspot_offsets&quot;: [15], &quot;hotspot_bonus&quot;: 5.5},
+                {&quot;stream&quot;: &quot;ingest-primary&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 20], &quot;base_value&quot;: 41.5, &quot;spread&quot;: 1.7, &quot;drift&quot;: 0.5},
+                {&quot;stream&quot;: &quot;chat-presence&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [5, 10, 25], &quot;base_value&quot;: 37.6, &quot;spread&quot;: 1.4, &quot;drift&quot;: 0.4},
+            ],
+        },
+    }
+    if dataset_family not in families or scenario not in families[dataset_family]:
+        raise ValueError(f&quot;unsupported plugin benchmark scenario/family: {scenario}/{dataset_family}&quot;)
+
+    profiles = families[dataset_family][scenario]
+    counts = _allocate_counts(records, [profile[&quot;weight&quot;] for profile in profiles])
+    lines = []
+    for profile, count in zip(profiles, counts):
+        lines.extend(
+            _generate_stream_events(
+                stream=profile[&quot;stream&quot;],
+                count=count,
+                base_time=base_time,
+                window_offsets=profile[&quot;window_offsets&quot;],
+                base_value=profile[&quot;base_value&quot;],
+                spread=profile[&quot;spread&quot;],
+                drift=profile[&quot;drift&quot;],
+                rng=rng,
+                hotspot_offsets=profile.get(&quot;hotspot_offsets&quot;),
+                hotspot_bonus=profile.get(&quot;hotspot_bonus&quot;, 0.0),
+            )
+        )
+    lines.sort(key=lambda line: line.split(&quot;,&quot;, maxsplit=2)[1])
+    return lines[:records]</code></pre></article><article><h2>Benchmark note hook: <code>plugins_streaming_window.benchmark_notes</code></h2><p><strong>Summary:</strong> Describe the intended hot windows and portfolio story for each family.</p><p><strong>Source line:</strong> <code>215</code></p><p><strong>Source anchor:</strong> <code>plugins_streaming_window.py#L215-L284</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284">https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284</a></p><pre><code>def benchmark_notes(scenario, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Describe the intended hot windows and portfolio story for each family.&quot;&quot;&quot;
+    notes = {
+        (&quot;balanced&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Even telemetry cadence&quot;,
+                &quot;detail&quot;: &quot;The default balanced family spreads sensor updates across multiple windows and streams, so reducer load should stay close while still demonstrating time-bucket aggregation.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the calm baseline before introducing a window hotspot that is caused by workload shape rather than partitioning noise.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Sensor alpha window spike&quot;,
+                &quot;detail&quot;: &quot;`sensor-alpha@2026-04-17T09:05:00Z` is intentionally overweighted, so the hottest reducer should look like one telemetry stream concentrating most of its work into a single five-minute bucket.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;sensor-alpha@2026-04-17T09:05:00Z&quot;],
+                &quot;takeaway&quot;: &quot;This is the simplest windowing story for explaining why time buckets can become hotspots even when the upstream stream names look balanced overall.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;iot-burst&quot;): [
+            {
+                &quot;title&quot;: &quot;Staggered building telemetry&quot;,
+                &quot;detail&quot;: &quot;The balanced IoT family rotates turnstiles, cameras, HVAC, and badge readers across adjacent windows so the output reads like a healthy campus-building control loop.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Good for showing the plugin as a normal ops dashboard baseline before a rush-hour burst distorts one window.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;iot-burst&quot;): [
+            {
+                &quot;title&quot;: &quot;Turnstile rush-hour burst&quot;,
+                &quot;detail&quot;: &quot;`turnstile-east@2026-04-17T09:10:00Z` dominates this family with both heavier volume and elevated values, so the hottest reducer should read like a lobby ingress spike during class changeover.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;turnstile-east@2026-04-17T09:10:00Z&quot;],
+                &quot;takeaway&quot;: &quot;This turns the plugin into a windowed-streaming case study about burst concentration, not just generic per-key aggregation.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Lobby camera spillover&quot;,
+                &quot;detail&quot;: &quot;`camera-lobby@2026-04-17T09:15:00Z` forms a second-tier hotspot right behind the turnstile window, which helps the benchmark tell a fuller story about adjacent systems reacting to the same surge.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;camera-lobby@2026-04-17T09:15:00Z&quot;],
+                &quot;takeaway&quot;: &quot;Keep this note when you want the report to show cross-stream spillover instead of only the single biggest bucket.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;live-ops&quot;): [
+            {
+                &quot;title&quot;: &quot;Steady live-ops baseline&quot;,
+                &quot;detail&quot;: &quot;The balanced live-ops family keeps ingest, presence, moderation, and fanout windows close enough that the report reads like a normal event stream instead of a launch incident.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the before state for the live moderation surge story.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;live-ops&quot;): [
+            {
+                &quot;title&quot;: &quot;Moderation queue pile-up&quot;,
+                &quot;detail&quot;: &quot;`moderation-queue@2026-04-17T09:20:00Z` becomes the obvious hotspot here, so the window summary looks like one burst of chat events overwhelming moderation capacity during a live launch.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;moderation-queue@2026-04-17T09:20:00Z&quot;],
+                &quot;takeaway&quot;: &quot;This family is useful when you want a streaming-systems narrative about time-bucket pressure rather than user sessions or service latency.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Reaction fanout echo&quot;,
+                &quot;detail&quot;: &quot;`reaction-fanout@2026-04-17T09:15:00Z` is the supporting hotspot behind moderation, which helps explain how bursty audience behavior can surface in multiple downstream windows.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;reaction-fanout@2026-04-17T09:15:00Z&quot;],
+                &quot;takeaway&quot;: &quot;Keep this annotation when you want the benchmark to tell a richer multi-stage streaming pipeline story.&quot;,
+            },
+        ],
+    }
+    return notes.get((scenario, dataset_family), [])</code></pre></article>
+  </section>
+</body>
+</html>

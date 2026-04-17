@@ -8,6 +8,7 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 - [Inspection diff HTML — Plugin Comparison](plugin-comparison-diff.html)
 - [Benchmark report HTML — 2026-04-17 · Annotation View](2026-04-17-annotation-view-report.html)
 - [Benchmark report HTML — 2026-04-17 · Incident Spike Latency](2026-04-17-incident-spike-latency-report.html)
+- [Benchmark report HTML — 2026-04-17 · IoT Burst Streaming Window](2026-04-17-iot-burst-streaming-window-report.html)
 - [Benchmark report HTML — 2026-04-17 · Project Week](2026-04-17-project-week-report.html)
 - [Benchmark report HTML — 2026-04-17 · Structured Annotations](2026-04-17-structured-annotations-report.html)
 - [Benchmark report HTML — Launch Day Sessionization](launch-day-sessionization-report.html)
@@ -26,6 +27,7 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 | `plugin-max-score` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-max-score.md) · [HTML](plugin-pages/plugin-max-score.html) |
 | `plugin-service-latency` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-service-latency.md) · [HTML](plugin-pages/plugin-service-latency.html) |
 | `plugin-sessionization` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-sessionization.md) · [HTML](plugin-pages/plugin-sessionization.html) |
+| `plugin-streaming-window` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-streaming-window.md) · [HTML](plugin-pages/plugin-streaming-window.html) |
 
 ## Inspection diffs
 
@@ -39,6 +41,7 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 | --- | --- | --- |
 | 2026-04-17 · Annotation View | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-annotation-view-report.md) · [HTML](2026-04-17-annotation-view-report.html) · [JSON](2026-04-17-annotation-view-benchmark.json) · [CSV](2026-04-17-annotation-view-benchmark.csv) · [Heatmap CSV](2026-04-17-annotation-view-heatmap.csv) |
 | 2026-04-17 · Incident Spike Latency | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-incident-spike-latency-report.md) · [HTML](2026-04-17-incident-spike-latency-report.html) · [JSON](2026-04-17-incident-spike-latency-benchmark.json) · [CSV](2026-04-17-incident-spike-latency-benchmark.csv) · [Heatmap CSV](2026-04-17-incident-spike-latency-heatmap.csv) |
+| 2026-04-17 · IoT Burst Streaming Window | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-iot-burst-streaming-window-report.md) · [HTML](2026-04-17-iot-burst-streaming-window-report.html) · [JSON](2026-04-17-iot-burst-streaming-window-benchmark.json) · [CSV](2026-04-17-iot-burst-streaming-window-benchmark.csv) · [Heatmap CSV](2026-04-17-iot-burst-streaming-window-heatmap.csv) |
 | 2026-04-17 · Project Week | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-project-week-report.md) · [HTML](2026-04-17-project-week-report.html) · [JSON](2026-04-17-project-week-benchmark.json) · [CSV](2026-04-17-project-week-benchmark.csv) · [Heatmap CSV](2026-04-17-project-week-heatmap.csv) |
 | 2026-04-17 · Structured Annotations | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-structured-annotations-report.md) · [HTML](2026-04-17-structured-annotations-report.html) · [JSON](2026-04-17-structured-annotations-benchmark.json) · [CSV](2026-04-17-structured-annotations-benchmark.csv) · [Heatmap CSV](2026-04-17-structured-annotations-heatmap.csv) |
 | Launch Day Sessionization | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](launch-day-sessionization-report.md) · [HTML](launch-day-sessionization-report.html) · [JSON](launch-day-sessionization-benchmark.json) · [CSV](launch-day-sessionization-benchmark.csv) · [Heatmap CSV](launch-day-sessionization-heatmap.csv) |

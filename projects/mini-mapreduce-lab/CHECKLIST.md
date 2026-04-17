@@ -16,6 +16,7 @@
 - [x] Add a streaming-window telemetry plugin example with deterministic five-minute buckets, IoT/live-ops benchmark families, and publishable docs artifacts
 
 ## Next candidate slices
-- [ ] Add another richer plugin example beyond the current score/latency/sessionization/windowing set, such as rolling-window joins or watermark-aware summaries
+- [ ] Add a rolling-window joins plugin example so the lab can compare multi-stream correlation against the existing score/latency/sessionization/windowing stories
+- [ ] Add watermark-aware late-event summaries so the portfolio can talk about out-of-order stream handling, not just fixed-window aggregation
 - [ ] Add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases
 - [ ] Add docs-site navigation sidebars or cross-project landing pages if the artifact surface keeps growing
