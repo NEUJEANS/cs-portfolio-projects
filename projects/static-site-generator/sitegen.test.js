@@ -501,7 +501,9 @@ test('buildDateArchiveCollections groups dated pages into reverse-chronological 
   assert.equal(collections[0].outputName, 'archives/2026/index.html');
   assert.equal(collections[0].totalPages, 2);
   assert.deepEqual(collections[0].months.map((month) => month.label), ['April 2026', 'February 2026']);
+  assert.equal(collections[0].months[0].outputName, 'archives/2026/04/index.html');
   assert.equal(collections[0].months[0].pages[0].title, 'Alpha');
+  assert.equal(collections[1].months[0].outputName, 'archives/2025/12/index.html');
   assert.equal(collections[1].months[0].pages[0].title, 'Gamma');
 });
 
@@ -572,27 +574,38 @@ archive: false
   const result = buildSite(contentDir, outputDir);
   assert.deepEqual(
     result.pages.map((page) => page.output).sort(),
-    ['404.html', 'archives/2026/index.html', ARCHIVE_INDEX_OUTPUT_NAME, 'index.html', 'posts/draft-post.html', 'posts/first-post.html', RSS_OUTPUT_NAME, SITEMAP_OUTPUT_NAME, 'tags/index.html', 'tags/node.html', 'tags/portfolio.html']
+    ['404.html', 'archives/2026/04/index.html', 'archives/2026/index.html', ARCHIVE_INDEX_OUTPUT_NAME, 'index.html', 'posts/draft-post.html', 'posts/first-post.html', RSS_OUTPUT_NAME, SITEMAP_OUTPUT_NAME, 'tags/index.html', 'tags/node.html', 'tags/portfolio.html']
   );
 
   const archiveIndexHtml = fs.readFileSync(path.join(outputDir, 'archives', 'index.html'), 'utf8');
   const archiveYearHtml = fs.readFileSync(path.join(outputDir, 'archives', '2026', 'index.html'), 'utf8');
+  const archiveMonthHtml = fs.readFileSync(path.join(outputDir, 'archives', '2026', '04', 'index.html'), 'utf8');
   const sitemapXml = fs.readFileSync(path.join(outputDir, SITEMAP_OUTPUT_NAME), 'utf8');
   const rssXml = fs.readFileSync(path.join(outputDir, RSS_OUTPUT_NAME), 'utf8');
 
   assert.match(archiveIndexHtml, /<a class="active" href="index\.html">Archive<\/a>/);
   assert.match(archiveIndexHtml, /Browse 1 dated portfolio page in reverse chronological order\./);
   assert.match(archiveIndexHtml, /<a href="2026\/index\.html">2026<\/a>/);
+  assert.match(archiveIndexHtml, /<a href="2026\/04\/index\.html">April 2026<\/a>/);
+  assert.match(archiveIndexHtml, /Latest: <a href="\.\.\/posts\/first-post\.html">First Post<\/a>/);
   assert.match(archiveYearHtml, /<title>Archive: 2026<\/title>/);
   assert.match(archiveYearHtml, /<a href="#month-2026-04">April 2026<\/a>/);
+  assert.match(archiveYearHtml, /<a href="04\/index\.html">Open month page<\/a>/);
+  assert.match(archiveYearHtml, /<a href="04\/index\.html">Browse April 2026<\/a>/);
   assert.match(archiveYearHtml, /<a href="\.\.\/\.\.\/posts\/first-post\.html">First Post<\/a>/);
   assert.doesNotMatch(archiveYearHtml, /Draft Post/);
+  assert.match(archiveMonthHtml, /<title>Archive: April 2026<\/title>/);
+  assert.match(archiveMonthHtml, /<a href="\.\.\/\.\.\/index\.html">← All archives<\/a>/);
+  assert.match(archiveMonthHtml, /<a href="\.\.\/index\.html">2026 archive<\/a>/);
+  assert.match(archiveMonthHtml, /<a href="\.\.\/\.\.\/\.\.\/posts\/first-post\.html">First Post<\/a>/);
+  assert.doesNotMatch(archiveMonthHtml, /Draft Post/);
 
   assert.match(sitemapXml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
   assert.match(sitemapXml, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
   assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/<\/loc>/);
   assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/archives\/<\/loc>/);
   assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/archives\/2026\/<\/loc>/);
+  assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/archives\/2026\/04\/<\/loc>/);
   assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/posts\/first-post\.html<\/loc>/);
   assert.match(sitemapXml, /<lastmod>2026-04-16T00:00:00\.000Z<\/lastmod>/);
   assert.match(sitemapXml, /<changefreq>weekly<\/changefreq>/);

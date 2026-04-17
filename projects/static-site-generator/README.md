@@ -16,7 +16,7 @@ This project shows practical compiler-style text processing, file-system automat
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
-- pages with `date` metadata automatically generate a dated `archives/` index plus yearly timeline pages for portfolio updates and project logs, with `archive: false` available for opt-outs
+- pages with `date` metadata automatically generate a dated `archives/` index plus yearly and monthly timeline pages for portfolio updates and project logs, with `archive: false` available for opt-outs
 - optional root-level `_site.json` metadata can generate deploy-ready `sitemap.xml` and `rss.xml` files with absolute site URLs for portfolio/blog hosting
 - presents fenced code blocks in richer portfolio-ready frames with language badges, optional file titles from fence metadata, line-number gutters, and copy-to-clipboard controls with accessible status feedback
 - turns GitHub-style blockquote markers such as `[!REVIEWER]` and `[!ARCHITECTURE]` into focused portfolio callout panels so code samples can carry concise “why this matters” notes
@@ -181,7 +181,7 @@ If you want deploy-ready discovery metadata for a hosted portfolio or blog, add 
 
 When `_site.json` is present, each build also emits `dist/sitemap.xml` plus `dist/rss.xml`. Sitemap entries use absolute URLs derived from `siteUrl`, exclude the generated `404.html` page, honor optional front matter such as `lastmod`, `changefreq`, and `priority`, and can opt individual pages out with `sitemap: false`. RSS items are generated from pages that include a `date` value, can be suppressed per page with `rss: false`, and inherit the channel title/description from `_site.json` (falling back to the home page when omitted). The reserved `_site.json` file is ignored during page discovery and static-asset copying.
 
-Pages with `date` metadata also generate `dist/archives/index.html` plus one yearly archive page under `dist/archives/<year>/index.html`. Those pages group entries into reverse-chronological month sections so portfolio updates, devlogs, and shipped slices are easier to browse. If a dated page should stay out of the generated timeline, set `archive: false` in front matter.
+Pages with `date` metadata also generate `dist/archives/index.html`, one yearly archive page under `dist/archives/<year>/index.html`, and one monthly landing page under `dist/archives/<year>/<month>/index.html`. The generated archive index links directly into those month pages, yearly pages keep their reverse-chronological month sections plus month-page handoffs, and monthly pages provide focused entry lists for portfolio updates, devlogs, and shipped slices. If a dated page should stay out of the generated timeline, set `archive: false` in front matter.
 
 Generated files are written to `dist/` and the CLI prints a short build summary. In watch mode, the same summary is reprinted after each detected rebuild so authors can confirm which pages were regenerated.
 
@@ -200,4 +200,4 @@ If you need to run the legacy mirrored entrypoint directly, `node --test test_st
 
 ## Future Improvements
 - optional theme presets or custom CSS hooks for different portfolio styles
-- richer archive layouts such as monthly landing pages, featured entries, or excerpt cards
+- richer archive layouts such as featured entries or excerpt cards inside archive pages
