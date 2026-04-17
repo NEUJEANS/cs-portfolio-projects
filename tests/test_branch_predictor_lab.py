@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import random
 import subprocess
 import sys
 import tempfile
@@ -20,7 +21,9 @@ spec.loader.exec_module(module)
 
 BranchRecord = module.BranchRecord
 GSharePredictor = module.GSharePredictor
+LocalHistoryPredictor = module.LocalHistoryPredictor
 OneBitPredictor = module.OneBitPredictor
+TournamentPredictor = module.TournamentPredictor
 TwoBitPredictor = module.TwoBitPredictor
 build_predictor = module.build_predictor
 compare_predictors = module.compare_predictors
@@ -69,11 +72,51 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertGreater(gshare.accuracy, bimodal.accuracy)
         self.assertEqual(gshare.final_state["final_history"], "0")
 
+    def test_local_history_learns_alternating_same_pc_pattern(self) -> None:
+        trace = [BranchRecord(address=0x140, taken=outcome) for outcome in [True, False] * 8]
+
+        bimodal = simulate_trace(trace, TwoBitPredictor(table_size=8))
+        local_history = simulate_trace(trace, LocalHistoryPredictor(table_size=8, history_bits=1))
+        gshare = simulate_trace(trace, GSharePredictor(table_size=8, history_bits=1))
+
+        self.assertEqual(local_history.mispredictions, 1)
+        self.assertEqual(local_history.mispredictions, gshare.mispredictions)
+        self.assertGreater(local_history.accuracy, bimodal.accuracy)
+
+    def test_tournament_matches_best_component_on_alternating_single_pc_pattern(self) -> None:
+        trace = [BranchRecord(address=0x140, taken=outcome) for outcome in [True, False] * 32]
+
+        tournament = simulate_trace(trace, TournamentPredictor(table_size=8, history_bits=1))
+        local_history = simulate_trace(trace, LocalHistoryPredictor(table_size=8, history_bits=1))
+        gshare = simulate_trace(trace, GSharePredictor(table_size=8, history_bits=1))
+        bimodal = simulate_trace(trace, TwoBitPredictor(table_size=8))
+
+        self.assertEqual(tournament.mispredictions, local_history.mispredictions)
+        self.assertEqual(tournament.mispredictions, gshare.mispredictions)
+        self.assertGreater(tournament.accuracy, bimodal.accuracy)
+
+    def test_tournament_chooser_can_shift_toward_global_history(self) -> None:
+        rng = random.Random(7)
+        trace: list[BranchRecord] = []
+        for _ in range(200):
+            driver_taken = rng.random() < 0.5
+            trace.append(BranchRecord(address=0x340, taken=driver_taken))
+            trace.append(BranchRecord(address=0x380, taken=driver_taken))
+
+        tournament = simulate_trace(trace, TournamentPredictor(table_size=8, history_bits=4))
+        local_history = simulate_trace(trace, LocalHistoryPredictor(table_size=8, history_bits=4))
+        gshare = simulate_trace(trace, GSharePredictor(table_size=8, history_bits=4))
+
+        self.assertGreater(gshare.accuracy, local_history.accuracy)
+        self.assertGreater(tournament.accuracy, local_history.accuracy)
+        self.assertGreaterEqual(tournament.final_state["trained_entries"], 1)
+        self.assertGreaterEqual(tournament.final_state["gshare_favored_entries"], 1)
+
     def test_compare_predictors_ranks_best_accuracy_first(self) -> None:
         trace = [BranchRecord(address=0x140, taken=outcome) for outcome in [True, False] * 8]
         results = compare_predictors(trace, table_size=8, history_bits=1)
 
-        self.assertEqual(results[0].predictor, "gshare")
+        self.assertIn(results[0].predictor, {"gshare", "local-history", "tournament"})
         self.assertLessEqual(results[-1].accuracy, results[1].accuracy)
         self.assertIn(results[-1].predictor, {"always-not-taken", "one-bit"})
 
@@ -131,8 +174,63 @@ class BranchPredictorLabTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["trace"], str(TRACE_PATH))
         self.assertEqual(payload["best_predictor"], payload["results"][0]["predictor"])
-        self.assertEqual(payload["results"][0]["predictor"], "gshare")
+        self.assertEqual(payload["results"][0]["predictor"], "local-history")
         self.assertEqual(payload["total_branches"], 24)
+
+    def test_cli_simulate_local_history_json_includes_snapshot(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "simulate",
+                str(TRACE_PATH),
+                "--predictor",
+                "local-history",
+                "--table-size",
+                "16",
+                "--history-bits",
+                "2",
+                "--json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["predictor"], "local-history")
+        self.assertEqual(payload["final_state"]["history_bits"], 2)
+        self.assertGreaterEqual(payload["final_state"]["active_histories"], 1)
+        self.assertIn("trained_patterns", payload["final_state"])
+
+    def test_cli_simulate_tournament_json_exposes_chooser_snapshot(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "simulate",
+                str(TRACE_PATH),
+                "--predictor",
+                "tournament",
+                "--table-size",
+                "16",
+                "--history-bits",
+                "2",
+                "--json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["predictor"], "tournament")
+        self.assertEqual(payload["final_state"]["history_bits"], 2)
+        self.assertIn("chooser_table", payload["final_state"])
+        self.assertIn("local_predictor", payload["final_state"])
+        self.assertIn("global_predictor", payload["final_state"])
+        chooser_total = sum(payload["final_state"]["chooser_table"].values())
+        self.assertEqual(chooser_total, 16)
 
     def test_cli_generate_json_writes_trace_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -168,6 +168,54 @@ class TwoBitPredictor(BranchPredictor):
         }
 
 
+class LocalHistoryPredictor(BranchPredictor):
+    name = "local-history"
+
+    def __init__(self, table_size: int = 16, history_bits: int = 4, default_counter: int = 2) -> None:
+        _validate_power_of_two(table_size, "table_size")
+        if history_bits < 1:
+            raise ValueError("history_bits must be at least 1")
+        if default_counter not in {0, 1, 2, 3}:
+            raise ValueError("default_counter must be between 0 and 3")
+        self.table_size = table_size
+        self.mask = table_size - 1
+        self.history_bits = history_bits
+        self.history_mask = (1 << history_bits) - 1
+        self.default_counter = default_counter
+        self.local_histories = [0] * table_size
+        self.pattern_table = [default_counter] * (1 << history_bits)
+
+    def _history_index(self, address: int) -> int:
+        return (address >> 2) & self.mask
+
+    def _pattern_index(self, address: int) -> int:
+        return self.local_histories[self._history_index(address)]
+
+    def predict(self, branch: BranchRecord) -> bool:
+        return self.pattern_table[self._pattern_index(branch.address)] >= 2
+
+    def update(self, branch: BranchRecord) -> None:
+        history_index = self._history_index(branch.address)
+        pattern_index = self.local_histories[history_index]
+        counter = self.pattern_table[pattern_index]
+        if branch.taken:
+            self.pattern_table[pattern_index] = min(3, counter + 1)
+        else:
+            self.pattern_table[pattern_index] = max(0, counter - 1)
+        self.local_histories[history_index] = ((pattern_index << 1) | int(branch.taken)) & self.history_mask
+
+    def snapshot(self) -> dict[str, Any]:
+        trained_patterns = sum(1 for value in self.pattern_table if value != self.default_counter)
+        active_histories = sum(1 for value in self.local_histories if value != 0)
+        return {
+            "table_size": self.table_size,
+            "history_bits": self.history_bits,
+            "trained_patterns": trained_patterns,
+            "active_histories": active_histories,
+            "default_counter": self.default_counter,
+        }
+
+
 class GSharePredictor(BranchPredictor):
     name = "gshare"
 
@@ -209,6 +257,71 @@ class GSharePredictor(BranchPredictor):
             "trained_entries": trained_entries,
             "default_counter": self.default_counter,
             "final_history": format(self.history, f"0{self.history_bits}b"),
+        }
+
+
+class TournamentPredictor(BranchPredictor):
+    name = "tournament"
+
+    def __init__(
+        self,
+        table_size: int = 16,
+        history_bits: int = 4,
+        default_chooser: int = 1,
+    ) -> None:
+        _validate_power_of_two(table_size, "table_size")
+        if default_chooser not in {0, 1, 2, 3}:
+            raise ValueError("default_chooser must be between 0 and 3")
+        self.table_size = table_size
+        self.mask = table_size - 1
+        self.history_bits = history_bits
+        self.default_chooser = default_chooser
+        self.local_predictor = LocalHistoryPredictor(table_size=table_size, history_bits=history_bits)
+        self.global_predictor = GSharePredictor(table_size=table_size, history_bits=history_bits)
+        self.chooser = [default_chooser] * table_size
+
+    def _index(self, address: int) -> int:
+        return (address >> 2) & self.mask
+
+    def _choose_global(self, address: int) -> bool:
+        return self.chooser[self._index(address)] >= 2
+
+    def predict(self, branch: BranchRecord) -> bool:
+        local_prediction = self.local_predictor.predict(branch)
+        global_prediction = self.global_predictor.predict(branch)
+        return global_prediction if self._choose_global(branch.address) else local_prediction
+
+    def update(self, branch: BranchRecord) -> None:
+        local_prediction = self.local_predictor.predict(branch)
+        global_prediction = self.global_predictor.predict(branch)
+        chooser_index = self._index(branch.address)
+
+        if local_prediction != global_prediction:
+            if global_prediction == branch.taken:
+                self.chooser[chooser_index] = min(3, self.chooser[chooser_index] + 1)
+            elif local_prediction == branch.taken:
+                self.chooser[chooser_index] = max(0, self.chooser[chooser_index] - 1)
+
+        self.local_predictor.update(branch)
+        self.global_predictor.update(branch)
+
+    def snapshot(self) -> dict[str, Any]:
+        trained_entries = sum(1 for value in self.chooser if value != self.default_chooser)
+        gshare_favored_entries = sum(1 for value in self.chooser if value >= 2)
+        return {
+            "table_size": self.table_size,
+            "history_bits": self.history_bits,
+            "trained_entries": trained_entries,
+            "default_chooser": self.default_chooser,
+            "gshare_favored_entries": gshare_favored_entries,
+            "chooser_table": {
+                "strongly_local": sum(1 for value in self.chooser if value == 0),
+                "weakly_local": sum(1 for value in self.chooser if value == 1),
+                "weakly_global": sum(1 for value in self.chooser if value == 2),
+                "strongly_global": sum(1 for value in self.chooser if value == 3),
+            },
+            "local_predictor": self.local_predictor.snapshot(),
+            "global_predictor": self.global_predictor.snapshot(),
         }
 
 
@@ -523,7 +636,9 @@ def compare_predictors(records: list[BranchRecord], table_size: int = 16, histor
         simulate_trace(records, AlwaysNotTakenPredictor()),
         simulate_trace(records, OneBitPredictor(table_size=table_size)),
         simulate_trace(records, TwoBitPredictor(table_size=table_size)),
+        simulate_trace(records, LocalHistoryPredictor(table_size=table_size, history_bits=history_bits)),
         simulate_trace(records, GSharePredictor(table_size=table_size, history_bits=history_bits)),
+        simulate_trace(records, TournamentPredictor(table_size=table_size, history_bits=history_bits)),
     ]
     return sorted(results, key=lambda item: (-item.accuracy, item.mispredictions, item.predictor))
 
@@ -538,8 +653,12 @@ def build_predictor(name: str, table_size: int, history_bits: int) -> BranchPred
         return OneBitPredictor(table_size=table_size)
     if normalized == "two-bit":
         return TwoBitPredictor(table_size=table_size)
+    if normalized == "local-history":
+        return LocalHistoryPredictor(table_size=table_size, history_bits=history_bits)
     if normalized == "gshare":
         return GSharePredictor(table_size=table_size, history_bits=history_bits)
+    if normalized == "tournament":
+        return TournamentPredictor(table_size=table_size, history_bits=history_bits)
     raise ValueError(f"unsupported predictor: {name}")
 
 
@@ -569,7 +688,7 @@ def _build_parser() -> argparse.ArgumentParser:
     common_help = {
         "trace": {"help": "Path to a trace file with '<address> <outcome>' lines."},
         "table_size": {"help": "Predictor table size (power of two).", "type": int, "default": 16},
-        "history_bits": {"help": "Global history bits for gshare.", "type": int, "default": 4},
+        "history_bits": {"help": "History-register bits for local-history, gshare, and tournament predictors.", "type": int, "default": 4},
     }
 
     compare_parser = subparsers.add_parser("compare", help="Run a fixed predictor suite and rank the results.")
@@ -582,7 +701,7 @@ def _build_parser() -> argparse.ArgumentParser:
     simulate_parser.add_argument("trace", **common_help["trace"])
     simulate_parser.add_argument(
         "--predictor",
-        choices=["always-taken", "always-not-taken", "one-bit", "two-bit", "gshare"],
+        choices=["always-taken", "always-not-taken", "one-bit", "two-bit", "local-history", "gshare", "tournament"],
         default="two-bit",
         help="Predictor to simulate.",
     )

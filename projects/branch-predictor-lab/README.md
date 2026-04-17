@@ -12,7 +12,9 @@ A compact computer-architecture portfolio project for simulating classic branch 
 - `always-not-taken`
 - `one-bit` bimodal table
 - `two-bit` saturating-counter bimodal table
+- `local-history` two-level predictor with per-PC history registers
 - `gshare` with XOR-based global history
+- `tournament` chooser that combines local-history and gshare
 
 ## Implemented synthetic workloads
 - `loop-heavy` — repeated loop backedges with explicit exits so one-bit vs two-bit behavior is easy to show
@@ -72,6 +74,8 @@ Example comparison output:
 ```text
 predictor          accuracy   mispreds   mpki    hardest branch
 ----------------  ---------  ---------  ------  ---------------
+local-history       75.00%          6   250.0  0x100
+tournament          75.00%          6   250.0  0x100
 gshare              70.83%          7   291.7  0x100
 always-taken        62.50%          9   375.0  0x140
 two-bit             62.50%          9   375.0  0x140
@@ -93,7 +97,7 @@ Inspect one specific predictor:
 ```bash
 python3 projects/branch-predictor-lab/branch_predictor.py simulate \
   projects/branch-predictor-lab/sample_trace.txt \
-  --predictor gshare \
+  --predictor tournament \
   --history-bits 2 \
   --json
 ```
@@ -136,16 +140,19 @@ Run the tests:
 - branch tables are indexed with `(pc >> 2)` so aligned instruction addresses collapse the low two zero bits
 - the one-bit predictor flips immediately after a miss, which makes loop-exit behavior easy to understand but noisy on phase changes
 - the two-bit predictor uses the standard 2-bit saturating states (`00`, `01`, `10`, `11`) and defaults to weakly taken
+- the local-history predictor keeps a short per-PC history register and uses that pattern to pick a saturating counter, which makes repeated branch-local motifs easy to demonstrate
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
+- the tournament predictor tracks when local-history vs gshare is doing better for a given PC and exposes chooser-state snapshots so the hybrid behavior is inspectable in JSON output
 - the synthetic generator is intentionally lightweight and reproducible so you can build demos, tests, and benchmark sweeps without needing a large external trace corpus
 
 ## Portfolio talking points
 - explain why one-bit predictors mispredict both loop exit and loop re-entry while two-bit predictors usually miss only on the exit
-- use the `tournament-style` workload to show why some branches want local bias tracking while others benefit from recent-history correlation
+- use the `tournament-style` workload to show why some branches want local-history tracking while others benefit from recent-history correlation
+- compare `local-history`, `gshare`, and `tournament` on the same trace to talk through hybrid prediction instead of stopping at bimodal counters
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
-- extend the simulator with tournament or perceptron prediction if you want a stronger architecture capstone story
+- extend the simulator with perceptron prediction if you want a stronger architecture capstone story
 
 ## Future improvements
 - render Markdown/SVG predictor comparison cards for the docs artifact gallery
-- add a perceptron or explicit tournament predictor follow-up for advanced architecture coverage
+- add a perceptron predictor follow-up for advanced architecture coverage
 - add trace-family sweep commands that run multiple generated workloads in one shot
