@@ -13,8 +13,9 @@
 - [x] Add a compact docs index page that links benchmark artifacts, plugin docs, and inspection diffs together
 - [x] Add a richer observability-style plugin example with service-latency summaries and incident/batch benchmark families
 - [x] Add a sessionization analytics plugin example with product-usage benchmark families and reviewer-friendly session summaries
+- [x] Add a streaming-window telemetry plugin example with deterministic five-minute buckets, IoT/live-ops benchmark families, and publishable docs artifacts
 
 ## Next candidate slices
-- [ ] Add another richer plugin example beyond score aggregation/sessionization, such as streaming-window summaries
+- [ ] Add another richer plugin example beyond the current score/latency/sessionization/windowing set, such as rolling-window joins or watermark-aware summaries
 - [ ] Add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases
 - [ ] Add docs-site navigation sidebars or cross-project landing pages if the artifact surface keeps growing

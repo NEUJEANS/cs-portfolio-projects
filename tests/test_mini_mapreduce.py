@@ -14,6 +14,7 @@ MODULE_PATH = PROJECT_DIR / "mapreduce.py"
 PLUGIN_PATH = PROJECT_DIR / "plugins_top_score.py"
 LATENCY_PLUGIN_PATH = PROJECT_DIR / "plugins_service_latency.py"
 SESSION_PLUGIN_PATH = PROJECT_DIR / "plugins_sessionization.py"
+STREAMING_PLUGIN_PATH = PROJECT_DIR / "plugins_streaming_window.py"
 
 spec = importlib.util.spec_from_file_location("mini_mapreduce_lab", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
@@ -123,6 +124,32 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             )
             self.assertEqual(result.output["bob"]["session_count"], 2)
             self.assertTrue(str(result.plugin).endswith("plugins_sessionization.py"))
+
+    def test_plugin_job_can_emit_streaming_window_summaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "stream.csv"
+            source.write_text(
+                "turnstile-east,2026-04-17T09:01:00Z,10\n"
+                "turnstile-east,2026-04-17T09:03:00Z,16\n"
+                "turnstile-east,2026-04-17T09:07:00Z,22\n"
+                "turnstile-east,2026-04-17T09:09:00Z,28\n"
+                "camera-lobby,2026-04-17T09:02:00Z,5\n",
+                encoding="utf-8",
+            )
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=STREAMING_PLUGIN_PATH,
+            )
+
+            self.assertEqual(result.job, "plugin-streaming-window")
+            self.assertEqual(result.output["turnstile-east@2026-04-17T09:00:00Z"]["avg_value"], 13.0)
+            self.assertEqual(result.output["turnstile-east@2026-04-17T09:05:00Z"]["max_value"], 28.0)
+            self.assertEqual(result.output["camera-lobby@2026-04-17T09:00:00Z"]["count"], 1)
+            self.assertTrue(str(result.plugin).endswith("plugins_streaming_window.py"))
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -488,6 +515,26 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.benchmark_note_annotations[0]["title"], "Release lead war room")
         self.assertEqual(result.benchmark_note_annotations[1]["title"], "QA desk verification loop")
         self.assertIn("release-lead", result.benchmark_note_annotations[0]["hotspot_keys"])
+
+    def test_plugin_streaming_window_benchmark_reports_iot_burst_metadata(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=STREAMING_PLUGIN_PATH,
+            dataset_family="iot-burst",
+        )
+
+        self.assertEqual(result.job, "plugin-streaming-window")
+        self.assertEqual(result.available_dataset_families, ["default", "iot-burst", "live-ops"])
+        self.assertEqual(result.plugin_mapper, "plugins_streaming_window.map_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_streaming_window.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Turnstile rush-hour burst")
+        self.assertEqual(result.benchmark_note_annotations[1]["title"], "Lobby camera spillover")
+        self.assertIn("turnstile-east@2026-04-17T09:10:00Z", result.benchmark_note_annotations[0]["hotspot_keys"])
 
     def test_plugin_benchmark_supports_plugin_defined_note_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

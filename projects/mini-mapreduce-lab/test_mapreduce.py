@@ -164,6 +164,46 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(result.output["bob"]["session_count"], 2)
             self.assertEqual(result.output["bob"]["longest_session_minutes"], 0.0)
 
+    def test_plugin_job_can_emit_streaming_window_summary_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "stream.csv"
+            source.write_text(
+                "turnstile-east,2026-04-17T09:01:00Z,10\n"
+                "turnstile-east,2026-04-17T09:03:00Z,16\n"
+                "turnstile-east,2026-04-17T09:07:00Z,22\n"
+                "turnstile-east,2026-04-17T09:09:00Z,28\n"
+                "camera-lobby,2026-04-17T09:02:00Z,5\n",
+                encoding="utf-8",
+            )
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=PROJECT_DIR / "plugins_streaming_window.py",
+            )
+
+            self.assertEqual(result.job, "plugin-streaming-window")
+            self.assertEqual(
+                result.output["turnstile-east@2026-04-17T09:00:00Z"],
+                {
+                    "stream": "turnstile-east",
+                    "window_start": "2026-04-17T09:00:00Z",
+                    "window_end": "2026-04-17T09:05:00Z",
+                    "count": 2,
+                    "avg_value": 13.0,
+                    "min_value": 10.0,
+                    "max_value": 16.0,
+                    "event_rate_per_minute": 0.4,
+                    "first_event_at": "2026-04-17T09:01:00Z",
+                    "last_event_at": "2026-04-17T09:03:00Z",
+                    "span_minutes": 2.0,
+                },
+            )
+            self.assertEqual(result.output["turnstile-east@2026-04-17T09:05:00Z"]["count"], 2)
+            self.assertEqual(result.output["camera-lobby@2026-04-17T09:00:00Z"]["avg_value"], 5.0)
+
     def test_plugin_job_rejects_non_json_serializable_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "scores.csv"
@@ -587,7 +627,7 @@ class MiniMapReduceTests(unittest.TestCase):
 
         self.assertEqual(
             [Path(item).name for item in refs],
-            ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_top_score.py"],
+            ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_streaming_window.py", "plugins_top_score.py"],
         )
 
     def test_cli_catalog_plugins_writes_json_markdown_and_html(self) -> None:
@@ -618,12 +658,12 @@ class MiniMapReduceTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             markdown = report_output.read_text(encoding="utf-8")
             html_payload = html_output.read_text(encoding="utf-8")
-            self.assertEqual(payload["plugin_count"], 4)
+            self.assertEqual(payload["plugin_count"], 5)
             self.assertEqual(
                 [Path(item["plugin"]).name for item in payload["plugins"]],
-                ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_top_score.py"],
+                ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_streaming_window.py", "plugins_top_score.py"],
             )
-            self.assertEqual(len(payload["diffs"]), 3)
+            self.assertEqual(len(payload["diffs"]), 4)
             self.assertIn("# Mini MapReduce plugin inspection", markdown)
             self.assertIn("## Catalog quick links", markdown)
             self.assertIn("plugin-average-score", markdown)
@@ -1309,6 +1349,31 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(result.benchmark_note_annotations[0]["severity"], "risk")
         self.assertIn("release-lead", result.benchmark_note_annotations[0]["hotspot_keys"])
         self.assertTrue(all(row["dataset_family"] == "launch-day" for row in result.heatmap_rows))
+
+    def test_plugin_streaming_window_benchmark_surfaces_iot_burst_annotations(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_streaming_window.py",
+            dataset_family="iot-burst",
+        )
+
+        self.assertEqual(result.job, "plugin-streaming-window")
+        self.assertEqual(result.dataset_family, "iot-burst")
+        self.assertEqual(result.available_dataset_families, ["default", "iot-burst", "live-ops"])
+        self.assertEqual(result.plugin_mapper, "plugins_streaming_window.map_records")
+        self.assertEqual(result.plugin_reducer, "plugins_streaming_window.reduce_key")
+        self.assertEqual(result.plugin_combiner, "plugins_streaming_window.combine_values")
+        self.assertEqual(result.plugin_benchmark_generator, "plugins_streaming_window.benchmark_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_streaming_window.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Turnstile rush-hour burst")
+        self.assertEqual(result.benchmark_note_annotations[0]["severity"], "risk")
+        self.assertIn("turnstile-east@2026-04-17T09:10:00Z", result.benchmark_note_annotations[0]["hotspot_keys"])
+        self.assertTrue(all(row["dataset_family"] == "iot-burst" for row in result.heatmap_rows))
 
     def test_benchmark_json_omits_annotation_view_when_unused(self) -> None:
         result = benchmark_job(
