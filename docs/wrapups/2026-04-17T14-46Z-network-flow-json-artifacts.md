@@ -5,6 +5,7 @@
 - Added portable `--json-out` support for flow, matching, weighted-assignment, generic min-cost-flow, and benchmark commands.
 - Published committed JSON companions under `docs/artifacts/network-flow-lab/` and linked them from the assignment/cost artifact pages, the optimization gallery, the benchmark gallery, the top-level showcase, the project README, and the artifact index.
 - Kept the JSON artifacts publish-safe by rebasing path-like fields to artifact-relative paths so the committed payloads do not leak absolute local filesystem paths.
+- Regenerated the published proof/benchmark bundles from one stable command set so the linked JSON, Markdown, SVG, and HTML artifacts line up with each other instead of drifting across separate refreshes.
 
 ## Tests / reviews run
 - `python3 -m py_compile projects/network-flow-lab/network_flow.py tests/test_network_flow_lab.py`
@@ -23,9 +24,11 @@
 - Review pass 1: portable-path audit on committed JSON artifacts; found `json_output` stayed cwd-relative inside published files, then fixed serialization so path-like fields are rebased relative to the artifact file itself.
 - Review pass 2: JSON-link coverage audit across README, artifact pages, galleries, and showcase.
 - Review pass 3: HTML local-link validation script over `artifact-gallery.html`, `benchmark-gallery.html`, `showcase.html`, `sample-assignment-artifact-page.html`, and `sample-cost-flow-artifact-page.html` verified every local `href`/`src` target exists.
+- Final consistency refresh: regenerated the committed proof/benchmark artifacts with stable parameters (`dinic` for the flow/matching demos; original seeded benchmark suites for `dag`, `dense`, and `layered`) so the published Markdown/SVG/JSON companions match.
 
-## Implementation commit
+## Implementation commits
 - `dba141c` — `feat(network-flow-lab): add JSON artifact companions`
+- `1fce7da` — `fix(network-flow-lab): align published artifact bundles`
 
 ## Next step
 - Add a small input-editor/replay surface to the showcase so reviewers can tweak a sample graph and compare a fresh JSON payload against the committed artifacts.
