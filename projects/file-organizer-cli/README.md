@@ -19,7 +19,7 @@ A Node.js CLI that organizes loose files into extension-based folders with colli
 - supports `--list-presets` and `--write-preset <name> <path>` so teams can export and share reusable bucket JSON files
 - supports `--config buckets.json` for custom buckets, extension overrides, and custom fallback bucket names
 - supports `--lint-config buckets.json` so shared bucket JSON can be validated in CI before teammates run a real organize pass
-- supports `--fix-config buckets.json` and `--write-normalized-config source.json destination.json` so teams can auto-resolve lint warnings into canonical shareable JSON
+- supports `--preview-normalized-config`, `--fix-config`, and `--write-normalized-config` so teams can review and then apply canonical shared-config cleanup
 - preserves existing files by renaming collisions like `notes (1).txt`
 - supports `--dry-run` to preview work without changing the file system
 - supports `--recursive` to organize nested folders while skipping already-organized bucket folders
@@ -40,6 +40,7 @@ node organizer.js ~/Downloads --config ./buckets.json --recursive
 node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json
 node organizer.js --lint-config ./shared/coursework-buckets.json
 node organizer.js --lint-config ./shared/coursework-buckets.json --json
+node organizer.js --preview-normalized-config ./shared/coursework-buckets.json
 node organizer.js --fix-config ./shared/coursework-buckets.json
 node organizer.js --write-normalized-config ./shared/coursework-buckets.raw.json ./shared/coursework-buckets.json --force
 node organizer.js --undo ./artifacts/downloads-run.json
@@ -144,6 +145,39 @@ warning 2: Unknown top-level key "owner" will be ignored by the organizer.
 No errors found.
 ```
 
+## Normalization preview
+Use `--preview-normalized-config` when you want a review-friendly summary of what the canonical rewrite would change before touching the file. This is useful in code review, CI notes, or teammate handoffs where you want to inspect the cleanup plan first.
+
+```bash
+node organizer.js --preview-normalized-config ./shared/coursework-buckets.json
+node organizer.js --preview-normalized-config ./shared/coursework-buckets.json --json
+```
+
+The preview report highlights:
+- whether a rewrite is needed at all
+- which keys, bucket names, or extensions will change or disappear
+- the canonical fallback bucket, bucket list, and `extendDefaults` value that a real write would produce
+- whether you should follow up with `--fix-config` or `--write-normalized-config`
+
+Example preview output:
+```text
+action: preview-normalized-config
+config: /home/student/shared/coursework-buckets.json
+status: valid
+rewrite needed: yes
+changes: 4
+warnings: 3
+errors: 0
+normalized fallback bucket: misc
+extends defaults: yes
+custom buckets: datasets, slides
+change 1: Remove unknown top-level key "owner".
+change 2: Normalize fallback bucket " misc " -> "misc".
+change 3: Normalize extension for bucket datasets: "CSV" -> ".csv".
+change 4: Add default extendDefaults=true.
+Preview only. Use --fix-config or --write-normalized-config to apply these changes.
+```
+
 ## Normalized config writers
 Use the normalized-config helpers when you want the CLI to clean up a warning-heavy shared config before it gets committed.
 
@@ -201,5 +235,5 @@ npm test
 
 ## Future Improvements
 - support richer matching rules beyond extensions, such as basename patterns or MIME-aware detection
-- add a config-diff summary or autofix preview mode before writing normalized shared configs
+- add small publishable demo artifacts that show config preview output beside before/after folder trees
 - optionally sign or checksum manifests for tamper-evident bulk-operation history

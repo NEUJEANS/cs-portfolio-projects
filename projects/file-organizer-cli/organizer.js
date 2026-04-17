@@ -445,6 +445,149 @@ async function lintBucketConfig(configPath) {
   };
 }
 
+function pushUniqueChange(changes, message) {
+  if (!changes.includes(message)) {
+    changes.push(message);
+  }
+}
+
+function buildNormalizationPreviewChanges(parsed, normalizedConfig) {
+  const changes = [];
+
+  for (const key of Object.keys(parsed)) {
+    if (!CONFIG_ALLOWED_KEYS.includes(key)) {
+      pushUniqueChange(changes, `Remove unknown top-level key "${key}".`);
+    }
+  }
+
+  if (parsed.buckets == null) {
+    pushUniqueChange(changes, 'Add an explicit empty "buckets" object for the canonical shared-config format.');
+  }
+
+  if (parsed.fallbackBucket == null) {
+    pushUniqueChange(changes, `Add default fallback bucket "${normalizedConfig.fallbackBucket}".`);
+  } else if (parsed.fallbackBucket !== normalizedConfig.fallbackBucket) {
+    pushUniqueChange(changes, `Normalize fallback bucket "${parsed.fallbackBucket}" -> "${normalizedConfig.fallbackBucket}".`);
+  }
+
+  if (parsed.extendDefaults == null) {
+    pushUniqueChange(changes, `Add default extendDefaults=${normalizedConfig.extendDefaults}.`);
+  }
+
+  if (parsed.buckets && !Array.isArray(parsed.buckets) && typeof parsed.buckets === 'object') {
+    const rawBucketOrder = [];
+
+    for (const [rawBucketName, rawExtensions] of Object.entries(parsed.buckets)) {
+      const bucketName = normalizeBucketName(rawBucketName, 'bucket name');
+      rawBucketOrder.push(bucketName);
+      if (rawBucketName !== bucketName) {
+        pushUniqueChange(changes, `Normalize bucket name "${rawBucketName}" -> "${bucketName}".`);
+      }
+
+      if (!Array.isArray(rawExtensions)) {
+        continue;
+      }
+
+      const encounteredExtensions = [];
+      const seenExtensions = new Set();
+      for (const rawExtension of rawExtensions) {
+        const normalizedExtension = normalizeExtension(rawExtension, bucketName);
+        if (rawExtension !== normalizedExtension) {
+          pushUniqueChange(changes, `Normalize extension for bucket ${bucketName}: "${rawExtension}" -> "${normalizedExtension}".`);
+        }
+        if (seenExtensions.has(normalizedExtension)) {
+          pushUniqueChange(changes, `Remove duplicate extension "${normalizedExtension}" from bucket ${bucketName}.`);
+          continue;
+        }
+        seenExtensions.add(normalizedExtension);
+        encounteredExtensions.push(normalizedExtension);
+      }
+
+      const canonicalExtensions = normalizedConfig.buckets[bucketName] || [];
+      if (JSON.stringify(encounteredExtensions) !== JSON.stringify(canonicalExtensions)) {
+        pushUniqueChange(changes, `Sort extensions for bucket ${bucketName} into canonical order.`);
+      }
+    }
+
+    if (JSON.stringify(rawBucketOrder) !== JSON.stringify(Object.keys(normalizedConfig.buckets))) {
+      pushUniqueChange(changes, 'Sort custom bucket names into canonical order.');
+    }
+  }
+
+  if (JSON.stringify(parsed) !== JSON.stringify(normalizedConfig) && changes.length === 0) {
+    pushUniqueChange(changes, 'Rewrite the config into canonical JSON ordering.');
+  }
+
+  return changes;
+}
+
+async function previewNormalizedBucketConfig(configPath) {
+  const resolvedPath = path.resolve(configPath);
+  let raw;
+
+  try {
+    raw = await fs.readFile(resolvedPath, 'utf8');
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return {
+        action: 'preview-normalized-config',
+        configPath: resolvedPath,
+        valid: false,
+        errors: [`Bucket config file not found: ${resolvedPath}`],
+        warnings: [],
+        changes: [],
+        rewriteNeeded: false,
+        normalizedConfig: null,
+      };
+    }
+    throw error;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return {
+      action: 'preview-normalized-config',
+      configPath: resolvedPath,
+      valid: false,
+      errors: [`Bucket config file must contain valid JSON: ${resolvedPath}`],
+      warnings: [],
+      changes: [],
+      rewriteNeeded: false,
+      normalizedConfig: null,
+    };
+  }
+
+  const lintResult = await lintBucketConfig(resolvedPath);
+  if (!lintResult.valid) {
+    return {
+      action: 'preview-normalized-config',
+      configPath: resolvedPath,
+      valid: false,
+      errors: lintResult.errors,
+      warnings: lintResult.warnings,
+      changes: [],
+      rewriteNeeded: false,
+      normalizedConfig: null,
+    };
+  }
+
+  const normalizedConfig = buildNormalizedConfigPayload(lintResult.normalizedConfig);
+  const changes = buildNormalizationPreviewChanges(parsed, normalizedConfig);
+
+  return {
+    action: 'preview-normalized-config',
+    configPath: resolvedPath,
+    valid: true,
+    errors: [],
+    warnings: lintResult.warnings,
+    changes,
+    rewriteNeeded: JSON.stringify(parsed) !== JSON.stringify(normalizedConfig),
+    normalizedConfig,
+  };
+}
+
 async function writeNormalizedBucketConfig(configPath, destinationPath, options = {}) {
   const settings = {
     force: false,
@@ -764,6 +907,7 @@ function parseArgs(argv) {
     undoManifest: null,
     configPath: null,
     lintConfigPath: null,
+    previewConfigPath: null,
     fixConfigPath: null,
     writeNormalizedConfigSource: null,
     writeNormalizedConfigDestination: null,
@@ -812,6 +956,13 @@ function parseArgs(argv) {
         throw new Error('Expected a path after --lint-config');
       }
       options.lintConfigPath = nextArg;
+      index += 1;
+    } else if (arg === '--preview-normalized-config') {
+      const nextArg = args[index + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Expected a path after --preview-normalized-config');
+      }
+      options.previewConfigPath = nextArg;
       index += 1;
     } else if (arg === '--fix-config') {
       const nextArg = args[index + 1];
@@ -896,15 +1047,23 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --lint-config');
   }
 
-  if (options.lintConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.lintConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--lint-config cannot be combined with organize, undo, preset, or normalized-config-write flags');
+  }
+
+  if (options.previewConfigPath && targetDirExplicit) {
+    throw new Error('Target directory cannot be combined with --preview-normalized-config');
+  }
+
+  if (options.previewConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+    throw new Error('--preview-normalized-config cannot be combined with organize, undo, lint, preset, or normalized-config-write flags');
   }
 
   if (options.fixConfigPath && targetDirExplicit) {
     throw new Error('Target directory cannot be combined with --fix-config');
   }
 
-  if (options.fixConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.fixConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--fix-config cannot be combined with organize, undo, lint, preset, or normalized-config-export flags');
   }
 
@@ -912,7 +1071,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --write-normalized-config');
   }
 
-  if (options.writeNormalizedConfigSource && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.presetName || options.listPresets || options.writePresetName)) {
+  if (options.writeNormalizedConfigSource && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.presetName || options.listPresets || options.writePresetName)) {
     throw new Error('--write-normalized-config cannot be combined with organize, undo, lint, or preset flags');
   }
 
@@ -920,7 +1079,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --list-presets');
   }
 
-  if (options.listPresets && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.writePresetName || options.force)) {
+  if (options.listPresets && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.writePresetName || options.force)) {
     throw new Error('--list-presets only supports optional --json output');
   }
 
@@ -928,7 +1087,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --write-preset');
   }
 
-  if (options.writePresetName && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets)) {
+  if (options.writePresetName && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets)) {
     throw new Error('--write-preset cannot be combined with organize, lint, normalized-config, or undo flags');
   }
 
@@ -1055,6 +1214,42 @@ function formatLintConfigTextReport(result) {
   return lines.join('\n');
 }
 
+function formatPreviewNormalizedConfigTextReport(result) {
+  const lines = [
+    'action: preview-normalized-config',
+    `config: ${result.configPath}`,
+    `status: ${result.valid ? 'valid' : 'invalid'}`,
+    `rewrite needed: ${result.rewriteNeeded ? 'yes' : 'no'}`,
+    `changes: ${result.changes.length}`,
+    `warnings: ${result.warnings.length}`,
+    `errors: ${result.errors.length}`,
+  ];
+
+  if (result.normalizedConfig) {
+    lines.push(`normalized fallback bucket: ${result.normalizedConfig.fallbackBucket}`);
+    lines.push(`extends defaults: ${result.normalizedConfig.extendDefaults ? 'yes' : 'no'}`);
+    lines.push(`custom buckets: ${Object.keys(result.normalizedConfig.buckets).join(', ') || '(none)'}`);
+  }
+
+  result.changes.forEach((change, index) => {
+    lines.push(`change ${index + 1}: ${change}`);
+  });
+  result.warnings.forEach((warning, index) => {
+    lines.push(`warning ${index + 1}: ${warning}`);
+  });
+  result.errors.forEach((error, index) => {
+    lines.push(`error ${index + 1}: ${error}`);
+  });
+
+  if (result.valid) {
+    lines.push(result.rewriteNeeded
+      ? 'Preview only. Use --fix-config or --write-normalized-config to apply these changes.'
+      : 'Config is already canonical.');
+  }
+
+  return lines.join('\n');
+}
+
 function formatWriteNormalizedConfigTextReport(result) {
   const lines = [
     'action: write-normalized-config',
@@ -1087,6 +1282,9 @@ function formatTextReport(result) {
   if (result.action === 'lint-config') {
     return formatLintConfigTextReport(result);
   }
+  if (result.action === 'preview-normalized-config') {
+    return formatPreviewNormalizedConfigTextReport(result);
+  }
   if (result.action === 'write-normalized-config') {
     return formatWriteNormalizedConfigTextReport(result);
   }
@@ -1102,6 +1300,7 @@ async function main(argv = process.argv.slice(2)) {
     console.log('       node organizer.js --list-presets [--json]');
     console.log('       node organizer.js --write-preset preset-name destination.json [--force] [--json]');
     console.log('       node organizer.js --lint-config buckets.json [--json]');
+    console.log('       node organizer.js --preview-normalized-config buckets.json [--json]');
     console.log('       node organizer.js --fix-config buckets.json [--json]');
     console.log('       node organizer.js --write-normalized-config source.json destination.json [--force] [--json]');
     return;
@@ -1123,6 +1322,8 @@ async function main(argv = process.argv.slice(2)) {
       options.writeNormalizedConfigDestination,
       { force: options.force },
     );
+  } else if (options.previewConfigPath) {
+    result = await previewNormalizedBucketConfig(options.previewConfigPath);
   } else if (options.fixConfigPath) {
     result = await writeNormalizedBucketConfig(options.fixConfigPath, options.fixConfigPath);
   } else if (options.lintConfigPath) {
@@ -1151,7 +1352,7 @@ async function main(argv = process.argv.slice(2)) {
     console.log(formatTextReport(result));
   }
 
-  if (result.action === 'lint-config' && !result.valid) {
+  if ((result.action === 'lint-config' || result.action === 'preview-normalized-config') && !result.valid) {
     process.exitCode = 1;
   }
 }
@@ -1183,6 +1384,7 @@ module.exports = {
   writePresetConfig,
   loadBucketConfig,
   lintBucketConfig,
+  previewNormalizedBucketConfig,
   writeNormalizedBucketConfig,
   describeBucketConfig,
   bucketFor,
