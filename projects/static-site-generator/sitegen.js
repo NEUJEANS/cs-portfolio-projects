@@ -18,6 +18,11 @@ const CALLOUT_DEFINITIONS = {
   tip: { label: 'Tip', icon: '💡', tone: 'tip' },
   warning: { label: 'Warning', icon: '⚠️', tone: 'warning' },
 };
+const COMPARISON_PANEL_DEFINITIONS = {
+  before: { label: 'Before', eyebrow: 'Baseline', tone: 'before' },
+  after: { label: 'After', eyebrow: 'Improved', tone: 'after' },
+  delta: { label: 'Delta', eyebrow: 'Impact', tone: 'delta' },
+};
 
 function parseFrontMatter(source) {
   const normalized = source.replace(/^\uFEFF/, '');
@@ -273,6 +278,21 @@ function inlineMarkdown(text, page) {
   return html;
 }
 
+function parseNamedFields(rawValue = '') {
+  const fields = {};
+  const fieldPattern = /([a-zA-Z0-9_-]+)=(\".*?\"|'.*?'|[^\s]+)/g;
+
+  for (const match of String(rawValue).matchAll(fieldPattern)) {
+    const key = match[1].toLowerCase();
+    const value = stripQuotes(match[2]);
+    if (value) {
+      fields[key] = value;
+    }
+  }
+
+  return fields;
+}
+
 function parseCodeFenceInfo(rawInfo = '') {
   const info = {
     language: '',
@@ -291,18 +311,23 @@ function parseCodeFenceInfo(rawInfo = '') {
     remainder = trimmed.slice(languageMatch[0].length).trim();
   }
 
-  const fieldPattern = /([a-zA-Z0-9_-]+)=(".*?"|'.*?'|[^\s]+)/g;
-  for (const match of remainder.matchAll(fieldPattern)) {
-    const key = match[1].toLowerCase();
-    const value = stripQuotes(match[2]);
+  for (const [key, value] of Object.entries(parseNamedFields(remainder))) {
     if (key === 'title' || key === 'file' || key === 'filename') {
       info.title = value;
-    } else if (value) {
+    } else {
       info[key] = value;
     }
   }
 
   return info;
+}
+
+function parseComparisonFenceInfo(rawInfo = '') {
+  const fields = parseNamedFields(rawInfo);
+  return {
+    title: fields.title || '',
+    summary: fields.summary || fields.description || '',
+  };
 }
 
 function formatCodeLanguageLabel(language) {
@@ -491,32 +516,128 @@ function parseCalloutMarker(line) {
   };
 }
 
-function renderBlockquote(lines, page) {
+function trimBlankLines(lines) {
   const normalizedLines = Array.isArray(lines) ? [...lines] : [];
 
   while (normalizedLines.length && !normalizedLines[0].trim()) {
     normalizedLines.shift();
   }
-
-  const marker = parseCalloutMarker(normalizedLines[0]);
-  if (!marker) {
-    return `<blockquote>${markdownToHtml(normalizedLines.join('\n'), page)}</blockquote>`;
+  while (normalizedLines.length && !normalizedLines[normalizedLines.length - 1].trim()) {
+    normalizedLines.pop();
   }
 
-  const bodyLines = normalizedLines.slice(1);
-  while (bodyLines.length && !bodyLines[0].trim()) {
-    bodyLines.shift();
-  }
-  while (bodyLines.length && !bodyLines[bodyLines.length - 1].trim()) {
-    bodyLines.pop();
-  }
+  return normalizedLines;
+}
 
+function renderCallout(marker, bodyLines, page) {
   const titleHtml = marker.title ? `<p class="callout__title">${inlineMarkdown(marker.title, page)}</p>` : '';
   const bodyHtml = bodyLines.length ? `<div class="callout__body">${markdownToHtml(bodyLines.join('\n'), page)}</div>` : '';
   const tone = escapeHtml(marker.tone || marker.type || 'note');
   const type = escapeHtml(marker.type || 'note');
 
   return `<aside class="callout callout--${tone}" data-callout-type="${type}"><div class="callout__header"><p class="callout__eyebrow"><span class="callout__icon" aria-hidden="true">${escapeHtml(marker.icon || 'ℹ')}</span><span>${escapeHtml(marker.label)}</span></p>${titleHtml}</div>${bodyHtml}</aside>`;
+}
+
+function renderBlockquote(lines, page) {
+  const normalizedLines = trimBlankLines(lines);
+  const marker = parseCalloutMarker(normalizedLines[0]);
+  if (!marker) {
+    return `<blockquote>${markdownToHtml(normalizedLines.join('\n'), page)}</blockquote>`;
+  }
+
+  return renderCallout(marker, trimBlankLines(normalizedLines.slice(1)), page);
+}
+
+function resolveComparisonPanelDefinition(rawType) {
+  const normalized = normalizeCalloutType(rawType);
+  return normalized && COMPARISON_PANEL_DEFINITIONS[normalized]
+    ? { type: normalized, ...(COMPARISON_PANEL_DEFINITIONS[normalized]) }
+    : null;
+}
+
+function parseComparisonBlock(lines, fenceInfo = {}) {
+  const normalizedLines = Array.isArray(lines) ? [...lines] : [];
+  const introLines = [];
+  const panels = [];
+  let currentPanel = null;
+
+  const flushPanel = () => {
+    if (!currentPanel) return;
+    const bodyLines = trimBlankLines(currentPanel.lines);
+    if (bodyLines.length) {
+      panels.push({
+        ...currentPanel,
+        title: currentPanel.title || currentPanel.label,
+        bodyLines,
+      });
+    }
+    currentPanel = null;
+  };
+
+  for (const rawLine of normalizedLines) {
+    const trimmed = rawLine.trim();
+    const sectionMatch = /^::([a-zA-Z0-9_-]+)::(?:\s+(.*))?$/.exec(trimmed);
+    const definition = sectionMatch ? resolveComparisonPanelDefinition(sectionMatch[1]) : null;
+
+    if (definition) {
+      flushPanel();
+      currentPanel = {
+        ...definition,
+        title: (sectionMatch[2] || '').trim(),
+        lines: [],
+      };
+      continue;
+    }
+
+    if (currentPanel) {
+      currentPanel.lines.push(rawLine);
+    } else {
+      introLines.push(rawLine);
+    }
+  }
+
+  flushPanel();
+
+  return {
+    title: fenceInfo.title || '',
+    summary: fenceInfo.summary || '',
+    introLines: trimBlankLines(introLines),
+    panels,
+  };
+}
+
+function renderComparisonBlock(lines, page, fenceInfo = {}) {
+  const comparison = parseComparisonBlock(lines, fenceInfo);
+  if (!comparison.panels.length) {
+    return '';
+  }
+
+  const order = ['before', 'after', 'delta'];
+  const orderedPanels = comparison.panels
+    .slice()
+    .sort((left, right) => order.indexOf(left.type) - order.indexOf(right.type));
+  const primaryPanels = orderedPanels.filter((panel) => panel.type !== 'delta');
+  const deltaPanels = orderedPanels.filter((panel) => panel.type === 'delta');
+  const introHtml = comparison.introLines.length ? markdownToHtml(comparison.introLines.join('\n'), page) : '';
+  const summaryHtml = comparison.summary ? `<p class="comparison-block__summary">${inlineMarkdown(comparison.summary, page)}</p>` : '';
+  const titleHtml = comparison.title ? `<h2 class="comparison-block__title">${inlineMarkdown(comparison.title, page)}</h2>` : '';
+  const headerHtml = titleHtml || summaryHtml || introHtml
+    ? `<div class="comparison-block__header"><p class="comparison-block__eyebrow">Comparison</p>${titleHtml}${summaryHtml}${introHtml}</div>`
+    : '';
+
+  const renderPanel = (panel) => {
+    const bodyHtml = markdownToHtml(panel.bodyLines.join('\n'), page);
+    return `<article class="comparison-panel comparison-panel--${escapeHtml(panel.tone)}"><div class="comparison-panel__header"><p class="comparison-panel__eyebrow">${escapeHtml(panel.eyebrow || panel.label)}</p><h3 class="comparison-panel__title">${inlineMarkdown(panel.title || panel.label, page)}</h3></div><div class="comparison-panel__body">${bodyHtml}</div></article>`;
+  };
+
+  const primaryHtml = primaryPanels.length
+    ? `<div class="comparison-block__grid comparison-block__grid--${Math.min(primaryPanels.length, 2)}">${primaryPanels.map(renderPanel).join('')}</div>`
+    : '';
+  const deltaHtml = deltaPanels.length
+    ? `<div class="comparison-block__delta-stack">${deltaPanels.map(renderPanel).join('')}</div>`
+    : '';
+
+  return `<section class="comparison-block">${headerHtml}${primaryHtml}${deltaHtml}</section>`;
 }
 
 function markdownToHtml(markdown, page) {
@@ -529,6 +650,8 @@ function markdownToHtml(markdown, page) {
   let blockquoteLines = [];
   let codeFence = null;
   let codeLines = [];
+  let comparisonFence = null;
+  let comparisonLines = [];
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
@@ -568,7 +691,22 @@ function markdownToHtml(markdown, page) {
     codeLines = [];
   };
 
+  const flushComparisonBlock = () => {
+    if (comparisonFence === null) return;
+    parts.push(renderComparisonBlock(comparisonLines, page, comparisonFence));
+    comparisonFence = null;
+    comparisonLines = [];
+  };
+
   for (const rawLine of lines) {
+    if (comparisonFence !== null) {
+      if (rawLine.trim() === ':::') {
+        flushComparisonBlock();
+      } else {
+        comparisonLines.push(rawLine);
+      }
+      continue;
+    }
     const fenceMatch = /^```\s*([^`]*)$/.exec(rawLine.trim());
     if (fenceMatch) {
       if (codeFence !== null) {
@@ -584,6 +722,15 @@ function markdownToHtml(markdown, page) {
 
     if (codeFence !== null) {
       codeLines.push(rawLine);
+      continue;
+    }
+
+    const comparisonFenceMatch = /^:::\s*(comparison|compare)\b(.*)$/.exec(rawLine.trim());
+    if (comparisonFenceMatch) {
+      flushParagraph();
+      flushLists();
+      flushBlockquote();
+      comparisonFence = parseComparisonFenceInfo(comparisonFenceMatch[2] || '');
       continue;
     }
 
@@ -643,6 +790,7 @@ function markdownToHtml(markdown, page) {
   flushParagraph();
   flushLists();
   flushCodeBlock();
+  flushComparisonBlock();
 
   return parts.join('\n');
 }
@@ -894,6 +1042,25 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .callout__body { display: grid; gap: 0.8rem; }
       .callout__body > :first-child { margin-top: 0; }
       .callout__body > :last-child { margin-bottom: 0; }
+      .comparison-block { display: grid; gap: 1rem; padding: 1.15rem; border: 1px solid #cbd5e1; border-radius: 1.1rem; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); box-shadow: 0 14px 32px -28px #0f172a; }
+      .comparison-block__header { display: grid; gap: 0.55rem; }
+      .comparison-block__eyebrow, .comparison-panel__eyebrow { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
+      .comparison-block__title, .comparison-panel__title { margin: 0; }
+      .comparison-block__summary { margin: 0; color: #334155; }
+      .comparison-block__grid, .comparison-block__delta-stack { display: grid; gap: 0.9rem; }
+      .comparison-block__grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .comparison-panel { --comparison-accent: #2563eb; --comparison-bg: #eff6ff; --comparison-fg: #1e3a8a; display: grid; gap: 0.8rem; padding: 1rem; border-radius: 0.95rem; border: 1px solid #cbd5e1; background: var(--comparison-bg); border-top: 4px solid var(--comparison-accent); }
+      .comparison-panel--before { --comparison-accent: #b45309; --comparison-bg: #fffbeb; --comparison-fg: #92400e; }
+      .comparison-panel--after { --comparison-accent: #15803d; --comparison-bg: #f0fdf4; --comparison-fg: #166534; }
+      .comparison-panel--delta { --comparison-accent: #7c3aed; --comparison-bg: #f5f3ff; --comparison-fg: #5b21b6; }
+      .comparison-panel__header { display: grid; gap: 0.3rem; }
+      .comparison-panel__eyebrow, .comparison-panel__title { color: var(--comparison-fg); }
+      .comparison-panel__body { display: grid; gap: 0.8rem; }
+      .comparison-panel__body > :first-child { margin-top: 0; }
+      .comparison-panel__body > :last-child { margin-bottom: 0; }
+      @media (max-width: 720px) {
+        .comparison-block__grid--2 { grid-template-columns: 1fr; }
+      }
       @media (prefers-color-scheme: dark) {
         .code-block { border-color: #ffffff1f; background: #0f172a; box-shadow: none; }
         .code-block__meta { background: #111827; border-bottom-color: #1f2937; }
@@ -916,6 +1083,13 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
         .callout--testing { --callout-bg: #172554; --callout-fg: #bfdbfe; }
         .callout--tip { --callout-bg: #052e16; --callout-fg: #bbf7d0; }
         .callout--warning { --callout-bg: #450a0a; --callout-fg: #fecaca; }
+        .comparison-block { border-color: #334155; background: linear-gradient(180deg, #0f172a 0%, #111827 100%); box-shadow: none; }
+        .comparison-block__eyebrow { color: #cbd5e1; }
+        .comparison-block__summary { color: #cbd5e1; }
+        .comparison-panel { border-color: #334155; color: #e5e7eb; }
+        .comparison-panel--before { --comparison-bg: #451a03; --comparison-fg: #fcd34d; }
+        .comparison-panel--after { --comparison-bg: #052e16; --comparison-fg: #bbf7d0; }
+        .comparison-panel--delta { --comparison-bg: #2e1065; --comparison-fg: #ddd6fe; }
       }
       blockquote p:first-child { margin-top: 0; }
       blockquote p:last-child { margin-bottom: 0; }
@@ -1744,9 +1918,11 @@ module.exports = {
   markdownToHtml,
   normalizePreviewPathname,
   renderCodeBlock,
+  renderComparisonBlock,
   normalizeTags,
   parseCliArgs,
   parseCodeFenceInfo,
+  parseComparisonFenceInfo,
   parseFrontMatter,
   parseServePort,
   parseWatchInterval,

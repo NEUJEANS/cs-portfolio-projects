@@ -18,6 +18,7 @@ This project shows practical compiler-style text processing, file-system automat
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
 - presents fenced code blocks in richer portfolio-ready frames with language badges, optional file titles from fence metadata, line-number gutters, and copy-to-clipboard controls with accessible status feedback
 - turns GitHub-style blockquote markers such as `[!REVIEWER]` and `[!ARCHITECTURE]` into focused portfolio callout panels so code samples can carry concise “why this matters” notes
+- renders `::: comparison` blocks into responsive before/after/delta panels so portfolio pages can show refactors or benchmark wins at a glance
 - supports a dependency-free `--watch` mode with a configurable polling interval so content edits, new files, and shared partial updates trigger rebuilds during local authoring
 - can serve the generated `dist/` folder through a built-in local preview server, including browser auto-refresh when `--serve` is combined with `--watch`
 - generates a default `404.html` fallback and lets authors override it with `404.md`, including preview-only placeholders such as `{{requestedPath}}`
@@ -127,6 +128,27 @@ For reviewer-style annotations around code or design decisions, use GitHub-style
 
 The renderer keeps ordinary blockquotes as blockquotes, but recognized markers such as `REVIEWER`, `ARCHITECTURE`, `PERFORMANCE`, `TRADEOFF`, `TESTING`, `TIP`, `NOTE`, and `WARNING` become styled callout panels in the generated page.
 
+For refactor stories or benchmark write-ups, use a `::: comparison` block with `::before::`, `::after::`, and optional `::delta::` sections:
+
+```md
+::: comparison title="Tokenizer refactor" summary="Same output, less work."
+Quick reviewer snapshot.
+
+::before:: Legacy parser
+- rescanned every file on each preview request
+- duplicated slug normalization in two paths
+
+::after:: Incremental parser
+- reuses page metadata between rebuilds
+- keeps link rewriting in one helper
+
+::delta:: Benchmark delta
+- rebuild time: **1.8s** -> **0.9s**
+:::
+```
+
+The generated page keeps the before/after panels side-by-side on wider screens, stacks them on narrow screens, and gives the optional delta panel its own follow-up emphasis for quick reviewer scans.
+
 Fenced code blocks are preserved for technical write-ups and can carry a title straight from the fence info string:
 
 ~~~md
@@ -155,5 +177,5 @@ If you need to run the legacy mirrored entrypoint directly, `node --test test_st
 
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
-- side-by-side comparison blocks for before/after refactors or benchmark deltas
 - sitemap.xml or RSS feed generation for blog-style portfolio sites
+- optional theme presets or custom CSS hooks for different portfolio styles

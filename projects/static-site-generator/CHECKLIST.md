@@ -15,4 +15,5 @@
 - [x] Add syntax highlighting themes or richer code-block presentation
 - [x] Add copy-to-clipboard controls for code samples
 - [x] Add focused reviewer callouts for code samples or architecture notes
-- [ ] Add side-by-side comparison blocks for before/after refactors or benchmark deltas
+- [x] Add side-by-side comparison blocks for before/after refactors or benchmark deltas
+- [ ] Add sitemap.xml or RSS feed generation for blog-style portfolio sites

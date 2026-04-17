@@ -21,6 +21,7 @@ const {
   markdownToHtml,
   parseCliArgs,
   parseCodeFenceInfo,
+  parseComparisonFenceInfo,
   parseFrontMatter,
   relativeLink,
   replaceMarkdownImages,
@@ -91,6 +92,17 @@ test('parseCodeFenceInfo extracts language aliases and optional code titles', ()
   assert.deepEqual(parseCodeFenceInfo('js title=sitegen.js'), { language: 'js', title: 'sitegen.js' });
   assert.deepEqual(parseCodeFenceInfo('python filename="demo script.py"'), { language: 'python', title: 'demo script.py' });
   assert.deepEqual(parseCodeFenceInfo('title="notes.txt"'), { language: '', title: 'notes.txt' });
+});
+
+test('parseComparisonFenceInfo extracts optional comparison titles and summaries', () => {
+  assert.deepEqual(parseComparisonFenceInfo('title="Tokenizer refactor" summary="Same output, less work."'), {
+    title: 'Tokenizer refactor',
+    summary: 'Same output, less work.',
+  });
+  assert.deepEqual(parseComparisonFenceInfo('description="Benchmark deltas for review"'), {
+    title: '',
+    summary: 'Benchmark deltas for review',
+  });
 });
 
 test('createCodeBlockEnhancementSnippet includes clipboard and legacy-copy fallbacks', () => {
@@ -164,6 +176,25 @@ test('markdownToHtml renders focused callout panels for reviewer and architectur
   assert.match(html, /<aside class="callout callout--architecture" data-callout-type="architecture">/);
   assert.match(html, /<span class="callout__icon" aria-hidden="true">🏗️<\/span><span>Architecture note<\/span>/);
   assert.match(html, /<code>loadPages\(\)<\/code> stays separate from rendering so tests can validate discovery independently\./);
+});
+
+test('markdownToHtml renders responsive comparison panels for before after and delta notes', () => {
+  const html = markdownToHtml('::: comparison title="Tokenizer refactor" summary="Same output, less work."\nA quick snapshot for reviewers.\n\n::before:: Legacy parser\n- rescanned every file on each preview hit\n- duplicated slug normalization in two paths\n\n::after:: Incremental parser\n- reuses page metadata between rebuilds\n- keeps link rewriting in one helper\n\n::delta:: Benchmark delta\n- rebuild time: **1.8s** -> **0.9s**\n:::');
+  assert.match(html, /<section class="comparison-block">/);
+  assert.match(html, /<p class="comparison-block__eyebrow">Comparison<\/p>/);
+  assert.match(html, /<h2 class="comparison-block__title">Tokenizer refactor<\/h2>/);
+  assert.match(html, /<p class="comparison-block__summary">Same output, less work\.<\/p>/);
+  assert.match(html, /<p>A quick snapshot for reviewers\.<\/p>/);
+  assert.match(html, /<div class="comparison-block__grid comparison-block__grid--2">/);
+  assert.match(html, /<article class="comparison-panel comparison-panel--before">/);
+  assert.match(html, /<p class="comparison-panel__eyebrow">Baseline<\/p><h3 class="comparison-panel__title">Legacy parser<\/h3>/);
+  assert.match(html, /rescanned every file on each preview hit/);
+  assert.match(html, /<article class="comparison-panel comparison-panel--after">/);
+  assert.match(html, /<p class="comparison-panel__eyebrow">Improved<\/p><h3 class="comparison-panel__title">Incremental parser<\/h3>/);
+  assert.match(html, /reuses page metadata between rebuilds/);
+  assert.match(html, /<div class="comparison-block__delta-stack">/);
+  assert.match(html, /<article class="comparison-panel comparison-panel--delta">/);
+  assert.match(html, /rebuild time: <strong>1\.8s<\/strong> -&gt; <strong>0\.9s<\/strong>/);
 });
 
 test('replaceMarkdownImages sanitizes unsafe image URLs', () => {
@@ -455,6 +486,34 @@ order: 1
   assert.match(notFoundHtml, /<title>Page Not Found<\/title>/);
   assert.match(notFoundHtml, /Tried: <code>\{\{requestedPath\}\}<\/code>/);
   assert.doesNotMatch(notFoundHtml, /href="404.html">Page Not Found<\/a>/);
+});
+
+test('buildSite renders comparison blocks without enabling code-copy enhancements on non-code pages', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Refactor Notes
+order: 1
+slug: refactor-notes
+description: Compare the old and new parser shape
+---
+# Parser comparison\n\n::: comparison title="Tokenizer refactor" summary="Same output, less work."\nQuick reviewer snapshot.\n\n::before:: Legacy parser\n- rescanned all content on every preview request\n\n::after:: Incremental parser\n- reused existing metadata snapshots between rebuilds\n\n::delta:: Benchmark delta\n- rebuild time dropped from **1.8s** to **0.9s**\n:::`,
+    'utf8'
+  );
+
+  buildSite(contentDir, outputDir);
+  const html = fs.readFileSync(path.join(outputDir, 'refactor-notes.html'), 'utf8');
+
+  assert.match(html, /<section class="comparison-block">/);
+  assert.match(html, /<h2 class="comparison-block__title">Tokenizer refactor<\/h2>/);
+  assert.match(html, /<article class="comparison-panel comparison-panel--before">/);
+  assert.match(html, /<article class="comparison-panel comparison-panel--after">/);
+  assert.match(html, /<article class="comparison-panel comparison-panel--delta">/);
+  assert.doesNotMatch(html, /<button type="button" class="code-block__copy"/);
+  assert.doesNotMatch(html, /navigator\.clipboard\.writeText/);
 });
 
 test('resolvePreviewRequestPath maps extensionless routes and blocks traversal', () => {

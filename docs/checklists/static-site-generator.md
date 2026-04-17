@@ -204,3 +204,21 @@
 - [x] commit and push
 - [x] append wrap-up
 - [ ] consider side-by-side comparison blocks for before/after refactors or benchmark deltas in a future run
+
+## 2026-04-17 vertical slice: before/after comparison blocks
+- [x] identify `static-site-generator` as still unfinished because the checklist still had side-by-side refactor and benchmark storytelling open
+- [x] do brief research on extended Markdown containers and CSS grid layout patterns for lightweight responsive comparisons
+- [x] skip extra language refresh because the slice stays inside the current Node/CommonJS Markdown renderer and existing test harness
+- [x] add a resumable checklist for the slice
+- [x] render `::: comparison` containers with `::before::`, `::after::`, and optional `::delta::` panels
+- [x] keep the new comparison layout responsive in light/dark themes without injecting code-copy helpers on non-code pages
+- [x] expand automated tests for fence metadata parsing, rendered Markdown output, generated-page output, and the synced duplicate test entrypoint
+- [x] update README and project checklist with the new comparison-block workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
+- [ ] consider theme presets or blog collections in a future run
