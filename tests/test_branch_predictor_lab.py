@@ -22,11 +22,13 @@ BranchRecord = module.BranchRecord
 GSharePredictor = module.GSharePredictor
 OneBitPredictor = module.OneBitPredictor
 TwoBitPredictor = module.TwoBitPredictor
+build_predictor = module.build_predictor
 compare_predictors = module.compare_predictors
+generate_synthetic_trace = module.generate_synthetic_trace
 load_trace = module.load_trace
 parse_trace_line = module.parse_trace_line
 simulate_trace = module.simulate_trace
-build_predictor = module.build_predictor
+summarize_trace = module.summarize_trace
 
 
 class BranchPredictorLabTests(unittest.TestCase):
@@ -79,6 +81,36 @@ class BranchPredictorLabTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "power of two"):
             build_predictor("two-bit", table_size=12, history_bits=2)
 
+    def test_generate_loop_heavy_trace_exposes_repeat_exit_pattern(self) -> None:
+        trace = generate_synthetic_trace("loop-heavy", branches=12, seed=99)
+
+        self.assertEqual(len(trace), 12)
+        self.assertEqual([record.taken for record in trace[:5]], [True, True, True, True, False])
+        self.assertEqual(trace[0].label, "outer-loop-backedge")
+        self.assertEqual(trace[4].label, "outer-loop-exit")
+        summary = summarize_trace(trace)
+        self.assertGreater(summary["taken_branches"], summary["not_taken_branches"])
+        self.assertGreaterEqual(summary["unique_addresses"], 2)
+
+    def test_generate_random_biased_trace_is_seed_reproducible(self) -> None:
+        left = generate_synthetic_trace("random-biased", branches=16, seed=11)
+        right = generate_synthetic_trace("random-biased", branches=16, seed=11)
+        other = generate_synthetic_trace("random-biased", branches=16, seed=12)
+
+        self.assertEqual(left, right)
+        self.assertNotEqual(left, other)
+
+    def test_tournament_style_trace_rewards_deeper_history(self) -> None:
+        trace = generate_synthetic_trace("tournament-style", branches=48, seed=5)
+        shallow_results = compare_predictors(trace, table_size=16, history_bits=1)
+        deep_results = compare_predictors(trace, table_size=16, history_bits=4)
+        shallow_by_name = {result.predictor: result for result in shallow_results}
+        deep_by_name = {result.predictor: result for result in deep_results}
+
+        self.assertEqual(deep_results[0].predictor, "gshare")
+        self.assertGreater(deep_by_name["gshare"].accuracy, deep_by_name["two-bit"].accuracy)
+        self.assertGreater(deep_by_name["gshare"].accuracy, shallow_by_name["gshare"].accuracy)
+
     def test_cli_compare_json_emits_best_predictor(self) -> None:
         completed = subprocess.run(
             [
@@ -101,6 +133,38 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertEqual(payload["best_predictor"], payload["results"][0]["predictor"])
         self.assertEqual(payload["results"][0]["predictor"], "gshare")
         self.assertEqual(payload["total_branches"], 24)
+
+    def test_cli_generate_json_writes_trace_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "generated.trace"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "generate",
+                    "tournament-style",
+                    "--branches",
+                    "12",
+                    "--seed",
+                    "3",
+                    "--output",
+                    str(output_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["workload"], "tournament-style")
+            self.assertEqual(payload["total_branches"], 12)
+            self.assertEqual(payload["output"], str(output_path))
+            self.assertTrue(output_path.exists())
+            written_lines = output_path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(written_lines), 12)
+            self.assertEqual(len(payload["records"]), 12)
+            self.assertIn("history-follower", output_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

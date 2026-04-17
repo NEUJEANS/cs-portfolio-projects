@@ -1,11 +1,11 @@
 # branch-predictor-lab
 
-A compact computer-architecture portfolio project for simulating classic branch predictors against a local branch trace.
+A compact computer-architecture portfolio project for simulating classic branch predictors against local branch traces or reproducible synthetic workloads.
 
 ## Why this project is worth showing
 - demonstrates core CPU architecture ideas beyond the usual data-structures portfolio set
 - compares naive baselines with realistic stateful predictors students see in computer architecture courses
-- stays practical: trace parsing, configurable tables, JSON output, and tests make it easy to demo or extend
+- stays practical: trace parsing, configurable tables, synthetic workload generation, JSON output, and tests make it easy to demo or extend
 
 ## Implemented predictors
 - `always-taken`
@@ -13,6 +13,11 @@ A compact computer-architecture portfolio project for simulating classic branch 
 - `one-bit` bimodal table
 - `two-bit` saturating-counter bimodal table
 - `gshare` with XOR-based global history
+
+## Implemented synthetic workloads
+- `loop-heavy` — repeated loop backedges with explicit exits so one-bit vs two-bit behavior is easy to show
+- `random-biased` — several static branches with different taken probabilities for reproducible baseline sweeps
+- `tournament-style` — a mixed trace that combines correlated-history branches, loop behavior, and biased cleanup branches to motivate hybrid predictors
 
 ## Trace format
 Use one branch per line:
@@ -34,6 +39,8 @@ Comments starting with `#` are ignored.
 
 ## Quick start
 
+Compare predictors on the bundled sample trace:
+
 ```bash
 python3 projects/branch-predictor-lab/branch_predictor.py compare \
   projects/branch-predictor-lab/sample_trace.txt \
@@ -41,7 +48,26 @@ python3 projects/branch-predictor-lab/branch_predictor.py compare \
   --history-bits 2
 ```
 
-Example text output:
+Generate a synthetic workload and inspect it as JSON:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py generate \
+  tournament-style \
+  --branches 16 \
+  --seed 3 \
+  --json
+```
+
+Write a loop-focused trace to disk for later experiments:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py generate \
+  loop-heavy \
+  --branches 20 \
+  --output /tmp/loop-heavy.trace
+```
+
+Example comparison output:
 
 ```text
 predictor          accuracy   mispreds   mpki    hardest branch
@@ -55,7 +81,7 @@ one-bit             25.00%         18   750.0  0x140
 
 ## Useful commands
 
-Run the full comparison suite:
+Run the full comparison suite on the bundled trace:
 
 ```bash
 python3 projects/branch-predictor-lab/branch_predictor.py compare \
@@ -72,6 +98,34 @@ python3 projects/branch-predictor-lab/branch_predictor.py simulate \
   --json
 ```
 
+Create a reproducible random-bias trace and compare it right away:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py generate \
+  random-biased \
+  --branches 48 \
+  --seed 11 \
+  --output /tmp/random-biased.trace
+python3 projects/branch-predictor-lab/branch_predictor.py compare \
+  /tmp/random-biased.trace \
+  --table-size 16 \
+  --history-bits 2
+```
+
+For the mixed tournament-style trace, use a deeper history length so gshare can exploit the correlated branch pair:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py generate \
+  tournament-style \
+  --branches 48 \
+  --seed 5 \
+  --output /tmp/tournament-style.trace
+python3 projects/branch-predictor-lab/branch_predictor.py compare \
+  /tmp/tournament-style.trace \
+  --table-size 16 \
+  --history-bits 4
+```
+
 Run the tests:
 
 ```bash
@@ -83,13 +137,15 @@ Run the tests:
 - the one-bit predictor flips immediately after a miss, which makes loop-exit behavior easy to understand but noisy on phase changes
 - the two-bit predictor uses the standard 2-bit saturating states (`00`, `01`, `10`, `11`) and defaults to weakly taken
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
+- the synthetic generator is intentionally lightweight and reproducible so you can build demos, tests, and benchmark sweeps without needing a large external trace corpus
 
 ## Portfolio talking points
 - explain why one-bit predictors mispredict both loop exit and loop re-entry while two-bit predictors usually miss only on the exit
-- use the alternating branch in `sample_trace.txt` to show where global history helps more than pure per-address bias
+- use the `tournament-style` workload to show why some branches want local bias tracking while others benefit from recent-history correlation
+- show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 - extend the simulator with tournament or perceptron prediction if you want a stronger architecture capstone story
 
 ## Future improvements
-- add synthetic trace generators for controlled accuracy sweeps
-- export Markdown/SVG scorecards for easy README screenshots
-- add tournament or perceptron predictors and compare training cost vs accuracy
+- render Markdown/SVG predictor comparison cards for the docs artifact gallery
+- add a perceptron or explicit tournament predictor follow-up for advanced architecture coverage
+- add trace-family sweep commands that run multiple generated workloads in one shot

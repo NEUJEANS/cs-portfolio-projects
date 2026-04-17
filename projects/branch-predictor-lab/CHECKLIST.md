@@ -8,8 +8,10 @@
 - [x] Add a compare/simulate CLI with text and JSON output modes
 - [x] Add unit tests for parser, predictor behavior, ranking, and CLI output
 - [x] Add portfolio-facing README notes, research notes, review logs, and wrap-up support
+- [x] Add synthetic workload generators for loop-heavy, random-biased, and tournament-style traces
+- [x] Add generator CLI coverage plus reproducibility checks for the new synthetic workloads
 
 ## Next candidate slices
-- [ ] Add synthetic trace generators for loop-heavy, random, and tournament-style workloads
 - [ ] Render Markdown/SVG predictor comparison cards for the docs artifact gallery
-- [ ] Add a perceptron or tournament predictor follow-up for advanced architecture coverage
+- [ ] Add a perceptron or explicit tournament predictor follow-up for advanced architecture coverage
+- [ ] Add trace-family sweep commands that batch-generate workloads and compare predictors in one run
