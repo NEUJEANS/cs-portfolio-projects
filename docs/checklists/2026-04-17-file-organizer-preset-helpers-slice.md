@@ -8,8 +8,8 @@
 - [x] extend tests for preset listing, preset export overwrite safety, preset-based organize runs, and CLI argument validation
 - [x] run targeted tests and final runnable CLI smoke checks
 - [x] complete 3 review passes and fix issues found
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 
 ## Review notes
 - review pass 1: added round-trip regression coverage so `--write-preset` exports are proven reusable through the normal `--config` path.
