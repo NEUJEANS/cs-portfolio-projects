@@ -1,0 +1,21 @@
+# File organizer undo-manifest slice
+
+- **Timestamp:** 2026-04-17T22:16:18Z
+- **Feature commit:** `231daa5` (`feat(file-organizer-cli): add manifest-based undo`)
+- **What changed:**
+  - added manifest export support to `file-organizer-cli` with `--manifest-out`, persisting the realized organize run as JSON for auditability and later rollback
+  - added `--undo <manifest>` restore support with reverse-order replay, collision-safe restore naming, missing-file reporting, and empty generated bucket cleanup
+  - expanded the Node test suite to cover manifest persistence, dry-run undo previews, restore collisions, dry-run manifest rejection, and CLI flag validation
+  - refreshed the project README, checklist, research note, learning refresh, and three review-pass logs so the slice is documented and resumable
+  - fixed two review-found issues: invalid `--undo --manifest-out` combinations are now rejected explicitly, and the README now warns that redirected `--json` output should be written outside the directory being organized
+  - fetched first, confirmed `main` matched `origin/main` before editing, and pushed the feature commit safely after a clean secret scan
+- **Tests / reviews run:**
+  - `git fetch --all --prune` + `git rev-list --left-right --count HEAD...origin/main` (`0 0` before edits)
+  - `npm test --prefix projects/file-organizer-cli`
+  - smoke: organize + undo text flow with `node projects/file-organizer-cli/organizer.js "$tmpdir" --manifest-out "$tmpdir/run.json"` and both dry-run/apply undo commands
+  - smoke: JSON organize + undo flow with manifest/output files outside the target directory, plus JSON shape assertions for `action`, `manifestPath`, and restore counts
+  - review pass 1: manifest shape and CLI mode audit; fixed silent acceptance of `--undo --manifest-out`
+  - review pass 2: restore-safety audit for reverse replay, restore collisions, dry-run behavior, and empty-directory cleanup
+  - review pass 3: README/demo audit; documented the redirected-JSON gotcha discovered during smoke testing and reran the final end-to-end flow
+  - secret scan before push: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` (`0` verified / `0` unknown)
+- **Next step:** either add config-driven custom buckets to `file-organizer-cli` or move on to another older project that still lacks a newer safety/polish slice, such as `github-repo-reporter` or `file-type`-aware categorization work.

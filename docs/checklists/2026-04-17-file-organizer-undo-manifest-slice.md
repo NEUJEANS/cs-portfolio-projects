@@ -13,7 +13,7 @@
 - [x] run targeted tests and CLI smoke checks
 - [x] complete 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 
 ## Review notes
 - review pass 1 should focus on manifest shape and CLI parsing edge cases.
