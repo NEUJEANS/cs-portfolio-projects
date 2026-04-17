@@ -106,6 +106,26 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(result.output, {"alice": 8.0, "bob": 5.5})
             self.assertIsNotNone(result.plugin)
 
+    def test_plugin_job_can_emit_latency_summary_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "latency.csv"
+            source.write_text("auth-gateway,120\nauth-gateway,180\nsearch-api,60\n", encoding="utf-8")
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=PROJECT_DIR / "plugins_service_latency.py",
+            )
+
+            self.assertEqual(result.job, "plugin-service-latency")
+            self.assertEqual(result.output["auth-gateway"]["count"], 2)
+            self.assertEqual(result.output["auth-gateway"]["avg_ms"], 150.0)
+            self.assertEqual(result.output["auth-gateway"]["p95_ms"], 180.0)
+            self.assertEqual(result.output["auth-gateway"]["max_ms"], 180.0)
+            self.assertEqual(result.output["search-api"]["count"], 1)
+
     def test_plugin_job_rejects_non_json_serializable_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "scores.csv"
@@ -160,7 +180,7 @@ class MiniMapReduceTests(unittest.TestCase):
         ).strip()
 
         self.assertEqual(inspection.name, "plugin-average-score")
-        self.assertTrue(inspection.plugin.endswith("plugins_average_score.py"))
+        self.assertEqual(inspection.plugin, "projects/mini-mapreduce-lab/plugins_average_score.py")
         self.assertEqual(inspection.plugin_repo_commit, expected_commit)
         self.assertEqual(inspection.available_dataset_families, ["default", "exam-cram", "project-week"])
         self.assertEqual(inspection.module_doc_summary, "Average-score analytics plugin with synthetic cohort benchmark families.")
@@ -226,6 +246,8 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(len(csv_lines), 3)
         self.assertIn("plugin-average-score", csv_lines[1])
         self.assertIn("plugin-max-score", csv_lines[2])
+        self.assertNotIn("/home/user1_admin/", batch.to_json())
+        self.assertNotIn("/home/user1_admin/", batch.to_csv())
 
     def test_diff_plugin_inspections_reports_changed_metadata_fields(self) -> None:
         diffs = diff_plugin_inspections([
@@ -527,7 +549,7 @@ class MiniMapReduceTests(unittest.TestCase):
 
         self.assertEqual(
             [Path(item).name for item in refs],
-            ["plugins_average_score.py", "plugins_top_score.py"],
+            ["plugins_average_score.py", "plugins_service_latency.py", "plugins_top_score.py"],
         )
 
     def test_cli_catalog_plugins_writes_json_markdown_and_html(self) -> None:
@@ -558,9 +580,9 @@ class MiniMapReduceTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             markdown = report_output.read_text(encoding="utf-8")
             html_payload = html_output.read_text(encoding="utf-8")
-            self.assertEqual(payload["plugin_count"], 2)
-            self.assertEqual([Path(item["plugin"]).name for item in payload["plugins"]], ["plugins_average_score.py", "plugins_top_score.py"])
-            self.assertEqual(len(payload["diffs"]), 1)
+            self.assertEqual(payload["plugin_count"], 3)
+            self.assertEqual([Path(item["plugin"]).name for item in payload["plugins"]], ["plugins_average_score.py", "plugins_service_latency.py", "plugins_top_score.py"])
+            self.assertEqual(len(payload["diffs"]), 2)
             self.assertIn("# Mini MapReduce plugin inspection", markdown)
             self.assertIn("## Catalog quick links", markdown)
             self.assertIn("plugin-average-score", markdown)
@@ -1196,6 +1218,31 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("<h2>Structured benchmark annotations</h2>", html_report)
         self.assertIn("Studio squad baseline", html_report)
         self.assertIn("default, exam-cram, project-week", html_report)
+
+    def test_plugin_latency_benchmark_surfaces_incident_annotations(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_service_latency.py",
+            dataset_family="incident-spike",
+        )
+
+        self.assertEqual(result.job, "plugin-service-latency")
+        self.assertEqual(result.dataset_family, "incident-spike")
+        self.assertEqual(result.available_dataset_families, ["default", "incident-spike", "batch-window"])
+        self.assertEqual(result.plugin_mapper, "plugins_service_latency.map_records")
+        self.assertEqual(result.plugin_reducer, "plugins_service_latency.reduce_key")
+        self.assertEqual(result.plugin_combiner, "plugins_service_latency.combine_values")
+        self.assertEqual(result.plugin_benchmark_generator, "plugins_service_latency.benchmark_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_service_latency.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Auth gateway timeout storm")
+        self.assertEqual(result.benchmark_note_annotations[0]["severity"], "risk")
+        self.assertIn("auth-gateway", result.benchmark_note_annotations[0]["hotspot_keys"])
+        self.assertTrue(all(row["dataset_family"] == "incident-spike" for row in result.heatmap_rows))
 
     def test_benchmark_json_omits_annotation_view_when_unused(self) -> None:
         result = benchmark_job(

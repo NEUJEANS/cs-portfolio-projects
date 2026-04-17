@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_DIR = PROJECT_ROOT / "projects" / "mini-mapreduce-lab"
 MODULE_PATH = PROJECT_DIR / "mapreduce.py"
 PLUGIN_PATH = PROJECT_DIR / "plugins_top_score.py"
+LATENCY_PLUGIN_PATH = PROJECT_DIR / "plugins_service_latency.py"
 
 spec = importlib.util.spec_from_file_location("mini_mapreduce_lab", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
@@ -77,6 +78,18 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(result.job, "plugin-max-score")
             self.assertEqual(result.output, {"alice": 11, "bob": 8})
             self.assertTrue(str(result.plugin).endswith("plugins_top_score.py"))
+
+    def test_plugin_job_can_emit_latency_summary_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "latency.csv"
+            source.write_text("auth-gateway,120\nauth-gateway,180\nprofile-read,72\n", encoding="utf-8")
+
+            result = execute_job("plugin", [source], shard_size=2, reducers=2, plugin_path=LATENCY_PLUGIN_PATH)
+
+            self.assertEqual(result.job, "plugin-service-latency")
+            self.assertEqual(result.output["auth-gateway"], {"count": 2, "avg_ms": 150.0, "p95_ms": 180.0, "max_ms": 180.0})
+            self.assertEqual(result.output["profile-read"]["count"], 1)
+            self.assertTrue(str(result.plugin).endswith("plugins_service_latency.py"))
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -403,6 +416,26 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "exactly records lines"):
                 benchmark_job("plugin", "balanced", records=3, shard_size=1, reducers=[1], plugin_path=plugin)
 
+    def test_plugin_latency_benchmark_reports_incident_spike_metadata(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=LATENCY_PLUGIN_PATH,
+            dataset_family="incident-spike",
+        )
+
+        self.assertEqual(result.job, "plugin-service-latency")
+        self.assertEqual(result.available_dataset_families, ["default", "incident-spike", "batch-window"])
+        self.assertEqual(result.plugin_mapper, "plugins_service_latency.map_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_service_latency.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Auth gateway timeout storm")
+        self.assertEqual(result.benchmark_note_annotations[1]["title"], "Session cache spillover")
+        self.assertIn("auth-gateway", result.benchmark_note_annotations[0]["hotspot_keys"])
+
     def test_plugin_benchmark_supports_plugin_defined_note_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             plugin = Path(tmpdir) / "custom_notes.py"
@@ -461,6 +494,7 @@ class MiniMapReduceRepoTests(unittest.TestCase):
 
     def test_plugin_inspection_can_render_csv(self) -> None:
         result = inspect_plugin(PROJECT_DIR / "plugins_average_score.py")
+        self.assertEqual(result.plugin, "projects/mini-mapreduce-lab/plugins_average_score.py")
 
         csv_rows = result.to_csv().strip().splitlines()
         self.assertEqual(
@@ -510,6 +544,8 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(len(payload["diffs"]), 1)
         self.assertIn("benchmark_generator", payload["diffs"][0]["changes"])
         self.assertIn("benchmark_note_hook", payload["diffs"][0]["changes"])
+        self.assertNotIn("/home/user1_admin/", batch.to_json())
+        self.assertNotIn("/home/user1_admin/", batch.to_csv())
 
         markdown = batch.to_markdown()
         html_output = batch.to_html()

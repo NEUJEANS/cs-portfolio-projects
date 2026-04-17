@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin doc — plugin-service-latency</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1080px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.8rem; }
+    .badge { display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }
+    article { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin doc: <code>plugin-service-latency</code></h1>
+  <ul class="meta"><li><strong>Plugin path</strong><br><code>projects/mini-mapreduce-lab/plugins_service_latency.py</code></li><li><strong>Summary</strong><br>Service-latency summary plugin for observability-style benchmark demos.</li><li><strong>Dataset families</strong><br><code>default, incident-spike, batch-window</code></li><li><strong>Catalog badges</strong><br><span class="badge">5 hooks</span><span class="badge">3 dataset families</span><span class="badge">commit pinned</span><span class="badge">github linked</span></li><li><strong>Repository commit</strong><br><code>c0c005d1bcef0d903008fadbb7bd0f4faa872508</code></li><li><strong>Catalog index</strong><br><a href="../plugin-catalog.html">plugin catalog</a></li><li><strong>Alternate format</strong><br><a href="plugin-service-latency.md">Markdown</a></li></ul>
+  <section>
+    <h2>Hook summary</h2>
+    <table>
+      <thead><tr><th>Hook</th><th>Export</th><th>Signature</th><th>Details</th><th>Source</th></tr></thead>
+      <tbody><tr><td>Mapper</td><td><code>plugins_service_latency.map_records</code></td><td><code>map_records(lines)</code></td><td>Parse comma-separated service/latency rows into partial latency summaries.<br>line 33<br>anchor <code>plugins_service_latency.py#L33-L46</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46">commit</a></td></tr><tr><td>Reducer</td><td><code>plugins_service_latency.reduce_key</code></td><td><code>reduce_key(_key, values)</code></td><td>Return count, average, p95, and max latency for one service key.<br>line 54<br>anchor <code>plugins_service_latency.py#L54-L64</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64">commit</a></td></tr><tr><td>Combiner</td><td><code>plugins_service_latency.combine_values</code></td><td><code>combine_values(_key, values)</code></td><td>Merge shard-local latency summaries before the final reduce step.<br>line 49<br>anchor <code>plugins_service_latency.py#L49-L51</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51">commit</a></td></tr><tr><td>Benchmark generator</td><td><code>plugins_service_latency.benchmark_records</code></td><td><code>benchmark_records(scenario, records, seed, dataset_family=&#x27;default&#x27;)</code></td><td>Generate deterministic latency fixtures for multiple observability-style families.<br>line 67<br>anchor <code>plugins_service_latency.py#L67-L131</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131">commit</a></td></tr><tr><td>Benchmark note hook</td><td><code>plugins_service_latency.benchmark_notes</code></td><td><code>benchmark_notes(scenario, dataset_family=&#x27;default&#x27;)</code></td><td>Describe the intended hot services for each synthetic latency family.<br>line 134<br>anchor <code>plugins_service_latency.py#L134-L203</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203">commit</a></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Hook source excerpts</h2>
+    <article><h2>Mapper: <code>plugins_service_latency.map_records</code></h2><p><strong>Summary:</strong> Parse comma-separated service/latency rows into partial latency summaries.</p><p><strong>Source line:</strong> <code>33</code></p><p><strong>Source anchor:</strong> <code>plugins_service_latency.py#L33-L46</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46">https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46</a></p><pre><code>def map_records(lines):
+    &quot;&quot;&quot;Parse comma-separated service/latency rows into partial latency summaries.&quot;&quot;&quot;
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        service, latency_ms = stripped.split(&quot;,&quot;, maxsplit=1)
+        latency_value = round(float(latency_ms.strip()), 3)
+        yield service.strip().lower(), {
+            &quot;count&quot;: 1,
+            &quot;sum_ms&quot;: latency_value,
+            &quot;max_ms&quot;: latency_value,
+            &quot;samples_ms&quot;: [latency_value],
+        }</code></pre></article><article><h2>Reducer: <code>plugins_service_latency.reduce_key</code></h2><p><strong>Summary:</strong> Return count, average, p95, and max latency for one service key.</p><p><strong>Source line:</strong> <code>54</code></p><p><strong>Source anchor:</strong> <code>plugins_service_latency.py#L54-L64</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64">https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64</a></p><pre><code>def reduce_key(_key, values):
+    &quot;&quot;&quot;Return count, average, p95, and max latency for one service key.&quot;&quot;&quot;
+    merged = _merge_latency_values(values)
+    count = int(merged[&quot;count&quot;])
+    average = round(float(merged[&quot;sum_ms&quot;]) / count, 3) if count else 0.0
+    return {
+        &quot;count&quot;: count,
+        &quot;avg_ms&quot;: average,
+        &quot;p95_ms&quot;: _nearest_rank_percentile(merged[&quot;samples_ms&quot;], 95),
+        &quot;max_ms&quot;: round(float(merged[&quot;max_ms&quot;]), 3),
+    }</code></pre></article><article><h2>Combiner: <code>plugins_service_latency.combine_values</code></h2><p><strong>Summary:</strong> Merge shard-local latency summaries before the final reduce step.</p><p><strong>Source line:</strong> <code>49</code></p><p><strong>Source anchor:</strong> <code>plugins_service_latency.py#L49-L51</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51">https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51</a></p><pre><code>def combine_values(_key, values):
+    &quot;&quot;&quot;Merge shard-local latency summaries before the final reduce step.&quot;&quot;&quot;
+    return _merge_latency_values(values)</code></pre></article><article><h2>Benchmark generator: <code>plugins_service_latency.benchmark_records</code></h2><p><strong>Summary:</strong> Generate deterministic latency fixtures for multiple observability-style families.</p><p><strong>Source line:</strong> <code>67</code></p><p><strong>Source anchor:</strong> <code>plugins_service_latency.py#L67-L131</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131">https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131</a></p><pre><code>def benchmark_records(scenario, records, seed, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Generate deterministic latency fixtures for multiple observability-style families.&quot;&quot;&quot;
+    if records &lt;= 0:
+        raise ValueError(&quot;records must be positive&quot;)
+    rng = random.Random(seed)
+
+    families = {
+        &quot;default&quot;: {
+            &quot;balanced&quot;: [
+                (&quot;edge-api&quot;, 82, 9),
+                (&quot;catalog-api&quot;, 76, 8),
+                (&quot;checkout-api&quot;, 88, 10),
+                (&quot;search-api&quot;, 71, 7),
+            ],
+            &quot;skewed&quot;: [
+                (&quot;edge-api&quot;, 144, 26),
+                (&quot;catalog-api&quot;, 84, 10),
+                (&quot;checkout-api&quot;, 96, 12),
+                (&quot;search-api&quot;, 74, 8),
+            ],
+        },
+        &quot;incident-spike&quot;: {
+            &quot;balanced&quot;: [
+                (&quot;auth-gateway&quot;, 118, 12),
+                (&quot;session-cache&quot;, 89, 8),
+                (&quot;token-service&quot;, 102, 10),
+                (&quot;profile-read&quot;, 78, 7),
+            ],
+            &quot;skewed&quot;: [
+                (&quot;auth-gateway&quot;, 236, 54),
+                (&quot;session-cache&quot;, 148, 22),
+                (&quot;token-service&quot;, 121, 14),
+                (&quot;profile-read&quot;, 83, 9),
+            ],
+        },
+        &quot;batch-window&quot;: {
+            &quot;balanced&quot;: [
+                (&quot;warehouse-loader&quot;, 264, 30),
+                (&quot;index-builder&quot;, 221, 24),
+                (&quot;backfill-runner&quot;, 246, 27),
+                (&quot;metrics-rollup&quot;, 198, 21),
+            ],
+            &quot;skewed&quot;: [
+                (&quot;warehouse-loader&quot;, 462, 86),
+                (&quot;index-builder&quot;, 274, 34),
+                (&quot;backfill-runner&quot;, 318, 42),
+                (&quot;metrics-rollup&quot;, 206, 25),
+            ],
+        },
+    }
+    if dataset_family not in families or scenario not in families[dataset_family]:
+        raise ValueError(f&quot;unsupported plugin benchmark scenario/family: {scenario}/{dataset_family}&quot;)
+
+    templates = families[dataset_family][scenario]
+    lines = []
+    for index in range(records):
+        service, base_ms, spread_ms = templates[index % len(templates)]
+        jitter = rng.randint(-spread_ms, spread_ms)
+        lines.append(f&quot;{service},{round(base_ms + jitter, 3)}&quot;)
+    if scenario == &quot;skewed&quot;:
+        hotspot = templates[0][0]
+        for index in range(max(1, records // 3)):
+            latency = templates[0][1] + templates[0][2] + rng.randint(18, 52)
+            lines[index] = f&quot;{hotspot},{round(latency, 3)}&quot;
+    return lines</code></pre></article><article><h2>Benchmark note hook: <code>plugins_service_latency.benchmark_notes</code></h2><p><strong>Summary:</strong> Describe the intended hot services for each synthetic latency family.</p><p><strong>Source line:</strong> <code>134</code></p><p><strong>Source anchor:</strong> <code>plugins_service_latency.py#L134-L203</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203">https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203</a></p><pre><code>def benchmark_notes(scenario, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Describe the intended hot services for each synthetic latency family.&quot;&quot;&quot;
+    notes = {
+        (&quot;balanced&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Healthy service spread&quot;,
+                &quot;detail&quot;: &quot;The default balanced latency family rotates evenly across four APIs, so reducer load should stay close while the output still looks like a small production stack.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the calm baseline before introducing latency hotspots or on-call incident narratives.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Edge API hotspot&quot;,
+                &quot;detail&quot;: &quot;`edge-api` is intentionally heavier and slower here, so the hottest reducer should read like a front-door latency spike instead of a partitioning accident.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;edge-api&quot;],
+                &quot;takeaway&quot;: &quot;This is the simplest observability-style story for discussing why p95 matters more than the mean under hotspot traffic.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;incident-spike&quot;): [
+            {
+                &quot;title&quot;: &quot;Steady auth baseline&quot;,
+                &quot;detail&quot;: &quot;The balanced incident family keeps auth, cache, token, and profile services close enough that the report highlights normal service-to-service variance rather than an outage.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;This is the before state for the incident-spike storyline.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;incident-spike&quot;): [
+            {
+                &quot;title&quot;: &quot;Auth gateway timeout storm&quot;,
+                &quot;detail&quot;: &quot;`auth-gateway` dominates this family with elevated latency, so the hottest reducer should look like an outage-era timeout storm concentrated around one service.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;auth-gateway&quot;],
+                &quot;takeaway&quot;: &quot;Call out the gap between average and p95 latency here to explain why long-tail spikes matter during incidents.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Session cache spillover&quot;,
+                &quot;detail&quot;: &quot;`session-cache` forms the second-tier hotspot behind the auth gateway, which helps tell a broader bottleneck story about downstream spillover instead of a single bad node.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;session-cache&quot;],
+                &quot;takeaway&quot;: &quot;Keep this annotation when you want a fuller causal narrative about cascading latency during the same incident.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Profile path cool lane&quot;,
+                &quot;detail&quot;: &quot;`profile-read` stays comparatively cool, so it works as a low-priority contrast point or a card to collapse in tighter portfolio reports.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;hotspot_keys&quot;: [&quot;profile-read&quot;],
+                &quot;takeaway&quot;: &quot;Use annotation filtering when you want the report to focus only on the riskiest paths.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;batch-window&quot;): [
+            {
+                &quot;title&quot;: &quot;Even batch cadence&quot;,
+                &quot;detail&quot;: &quot;The balanced batch-window family rotates evenly across warehouse, indexing, backfill, and metrics jobs so the reducer heatmap reflects a normal overnight data window.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;This family is useful when you want a data-engineering story rather than an incident-response story.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;batch-window&quot;): [
+            {
+                &quot;title&quot;: &quot;Warehouse loader saturation&quot;,
+                &quot;detail&quot;: &quot;`warehouse-loader` is intentionally the hottest and slowest key here, so the benchmark looks like a batch-window saturation problem during an oversized ingest run.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;warehouse-loader&quot;],
+                &quot;takeaway&quot;: &quot;Use this family to talk about long-running ETL contention and why reducer skew can line up with operational bottlenecks.&quot;,
+            },
+        ],
+    }
+    return notes.get((scenario, dataset_family), [])</code></pre></article>
+  </section>
+</body>
+</html>

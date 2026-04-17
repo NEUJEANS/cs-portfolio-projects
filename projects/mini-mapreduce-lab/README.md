@@ -209,6 +209,7 @@ Repeat `--plugin` to batch multiple plugins into one JSON/CSV artifact when you 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
+  --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
   --output plugin-batch.json \
   --csv-output plugin-batch.csv
@@ -219,6 +220,7 @@ Add `--diff` to the same batched inspection flow when you want the JSON payload 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
+  --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
   --diff \
   --output plugin-diff.json
@@ -229,6 +231,7 @@ Write publishable Markdown and HTML inspection artifacts from the same diff-awar
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
+  --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
   --diff \
   --report-output plugin-diff-report.md \
@@ -256,7 +259,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \
   --docs-dir docs/plugin-pages
 ```
 
-Switch benchmark dataset families to model different workload shapes. For example, the built-in `json-group-count` benchmark now supports `default`, `incidents`, and `deployments` families, while the average-score plugin exposes `default`, `exam-cram`, and `project-week` families:
+Switch benchmark dataset families to model different workload shapes. For example, the built-in `json-group-count` benchmark now supports `default`, `incidents`, and `deployments` families, the average-score plugin exposes `default`, `exam-cram`, and `project-week`, and the service-latency plugin exposes `default`, `incident-spike`, and `batch-window`:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
@@ -268,6 +271,19 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --shard-size 30 \
   --reducers 2 4 \
   --output project-week-benchmark.json
+```
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --job plugin \
+  --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
+  --scenario skewed \
+  --dataset-family incident-spike \
+  --records 240 \
+  --shard-size 30 \
+  --reducers 2 4 \
+  --report-output incident-spike-latency-report.md \
+  --html-output incident-spike-latency-report.html
 ```
 
 Filter the structured reviewer callouts down to the highest-priority severities and collapse the rest into one summary card when you want a tighter benchmark write-up:
@@ -315,6 +331,8 @@ python3 projects/mini-mapreduce-lab/mapreduce.py docs-index \
 The current committed bundle includes:
 - Markdown index: [`../../docs/artifacts/mini-mapreduce/docs-index.md`](../../docs/artifacts/mini-mapreduce/docs-index.md)
 - HTML index: [`../../docs/artifacts/mini-mapreduce/docs-index.html`](../../docs/artifacts/mini-mapreduce/docs-index.html)
+- plugin catalog + dedicated plugin pages (including the service-latency example) under [`../../docs/artifacts/mini-mapreduce/`](../../docs/artifacts/mini-mapreduce/)
+- an incident-spike latency benchmark report alongside the earlier project-week score benchmark so reviewers can see two different portfolio stories from the same runner
 
 ## Plugin contract
 
@@ -332,7 +350,9 @@ Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/pl
 
 The included `plugins_top_score.py` example parses `name,score` lines and keeps the maximum score for each user. It uses both `combine_values` and `reduce_key` so the shard-local combiner does not accidentally turn a max-style reduction back into summation.
 
-The new `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks, and the optional `benchmark_notes()` hook explains which synthetic cohort should become the hotspot in each family. It now supports named dataset families such as `exam-cram` and `project-week`, advertises them via `BENCHMARK_DATASET_FAMILIES`, and exposes both the generator and note hook through `inspect-plugin` / `catalog-plugins` metadata so benchmark artifacts can surface the supported families automatically. That makes the project easier to discuss as a stepping stone from simple counting jobs toward typed aggregations and analytics pipelines.
+The `plugins_average_score.py` example shows a richer pattern: the mapper emits `{"sum": ..., "count": ...}` objects, the combiner merges those objects per shard, the reducer returns a float average, the optional `benchmark_records()` hook emits domain-shaped synthetic score streams for deterministic plugin benchmarks, and the optional `benchmark_notes()` hook explains which synthetic cohort should become the hotspot in each family. It now supports named dataset families such as `exam-cram` and `project-week`, advertises them via `BENCHMARK_DATASET_FAMILIES`, and exposes both the generator and note hook through `inspect-plugin` / `catalog-plugins` metadata so benchmark artifacts can surface the supported families automatically.
+
+The new `plugins_service_latency.py` example pushes the same contract into an observability-flavored direction: the mapper emits structured latency objects, the combiner preserves per-service sample lists and rollups, and the reducer returns a portfolio-friendly summary object with `count`, `avg_ms`, `p95_ms`, and `max_ms`. Its benchmark families (`default`, `incident-spike`, `batch-window`) make the docs bundle look more like a real systems/infra case study, and its structured annotations give you incident-review talking points for why long-tail latency and hot services matter.
 
 ## Output shape
 
@@ -395,5 +415,6 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
+- add another richer plugin example such as sessionization or streaming-window summaries so the portfolio spans more than score/latency stories
 - add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases, not just adjacent runs
 - add docs-site navigation sidebars or a cross-project portfolio landing page if the artifact surface keeps growing beyond one project bundle

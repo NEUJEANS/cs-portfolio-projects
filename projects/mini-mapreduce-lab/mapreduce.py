@@ -2873,7 +2873,7 @@ def inspect_plugin(plugin_ref: str | Path) -> PluginInspection:
     plugin_repo_commit = _repo_head_commit(plugin.path)
     return PluginInspection(
         name=plugin.name,
-        plugin=str(plugin.path),
+        plugin=plugin_display_path(str(plugin.path)),
         plugin_repo_commit=plugin_repo_commit,
         module_doc_summary=_module_doc_summary(plugin.path),
         mapper=_callable_name(plugin.mapper) or "<unknown>",

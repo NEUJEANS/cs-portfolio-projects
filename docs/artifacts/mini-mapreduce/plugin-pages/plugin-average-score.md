@@ -6,7 +6,7 @@
 - Summary: Average-score analytics plugin with synthetic cohort benchmark families.
 - Dataset families: `default, exam-cram, project-week`
 - Catalog badges: `5 hooks` · `3 dataset families` · `commit pinned` · `github linked`
-- Repository commit: `2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8`
+- Repository commit: `c0c005d1bcef0d903008fadbb7bd0f4faa872508`
 - Catalog index: [plugin catalog](../plugin-catalog.md)
 - Alternate format: [HTML](plugin-average-score.html)
 
@@ -14,11 +14,11 @@
 
 | Hook | Export | Signature | Details | Source |
 | --- | --- | --- | --- | --- |
-| Mapper | `plugins_average_score.map_records` | `map_records(lines)` | Emit per-student sum/count records from comma-separated score lines.<br>line 7<br>anchor `plugins_average_score.py#L7-L13` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13) |
-| Reducer | `plugins_average_score.reduce_key` | `reduce_key(_key, values)` | Return a rounded average score for one student key.<br>line 23<br>anchor `plugins_average_score.py#L23-L27` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27) |
-| Combiner | `plugins_average_score.combine_values` | `combine_values(_key, values)` | Merge shard-local sum/count objects before the final reduce step.<br>line 16<br>anchor `plugins_average_score.py#L16-L20` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20) |
-| Benchmark generator | `plugins_average_score.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic cohort score fixtures for benchmark scenarios.<br>line 30<br>anchor `plugins_average_score.py#L30-L60` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60) |
-| Benchmark note hook | `plugins_average_score.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hot keys for each synthetic benchmark family.<br>line 63<br>anchor `plugins_average_score.py#L63-L132` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132) |
+| Mapper | `plugins_average_score.map_records` | `map_records(lines)` | Emit per-student sum/count records from comma-separated score lines.<br>line 7<br>anchor `plugins_average_score.py#L7-L13` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13) |
+| Reducer | `plugins_average_score.reduce_key` | `reduce_key(_key, values)` | Return a rounded average score for one student key.<br>line 23<br>anchor `plugins_average_score.py#L23-L27` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27) |
+| Combiner | `plugins_average_score.combine_values` | `combine_values(_key, values)` | Merge shard-local sum/count objects before the final reduce step.<br>line 16<br>anchor `plugins_average_score.py#L16-L20` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20) |
+| Benchmark generator | `plugins_average_score.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic cohort score fixtures for benchmark scenarios.<br>line 30<br>anchor `plugins_average_score.py#L30-L60` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60) |
+| Benchmark note hook | `plugins_average_score.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hot keys for each synthetic benchmark family.<br>line 63<br>anchor `plugins_average_score.py#L63-L132` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132) |
 
 ## Hook source excerpts
 
@@ -28,7 +28,7 @@
 - Source line: `7`
 - Source anchor: `plugins_average_score.py#L7-L13`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13>
 
 ```python
 def map_records(lines):
@@ -46,7 +46,7 @@ def map_records(lines):
 - Source line: `23`
 - Source anchor: `plugins_average_score.py#L23-L27`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27>
 
 ```python
 def reduce_key(_key, values):
@@ -62,7 +62,7 @@ def reduce_key(_key, values):
 - Source line: `16`
 - Source anchor: `plugins_average_score.py#L16-L20`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20>
 
 ```python
 def combine_values(_key, values):
@@ -78,7 +78,7 @@ def combine_values(_key, values):
 - Source line: `30`
 - Source anchor: `plugins_average_score.py#L30-L60`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60>
 
 ```python
 def benchmark_records(scenario, records, seed, dataset_family="default"):
@@ -120,7 +120,7 @@ def benchmark_records(scenario, records, seed, dataset_family="default"):
 - Source line: `63`
 - Source anchor: `plugins_average_score.py#L63-L132`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/c0c005d1bcef0d903008fadbb7bd0f4faa872508/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132>
 
 ```python
 def benchmark_notes(scenario, dataset_family="default"):

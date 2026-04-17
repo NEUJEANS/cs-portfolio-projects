@@ -1,132 +1,156 @@
 {
-  "annotation_batches": [
-    {
-      "manifest": "2026-04-17-annotation-batch-manifest.json",
-      "presets": [
-        {
-          "annotation_limit": null,
-          "annotation_overflow": null,
-          "annotation_severities": null,
-          "description": "Full annotation view with every structured reviewer callout rendered.",
-          "links": {
-            "csv": null,
-            "heatmap_csv": null,
-            "html": "2026-04-17-annotation-batch-full.html",
-            "json": "2026-04-17-annotation-batch-full.json",
-            "markdown": "2026-04-17-annotation-batch-full.md"
-          },
-          "name": "full"
-        },
-        {
-          "annotation_limit": 1,
-          "annotation_overflow": "summary",
-          "annotation_severities": [
-            "risk",
-            "watch"
-          ],
-          "description": "Filtered annotation view for portfolio screenshots: keep risk/watch callouts, show one card, and collapse the rest into a summary.",
-          "links": {
-            "csv": null,
-            "heatmap_csv": null,
-            "html": "2026-04-17-annotation-batch-portfolio-tight.html",
-            "json": "2026-04-17-annotation-batch-portfolio-tight.json",
-            "markdown": "2026-04-17-annotation-batch-portfolio-tight.md"
-          },
-          "name": "portfolio-tight"
-        }
-      ],
-      "shared_artifacts": {
-        "csv": "2026-04-17-annotation-batch-shared.csv",
-        "heatmap_csv": "2026-04-17-annotation-batch-shared-heatmap.csv"
-      },
-      "slug": "2026-04-17-annotation-batch",
-      "title": "2026-04-17 \u00b7 Annotation Batch"
-    }
-  ],
   "artifacts_root": ".",
-  "benchmark_reports": [
+  "plugin_catalog": {
+    "markdown": "plugin-catalog.md",
+    "html": "plugin-catalog.html",
+    "json": "plugin-catalog.json",
+    "csv": "plugin-catalog.csv",
+    "heatmap_csv": null
+  },
+  "plugin_pages": [
     {
-      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "slug": "plugin-average-score",
+      "title": "Plugin Average Score",
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
       "links": {
-        "csv": "2026-04-17-annotation-view-benchmark.csv",
-        "heatmap_csv": "2026-04-17-annotation-view-heatmap.csv",
-        "html": "2026-04-17-annotation-view-report.html",
-        "json": "2026-04-17-annotation-view-benchmark.json",
-        "markdown": "2026-04-17-annotation-view-report.md"
-      },
-      "slug": "2026-04-17-annotation-view",
-      "title": "2026-04-17 \u00b7 Annotation View"
+        "markdown": "plugin-pages/plugin-average-score.md",
+        "html": "plugin-pages/plugin-average-score.html",
+        "json": null,
+        "csv": null,
+        "heatmap_csv": null
+      }
     },
     {
-      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "slug": "plugin-max-score",
+      "title": "Plugin Max Score",
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
       "links": {
-        "csv": "2026-04-17-project-week-benchmark.csv",
-        "heatmap_csv": "2026-04-17-project-week-heatmap.csv",
-        "html": "2026-04-17-project-week-report.html",
-        "json": "2026-04-17-project-week-benchmark.json",
-        "markdown": "2026-04-17-project-week-report.md"
-      },
-      "slug": "2026-04-17-project-week",
-      "title": "2026-04-17 \u00b7 Project Week"
+        "markdown": "plugin-pages/plugin-max-score.md",
+        "html": "plugin-pages/plugin-max-score.html",
+        "json": null,
+        "csv": null,
+        "heatmap_csv": null
+      }
     },
     {
-      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "slug": "plugin-service-latency",
+      "title": "Plugin Service Latency",
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
       "links": {
-        "csv": "2026-04-17-structured-annotations-benchmark.csv",
-        "heatmap_csv": "2026-04-17-structured-annotations-heatmap.csv",
-        "html": "2026-04-17-structured-annotations-report.html",
-        "json": "2026-04-17-structured-annotations-benchmark.json",
-        "markdown": "2026-04-17-structured-annotations-report.md"
-      },
-      "slug": "2026-04-17-structured-annotations",
-      "title": "2026-04-17 \u00b7 Structured Annotations"
+        "markdown": "plugin-pages/plugin-service-latency.md",
+        "html": "plugin-pages/plugin-service-latency.html",
+        "json": null,
+        "csv": null,
+        "heatmap_csv": null
+      }
     }
   ],
   "inspection_diffs": [
     {
+      "slug": "plugin-comparison",
+      "title": "Plugin Comparison",
       "description": "Adjacent plugin contract comparison bundle with publishable Markdown/HTML plus machine-readable JSON.",
       "links": {
-        "csv": null,
-        "heatmap_csv": null,
+        "markdown": "plugin-comparison-diff.md",
         "html": "plugin-comparison-diff.html",
         "json": "plugin-comparison-diff.json",
-        "markdown": "plugin-comparison-diff.md"
-      },
-      "slug": "plugin-comparison",
-      "title": "Plugin Comparison"
+        "csv": null,
+        "heatmap_csv": null
+      }
     }
   ],
-  "plugin_catalog": {
-    "csv": "plugin-catalog.csv",
-    "heatmap_csv": null,
-    "html": "plugin-catalog.html",
-    "json": "plugin-catalog.json",
-    "markdown": "plugin-catalog.md"
-  },
-  "plugin_pages": [
+  "benchmark_reports": [
     {
-      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "slug": "2026-04-17-annotation-view",
+      "title": "2026-04-17 \u00b7 Annotation View",
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
       "links": {
-        "csv": null,
-        "heatmap_csv": null,
-        "html": "plugin-pages/plugin-average-score.html",
-        "json": null,
-        "markdown": "plugin-pages/plugin-average-score.md"
-      },
-      "slug": "plugin-average-score",
-      "title": "Plugin Average Score"
+        "markdown": "2026-04-17-annotation-view-report.md",
+        "html": "2026-04-17-annotation-view-report.html",
+        "json": "2026-04-17-annotation-view-benchmark.json",
+        "csv": "2026-04-17-annotation-view-benchmark.csv",
+        "heatmap_csv": "2026-04-17-annotation-view-heatmap.csv"
+      }
     },
     {
-      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "slug": "2026-04-17-incident-spike-latency",
+      "title": "2026-04-17 \u00b7 Incident Spike Latency",
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
       "links": {
-        "csv": null,
-        "heatmap_csv": null,
-        "html": "plugin-pages/plugin-max-score.html",
-        "json": null,
-        "markdown": "plugin-pages/plugin-max-score.md"
+        "markdown": "2026-04-17-incident-spike-latency-report.md",
+        "html": "2026-04-17-incident-spike-latency-report.html",
+        "json": "2026-04-17-incident-spike-latency-benchmark.json",
+        "csv": "2026-04-17-incident-spike-latency-benchmark.csv",
+        "heatmap_csv": "2026-04-17-incident-spike-latency-heatmap.csv"
+      }
+    },
+    {
+      "slug": "2026-04-17-project-week",
+      "title": "2026-04-17 \u00b7 Project Week",
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "markdown": "2026-04-17-project-week-report.md",
+        "html": "2026-04-17-project-week-report.html",
+        "json": "2026-04-17-project-week-benchmark.json",
+        "csv": "2026-04-17-project-week-benchmark.csv",
+        "heatmap_csv": "2026-04-17-project-week-heatmap.csv"
+      }
+    },
+    {
+      "slug": "2026-04-17-structured-annotations",
+      "title": "2026-04-17 \u00b7 Structured Annotations",
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "markdown": "2026-04-17-structured-annotations-report.md",
+        "html": "2026-04-17-structured-annotations-report.html",
+        "json": "2026-04-17-structured-annotations-benchmark.json",
+        "csv": "2026-04-17-structured-annotations-benchmark.csv",
+        "heatmap_csv": "2026-04-17-structured-annotations-heatmap.csv"
+      }
+    }
+  ],
+  "annotation_batches": [
+    {
+      "slug": "2026-04-17-annotation-batch",
+      "title": "2026-04-17 \u00b7 Annotation Batch",
+      "manifest": "2026-04-17-annotation-batch-manifest.json",
+      "shared_artifacts": {
+        "csv": "2026-04-17-annotation-batch-shared.csv",
+        "heatmap_csv": "2026-04-17-annotation-batch-shared-heatmap.csv"
       },
-      "slug": "plugin-max-score",
-      "title": "Plugin Max Score"
+      "presets": [
+        {
+          "name": "full",
+          "description": "Full annotation view with every structured reviewer callout rendered.",
+          "annotation_severities": null,
+          "annotation_limit": null,
+          "annotation_overflow": null,
+          "links": {
+            "markdown": "2026-04-17-annotation-batch-full.md",
+            "html": "2026-04-17-annotation-batch-full.html",
+            "json": "2026-04-17-annotation-batch-full.json",
+            "csv": null,
+            "heatmap_csv": null
+          }
+        },
+        {
+          "name": "portfolio-tight",
+          "description": "Filtered annotation view for portfolio screenshots: keep risk/watch callouts, show one card, and collapse the rest into a summary.",
+          "annotation_severities": [
+            "risk",
+            "watch"
+          ],
+          "annotation_limit": 1,
+          "annotation_overflow": "summary",
+          "links": {
+            "markdown": "2026-04-17-annotation-batch-portfolio-tight.md",
+            "html": "2026-04-17-annotation-batch-portfolio-tight.html",
+            "json": "2026-04-17-annotation-batch-portfolio-tight.json",
+            "csv": null,
+            "heatmap_csv": null
+          }
+        }
+      ]
     }
   ]
 }

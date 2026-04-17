@@ -438,4 +438,19 @@
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider richer plugin examples beyond score aggregation, such as sessionization or log-latency summaries
+- [x] consider richer plugin examples beyond score aggregation, such as sessionization or log-latency summaries
+
+## Service-latency plugin slice (2026-04-17 19:14 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the previous wrap-up already scoped the richer-plugin follow-up clearly
+- [x] do a short Python percentile/latency-summary refresh and nearest-rank self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add a bundled `plugins_service_latency.py` example that emits structured latency summaries (`count`, `avg_ms`, `p95_ms`, `max_ms`)
+- [x] give the new plugin deterministic benchmark families plus structured incident/batch hotspot annotations
+- [x] extend project-level and repo-level tests for structured latency output, benchmark metadata, and catalog discovery
+- [x] regenerate the committed Mini MapReduce artifact bundle so the catalog, plugin pages, diff report, and docs index include the new service-latency plugin
+- [x] run targeted tests and 3 review passes (link audit, publishability audit, and commit-pinned/source-path review fixed the absolute-path leak in inspection artifacts before publish)
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider a follow-up plugin example such as sessionization or streaming-window summaries
