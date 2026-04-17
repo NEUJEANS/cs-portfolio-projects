@@ -538,6 +538,86 @@ def expand_results_to_sections(results):
     return expanded
 
 
+def section_cluster_counts(results):
+    counts = {}
+    for note in results:
+        if note.get('scope') != 'section':
+            continue
+        counts[note['path']] = counts.get(note['path'], 0) + 1
+    return counts
+
+
+def has_groupable_section_clusters(results):
+    return any(count > 1 for count in section_cluster_counts(results).values())
+
+
+def grouped_section_label(result):
+    section_match = result.get('section_match') or {}
+    heading = section_match.get('heading')
+    anchor = section_match.get('anchor')
+    if heading and anchor:
+        return f'{heading} (#{anchor})'
+    if heading:
+        return heading
+    if anchor:
+        return f'#{anchor}'
+    return result_display_path(result)
+
+
+def build_grouped_section_result(group_results):
+    top_result = group_results[0]
+    headings = []
+    seen = set()
+    for result in group_results:
+        section_match = result.get('section_match') or {}
+        unique_key = section_match.get('path_with_anchor') or section_match.get('anchor') or result_display_path(result)
+        if unique_key in seen:
+            continue
+        seen.add(unique_key)
+        headings.append(grouped_section_label(result))
+
+    count = len(group_results)
+    listed_headings = ', '.join(headings[:3])
+    if len(headings) > 3:
+        listed_headings += f', +{len(headings) - 3} more'
+    snippet = f'{count} section results: {listed_headings}' if listed_headings else f'{count} section results'
+
+    group_note = dict(top_result)
+    group_note['scope'] = 'group'
+    group_note['section_match'] = None
+    group_note['snippet'] = snippet
+    group_note['group_count'] = count
+    group_note['group_headings'] = headings
+    group_note['group_results'] = list(group_results)
+    return group_note
+
+
+def group_results_for_tui(results):
+    counts = section_cluster_counts(results)
+
+    grouped_results = []
+    pending_groups = {}
+    for note in results:
+        if note.get('scope') != 'section' or counts.get(note['path'], 0) < 2:
+            grouped_results.append(note)
+            continue
+
+        bucket = pending_groups.get(note['path'])
+        if bucket is None:
+            bucket = []
+            pending_groups[note['path']] = bucket
+            grouped_results.append(bucket)
+        bucket.append(note)
+
+    collapsed = []
+    for item in grouped_results:
+        if isinstance(item, list):
+            collapsed.append(build_grouped_section_result(item))
+        else:
+            collapsed.append(item)
+    return collapsed
+
+
 def result_sort_key(note):
     line_number = None
     if note.get('section_match'):
@@ -663,7 +743,9 @@ def truncate_for_width(text, width):
 def summarize_result_line(note, width):
     display_path = result_display_path(note)
     section = ''
-    if note.get('scope') != 'section' and note.get('section_match'):
+    if note.get('scope') == 'group':
+        section = f" [{note.get('group_count', len(note.get('group_results', [])))} sections]"
+    elif note.get('scope') != 'section' and note.get('section_match'):
         section_heading = note['section_match'].get('heading') or note['section_match'].get('anchor') or ''
         if section_heading:
             section = f' -> {section_heading}'
@@ -674,7 +756,24 @@ def summarize_result_line(note, width):
 def build_preview_lines(note, width):
     width = max(10, width)
     lines = [truncate_for_width(result_display_path(note), width), truncate_for_width(f"score: {note['score']}", width)]
-    if note.get('scope') == 'section':
+    if note.get('scope') == 'group':
+        count = note.get('group_count', len(note.get('group_results', [])))
+        lines.append(truncate_for_width('scope: grouped section results', width))
+        lines.append(truncate_for_width(f'section hits: {count}', width))
+        for result in note.get('group_results', [])[:5]:
+            section = result.get('section_match') or {}
+            label = section.get('heading') or section.get('anchor') or result_display_path(result)
+            if section.get('heading') and section.get('anchor'):
+                label = f"{section['heading']} (#{section['anchor']})"
+            if section.get('line_number'):
+                label += f":{section['line_number']}"
+            lines.extend(textwrap.wrap(f"- {label}", width=width) or [''])
+        remaining = count - min(count, 5)
+        if remaining > 0:
+            lines.append(truncate_for_width(f'… {remaining} more section hits', width))
+        lines.append('')
+        lines.append(truncate_for_width('Enter/o/e/Space apply to the whole group.', width))
+    elif note.get('scope') == 'section':
         lines.append(truncate_for_width('scope: section result', width))
     if note.get('tags'):
         lines.extend(textwrap.wrap(f"tags: {' '.join('#' + tag for tag in note['tags'])}", width=width) or [''])
@@ -693,7 +792,12 @@ def build_preview_lines(note, width):
 
 
 def selection_label(results, selected_indices):
-    count = len(selected_indices)
+    count = 0
+    for index in selected_indices:
+        if not 0 <= index < len(results):
+            continue
+        note = results[index]
+        count += note.get('group_count', len(note.get('group_results', [])) or 1)
     if count == 0:
         return 'current result'
     noun = 'result' if count == 1 else 'results'
@@ -703,9 +807,33 @@ def selection_label(results, selected_indices):
 def selected_or_current_results(results, selected_indices, current_index):
     if not results:
         return []
+
+    def expand(note):
+        group_results = note.get('group_results')
+        if group_results:
+            return group_results
+        return [note]
+
+    chosen = []
     if selected_indices:
-        return [results[index] for index in sorted(selected_indices) if 0 <= index < len(results)]
-    return [results[current_index]]
+        for index in sorted(selected_indices):
+            if not 0 <= index < len(results):
+                continue
+            chosen.extend(expand(results[index]))
+    else:
+        if not 0 <= current_index < len(results):
+            return []
+        chosen.extend(expand(results[current_index]))
+
+    deduped = []
+    seen = set()
+    for note in chosen:
+        key = result_display_path(note)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(note)
+    return deduped
 
 
 def export_results(results, destination, export_format='markdown', editor=None, base_directory=None):
@@ -762,15 +890,30 @@ def launch_tui(results, editor=None, base_directory=None, export_file=None, expo
         print('No results to browse in TUI mode.')
         return
 
+    groupable_clusters = has_groupable_section_clusters(results)
+
+    def view_results(grouped):
+        return group_results_for_tui(results) if grouped else list(results)
+
+    def selection_anchor(note):
+        return note['path'] if note.get('scope') in {'section', 'group'} else result_display_path(note)
+
     def run(stdscr):
         curses.curs_set(0)
         stdscr.keypad(True)
+        grouped_view = False
+        visible_results = view_results(grouped_view)
         selected = 0
         scroll = 0
         marked = set()
         status_message = ''
 
         while True:
+            if not visible_results:
+                visible_results = view_results(grouped_view)
+                selected = 0
+                scroll = 0
+
             height, width = stdscr.getmaxyx()
             stdscr.erase()
 
@@ -784,6 +927,7 @@ def launch_tui(results, editor=None, base_directory=None, export_file=None, expo
                     return
                 continue
 
+            selected = min(max(selected, 0), len(visible_results) - 1)
             left_width = max(24, width // 3)
             right_width = max(10, width - left_width - 3)
             visible_rows = max(1, height - 2)
@@ -792,15 +936,25 @@ def launch_tui(results, editor=None, base_directory=None, export_file=None, expo
             if selected >= scroll + visible_rows:
                 scroll = selected - visible_rows + 1
 
-            title = 'markdown-notes-search TUI  ↑/↓ move  Space mark  Enter/o open  e export  q quit'
+            title_parts = [
+                'markdown-notes-search TUI',
+                '↑/↓ move',
+                'Space mark',
+                'Enter/o open',
+                'e export',
+            ]
+            if groupable_clusters:
+                title_parts.append('g group')
+            title_parts.append('q quit')
+            title = '  '.join(title_parts)
             stdscr.addnstr(0, 0, title, width - 1, curses.A_BOLD)
 
             for row_index in range(visible_rows):
                 result_index = scroll + row_index
-                if result_index >= len(results):
+                if result_index >= len(visible_results):
                     break
                 marker = '*' if result_index in marked else ' '
-                summary = summarize_result_line(results[result_index], max(1, left_width - 4))
+                summary = summarize_result_line(visible_results[result_index], max(1, left_width - 4))
                 line = f'{marker} {summary}'
                 attr = curses.A_REVERSE if result_index == selected else curses.A_NORMAL
                 stdscr.addnstr(row_index + 1, 0, line, left_width - 1, attr)
@@ -809,9 +963,12 @@ def launch_tui(results, editor=None, base_directory=None, export_file=None, expo
             for y in range(1, height):
                 stdscr.addch(y, divider_x, '|')
 
-            preview_lines = build_preview_lines(results[selected], right_width)
+            preview_lines = build_preview_lines(visible_results[selected], right_width)
             preview_lines.append('')
-            preview_lines.append(selection_label(results, marked))
+            preview_lines.append(selection_label(visible_results, marked))
+            if groupable_clusters:
+                mode_label = 'grouped by note' if grouped_view else 'expanded sections'
+                preview_lines.append(truncate_for_width(f'tui mode: {mode_label} (press g to toggle)', right_width))
             if status_message:
                 preview_lines.append(truncate_for_width(status_message, right_width))
             for row_index, line in enumerate(preview_lines[:visible_rows]):
@@ -824,20 +981,42 @@ def launch_tui(results, editor=None, base_directory=None, export_file=None, expo
             if key in (curses.KEY_UP, ord('k')):
                 selected = max(0, selected - 1)
             elif key in (curses.KEY_DOWN, ord('j')):
-                selected = min(len(results) - 1, selected + 1)
+                selected = min(len(visible_results) - 1, selected + 1)
             elif key in (curses.KEY_PPAGE,):
                 selected = max(0, selected - visible_rows)
             elif key in (curses.KEY_NPAGE,):
-                selected = min(len(results) - 1, selected + visible_rows)
+                selected = min(len(visible_results) - 1, selected + visible_rows)
             elif key == ord(' '):
+                current_note = visible_results[selected]
+                current_count = current_note.get('group_count', len(current_note.get('group_results', [])) or 1)
+                current_label = 'group' if current_note.get('scope') == 'group' else 'result'
                 if selected in marked:
                     marked.remove(selected)
-                    status_message = 'Unmarked current result.'
+                    status_message = f'Unmarked current {current_label} ({current_count} result(s)).'
                 else:
                     marked.add(selected)
-                    status_message = 'Marked current result.'
+                    status_message = f'Marked current {current_label} ({current_count} result(s)).'
+            elif key == ord('g'):
+                if not groupable_clusters:
+                    status_message = 'No multi-section note clusters are available for grouping.'
+                    continue
+                anchor = selection_anchor(visible_results[selected])
+                grouped_view = not grouped_view
+                visible_results = view_results(grouped_view)
+                marked.clear()
+                scroll = 0
+                selected = 0
+                for index, note in enumerate(visible_results):
+                    if selection_anchor(note) == anchor:
+                        selected = index
+                        break
+                status_message = (
+                    'Grouped section results by note and cleared prior marks.'
+                    if grouped_view
+                    else 'Expanded grouped section results and cleared prior marks.'
+                )
             elif key in (10, 13, curses.KEY_ENTER, ord('o')):
-                opened = selected_or_current_results(results, marked, selected)
+                opened = selected_or_current_results(visible_results, marked, selected)
                 for note in opened:
                     open_result_in_editor(note, editor=editor, base_directory=base_directory)
                 status_message = f'Opened {len(opened)} result(s) in editor.'
@@ -845,7 +1024,7 @@ def launch_tui(results, editor=None, base_directory=None, export_file=None, expo
                 if not export_file:
                     status_message = 'Set --export-results to enable TUI export.'
                 else:
-                    chosen = selected_or_current_results(results, marked, selected)
+                    chosen = selected_or_current_results(visible_results, marked, selected)
                     export_results(chosen, export_file, export_format=export_format, editor=editor, base_directory=base_directory)
                     status_message = f'Exported {len(chosen)} result(s) to {export_file}.'
 

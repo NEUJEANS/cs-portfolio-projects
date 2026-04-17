@@ -1,7 +1,7 @@
 # Markdown Notes Search Checklist
 
-Status: vertical slice 9 complete
-Last updated: 2026-04-16
+Status: vertical slice 10 complete
+Last updated: 2026-04-17
 
 ## Vertical slice 1
 - [x] identify markdown-notes-search as one of the weakest portfolio projects due to minimal search quality and docs
@@ -143,8 +143,24 @@ Last updated: 2026-04-16
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Vertical slice 10 — grouped TUI clusters for dense section results
+- [x] confirm markdown-notes-search still had a clear unfinished TUI follow-up because large section-result clusters from one note could dominate the left pane
+- [x] skip external web research because the next slice was already scoped in the local checklist, README, and prior wrap-up
+- [x] do a short Python/TUI state refresh with a local self-test for grouped selection behavior
+- [x] update checklist/docs so the slice is resumable
+- [x] add grouped TUI rows that collapse multi-section clusters from the same note into one note-level entry
+- [x] make mark/open/export actions expand grouped rows back into their underlying section results
+- [x] expand automated coverage for grouped TUI helper behavior and grouped selection expansion
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Next slice candidates
 - [ ] richer posting-list style incremental index rather than storing full note bodies in cache
 - [x] multi-result TUI actions such as bulk-open or export
 - [x] section-scoped retrieval with heading anchors and open-in-editor actions for multiple selected hits
-- [ ] collapse/group dense section-result clusters from the same note in TUI mode
+- [x] collapse/group dense section-result clusters from the same note in TUI mode
+- [ ] add plain-text or export-side collapse controls for closely related section-scoped hits

@@ -10,6 +10,7 @@ Search Markdown notes by filename, inline tags, YAML-style front matter tags, he
 - boosts notes whose headings directly match the query and surfaces heading-first snippets for faster scanning
 - extracts wiki-style and Markdown links to build backlink-aware navigation across note graphs
 - balances plain terminal output, JSON output, export bundles, and an interactive TUI for scripting plus hands-on browsing
+- adds a TUI grouping toggle so dense section-result clusters from the same note can collapse into one review-friendly row
 - includes automated tests for ranking, metadata parsing, backlink enrichment, cache refresh behavior, recursion, boolean logic, and CLI behavior
 
 ## Stack
@@ -32,6 +33,7 @@ Search Markdown notes by filename, inline tags, YAML-style front matter tags, he
 - include best-match `path#anchor` metadata, section line numbers, and generated editor commands so other tools or editors can jump straight to the relevant heading
 - optionally expand note matches into section-scoped results so several matching anchors from the same note can be opened or exported independently
 - browse results in a keyboard-driven TUI with a result list on the left and rich note preview on the right
+- toggle grouped note-level rows inside the TUI when section-level expansion would otherwise flood the result list from one large note
 - mark multiple TUI results, open them together in an editor, and export the marked subset to Markdown or JSON
 - export ranked result bundles from plain CLI mode for sharing, review, or downstream automation
 - limit output for focused workflows
@@ -95,11 +97,12 @@ python3 -m unittest discover -s . -p "test_*.py"
 ## TUI notes
 - pass `--tui` to browse matches interactively inside a terminal window
 - add `--section-results` before `--tui` when you want the left pane to list individual anchors instead of one best hit per note
-- use `↑` / `↓` or `j` / `k` to move through results, `PageUp` / `PageDown` for larger jumps, `Space` to mark results, and `Enter` or `o` to open the current/marked result set in your editor
+- use `↑` / `↓` or `j` / `k` to move through results, `PageUp` / `PageDown` for larger jumps, `Space` to mark results, `g` to toggle grouped note-level rows for dense section-result clusters, and `Enter` or `o` to open the current/marked result set in your editor
 - add `--export-results path.md` (or `.json` with `--export-format json`) and press `e` inside the TUI to export the marked subset; without marks, the current result is exported
 - the left pane shows ranked matches while the right pane previews tags, backlinks, scope, the best section anchor, selection state, and the current snippet
+- in grouped mode, one row can represent every matching section from the same note; marking, opening, or exporting that row applies to the whole grouped cluster
 - if the terminal is too small, the UI waits for a resize instead of crashing
 
 ## Future Improvements
 - support richer incremental posting-list structures instead of whole-note JSON cache entries
-- add dedicated section-grouping or collapse controls for very large notes that produce many section-scoped hits
+- add plain-text or export-side collapse controls for very large notes that produce many closely related section-scoped hits

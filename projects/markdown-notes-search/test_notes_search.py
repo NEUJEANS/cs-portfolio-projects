@@ -13,6 +13,7 @@ from notes_search import (
     build_editor_command,
     build_preview_lines,
     export_results,
+    group_results_for_tui,
     index_notes,
     search_notes,
     selected_or_current_results,
@@ -468,6 +469,118 @@ class NotesSearchTests(unittest.TestCase):
         self.assertTrue(any('section:' in line for line in preview_lines))
         self.assertTrue(any('backlinks:' in line for line in preview_lines))
         self.assertTrue(any('phi accrual' in line.lower() for line in preview_lines))
+
+    def test_group_results_for_tui_collapses_multi_section_note_clusters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\n## Failure Detection\nHeartbeat timeout and phi accrual.\n## Failure Recovery\nFailure detection retries and timers.',
+                encoding='utf-8',
+            )
+            (root / 'storage.md').write_text('# Storage\nCompaction overview.', encoding='utf-8')
+
+            results = search_notes(index_notes(root), 'failure OR compaction', section_results=True)
+            grouped = group_results_for_tui(results)
+
+            self.assertEqual(grouped[0]['scope'], 'group')
+            self.assertEqual(grouped[0]['group_count'], 2)
+            self.assertEqual([item['scope'] for item in grouped], ['group', 'section'])
+            self.assertEqual(
+                sorted(item['section_match']['path_with_anchor'] for item in grouped[0]['group_results']),
+                ['systems.md#failure-detection', 'systems.md#failure-recovery'],
+            )
+
+    def test_grouped_tui_entries_expand_for_selection_and_preview(self):
+        grouped_note = {
+            'path': 'systems.md',
+            'score': 188,
+            'scope': 'group',
+            'tags': ['systems'],
+            'snippet': '2 section results: Failure Detection, Failure Recovery',
+            'group_count': 2,
+            'group_results': [
+                {
+                    'path': 'systems.md',
+                    'score': 188,
+                    'scope': 'section',
+                    'tags': ['systems'],
+                    'snippet': 'Failure Detection notes.',
+                    'section_match': {
+                        'heading': 'Failure Detection',
+                        'path': 'systems.md',
+                        'path_with_anchor': 'systems.md#failure-detection',
+                        'line_number': 3,
+                    },
+                },
+                {
+                    'path': 'systems.md',
+                    'score': 172,
+                    'scope': 'section',
+                    'tags': ['systems'],
+                    'snippet': 'Failure Recovery notes.',
+                    'section_match': {
+                        'heading': 'Failure Recovery',
+                        'path': 'systems.md',
+                        'path_with_anchor': 'systems.md#failure-recovery',
+                        'line_number': 6,
+                    },
+                },
+            ],
+        }
+
+        preview_lines = build_preview_lines(grouped_note, 40)
+        selected = selected_or_current_results([grouped_note], set(), 0)
+
+        self.assertTrue(any('grouped section results' in line for line in preview_lines))
+        self.assertTrue(any('Failure Detection' in line for line in preview_lines))
+        self.assertEqual(
+            [note['section_match']['path_with_anchor'] for note in selected],
+            ['systems.md#failure-detection', 'systems.md#failure-recovery'],
+        )
+        self.assertEqual(selection_label([grouped_note], {0}), '2 selected results')
+        self.assertIn('[2 sections]', summarize_result_line(grouped_note, 48))
+
+    def test_group_results_for_tui_keeps_duplicate_heading_anchors_distinct(self):
+        results = [
+            {
+                'path': 'systems.md',
+                'score': 188,
+                'scope': 'section',
+                'tags': ['systems'],
+                'snippet': 'Overview near the top.',
+                'section_match': {
+                    'heading': 'Overview',
+                    'anchor': 'overview',
+                    'path': 'systems.md',
+                    'path_with_anchor': 'systems.md#overview',
+                    'line_number': 3,
+                },
+            },
+            {
+                'path': 'systems.md',
+                'score': 172,
+                'scope': 'section',
+                'tags': ['systems'],
+                'snippet': 'Overview repeated later.',
+                'section_match': {
+                    'heading': 'Overview',
+                    'anchor': 'overview-2',
+                    'path': 'systems.md',
+                    'path_with_anchor': 'systems.md#overview-2',
+                    'line_number': 9,
+                },
+            },
+        ]
+
+        grouped = group_results_for_tui(results)
+
+        self.assertEqual(len(grouped), 1)
+        self.assertEqual(grouped[0]['scope'], 'group')
+        self.assertEqual(
+            grouped[0]['group_headings'],
+            ['Overview (#overview)', 'Overview (#overview-2)'],
+        )
+        self.assertIn('Overview (#overview-2)', grouped[0]['snippet'])
 
     def test_truncate_for_width_uses_ellipsis(self):
         self.assertEqual(truncate_for_width('abcdef', 4), 'abc…')
