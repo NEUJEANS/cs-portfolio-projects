@@ -1,0 +1,23 @@
+# Mini MapReduce rolling-window join slice
+
+- **Timestamp:** 2026-04-17T21:57:34Z
+- **Feature commit:** `2332425` (`feat(mini-mapreduce): add rolling window join plugin`)
+- **Publish commit:** `180421d` (`docs(mini-mapreduce): publish rolling window join bundle`)
+- **What changed:**
+  - added the new `plugins_rolling_window_join.py` bundled plugin so Mini MapReduce can demo rolling stream-to-stream correlation with `default`, `checkout-funnel`, and `incident-correlation` benchmark families
+  - added repo-level and project-level tests that cover rolling join summaries, catalog discovery, and benchmark annotation metadata for the new plugin
+  - published the missing rolling-window-join docs/artifact bundle under `docs/artifacts/mini-mapreduce/`, including the checkout-funnel benchmark JSON/CSV/heatmap/Markdown/HTML outputs plus dedicated Markdown/HTML plugin docs
+  - refreshed the shared plugin catalog, plugin comparison diff bundle, and docs index so the committed docs surface now includes the rolling-window-join plugin end to end
+  - fixed review-found drift before publish: the first docs-index JSON generation attempt was empty, the project checklist still showed the slice as unfinished, and the README bundle summary still counted only five portfolio stories
+  - fetched first and confirmed `main` matched `origin/main` with no remote drift before editing; both implementation and publish commits were pushed safely after a clean secret scan
+- **Tests / reviews run:**
+  - `git fetch origin --prune` + `git rev-list --left-right --count HEAD...origin/main` (`0 0` before edits)
+  - `python3 -m py_compile projects/mini-mapreduce-lab/mapreduce.py projects/mini-mapreduce-lab/plugins_rolling_window_join.py`
+  - `python3 -m unittest projects/mini-mapreduce-lab/test_mapreduce.py tests/test_mini_mapreduce.py` (`114` tests passed, rerun after the doc/checklist fixes)
+  - `python3 projects/mini-mapreduce-lab/mapreduce.py benchmark --job plugin --plugin projects/mini-mapreduce-lab/plugins_rolling_window_join.py --scenario skewed --dataset-family checkout-funnel --records 240 --shard-size 30 --reducers 2 4 ...`
+  - final smoke: `python3 projects/mini-mapreduce-lab/mapreduce.py benchmark --job plugin --plugin projects/mini-mapreduce-lab/plugins_rolling_window_join.py --scenario skewed --dataset-family checkout-funnel --records 48 --shard-size 12 --reducers 2 4 --output /tmp/mini-mapreduce-rolling-window-join-smoke.json --report-output /tmp/mini-mapreduce-rolling-window-join-smoke.md --html-output /tmp/mini-mapreduce-rolling-window-join-smoke.html`
+  - review pass 1: generated the docs bundle and found the empty `docs-index.json` publish bug; fixed it by regenerating the JSON index from `discover_mini_mapreduce_docs_index(...)`
+  - review pass 2: audited project docs drift and fixed the still-unchecked rolling-window checklist item plus the README portfolio-story count
+  - review pass 3: reran tests/smoke checks, confirmed the rolling-window plugin page and benchmark report are linked from the catalog/index, and verified no `/home/user1_admin/` absolute-path leaks remain in publishable docs
+  - secret scan before push: `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` (`0` verified / `0` unknown)
+- **Next step:** add the next Mini MapReduce portfolio slice around repository-level inspection summaries or release-to-release plugin comparison pages now that the plugin set is broad enough to benefit from higher-level docs.
