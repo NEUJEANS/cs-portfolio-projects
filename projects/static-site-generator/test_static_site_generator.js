@@ -11,6 +11,9 @@ const {
   LIVE_RELOAD_PATH,
   NOT_FOUND_OUTPUT_NAME,
   PARTIALS_DIR_NAME,
+  RSS_OUTPUT_NAME,
+  SITE_CONFIG_NAME,
+  SITEMAP_OUTPUT_NAME,
   applyPreviewPlaceholders,
   buildSite,
   copyStaticAssets,
@@ -232,10 +235,11 @@ test('relativeLink computes nav hrefs across nested pages', () => {
   assert.equal(relativeLink('posts/welcome.html', 'posts/welcome.html'), 'welcome.html');
 });
 
-test('walkContentEntries and loadPages ignore reserved partial templates and keep nested content in stable order', () => {
+test('walkContentEntries and loadPages ignore reserved partial templates and site config files while keeping nested content in stable order', () => {
   const tmp = makeTempDir();
   fs.mkdirSync(path.join(tmp, 'nested'), { recursive: true });
   fs.mkdirSync(path.join(tmp, PARTIALS_DIR_NAME), { recursive: true });
+  fs.writeFileSync(path.join(tmp, SITE_CONFIG_NAME), JSON.stringify({ siteUrl: 'https://example.com/' }), 'utf8');
   fs.writeFileSync(path.join(tmp, PARTIALS_DIR_NAME, 'header.html'), '<p>Shared header</p>', 'utf8');
   fs.writeFileSync(path.join(tmp, 'nested', 'diagram.png'), 'fake-image', 'utf8');
   fs.writeFileSync(path.join(tmp, 'b.md'), `---\ntitle: Beta\norder: 2\n---\nBody`, 'utf8');
@@ -256,11 +260,12 @@ test('walkContentEntries and loadPages ignore reserved partial templates and kee
   );
 });
 
-test('copyStaticAssets preserves nested asset paths while excluding reserved partial files', () => {
+test('copyStaticAssets preserves nested asset paths while excluding reserved partial files and site config', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, 'assets'), { recursive: true });
   fs.mkdirSync(path.join(contentDir, PARTIALS_DIR_NAME), { recursive: true });
+  fs.writeFileSync(path.join(contentDir, SITE_CONFIG_NAME), JSON.stringify({ siteUrl: 'https://example.com/' }), 'utf8');
   fs.writeFileSync(path.join(contentDir, 'index.md'), '# Home', 'utf8');
   fs.writeFileSync(path.join(contentDir, PARTIALS_DIR_NAME, 'footer.html'), '<p>Footer</p>', 'utf8');
   fs.writeFileSync(path.join(contentDir, 'assets', 'styles.css'), 'body { color: red; }', 'utf8');
@@ -269,6 +274,7 @@ test('copyStaticAssets preserves nested asset paths while excluding reserved par
   assert.deepEqual(copied, [path.join('assets', 'styles.css')]);
   assert.equal(fs.readFileSync(path.join(outputDir, 'assets', 'styles.css'), 'utf8'), 'body { color: red; }');
   assert.equal(fs.existsSync(path.join(outputDir, PARTIALS_DIR_NAME, 'footer.html')), false);
+  assert.equal(fs.existsSync(path.join(outputDir, SITE_CONFIG_NAME)), false);
 });
 
 test('markdownToHtml closes an unclosed fenced code block at end of document', () => {
@@ -457,6 +463,100 @@ tags: [docs]
   assert.equal(fs.existsSync(path.join(outputDir, PARTIALS_DIR_NAME, 'header.html')), false);
 });
 
+
+
+test('buildSite generates sitemap.xml and rss.xml from optional site config', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'posts'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, SITE_CONFIG_NAME),
+    JSON.stringify(
+      {
+        siteUrl: 'https://example.com/portfolio',
+        title: 'Portfolio Updates',
+        description: 'Latest shipped student projects.',
+        language: 'en-us',
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Home
+order: 1
+description: Landing page
+---
+# Welcome`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'first.md'),
+    `---
+title: First Post
+slug: first-post
+order: 2
+description: Ships sitemap and RSS generation.
+date: 2026-04-16T10:30:00Z
+lastmod: 2026-04-16
+changefreq: weekly
+priority: 0.8
+tags: [portfolio, node]
+---
+# First Post`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'draft.md'),
+    `---
+title: Draft Post
+slug: draft-post
+order: 3
+date: 2026-04-15T09:00:00Z
+rss: false
+sitemap: false
+---
+# Draft Post`,
+    'utf8'
+  );
+
+  const result = buildSite(contentDir, outputDir);
+  assert.deepEqual(
+    result.pages.map((page) => page.output).sort(),
+    ['404.html', 'index.html', 'posts/draft-post.html', 'posts/first-post.html', RSS_OUTPUT_NAME, SITEMAP_OUTPUT_NAME, 'tags/index.html', 'tags/node.html', 'tags/portfolio.html']
+  );
+
+  const sitemapXml = fs.readFileSync(path.join(outputDir, SITEMAP_OUTPUT_NAME), 'utf8');
+  const rssXml = fs.readFileSync(path.join(outputDir, RSS_OUTPUT_NAME), 'utf8');
+
+  assert.match(sitemapXml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  assert.match(sitemapXml, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+  assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/<\/loc>/);
+  assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/posts\/first-post\.html<\/loc>/);
+  assert.match(sitemapXml, /<lastmod>2026-04-16T00:00:00\.000Z<\/lastmod>/);
+  assert.match(sitemapXml, /<changefreq>weekly<\/changefreq>/);
+  assert.match(sitemapXml, /<priority>0\.8<\/priority>/);
+  assert.doesNotMatch(sitemapXml, /404\.html/);
+  assert.doesNotMatch(sitemapXml, /draft-post\.html/);
+
+  assert.match(rssXml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  assert.match(rssXml, /<title>Portfolio Updates<\/title>/);
+  assert.match(rssXml, /<link>https:\/\/example\.com\/portfolio\/<\/link>/);
+  assert.match(rssXml, /<description>Latest shipped student projects\.<\/description>/);
+  assert.match(rssXml, /<title>First Post<\/title>/);
+  assert.match(rssXml, /<guid isPermaLink="true">https:\/\/example\.com\/portfolio\/posts\/first-post\.html<\/guid>/);
+  assert.match(rssXml, /<pubDate>Thu, 16 Apr 2026 10:30:00 GMT<\/pubDate>/);
+  assert.match(rssXml, /<category>portfolio<\/category>/);
+  assert.match(rssXml, /<category>node<\/category>/);
+  assert.doesNotMatch(rssXml, /Draft Post/);
+});
 test('buildSite lets authors provide a custom 404 page without adding it to navigation by default', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();

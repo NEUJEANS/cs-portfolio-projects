@@ -4,10 +4,13 @@ const http = require('http');
 const path = require('path');
 
 const PARTIALS_DIR_NAME = '_partials';
+const SITE_CONFIG_NAME = '_site.json';
 const LIVE_RELOAD_PATH = '/__sitegen/live';
 const DEFAULT_SERVE_HOST = '127.0.0.1';
 const DEFAULT_SERVE_PORT = 4173;
 const NOT_FOUND_OUTPUT_NAME = '404.html';
+const SITEMAP_OUTPUT_NAME = 'sitemap.xml';
+const RSS_OUTPUT_NAME = 'rss.xml';
 const CALLOUT_DEFINITIONS = {
   note: { label: 'Note', icon: 'ℹ', tone: 'note' },
   reviewer: { label: 'Reviewer note', icon: '👀', tone: 'reviewer' },
@@ -113,9 +116,94 @@ function toPosixPath(value) {
   return String(value).split(path.sep).join('/');
 }
 
+function escapeXml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function normalizeSiteUrl(rawValue) {
+  const trimmed = String(rawValue || '').trim();
+  if (!trimmed) {
+    throw new Error(`Site config must include a non-empty "siteUrl".`);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`Invalid siteUrl in ${SITE_CONFIG_NAME}: ${trimmed}`);
+  }
+
+  if (!/^https?:$/.test(parsed.protocol)) {
+    throw new Error(`siteUrl in ${SITE_CONFIG_NAME} must use http or https: ${trimmed}`);
+  }
+
+  parsed.hash = '';
+  parsed.search = '';
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  if (!parsed.pathname) {
+    parsed.pathname = '/';
+  } else if (!parsed.pathname.endsWith('/')) {
+    parsed.pathname = `${parsed.pathname}/`;
+  }
+
+  return parsed.toString();
+}
+
+function pageOutputToPublicHref(outputName) {
+  const normalized = toPosixPath(outputName);
+  if (!normalized || normalized === 'index.html') {
+    return '';
+  }
+
+  if (normalized.endsWith('/index.html')) {
+    return normalized.slice(0, -'index.html'.length);
+  }
+
+  return normalized;
+}
+
+function buildAbsoluteSiteUrl(siteUrl, outputName) {
+  return new URL(pageOutputToPublicHref(outputName), normalizeSiteUrl(siteUrl)).toString();
+}
+
+function loadSiteConfig(contentDir) {
+  const configPath = path.join(contentDir, SITE_CONFIG_NAME);
+  if (!fs.existsSync(configPath)) {
+    return null;
+  }
+
+  if (!fs.statSync(configPath).isFile()) {
+    throw new Error(`Site config path is not a file: ${configPath}`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (error) {
+    throw new Error(`Invalid JSON in ${SITE_CONFIG_NAME}: ${error.message}`);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${SITE_CONFIG_NAME} must contain a JSON object.`);
+  }
+
+  return {
+    siteUrl: normalizeSiteUrl(parsed.siteUrl),
+    title: typeof parsed.title === 'string' ? parsed.title.trim() : '',
+    description: typeof parsed.description === 'string' ? parsed.description.trim() : '',
+    language: typeof parsed.language === 'string' && parsed.language.trim() ? parsed.language.trim() : 'en-us',
+    copyright: typeof parsed.copyright === 'string' ? parsed.copyright.trim() : '',
+  };
+}
+
 function isReservedContentPath(relativePath) {
   const normalized = toPosixPath(relativePath);
-  return normalized === PARTIALS_DIR_NAME || normalized.startsWith(`${PARTIALS_DIR_NAME}/`);
+  return normalized === SITE_CONFIG_NAME || normalized === PARTIALS_DIR_NAME || normalized.startsWith(`${PARTIALS_DIR_NAME}/`);
 }
 
 function splitHref(href) {
@@ -907,6 +995,153 @@ function selectFallbackHomePage(pages) {
   return pages.find((page) => page.outputName === 'index.html') || pages.find((page) => page.metadata.nav !== false) || null;
 }
 
+function resolveSiteMetadata(siteConfig, pages) {
+  const homePage = selectFallbackHomePage(pages);
+  return {
+    title: siteConfig.title || (homePage ? homePage.metadata.title || homePage.slug : 'Portfolio site'),
+    description:
+      siteConfig.description ||
+      (homePage ? homePage.metadata.description || `Generated portfolio feed for ${homePage.metadata.title || homePage.slug}.` : 'Generated portfolio feed.'),
+    language: siteConfig.language || 'en-us',
+    copyright: siteConfig.copyright || '',
+  };
+}
+
+function normalizeSitemapLastmod(rawValue, page) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return '';
+  }
+
+  const parsed = new Date(String(rawValue));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid sitemap lastmod for ${page.sourceName || page.outputName}: ${rawValue}`);
+  }
+
+  return parsed.toISOString();
+}
+
+function normalizeSitemapChangefreq(rawValue, page) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return '';
+  }
+
+  const normalized = String(rawValue).trim().toLowerCase();
+  const supported = new Set(['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never']);
+  if (!supported.has(normalized)) {
+    throw new Error(`Invalid sitemap changefreq for ${page.sourceName || page.outputName}: ${rawValue}`);
+  }
+
+  return normalized;
+}
+
+function normalizeSitemapPriority(rawValue, page) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return '';
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(`Invalid sitemap priority for ${page.sourceName || page.outputName}: ${rawValue}`);
+  }
+
+  return parsed.toFixed(1);
+}
+
+function resolveRssPubDate(rawValue, page) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return '';
+  }
+
+  const parsed = new Date(String(rawValue));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid RSS date for ${page.sourceName || page.outputName}: ${rawValue}`);
+  }
+
+  return parsed.toUTCString();
+}
+
+function renderSitemapXml(siteConfig, pages) {
+  const eligiblePages = pages.filter((page) => !isNotFoundOutputName(page.outputName) && page.metadata?.sitemap !== false);
+  const entries = eligiblePages
+    .map((page) => {
+      const lastmod = normalizeSitemapLastmod(page.metadata?.lastmod || page.metadata?.date || '', page);
+      const changefreq = normalizeSitemapChangefreq(page.metadata?.changefreq || '', page);
+      const priority = normalizeSitemapPriority(page.metadata?.priority, page);
+      const lines = [`  <url>`, `    <loc>${escapeXml(buildAbsoluteSiteUrl(siteConfig.siteUrl, page.outputName))}</loc>`];
+      if (lastmod) {
+        lines.push(`    <lastmod>${escapeXml(lastmod)}</lastmod>`);
+      }
+      if (changefreq) {
+        lines.push(`    <changefreq>${escapeXml(changefreq)}</changefreq>`);
+      }
+      if (priority) {
+        lines.push(`    <priority>${escapeXml(priority)}</priority>`);
+      }
+      lines.push('  </url>');
+      return lines.join('\n');
+    })
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${entries}
+</urlset>
+`;
+}
+
+function renderRssFeedXml(siteConfig, pages) {
+  const metadata = resolveSiteMetadata(siteConfig, pages);
+  const feedPages = pages
+    .filter((page) => !isNotFoundOutputName(page.outputName) && page.metadata?.rss !== false && page.metadata?.date)
+    .map((page) => ({ page, pubDate: resolveRssPubDate(page.metadata.date, page) }))
+    .sort((left, right) => new Date(right.page.metadata.date).getTime() - new Date(left.page.metadata.date).getTime());
+
+  const items = feedPages
+    .map(({ page, pubDate }) => {
+      const title = page.metadata.title || page.slug;
+      const description = page.metadata.description || title;
+      const link = buildAbsoluteSiteUrl(siteConfig.siteUrl, page.outputName);
+      const categories = (page.tags || []).map((tag) => `    <category>${escapeXml(tag.label)}</category>`);
+      return [
+        '    <item>',
+        `      <title>${escapeXml(title)}</title>`,
+        `      <link>${escapeXml(link)}</link>`,
+        `      <guid isPermaLink="true">${escapeXml(link)}</guid>`,
+        `      <description>${escapeXml(description)}</description>`,
+        `      <pubDate>${escapeXml(pubDate)}</pubDate>`,
+        ...categories.map((category) => category.replace(/^ {4}/, '      ')),
+        '    </item>',
+      ].join('\n');
+    })
+    .join('\n');
+
+  const feedLines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<rss version="2.0">',
+    '  <channel>',
+    `    <title>${escapeXml(metadata.title)}</title>`,
+    `    <link>${escapeXml(siteConfig.siteUrl)}</link>`,
+    `    <description>${escapeXml(metadata.description)}</description>`,
+    `    <language>${escapeXml(metadata.language)}</language>`,
+  ];
+
+  if (metadata.copyright) {
+    feedLines.push(`    <copyright>${escapeXml(metadata.copyright)}</copyright>`);
+  }
+  if (feedPages[0]) {
+    feedLines.push(`    <lastBuildDate>${escapeXml(feedPages[0].pubDate)}</lastBuildDate>`);
+  }
+  if (items) {
+    feedLines.push(items);
+  }
+
+  feedLines.push('  </channel>');
+  feedLines.push('</rss>');
+  feedLines.push('');
+
+  return feedLines.join('\n');
+}
+
 function renderDefaultNotFoundContent(page, pages) {
   const homePage = selectFallbackHomePage(pages);
   const homeLink = homePage ? relativeLink(page.outputName, homePage.outputName) : null;
@@ -1237,6 +1472,7 @@ function buildSite(contentDir, outputDir) {
     throw new Error(`No markdown files found in: ${contentDir}`);
   }
 
+  const siteConfig = loadSiteConfig(contentDir);
   const partials = loadTemplatePartials(contentDir);
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -1249,6 +1485,9 @@ function buildSite(contentDir, outputDir) {
   }
   if (tagCollections.length) {
     generatedOutputNames.push('tags/index.html', ...tagCollections.map((collection) => collection.outputName));
+  }
+  if (siteConfig) {
+    generatedOutputNames.push(SITEMAP_OUTPUT_NAME, RSS_OUTPUT_NAME);
   }
   if (generatedOutputNames.length) {
     assertNoGeneratedPageConflicts(pages, generatedOutputNames);
@@ -1264,6 +1503,7 @@ function buildSite(contentDir, outputDir) {
   }
 
   const generatedPages = [];
+  const generatedHtmlPages = [];
   if (!hasAuthoredNotFoundPage) {
     const notFoundPage = {
       slug: '404',
@@ -1287,6 +1527,7 @@ function buildSite(contentDir, outputDir) {
       output: notFoundPage.outputName,
       title: notFoundPage.metadata.title,
     });
+    generatedHtmlPages.push(notFoundPage);
   }
 
   if (tagCollections.length) {
@@ -1298,6 +1539,7 @@ function buildSite(contentDir, outputDir) {
         title: 'Tags',
         description: 'Browse portfolio pages grouped by shared front matter tags.',
       },
+      sourceName: '(generated)',
       tags: [],
     };
 
@@ -1311,6 +1553,7 @@ function buildSite(contentDir, outputDir) {
       output: tagIndexPage.outputName,
       title: tagIndexPage.metadata.title,
     });
+    generatedHtmlPages.push(tagIndexPage);
 
     for (const collection of tagCollections) {
       const archivePage = {
@@ -1319,8 +1562,9 @@ function buildSite(contentDir, outputDir) {
         section: 'tags',
         metadata: {
           title: `Tag: ${collection.label}`,
-          description: `${collection.pages.length} page${collection.pages.length === 1 ? '' : 's'} tagged \"${collection.label}\".`,
+          description: `${collection.pages.length} page${collection.pages.length === 1 ? '' : 's'} tagged "${collection.label}".`,
         },
+        sourceName: '(generated)',
         tags: [],
       };
 
@@ -1334,7 +1578,26 @@ function buildSite(contentDir, outputDir) {
         output: archivePage.outputName,
         title: archivePage.metadata.title,
       });
+      generatedHtmlPages.push(archivePage);
     }
+  }
+
+  if (siteConfig) {
+    const sitemapXml = renderSitemapXml(siteConfig, [...pages, ...generatedHtmlPages]);
+    fs.writeFileSync(path.join(outputDir, SITEMAP_OUTPUT_NAME), sitemapXml, 'utf8');
+    generatedPages.push({
+      source: '(generated)',
+      output: SITEMAP_OUTPUT_NAME,
+      title: 'Sitemap',
+    });
+
+    const rssXml = renderRssFeedXml(siteConfig, pages);
+    fs.writeFileSync(path.join(outputDir, RSS_OUTPUT_NAME), rssXml, 'utf8');
+    generatedPages.push({
+      source: '(generated)',
+      output: RSS_OUTPUT_NAME,
+      title: 'RSS Feed',
+    });
   }
 
   return {
@@ -1895,6 +2158,9 @@ module.exports = {
   LIVE_RELOAD_PATH,
   NOT_FOUND_OUTPUT_NAME,
   PARTIALS_DIR_NAME,
+  RSS_OUTPUT_NAME,
+  SITE_CONFIG_NAME,
+  SITEMAP_OUTPUT_NAME,
   applyPreviewPlaceholders,
   assertNoGeneratedAssetConflicts,
   assertNoGeneratedPageConflicts,
@@ -1908,12 +2174,14 @@ module.exports = {
   createWatchSnapshot,
   detectContentType,
   escapeHtml,
+  escapeXml,
   formatBuildSummary,
   injectLiveReloadClient,
   isNotFoundOutputName,
   isReservedContentPath,
   listStaticAssetOutputNames,
   loadPages,
+  loadSiteConfig,
   loadTemplatePartials,
   markdownToHtml,
   normalizePreviewPathname,
@@ -1923,22 +2191,27 @@ module.exports = {
   parseCliArgs,
   parseCodeFenceInfo,
   parseComparisonFenceInfo,
+  pageOutputToPublicHref,
   parseFrontMatter,
   parseServePort,
   parseWatchInterval,
   relativeLink,
   renderDefaultNotFoundContent,
   renderPartial,
+  renderRssFeedXml,
+  renderSitemapXml,
   replaceMarkdownImages,
   replaceMarkdownLinks,
   resolveDocumentHref,
   resolvePreviewNotFoundPath,
   resolvePreviewRequestPath,
+  resolveSiteMetadata,
   rootPathForPage,
   sanitizeHref,
   selectFallbackHomePage,
   sendPreviewFile,
   slugify,
+  buildAbsoluteSiteUrl,
   startPreviewServer,
   toOutputPath,
   walkContentEntries,

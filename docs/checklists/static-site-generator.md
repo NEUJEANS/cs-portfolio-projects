@@ -221,4 +221,23 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
-- [ ] consider theme presets or blog collections in a future run
+- [ ] consider sitemap.xml or RSS feed generation in a future run
+
+## 2026-04-17 vertical slice: sitemap.xml and RSS feed generation
+- [x] identify `static-site-generator` as still unfinished because the checklist still had sitemap/RSS generation open for blog-style portfolio posts
+- [x] do brief research on the sitemap protocol plus RSS 2.0 channel/item requirements
+- [x] skip extra language refresh because the slice stays inside the current Node/CommonJS build pipeline and test harness
+- [x] add a resumable checklist for the slice
+- [x] reserve root-level `_site.json` metadata for site URL + feed defaults without copying it into `dist/`
+- [x] generate `sitemap.xml` for authored pages plus generated tag archives while excluding `404.html` and supporting `sitemap: false`
+- [x] generate `rss.xml` for dated pages with optional `rss: false` opt-outs and absolute item links
+- [x] expand automated tests for reserved `_site.json` handling, sitemap/RSS output, and the synced duplicate test entrypoint
+- [x] update README and project checklist with the new site-metadata workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
+- [ ] consider date-based archive pages or timeline indexes in a future run

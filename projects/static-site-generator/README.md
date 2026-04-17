@@ -16,6 +16,7 @@ This project shows practical compiler-style text processing, file-system automat
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
+- optional root-level `_site.json` metadata can generate deploy-ready `sitemap.xml` and `rss.xml` files with absolute site URLs for portfolio/blog hosting
 - presents fenced code blocks in richer portfolio-ready frames with language badges, optional file titles from fence metadata, line-number gutters, and copy-to-clipboard controls with accessible status feedback
 - turns GitHub-style blockquote markers such as `[!REVIEWER]` and `[!ARCHITECTURE]` into focused portfolio callout panels so code samples can carry concise “why this matters” notes
 - renders `::: comparison` blocks into responsive before/after/delta panels so portfolio pages can show refactors or benchmark wins at a glance
@@ -40,6 +41,11 @@ order: 2
 slug: student-projects
 tags: [node, portfolio]
 nav: true
+date: 2026-04-16T10:30:00Z
+lastmod: 2026-04-16
+changefreq: weekly
+priority: 0.8
+rss: true
 ---
 ```
 
@@ -160,6 +166,19 @@ print(Path('portfolio').resolve())
 
 Rendered code samples now show a language badge, an optional file/title pill, line numbers, and a copy button so walkthrough-style portfolio posts feel closer to polished docs than raw plain-text dumps. The renderer accepts `title=`, `file=`, or `filename=` in the fence info string, and the generated pages announce copy success/failure through a polite status region while falling back to a legacy copy path if the async Clipboard API is unavailable.
 
+If you want deploy-ready discovery metadata for a hosted portfolio or blog, add an optional `content/_site.json` file:
+
+```json
+{
+  "siteUrl": "https://example.com/portfolio",
+  "title": "Student Portfolio Updates",
+  "description": "New project write-ups and shipped improvements.",
+  "language": "en-us"
+}
+```
+
+When `_site.json` is present, each build also emits `dist/sitemap.xml` plus `dist/rss.xml`. Sitemap entries use absolute URLs derived from `siteUrl`, exclude the generated `404.html` page, honor optional front matter such as `lastmod`, `changefreq`, and `priority`, and can opt individual pages out with `sitemap: false`. RSS items are generated from pages that include a `date` value, can be suppressed per page with `rss: false`, and inherit the channel title/description from `_site.json` (falling back to the home page when omitted). The reserved `_site.json` file is ignored during page discovery and static-asset copying.
+
 Generated files are written to `dist/` and the CLI prints a short build summary. In watch mode, the same summary is reprinted after each detected rebuild so authors can confirm which pages were regenerated.
 
 ## Test
@@ -177,5 +196,5 @@ If you need to run the legacy mirrored entrypoint directly, `node --test test_st
 
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
-- sitemap.xml or RSS feed generation for blog-style portfolio sites
+- date-based post indexes or timeline archives for dated portfolio entries
 - optional theme presets or custom CSS hooks for different portfolio styles

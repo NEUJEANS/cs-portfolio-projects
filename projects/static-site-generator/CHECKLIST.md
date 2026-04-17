@@ -16,4 +16,5 @@
 - [x] Add copy-to-clipboard controls for code samples
 - [x] Add focused reviewer callouts for code samples or architecture notes
 - [x] Add side-by-side comparison blocks for before/after refactors or benchmark deltas
-- [ ] Add sitemap.xml or RSS feed generation for blog-style portfolio sites
+- [x] Add sitemap.xml and RSS feed generation for blog-style portfolio sites
+- [ ] Add date-based archive pages or timeline indexes for dated portfolio posts
