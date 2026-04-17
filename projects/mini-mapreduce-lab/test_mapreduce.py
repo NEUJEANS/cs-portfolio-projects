@@ -769,7 +769,7 @@ class MiniMapReduceTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(payload["job"], "plugin-max-score")
             self.assertEqual(payload["output"], {"alice": 9, "bob": 3})
-            self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
+            self.assertEqual(payload["plugin"], "projects/mini-mapreduce-lab/plugins_top_score.py")
 
     def test_cli_runs_average_plugin_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -980,10 +980,10 @@ class MiniMapReduceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.job, "plugin-max-score")
-        self.assertTrue(result.plugin.endswith("plugins_top_score.py"))
+        self.assertEqual(result.plugin, "projects/mini-mapreduce-lab/plugins_top_score.py")
         self.assertEqual(result.reducers, [2, 4])
         self.assertTrue(all(row["job"] == "plugin" for row in result.heatmap_rows))
-        self.assertTrue(all(row["plugin"] for row in result.heatmap_rows))
+        self.assertTrue(all(row["plugin"] == "projects/mini-mapreduce-lab/plugins_top_score.py" for row in result.heatmap_rows))
 
     def test_plugin_benchmark_uses_plugin_defined_generator(self) -> None:
         result = benchmark_job(
@@ -1070,6 +1070,9 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(result.plugin_benchmark_note_hook, "plugins_average_score.benchmark_notes")
         payload = json.loads(result.to_json())
         self.assertEqual(payload["available_dataset_families"], ["default", "exam-cram", "project-week"])
+        self.assertIn("Studio squad baseline", " ".join(payload["benchmark_notes"]))
+        self.assertEqual(payload["benchmark_note_annotations"][0]["title"], "Studio squad baseline")
+        self.assertEqual(payload["benchmark_note_annotations"][0]["severity"], "info")
         self.assertEqual(payload["plugin_mapper"], "plugins_average_score.map_records")
         self.assertEqual(payload["plugin_reducer"], "plugins_average_score.reduce_key")
         self.assertEqual(payload["plugin_combiner"], "plugins_average_score.combine_values")
@@ -1080,7 +1083,11 @@ class MiniMapReduceTests(unittest.TestCase):
         report = result.to_markdown()
         html_report = result.to_html()
         self.assertIn("- Available dataset families: `default, exam-cram, project-week`", report)
+        self.assertIn("## Structured benchmark annotations", report)
+        self.assertIn("Studio squad baseline", report)
         self.assertIn("<strong>Available dataset families</strong>", html_report)
+        self.assertIn("<h2>Structured benchmark annotations</h2>", html_report)
+        self.assertIn("Studio squad baseline", html_report)
         self.assertIn("default, exam-cram, project-week", html_report)
 
     def test_plugin_benchmark_rejects_unsupported_declared_dataset_family(self) -> None:
@@ -1152,7 +1159,7 @@ class MiniMapReduceTests(unittest.TestCase):
             rows = csv_output.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(payload["job"], "plugin-max-score")
             self.assertEqual(payload["dataset_family"], "project-week")
-            self.assertTrue(payload["plugin"].endswith("plugins_top_score.py"))
+            self.assertEqual(payload["plugin"], "projects/mini-mapreduce-lab/plugins_top_score.py")
             self.assertEqual(payload["reducers"], [2, 4])
             self.assertEqual(rows[0], "job,plugin,scenario,dataset_family,available_dataset_families,plugin_mapper,plugin_reducer,plugin_combiner,plugin_benchmark_generator,plugin_benchmark_note_hook,seed,total_records,shard_size,reducers,elapsed_ms,shards,map_records,unique_keys,max_reducer_records,skew_ratio")
             self.assertTrue(rows[1].startswith("plugin-max-score,"))

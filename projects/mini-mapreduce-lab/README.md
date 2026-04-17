@@ -18,6 +18,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - synthetic `benchmark` mode for balanced vs skewed workloads across multiple reducer counts for built-in wordcount, built-in JSONL aggregation, or plugin jobs
 - built-in JSON benchmark dataset families for generic events, incident workflows, and deployment pipelines
 - benchmark JSON/Markdown/HTML artifacts now include dataset-specific hotspot notes so reviewers can connect skewed cells back to the synthetic workload design
+- plugin note hooks can now emit structured benchmark annotations with severity, hotspot keys, and interview-ready takeaways in addition to plain note strings
 - machine-readable JSON output with shard and record statistics
 - optional CSV benchmark export for charting reducer-count comparisons in spreadsheets or notebooks
 - optional shard-to-reducer heatmap CSV export for slide-ready skew visualizations
@@ -34,6 +35,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
 - plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts with quick-link landing cards and review-friendly badge summaries, without repeating `--plugin` flags manually
 - optional dedicated per-plugin Markdown/HTML docs pages from the catalog flow so each bundled plugin can ship as its own review-friendly portfolio page
+- repo-relative plugin references in run/benchmark outputs so committed JSON/CSV/Markdown/HTML artifacts stay portable across machines
 
 ## Usage
 
@@ -276,7 +278,7 @@ A plugin is a Python file with:
 - `reduce_key(key, values)` → returns a JSON-serializable result for that key
 - `benchmark_records(scenario, records, seed)` → optional synthetic input generator for plugin benchmarks
 - `benchmark_records(scenario, records, seed, dataset_family)` → optional extended form when a plugin wants multiple workload families
-- `benchmark_notes(scenario)` / `benchmark_notes(scenario, dataset_family)` / `benchmark_notes(scenario, dataset_family, records, seed)` → optional benchmark hotspot narrative hook whose returned list of strings is appended to benchmark JSON/Markdown/HTML artifacts
+- `benchmark_notes(scenario)` / `benchmark_notes(scenario, dataset_family)` / `benchmark_notes(scenario, dataset_family, records, seed)` → optional benchmark hotspot narrative hook whose returned list can contain plain strings or JSON-safe annotation dicts with fields like `title`, `detail`, `severity`, `hotspot_keys`, and `takeaway`; both forms are surfaced in benchmark JSON/Markdown/HTML artifacts
 
 Pass `--plugin` either as a filesystem path like `projects/mini-mapreduce-lab/plugins_top_score.py` or as a dotted module path like `demo_plugins.topscore` when the package is importable on `PYTHONPATH`.
 
@@ -291,7 +293,7 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 ```json
 {
   "job": "plugin-max-score",
-  "plugin": "/abs/path/to/plugins_top_score.py",
+  "plugin": "projects/mini-mapreduce-lab/plugins_top_score.py",
   "reducers": 2,
   "reducer_stats": [
     {
@@ -307,7 +309,7 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, dataset-specific `benchmark_notes`, and `plugin_benchmark_note_hook`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `inspect-plugin` / `catalog-plugins` artifacts likewise surface the optional benchmark note hook alongside the mapper/reducer/combiner/generator metadata. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
+`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, dataset-specific `benchmark_notes`, richer `benchmark_note_annotations`, and `plugin_benchmark_note_hook`, plus `heatmap_rows`, where each row captures one shard/reducer cell. `inspect-plugin` / `catalog-plugins` artifacts likewise surface the optional benchmark note hook alongside the mapper/reducer/combiner/generator metadata. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
 
 ```json
 {
@@ -345,5 +347,5 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
 
 ## Future improvements
-- add richer note-hook contracts for plugins that want structured benchmark annotations, not just short narrative bullet lists
 - add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases, not just adjacent runs
+- add optional benchmark-annotation filters or collapse modes when a plugin emits many reviewer callouts in one report

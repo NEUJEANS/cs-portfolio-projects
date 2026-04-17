@@ -27,11 +27,13 @@ from typing import Any, Callable, Iterable, Iterator
 
 JSONScalar = str | int | float | bool | None
 JSONValue = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
+BenchmarkNoteAnnotation = dict[str, JSONValue]
+BenchmarkNoteItem = str | BenchmarkNoteAnnotation
 KeyValue = tuple[str, JSONValue]
 Mapper = Callable[[Iterable[str]], Iterator[KeyValue]]
 Reducer = Callable[[str, list[JSONValue]], JSONValue]
 BenchmarkGenerator = Callable[..., list[str]]
-BenchmarkNoteHook = Callable[..., list[str] | tuple[str, ...] | None]
+BenchmarkNoteHook = Callable[..., list[BenchmarkNoteItem] | tuple[BenchmarkNoteItem, ...] | None]
 
 
 PLUGIN_INSPECTION_FIELDNAMES = [
@@ -939,6 +941,59 @@ def order_output(output: dict[str, JSONValue]) -> dict[str, JSONValue]:
     return dict(sorted(output.items()))
 
 
+def summarize_benchmark_note_annotation(annotation: BenchmarkNoteAnnotation) -> str:
+    return f"{annotation['title']}: {annotation['detail']}"
+
+
+def render_benchmark_note_annotation_markdown(annotation: BenchmarkNoteAnnotation) -> list[str]:
+    lines = [f"### {annotation['title']}", f"- Detail: {annotation['detail']}"]
+    severity = annotation.get("severity")
+    if severity:
+        lines.append(f"- Severity: `{severity}`")
+    hotspot_keys = annotation.get("hotspot_keys")
+    if isinstance(hotspot_keys, list) and hotspot_keys:
+        lines.append(f"- Hotspot keys: `{', '.join(str(item) for item in hotspot_keys)}`")
+    takeaway = annotation.get("takeaway")
+    if takeaway:
+        lines.append(f"- Takeaway: {takeaway}")
+    return lines
+
+
+def render_benchmark_note_annotation_html(annotation: BenchmarkNoteAnnotation) -> str:
+    def esc(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
+    def severity_class(value: object) -> str:
+        slug = "".join(char.lower() if str(char).isalnum() else "-" for char in str(value)).strip("-")
+        return slug or "custom"
+
+    severity = annotation.get("severity")
+    hotspot_keys = annotation.get("hotspot_keys")
+    takeaway = annotation.get("takeaway")
+    severity_html = (
+        f"<p><span class='annotation-pill annotation-pill-{severity_class(severity)}'>{esc(severity)}</span></p>"
+        if severity
+        else ""
+    )
+    hotspot_html = ""
+    if isinstance(hotspot_keys, list) and hotspot_keys:
+        hotspot_html = (
+            "<p><strong>Hotspot keys</strong><br>"
+            + " ".join(f"<code>{esc(item)}</code>" for item in hotspot_keys)
+            + "</p>"
+        )
+    takeaway_html = f"<p><strong>Takeaway</strong><br>{esc(takeaway)}</p>" if takeaway else ""
+    return (
+        "<article class='annotation-card'>"
+        f"<h3>{esc(annotation['title'])}</h3>"
+        f"{severity_html}"
+        f"<p><strong>Detail</strong><br>{esc(annotation['detail'])}</p>"
+        f"{hotspot_html}"
+        f"{takeaway_html}"
+        "</article>"
+    )
+
+
 @dataclass(slots=True)
 class JobResult:
     job: str
@@ -984,6 +1039,7 @@ class BenchmarkResult:
     plugin: str | None = None
     available_dataset_families: list[str] | None = None
     benchmark_notes: list[str] | None = None
+    benchmark_note_annotations: list[BenchmarkNoteAnnotation] | None = None
     plugin_mapper: str | None = None
     plugin_reducer: str | None = None
     plugin_combiner: str | None = None
@@ -1006,6 +1062,7 @@ class BenchmarkResult:
                 "heatmap_rows": self.heatmap_rows,
                 "available_dataset_families": self.available_dataset_families,
                 "benchmark_notes": self.benchmark_notes,
+                "benchmark_note_annotations": self.benchmark_note_annotations,
                 "plugin_mapper": self.plugin_mapper,
                 "plugin_reducer": self.plugin_reducer,
                 "plugin_combiner": self.plugin_combiner,
@@ -1202,6 +1259,15 @@ class BenchmarkResult:
             lines.append("## Dataset notes")
             lines.append("")
             lines.extend(f"- {note}" for note in self.benchmark_notes)
+        if self.benchmark_note_annotations:
+            lines.append("")
+            lines.append("## Structured benchmark annotations")
+            lines.append("")
+            for annotation in self.benchmark_note_annotations:
+                lines.extend(render_benchmark_note_annotation_markdown(annotation))
+                lines.append("")
+            if lines[-1] == "":
+                lines.pop()
         lines.extend([
             "",
             "## Timing summary",
@@ -1323,6 +1389,13 @@ class BenchmarkResult:
                 f"<table><thead><tr><th>Shard</th>{header_cells}</tr></thead><tbody>{''.join(heatmap_rows)}</tbody></table></section>"
             )
 
+        annotation_html = ""
+        if self.benchmark_note_annotations:
+            annotation_html = (
+                "<h2>Structured benchmark annotations</h2>"
+                f"<div class='annotation-grid'>{''.join(render_benchmark_note_annotation_html(annotation) for annotation in self.benchmark_note_annotations)}</div>"
+            )
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1342,6 +1415,15 @@ class BenchmarkResult:
     .meta li {{ list-style: none; padding: 0.75rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.75rem; }}
     .chart-card {{ margin: 1rem 0 1.5rem; padding: 1rem; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1rem; background: rgba(255, 255, 255, 0.45); }}
     .chart-card h3 {{ margin-top: 0; margin-bottom: 0.75rem; }}
+    .annotation-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1rem 0 2rem; }}
+    .annotation-card {{ padding: 1rem; border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 1rem; background: rgba(239, 246, 255, 0.52); }}
+    .annotation-card h3 {{ margin-top: 0; margin-bottom: 0.75rem; }}
+    .annotation-card p {{ margin: 0.55rem 0; }}
+    .annotation-pill {{ display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }}
+    .annotation-pill-info {{ background: rgba(37, 99, 235, 0.14); color: #1d4ed8; }}
+    .annotation-pill-watch {{ background: rgba(245, 158, 11, 0.18); color: #b45309; }}
+    .annotation-pill-risk {{ background: rgba(220, 38, 38, 0.14); color: #b91c1c; }}
+    .annotation-pill-custom {{ background: rgba(71, 85, 105, 0.14); color: #334155; }}
     svg {{ width: 100%; height: auto; display: block; }}
     ul.summary {{ padding-left: 1.2rem; }}
   </style>
@@ -1359,6 +1441,7 @@ class BenchmarkResult:
     {f"<li><strong>Available dataset families</strong><br><code>{esc(', '.join(self.available_dataset_families))}</code></li>" if self.available_dataset_families else ""}
   </ul>
   {f"<h2>Dataset notes</h2><ul class='summary'>{''.join(f'<li>{esc(note)}</li>' for note in self.benchmark_notes)}</ul>" if self.benchmark_notes else ""}
+  {annotation_html}
   <h2>Timing summary</h2>
   <div class="chart-card"><h3>Elapsed timing chart</h3>{timing_chart}</div>
   <table>
@@ -1401,7 +1484,7 @@ def normalize_dataset_families(value: Any) -> list[str] | None:
 BUILTIN_JOBS = ("wordcount", "json-group-count")
 
 
-BUILTIN_JOB_BENCHMARK_NOTES: dict[tuple[str, str, str], list[str]] = {
+BUILTIN_JOB_BENCHMARK_NOTES: dict[tuple[str, str, str], list[BenchmarkNoteItem]] = {
     ("wordcount", "balanced", "default"): [
         "The default balanced corpus rotates evenly across 24 generic keys, so reducer hot spots should stay mild unless the partitioner itself clusters hashes.",
         "If one reducer still pulls ahead here, that usually reflects hash-bucket variance rather than an intentionally dominant vocabulary term.",
@@ -1453,6 +1536,71 @@ BUILTIN_JOB_BENCHMARK_NOTES: dict[tuple[str, str, str], list[str]] = {
 }
 
 
+def normalize_benchmark_note_annotation(
+    item: BenchmarkNoteAnnotation,
+    *,
+    source: str,
+    index: int,
+) -> BenchmarkNoteAnnotation:
+    if not is_json_value(item):
+        raise ValueError(f"{source} item {index} must be a JSON-serializable annotation object")
+    title = item.get("title")
+    detail = item.get("detail", item.get("summary"))
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError(f"{source} item {index} must include a non-empty string title")
+    if not isinstance(detail, str) or not detail.strip():
+        raise ValueError(f"{source} item {index} must include a non-empty string detail")
+
+    normalized: BenchmarkNoteAnnotation = {
+        "title": title.strip(),
+        "detail": detail.strip(),
+    }
+
+    severity = item.get("severity")
+    if severity is not None:
+        if not isinstance(severity, str) or not severity.strip():
+            raise ValueError(f"{source} item {index} severity must be a non-empty string when provided")
+        normalized["severity"] = severity.strip().lower()
+
+    hotspot_keys = item.get("hotspot_keys")
+    if hotspot_keys is not None:
+        if not isinstance(hotspot_keys, (list, tuple)) or not hotspot_keys or not all(isinstance(key, str) and key.strip() for key in hotspot_keys):
+            raise ValueError(f"{source} item {index} hotspot_keys must be a non-empty list/tuple of strings when provided")
+        normalized["hotspot_keys"] = [key.strip() for key in hotspot_keys]
+
+    takeaway = item.get("takeaway")
+    if takeaway is not None:
+        if not isinstance(takeaway, str) or not takeaway.strip():
+            raise ValueError(f"{source} item {index} takeaway must be a non-empty string when provided")
+        normalized["takeaway"] = takeaway.strip()
+
+    for key, value in item.items():
+        if key in {"title", "detail", "summary", "severity", "hotspot_keys", "takeaway"}:
+            continue
+        normalized[key] = normalize_json_value(value, context=f"{source} item {index} field {key!r}")
+    return normalized
+
+
+def normalize_benchmark_note_items(
+    note_values: list[BenchmarkNoteItem] | tuple[BenchmarkNoteItem, ...],
+    *,
+    source: str,
+) -> tuple[list[str], list[BenchmarkNoteAnnotation]]:
+    notes: list[str] = []
+    annotations: list[BenchmarkNoteAnnotation] = []
+    for index, item in enumerate(note_values):
+        if isinstance(item, str) and item.strip():
+            notes.append(item.strip())
+            continue
+        if isinstance(item, dict):
+            annotation = normalize_benchmark_note_annotation(item, source=source, index=index)
+            annotations.append(annotation)
+            notes.append(summarize_benchmark_note_annotation(annotation))
+            continue
+        raise ValueError(f"{source} must contain only non-empty strings or annotation objects")
+    return notes, annotations
+
+
 def call_benchmark_note_hook(
     hook: BenchmarkNoteHook,
     *,
@@ -1460,7 +1608,7 @@ def call_benchmark_note_hook(
     dataset_family: str,
     records: int,
     seed: int,
-) -> list[str]:
+) -> list[BenchmarkNoteItem]:
     signature = inspect.signature(hook)
     positional_params = [
         parameter
@@ -1483,9 +1631,10 @@ def call_benchmark_note_hook(
     note_values = hook(*args if has_varargs else args[: len(positional_params)])
     if note_values is None:
         return []
-    if not isinstance(note_values, (list, tuple)) or not all(isinstance(item, str) and item.strip() for item in note_values):
-        raise ValueError("plugin benchmark_notes must return a list/tuple of non-empty strings")
-    return [item.strip() for item in note_values]
+    if not isinstance(note_values, (list, tuple)):
+        raise ValueError("plugin benchmark_notes must return a list/tuple of non-empty strings or annotation objects")
+    normalize_benchmark_note_items(note_values, source="plugin benchmark_notes")
+    return list(note_values)
 
 
 def benchmark_notes_for(
@@ -1496,10 +1645,10 @@ def benchmark_notes_for(
     records: int,
     seed: int,
     plugin: PluginJob | None = None,
-) -> list[str]:
-    notes = list(BUILTIN_JOB_BENCHMARK_NOTES.get((job, scenario, dataset_family), []))
+) -> tuple[list[str], list[BenchmarkNoteAnnotation]]:
+    note_items = list(BUILTIN_JOB_BENCHMARK_NOTES.get((job, scenario, dataset_family), []))
     if job == "plugin" and plugin is not None and plugin.benchmark_note_hook is not None:
-        notes.extend(
+        note_items.extend(
             call_benchmark_note_hook(
                 plugin.benchmark_note_hook,
                 scenario=scenario,
@@ -1508,7 +1657,7 @@ def benchmark_notes_for(
                 seed=seed,
             )
         )
-    return notes
+    return normalize_benchmark_note_items(note_items, source="benchmark notes")
 
 
 def chunked(items: list[str], size: int) -> Iterator[list[str]]:
@@ -1981,7 +2130,7 @@ def execute_job(
     reduced, reducer_stats = reduce_shards(partials, reducers, reducer_fn=reducer_fn)
     return JobResult(
         job=resolved_job_name,
-        plugin=str(plugin.path) if plugin else None,
+        plugin=plugin_display_path(str(plugin.path)) if plugin else None,
         inputs=[str(path) for path in inputs],
         shard_count=len(shards),
         map_records=map_records,
@@ -2134,6 +2283,7 @@ def benchmark_job(
 
     timings: list[dict[str, int | float]] = []
     heatmap_rows: list[dict[str, int | str]] = []
+    benchmark_plugin_ref = plugin_display_path(str(benchmark_plugin.path)) if benchmark_plugin else None
     benchmark_shards = list(chunked(lines, shard_size)) or [[]]
     if job == "wordcount":
         benchmark_mapper = map_wordcount
@@ -2182,7 +2332,7 @@ def benchmark_job(
                     heatmap_rows.append(
                         {
                             "job": job,
-                            "plugin": str(benchmark_plugin.path) if benchmark_plugin else None,
+                            "plugin": benchmark_plugin_ref,
                             "scenario": scenario,
                             "dataset_family": dataset_family,
                             "seed": seed,
@@ -2197,15 +2347,24 @@ def benchmark_job(
         input_path.unlink(missing_ok=True)
 
     inspection = inspect_plugin(plugin_path) if benchmark_plugin and plugin_path is not None else None
+    benchmark_notes, benchmark_note_annotations = benchmark_notes_for(
+        job,
+        scenario,
+        dataset_family,
+        records=records,
+        seed=seed,
+        plugin=benchmark_plugin,
+    )
     return BenchmarkResult(
         job=job if job != "plugin" or benchmark_plugin is None else benchmark_plugin.name,
-        plugin=str(benchmark_plugin.path) if benchmark_plugin else None,
+        plugin=benchmark_plugin_ref,
         available_dataset_families=(
             list(benchmark_plugin.dataset_families)
             if benchmark_plugin and benchmark_plugin.dataset_families
             else (["default", "news", "logs"] if job == "wordcount" else (["default", "incidents", "deployments"] if job == "json-group-count" else None))
         ),
-        benchmark_notes=benchmark_notes_for(job, scenario, dataset_family, records=records, seed=seed, plugin=benchmark_plugin),
+        benchmark_notes=benchmark_notes,
+        benchmark_note_annotations=benchmark_note_annotations or None,
         plugin_mapper=inspection.mapper if inspection else None,
         plugin_reducer=inspection.reducer if inspection else None,
         plugin_combiner=inspection.combiner if inspection else None,

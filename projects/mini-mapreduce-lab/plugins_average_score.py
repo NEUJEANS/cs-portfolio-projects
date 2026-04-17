@@ -64,22 +64,55 @@ def benchmark_notes(scenario, dataset_family="default"):
     """Describe the intended hot keys for each synthetic benchmark family."""
     notes = {
         ("balanced", "default"): [
-            "The default balanced cohort rotates evenly across team labels, so average-score aggregation stays spread out and mostly tests framework overhead rather than hot students.",
+            {
+                "title": "Even cohort rotation",
+                "detail": "The default balanced cohort rotates evenly across team labels, so average-score aggregation stays spread out and mostly tests framework overhead rather than hot students.",
+                "severity": "info",
+                "takeaway": "Treat any noticeable reducer imbalance here as partition spread, not as a workload-shaped hotspot.",
+            },
         ],
         ("skewed", "default"): [
-            "`capstone-core` is the dominant student key here, so the hottest reducer should look like one heavy project lead soaking up repeated score updates.",
+            {
+                "title": "Capstone leader hotspot",
+                "detail": "`capstone-core` is the dominant student key here, so the hottest reducer should look like one heavy project lead soaking up repeated score updates.",
+                "severity": "watch",
+                "hotspot_keys": ["capstone-core"],
+                "takeaway": "Use this scenario to explain how a single standout key can dominate reducer traffic even when the final averages remain correct.",
+            },
         ],
         ("balanced", "exam-cram"): [
-            "Balanced exam-cram fixtures distribute scores across study groups, which makes them a clean baseline before simulating deadline pressure.",
+            {
+                "title": "Distributed study groups",
+                "detail": "Balanced exam-cram fixtures distribute scores across study groups, which makes them a clean baseline before simulating deadline pressure.",
+                "severity": "info",
+                "takeaway": "This is the calm comparison point for the cram-week hotspot run.",
+            },
         ],
         ("skewed", "exam-cram"): [
-            "`midterm-sprint` is intentionally overrepresented, so the report should surface one study cohort as the obvious hotspot during cram-week traffic.",
+            {
+                "title": "Cram-week surge",
+                "detail": "`midterm-sprint` is intentionally overrepresented, so the report should surface one study cohort as the obvious hotspot during cram-week traffic.",
+                "severity": "watch",
+                "hotspot_keys": ["midterm-sprint"],
+                "takeaway": "The skew should read like deadline-driven traffic, not like a partitioner bug.",
+            },
         ],
         ("balanced", "project-week"): [
-            "Balanced project-week fixtures rotate across studio squads so reducer load stays close even though the labels feel more portfolio-realistic than generic teams.",
+            {
+                "title": "Studio squad baseline",
+                "detail": "Balanced project-week fixtures rotate across studio squads so reducer load stays close even though the labels feel more portfolio-realistic than generic teams.",
+                "severity": "info",
+                "takeaway": "This family keeps the story portfolio-friendly without manufacturing a hotspot.",
+            },
         ],
         ("skewed", "project-week"): [
-            "`demo-day-core` is the main hotspot here, with integration and feature tails behind it, so you can narrate the skew as a deadline-driven project crunch.",
+            {
+                "title": "Demo-day crunch hotspot",
+                "detail": "`demo-day-core` is the main hotspot here, with integration and feature tails behind it, so you can narrate the skew as a deadline-driven project crunch.",
+                "severity": "risk",
+                "hotspot_keys": ["demo-day-core", "integration-0", "feature-0"],
+                "takeaway": "This slice is meant to read like a real project-week bottleneck where one squad absorbs the final demo push.",
+            },
         ],
     }
     return notes.get((scenario, dataset_family), [])
