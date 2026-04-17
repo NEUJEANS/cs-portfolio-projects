@@ -4,6 +4,8 @@ import argparse
 import json
 import random
 import re
+import textwrap
+from datetime import UTC, datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -675,6 +677,293 @@ def format_summary_table(results: list[SimulationResult]) -> str:
     return "\n".join(lines)
 
 
+def _build_comparison_talking_points(
+    results: list[SimulationResult],
+    trace_summary: dict[str, Any],
+) -> list[str]:
+    by_name = {result.predictor: result for result in results}
+    best = results[0]
+    runner_up = results[1]
+    points: list[str] = []
+
+    if abs(best.accuracy - runner_up.accuracy) < 1e-9:
+        tied = [result.predictor for result in results if abs(result.accuracy - best.accuracy) < 1e-9]
+        points.append(
+            f"Top spot is a tie at {best.accuracy * 100:.2f}% accuracy across {', '.join(tied)}."
+        )
+    else:
+        points.append(
+            f"{best.predictor} wins this trace at {best.accuracy * 100:.2f}% accuracy, "
+            f"beating {runner_up.predictor} by {(best.accuracy - runner_up.accuracy) * 100:.2f} percentage points."
+        )
+
+    one_bit = by_name.get("one-bit")
+    two_bit = by_name.get("two-bit")
+    if one_bit is not None and two_bit is not None:
+        delta = (two_bit.accuracy - one_bit.accuracy) * 100
+        if delta >= 0:
+            points.append(
+                f"Two-bit vs one-bit: {two_bit.accuracy * 100:.2f}% vs {one_bit.accuracy * 100:.2f}% accuracy "
+                f"({delta:.2f} pp in favor of two-bit)."
+            )
+        else:
+            points.append(
+                f"Two-bit vs one-bit: {two_bit.accuracy * 100:.2f}% vs {one_bit.accuracy * 100:.2f}% accuracy "
+                f"({abs(delta):.2f} pp in favor of one-bit on this trace)."
+            )
+
+    advanced_names = {"local-history", "gshare", "tournament"}
+    simple_names = {"always-taken", "always-not-taken", "one-bit", "two-bit"}
+    advanced_best = next((result for result in results if result.predictor in advanced_names), None)
+    simple_best = next((result for result in results if result.predictor in simple_names), None)
+    if advanced_best is not None and simple_best is not None:
+        points.append(
+            f"Best advanced predictor: {advanced_best.predictor} at {advanced_best.accuracy * 100:.2f}% "
+            f"vs best simple baseline {simple_best.predictor} at {simple_best.accuracy * 100:.2f}%."
+        )
+
+    hardest = best.hardest_branches[0] if best.hardest_branches else None
+    if hardest is not None:
+        points.append(
+            f"Hardest branch for the winning predictor is {hardest['address']} with "
+            f"{hardest['mispredictions']} misses across {hardest['total']} executions."
+        )
+
+    label_counts = trace_summary.get("label_counts", {})
+    if label_counts:
+        top_labels = sorted(label_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
+        points.append(
+            "Top labeled branch motifs: " + ", ".join(f"{label} ({count})" for label, count in top_labels) + "."
+        )
+
+    return points[:5]
+
+
+def render_comparison_markdown(
+    *,
+    trace_path: Path,
+    trace_summary: dict[str, Any],
+    results: list[SimulationResult],
+    table_size: int,
+    history_bits: int,
+) -> str:
+    generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    best = results[0]
+    worst = results[-1]
+    talking_points = _build_comparison_talking_points(results, trace_summary)
+    address_counts = list(trace_summary["address_counts"].items())[:5]
+    label_counts = list(trace_summary["label_counts"].items())[:5]
+
+    lines = [
+        f"# Branch predictor comparison card: `{trace_path.stem}`",
+        "",
+        f"- Generated: `{generated}`",
+        f"- Trace: `{trace_path}`",
+        f"- Branches: `{trace_summary['total_branches']}` across `{trace_summary['unique_addresses']}` static PCs",
+        f"- Taken rate: `{trace_summary['taken_percent']:.3f}%` (`{trace_summary['taken_branches']}` taken / `{trace_summary['not_taken_branches']}` not taken)",
+        f"- Predictor config: table size `{table_size}` · history bits `{history_bits}`",
+        "",
+        "## Headline",
+        "",
+        f"- Best predictor: `{best.predictor}` at `{best.accuracy * 100:.2f}%` accuracy with `{best.mispredictions}` mispredictions.",
+        f"- Weakest predictor on this trace: `{worst.predictor}` at `{worst.accuracy * 100:.2f}%` accuracy.",
+        "",
+        "## Ranking",
+        "",
+        "| Predictor | Accuracy | Mispredictions | MPKI | Hardest branch |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ]
+    for result in results:
+        hardest = result.hardest_branches[0]["address"] if result.hardest_branches else "-"
+        lines.append(
+            f"| `{result.predictor}` | `{result.accuracy * 100:.2f}%` | `{result.mispredictions}` | `{result.mpki:.1f}` | `{hardest}` |"
+        )
+
+    lines.extend(["", "## Portfolio talking points", ""])
+    lines.extend(f"- {point}" for point in talking_points)
+
+    lines.extend(["", "## Trace mix", ""])
+    lines.append(
+        "- Top PCs: " + ", ".join(f"`{address}` × `{count}`" for address, count in address_counts)
+    )
+    if label_counts:
+        lines.append(
+            "- Top labels: " + ", ".join(f"`{label}` × `{count}`" for label, count in label_counts)
+        )
+    else:
+        lines.append("- Top labels: `(none)`")
+
+    if best.hardest_branches:
+        lines.extend(["", "## Hardest branches for the winning predictor", ""])
+        for branch in best.hardest_branches:
+            lines.append(
+                f"- `{branch['address']}` · `{branch['mispredictions']}` mispredictions over `{branch['total']}` executions "
+                f"(`{branch['accuracy_percent']:.2f}%` accuracy on that branch)"
+            )
+
+    return "\n".join(lines) + "\n"
+
+
+def _svg_escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _svg_text(x: float, y: float, text: str, *, size: int = 14, weight: str = "normal", fill: str = "#111827") -> str:
+    font_family = "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    return (
+        f"<text x=\"{x:.1f}\" y=\"{y:.1f}\" font-size=\"{size}\" font-weight=\"{weight}\" "
+        f"fill=\"{fill}\" font-family=\"{font_family}\">{_svg_escape(text)}</text>"
+    )
+
+
+def _truncate_svg_text(text: str, limit: int = 68) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _wrap_svg_text(text: str, *, max_chars: int = 44) -> list[str]:
+    normalized = " ".join(text.split())
+    if not normalized:
+        return ["(none)"]
+    return textwrap.wrap(
+        normalized,
+        width=max_chars,
+        break_long_words=False,
+        break_on_hyphens=False,
+    ) or [normalized]
+
+
+def _svg_add_wrapped_text(
+    parts: list[str],
+    x: float,
+    y: float,
+    text: str,
+    *,
+    max_chars: int = 44,
+    line_height: int = 18,
+    size: int = 13,
+    weight: str = "normal",
+    fill: str = "#334155",
+) -> float:
+    lines = _wrap_svg_text(text, max_chars=max_chars)
+    for index, line in enumerate(lines):
+        parts.append(_svg_text(x, y + index * line_height, line, size=size, weight=weight, fill=fill))
+    return y + max(0, len(lines) - 1) * line_height
+
+
+def render_comparison_svg(
+    *,
+    trace_path: Path,
+    trace_summary: dict[str, Any],
+    results: list[SimulationResult],
+    table_size: int,
+    history_bits: int,
+) -> str:
+    width = 960
+    height = 640
+    best = results[0]
+    runner_up = results[1]
+    talking_points = _build_comparison_talking_points(results, trace_summary)[:3]
+    hardest_branches = best.hardest_branches[:3]
+    gap_text = (
+        f"Tie at {best.accuracy * 100:.2f}%"
+        if abs(best.accuracy - runner_up.accuracy) < 1e-9
+        else f"{(best.accuracy - runner_up.accuracy) * 100:.2f} pp"
+    )
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Branch predictor comparison card</title>',
+        f'<desc id="desc">Comparison card for {trace_path.stem} showing branch predictor accuracy rankings and trace insights.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 40, "Branch predictor comparison card", size=28, weight="700"),
+        _svg_text(28, 66, f"Trace: {trace_path.stem} · branches={trace_summary['total_branches']} · unique PCs={trace_summary['unique_addresses']} · table={table_size} · history={history_bits}", size=14, fill="#334155"),
+    ]
+
+    cards = [
+        (28, "Best predictor", best.predictor, f"{best.accuracy * 100:.2f}% accuracy"),
+        (258, "Runner-up gap", gap_text, runner_up.predictor),
+        (488, "Taken rate", f"{trace_summary['taken_percent']:.2f}%", f"{trace_summary['taken_branches']} taken / {trace_summary['not_taken_branches']} not taken"),
+        (718, "Worst predictor", results[-1].predictor, f"{results[-1].accuracy * 100:.2f}% accuracy"),
+    ]
+    for x, label, value, subtitle in cards:
+        parts.append(f'<rect x="{x}" y="92" width="214" height="86" rx="16" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(x + 18, 120, label, size=13, weight="700", fill="#475569"))
+        parts.append(_svg_text(x + 18, 152, value, size=24, weight="700", fill="#0f172a"))
+        parts.append(_svg_text(x + 18, 170, _truncate_svg_text(subtitle, 30), size=11, fill="#64748b"))
+
+    left_x = 28
+    left_y = 214
+    left_w = 500
+    left_h = 376
+    parts.append(f'<rect x="{left_x}" y="{left_y}" width="{left_w}" height="{left_h}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(left_x + 20, left_y + 34, "Accuracy ranking", size=20, weight="700"))
+    chart_left = left_x + 132
+    chart_right = left_x + left_w - 28
+    chart_width = chart_right - chart_left
+    row_top = left_y + 78
+    row_height = 40
+    for tick in range(0, 101, 20):
+        tick_x = chart_left + chart_width * (tick / 100)
+        parts.append(f'<line x1="{tick_x:.1f}" y1="{left_y + 58}" x2="{tick_x:.1f}" y2="{left_y + left_h - 24}" stroke="#e2e8f0" stroke-width="1" />')
+        parts.append(_svg_text(tick_x - 10, left_y + 54, str(tick), size=10, fill="#94a3b8"))
+    for index, result in enumerate(results):
+        row_y = row_top + index * row_height
+        bar_width = chart_width * result.accuracy
+        bar_color = "#2563eb" if index == 0 else ("#7c3aed" if result.predictor in {"local-history", "gshare", "tournament"} else "#94a3b8")
+        parts.append(_svg_text(left_x + 20, row_y + 16, result.predictor, size=13, weight="700", fill="#0f172a"))
+        parts.append(f'<rect x="{chart_left}" y="{row_y}" width="{chart_width:.1f}" height="18" rx="9" fill="#e2e8f0" />')
+        parts.append(f'<rect x="{chart_left}" y="{row_y}" width="{bar_width:.1f}" height="18" rx="9" fill="{bar_color}" />')
+        parts.append(_svg_text(chart_right - 70, row_y + 15, f"{result.accuracy * 100:.2f}%", size=12, weight="700", fill="#0f172a"))
+        hardest = result.hardest_branches[0]["address"] if result.hardest_branches else "-"
+        parts.append(_svg_text(chart_left, row_y + 33, f"mispreds={result.mispredictions} · hardest={hardest}", size=11, fill="#64748b"))
+
+    right_x = 556
+    right_y = 214
+    right_w = 376
+    parts.append(f'<rect x="{right_x}" y="{right_y}" width="{right_w}" height="178" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(right_x + 20, right_y + 34, "Interview-ready talking points", size=20, weight="700"))
+    current_y = right_y + 66
+    for point in talking_points:
+        parts.append(_svg_text(right_x + 20, current_y, "•", size=15, weight="700", fill="#2563eb"))
+        current_y = _svg_add_wrapped_text(parts, right_x + 34, current_y, point, max_chars=40, size=13, fill="#334155") + 24
+
+    lower_y = 412
+    parts.append(f'<rect x="{right_x}" y="{lower_y}" width="{right_w}" height="178" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(right_x + 20, lower_y + 34, "Hardest branches for the winner", size=20, weight="700"))
+    if hardest_branches:
+        current_y = lower_y + 66
+        for branch in hardest_branches:
+            summary = (
+                f"{branch['address']} · {branch['mispredictions']} misses / {branch['total']} execs · "
+                f"{branch['accuracy_percent']:.2f}% branch accuracy"
+            )
+            current_y = _svg_add_wrapped_text(parts, right_x + 20, current_y, summary, max_chars=42, size=13, fill="#334155") + 20
+    else:
+        parts.append(_svg_text(right_x + 20, lower_y + 66, "No mispredicted branches on this trace.", size=13, fill="#334155"))
+
+    footer = "Use this card next to the Markdown report to explain why simple vs history-aware predictors diverge on the same trace."
+    parts.append(_svg_text(28, 620, _truncate_svg_text(footer, 120), size=12, fill="#475569"))
+    parts.append("</svg>")
+    return "".join(parts) + "\n"
+
+
+def write_markdown_output(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+
+
+def write_svg_output(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+
+
 def _json_default(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
@@ -695,6 +984,8 @@ def _build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("trace", **common_help["trace"])
     compare_parser.add_argument("--table-size", **common_help["table_size"])
     compare_parser.add_argument("--history-bits", **common_help["history_bits"])
+    compare_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown comparison card for the ranked predictor suite.")
+    compare_parser.add_argument("--svg-out", type=Path, help="Write an SVG comparison card for the ranked predictor suite.")
     compare_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text table.")
 
     simulate_parser = subparsers.add_parser("simulate", help="Run one specific predictor on the trace.")
@@ -758,19 +1049,52 @@ def main(argv: list[str] | None = None) -> int:
 
         records = load_trace(args.trace)
         if args.command == "compare":
+            trace_path = Path(args.trace)
+            trace_summary = summarize_trace(records)
             results = compare_predictors(records, table_size=args.table_size, history_bits=args.history_bits)
+            payload = {
+                "trace": str(trace_path),
+                "table_size": args.table_size,
+                "history_bits": args.history_bits,
+                "trace_summary": trace_summary,
+                "total_branches": len(records),
+                "results": [result.to_dict() for result in results],
+                "best_predictor": results[0].predictor,
+            }
+            if getattr(args, "markdown_out", None):
+                write_markdown_output(
+                    args.markdown_out,
+                    render_comparison_markdown(
+                        trace_path=trace_path,
+                        trace_summary=trace_summary,
+                        results=results,
+                        table_size=args.table_size,
+                        history_bits=args.history_bits,
+                    ),
+                )
+                payload["markdown_output"] = str(args.markdown_out)
+            if getattr(args, "svg_out", None):
+                write_svg_output(
+                    args.svg_out,
+                    render_comparison_svg(
+                        trace_path=trace_path,
+                        trace_summary=trace_summary,
+                        results=results,
+                        table_size=args.table_size,
+                        history_bits=args.history_bits,
+                    ),
+                )
+                payload["svg_output"] = str(args.svg_out)
             if args.json:
-                payload = {
-                    "trace": str(Path(args.trace)),
-                    "total_branches": len(records),
-                    "results": [result.to_dict() for result in results],
-                    "best_predictor": results[0].predictor,
-                }
                 print(json.dumps(payload, indent=2, default=_json_default))
             else:
                 print(format_summary_table(results))
                 print()
                 print(f"best predictor: {results[0].predictor} ({results[0].accuracy * 100:.2f}% accuracy)")
+                if "markdown_output" in payload:
+                    print(f"markdown card: {payload['markdown_output']}")
+                if "svg_output" in payload:
+                    print(f"svg card: {payload['svg_output']}")
             return 0
 
         predictor = build_predictor(args.predictor, table_size=args.table_size, history_bits=args.history_bits)

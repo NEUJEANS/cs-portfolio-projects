@@ -11,8 +11,9 @@
 - [x] Add synthetic workload generators for loop-heavy, random-biased, and tournament-style traces
 - [x] Add generator CLI coverage plus reproducibility checks for the new synthetic workloads
 - [x] Add local-history and tournament predictors with advanced-predictor tests and JSON-visible chooser snapshots
+- [x] Render Markdown/SVG predictor comparison cards for the docs artifact gallery
 
 ## Next candidate slices
-- [ ] Render Markdown/SVG predictor comparison cards for the docs artifact gallery
 - [ ] Add a perceptron predictor follow-up for advanced architecture coverage
 - [ ] Add trace-family sweep commands that batch-generate workloads and compare predictors in one run
+- [ ] Add aliasing-focused traces or counters so table-size trade-offs become easier to show in portfolio screenshots

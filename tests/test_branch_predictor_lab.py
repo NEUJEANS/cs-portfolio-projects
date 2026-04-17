@@ -30,6 +30,8 @@ compare_predictors = module.compare_predictors
 generate_synthetic_trace = module.generate_synthetic_trace
 load_trace = module.load_trace
 parse_trace_line = module.parse_trace_line
+render_comparison_markdown = module.render_comparison_markdown
+render_comparison_svg = module.render_comparison_svg
 simulate_trace = module.simulate_trace
 summarize_trace = module.summarize_trace
 
@@ -231,6 +233,78 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("global_predictor", payload["final_state"])
         chooser_total = sum(payload["final_state"]["chooser_table"].values())
         self.assertEqual(chooser_total, 16)
+
+    def test_render_comparison_markdown_includes_rankings_and_talking_points(self) -> None:
+        records = load_trace(TRACE_PATH)
+        trace_summary = summarize_trace(records)
+        results = compare_predictors(records, table_size=16, history_bits=2)
+
+        rendered = render_comparison_markdown(
+            trace_path=TRACE_PATH,
+            trace_summary=trace_summary,
+            results=results,
+            table_size=16,
+            history_bits=2,
+        )
+
+        self.assertIn("# Branch predictor comparison card: `sample_trace`", rendered)
+        self.assertIn("## Ranking", rendered)
+        self.assertIn("`local-history`", rendered)
+        self.assertIn("## Portfolio talking points", rendered)
+        self.assertIn("Two-bit vs one-bit", rendered)
+
+    def test_render_comparison_svg_includes_expected_labels(self) -> None:
+        records = load_trace(TRACE_PATH)
+        trace_summary = summarize_trace(records)
+        results = compare_predictors(records, table_size=16, history_bits=2)
+
+        rendered = render_comparison_svg(
+            trace_path=TRACE_PATH,
+            trace_summary=trace_summary,
+            results=results,
+            table_size=16,
+            history_bits=2,
+        )
+
+        self.assertIn("<svg", rendered)
+        self.assertIn("Branch predictor comparison card", rendered)
+        self.assertIn("Accuracy ranking", rendered)
+        self.assertIn("local-history", rendered)
+        self.assertIn("Worst predictor", rendered)
+
+    def test_cli_compare_json_writes_markdown_and_svg_cards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "branch-predictor-card.md"
+            svg_path = Path(tmpdir) / "branch-predictor-card.svg"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "compare",
+                    str(TRACE_PATH),
+                    "--table-size",
+                    "16",
+                    "--history-bits",
+                    "2",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["best_predictor"], "local-history")
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertIn("## Ranking", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Accuracy ranking", svg_path.read_text(encoding="utf-8"))
 
     def test_cli_generate_json_writes_trace_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

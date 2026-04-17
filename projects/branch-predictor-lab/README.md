@@ -130,6 +130,19 @@ python3 projects/branch-predictor-lab/branch_predictor.py compare \
   --history-bits 4
 ```
 
+Export recruiter-friendly Markdown and SVG comparison cards from the same compare command:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py compare \
+  projects/branch-predictor-lab/sample_trace.txt \
+  --table-size 16 \
+  --history-bits 2 \
+  --markdown-out docs/artifacts/branch-predictor-lab/sample-trace-comparison.md \
+  --svg-out docs/artifacts/branch-predictor-lab/sample-trace-comparison.svg
+```
+
+See the committed gallery at [`docs/artifacts/branch-predictor-lab/index.md`](../../docs/artifacts/branch-predictor-lab/index.md).
+
 Run the tests:
 
 ```bash
@@ -153,6 +166,6 @@ Run the tests:
 - extend the simulator with perceptron prediction if you want a stronger architecture capstone story
 
 ## Future improvements
-- render Markdown/SVG predictor comparison cards for the docs artifact gallery
 - add a perceptron predictor follow-up for advanced architecture coverage
 - add trace-family sweep commands that run multiple generated workloads in one shot
+- add aliasing-focused traces or summaries so table-size trade-offs are easier to show in artifact cards

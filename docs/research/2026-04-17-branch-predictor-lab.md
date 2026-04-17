@@ -20,3 +20,4 @@ Build a compact Python lab with:
 - gshare as the first genuinely history-aware follow-up
 - a local-history and tournament follow-up so the project covers the classic local/global/hybrid progression
 - JSON-friendly output so the project can later grow artifact exports or benchmarking
+- reuse the same compare payload for Markdown/SVG report cards instead of inventing a separate artifact-only path
