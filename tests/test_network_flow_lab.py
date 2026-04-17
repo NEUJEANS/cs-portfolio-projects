@@ -20,6 +20,8 @@ spec.loader.exec_module(module)
 Edge = module.Edge
 benchmark_algorithms = module.benchmark_algorithms
 generate_random_flow_graph = module.generate_random_flow_graph
+generate_dense_flow_graph = module.generate_dense_flow_graph
+generate_layered_flow_graph = module.generate_layered_flow_graph
 load_graph = module.load_graph
 load_bipartite_graph = module.load_bipartite_graph
 render_flow_dot = module.render_flow_dot
@@ -293,15 +295,88 @@ class NetworkFlowLabTests(unittest.TestCase):
         for i in range(len(nodes) - 1):
             self.assertIn((f"n{i}", f"n{i+1}"), edge_pairs)
 
+    def test_dense_graph_generator_includes_backward_residual_edges(self) -> None:
+        graph_a = generate_dense_flow_graph(seed=9, node_count=6, edge_probability=0.7)
+        graph_b = generate_dense_flow_graph(seed=9, node_count=6, edge_probability=0.7)
+        self.assertEqual(graph_a, graph_b)
+        nodes, edges, source, sink = graph_a
+        self.assertEqual((source, sink), ("n0", "n5"))
+        edge_pairs = {(edge.source, edge.target) for edge in edges}
+        self.assertIn(("n2", "n1"), edge_pairs)
+        self.assertIn(("n4", "n3"), edge_pairs)
+        self.assertIn(("n1", "n5"), edge_pairs)
+        self.assertIn(("n0", "n4"), edge_pairs)
+        self.assertEqual(nodes, [f"n{i}" for i in range(6)])
+
+    def test_layered_graph_generator_builds_dense_adjacent_layers(self) -> None:
+        nodes, edges, source, sink = generate_layered_flow_graph(seed=5, node_count=8, edge_probability=0.25)
+        self.assertEqual((source, sink), ("n0", "n7"))
+        edge_pairs = {(edge.source, edge.target) for edge in edges}
+        for node in ["n1", "n2", "n3"]:
+            self.assertIn(("n0", node), edge_pairs)
+        for left in ["n1", "n2", "n3"]:
+            for right in ["n4", "n5", "n6"]:
+                self.assertIn((left, right), edge_pairs)
+        for node in ["n4", "n5", "n6"]:
+            self.assertIn((node, "n7"), edge_pairs)
+        self.assertEqual(nodes, [f"n{i}" for i in range(8)])
+
     def test_benchmark_reports_matching_algorithms_and_speedup(self) -> None:
         payload = benchmark_algorithms(node_count=12, edge_probability=0.3, trials=3, seed=11)
         self.assertEqual(payload["command"], "benchmark")
         self.assertEqual(payload["algorithms"], ["edmonds-karp", "dinic"])
+        self.assertEqual(payload["generator"]["graph_family"], "dag")
         self.assertEqual(len(payload["trials"]), 3)
         self.assertIn("speedup_ratio", payload["summary"])
         self.assertGreater(payload["summary"]["dinic"]["mean_phases"], 0)
         for trial in payload["trials"]:
             self.assertEqual(trial["edmonds-karp"]["max_flow"], trial["dinic"]["max_flow"])
+            self.assertEqual(trial["graph_family"], "dag")
+
+    def test_benchmark_accepts_dense_graph_family(self) -> None:
+        payload = benchmark_algorithms(
+            node_count=10,
+            edge_probability=0.35,
+            trials=2,
+            seed=4,
+            graph_family="dense",
+        )
+        self.assertEqual(payload["generator"]["graph_family"], "dense")
+        self.assertEqual(len(payload["trials"]), 2)
+        self.assertTrue(all(trial["graph_family"] == "dense" for trial in payload["trials"]))
+        self.assertTrue(all(trial["edge_density"] > 0 for trial in payload["trials"]))
+
+    def test_benchmark_rejects_too_few_nodes_for_layered_family(self) -> None:
+        with self.assertRaisesRegex(ValueError, "layered benchmark family requires at least 6 nodes"):
+            benchmark_algorithms(
+                node_count=5,
+                edge_probability=0.25,
+                trials=1,
+                seed=2,
+                graph_family="layered",
+            )
+
+    def test_cli_benchmark_reports_family_node_requirement_cleanly(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "benchmark",
+                "--graph-family",
+                "layered",
+                "--nodes",
+                "4",
+                "--trials",
+                "1",
+                "--seed",
+                "1",
+            ],
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("--graph-family layered requires --nodes >= 6", completed.stderr)
 
     def test_cli_demo_outputs_json_payload(self) -> None:
         completed = subprocess.run(
@@ -435,6 +510,8 @@ class NetworkFlowLabTests(unittest.TestCase):
                 "2",
                 "--seed",
                 "5",
+                "--graph-family",
+                "layered",
             ],
             cwd=PROJECT_ROOT,
             check=True,
@@ -444,7 +521,9 @@ class NetworkFlowLabTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["command"], "benchmark")
         self.assertEqual(payload["generator"]["seed"], 5)
+        self.assertEqual(payload["generator"]["graph_family"], "layered")
         self.assertEqual(len(payload["trials"]), 2)
+        self.assertTrue(all(trial["graph_family"] == "layered" for trial in payload["trials"]))
         self.assertIn("speedup_ratio", payload["summary"])
 
 

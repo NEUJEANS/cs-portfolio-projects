@@ -13,4 +13,5 @@
 - [x] Export proof views as standalone Markdown artifacts for portfolio screenshots
 - [ ] Add weighted assignment / min-cost flow as an advanced follow-up
 - [ ] Ship pre-rendered SVG examples in docs for quick visual browsing
-- [ ] Expand the benchmark generator with denser residual-heavy stress cases
+- [x] Expand the benchmark generator with denser residual-heavy stress cases
+- [ ] Export benchmark suites as committed Markdown/SVG report cards

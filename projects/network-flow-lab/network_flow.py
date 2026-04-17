@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import statistics
 import time
@@ -124,6 +125,12 @@ MATCH_SOURCE = "__source__"
 MATCH_SINK = "__sink__"
 DEFAULT_ALGORITHM = "edmonds-karp"
 SUPPORTED_ALGORITHMS = ("edmonds-karp", "dinic")
+BENCHMARK_GRAPH_FAMILIES = ("dag", "dense", "layered")
+BENCHMARK_GRAPH_MIN_NODES = {
+    "dag": 2,
+    "dense": 4,
+    "layered": 6,
+}
 
 
 def load_graph(path: Path) -> tuple[list[str], list[Edge], str, str]:
@@ -498,15 +505,39 @@ def solve_max_flow_dinic(nodes: list[str], edges: list[Edge], source: str, sink:
     )
 
 
-def generate_random_flow_graph(
-    *, seed: int, node_count: int, edge_probability: float, capacity_min: int = 1, capacity_max: int = 20
-) -> tuple[list[str], list[Edge], str, str]:
+def validate_benchmark_graph_inputs(
+    *, node_count: int, edge_probability: float, capacity_min: int, capacity_max: int
+) -> None:
     if node_count < 2:
         raise ValueError("node_count must be at least 2")
     if not 0 < edge_probability <= 1:
         raise ValueError("edge_probability must be within (0, 1]")
     if capacity_min <= 0 or capacity_max < capacity_min:
         raise ValueError("capacity bounds must be positive and ordered")
+
+
+def append_unique_edge(
+    edges: list[Edge],
+    seen: set[tuple[str, str]],
+    source: str,
+    target: str,
+    capacity: int,
+) -> None:
+    if source == target or (source, target) in seen:
+        return
+    seen.add((source, target))
+    edges.append(Edge(source, target, capacity))
+
+
+def generate_random_flow_graph(
+    *, seed: int, node_count: int, edge_probability: float, capacity_min: int = 1, capacity_max: int = 20
+) -> tuple[list[str], list[Edge], str, str]:
+    validate_benchmark_graph_inputs(
+        node_count=node_count,
+        edge_probability=edge_probability,
+        capacity_min=capacity_min,
+        capacity_max=capacity_max,
+    )
 
     rng = random.Random(seed)
     nodes = [f"n{i}" for i in range(node_count)]
@@ -516,20 +547,139 @@ def generate_random_flow_graph(
     seen: set[tuple[str, str]] = set()
 
     for left, right in zip(nodes, nodes[1:]):
-        capacity = rng.randint(capacity_min, capacity_max)
-        edge = (left, right)
-        seen.add(edge)
-        edges.append(Edge(left, right, capacity))
+        append_unique_edge(edges, seen, left, right, rng.randint(capacity_min, capacity_max))
 
     for i, left in enumerate(nodes[:-1]):
         for right in nodes[i + 1 :]:
-            if (left, right) in seen:
-                continue
             if rng.random() <= edge_probability:
-                seen.add((left, right))
-                edges.append(Edge(left, right, rng.randint(capacity_min, capacity_max)))
+                append_unique_edge(edges, seen, left, right, rng.randint(capacity_min, capacity_max))
 
     return nodes, edges, source, sink
+
+
+def generate_dense_flow_graph(
+    *, seed: int, node_count: int, edge_probability: float, capacity_min: int = 1, capacity_max: int = 20
+) -> tuple[list[str], list[Edge], str, str]:
+    validate_benchmark_graph_inputs(
+        node_count=node_count,
+        edge_probability=edge_probability,
+        capacity_min=capacity_min,
+        capacity_max=capacity_max,
+    )
+    if node_count < BENCHMARK_GRAPH_MIN_NODES["dense"]:
+        raise ValueError(f"dense benchmark family requires at least {BENCHMARK_GRAPH_MIN_NODES['dense']} nodes")
+
+    rng = random.Random(seed)
+    nodes = [f"n{i}" for i in range(node_count)]
+    source = nodes[0]
+    sink = nodes[-1]
+    middle = nodes[1:-1]
+    edges: list[Edge] = []
+    seen: set[tuple[str, str]] = set()
+
+    for left, right in zip(nodes, nodes[1:]):
+        append_unique_edge(edges, seen, left, right, rng.randint(capacity_min, capacity_max))
+
+    for node in middle:
+        append_unique_edge(edges, seen, source, node, rng.randint(capacity_min, capacity_max))
+        append_unique_edge(edges, seen, node, sink, rng.randint(capacity_min, capacity_max))
+    for left, right in zip(middle[1:], middle[:-1]):
+        append_unique_edge(edges, seen, left, right, rng.randint(capacity_min, capacity_max))
+
+    backward_probability = min(1.0, max(0.2, edge_probability * 0.75))
+    forward_probability = min(1.0, max(edge_probability, 0.55))
+    for index, left in enumerate(middle):
+        for right in middle[index + 1 :]:
+            if rng.random() <= forward_probability:
+                append_unique_edge(edges, seen, left, right, rng.randint(capacity_min, capacity_max))
+            if rng.random() <= backward_probability:
+                append_unique_edge(edges, seen, right, left, rng.randint(capacity_min, capacity_max))
+
+    return nodes, edges, source, sink
+
+
+def generate_layered_flow_graph(
+    *, seed: int, node_count: int, edge_probability: float, capacity_min: int = 1, capacity_max: int = 20
+) -> tuple[list[str], list[Edge], str, str]:
+    validate_benchmark_graph_inputs(
+        node_count=node_count,
+        edge_probability=edge_probability,
+        capacity_min=capacity_min,
+        capacity_max=capacity_max,
+    )
+    if node_count < BENCHMARK_GRAPH_MIN_NODES["layered"]:
+        raise ValueError(f"layered benchmark family requires at least {BENCHMARK_GRAPH_MIN_NODES['layered']} nodes")
+
+    rng = random.Random(seed)
+    nodes = [f"n{i}" for i in range(node_count)]
+    source = nodes[0]
+    sink = nodes[-1]
+    middle = nodes[1:-1]
+    layer_count = max(2, round(math.sqrt(len(middle))))
+    layer_width = math.ceil(len(middle) / layer_count)
+    layers = [middle[offset : offset + layer_width] for offset in range(0, len(middle), layer_width)]
+    if len(layers) == 1:
+        midpoint = max(1, len(middle) // 2)
+        layers = [middle[:midpoint], middle[midpoint:]]
+        layers = [layer for layer in layers if layer]
+
+    edges: list[Edge] = []
+    seen: set[tuple[str, str]] = set()
+    internal_capacity_max = min(capacity_max, max(capacity_min, 3))
+
+    for node in layers[0]:
+        append_unique_edge(edges, seen, source, node, rng.randint(capacity_min, capacity_max))
+    for left_layer, right_layer in zip(layers, layers[1:]):
+        for left in left_layer:
+            for right in right_layer:
+                append_unique_edge(edges, seen, left, right, rng.randint(capacity_min, internal_capacity_max))
+    for node in layers[-1]:
+        append_unique_edge(edges, seen, node, sink, rng.randint(capacity_min, capacity_max))
+
+    for start_index, left_layer in enumerate(layers[:-2]):
+        for later_layer in layers[start_index + 2 :]:
+            for left in left_layer:
+                for right in later_layer:
+                    if rng.random() <= edge_probability:
+                        append_unique_edge(edges, seen, left, right, rng.randint(capacity_min, internal_capacity_max))
+
+    return nodes, edges, source, sink
+
+
+def generate_benchmark_flow_graph(
+    *,
+    graph_family: str,
+    seed: int,
+    node_count: int,
+    edge_probability: float,
+    capacity_min: int = 1,
+    capacity_max: int = 20,
+) -> tuple[list[str], list[Edge], str, str]:
+    if graph_family == "dag":
+        return generate_random_flow_graph(
+            seed=seed,
+            node_count=node_count,
+            edge_probability=edge_probability,
+            capacity_min=capacity_min,
+            capacity_max=capacity_max,
+        )
+    if graph_family == "dense":
+        return generate_dense_flow_graph(
+            seed=seed,
+            node_count=node_count,
+            edge_probability=edge_probability,
+            capacity_min=capacity_min,
+            capacity_max=capacity_max,
+        )
+    if graph_family == "layered":
+        return generate_layered_flow_graph(
+            seed=seed,
+            node_count=node_count,
+            edge_probability=edge_probability,
+            capacity_min=capacity_min,
+            capacity_max=capacity_max,
+        )
+    raise ValueError(f"unsupported benchmark graph family: {graph_family}")
 
 
 def benchmark_algorithms(
@@ -540,6 +690,7 @@ def benchmark_algorithms(
     seed: int,
     capacity_min: int = 1,
     capacity_max: int = 20,
+    graph_family: str = "dag",
 ) -> dict[str, Any]:
     if trials <= 0:
         raise ValueError("trials must be positive")
@@ -550,16 +701,27 @@ def benchmark_algorithms(
     flow_values: list[int] = []
     trial_payloads: list[dict[str, Any]] = []
 
+    if graph_family not in BENCHMARK_GRAPH_FAMILIES:
+        raise ValueError(f"graph_family must be one of {', '.join(BENCHMARK_GRAPH_FAMILIES)}")
+
     for trial_index in range(trials):
         trial_seed = seed + trial_index
-        nodes, edges, source, sink = generate_random_flow_graph(
+        nodes, edges, source, sink = generate_benchmark_flow_graph(
+            graph_family=graph_family,
             seed=trial_seed,
             node_count=node_count,
             edge_probability=edge_probability,
             capacity_min=capacity_min,
             capacity_max=capacity_max,
         )
-        trial_result: dict[str, Any] = {"trial": trial_index + 1, "seed": trial_seed, "edge_count": len(edges)}
+        max_edges = max(1, node_count * (node_count - 1))
+        trial_result: dict[str, Any] = {
+            "trial": trial_index + 1,
+            "seed": trial_seed,
+            "graph_family": graph_family,
+            "edge_count": len(edges),
+            "edge_density": round(len(edges) / max_edges, 3),
+        }
         reference_flow: int | None = None
         for algorithm in SUPPORTED_ALGORITHMS:
             start = time.perf_counter()
@@ -608,6 +770,7 @@ def benchmark_algorithms(
     return {
         "command": "benchmark",
         "generator": {
+            "graph_family": graph_family,
             "node_count": node_count,
             "edge_probability": edge_probability,
             "capacity_range": [capacity_min, capacity_max],
@@ -845,14 +1008,38 @@ def build_parser() -> argparse.ArgumentParser:
     add_explain_argument(match_demo_parser)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
-    benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated DAG")
-    benchmark_parser.add_argument("--edge-probability", type=float, default=0.18, help="probability for extra forward edges")
+    benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated benchmark graph")
+    benchmark_parser.add_argument(
+        "--graph-family",
+        choices=BENCHMARK_GRAPH_FAMILIES,
+        default="dag",
+        help="benchmark graph generator: DAG, dense cyclic residual mesh, or dense layered network",
+    )
+    benchmark_parser.add_argument("--edge-probability", type=float, default=0.18, help="probability for optional generator-specific extra edges")
     benchmark_parser.add_argument("--trials", type=int, default=5, help="how many generated graphs to test")
     benchmark_parser.add_argument("--seed", type=int, default=42, help="base RNG seed for reproducible graphs")
     benchmark_parser.add_argument("--capacity-min", type=int, default=1)
     benchmark_parser.add_argument("--capacity-max", type=int, default=20)
     benchmark_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     return parser
+
+
+def validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.command != "benchmark":
+        return
+    try:
+        validate_benchmark_graph_inputs(
+            node_count=args.nodes,
+            edge_probability=args.edge_probability,
+            capacity_min=args.capacity_min,
+            capacity_max=args.capacity_max,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    minimum_nodes = BENCHMARK_GRAPH_MIN_NODES[args.graph_family]
+    if args.nodes < minimum_nodes:
+        parser.error(f"--graph-family {args.graph_family} requires --nodes >= {minimum_nodes}")
 
 
 def run_command(args: argparse.Namespace) -> dict[str, Any]:
@@ -923,12 +1110,14 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         seed=args.seed,
         capacity_min=args.capacity_min,
         capacity_max=args.capacity_max,
+        graph_family=args.graph_family,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    validate_cli_args(parser, args)
     payload = run_command(args)
     if getattr(args, "pretty", False):
         print(json.dumps(payload, indent=2))

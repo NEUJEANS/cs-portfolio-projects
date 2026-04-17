@@ -1,6 +1,6 @@
 # network-flow-lab
 
-A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, and now ships a reproducible benchmark mode, a bipartite minimum-vertex-cover explainer via König's theorem, Graphviz DOT export for explainable visuals, plus an optional proof view that narrates why the reported cut/cover certifies correctness.
+A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, and now ships a reproducible benchmark mode with multiple graph families, a bipartite minimum-vertex-cover explainer via König's theorem, Graphviz DOT export for explainable visuals, plus an optional proof view that narrates why the reported cut/cover certifies correctness.
 
 ## Why it is interesting
 - demonstrates a classic graph algorithm used in routing, scheduling, and resource allocation
@@ -19,7 +19,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - per-edge flow summary and min-cut partition output
 - bipartite-matching mode that reduces assignments to unit-capacity flow
 - minimum vertex cover recovery for bipartite graphs using alternating paths after the matching is found
-- reproducible benchmark mode that generates random DAGs and compares Edmonds-Karp vs Dinic
+- reproducible benchmark mode that compares Edmonds-Karp vs Dinic on random DAGs, dense residual-style meshes, or layered cut-stress graphs
 - Graphviz DOT export for solved flow graphs and bipartite matchings
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--markdown-out` proof artifacts for flow and matching runs so portfolio screenshots do not require terminal capture
@@ -67,11 +67,18 @@ python3 projects/network-flow-lab/network_flow.py match projects/network-flow-la
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --algorithm dinic --pretty
 ```
 
-Run a reproducible benchmark that compares Edmonds-Karp against Dinic on generated directed acyclic flow graphs. In this pure-Python lab, Dinic is included for trade-off analysis rather than a guaranteed speed win on every small benchmark:
+Run reproducible benchmarks that compare Edmonds-Karp against Dinic across different generated graph families. In this pure-Python lab, Dinic is included for trade-off analysis rather than a guaranteed speed win on every small benchmark:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py benchmark --nodes 24 --edge-probability 0.18 --trials 5 --seed 42 --pretty
+python3 projects/network-flow-lab/network_flow.py benchmark --graph-family dense --nodes 18 --edge-probability 0.30 --trials 3 --seed 7 --pretty
+python3 projects/network-flow-lab/network_flow.py benchmark --graph-family layered --nodes 18 --edge-probability 0.20 --trials 3 --seed 7 --pretty
 ```
+
+Benchmark graph families:
+- `dag` keeps the original acyclic baseline for easy apples-to-apples comparisons.
+- `dense` adds many source/sink shortcuts plus guaranteed backward middle-layer edges, which creates more residual rerouting opportunities (requires at least 4 nodes).
+- `layered` builds dense adjacent layers with optional skip edges, which makes cut-heavy phases easier to demo (requires at least 6 nodes).
 
 Flow graph format:
 
@@ -123,11 +130,11 @@ python3 -m unittest tests/test_network_flow_lab.py
 - Maximum bipartite matching reduces cleanly to max flow by adding a super-source, a super-sink, and unit capacities on partition and compatibility edges.
 - Once a maximum matching is known, the lab derives a minimum vertex cover by alternating-path reachability from unmatched left-side vertices, giving a constructive König's theorem witness.
 - In matching mode, `--explain` surfaces the alternating-path reachability sets and the recovered cover vertices so the proof can be demoed without reading code.
-- The benchmark mode generates reproducible random DAG instances, verifies both algorithms return the same max-flow value, and summarizes elapsed time plus augmentation/phase counts.
+- The benchmark mode generates reproducible graph families for three different stories: random DAGs, dense cyclic residual meshes, and layered cut-stress networks; it verifies both algorithms return the same max-flow value and summarizes elapsed time plus augmentation/phase counts.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
 - add weighted assignment or min-cost flow as a follow-up advanced slice
 - ship more polished SVG proof cards built on top of the Markdown artifact pipeline
 - ship pre-rendered SVG examples in the docs for portfolio screenshots
-- expand the benchmark generator beyond DAGs to include denser residual-heavy stress cases
+- export benchmark runs as committed Markdown/SVG report cards for quick portfolio browsing
