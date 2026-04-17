@@ -287,6 +287,21 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output project-week-annotation-view.html
 ```
 
+Or emit both the full and portfolio-tight annotation views from one shared benchmark run so your CSV/heatmap metrics stay identical across screenshot-friendly variants:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --job plugin \
+  --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
+  --scenario skewed \
+  --dataset-family project-week \
+  --records 240 \
+  --shard-size 30 \
+  --reducers 2 4 \
+  --annotation-batch-dir docs/artifacts/mini-mapreduce \
+  --annotation-batch-prefix project-week-annotation-batch
+```
+
 ## Plugin contract
 
 A plugin is a Python file with:
@@ -328,7 +343,7 @@ The new `plugins_average_score.py` example shows a richer pattern: the mapper em
 }
 ```
 
-`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, dataset-specific `benchmark_notes`, richer `benchmark_note_annotations`, and `plugin_benchmark_note_hook`, plus `heatmap_rows`, where each row captures one shard/reducer cell. When annotation filters or limits are active—or when a plugin actually emits structured reviewer callouts—the JSON payload also includes an `annotation_view` summary so Markdown/HTML artifacts can explain how many notes were hidden or collapsed. `inspect-plugin` / `catalog-plugins` artifacts likewise surface the optional benchmark note hook alongside the mapper/reducer/combiner/generator metadata. `--report-output` can turn the same data into a narrative Markdown artifact, and `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing:
+`benchmark` mode now also includes benchmark `job`/`plugin` metadata, `dataset_family`, optional `available_dataset_families`, dataset-specific `benchmark_notes`, richer `benchmark_note_annotations`, and `plugin_benchmark_note_hook`, plus `heatmap_rows`, where each row captures one shard/reducer cell. When annotation filters or limits are active, the JSON payload also includes an `annotation_view` summary so Markdown/HTML artifacts can explain how many notes were hidden or collapsed. `inspect-plugin` / `catalog-plugins` artifacts likewise surface the optional benchmark note hook alongside the mapper/reducer/combiner/generator metadata. `--report-output` can turn the same data into a narrative Markdown artifact, `--html-output` can render a standalone colorized report page for screenshots or GitHub Pages publishing, and `--annotation-batch-dir` can emit a manifest plus shared CSV/heatmap files alongside full and filtered Markdown/HTML/JSON variants from one shared benchmark run. The manifest uses self-relative filenames so the committed batch stays portable across machines:
 
 ```json
 {
@@ -367,4 +382,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases, not just adjacent runs
-- add batch benchmark presets that emit multiple filtered annotation views in one run so you can compare terse vs full reviewer narratives side by side
+- add a lightweight landing page that links plugin catalogs, plugin doc pages, benchmark reports, and annotation-batch manifests into one portfolio-friendly docs index

@@ -13,6 +13,8 @@ if str(PROJECT_DIR) not in sys.path:
 
 from mapreduce import (
     benchmark_job,
+    benchmark_note_items_for,
+    build_benchmark_preset_batch,
     build_plugin_page_links,
     diff_plugin_inspections,
     discover_plugin_refs,
@@ -1149,6 +1151,62 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("Hidden by severity filter", html_report)
         self.assertIn("Hidden by annotation limit", html_report)
         self.assertIn("Collapsed reviewer callouts", html_report)
+
+    def test_build_benchmark_preset_batch_reuses_metrics_and_writes_manifest_ready_artifacts(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2, 4],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_average_score.py",
+            dataset_family="project-week",
+        )
+        plugin = load_plugin(PROJECT_DIR / "plugins_average_score.py")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            batch = build_benchmark_preset_batch(
+                result,
+                note_items=benchmark_note_items_for(
+                    "plugin",
+                    "skewed",
+                    "project-week",
+                    records=48,
+                    seed=11,
+                    plugin=plugin,
+                ),
+                output_dir=Path(tmpdir),
+                prefix="project-week-batch",
+            )
+
+            self.assertEqual(batch.prefix, "project-week-batch")
+            self.assertEqual(batch.shared_csv_path, "project-week-batch-shared.csv")
+            self.assertEqual(batch.shared_heatmap_path, "project-week-batch-shared-heatmap.csv")
+            self.assertEqual([preset.name for preset in batch.presets], ["full", "portfolio-tight"])
+
+            full_payload = json.loads((Path(tmpdir) / "project-week-batch-full.json").read_text(encoding="utf-8"))
+            tight_payload = json.loads((Path(tmpdir) / "project-week-batch-portfolio-tight.json").read_text(encoding="utf-8"))
+            self.assertEqual(full_payload["timings_ms"], tight_payload["timings_ms"])
+            self.assertEqual(full_payload["heatmap_rows"], tight_payload["heatmap_rows"])
+            self.assertEqual(len(full_payload["benchmark_note_annotations"]), 3)
+            self.assertNotIn("annotation_view", full_payload)
+            self.assertEqual(tight_payload["annotation_view"]["severity_filter"], ["risk", "watch"])
+            self.assertEqual(tight_payload["annotation_view"]["hidden_by_severity"], 1)
+            self.assertEqual(tight_payload["annotation_view"]["hidden_by_limit"], 1)
+            self.assertEqual(
+                [item["title"] for item in tight_payload["benchmark_note_annotations"]],
+                ["Demo-day crunch hotspot", "Collapsed reviewer callouts"],
+            )
+            self.assertTrue((Path(tmpdir) / "project-week-batch-full.md").exists())
+            self.assertTrue((Path(tmpdir) / "project-week-batch-portfolio-tight.html").exists())
+
+            manifest = batch.as_dict()
+            self.assertEqual(manifest["output_dir"], ".")
+            self.assertEqual(manifest["shared_artifacts"]["csv"], "project-week-batch-shared.csv")
+            self.assertEqual(manifest["presets"][1]["annotation_limit"], 1)
+            self.assertEqual(manifest["presets"][1]["annotation_overflow"], "summary")
+            self.assertEqual(manifest["presets"][1]["artifacts"]["html"], "project-week-batch-portfolio-tight.html")
 
     def test_plugin_benchmark_rejects_unsupported_declared_dataset_family(self) -> None:
         with self.assertRaisesRegex(ValueError, "supported: default, exam-cram, project-week"):

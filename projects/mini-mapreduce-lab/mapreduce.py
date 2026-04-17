@@ -1050,6 +1050,40 @@ def render_annotation_view_html(annotation_view: dict[str, JSONValue]) -> str:
     return f"<div class='annotation-view'><h3>Annotation view</h3><ul class='meta'>{''.join(items)}</ul></div>"
 
 
+@dataclass(frozen=True, slots=True)
+class BenchmarkAnnotationPreset:
+    name: str
+    description: str
+    annotation_severities: list[str] | None = None
+    annotation_limit: int | None = None
+    annotation_overflow: str = "drop"
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "annotation_severities": list(self.annotation_severities) if self.annotation_severities else None,
+            "annotation_limit": self.annotation_limit,
+            "annotation_overflow": self.annotation_overflow if self.annotation_limit is not None else None,
+        }
+
+
+ANNOTATION_BATCH_PRESETS: dict[str, BenchmarkAnnotationPreset] = {
+    "full": BenchmarkAnnotationPreset(
+        name="full",
+        description="Full annotation view with every structured reviewer callout rendered.",
+    ),
+    "portfolio-tight": BenchmarkAnnotationPreset(
+        name="portfolio-tight",
+        description="Filtered annotation view for portfolio screenshots: keep risk/watch callouts, show one card, and collapse the rest into a summary.",
+        annotation_severities=["risk", "watch"],
+        annotation_limit=1,
+        annotation_overflow="summary",
+    ),
+}
+DEFAULT_ANNOTATION_BATCH_PRESET_NAMES = ("full", "portfolio-tight")
+
+
 @dataclass(slots=True)
 class JobResult:
     job: str
@@ -1527,6 +1561,87 @@ class BenchmarkResult:
 </html>
 """
 
+    def with_annotation_view(
+        self,
+        *,
+        benchmark_notes: list[str],
+        benchmark_note_annotations: list[BenchmarkNoteAnnotation],
+        annotation_view: dict[str, JSONValue] | None,
+    ) -> "BenchmarkResult":
+        return BenchmarkResult(
+            job=self.job,
+            scenario=self.scenario,
+            dataset_family=self.dataset_family,
+            seed=self.seed,
+            total_records=self.total_records,
+            unique_keys=self.unique_keys,
+            shard_size=self.shard_size,
+            reducers=list(self.reducers),
+            timings_ms=[dict(row) for row in self.timings_ms],
+            heatmap_rows=[dict(row) for row in self.heatmap_rows],
+            plugin=self.plugin,
+            available_dataset_families=list(self.available_dataset_families) if self.available_dataset_families else None,
+            benchmark_notes=list(benchmark_notes) or None,
+            benchmark_note_annotations=[dict(item) for item in benchmark_note_annotations] or None,
+            annotation_view=dict(annotation_view) if annotation_view is not None else None,
+            plugin_mapper=self.plugin_mapper,
+            plugin_reducer=self.plugin_reducer,
+            plugin_combiner=self.plugin_combiner,
+            plugin_benchmark_generator=self.plugin_benchmark_generator,
+            plugin_benchmark_note_hook=self.plugin_benchmark_note_hook,
+        )
+
+
+@dataclass(slots=True)
+class BenchmarkPresetArtifact:
+    name: str
+    description: str
+    annotation_severities: list[str] | None
+    annotation_limit: int | None
+    annotation_overflow: str | None
+    annotation_view: dict[str, JSONValue] | None
+    json_path: str
+    report_path: str
+    html_path: str
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "annotation_severities": list(self.annotation_severities) if self.annotation_severities else None,
+            "annotation_limit": self.annotation_limit,
+            "annotation_overflow": self.annotation_overflow,
+            "annotation_view": dict(self.annotation_view) if self.annotation_view is not None else None,
+            "artifacts": {
+                "json": self.json_path,
+                "report": self.report_path,
+                "html": self.html_path,
+            },
+        }
+
+
+@dataclass(slots=True)
+class BenchmarkPresetBatch:
+    output_dir: str
+    prefix: str
+    shared_csv_path: str
+    shared_heatmap_path: str
+    presets: list[BenchmarkPresetArtifact]
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "output_dir": self.output_dir,
+            "prefix": self.prefix,
+            "shared_artifacts": {
+                "csv": self.shared_csv_path,
+                "heatmap_csv": self.shared_heatmap_path,
+            },
+            "presets": [preset.as_dict() for preset in self.presets],
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.as_dict(), indent=2, sort_keys=True)
+
 
 @dataclass(slots=True)
 class PluginJob:
@@ -1770,7 +1885,7 @@ def apply_benchmark_annotation_view(
 
     notes, annotations = normalize_benchmark_note_items(selected_items, source=source)
     annotation_view: dict[str, JSONValue] | None = None
-    if total_annotations > 0 or normalized_severities is not None or annotation_limit is not None:
+    if normalized_severities is not None or annotation_limit is not None:
         annotation_view = {
             "severity_filter": normalized_severities,
             "limit": annotation_limit,
@@ -1821,6 +1936,29 @@ def call_benchmark_note_hook(
     return list(note_values)
 
 
+def benchmark_note_items_for(
+    job: str,
+    scenario: str,
+    dataset_family: str,
+    *,
+    records: int,
+    seed: int,
+    plugin: PluginJob | None = None,
+) -> list[BenchmarkNoteItem]:
+    note_items = list(BUILTIN_JOB_BENCHMARK_NOTES.get((job, scenario, dataset_family), []))
+    if job == "plugin" and plugin is not None and plugin.benchmark_note_hook is not None:
+        note_items.extend(
+            call_benchmark_note_hook(
+                plugin.benchmark_note_hook,
+                scenario=scenario,
+                dataset_family=dataset_family,
+                records=records,
+                seed=seed,
+            )
+        )
+    return note_items
+
+
 def benchmark_notes_for(
     job: str,
     scenario: str,
@@ -1833,23 +1971,105 @@ def benchmark_notes_for(
     annotation_limit: int | None = None,
     annotation_overflow: str = "drop",
 ) -> tuple[list[str], list[BenchmarkNoteAnnotation], dict[str, JSONValue] | None]:
-    note_items = list(BUILTIN_JOB_BENCHMARK_NOTES.get((job, scenario, dataset_family), []))
-    if job == "plugin" and plugin is not None and plugin.benchmark_note_hook is not None:
-        note_items.extend(
-            call_benchmark_note_hook(
-                plugin.benchmark_note_hook,
-                scenario=scenario,
-                dataset_family=dataset_family,
-                records=records,
-                seed=seed,
-            )
-        )
     return apply_benchmark_annotation_view(
-        note_items,
+        benchmark_note_items_for(
+            job,
+            scenario,
+            dataset_family,
+            records=records,
+            seed=seed,
+            plugin=plugin,
+        ),
         source="benchmark notes",
         annotation_severities=annotation_severities,
         annotation_limit=annotation_limit,
         annotation_overflow=annotation_overflow,
+    )
+
+
+def resolve_annotation_batch_presets(names: list[str] | None = None) -> list[BenchmarkAnnotationPreset]:
+    selected_names = names or list(DEFAULT_ANNOTATION_BATCH_PRESET_NAMES)
+    resolved: list[BenchmarkAnnotationPreset] = []
+    seen: set[str] = set()
+    for name in selected_names:
+        if name in seen:
+            continue
+        if name not in ANNOTATION_BATCH_PRESETS:
+            raise ValueError(
+                f"unsupported annotation batch preset: {name} (supported: {', '.join(sorted(ANNOTATION_BATCH_PRESETS))})"
+            )
+        seen.add(name)
+        resolved.append(ANNOTATION_BATCH_PRESETS[name])
+    return resolved
+
+
+def slugify_filename(value: str) -> str:
+    slug = "".join(char.lower() if char.isalnum() else "-" for char in value).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug or "benchmark"
+
+
+def default_annotation_batch_prefix(result: BenchmarkResult) -> str:
+    return slugify_filename(f"{result.job}-{result.scenario}-{result.dataset_family}-annotation-batch")
+
+
+def build_benchmark_preset_batch(
+    base_result: BenchmarkResult,
+    *,
+    note_items: list[BenchmarkNoteItem],
+    output_dir: Path,
+    prefix: str | None = None,
+    preset_names: list[str] | None = None,
+) -> BenchmarkPresetBatch:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_presets = resolve_annotation_batch_presets(preset_names)
+    prefix_slug = slugify_filename(prefix or default_annotation_batch_prefix(base_result))
+    shared_csv_path = output_dir / f"{prefix_slug}-shared.csv"
+    shared_heatmap_path = output_dir / f"{prefix_slug}-shared-heatmap.csv"
+    shared_csv_path.write_text(base_result.to_csv(), encoding="utf-8")
+    shared_heatmap_path.write_text(base_result.heatmap_to_csv(), encoding="utf-8")
+
+    preset_artifacts: list[BenchmarkPresetArtifact] = []
+    for preset in resolved_presets:
+        notes, annotations, annotation_view = apply_benchmark_annotation_view(
+            note_items,
+            source="benchmark notes",
+            annotation_severities=preset.annotation_severities,
+            annotation_limit=preset.annotation_limit,
+            annotation_overflow=preset.annotation_overflow,
+        )
+        preset_result = base_result.with_annotation_view(
+            benchmark_notes=notes,
+            benchmark_note_annotations=annotations,
+            annotation_view=annotation_view,
+        )
+        json_path = output_dir / f"{prefix_slug}-{preset.name}.json"
+        report_path = output_dir / f"{prefix_slug}-{preset.name}.md"
+        html_path = output_dir / f"{prefix_slug}-{preset.name}.html"
+        json_path.write_text(preset_result.to_json() + "\n", encoding="utf-8")
+        report_path.write_text(preset_result.to_markdown(), encoding="utf-8")
+        html_path.write_text(preset_result.to_html(), encoding="utf-8")
+        preset_artifacts.append(
+            BenchmarkPresetArtifact(
+                name=preset.name,
+                description=preset.description,
+                annotation_severities=list(preset.annotation_severities) if preset.annotation_severities else None,
+                annotation_limit=preset.annotation_limit,
+                annotation_overflow=preset.annotation_overflow if preset.annotation_limit is not None else None,
+                annotation_view=dict(annotation_view) if annotation_view is not None else None,
+                json_path=json_path.name,
+                report_path=report_path.name,
+                html_path=html_path.name,
+            )
+        )
+
+    return BenchmarkPresetBatch(
+        output_dir=".",
+        prefix=prefix_slug,
+        shared_csv_path=shared_csv_path.name,
+        shared_heatmap_path=shared_heatmap_path.name,
+        presets=preset_artifacts,
     )
 
 
@@ -2657,6 +2877,20 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--heatmap-output", help="optional shard-to-reducer heatmap CSV output path")
     benchmark_parser.add_argument("--report-output", help="optional Markdown benchmark report path")
     benchmark_parser.add_argument("--html-output", help="optional HTML benchmark report path")
+    benchmark_parser.add_argument(
+        "--annotation-batch-dir",
+        help="optional directory that emits full and filtered annotation-view artifacts from one shared benchmark run",
+    )
+    benchmark_parser.add_argument(
+        "--annotation-batch-prefix",
+        help="optional filename prefix to use inside --annotation-batch-dir",
+    )
+    benchmark_parser.add_argument(
+        "--annotation-batch-preset",
+        action="append",
+        choices=sorted(ANNOTATION_BATCH_PRESETS),
+        help="annotation batch preset(s) to emit inside --annotation-batch-dir (defaults to full + portfolio-tight)",
+    )
 
     return parser
 
@@ -2766,6 +3000,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--reducers values must be positive")
         if args.annotation_limit is not None and args.annotation_limit <= 0:
             parser.error("--annotation-limit must be positive")
+        if args.annotation_batch_preset and not args.annotation_batch_dir:
+            parser.error("--annotation-batch-preset requires --annotation-batch-dir")
         if args.job == "plugin" and not args.plugin:
             parser.error("--plugin is required for plugin benchmarks")
         try:
@@ -2783,12 +3019,29 @@ def main(argv: list[str] | None = None) -> int:
                 annotation_limit=args.annotation_limit,
                 annotation_overflow=args.annotation_overflow,
             )
+            batch_manifest: BenchmarkPresetBatch | None = None
+            if args.annotation_batch_dir:
+                benchmark_plugin = load_plugin(args.plugin) if args.job == "plugin" and args.plugin else None
+                batch_manifest = build_benchmark_preset_batch(
+                    result,
+                    note_items=benchmark_note_items_for(
+                        args.job,
+                        args.scenario,
+                        args.dataset_family,
+                        records=args.records,
+                        seed=args.seed,
+                        plugin=benchmark_plugin,
+                    ),
+                    output_dir=Path(args.annotation_batch_dir),
+                    prefix=args.annotation_batch_prefix,
+                    preset_names=args.annotation_batch_preset,
+                )
         except ValueError as exc:
             parser.error(str(exc))
         rendered = result.to_json()
         if args.output:
             Path(args.output).write_text(rendered + "\n", encoding="utf-8")
-        else:
+        elif not args.annotation_batch_dir:
             print(rendered)
         if args.csv_output:
             Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
@@ -2798,6 +3051,9 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
         if args.html_output:
             Path(args.html_output).write_text(result.to_html(), encoding="utf-8")
+        if batch_manifest is not None:
+            manifest_path = Path(args.annotation_batch_dir) / f"{batch_manifest.prefix}-manifest.json"
+            manifest_path.write_text(batch_manifest.to_json() + "\n", encoding="utf-8")
         return 0
 
     parser.error("unsupported command")

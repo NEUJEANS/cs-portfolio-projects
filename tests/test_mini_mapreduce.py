@@ -775,6 +775,58 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertIn("### Annotation view", report)
             self.assertIn("Collapsed reviewer callouts", report)
 
+    def test_cli_benchmark_can_emit_annotation_batch_presets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            batch_dir = Path(tmpdir) / "batch"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--job",
+                    "plugin",
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_average_score.py"),
+                    "--scenario",
+                    "skewed",
+                    "--dataset-family",
+                    "project-week",
+                    "--records",
+                    "48",
+                    "--shard-size",
+                    "12",
+                    "--reducers",
+                    "2",
+                    "4",
+                    "--annotation-batch-dir",
+                    str(batch_dir),
+                    "--annotation-batch-prefix",
+                    "project-week-batch",
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.stdout, "")
+            manifest = json.loads((batch_dir / "project-week-batch-manifest.json").read_text(encoding="utf-8"))
+            full_payload = json.loads((batch_dir / "project-week-batch-full.json").read_text(encoding="utf-8"))
+            tight_payload = json.loads((batch_dir / "project-week-batch-portfolio-tight.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["output_dir"], ".")
+            self.assertEqual(manifest["shared_artifacts"]["csv"], "project-week-batch-shared.csv")
+            self.assertEqual(manifest["shared_artifacts"]["heatmap_csv"], "project-week-batch-shared-heatmap.csv")
+            self.assertEqual([preset["name"] for preset in manifest["presets"]], ["full", "portfolio-tight"])
+            self.assertEqual(full_payload["timings_ms"], tight_payload["timings_ms"])
+            self.assertEqual(full_payload["heatmap_rows"], tight_payload["heatmap_rows"])
+            self.assertEqual(len(full_payload["benchmark_note_annotations"]), 3)
+            self.assertNotIn("annotation_view", full_payload)
+            self.assertEqual(tight_payload["annotation_view"]["severity_filter"], ["risk", "watch"])
+            self.assertEqual(tight_payload["annotation_view"]["hidden_by_severity"], 1)
+            self.assertEqual(tight_payload["annotation_view"]["hidden_by_limit"], 1)
+            self.assertTrue((batch_dir / "project-week-batch-full.md").exists())
+            self.assertTrue((batch_dir / "project-week-batch-portfolio-tight.html").exists())
+
     def test_cli_benchmark_rejects_unsupported_dataset_family_cleanly(self) -> None:
         completed = subprocess.run(
             [

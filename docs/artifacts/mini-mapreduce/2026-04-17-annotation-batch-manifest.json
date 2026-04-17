@@ -1,0 +1,52 @@
+{
+  "output_dir": ".",
+  "prefix": "2026-04-17-annotation-batch",
+  "presets": [
+    {
+      "annotation_limit": null,
+      "annotation_overflow": null,
+      "annotation_severities": null,
+      "annotation_view": null,
+      "artifacts": {
+        "html": "2026-04-17-annotation-batch-full.html",
+        "json": "2026-04-17-annotation-batch-full.json",
+        "report": "2026-04-17-annotation-batch-full.md"
+      },
+      "description": "Full annotation view with every structured reviewer callout rendered.",
+      "name": "full"
+    },
+    {
+      "annotation_limit": 1,
+      "annotation_overflow": "summary",
+      "annotation_severities": [
+        "risk",
+        "watch"
+      ],
+      "annotation_view": {
+        "hidden_by_limit": 1,
+        "hidden_by_severity": 1,
+        "limit": 1,
+        "matched_annotations": 2,
+        "overflow": "summary",
+        "overflow_summary_emitted": true,
+        "rendered_annotations": 2,
+        "severity_filter": [
+          "risk",
+          "watch"
+        ],
+        "total_annotations": 3
+      },
+      "artifacts": {
+        "html": "2026-04-17-annotation-batch-portfolio-tight.html",
+        "json": "2026-04-17-annotation-batch-portfolio-tight.json",
+        "report": "2026-04-17-annotation-batch-portfolio-tight.md"
+      },
+      "description": "Filtered annotation view for portfolio screenshots: keep risk/watch callouts, show one card, and collapse the rest into a summary.",
+      "name": "portfolio-tight"
+    }
+  ],
+  "shared_artifacts": {
+    "csv": "2026-04-17-annotation-batch-shared.csv",
+    "heatmap_csv": "2026-04-17-annotation-batch-shared-heatmap.csv"
+  }
+}
