@@ -13,8 +13,8 @@
 - [x] complete review pass 2 and fix issues found
 - [x] complete review pass 3 and fix issues found
 - [x] run secret scan before push
-- [ ] commit and push
-- [ ] append wrap-up
+- [x] commit and push
+- [x] append wrap-up
 
 ## Review fixes captured
 1. Prevented the newest year-level featured entry from leaving an empty month section when that month only has a single post.
