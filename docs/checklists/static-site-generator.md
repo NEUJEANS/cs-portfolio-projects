@@ -150,3 +150,21 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-17 vertical slice: richer code-block presentation
+- [x] identify `static-site-generator` as still unfinished because fenced code blocks were plain `<pre>` dumps with no presentation polish
+- [x] do brief web research on accessible syntax-highlighting / code-sample presentation patterns
+- [x] skip extra language refresh because the slice stays inside the existing Node/CommonJS Markdown renderer
+- [x] add a resumable checklist for the slice
+- [x] parse fenced code-block metadata such as `title=` / `filename=`
+- [x] render richer code-block frames with language badges and line-number gutters
+- [x] keep the new code-block styling readable in both light and dark color schemes
+- [x] expand automated tests for fence metadata parsing and rendered HTML output
+- [x] update README and project checklist with the richer code-block workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

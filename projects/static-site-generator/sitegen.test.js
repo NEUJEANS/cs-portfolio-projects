@@ -19,6 +19,7 @@ const {
   loadPages,
   markdownToHtml,
   parseCliArgs,
+  parseCodeFenceInfo,
   parseFrontMatter,
   relativeLink,
   replaceMarkdownImages,
@@ -85,6 +86,12 @@ test('parseCliArgs enables watch mode, preview serving, and custom ports', () =>
   assert.equal(parsed.options.servePort, 4321);
 });
 
+test('parseCodeFenceInfo extracts language aliases and optional code titles', () => {
+  assert.deepEqual(parseCodeFenceInfo('js title=sitegen.js'), { language: 'js', title: 'sitegen.js' });
+  assert.deepEqual(parseCodeFenceInfo('python filename="demo script.py"'), { language: 'python', title: 'demo script.py' });
+  assert.deepEqual(parseCodeFenceInfo('title="notes.txt"'), { language: '', title: 'notes.txt' });
+});
+
 test('createWatchSnapshot changes when shared partial templates change', () => {
   const contentDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, PARTIALS_DIR_NAME), { recursive: true });
@@ -120,7 +127,7 @@ test('applyPreviewPlaceholders tolerates malformed escape sequences', () => {
 });
 
 test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, images, and fenced blocks', () => {
-  const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\n3. third\n4. fourth\n\n> quoted **note**\n>\n> follow-up line\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))\n\n```js\nconst x = 1 < 2;\nconsole.log(x);\n```');
+  const html = markdownToHtml('# Title\n\n![Diagram](assets/graph.png)\n\n- one\n- two\n\n3. third\n4. fourth\n\n> quoted **note**\n>\n> follow-up line\n\nHello **world** with `code` and [docs](https://example.com) plus [bad](javascript:alert(1))\n\n```js title="sitegen.js"\nconst x = 1 < 2;\nconsole.log(x);\n```');
   assert.match(html, /<h1>Title<\/h1>/);
   assert.match(html, /<img src="assets\/graph.png" alt="Diagram" loading="lazy">/);
   assert.match(html, /<ul><li>one<\/li><li>two<\/li><\/ul>/);
@@ -130,7 +137,11 @@ test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, ima
   assert.match(html, /<code>code<\/code>/);
   assert.match(html, /<a href="https:\/\/example.com">docs<\/a>/);
   assert.match(html, /<a href="#">bad<\/a>/);
-  assert.match(html, /<pre><code class="language-js">const x = 1 &lt; 2;\nconsole\.log\(x\);<\/code><\/pre>/);
+  assert.match(html, /<figure class="code-block">/);
+  assert.match(html, /<span class="code-block__title">sitegen\.js<\/span>/);
+  assert.match(html, /<span class="code-block__language">JavaScript<\/span>/);
+  assert.match(html, /<span class="code-block__line-count">2 lines<\/span>/);
+  assert.match(html, /<code class="language-js"><span class="code-block__line" data-line="1"><span class="code-block__line-content">const x = 1 &lt; 2;<\/span><\/span>\n<span class="code-block__line" data-line="2"><span class="code-block__line-content">console\.log\(x\);<\/span><\/span><\/code>/);
 });
 
 test('replaceMarkdownImages sanitizes unsafe image URLs', () => {
@@ -208,8 +219,11 @@ test('copyStaticAssets preserves nested asset paths while excluding reserved par
 });
 
 test('markdownToHtml closes an unclosed fenced code block at end of document', () => {
-  const html = markdownToHtml('```python\nprint("hi")');
-  assert.match(html, /<pre><code class="language-python">print\(&quot;hi&quot;\)<\/code><\/pre>/);
+  const html = markdownToHtml('```python title="demo.py"\nprint("hi")');
+  assert.match(html, /<span class="code-block__title">demo\.py<\/span>/);
+  assert.match(html, /<span class="code-block__language">Python<\/span>/);
+  assert.match(html, /<span class="code-block__line-count">1 line<\/span>/);
+  assert.match(html, /<code class="language-python"><span class="code-block__line" data-line="1"><span class="code-block__line-content">print\(&quot;hi&quot;\)<\/span><\/span><\/code>/);
 });
 
 test('buildSite writes nested pages, relative nav links, copied assets, and generated tag archives', () => {
@@ -284,7 +298,10 @@ Return [home](../index.md).`,
   assert.match(setupHtml, /<img src="\.\.\/images\/hero.png" alt="Hero" loading="lazy">/);
   assert.match(setupHtml, /<ol><li>Install Node\.js<\/li><li>Run the builder<\/li><\/ol>/);
   assert.match(setupHtml, /<blockquote><p>Tip: keep screenshots next to your Markdown files for easy copying\.<\/p><\/blockquote>/);
-  assert.match(setupHtml, /<pre><code class="language-bash">node sitegen\.js content dist<\/code><\/pre>/);
+  assert.match(setupHtml, /<figure class="code-block">/);
+  assert.match(setupHtml, /<span class="code-block__language">Bash<\/span>/);
+  assert.match(setupHtml, /<span class="code-block__line-count">1 line<\/span>/);
+  assert.match(setupHtml, /<code class="language-bash"><span class="code-block__line" data-line="1"><span class="code-block__line-content">node sitegen\.js content dist<\/span><\/span><\/code>/);
   assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/portfolio.html">portfolio<\/a>/);
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/docs.html">docs<\/a>/);

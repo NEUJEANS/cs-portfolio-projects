@@ -16,6 +16,7 @@ This project shows practical compiler-style text processing, file-system automat
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
+- presents fenced code blocks in richer portfolio-ready frames with language badges, optional file titles from fence metadata, and line-number gutters that stay readable in both light and dark mode
 - supports a dependency-free `--watch` mode with a configurable polling interval so content edits, new files, and shared partial updates trigger rebuilds during local authoring
 - can serve the generated `dist/` folder through a built-in local preview server, including browser auto-refresh when `--serve` is combined with `--watch`
 - generates a default `404.html` fallback and lets authors override it with `404.md`, including preview-only placeholders such as `{{requestedPath}}`
@@ -113,14 +114,16 @@ If pages include `tags`, the generator also creates `dist/tags/index.html` plus 
 
 Ordered steps and pull-quote style callouts are also preserved, so project pages can mix tutorials, release notes, and narrative case studies without extra tooling.
 
-Fenced code blocks are preserved for technical write-ups:
+Fenced code blocks are preserved for technical write-ups and can carry a title straight from the fence info string:
 
 ~~~md
-```python
+```python title="scripts/build_portfolio.py"
 from pathlib import Path
 print(Path('portfolio').resolve())
 ```
 ~~~
+
+Rendered code samples now show a language badge, an optional file/title pill, and line numbers so walkthrough-style portfolio posts feel closer to polished docs than raw plain-text dumps. The renderer accepts `title=`, `file=`, or `filename=` in the fence info string.
 
 Generated files are written to `dist/` and the CLI prints a short build summary. In watch mode, the same summary is reprinted after each detected rebuild so authors can confirm which pages were regenerated.
 
@@ -137,5 +140,5 @@ node --test test_static_site_generator.js
 
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
-- syntax highlighting themes and line-number support for fenced code blocks
+- copy-to-clipboard buttons or focused callout annotations for code samples
 - sitemap.xml or RSS feed generation for blog-style portfolio sites

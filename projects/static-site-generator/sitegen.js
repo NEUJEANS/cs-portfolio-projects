@@ -263,6 +263,92 @@ function inlineMarkdown(text, page) {
   return html;
 }
 
+function parseCodeFenceInfo(rawInfo = '') {
+  const info = {
+    language: '',
+    title: '',
+  };
+
+  const trimmed = String(rawInfo).trim();
+  if (!trimmed) {
+    return info;
+  }
+
+  const languageMatch = /^([^\s=]+)(?:\s+|$)/.exec(trimmed);
+  let remainder = trimmed;
+  if (languageMatch) {
+    info.language = stripQuotes(languageMatch[1]).toLowerCase();
+    remainder = trimmed.slice(languageMatch[0].length).trim();
+  }
+
+  const fieldPattern = /([a-zA-Z0-9_-]+)=(".*?"|'.*?'|[^\s]+)/g;
+  for (const match of remainder.matchAll(fieldPattern)) {
+    const key = match[1].toLowerCase();
+    const value = stripQuotes(match[2]);
+    if (key === 'title' || key === 'file' || key === 'filename') {
+      info.title = value;
+    } else if (value) {
+      info[key] = value;
+    }
+  }
+
+  return info;
+}
+
+function formatCodeLanguageLabel(language) {
+  const normalized = String(language || '').trim().toLowerCase();
+  const labels = {
+    bash: 'Bash',
+    console: 'Console',
+    css: 'CSS',
+    html: 'HTML',
+    javascript: 'JavaScript',
+    js: 'JavaScript',
+    json: 'JSON',
+    md: 'Markdown',
+    markdown: 'Markdown',
+    py: 'Python',
+    python: 'Python',
+    sh: 'Shell',
+    sql: 'SQL',
+    text: 'Text',
+    ts: 'TypeScript',
+    typescript: 'TypeScript',
+    xml: 'XML',
+    yaml: 'YAML',
+    yml: 'YAML',
+  };
+
+  return labels[normalized] || (normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Plain text');
+}
+
+function renderCodeBlock(codeLines, codeFence) {
+  const info = typeof codeFence === 'string' ? parseCodeFenceInfo(codeFence) : codeFence || { language: '', title: '' };
+  const language = info.language || '';
+  const title = info.title || '';
+  const languageLabel = formatCodeLanguageLabel(language);
+  const lineCount = codeLines.length;
+  const lineLabel = `${lineCount} line${lineCount === 1 ? '' : 's'}`;
+  const ariaLabel = [title, languageLabel].filter(Boolean).join(' — ') || 'Code sample';
+  const codeClass = language ? ` class="language-${escapeHtml(language)}"` : '';
+  const metaBits = [];
+
+  if (title) {
+    metaBits.push(`<span class="code-block__title">${escapeHtml(title)}</span>`);
+  }
+  metaBits.push(`<span class="code-block__language">${escapeHtml(languageLabel)}</span>`);
+  metaBits.push(`<span class="code-block__line-count">${lineLabel}</span>`);
+
+  const linesHtml = codeLines
+    .map((line, index) => {
+      const content = line.length ? escapeHtml(line) : '&nbsp;';
+      return `<span class="code-block__line" data-line="${index + 1}"><span class="code-block__line-content">${content}</span></span>`;
+    })
+    .join('\n');
+
+  return `<figure class="code-block"><figcaption class="code-block__meta">${metaBits.join('')}</figcaption><pre aria-label="${escapeHtml(ariaLabel)}"><code${codeClass}>${linesHtml}</code></pre></figure>`;
+}
+
 function markdownToHtml(markdown, page) {
   const lines = markdown.replace(/\r/g, '').split('\n');
   const parts = [];
@@ -308,8 +394,7 @@ function markdownToHtml(markdown, page) {
 
   const flushCodeBlock = () => {
     if (codeFence === null) return;
-    const languageClass = codeFence ? ` class="language-${escapeHtml(codeFence)}"` : '';
-    parts.push(`<pre><code${languageClass}>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+    parts.push(renderCodeBlock(codeLines, codeFence));
     codeFence = null;
     codeLines = [];
   };
@@ -323,7 +408,7 @@ function markdownToHtml(markdown, page) {
         flushParagraph();
         flushLists();
         flushBlockquote();
-        codeFence = fenceMatch[1].trim();
+        codeFence = parseCodeFenceInfo(fenceMatch[1]);
       }
       continue;
     }
@@ -602,9 +687,27 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       main { display: grid; gap: 1rem; }
       img { max-width: 100%; height: auto; border-radius: 0.75rem; }
       code { background: #9992; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
-      pre { overflow-x: auto; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 0.85rem; }
-      pre code { display: block; background: transparent; padding: 0; border-radius: 0; }
+      .code-block { margin: 0; border: 1px solid #0f172a22; border-radius: 1rem; overflow: hidden; background: #f8fafc; box-shadow: 0 12px 30px -24px #0f172a; }
+      .code-block__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; padding: 0.75rem 0.9rem; background: #e2e8f0; border-bottom: 1px solid #cbd5e1; }
+      .code-block__title, .code-block__language, .code-block__line-count { display: inline-flex; align-items: center; border-radius: 999px; padding: 0.15rem 0.55rem; font-size: 0.85rem; }
+      .code-block__title { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+      .code-block__language { background: #dcfce7; color: #166534; font-weight: 600; }
+      .code-block__line-count { background: #e5e7eb; color: #334155; }
+      .code-block pre { margin: 0; overflow-x: auto; background: transparent; color: inherit; padding: 0.85rem 0; border-radius: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.95rem; line-height: 1.6; tab-size: 2; }
+      .code-block pre code { display: grid; min-width: max-content; background: transparent; padding: 0; border-radius: 0; }
+      .code-block__line { display: grid; grid-template-columns: minmax(2.5rem, auto) 1fr; gap: 1rem; align-items: start; padding: 0 1rem; }
+      .code-block__line::before { content: attr(data-line); text-align: right; color: #64748b; user-select: none; }
+      .code-block__line-content { white-space: pre; }
       blockquote { margin: 0; padding: 0.25rem 1rem; border-left: 4px solid #2563eb; background: #2563eb11; border-radius: 0 0.85rem 0.85rem 0; }
+      @media (prefers-color-scheme: dark) {
+        .code-block { border-color: #ffffff1f; background: #0f172a; box-shadow: none; }
+        .code-block__meta { background: #111827; border-bottom-color: #1f2937; }
+        .code-block__title { background: #1d4ed833; color: #bfdbfe; }
+        .code-block__language { background: #14532d; color: #bbf7d0; }
+        .code-block__line-count { background: #1f2937; color: #cbd5e1; }
+        .code-block pre { color: #e5e7eb; }
+        .code-block__line::before { color: #94a3b8; }
+      }
       blockquote p:first-child { margin-top: 0; }
       blockquote p:last-child { margin-bottom: 0; }
       .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -1429,8 +1532,10 @@ module.exports = {
   loadTemplatePartials,
   markdownToHtml,
   normalizePreviewPathname,
+  renderCodeBlock,
   normalizeTags,
   parseCliArgs,
+  parseCodeFenceInfo,
   parseFrontMatter,
   parseServePort,
   parseWatchInterval,

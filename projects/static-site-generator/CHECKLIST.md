@@ -12,4 +12,5 @@
 - [x] Add a watch mode for faster local authoring
 - [x] Add an optional live preview server with browser auto-refresh
 - [x] Add custom 404 pages and friendlier preview error surfaces for missing routes
-- [ ] Add syntax highlighting themes or richer code-block presentation
+- [x] Add syntax highlighting themes or richer code-block presentation
+- [ ] Add copy-to-clipboard controls or reviewer callouts for code samples
