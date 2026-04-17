@@ -56,6 +56,7 @@ build_flow_explanation = module.build_flow_explanation
 build_matching_explanation = module.build_matching_explanation
 build_assignment_explanation = module.build_assignment_explanation
 build_min_cost_flow_explanation = module.build_min_cost_flow_explanation
+build_flow_replay_reference = module.build_flow_replay_reference
 
 
 class NetworkFlowLabTests(unittest.TestCase):
@@ -537,6 +538,41 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('id="assignment-proof-title"', html)
         self.assertNotIn('id="title"', html)
         self.assertNotIn('id="desc"', html)
+
+    def test_build_flow_replay_reference_normalizes_core_flow_fields(self) -> None:
+        payload = {
+            "algorithm": "dinic",
+            "source": "s",
+            "sink": "t",
+            "max_flow": 5,
+            "min_cut": {"source_side": ["b", "s", "a"], "sink_side": ["t", "c"]},
+            "edge_flows": [
+                {"source": "b", "target": "t", "capacity": 3, "flow": 2, "ignored": True},
+                {"source": "s", "target": "a", "capacity": 4, "flow": 4},
+                {"source": "a", "target": "t", "capacity": 4, "flow": 3},
+            ],
+            "command": "python3 network_flow.py demo --json-out /tmp/out.json",
+            "html_output": "/tmp/showcase.html",
+        }
+
+        reference = build_flow_replay_reference(payload)
+
+        self.assertEqual(reference["algorithm"], "dinic")
+        self.assertEqual(reference["source"], "s")
+        self.assertEqual(reference["sink"], "t")
+        self.assertEqual(reference["max_flow"], 5)
+        self.assertEqual(reference["min_cut"]["source_side"], ["a", "b", "s"])
+        self.assertEqual(reference["min_cut"]["sink_side"], ["c", "t"])
+        self.assertEqual(
+            reference["edge_flows"],
+            [
+                {"source": "a", "target": "t", "capacity": 4, "flow": 3},
+                {"source": "b", "target": "t", "capacity": 3, "flow": 2},
+                {"source": "s", "target": "a", "capacity": 4, "flow": 4},
+            ],
+        )
+        self.assertNotIn("command", reference)
+
 
     def test_render_assignment_dot_includes_ranked_partitions_and_selected_costs(self) -> None:
         result = solve_weighted_assignment(
@@ -1139,6 +1175,10 @@ class NetworkFlowLabTests(unittest.TestCase):
             self.assertIn('href="sample-assignment-result.json"', html)
             self.assertIn('iframe src="sample-cost-flow-artifact-page.html"', html)
             self.assertIn('img src="benchmark-layered-report.svg"', html)
+            self.assertIn('Replay the bundled sample graph', html)
+            self.assertIn('Compare against committed artifact', html)
+            self.assertIn('network-flow-showcase-input.json', html)
+            self.assertIn('sample-flow-result.json', html)
 
     def test_cli_showcase_demo_requires_existing_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

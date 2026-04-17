@@ -1549,6 +1549,32 @@ def build_showcase_paths(*, html_out: Path, artifact_dir: Path | None = None) ->
     }
 
 
+
+def build_flow_replay_reference(payload: dict[str, Any]) -> dict[str, Any]:
+    min_cut = payload.get("min_cut") or {}
+    edge_flows = [
+        {
+            "source": str(item["source"]),
+            "target": str(item["target"]),
+            "capacity": int(item["capacity"]),
+            "flow": int(item["flow"]),
+        }
+        for item in payload.get("edge_flows", [])
+    ]
+    edge_flows.sort(key=lambda item: (item["source"], item["target"], item["capacity"], item["flow"]))
+    return {
+        "algorithm": str(payload.get("algorithm", "unknown")),
+        "source": str(payload.get("source", "")),
+        "sink": str(payload.get("sink", "")),
+        "max_flow": int(payload.get("max_flow", 0)),
+        "min_cut": {
+            "source_side": sorted(str(item) for item in min_cut.get("source_side", [])),
+            "sink_side": sorted(str(item) for item in min_cut.get("sink_side", [])),
+        },
+        "edge_flows": edge_flows,
+    }
+
+
 def _compute_vertical_positions(count: int, *, top: float, bottom: float) -> list[float]:
     if count <= 0:
         return []
@@ -2629,6 +2655,9 @@ def render_showcase_html(
     layered_svg: str,
     layered_markdown: str,
     layered_json: str,
+    bundled_flow_graph: dict[str, Any],
+    committed_flow_reference: dict[str, Any],
+    committed_flow_payload: dict[str, Any],
 ) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
     cards = [
@@ -2760,19 +2789,39 @@ def render_showcase_html(
     :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
     body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
     main {{ max-width: 1680px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
-    h1, h2 {{ line-height: 1.1; }}
+    h1, h2, h3 {{ line-height: 1.1; }}
     p {{ line-height: 1.55; }}
-    .hero {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.5rem; padding: 1.5rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.94), rgba(236, 253, 245, 0.92)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
-    .hero p {{ max-width: 78ch; }}
-    .hero-meta, .hero-links, .filter-row, .chip-row, .badge-row {{ display: flex; flex-wrap: wrap; gap: 0.75rem; }}
+    code, pre {{ font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Consolas, monospace; }}
+    .hero, .replay-lab {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.5rem; padding: 1.5rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.94), rgba(236, 253, 245, 0.92)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
+    .hero p, .replay-lab > p {{ max-width: 78ch; }}
+    .hero-meta, .hero-links, .filter-row, .chip-row, .badge-row, .replay-actions, .replay-stat-row {{ display: flex; flex-wrap: wrap; gap: 0.75rem; }}
     .hero-meta {{ margin-top: 1rem; }}
-    .hero-meta span, .badge {{ padding: 0.45rem 0.78rem; border-radius: 999px; background: rgba(255, 255, 255, 0.78); border: 1px solid rgba(148, 163, 184, 0.35); font-size: 0.92rem; }}
+    .hero-meta span, .badge, .stat-pill {{ padding: 0.45rem 0.78rem; border-radius: 999px; background: rgba(255, 255, 255, 0.78); border: 1px solid rgba(148, 163, 184, 0.35); font-size: 0.92rem; }}
     .hero-links {{ margin-top: 1rem; }}
-    .hero-link, .chip, .filter-button {{ display: inline-flex; align-items: center; justify-content: center; padding: 0.58rem 0.9rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 700; cursor: pointer; }}
-    .hero-link:hover, .chip:hover, .filter-button:hover {{ background: rgba(219, 234, 254, 1); }}
+    .hero-link, .chip, .filter-button, .action-button {{ display: inline-flex; align-items: center; justify-content: center; padding: 0.58rem 0.9rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 700; cursor: pointer; }}
+    .hero-link:hover, .chip:hover, .filter-button:hover, .action-button:hover {{ background: rgba(219, 234, 254, 1); }}
     .filter-button[aria-pressed="true"] {{ background: #1d4ed8; color: white; border-color: #1d4ed8; }}
     .filters {{ margin-top: 1.35rem; border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 1.2rem; padding: 1rem; background: rgba(255, 255, 255, 0.76); }}
     .filters p {{ margin: 0 0 0.85rem; color: #334155; }}
+    .replay-lab {{ margin-top: 1.5rem; background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(240, 249, 255, 0.96)); }}
+    .replay-lab h2 {{ margin-bottom: 0.45rem; }}
+    .replay-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.25rem; }}
+    .replay-card {{ border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1.2rem; padding: 1rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05); }}
+    .replay-card h3 {{ margin-top: 0; margin-bottom: 0.5rem; }}
+    .replay-card p {{ margin-top: 0.25rem; color: #334155; }}
+    .replay-card textarea {{ width: 100%; min-height: 280px; resize: vertical; border-radius: 1rem; border: 1px solid rgba(148, 163, 184, 0.45); padding: 0.9rem; font-size: 0.95rem; line-height: 1.45; background: #0f172a; color: #e2e8f0; box-sizing: border-box; }}
+    .command-block, .reference-block {{ margin: 0.85rem 0 0; padding: 0.95rem; border-radius: 1rem; background: #0f172a; color: #e2e8f0; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }}
+    .replay-status {{ margin-top: 0.85rem; padding: 0.75rem 0.9rem; border-radius: 0.95rem; background: rgba(226, 232, 240, 0.85); color: #0f172a; }}
+    .replay-status[data-tone="good"] {{ background: rgba(220, 252, 231, 0.95); color: #166534; }}
+    .replay-status[data-tone="warn"] {{ background: rgba(254, 249, 195, 0.95); color: #854d0e; }}
+    .replay-status[data-tone="bad"] {{ background: rgba(254, 226, 226, 0.95); color: #991b1b; }}
+    .comparison-list {{ list-style: none; padding: 0; margin: 0.9rem 0 0; display: grid; gap: 0.7rem; }}
+    .comparison-list li {{ border-radius: 1rem; padding: 0.8rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.25); background: rgba(248, 250, 252, 0.9); }}
+    .comparison-list li.pass {{ border-color: rgba(22, 163, 74, 0.35); background: rgba(220, 252, 231, 0.7); }}
+    .comparison-list li.fail {{ border-color: rgba(220, 38, 38, 0.28); background: rgba(254, 242, 242, 0.82); }}
+    .comparison-list strong {{ display: block; margin-bottom: 0.2rem; }}
+    details {{ margin-top: 1rem; }}
+    summary {{ cursor: pointer; font-weight: 700; color: #0f172a; }}
     .showcase-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }}
     .showcase-card {{ border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1.25rem; padding: 1.05rem; background: rgba(255, 255, 255, 0.88); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }}
     .showcase-card[hidden] {{ display: none; }}
@@ -2785,6 +2834,7 @@ def render_showcase_html(
     @media (max-width: 760px) {{
       main {{ padding: 1rem 0.75rem 2rem; }}
       iframe {{ min-height: 320px; }}
+      .replay-card textarea {{ min-height: 220px; }}
     }}
   </style>
 </head>
@@ -2815,6 +2865,42 @@ def render_showcase_html(
         </div>
       </section>
     </section>
+    <section class="replay-lab" aria-labelledby="replay-heading">
+      <p class="eyebrow">Replay workspace</p>
+      <h2 id="replay-heading">Replay the bundled sample graph</h2>
+      <p>Edit the bundled flow-graph JSON, copy or download it, rerun the CLI locally, then paste the fresh JSON payload back here to compare its core metrics against the committed <code>{_html_escape(flow_json)}</code> artifact.</p>
+      <div class="replay-stat-row">
+        <span class="stat-pill">Committed algorithm: <strong>{_html_escape(str(committed_flow_reference["algorithm"]))}</strong></span>
+        <span class="stat-pill">Committed max flow: <strong>{_html_escape(str(committed_flow_reference["max_flow"]))}</strong></span>
+        <span class="stat-pill">Committed cut: <strong>{_html_escape(', '.join(committed_flow_reference["min_cut"]["source_side"]))}</strong> vs <strong>{_html_escape(', '.join(committed_flow_reference["min_cut"]["sink_side"]))}</strong></span>
+      </div>
+      <div class="replay-grid">
+        <section class="replay-card">
+          <h3>1. Tweak the sample input</h3>
+          <p>The editor starts with the repo's bundled sample graph. Keep it valid JSON, then use the generated shell snippet to replay the CLI with your edited graph.</p>
+          <textarea id="replay-graph-input" spellcheck="false" aria-label="Editable network-flow sample graph JSON"></textarea>
+          <div class="replay-actions">
+            <button type="button" class="action-button" id="replay-reset-button">Reset sample graph</button>
+            <button type="button" class="action-button" id="replay-download-button">Download edited JSON</button>
+          </div>
+          <pre class="command-block" id="replay-command"></pre>
+        </section>
+        <section class="replay-card">
+          <h3>2. Paste a fresh solver payload</h3>
+          <p>After you run the CLI on your edited graph, paste the generated JSON output here and compare it against the committed artifact. The comparison ignores file-path fields and focuses on flow metrics/cuts.</p>
+          <textarea id="replay-json-input" spellcheck="false" aria-label="Fresh network-flow solver JSON payload" placeholder="Paste a fresh JSON payload from network_flow.py here."></textarea>
+          <div class="replay-actions">
+            <button type="button" class="action-button" id="replay-compare-button">Compare against committed artifact</button>
+          </div>
+          <div class="replay-status" id="replay-status" data-tone="warn" aria-live="polite">Paste a fresh JSON payload to compare it against the committed reference.</div>
+          <ul class="comparison-list" id="replay-comparison-list" aria-live="polite"></ul>
+          <details>
+            <summary>Show committed comparison reference</summary>
+            <pre class="reference-block" id="replay-reference"></pre>
+          </details>
+        </section>
+      </div>
+    </section>
     <section class="showcase-grid" id="showcase-grid">
 {cards_html}
     </section>
@@ -2822,6 +2908,9 @@ def render_showcase_html(
   <script>
     const buttons = Array.from(document.querySelectorAll('.filter-button'));
     const cards = Array.from(document.querySelectorAll('.showcase-card'));
+    const bundledSampleGraph = {json.dumps(bundled_flow_graph, indent=2)};
+    const committedFlowReference = {json.dumps(committed_flow_reference, indent=2)};
+    const committedFlowPayload = {json.dumps(committed_flow_payload, indent=2)};
     const applyFilter = (filter) => {{
       buttons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.filter === filter)));
       cards.forEach((card) => {{
@@ -2830,10 +2919,152 @@ def render_showcase_html(
       }});
     }};
     buttons.forEach((button) => button.addEventListener('click', () => applyFilter(button.dataset.filter || 'all')));
+
+    const graphInput = document.getElementById('replay-graph-input');
+    const resultInput = document.getElementById('replay-json-input');
+    const resetButton = document.getElementById('replay-reset-button');
+    const downloadButton = document.getElementById('replay-download-button');
+    const compareButton = document.getElementById('replay-compare-button');
+    const commandBlock = document.getElementById('replay-command');
+    const statusBlock = document.getElementById('replay-status');
+    const comparisonList = document.getElementById('replay-comparison-list');
+    const referenceBlock = document.getElementById('replay-reference');
+    const bundledGraphText = JSON.stringify(bundledSampleGraph, null, 2);
+    graphInput.value = bundledGraphText;
+    referenceBlock.textContent = JSON.stringify({{
+      reference: committedFlowReference,
+      committed_payload_excerpt: {{
+        command: committedFlowPayload.command,
+        graph: committedFlowPayload.graph,
+        algorithm: committedFlowPayload.algorithm,
+        max_flow: committedFlowPayload.max_flow,
+        min_cut: committedFlowPayload.min_cut,
+      }},
+    }}, null, 2);
+
+    const setStatus = (message, tone) => {{
+      statusBlock.textContent = message;
+      statusBlock.dataset.tone = tone;
+    }};
+
+    const normalizeNodeList = (items) => (Array.isArray(items) ? items.map((item) => String(item)).sort() : []);
+    const normalizeEdgeFlows = (items) => (Array.isArray(items) ? items.map((item) => ({{
+      source: String(item?.source ?? ''),
+      target: String(item?.target ?? ''),
+      capacity: Number(item?.capacity ?? NaN),
+      flow: Number(item?.flow ?? NaN),
+    }})).sort((left, right) => {{
+      if (left.source !== right.source) return left.source.localeCompare(right.source);
+      if (left.target !== right.target) return left.target.localeCompare(right.target);
+      if (left.capacity !== right.capacity) return left.capacity - right.capacity;
+      return left.flow - right.flow;
+    }}) : []);
+    const buildComparablePayload = (payload) => ({{
+      source: String(payload?.source ?? ''),
+      sink: String(payload?.sink ?? ''),
+      max_flow: Number(payload?.max_flow ?? NaN),
+      min_cut: {{
+        source_side: normalizeNodeList(payload?.min_cut?.source_side),
+        sink_side: normalizeNodeList(payload?.min_cut?.sink_side),
+      }},
+      edge_flows: normalizeEdgeFlows(payload?.edge_flows),
+    }});
+    const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+    const renderComparisons = (items) => {{
+      comparisonList.innerHTML = items.map((item) => `
+        <li class="${{item.ok ? 'pass' : 'fail'}}">
+          <strong>${{item.label}} — ${{item.ok ? 'match' : 'different'}}</strong>
+          <span>${{item.detail}}</span>
+        </li>
+      `).join('');
+    }};
+    const updateCommand = () => {{
+      const graphText = (graphInput.value || bundledGraphText).trim() || bundledGraphText;
+      commandBlock.textContent = [
+        "cat > /tmp/network-flow-showcase-input.json <<'JSON'",
+        graphText,
+        'JSON',
+        'python3 projects/network-flow-lab/network_flow.py solve /tmp/network-flow-showcase-input.json --algorithm dinic --json-out /tmp/network-flow-showcase-output.json --pretty',
+        'cat /tmp/network-flow-showcase-output.json',
+      ].join('\n');
+      try {{
+        JSON.parse(graphText);
+        setStatus('Editor JSON looks valid. Run the generated command, then paste the fresh JSON payload on the right.', 'good');
+      }} catch (error) {{
+        setStatus(`The graph editor currently has invalid JSON: ${{error.message}}`, 'bad');
+      }}
+    }};
+    const triggerDownload = () => {{
+      const blob = new Blob([graphInput.value.endsWith('\n') ? graphInput.value : `${{graphInput.value}}\n`], {{ type: 'application/json' }});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'network-flow-showcase-input.json';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }};
+    const comparePayload = () => {{
+      const raw = resultInput.value.trim();
+      if (!raw) {{
+        setStatus('Paste a fresh solver JSON payload first.', 'warn');
+        comparisonList.innerHTML = '';
+        return;
+      }}
+      let payload;
+      try {{
+        payload = JSON.parse(raw);
+      }} catch (error) {{
+        setStatus(`Fresh payload is not valid JSON: ${{error.message}}`, 'bad');
+        comparisonList.innerHTML = '';
+        return;
+      }}
+      const comparable = buildComparablePayload(payload);
+      const checks = [
+        {{
+          label: 'Source / sink',
+          ok: comparable.source === committedFlowReference.source && comparable.sink === committedFlowReference.sink,
+          detail: `fresh=${{comparable.source}}→${{comparable.sink}} · committed=${{committedFlowReference.source}}→${{committedFlowReference.sink}}`,
+        }},
+        {{
+          label: 'Max flow',
+          ok: comparable.max_flow === committedFlowReference.max_flow,
+          detail: `fresh=${{comparable.max_flow}} · committed=${{committedFlowReference.max_flow}}`,
+        }},
+        {{
+          label: 'Min-cut source side',
+          ok: sameJson(comparable.min_cut.source_side, committedFlowReference.min_cut.source_side),
+          detail: `fresh=${{comparable.min_cut.source_side.join(', ') || '(none)'}} · committed=${{committedFlowReference.min_cut.source_side.join(', ') || '(none)'}}`,
+        }},
+        {{
+          label: 'Min-cut sink side',
+          ok: sameJson(comparable.min_cut.sink_side, committedFlowReference.min_cut.sink_side),
+          detail: `fresh=${{comparable.min_cut.sink_side.join(', ') || '(none)'}} · committed=${{committedFlowReference.min_cut.sink_side.join(', ') || '(none)'}}`,
+        }},
+        {{
+          label: 'Edge-flow table',
+          ok: sameJson(comparable.edge_flows, committedFlowReference.edge_flows),
+          detail: `fresh edges=${{comparable.edge_flows.length}} · committed edges=${{committedFlowReference.edge_flows.length}}`,
+        }},
+      ];
+      renderComparisons(checks);
+      const passed = checks.filter((item) => item.ok).length;
+      const tone = passed === checks.length ? 'good' : (passed === 0 ? 'bad' : 'warn');
+      setStatus(`Compared fresh payload against the committed artifact: ${{passed}} / ${{checks.length}} checks match.`, tone);
+    }};
+    graphInput.addEventListener('input', updateCommand);
+    resetButton.addEventListener('click', () => {{
+      graphInput.value = bundledGraphText;
+      updateCommand();
+    }});
+    downloadButton.addEventListener('click', triggerDownload);
+    compareButton.addEventListener('click', comparePayload);
+    updateCommand();
+  </script>
   </script>
 </body>
 </html>
 '''
+
 
 
 def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
@@ -3188,7 +3419,6 @@ def render_assignment_artifact_html(
 </body>
 </html>
 """
-
 
 
 def render_min_cost_flow_markdown(
@@ -3881,6 +4111,18 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             key: _relative_output_path(path, args.html_out.parent)
             for key, path in artifact_paths.items()
         }
+        sample_graph_path = Path(__file__).with_name("sample_graph.json")
+        bundled_flow_graph = json.loads(sample_graph_path.read_text(encoding="utf-8"))
+        try:
+            committed_flow_payload = json.loads(artifact_paths["flow_json"].read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            fallback_nodes, fallback_edges, fallback_source, fallback_sink = load_graph(sample_graph_path)
+            committed_flow_payload = {
+                "command": "showcase-demo fallback replay reference",
+                "graph": bundled_flow_graph,
+                **solve_max_flow(fallback_nodes, fallback_edges, fallback_source, fallback_sink).to_dict(),
+            }
+        committed_flow_reference = build_flow_replay_reference(committed_flow_payload)
         write_html_output(
             args.html_out,
             render_showcase_html(
@@ -3911,6 +4153,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 layered_svg=relative_paths["layered_svg"],
                 layered_markdown=relative_paths["layered_markdown"],
                 layered_json=relative_paths["layered_json"],
+                bundled_flow_graph=bundled_flow_graph,
+                committed_flow_reference=committed_flow_reference,
+                committed_flow_payload=committed_flow_payload,
             ),
         )
         return {

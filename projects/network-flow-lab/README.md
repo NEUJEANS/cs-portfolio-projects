@@ -28,6 +28,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - standalone benchmark report-card export in Markdown and SVG for quick portfolio screenshots and README embeds
 - standalone `benchmark-gallery-demo --html-out` landing page that makes the committed benchmark cards browsable beside the optimization walkthrough gallery
 - standalone `showcase-demo --html-out` filterable hub that lets reviewers jump between proof cards, HTML walkthroughs, benchmark reports, and companion Markdown/DOT/JSON files from one page
+- replay-friendly showcase page section that lets reviewers edit the bundled sample graph, rerun the solver locally, and compare a fresh JSON payload against the committed reference artifact
 - Graphviz DOT export for solved flow graphs, bipartite matchings, weighted assignments, and generic min-cost-flow graphs
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--json-out` machine-readable companions for flow, matching, assignment, generic min-cost-flow, and benchmark runs so the published galleries can link back to exact solver payloads without leaking absolute local paths
@@ -123,7 +124,7 @@ Build a sibling benchmark landing page that keeps the DAG, dense, and layered re
 python3 projects/network-flow-lab/network_flow.py benchmark-gallery-demo --artifact-dir docs/artifacts/network-flow-lab --html-out docs/artifacts/network-flow-lab/benchmark-gallery.html --pretty
 ```
 
-Build the top-level showcase hub when you want one filterable page for proof cards, optimization walkthroughs, benchmark reports, and their Markdown/DOT companions:
+Build the top-level showcase hub when you want one filterable page for proof cards, optimization walkthroughs, benchmark reports, and their Markdown/DOT companions. The generated page also includes a replay workspace where a reviewer can tweak the bundled sample graph JSON, rerun the CLI locally, and compare the fresh JSON payload against the committed `sample-flow-result.json` reference:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py showcase-demo --artifact-dir docs/artifacts/network-flow-lab --html-out docs/artifacts/network-flow-lab/showcase.html --pretty

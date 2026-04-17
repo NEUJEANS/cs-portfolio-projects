@@ -22,6 +22,7 @@
 - [x] Add a lightweight benchmark HTML gallery page so the benchmark cards are browsable beside the optimization artifact gallery
 - [x] Add a filterable showcase page that links proof cards, HTML walkthroughs, benchmark reports, and their Markdown/DOT companions from one browser hub
 - [x] Add raw JSON companions for the demo/report artifacts and link them from the galleries/showcase hub
+- [x] Add a replay workspace to the showcase page so viewers can tweak the sample graph and compare a fresh solver JSON payload against the committed artifact
 - [x] Generalize weighted assignment into a custom min-cost-flow graph input format
 - [x] Add Graphviz DOT export for generic min-cost-flow graphs
 - [x] Add Graphviz DOT export for weighted-assignment reductions
