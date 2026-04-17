@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin doc — plugin-sessionization</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1080px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.8rem; }
+    .badge { display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }
+    article { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin doc: <code>plugin-sessionization</code></h1>
+  <ul class="meta"><li><strong>Plugin path</strong><br><code>projects/mini-mapreduce-lab/plugins_sessionization.py</code></li><li><strong>Summary</strong><br>Sessionization analytics plugin for product-usage benchmark demos.</li><li><strong>Dataset families</strong><br><code>default, exam-revision, launch-day</code></li><li><strong>Catalog badges</strong><br><span class="badge">5 hooks</span><span class="badge">3 dataset families</span><span class="badge">commit pinned</span><span class="badge">github linked</span></li><li><strong>Repository commit</strong><br><code>ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3</code></li><li><strong>Catalog index</strong><br><a href="../plugin-catalog.html">plugin catalog</a></li><li><strong>Alternate format</strong><br><a href="plugin-sessionization.md">Markdown</a></li></ul>
+  <section>
+    <h2>Hook summary</h2>
+    <table>
+      <thead><tr><th>Hook</th><th>Export</th><th>Signature</th><th>Details</th><th>Source</th></tr></thead>
+      <tbody><tr><td>Mapper</td><td><code>plugins_sessionization.map_records</code></td><td><code>map_records(lines)</code></td><td>Emit per-user session events from comma-separated user,timestamp,page rows.<br>line 52<br>anchor <code>plugins_sessionization.py#L52-L62</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62">commit</a></td></tr><tr><td>Reducer</td><td><code>plugins_sessionization.reduce_key</code></td><td><code>reduce_key(_key, values)</code></td><td>Summarize session count, duration, and activity intensity for one user.<br>line 70<br>anchor <code>plugins_sessionization.py#L70-L91</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91">commit</a></td></tr><tr><td>Combiner</td><td><code>plugins_sessionization.combine_values</code></td><td><code>combine_values(_key, values)</code></td><td>Keep shard-local event batches JSON-safe before global sessionization.<br>line 65<br>anchor <code>plugins_sessionization.py#L65-L67</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67">commit</a></td></tr><tr><td>Benchmark generator</td><td><code>plugins_sessionization.benchmark_records</code></td><td><code>benchmark_records(scenario, records, seed, dataset_family=&#x27;default&#x27;)</code></td><td>Generate deterministic product-analytics event streams for sessionization demos.<br>line 135<br>anchor <code>plugins_sessionization.py#L135-L206</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206">commit</a></td></tr><tr><td>Benchmark note hook</td><td><code>plugins_sessionization.benchmark_notes</code></td><td><code>benchmark_notes(scenario, dataset_family=&#x27;default&#x27;)</code></td><td>Describe the intended hotspot users and browsing patterns for each family.<br>line 209<br>anchor <code>plugins_sessionization.py#L209-L278</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278">commit</a></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Hook source excerpts</h2>
+    <article><h2>Mapper: <code>plugins_sessionization.map_records</code></h2><p><strong>Summary:</strong> Emit per-user session events from comma-separated user,timestamp,page rows.</p><p><strong>Source line:</strong> <code>52</code></p><p><strong>Source anchor:</strong> <code>plugins_sessionization.py#L52-L62</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62">https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62</a></p><pre><code>def map_records(lines):
+    &quot;&quot;&quot;Emit per-user session events from comma-separated user,timestamp,page rows.&quot;&quot;&quot;
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        user_id, timestamp, page = [part.strip() for part in stripped.split(&quot;,&quot;, maxsplit=2)]
+        yield user_id.lower(), {
+            &quot;timestamp&quot;: _isoformat_z(_parse_timestamp(timestamp)),
+            &quot;page&quot;: page,
+        }</code></pre></article><article><h2>Reducer: <code>plugins_sessionization.reduce_key</code></h2><p><strong>Summary:</strong> Summarize session count, duration, and activity intensity for one user.</p><p><strong>Source line:</strong> <code>70</code></p><p><strong>Source anchor:</strong> <code>plugins_sessionization.py#L70-L91</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91">https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91</a></p><pre><code>def reduce_key(_key, values):
+    &quot;&quot;&quot;Summarize session count, duration, and activity intensity for one user.&quot;&quot;&quot;
+    merged = _merge_event_batches(values)
+    events = merged[&quot;events&quot;]
+    sessions = _session_summaries(events)
+    durations = []
+    for session in sessions:
+        start = _parse_timestamp(session[0][&quot;timestamp&quot;])
+        end = _parse_timestamp(session[-1][&quot;timestamp&quot;])
+        durations.append(round((end - start).total_seconds() / 60, 3))
+    total_events = len(events)
+    session_count = len(sessions)
+    return {
+        &quot;session_count&quot;: session_count,
+        &quot;total_events&quot;: total_events,
+        &quot;avg_events_per_session&quot;: round(total_events / session_count, 3) if session_count else 0.0,
+        &quot;avg_session_minutes&quot;: round(sum(durations) / session_count, 3) if session_count else 0.0,
+        &quot;longest_session_events&quot;: max((len(session) for session in sessions), default=0),
+        &quot;longest_session_minutes&quot;: max(durations, default=0.0),
+        &quot;first_event_at&quot;: events[0][&quot;timestamp&quot;] if events else None,
+        &quot;last_event_at&quot;: events[-1][&quot;timestamp&quot;] if events else None,
+    }</code></pre></article><article><h2>Combiner: <code>plugins_sessionization.combine_values</code></h2><p><strong>Summary:</strong> Keep shard-local event batches JSON-safe before global sessionization.</p><p><strong>Source line:</strong> <code>65</code></p><p><strong>Source anchor:</strong> <code>plugins_sessionization.py#L65-L67</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67">https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67</a></p><pre><code>def combine_values(_key, values):
+    &quot;&quot;&quot;Keep shard-local event batches JSON-safe before global sessionization.&quot;&quot;&quot;
+    return {&quot;events&quot;: sorted(values, key=lambda event: event[&quot;timestamp&quot;])}</code></pre></article><article><h2>Benchmark generator: <code>plugins_sessionization.benchmark_records</code></h2><p><strong>Summary:</strong> Generate deterministic product-analytics event streams for sessionization demos.</p><p><strong>Source line:</strong> <code>135</code></p><p><strong>Source anchor:</strong> <code>plugins_sessionization.py#L135-L206</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206">https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206</a></p><pre><code>def benchmark_records(scenario, records, seed, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Generate deterministic product-analytics event streams for sessionization demos.&quot;&quot;&quot;
+    if records &lt;= 0:
+        raise ValueError(&quot;records must be positive&quot;)
+    rng = random.Random(seed)
+    base_time = datetime(2026, 4, 17, 8, 0, tzinfo=timezone.utc)
+
+    families = {
+        &quot;default&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;user&quot;: &quot;student-alpha&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 52, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;home&quot;, &quot;lecture-notes&quot;, &quot;quiz&quot;]},
+                {&quot;user&quot;: &quot;student-beta&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 48, &quot;intra_gap&quot;: 4, &quot;pages&quot;: [&quot;home&quot;, &quot;lab&quot;, &quot;forum&quot;]},
+                {&quot;user&quot;: &quot;student-gamma&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 4, &quot;session_gap&quot;: 56, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;home&quot;, &quot;editor&quot;, &quot;submissions&quot;]},
+                {&quot;user&quot;: &quot;student-delta&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 50, &quot;intra_gap&quot;: 4, &quot;pages&quot;: [&quot;home&quot;, &quot;flashcards&quot;, &quot;quiz&quot;]},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;user&quot;: &quot;student-alpha&quot;, &quot;weight&quot;: 3.3, &quot;session_size&quot;: 5, &quot;session_gap&quot;: 38, &quot;intra_gap&quot;: 4, &quot;pages&quot;: [&quot;home&quot;, &quot;lecture-notes&quot;, &quot;quiz&quot;, &quot;editor&quot;]},
+                {&quot;user&quot;: &quot;student-beta&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 55, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;home&quot;, &quot;lab&quot;, &quot;forum&quot;]},
+                {&quot;user&quot;: &quot;student-gamma&quot;, &quot;weight&quot;: 0.9, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 58, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;home&quot;, &quot;editor&quot;, &quot;submissions&quot;]},
+                {&quot;user&quot;: &quot;student-delta&quot;, &quot;weight&quot;: 0.8, &quot;session_size&quot;: 2, &quot;session_gap&quot;: 62, &quot;intra_gap&quot;: 6, &quot;pages&quot;: [&quot;home&quot;, &quot;flashcards&quot;, &quot;quiz&quot;]},
+            ],
+        },
+        &quot;exam-revision&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;user&quot;: &quot;night-owl&quot;, &quot;weight&quot;: 1.1, &quot;session_size&quot;: 4, &quot;session_gap&quot;: 46, &quot;intra_gap&quot;: 4, &quot;pages&quot;: [&quot;review-guide&quot;, &quot;quiz&quot;, &quot;flashcards&quot;]},
+                {&quot;user&quot;: &quot;lab-partner&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 50, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;practice-exam&quot;, &quot;solutions&quot;, &quot;forum&quot;]},
+                {&quot;user&quot;: &quot;project-mate&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 54, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;review-guide&quot;, &quot;editor&quot;, &quot;submission&quot;]},
+                {&quot;user&quot;: &quot;commuter&quot;, &quot;weight&quot;: 0.9, &quot;session_size&quot;: 2, &quot;session_gap&quot;: 58, &quot;intra_gap&quot;: 6, &quot;pages&quot;: [&quot;flashcards&quot;, &quot;quiz&quot;, &quot;summary&quot;]},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;user&quot;: &quot;night-owl&quot;, &quot;weight&quot;: 3.8, &quot;session_size&quot;: 6, &quot;session_gap&quot;: 34, &quot;intra_gap&quot;: 4, &quot;pages&quot;: [&quot;review-guide&quot;, &quot;quiz&quot;, &quot;quiz-review&quot;, &quot;flashcards&quot;]},
+                {&quot;user&quot;: &quot;lab-partner&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 52, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;practice-exam&quot;, &quot;solutions&quot;, &quot;forum&quot;]},
+                {&quot;user&quot;: &quot;project-mate&quot;, &quot;weight&quot;: 0.9, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 56, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;review-guide&quot;, &quot;editor&quot;, &quot;submission&quot;]},
+                {&quot;user&quot;: &quot;commuter&quot;, &quot;weight&quot;: 0.7, &quot;session_size&quot;: 2, &quot;session_gap&quot;: 64, &quot;intra_gap&quot;: 6, &quot;pages&quot;: [&quot;flashcards&quot;, &quot;quiz&quot;, &quot;summary&quot;]},
+            ],
+        },
+        &quot;launch-day&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;user&quot;: &quot;release-lead&quot;, &quot;weight&quot;: 1.1, &quot;session_size&quot;: 4, &quot;session_gap&quot;: 42, &quot;intra_gap&quot;: 4, &quot;pages&quot;: [&quot;overview&quot;, &quot;health&quot;, &quot;errors&quot;, &quot;deploy&quot;]},
+                {&quot;user&quot;: &quot;qa-desk&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 48, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;smoke-tests&quot;, &quot;errors&quot;, &quot;feedback&quot;]},
+                {&quot;user&quot;: &quot;support-ops&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 50, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;tickets&quot;, &quot;feedback&quot;, &quot;health&quot;]},
+                {&quot;user&quot;: &quot;analytics-watch&quot;, &quot;weight&quot;: 0.9, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 54, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;overview&quot;, &quot;conversion&quot;, &quot;health&quot;]},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;user&quot;: &quot;release-lead&quot;, &quot;weight&quot;: 4.0, &quot;session_size&quot;: 6, &quot;session_gap&quot;: 31, &quot;intra_gap&quot;: 4, &quot;pages&quot;: [&quot;overview&quot;, &quot;health&quot;, &quot;errors&quot;, &quot;deploy&quot;, &quot;rollback&quot;]},
+                {&quot;user&quot;: &quot;qa-desk&quot;, &quot;weight&quot;: 1.1, &quot;session_size&quot;: 4, &quot;session_gap&quot;: 44, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;smoke-tests&quot;, &quot;errors&quot;, &quot;feedback&quot;]},
+                {&quot;user&quot;: &quot;support-ops&quot;, &quot;weight&quot;: 1.0, &quot;session_size&quot;: 3, &quot;session_gap&quot;: 50, &quot;intra_gap&quot;: 5, &quot;pages&quot;: [&quot;tickets&quot;, &quot;feedback&quot;, &quot;health&quot;]},
+                {&quot;user&quot;: &quot;analytics-watch&quot;, &quot;weight&quot;: 0.8, &quot;session_size&quot;: 2, &quot;session_gap&quot;: 58, &quot;intra_gap&quot;: 6, &quot;pages&quot;: [&quot;overview&quot;, &quot;conversion&quot;, &quot;health&quot;]},
+            ],
+        },
+    }
+    if dataset_family not in families or scenario not in families[dataset_family]:
+        raise ValueError(f&quot;unsupported plugin benchmark scenario/family: {scenario}/{dataset_family}&quot;)
+
+    profiles = families[dataset_family][scenario]
+    counts = _allocate_counts(records, [profile[&quot;weight&quot;] for profile in profiles])
+    events = []
+    for index, (profile, count) in enumerate(zip(profiles, counts)):
+        start_offset = timedelta(minutes=(index * 9) + rng.randint(0, 4))
+        events.extend(
+            _generate_user_events(
+                user=profile[&quot;user&quot;],
+                count=count,
+                start_at=base_time + start_offset,
+                session_size=profile[&quot;session_size&quot;],
+                session_gap_minutes=profile[&quot;session_gap&quot;] + rng.randint(-3, 3),
+                intra_gap_minutes=profile[&quot;intra_gap&quot;],
+                pages=profile[&quot;pages&quot;],
+            )
+        )
+    events.sort(key=lambda item: item[&quot;timestamp&quot;])
+    return [f&quot;{event[&#x27;user&#x27;]},{event[&#x27;timestamp&#x27;]},{event[&#x27;page&#x27;]}&quot; for event in events[:records]]</code></pre></article><article><h2>Benchmark note hook: <code>plugins_sessionization.benchmark_notes</code></h2><p><strong>Summary:</strong> Describe the intended hotspot users and browsing patterns for each family.</p><p><strong>Source line:</strong> <code>209</code></p><p><strong>Source anchor:</strong> <code>plugins_sessionization.py#L209-L278</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278">https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278</a></p><pre><code>def benchmark_notes(scenario, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Describe the intended hotspot users and browsing patterns for each family.&quot;&quot;&quot;
+    notes = {
+        (&quot;balanced&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Even study cadence&quot;,
+                &quot;detail&quot;: &quot;The default balanced family spreads activity across four students with similarly sized bursts, so reducer load should stay close while the output still demonstrates session boundaries.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the calm baseline before showing why repeated bursts from one user change the session story.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Student alpha cram loop&quot;,
+                &quot;detail&quot;: &quot;`student-alpha` revisits notes, quizzes, and the editor in repeated short bursts, so the hottest reducer should look like one user driving most session starts and events.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;student-alpha&quot;],
+                &quot;takeaway&quot;: &quot;This is the simplest sessionization story for discussing hot users versus evenly distributed class traffic.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;exam-revision&quot;): [
+            {
+                &quot;title&quot;: &quot;Shared review week&quot;,
+                &quot;detail&quot;: &quot;The balanced exam family keeps revision activity spread across multiple learners and shorter study sessions, which makes the session summaries read like a healthy pre-exam baseline.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Good for explaining why session counts alone are not enough without session length and event intensity.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;exam-revision&quot;): [
+            {
+                &quot;title&quot;: &quot;Night-owl marathon&quot;,
+                &quot;detail&quot;: &quot;`night-owl` owns most of the benchmark volume here with repeated late-session bursts, so the reducer heatmap should show one learner dominating both activity and longest-session metrics.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;night-owl&quot;],
+                &quot;takeaway&quot;: &quot;Call out how sessionization turns a raw clickstream into a workload story about sustained study behavior instead of isolated page hits.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Commuter quick checks&quot;,
+                &quot;detail&quot;: &quot;`commuter` stays small and bursty, which makes it a useful low-priority contrast key when tightening the portfolio narrative down to the primary hotspot.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;hotspot_keys&quot;: [&quot;commuter&quot;],
+                &quot;takeaway&quot;: &quot;This annotation is a good candidate to collapse in portfolio-tight reports.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;launch-day&quot;): [
+            {
+                &quot;title&quot;: &quot;Coordinated launch monitoring&quot;,
+                &quot;detail&quot;: &quot;The balanced launch-day family keeps release, QA, support, and analytics roles close enough that the session summary reads like a calm release checklist instead of an incident.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the before state for the launch-day hotspot story.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;launch-day&quot;): [
+            {
+                &quot;title&quot;: &quot;Release lead war room&quot;,
+                &quot;detail&quot;: &quot;`release-lead` dominates this family with back-to-back dashboard, deploy, and rollback visits, so the hottest reducer should look like one operator repeatedly re-entering a release war room.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;release-lead&quot;],
+                &quot;takeaway&quot;: &quot;This turns the plugin into a product-analytics case study about launch-day behavior rather than generic score aggregation.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;QA desk verification loop&quot;,
+                &quot;detail&quot;: &quot;`qa-desk` forms a second-tier hotspot behind the release lead, which helps the report show supporting verification traffic instead of a single isolated key.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;qa-desk&quot;],
+                &quot;takeaway&quot;: &quot;Keep this note when you want a fuller multi-role launch narrative in the benchmark report.&quot;,
+            },
+        ],
+    }
+    return notes.get((scenario, dataset_family), [])</code></pre></article>
+  </section>
+</body>
+</html>

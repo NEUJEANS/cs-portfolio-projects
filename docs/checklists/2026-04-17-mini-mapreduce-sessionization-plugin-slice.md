@@ -11,7 +11,7 @@
 - [x] regenerate the committed Mini MapReduce artifact bundle so the catalog, plugin pages, diff report, sessionization benchmark report, and docs index include the new plugin
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 
 ## Review notes
 - review pass 1: verify the session-gap logic on a hand-worked event stream so the reducer breaks sessions only when the inactivity gap exceeds 30 minutes.

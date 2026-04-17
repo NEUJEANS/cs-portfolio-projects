@@ -6,7 +6,7 @@
 - Summary: Maximum-score reducer plugin for simple leaderboard-style demos.
 - Dataset families: `-`
 - Catalog badges: `3 hooks` · `no dataset families` · `commit pinned` · `github linked`
-- Repository commit: `5d6ac8f8b9261dfca592baec0caa2d1fb0b963ef`
+- Repository commit: `ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3`
 - Catalog index: [plugin catalog](../plugin-catalog.md)
 - Alternate format: [HTML](plugin-max-score.html)
 
@@ -14,9 +14,9 @@
 
 | Hook | Export | Signature | Details | Source |
 | --- | --- | --- | --- | --- |
-| Mapper | `plugins_top_score.map_records` | `map_records(lines)` | Parse comma-separated score rows into integer leaderboard updates.<br>line 6<br>anchor `plugins_top_score.py#L6-L13` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L6-L13)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/5d6ac8f8b9261dfca592baec0caa2d1fb0b963ef/projects/mini-mapreduce-lab/plugins_top_score.py#L6-L13) |
-| Reducer | `plugins_top_score.reduce_key` | `reduce_key(_key, values)` | Return the overall maximum score for one student key.<br>line 21<br>anchor `plugins_top_score.py#L21-L23` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L21-L23)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/5d6ac8f8b9261dfca592baec0caa2d1fb0b963ef/projects/mini-mapreduce-lab/plugins_top_score.py#L21-L23) |
-| Combiner | `plugins_top_score.combine_values` | `combine_values(_key, values)` | Keep the shard-local maximum score for one student key.<br>line 16<br>anchor `plugins_top_score.py#L16-L18` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L16-L18)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/5d6ac8f8b9261dfca592baec0caa2d1fb0b963ef/projects/mini-mapreduce-lab/plugins_top_score.py#L16-L18) |
+| Mapper | `plugins_top_score.map_records` | `map_records(lines)` | Parse comma-separated score rows into integer leaderboard updates.<br>line 6<br>anchor `plugins_top_score.py#L6-L13` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L6-L13)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_top_score.py#L6-L13) |
+| Reducer | `plugins_top_score.reduce_key` | `reduce_key(_key, values)` | Return the overall maximum score for one student key.<br>line 21<br>anchor `plugins_top_score.py#L21-L23` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L21-L23)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_top_score.py#L21-L23) |
+| Combiner | `plugins_top_score.combine_values` | `combine_values(_key, values)` | Keep the shard-local maximum score for one student key.<br>line 16<br>anchor `plugins_top_score.py#L16-L18` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L16-L18)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_top_score.py#L16-L18) |
 
 ## Hook source excerpts
 
@@ -26,7 +26,7 @@
 - Source line: `6`
 - Source anchor: `plugins_top_score.py#L6-L13`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L6-L13>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/5d6ac8f8b9261dfca592baec0caa2d1fb0b963ef/projects/mini-mapreduce-lab/plugins_top_score.py#L6-L13>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_top_score.py#L6-L13>
 
 ```python
 def map_records(lines):
@@ -45,7 +45,7 @@ def map_records(lines):
 - Source line: `21`
 - Source anchor: `plugins_top_score.py#L21-L23`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L21-L23>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/5d6ac8f8b9261dfca592baec0caa2d1fb0b963ef/projects/mini-mapreduce-lab/plugins_top_score.py#L21-L23>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_top_score.py#L21-L23>
 
 ```python
 def reduce_key(_key, values):
@@ -59,7 +59,7 @@ def reduce_key(_key, values):
 - Source line: `16`
 - Source anchor: `plugins_top_score.py#L16-L18`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_top_score.py#L16-L18>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/5d6ac8f8b9261dfca592baec0caa2d1fb0b963ef/projects/mini-mapreduce-lab/plugins_top_score.py#L16-L18>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/ab1a55b71a0eb4d40e3bf6e764ba90db78d0f2f3/projects/mini-mapreduce-lab/plugins_top_score.py#L16-L18>
 
 ```python
 def combine_values(_key, values):
