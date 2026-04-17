@@ -8,6 +8,16 @@ const LIVE_RELOAD_PATH = '/__sitegen/live';
 const DEFAULT_SERVE_HOST = '127.0.0.1';
 const DEFAULT_SERVE_PORT = 4173;
 const NOT_FOUND_OUTPUT_NAME = '404.html';
+const CALLOUT_DEFINITIONS = {
+  note: { label: 'Note', icon: 'ℹ', tone: 'note' },
+  reviewer: { label: 'Reviewer note', icon: '👀', tone: 'reviewer' },
+  architecture: { label: 'Architecture note', icon: '🏗️', tone: 'architecture' },
+  performance: { label: 'Performance note', icon: '⚡', tone: 'performance' },
+  tradeoff: { label: 'Trade-off', icon: '⚖️', tone: 'tradeoff' },
+  testing: { label: 'Testing note', icon: '🧪', tone: 'testing' },
+  tip: { label: 'Tip', icon: '💡', tone: 'tip' },
+  warning: { label: 'Warning', icon: '⚠️', tone: 'warning' },
+};
 
 function parseFrontMatter(source) {
   const normalized = source.replace(/^\uFEFF/, '');
@@ -452,6 +462,63 @@ function renderCodeBlock(codeLines, codeFence) {
   return `<figure class="code-block"><figcaption class="code-block__meta">${metaBits.join('')}</figcaption><pre aria-label="${escapeHtml(ariaLabel)}"><code${codeClass}>${linesHtml}</code></pre></figure>`;
 }
 
+function normalizeCalloutType(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+}
+
+function resolveCalloutDefinition(rawType) {
+  const normalized = normalizeCalloutType(rawType);
+  return normalized ? { type: normalized, ...(CALLOUT_DEFINITIONS[normalized] || {}) } : null;
+}
+
+function parseCalloutMarker(line) {
+  const match = /^\[!([A-Za-z0-9_-]+)\](?:\s+(.*))?$/.exec(String(line || '').trim());
+  if (!match) {
+    return null;
+  }
+
+  const definition = resolveCalloutDefinition(match[1]);
+  if (!definition || !definition.label) {
+    return null;
+  }
+
+  return {
+    ...definition,
+    title: (match[2] || '').trim(),
+  };
+}
+
+function renderBlockquote(lines, page) {
+  const normalizedLines = Array.isArray(lines) ? [...lines] : [];
+
+  while (normalizedLines.length && !normalizedLines[0].trim()) {
+    normalizedLines.shift();
+  }
+
+  const marker = parseCalloutMarker(normalizedLines[0]);
+  if (!marker) {
+    return `<blockquote>${markdownToHtml(normalizedLines.join('\n'), page)}</blockquote>`;
+  }
+
+  const bodyLines = normalizedLines.slice(1);
+  while (bodyLines.length && !bodyLines[0].trim()) {
+    bodyLines.shift();
+  }
+  while (bodyLines.length && !bodyLines[bodyLines.length - 1].trim()) {
+    bodyLines.pop();
+  }
+
+  const titleHtml = marker.title ? `<p class="callout__title">${inlineMarkdown(marker.title, page)}</p>` : '';
+  const bodyHtml = bodyLines.length ? `<div class="callout__body">${markdownToHtml(bodyLines.join('\n'), page)}</div>` : '';
+  const tone = escapeHtml(marker.tone || marker.type || 'note');
+  const type = escapeHtml(marker.type || 'note');
+
+  return `<aside class="callout callout--${tone}" data-callout-type="${type}"><div class="callout__header"><p class="callout__eyebrow"><span class="callout__icon" aria-hidden="true">${escapeHtml(marker.icon || 'ℹ')}</span><span>${escapeHtml(marker.label)}</span></p>${titleHtml}</div>${bodyHtml}</aside>`;
+}
+
 function markdownToHtml(markdown, page) {
   const lines = markdown.replace(/\r/g, '').split('\n');
   const parts = [];
@@ -490,8 +557,7 @@ function markdownToHtml(markdown, page) {
 
   const flushBlockquote = () => {
     if (!blockquoteLines.length) return;
-    const innerHtml = markdownToHtml(blockquoteLines.join('\n'), page);
-    parts.push(`<blockquote>${innerHtml}</blockquote>`);
+    parts.push(renderBlockquote(blockquoteLines, page));
     blockquoteLines = [];
   };
 
@@ -813,6 +879,21 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .code-block__line::before { content: attr(data-line); text-align: right; color: #64748b; user-select: none; }
       .code-block__line-content { white-space: pre; }
       blockquote { margin: 0; padding: 0.25rem 1rem; border-left: 4px solid #2563eb; background: #2563eb11; border-radius: 0 0.85rem 0.85rem 0; }
+      .callout { --callout-accent: #2563eb; --callout-bg: #eff6ff; --callout-fg: #1e3a8a; margin: 0; padding: 1rem 1.1rem; border: 1px solid #cbd5e1; border-left: 5px solid var(--callout-accent); background: var(--callout-bg); border-radius: 0 1rem 1rem 0; }
+      .callout--reviewer { --callout-accent: #7c3aed; --callout-bg: #f5f3ff; --callout-fg: #5b21b6; }
+      .callout--architecture { --callout-accent: #0f766e; --callout-bg: #ecfeff; --callout-fg: #115e59; }
+      .callout--performance { --callout-accent: #ea580c; --callout-bg: #fff7ed; --callout-fg: #9a3412; }
+      .callout--tradeoff { --callout-accent: #b45309; --callout-bg: #fffbeb; --callout-fg: #92400e; }
+      .callout--testing { --callout-accent: #2563eb; --callout-bg: #eff6ff; --callout-fg: #1d4ed8; }
+      .callout--tip { --callout-accent: #15803d; --callout-bg: #f0fdf4; --callout-fg: #166534; }
+      .callout--warning { --callout-accent: #dc2626; --callout-bg: #fef2f2; --callout-fg: #991b1b; }
+      .callout__header { display: grid; gap: 0.35rem; margin-bottom: 0.75rem; }
+      .callout__eyebrow { display: inline-flex; align-items: center; gap: 0.45rem; margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--callout-fg); }
+      .callout__icon { font-size: 0.95rem; }
+      .callout__title { margin: 0; font-size: 1.05rem; font-weight: 700; color: inherit; }
+      .callout__body { display: grid; gap: 0.8rem; }
+      .callout__body > :first-child { margin-top: 0; }
+      .callout__body > :last-child { margin-bottom: 0; }
       @media (prefers-color-scheme: dark) {
         .code-block { border-color: #ffffff1f; background: #0f172a; box-shadow: none; }
         .code-block__meta { background: #111827; border-bottom-color: #1f2937; }
@@ -826,6 +907,15 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
         .code-block__copy[data-copy-state="error"] { background: #7f1d1d; border-color: #f87171; color: #fee2e2; }
         .code-block pre { color: #e5e7eb; }
         .code-block__line::before { color: #94a3b8; }
+        .callout { border-color: #334155; color: #e5e7eb; }
+        .callout--note { --callout-bg: #172554; --callout-fg: #bfdbfe; }
+        .callout--reviewer { --callout-bg: #2e1065; --callout-fg: #ddd6fe; }
+        .callout--architecture { --callout-bg: #042f2e; --callout-fg: #99f6e4; }
+        .callout--performance { --callout-bg: #431407; --callout-fg: #fdba74; }
+        .callout--tradeoff { --callout-bg: #451a03; --callout-fg: #fcd34d; }
+        .callout--testing { --callout-bg: #172554; --callout-fg: #bfdbfe; }
+        .callout--tip { --callout-bg: #052e16; --callout-fg: #bbf7d0; }
+        .callout--warning { --callout-bg: #450a0a; --callout-fg: #fecaca; }
       }
       blockquote p:first-child { margin-top: 0; }
       blockquote p:last-child { margin-bottom: 0; }

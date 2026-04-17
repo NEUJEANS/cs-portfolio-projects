@@ -14,4 +14,5 @@
 - [x] Add custom 404 pages and friendlier preview error surfaces for missing routes
 - [x] Add syntax highlighting themes or richer code-block presentation
 - [x] Add copy-to-clipboard controls for code samples
-- [ ] Add focused reviewer callouts for code samples or architecture notes
+- [x] Add focused reviewer callouts for code samples or architecture notes
+- [ ] Add side-by-side comparison blocks for before/after refactors or benchmark deltas

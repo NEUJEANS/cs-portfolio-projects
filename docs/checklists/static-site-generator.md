@@ -186,4 +186,21 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
-- [ ] consider reviewer callout panels for architecture notes or “why this code matters” annotations in a future run
+
+## 2026-04-17 vertical slice: reviewer + architecture callout panels
+- [x] identify `static-site-generator` as still unfinished because the project checklist still had callout annotations open for code samples and architecture notes
+- [x] do brief research on GitHub-style `[!TYPE]` blockquote markers to keep authoring lightweight and familiar
+- [x] skip extra language refresh because the slice stays inside the existing Node/CommonJS Markdown renderer and test harness
+- [x] add a resumable checklist for the slice
+- [x] render focused callout panels for markers such as `[!REVIEWER]` and `[!ARCHITECTURE]` while preserving ordinary blockquotes
+- [x] style the new callouts for light/dark themes without disturbing the existing blockquote presentation
+- [x] expand automated tests for Markdown callout rendering, generated-page output, and the synced duplicate test entrypoint
+- [x] update README and project checklist with the new callout workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
+- [ ] consider side-by-side comparison blocks for before/after refactors or benchmark deltas in a future run

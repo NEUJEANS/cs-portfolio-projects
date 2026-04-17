@@ -155,6 +155,17 @@ test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, ima
   assert.match(html, /<code class="language-js"><span class="code-block__line" data-line="1"><span class="code-block__line-content">const x = 1 &lt; 2;<\/span><\/span>\n<span class="code-block__line" data-line="2"><span class="code-block__line-content">console\.log\(x\);<\/span><\/span><\/code>/);
 });
 
+test('markdownToHtml renders focused callout panels for reviewer and architecture notes', () => {
+  const html = markdownToHtml('> [!REVIEWER] Why this snippet matters\n> Keep the parser deterministic so review diffs stay small.\n>\n> - avoid hidden filesystem state\n\n> [!ARCHITECTURE]\n> `loadPages()` stays separate from rendering so tests can validate discovery independently.');
+  assert.match(html, /<aside class="callout callout--reviewer" data-callout-type="reviewer">/);
+  assert.match(html, /<p class="callout__eyebrow"><span class="callout__icon" aria-hidden="true">👀<\/span><span>Reviewer note<\/span><\/p>/);
+  assert.match(html, /<p class="callout__title">Why this snippet matters<\/p>/);
+  assert.match(html, /<div class="callout__body"><p>Keep the parser deterministic so review diffs stay small\.<\/p>\s*<ul><li>avoid hidden filesystem state<\/li><\/ul><\/div>/);
+  assert.match(html, /<aside class="callout callout--architecture" data-callout-type="architecture">/);
+  assert.match(html, /<span class="callout__icon" aria-hidden="true">🏗️<\/span><span>Architecture note<\/span>/);
+  assert.match(html, /<code>loadPages\(\)<\/code> stays separate from rendering so tests can validate discovery independently\./);
+});
+
 test('replaceMarkdownImages sanitizes unsafe image URLs', () => {
   const html = replaceMarkdownImages('![blocked](javascript:alert(1)) and ![ok](images/demo.png)');
   assert.match(html, /<img src="#" alt="blocked" loading="lazy">/);
@@ -281,6 +292,12 @@ test command:
 node sitegen.js content dist
 \`\`\`
 
+> [!REVIEWER] Why this command matters
+> Run the generator from the project root so copied assets and rewritten links stay in sync.
+
+> [!ARCHITECTURE]
+> \`loadPages()\` and \`buildSite()\` stay split so content discovery can be tested independently from HTML rendering.
+
 Return [home](../index.md).`,
     'utf8'
   );
@@ -320,6 +337,11 @@ Return [home](../index.md).`,
   assert.match(setupHtml, /navigator\.clipboard\.writeText/);
   assert.match(setupHtml, /document\.execCommand\('copy'\)/);
   assert.match(setupHtml, /<code class="language-bash"><span class="code-block__line" data-line="1"><span class="code-block__line-content">node sitegen\.js content dist<\/span><\/span><\/code>/);
+  assert.match(setupHtml, /<aside class="callout callout--reviewer" data-callout-type="reviewer">/);
+  assert.match(setupHtml, /<p class="callout__title">Why this command matters<\/p>/);
+  assert.match(setupHtml, /Run the generator from the project root so copied assets and rewritten links stay in sync\./);
+  assert.match(setupHtml, /<aside class="callout callout--architecture" data-callout-type="architecture">/);
+  assert.match(setupHtml, /<code>loadPages\(\)<\/code> and <code>buildSite\(\)<\/code> stay split so content discovery can be tested independently from HTML rendering\./);
   assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/portfolio.html">portfolio<\/a>/);
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/docs.html">docs<\/a>/);

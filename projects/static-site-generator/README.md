@@ -17,6 +17,7 @@ This project shows practical compiler-style text processing, file-system automat
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
 - presents fenced code blocks in richer portfolio-ready frames with language badges, optional file titles from fence metadata, line-number gutters, and copy-to-clipboard controls with accessible status feedback
+- turns GitHub-style blockquote markers such as `[!REVIEWER]` and `[!ARCHITECTURE]` into focused portfolio callout panels so code samples can carry concise “why this matters” notes
 - supports a dependency-free `--watch` mode with a configurable polling interval so content edits, new files, and shared partial updates trigger rebuilds during local authoring
 - can serve the generated `dist/` folder through a built-in local preview server, including browser auto-refresh when `--serve` is combined with `--watch`
 - generates a default `404.html` fallback and lets authors override it with `404.md`, including preview-only placeholders such as `{{requestedPath}}`
@@ -114,6 +115,18 @@ If pages include `tags`, the generator also creates `dist/tags/index.html` plus 
 
 Ordered steps and pull-quote style callouts are also preserved, so project pages can mix tutorials, release notes, and narrative case studies without extra tooling.
 
+For reviewer-style annotations around code or design decisions, use GitHub-style blockquote markers:
+
+```md
+> [!REVIEWER] Why this snippet matters
+> This parser keeps output deterministic so review diffs stay compact.
+
+> [!ARCHITECTURE]
+> `loadPages()` stays separate from rendering so tests can verify discovery independently.
+```
+
+The renderer keeps ordinary blockquotes as blockquotes, but recognized markers such as `REVIEWER`, `ARCHITECTURE`, `PERFORMANCE`, `TRADEOFF`, `TESTING`, `TIP`, `NOTE`, and `WARNING` become styled callout panels in the generated page.
+
 Fenced code blocks are preserved for technical write-ups and can carry a title straight from the fence info string:
 
 ~~~md
@@ -142,5 +155,5 @@ If you need to run the legacy mirrored entrypoint directly, `node --test test_st
 
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
-- focused reviewer callout annotations around code samples or architecture decisions
+- side-by-side comparison blocks for before/after refactors or benchmark deltas
 - sitemap.xml or RSS feed generation for blog-style portfolio sites
