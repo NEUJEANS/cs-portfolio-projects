@@ -13,7 +13,9 @@
 - [x] run targeted tests and runnable smoke checks
 - [x] complete 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit the feature slice
+- [x] push the feature slice
+- [ ] add wrap-up
 
 ## Review notes
 - review pass 1: config safety and recursive traversal behavior.
