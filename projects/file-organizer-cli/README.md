@@ -19,6 +19,7 @@ A Node.js CLI that organizes loose files into extension-based folders with colli
 - supports `--list-presets` and `--write-preset <name> <path>` so teams can export and share reusable bucket JSON files
 - supports `--config buckets.json` for custom buckets, extension overrides, and custom fallback bucket names
 - supports `--lint-config buckets.json` so shared bucket JSON can be validated in CI before teammates run a real organize pass
+- supports `--fix-config buckets.json` and `--write-normalized-config source.json destination.json` so teams can auto-resolve lint warnings into canonical shareable JSON
 - preserves existing files by renaming collisions like `notes (1).txt`
 - supports `--dry-run` to preview work without changing the file system
 - supports `--recursive` to organize nested folders while skipping already-organized bucket folders
@@ -39,6 +40,8 @@ node organizer.js ~/Downloads --config ./buckets.json --recursive
 node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json
 node organizer.js --lint-config ./shared/coursework-buckets.json
 node organizer.js --lint-config ./shared/coursework-buckets.json --json
+node organizer.js --fix-config ./shared/coursework-buckets.json
+node organizer.js --write-normalized-config ./shared/coursework-buckets.raw.json ./shared/coursework-buckets.json --force
 node organizer.js --undo ./artifacts/downloads-run.json
 node organizer.js --undo ./artifacts/downloads-run.json --dry-run --json
 ```
@@ -141,6 +144,38 @@ warning 2: Unknown top-level key "owner" will be ignored by the organizer.
 No errors found.
 ```
 
+## Normalized config writers
+Use the normalized-config helpers when you want the CLI to clean up a warning-heavy shared config before it gets committed.
+
+```bash
+node organizer.js --fix-config ./shared/coursework-buckets.json
+node organizer.js --write-normalized-config ./shared/coursework-buckets.raw.json ./shared/coursework-buckets.json --force
+```
+
+The normalized writer:
+- trims bucket and fallback names into canonical folder-safe values
+- lowercases and dot-prefixes extensions while removing duplicates
+- strips unknown top-level keys so the saved JSON matches what the organizer actually reads
+- writes stable key ordering for cleaner code review diffs across teammates
+- refuses to normalize invalid configs until the real errors are fixed
+
+> Tip: keep raw review artifacts (like `write.json` or an un-fixed `raw.json`) outside the directory you plan to organize. Only the active `--config` path is auto-skipped during an organize run.
+
+Example normalized-config output:
+```text
+action: write-normalized-config
+config: /home/student/shared/coursework-buckets.raw.json
+destination: /home/student/shared/coursework-buckets.json
+mode: copy
+resolved warnings: 2
+fallback bucket: misc
+extends defaults: yes
+custom buckets: datasets, slides
+resolved warning 1: Unknown top-level key "owner" will be ignored by the organizer.
+resolved warning 2: Bucket datasets extension "CSV" will normalize to ".csv".
+Normalized config written.
+```
+
 Example undo output:
 ```text
 root: /home/student/Downloads
@@ -165,6 +200,6 @@ npm test
 ```
 
 ## Future Improvements
-- add file-type detection beyond extensions for better categorization
+- support richer matching rules beyond extensions, such as basename patterns or MIME-aware detection
+- add a config-diff summary or autofix preview mode before writing normalized shared configs
 - optionally sign or checksum manifests for tamper-evident bulk-operation history
-- optionally auto-write a normalized config file so teams can clean up lint warnings in one step before committing shared presets

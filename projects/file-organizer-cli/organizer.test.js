@@ -14,6 +14,7 @@ const {
   uniqueDestination,
   loadBucketConfig,
   lintBucketConfig,
+  writeNormalizedBucketConfig,
   listPresetCatalog,
   loadPresetBucketConfig,
   writePresetConfig,
@@ -144,6 +145,76 @@ test('lintBucketConfig returns CI-friendly invalid results for broken shared con
   assert.equal(result.normalizedConfig, null);
   assert.match(result.errors[0], /Field "extendDefaults" must be true or false when provided\./);
   assert.match(result.errors[1], /Extension \.csv is assigned to multiple custom buckets/);
+});
+
+test('writeNormalizedBucketConfig resolves lint warnings into canonical shareable JSON', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-normalize-'));
+  const sourcePath = path.join(tmp, 'shared-buckets.json');
+  const destinationPath = path.join(tmp, 'normalized', 'shared-buckets.normalized.json');
+  await fs.writeFile(sourcePath, JSON.stringify({
+    buckets: {
+      slides: ['pptx', '.pptx'],
+      ' datasets ': ['CSV', '.parquet'],
+    },
+    fallbackBucket: ' misc ',
+    owner: 'team-shared',
+  }, null, 2));
+
+  const result = await writeNormalizedBucketConfig(sourcePath, destinationPath);
+  const payload = JSON.parse(await fs.readFile(destinationPath, 'utf8'));
+
+  assert.equal(result.destination, path.resolve(destinationPath));
+  assert.equal(result.inPlace, false);
+  assert.equal(result.resolvedWarnings.length, 6);
+  assert.deepEqual(payload, {
+    buckets: {
+      datasets: ['.csv', '.parquet'],
+      slides: ['.pptx'],
+    },
+    fallbackBucket: 'misc',
+    extendDefaults: true,
+  });
+});
+
+test('writeNormalizedBucketConfig supports in-place fixes and rejects invalid or clobbering writes', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-fix-'));
+  const configPath = path.join(tmp, 'shared-buckets.json');
+  await fs.writeFile(configPath, JSON.stringify({
+    buckets: {
+      ' datasets ': ['CSV', '.csv'],
+    },
+    fallbackBucket: ' misc ',
+  }, null, 2));
+
+  const inPlaceResult = await writeNormalizedBucketConfig(configPath, configPath);
+  const payload = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  assert.equal(inPlaceResult.inPlace, true);
+  assert.deepEqual(payload, {
+    buckets: {
+      datasets: ['.csv'],
+    },
+    fallbackBucket: 'misc',
+    extendDefaults: true,
+  });
+
+  const existingDestination = path.join(tmp, 'already-exists.json');
+  await fs.writeFile(existingDestination, '{}\n');
+  await assert.rejects(
+    writeNormalizedBucketConfig(configPath, existingDestination),
+    /Normalized config destination already exists/,
+  );
+
+  const invalidPath = path.join(tmp, 'broken-buckets.json');
+  await fs.writeFile(invalidPath, JSON.stringify({
+    buckets: {
+      datasets: ['csv'],
+      archives: ['.csv'],
+    },
+  }, null, 2));
+  await assert.rejects(
+    writeNormalizedBucketConfig(invalidPath, path.join(tmp, 'broken.normalized.json')),
+    /Cannot normalize invalid config/,
+  );
 });
 
 test('listPresetCatalog exposes named bucket presets', () => {
@@ -392,7 +463,7 @@ test('undo rejects manifests created from dry-run results', async () => {
   );
 });
 
-test('parseArgs supports config, preset, preset-export, and undo flags', () => {
+test('parseArgs supports config, preset, lint, normalized-config, preset-export, and undo flags', () => {
   const organizeArgs = parseArgs(['~/Downloads', '--dry-run', '--recursive', '--json', '--config', 'buckets.json', '--manifest-out', 'runs/latest.json']);
   assert.equal(organizeArgs.targetDir, '~/Downloads');
   assert.deepEqual(organizeArgs.options, {
@@ -403,6 +474,9 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     undoManifest: null,
     configPath: 'buckets.json',
     lintConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
     presetName: null,
     listPresets: false,
     writePresetName: null,
@@ -419,6 +493,9 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     undoManifest: null,
     configPath: null,
     lintConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
     presetName: 'coursework',
     listPresets: false,
     writePresetName: null,
@@ -436,6 +513,9 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     undoManifest: 'runs/latest.json',
     configPath: null,
     lintConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
     presetName: null,
     listPresets: false,
     writePresetName: null,
@@ -456,6 +536,9 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     undoManifest: null,
     configPath: null,
     lintConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
     presetName: null,
     listPresets: false,
     writePresetName: 'data-science',
@@ -472,11 +555,52 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
     undoManifest: null,
     configPath: null,
     lintConfigPath: 'shared/buckets.json',
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
     presetName: null,
     listPresets: false,
     writePresetName: null,
     writePresetDestination: null,
     force: false,
+  });
+
+  const fixConfigArgs = parseArgs(['--fix-config', 'shared/buckets.json', '--json']);
+  assert.deepEqual(fixConfigArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: true,
+    manifestOut: null,
+    undoManifest: null,
+    configPath: null,
+    lintConfigPath: null,
+    fixConfigPath: 'shared/buckets.json',
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
+  });
+
+  const writeNormalizedArgs = parseArgs(['--write-normalized-config', 'shared/raw.json', 'shared/clean.json', '--force', '--json']);
+  assert.deepEqual(writeNormalizedArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: true,
+    manifestOut: null,
+    undoManifest: null,
+    configPath: null,
+    lintConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: 'shared/raw.json',
+    writeNormalizedConfigDestination: 'shared/clean.json',
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: true,
   });
 
   assert.throws(
@@ -506,21 +630,31 @@ test('parseArgs supports config, preset, preset-export, and undo flags', () => {
 
   assert.throws(
     () => parseArgs(['--lint-config', 'shared/buckets.json', '--config', 'other.json']),
-    /--lint-config cannot be combined with organize, undo, or preset-export flags/,
+    /--lint-config cannot be combined with organize, undo, preset, or normalized-config-write flags/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--fix-config', 'shared/buckets.json', '--force']),
+    /--fix-config cannot be combined with organize, undo, lint, preset, or normalized-config-export flags/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--write-normalized-config', 'shared/raw.json', 'shared/clean.json', '--preset', 'coursework']),
+    /--write-normalized-config cannot be combined with organize, undo, lint, or preset flags/,
   );
 
   assert.throws(
     () => parseArgs(['--write-preset', 'coursework', 'preset.json', '--dry-run']),
-    /--write-preset cannot be combined with organize or undo flags/,
+    /--write-preset cannot be combined with organize, lint, normalized-config, or undo flags/,
   );
 
   assert.throws(
     () => parseArgs(['--force']),
-    /--force can only be used with --write-preset/,
+    /--force can only be used with --write-preset or --write-normalized-config/,
   );
 });
 
-test('formatTextReport includes config, preset, and manifest details for supported actions', () => {
+test('formatTextReport includes config, preset, manifest, lint, and normalized-config details for supported actions', () => {
   const organizeReport = formatTextReport({
     action: 'organize',
     rootDir: '/tmp/demo',
@@ -575,6 +709,19 @@ test('formatTextReport includes config, preset, and manifest details for support
     },
   });
 
+  const writeNormalizedConfigReport = formatTextReport({
+    action: 'write-normalized-config',
+    configPath: '/tmp/demo/shared-buckets.json',
+    destination: '/tmp/demo/shared-buckets.normalized.json',
+    inPlace: false,
+    resolvedWarnings: ['Bucket datasets extension "CSV" will normalize to ".csv".'],
+    normalizedConfig: {
+      buckets: { datasets: ['.csv'] },
+      fallbackBucket: 'misc',
+      extendDefaults: true,
+    },
+  });
+
   assert.match(organizeReport, /preset: coursework/);
   assert.match(organizeReport, /config: \/tmp\/demo\/buckets\.json/);
   assert.match(organizeReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
@@ -590,4 +737,9 @@ test('formatTextReport includes config, preset, and manifest details for support
   assert.match(lintConfigReport, /status: valid/);
   assert.match(lintConfigReport, /warning 1: Bucket datasets extension "CSV" will normalize to "\.csv"\./);
   assert.match(lintConfigReport, /No errors found\./);
+  assert.match(writeNormalizedConfigReport, /action: write-normalized-config/);
+  assert.match(writeNormalizedConfigReport, /destination: \/tmp\/demo\/shared-buckets\.normalized\.json/);
+  assert.match(writeNormalizedConfigReport, /mode: copy/);
+  assert.match(writeNormalizedConfigReport, /resolved warning 1: Bucket datasets extension "CSV" will normalize to "\.csv"\./);
+  assert.match(writeNormalizedConfigReport, /Normalized config written\./);
 });
