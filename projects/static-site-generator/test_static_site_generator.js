@@ -14,6 +14,7 @@ const {
   applyPreviewPlaceholders,
   buildSite,
   copyStaticAssets,
+  createCodeBlockEnhancementSnippet,
   createWatchSnapshot,
   injectLiveReloadClient,
   loadPages,
@@ -92,6 +93,14 @@ test('parseCodeFenceInfo extracts language aliases and optional code titles', ()
   assert.deepEqual(parseCodeFenceInfo('title="notes.txt"'), { language: '', title: 'notes.txt' });
 });
 
+test('createCodeBlockEnhancementSnippet includes clipboard and legacy-copy fallbacks', () => {
+  const snippet = createCodeBlockEnhancementSnippet();
+  assert.match(snippet, /navigator\.clipboard/);
+  assert.match(snippet, /document\.execCommand\('copy'\)/);
+  assert.match(snippet, /helper\.setSelectionRange\(0, helper\.value\.length\)/);
+  assert.match(snippet, /Code sample copied to clipboard\./);
+});
+
 test('createWatchSnapshot changes when shared partial templates change', () => {
   const contentDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, PARTIALS_DIR_NAME), { recursive: true });
@@ -141,6 +150,8 @@ test('markdownToHtml renders headings, lists, quotes, emphasis, code, links, ima
   assert.match(html, /<span class="code-block__title">sitegen\.js<\/span>/);
   assert.match(html, /<span class="code-block__language">JavaScript<\/span>/);
   assert.match(html, /<span class="code-block__line-count">2 lines<\/span>/);
+  assert.match(html, /<span class="code-block__status" role="status" aria-live="polite" aria-atomic="true"><\/span>/);
+  assert.match(html, /<button type="button" class="code-block__copy" data-copy-state="idle" aria-label="Copy sitegen\.js to clipboard">Copy<\/button>/);
   assert.match(html, /<code class="language-js"><span class="code-block__line" data-line="1"><span class="code-block__line-content">const x = 1 &lt; 2;<\/span><\/span>\n<span class="code-block__line" data-line="2"><span class="code-block__line-content">console\.log\(x\);<\/span><\/span><\/code>/);
 });
 
@@ -223,6 +234,7 @@ test('markdownToHtml closes an unclosed fenced code block at end of document', (
   assert.match(html, /<span class="code-block__title">demo\.py<\/span>/);
   assert.match(html, /<span class="code-block__language">Python<\/span>/);
   assert.match(html, /<span class="code-block__line-count">1 line<\/span>/);
+  assert.match(html, /aria-label="Copy demo\.py to clipboard"/);
   assert.match(html, /<code class="language-python"><span class="code-block__line" data-line="1"><span class="code-block__line-content">print\(&quot;hi&quot;\)<\/span><\/span><\/code>/);
 });
 
@@ -293,6 +305,8 @@ Return [home](../index.md).`,
   assert.match(homeHtml, /<a href="guides\/setup.html">Setup Guide<\/a>/);
   assert.match(homeHtml, /<a href="tags\/index.html">Tags<\/a>/);
   assert.match(homeHtml, /href="guides\/setup.html"/);
+  assert.doesNotMatch(homeHtml, /<button type="button" class="code-block__copy"/);
+  assert.doesNotMatch(homeHtml, /navigator\.clipboard\.writeText/);
   assert.match(setupHtml, /<a href="\.\.\/index.html">Home<\/a>/);
   assert.match(setupHtml, /<a class="active" href="setup.html">Setup Guide<\/a>/);
   assert.match(setupHtml, /<img src="\.\.\/images\/hero.png" alt="Hero" loading="lazy">/);
@@ -301,6 +315,10 @@ Return [home](../index.md).`,
   assert.match(setupHtml, /<figure class="code-block">/);
   assert.match(setupHtml, /<span class="code-block__language">Bash<\/span>/);
   assert.match(setupHtml, /<span class="code-block__line-count">1 line<\/span>/);
+  assert.match(setupHtml, /<button type="button" class="code-block__copy" data-copy-state="idle" aria-label="Copy Bash code sample to clipboard">Copy<\/button>/);
+  assert.match(setupHtml, /<span class="code-block__status" role="status" aria-live="polite" aria-atomic="true"><\/span>/);
+  assert.match(setupHtml, /navigator\.clipboard\.writeText/);
+  assert.match(setupHtml, /document\.execCommand\('copy'\)/);
   assert.match(setupHtml, /<code class="language-bash"><span class="code-block__line" data-line="1"><span class="code-block__line-content">node sitegen\.js content dist<\/span><\/span><\/code>/);
   assert.match(setupHtml, /href="\.\.\/index.html">home<\/a>/i);
   assert.match(setupHtml, /<a class="tag-pill" href="\.\.\/tags\/portfolio.html">portfolio<\/a>/);

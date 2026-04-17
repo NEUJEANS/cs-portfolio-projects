@@ -16,7 +16,7 @@ This project shows practical compiler-style text processing, file-system automat
 - supports front matter metadata such as `title`, `description`, `order`, `slug`, `tags`, and `nav`
 - tag pills in each page header link into the generated archive pages so visitors can browse related work without an external CMS
 - optional shared `_partials/header.html` and `_partials/footer.html` templates let authors reuse portfolio chrome while keeping page content in Markdown
-- presents fenced code blocks in richer portfolio-ready frames with language badges, optional file titles from fence metadata, and line-number gutters that stay readable in both light and dark mode
+- presents fenced code blocks in richer portfolio-ready frames with language badges, optional file titles from fence metadata, line-number gutters, and copy-to-clipboard controls with accessible status feedback
 - supports a dependency-free `--watch` mode with a configurable polling interval so content edits, new files, and shared partial updates trigger rebuilds during local authoring
 - can serve the generated `dist/` folder through a built-in local preview server, including browser auto-refresh when `--serve` is combined with `--watch`
 - generates a default `404.html` fallback and lets authors override it with `404.md`, including preview-only placeholders such as `{{requestedPath}}`
@@ -123,14 +123,16 @@ print(Path('portfolio').resolve())
 ```
 ~~~
 
-Rendered code samples now show a language badge, an optional file/title pill, and line numbers so walkthrough-style portfolio posts feel closer to polished docs than raw plain-text dumps. The renderer accepts `title=`, `file=`, or `filename=` in the fence info string.
+Rendered code samples now show a language badge, an optional file/title pill, line numbers, and a copy button so walkthrough-style portfolio posts feel closer to polished docs than raw plain-text dumps. The renderer accepts `title=`, `file=`, or `filename=` in the fence info string, and the generated pages announce copy success/failure through a polite status region while falling back to a legacy copy path if the async Clipboard API is unavailable.
 
 Generated files are written to `dist/` and the CLI prints a short build summary. In watch mode, the same summary is reprinted after each detected rebuild so authors can confirm which pages were regenerated.
 
 ## Test
 ```bash
-node --test test_static_site_generator.js
+npm test
 ```
+
+If you need to run the legacy mirrored entrypoint directly, `node --test test_static_site_generator.js` stays in sync with `sitegen.test.js` for compatibility with older repo scripts.
 
 ## Example portfolio use cases
 - personal project showcase
@@ -140,5 +142,5 @@ node --test test_static_site_generator.js
 
 ## Future Improvements
 - blog collections such as date-based post indexes or timeline archives
-- copy-to-clipboard buttons or focused callout annotations for code samples
+- focused reviewer callout annotations around code samples or architecture decisions
 - sitemap.xml or RSS feed generation for blog-style portfolio sites

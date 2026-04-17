@@ -13,4 +13,5 @@
 - [x] Add an optional live preview server with browser auto-refresh
 - [x] Add custom 404 pages and friendlier preview error surfaces for missing routes
 - [x] Add syntax highlighting themes or richer code-block presentation
-- [ ] Add copy-to-clipboard controls or reviewer callouts for code samples
+- [x] Add copy-to-clipboard controls for code samples
+- [ ] Add focused reviewer callouts for code samples or architecture notes

@@ -322,6 +322,106 @@ function formatCodeLanguageLabel(language) {
   return labels[normalized] || (normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Plain text');
 }
 
+function createCodeBlockEnhancementSnippet() {
+  return `<script>
+(() => {
+  const resetTimers = new WeakMap();
+
+  function getCodeText(figure) {
+    return Array.from(figure.querySelectorAll('.code-block__line-content'))
+      .map((line) => line.textContent || '')
+      .join('\\n');
+  }
+
+  async function copyText(text) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', '');
+    helper.setAttribute('aria-hidden', 'true');
+    helper.style.position = 'fixed';
+    helper.style.left = '-9999px';
+    helper.style.top = '0';
+    helper.style.opacity = '0';
+    helper.style.pointerEvents = 'none';
+    document.body.appendChild(helper);
+    helper.focus();
+    helper.select();
+    helper.setSelectionRange(0, helper.value.length);
+
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } finally {
+      helper.remove();
+    }
+
+    if (!copied) {
+      throw new Error('Copy command failed.');
+    }
+  }
+
+  function resetFeedback(button, status) {
+    const existingTimer = resetTimers.get(button);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = window.setTimeout(() => {
+      button.textContent = 'Copy';
+      button.dataset.copyState = 'idle';
+      status.textContent = '';
+      resetTimers.delete(button);
+    }, 2200);
+
+    resetTimers.set(button, timer);
+  }
+
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('.code-block__copy');
+    if (!button) return;
+
+    const figure = button.closest('.code-block');
+    const status = figure ? figure.querySelector('.code-block__status') : null;
+    if (!figure || !status) return;
+
+    event.preventDefault();
+    const text = getCodeText(figure);
+    if (!text) {
+      button.dataset.copyState = 'error';
+      button.textContent = 'Copy failed';
+      status.textContent = 'Nothing to copy from this code sample.';
+      resetFeedback(button, status);
+      return;
+    }
+
+    button.disabled = true;
+    button.dataset.copyState = 'working';
+    button.textContent = 'Copying…';
+    status.textContent = '';
+
+    try {
+      await copyText(text);
+      button.dataset.copyState = 'success';
+      button.textContent = 'Copied';
+      status.textContent = 'Code sample copied to clipboard.';
+    } catch (error) {
+      button.dataset.copyState = 'error';
+      button.textContent = 'Copy failed';
+      status.textContent = 'Copy unavailable in this browser context.';
+    } finally {
+      button.disabled = false;
+      resetFeedback(button, status);
+    }
+  });
+})();
+</script>`;
+}
+
 function renderCodeBlock(codeLines, codeFence) {
   const info = typeof codeFence === 'string' ? parseCodeFenceInfo(codeFence) : codeFence || { language: '', title: '' };
   const language = info.language || '';
@@ -330,6 +430,7 @@ function renderCodeBlock(codeLines, codeFence) {
   const lineCount = codeLines.length;
   const lineLabel = `${lineCount} line${lineCount === 1 ? '' : 's'}`;
   const ariaLabel = [title, languageLabel].filter(Boolean).join(' — ') || 'Code sample';
+  const copyTargetLabel = title || (language ? `${languageLabel} code sample` : 'code sample');
   const codeClass = language ? ` class="language-${escapeHtml(language)}"` : '';
   const metaBits = [];
 
@@ -338,6 +439,8 @@ function renderCodeBlock(codeLines, codeFence) {
   }
   metaBits.push(`<span class="code-block__language">${escapeHtml(languageLabel)}</span>`);
   metaBits.push(`<span class="code-block__line-count">${lineLabel}</span>`);
+  metaBits.push('<span class="code-block__meta-spacer"></span>');
+  metaBits.push(`<span class="code-block__actions"><span class="code-block__status" role="status" aria-live="polite" aria-atomic="true"></span><button type="button" class="code-block__copy" data-copy-state="idle" aria-label="${escapeHtml(`Copy ${copyTargetLabel} to clipboard`)}">Copy</button></span>`);
 
   const linesHtml = codeLines
     .map((line, index) => {
@@ -669,6 +772,8 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
   const footerInnerHtml = partials.footer
     ? renderPartial(partials.footer, partialContext)
     : 'Built with static-site-generator.';
+  const includesCodeBlocks = contentHtml.includes('class="code-block"');
+  const enhancementScripts = includesCodeBlocks ? [createCodeBlockEnhancementSnippet()] : [];
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -693,6 +798,15 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .code-block__title { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
       .code-block__language { background: #dcfce7; color: #166534; font-weight: 600; }
       .code-block__line-count { background: #e5e7eb; color: #334155; }
+      .code-block__meta-spacer { flex: 1 1 auto; }
+      .code-block__actions { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-left: auto; }
+      .code-block__status { min-height: 1rem; font-size: 0.82rem; color: #475569; }
+      .code-block__copy { appearance: none; border: 1px solid #94a3b8; background: #fff; color: #0f172a; border-radius: 999px; padding: 0.35rem 0.75rem; font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: background 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease; }
+      .code-block__copy:hover { border-color: #2563eb; color: #1d4ed8; }
+      .code-block__copy:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+      .code-block__copy:disabled { cursor: progress; opacity: 0.85; }
+      .code-block__copy[data-copy-state="success"] { background: #dcfce7; border-color: #22c55e; color: #166534; }
+      .code-block__copy[data-copy-state="error"] { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
       .code-block pre { margin: 0; overflow-x: auto; background: transparent; color: inherit; padding: 0.85rem 0; border-radius: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.95rem; line-height: 1.6; tab-size: 2; }
       .code-block pre code { display: grid; min-width: max-content; background: transparent; padding: 0; border-radius: 0; }
       .code-block__line { display: grid; grid-template-columns: minmax(2.5rem, auto) 1fr; gap: 1rem; align-items: start; padding: 0 1rem; }
@@ -705,6 +819,11 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
         .code-block__title { background: #1d4ed833; color: #bfdbfe; }
         .code-block__language { background: #14532d; color: #bbf7d0; }
         .code-block__line-count { background: #1f2937; color: #cbd5e1; }
+        .code-block__status { color: #cbd5e1; }
+        .code-block__copy { background: #111827; border-color: #334155; color: #e5e7eb; }
+        .code-block__copy:hover { border-color: #60a5fa; color: #bfdbfe; }
+        .code-block__copy[data-copy-state="success"] { background: #14532d; border-color: #22c55e; color: #dcfce7; }
+        .code-block__copy[data-copy-state="error"] { background: #7f1d1d; border-color: #f87171; color: #fee2e2; }
         .code-block pre { color: #e5e7eb; }
         .code-block__line::before { color: #94a3b8; }
       }
@@ -732,6 +851,7 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
     <footer>
       ${footerInnerHtml}
     </footer>
+    ${enhancementScripts.join('\n    ')}
   </body>
 </html>`;
 }
@@ -1519,6 +1639,7 @@ module.exports = {
   buildTagCollections,
   buildWithLogging,
   copyStaticAssets,
+  createCodeBlockEnhancementSnippet,
   createLiveReloadClientSnippet,
   createWatchSnapshot,
   detectContentType,

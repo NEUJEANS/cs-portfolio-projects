@@ -168,3 +168,22 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-17 vertical slice: code-sample copy controls
+- [x] identify `static-site-generator` as still unfinished because portfolio code samples looked polished but were not yet interactive
+- [x] do brief web research on clipboard access constraints and accessible live-region status patterns
+- [x] skip extra language refresh because the slice stays inside the existing Node/CommonJS renderer with a tiny inline browser helper
+- [x] add a resumable checklist for the slice
+- [x] add copy-to-clipboard controls plus polite status feedback to rendered fenced code blocks
+- [x] provide a legacy copy fallback when `navigator.clipboard.writeText()` is unavailable
+- [x] inject the copy helper only on pages that actually render code blocks
+- [x] expand automated tests for copy-button markup, helper injection, and the synced duplicate test entrypoint
+- [x] update README and project checklist with the interactive code-sample workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [ ] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
+- [ ] consider reviewer callout panels for architecture notes or “why this code matters” annotations in a future run
