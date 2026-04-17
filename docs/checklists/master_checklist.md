@@ -8,6 +8,7 @@
 - [x] extend the set with additional strong projects when useful
 - [x] add a dynamic-routing networking project to strengthen distributed-systems coverage
 - [x] add a link-state routing lab to complement the distance-vector simulator
+- [x] add a branch-predictor simulator to strengthen computer-architecture coverage
 
 ## Build Quality Bar for each project
 - [x] implementation complete

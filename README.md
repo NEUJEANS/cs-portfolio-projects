@@ -35,6 +35,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `huffman-compressor`
 - [x] `cpu-scheduler-simulator`
 - [x] `cache-simulator`
+- [x] `branch-predictor-lab`
 - [x] `bloom-filter-cli`
 - [x] `rate-limiter-lab`
 - [x] `consistent-hashing-lab`
