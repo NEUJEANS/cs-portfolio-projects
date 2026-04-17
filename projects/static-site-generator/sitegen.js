@@ -9,8 +9,23 @@ const LIVE_RELOAD_PATH = '/__sitegen/live';
 const DEFAULT_SERVE_HOST = '127.0.0.1';
 const DEFAULT_SERVE_PORT = 4173;
 const NOT_FOUND_OUTPUT_NAME = '404.html';
+const ARCHIVE_INDEX_OUTPUT_NAME = 'archives/index.html';
 const SITEMAP_OUTPUT_NAME = 'sitemap.xml';
 const RSS_OUTPUT_NAME = 'rss.xml';
+const MONTH_LABELS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 const CALLOUT_DEFINITIONS = {
   note: { label: 'Note', icon: 'ℹ', tone: 'note' },
   reviewer: { label: 'Reviewer note', icon: '👀', tone: 'reviewer' },
@@ -936,7 +951,66 @@ function buildTagCollections(pages) {
   return Array.from(collections.values()).sort((left, right) => left.label.localeCompare(right.label));
 }
 
-function buildNavigation(pages, tagCollections) {
+function buildDateArchiveCollections(pages) {
+  const collections = new Map();
+
+  const datedEntries = pages
+    .filter((page) => !isNotFoundOutputName(page.outputName) && page.metadata?.date && page.metadata?.archive !== false)
+    .map((page) => {
+      const date = resolveArchiveDate(page.metadata.date, page);
+      const year = String(date.getUTCFullYear());
+      const monthNumber = String(date.getUTCMonth() + 1).padStart(2, '0');
+      return {
+        title: page.metadata.title || page.slug,
+        description: page.metadata.description || '',
+        outputName: page.outputName,
+        sourceName: page.sourceName,
+        isoDate: date.toISOString(),
+        dateLabel: formatArchiveDateLabel(date),
+        sortKey: date.getTime(),
+        year,
+        monthNumber,
+      };
+    })
+    .sort((left, right) => right.sortKey - left.sortKey || left.outputName.localeCompare(right.outputName));
+
+  for (const entry of datedEntries) {
+    if (!collections.has(entry.year)) {
+      collections.set(entry.year, {
+        year: entry.year,
+        outputName: `archives/${entry.year}/index.html`,
+        totalPages: 0,
+        monthMap: new Map(),
+      });
+    }
+
+    const yearCollection = collections.get(entry.year);
+    const monthKey = `${entry.year}-${entry.monthNumber}`;
+    if (!yearCollection.monthMap.has(monthKey)) {
+      yearCollection.monthMap.set(monthKey, {
+        key: monthKey,
+        monthNumber: entry.monthNumber,
+        label: formatArchiveMonthLabel(entry.year, entry.monthNumber),
+        anchorId: `month-${monthKey}`,
+        pages: [],
+      });
+    }
+
+    yearCollection.monthMap.get(monthKey).pages.push(entry);
+    yearCollection.totalPages += 1;
+  }
+
+  return Array.from(collections.values())
+    .map((collection) => ({
+      year: collection.year,
+      outputName: collection.outputName,
+      totalPages: collection.totalPages,
+      months: Array.from(collection.monthMap.values()).sort((left, right) => right.key.localeCompare(left.key)),
+    }))
+    .sort((left, right) => right.year.localeCompare(left.year));
+}
+
+function buildNavigation(pages, tagCollections, dateArchiveCollections = []) {
   const navigation = pages
     .filter((page) => page.metadata.nav !== false)
     .map((page) => ({
@@ -944,6 +1018,15 @@ function buildNavigation(pages, tagCollections) {
       outputName: page.outputName,
       order: page.metadata.order,
     }));
+
+  if (dateArchiveCollections.length) {
+    navigation.push({
+      title: 'Archive',
+      outputName: ARCHIVE_INDEX_OUTPUT_NAME,
+      order: Number.MAX_SAFE_INTEGER - 1,
+      section: 'archives',
+    });
+  }
 
   if (tagCollections.length) {
     navigation.push({
@@ -988,6 +1071,60 @@ function renderTagArchiveContent(collection, page) {
       (entry) => `<li><article><h2><a href="${escapeHtml(relativeLink(page.outputName, entry.outputName))}">${escapeHtml(entry.title)}</a></h2>${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ''}<p class="tag-source">Source: <code>${escapeHtml(entry.sourceName)}</code></p></article></li>`
     )
     .join('')}</ul>
+</section>`;
+}
+
+function resolveArchiveDate(rawValue, page) {
+  const parsed = new Date(String(rawValue));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid archive date for ${page.sourceName || page.outputName}: ${rawValue}`);
+  }
+  return parsed;
+}
+
+function formatArchiveMonthLabel(year, monthNumber) {
+  const monthIndex = Number(monthNumber) - 1;
+  return `${MONTH_LABELS[monthIndex]} ${year}`;
+}
+
+function formatArchiveDateLabel(date) {
+  return `${MONTH_LABELS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
+}
+
+function renderDateArchiveEntry(entry, page) {
+  return `<li><article class="date-archive-entry"><p class="date-archive-entry__meta"><time datetime="${escapeHtml(entry.isoDate)}">${escapeHtml(entry.dateLabel)}</time> <span aria-hidden="true">·</span> <code>${escapeHtml(entry.sourceName)}</code></p><h3><a href="${escapeHtml(relativeLink(page.outputName, entry.outputName))}">${escapeHtml(entry.title)}</a></h3>${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ''}</article></li>`;
+}
+
+function renderDateArchiveIndexContent(dateArchiveCollections, page) {
+  const totalPages = dateArchiveCollections.reduce((sum, collection) => sum + collection.totalPages, 0);
+  return `<section class="date-archive-index">
+  <p>Browse ${totalPages} dated portfolio page${totalPages === 1 ? '' : 's'} in reverse chronological order. Use these generated archive pages for project logs, shipped slices, and timeline-style portfolio updates.</p>
+  <ul class="date-archive-year-list">${dateArchiveCollections
+    .map(
+      (collection) => `<li><article class="date-archive-year-card"><p class="date-archive-eyebrow">Year archive</p><h2><a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)}</a></h2><p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} across ${collection.months.length} month${collection.months.length === 1 ? '' : 's'}.</p><ul class="date-archive-month-list">${collection.months
+        .map(
+          (month) => `<li><a href="${escapeHtml(`${relativeLink(page.outputName, collection.outputName)}#${month.anchorId}`)}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span></li>`
+        )
+        .join('')}</ul></article></li>`
+    )
+    .join('')}</ul>
+</section>`;
+}
+
+function renderDateArchiveYearContent(collection, page) {
+  return `<section class="date-archive-year">
+  <p><a href="${escapeHtml(relativeLink(page.outputName, ARCHIVE_INDEX_OUTPUT_NAME))}">← All archives</a></p>
+  <p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month for ${escapeHtml(collection.year)}.</p>
+  <ul class="date-archive-month-jump-list">${collection.months
+    .map(
+      (month) => `<li><a href="#${month.anchorId}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span></li>`
+    )
+    .join('')}</ul>
+  ${collection.months
+    .map(
+      (month) => `<section class="date-archive-month-section" id="${month.anchorId}"><p class="date-archive-eyebrow">Month archive</p><h2>${escapeHtml(month.label)}</h2><ol class="date-archive-entry-list">${month.pages.map((entry) => renderDateArchiveEntry(entry, page)).join('')}</ol></section>`
+    )
+    .join('')}
 </section>`;
 }
 
@@ -1278,6 +1415,17 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .callout__body > :first-child { margin-top: 0; }
       .callout__body > :last-child { margin-bottom: 0; }
       .comparison-block { display: grid; gap: 1rem; padding: 1.15rem; border: 1px solid #cbd5e1; border-radius: 1.1rem; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); box-shadow: 0 14px 32px -28px #0f172a; }
+      .date-archive-eyebrow { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
+      .date-archive-year-list, .date-archive-month-list, .date-archive-month-jump-list, .date-archive-entry-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.85rem; }
+      .date-archive-year-card, .date-archive-month-section, .date-archive-entry { padding: 1rem 1.05rem; border: 1px solid #cbd5e1; border-radius: 1rem; background: #ffffffcc; box-shadow: 0 10px 24px -24px #0f172a; }
+      .date-archive-year, .date-archive-index { display: grid; gap: 1rem; }
+      .date-archive-month-jump-list { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+      .date-archive-month-list li, .date-archive-month-jump-list li { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; }
+      .date-archive-entry-list { counter-reset: archive-item; }
+      .date-archive-entry-list > li { counter-increment: archive-item; }
+      .date-archive-entry__meta, .date-archive-count { margin: 0; color: #475569; font-size: 0.92rem; }
+      .date-archive-entry h3, .date-archive-year-card h2, .date-archive-month-section h2 { margin-top: 0.35rem; margin-bottom: 0.45rem; }
+      .date-archive-entry p:last-child, .date-archive-year-card p:last-child, .date-archive-month-section p:last-child { margin-bottom: 0; }
       .comparison-block__header { display: grid; gap: 0.55rem; }
       .comparison-block__eyebrow, .comparison-panel__eyebrow { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
       .comparison-block__title, .comparison-panel__title { margin: 0; }
@@ -1319,6 +1467,8 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
         .callout--tip { --callout-bg: #052e16; --callout-fg: #bbf7d0; }
         .callout--warning { --callout-bg: #450a0a; --callout-fg: #fecaca; }
         .comparison-block { border-color: #334155; background: linear-gradient(180deg, #0f172a 0%, #111827 100%); box-shadow: none; }
+        .date-archive-eyebrow, .date-archive-entry__meta, .date-archive-count { color: #cbd5e1; }
+        .date-archive-year-card, .date-archive-month-section, .date-archive-entry { border-color: #334155; background: #111827; box-shadow: none; }
         .comparison-block__eyebrow { color: #cbd5e1; }
         .comparison-block__summary { color: #cbd5e1; }
         .comparison-panel { border-color: #334155; color: #e5e7eb; }
@@ -1450,7 +1600,7 @@ function assertNoGeneratedPageConflicts(pages, generatedOutputNames) {
   const authoredOutputs = new Set(pages.map((page) => page.outputName));
   const conflicts = generatedOutputNames.filter((outputName) => authoredOutputs.has(outputName));
   if (conflicts.length) {
-    throw new Error(`Generated tag archive path conflicts with source page output: ${conflicts.join(', ')}`);
+    throw new Error(`Generated page path conflicts with source page output: ${conflicts.join(', ')}`);
   }
 }
 
@@ -1458,7 +1608,7 @@ function assertNoGeneratedAssetConflicts(assetOutputNames, generatedOutputNames)
   const authoredAssets = new Set(assetOutputNames);
   const conflicts = generatedOutputNames.filter((outputName) => authoredAssets.has(outputName));
   if (conflicts.length) {
-    throw new Error(`Generated tag archive path conflicts with static asset output: ${conflicts.join(', ')}`);
+    throw new Error(`Generated page path conflicts with static asset output: ${conflicts.join(', ')}`);
   }
 }
 
@@ -1477,11 +1627,15 @@ function buildSite(contentDir, outputDir) {
   fs.mkdirSync(outputDir, { recursive: true });
 
   const tagCollections = buildTagCollections(pages);
+  const dateArchiveCollections = buildDateArchiveCollections(pages);
   const tagCollectionsBySlug = new Map(tagCollections.map((collection) => [collection.slug, collection]));
   const hasAuthoredNotFoundPage = pages.some((page) => isNotFoundOutputName(page.outputName));
   const generatedOutputNames = [];
   if (!hasAuthoredNotFoundPage) {
     generatedOutputNames.push(NOT_FOUND_OUTPUT_NAME);
+  }
+  if (dateArchiveCollections.length) {
+    generatedOutputNames.push(ARCHIVE_INDEX_OUTPUT_NAME, ...dateArchiveCollections.map((collection) => collection.outputName));
   }
   if (tagCollections.length) {
     generatedOutputNames.push('tags/index.html', ...tagCollections.map((collection) => collection.outputName));
@@ -1493,7 +1647,7 @@ function buildSite(contentDir, outputDir) {
     assertNoGeneratedPageConflicts(pages, generatedOutputNames);
     assertNoGeneratedAssetConflicts(listStaticAssetOutputNames(contentDir), generatedOutputNames);
   }
-  const navigation = buildNavigation(pages, tagCollections);
+  const navigation = buildNavigation(pages, tagCollections, dateArchiveCollections);
   const assets = copyStaticAssets(contentDir, outputDir);
 
   for (const page of pages) {
@@ -1528,6 +1682,58 @@ function buildSite(contentDir, outputDir) {
       title: notFoundPage.metadata.title,
     });
     generatedHtmlPages.push(notFoundPage);
+  }
+
+  if (dateArchiveCollections.length) {
+    const archiveIndexPage = {
+      slug: 'archive',
+      outputName: ARCHIVE_INDEX_OUTPUT_NAME,
+      section: 'archives',
+      metadata: {
+        title: 'Archive',
+        description: 'Browse dated portfolio updates grouped into generated yearly archives.',
+      },
+      sourceName: '(generated)',
+      tags: [],
+    };
+
+    writeRenderedPage(
+      outputDir,
+      archiveIndexPage.outputName,
+      renderTemplate(archiveIndexPage, navigation, renderDateArchiveIndexContent(dateArchiveCollections, archiveIndexPage), tagCollectionsBySlug, partials)
+    );
+    generatedPages.push({
+      source: '(generated)',
+      output: archiveIndexPage.outputName,
+      title: archiveIndexPage.metadata.title,
+    });
+    generatedHtmlPages.push(archiveIndexPage);
+
+    for (const collection of dateArchiveCollections) {
+      const archiveYearPage = {
+        slug: `archive-${collection.year}`,
+        outputName: collection.outputName,
+        section: 'archives',
+        metadata: {
+          title: `Archive: ${collection.year}`,
+          description: `${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month in ${collection.year}.`,
+        },
+        sourceName: '(generated)',
+        tags: [],
+      };
+
+      writeRenderedPage(
+        outputDir,
+        archiveYearPage.outputName,
+        renderTemplate(archiveYearPage, navigation, renderDateArchiveYearContent(collection, archiveYearPage), tagCollectionsBySlug, partials)
+      );
+      generatedPages.push({
+        source: '(generated)',
+        output: archiveYearPage.outputName,
+        title: archiveYearPage.metadata.title,
+      });
+      generatedHtmlPages.push(archiveYearPage);
+    }
   }
 
   if (tagCollections.length) {
@@ -2153,6 +2359,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  ARCHIVE_INDEX_OUTPUT_NAME,
   DEFAULT_SERVE_HOST,
   DEFAULT_SERVE_PORT,
   LIVE_RELOAD_PATH,
@@ -2164,6 +2371,7 @@ module.exports = {
   applyPreviewPlaceholders,
   assertNoGeneratedAssetConflicts,
   assertNoGeneratedPageConflicts,
+  buildDateArchiveCollections,
   buildNavigation,
   buildSite,
   buildTagCollections,

@@ -7,6 +7,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const {
+  ARCHIVE_INDEX_OUTPUT_NAME,
   DEFAULT_SERVE_HOST,
   LIVE_RELOAD_PATH,
   NOT_FOUND_OUTPUT_NAME,
@@ -15,6 +16,7 @@ const {
   SITE_CONFIG_NAME,
   SITEMAP_OUTPUT_NAME,
   applyPreviewPlaceholders,
+  buildDateArchiveCollections,
   buildSite,
   copyStaticAssets,
   createCodeBlockEnhancementSnippet,
@@ -465,7 +467,45 @@ tags: [docs]
 
 
 
-test('buildSite generates sitemap.xml and rss.xml from optional site config', () => {
+test('buildDateArchiveCollections groups dated pages into reverse-chronological year buckets', () => {
+  const pages = [
+    {
+      slug: 'alpha',
+      outputName: 'posts/alpha.html',
+      sourceName: 'posts/alpha.md',
+      metadata: { title: 'Alpha', date: '2026-04-16T10:30:00Z' },
+    },
+    {
+      slug: 'beta',
+      outputName: 'posts/beta.html',
+      sourceName: 'posts/beta.md',
+      metadata: { title: 'Beta', date: '2026-02-01T08:00:00Z' },
+    },
+    {
+      slug: 'gamma',
+      outputName: 'posts/gamma.html',
+      sourceName: 'posts/gamma.md',
+      metadata: { title: 'Gamma', date: '2025-12-31T23:00:00Z' },
+    },
+    {
+      slug: 'hidden',
+      outputName: 'posts/hidden.html',
+      sourceName: 'posts/hidden.md',
+      metadata: { title: 'Hidden', date: '2026-04-01T00:00:00Z', archive: false },
+    },
+  ];
+
+  const collections = buildDateArchiveCollections(pages);
+
+  assert.deepEqual(collections.map((collection) => collection.year), ['2026', '2025']);
+  assert.equal(collections[0].outputName, 'archives/2026/index.html');
+  assert.equal(collections[0].totalPages, 2);
+  assert.deepEqual(collections[0].months.map((month) => month.label), ['April 2026', 'February 2026']);
+  assert.equal(collections[0].months[0].pages[0].title, 'Alpha');
+  assert.equal(collections[1].months[0].pages[0].title, 'Gamma');
+});
+
+test('buildSite generates sitemap.xml, rss.xml, and date archives from optional site config', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
   fs.mkdirSync(path.join(contentDir, 'posts'), { recursive: true });
@@ -519,9 +559,11 @@ tags: [portfolio, node]
 title: Draft Post
 slug: draft-post
 order: 3
+nav: false
 date: 2026-04-15T09:00:00Z
 rss: false
 sitemap: false
+archive: false
 ---
 # Draft Post`,
     'utf8'
@@ -530,15 +572,27 @@ sitemap: false
   const result = buildSite(contentDir, outputDir);
   assert.deepEqual(
     result.pages.map((page) => page.output).sort(),
-    ['404.html', 'index.html', 'posts/draft-post.html', 'posts/first-post.html', RSS_OUTPUT_NAME, SITEMAP_OUTPUT_NAME, 'tags/index.html', 'tags/node.html', 'tags/portfolio.html']
+    ['404.html', 'archives/2026/index.html', ARCHIVE_INDEX_OUTPUT_NAME, 'index.html', 'posts/draft-post.html', 'posts/first-post.html', RSS_OUTPUT_NAME, SITEMAP_OUTPUT_NAME, 'tags/index.html', 'tags/node.html', 'tags/portfolio.html']
   );
 
+  const archiveIndexHtml = fs.readFileSync(path.join(outputDir, 'archives', 'index.html'), 'utf8');
+  const archiveYearHtml = fs.readFileSync(path.join(outputDir, 'archives', '2026', 'index.html'), 'utf8');
   const sitemapXml = fs.readFileSync(path.join(outputDir, SITEMAP_OUTPUT_NAME), 'utf8');
   const rssXml = fs.readFileSync(path.join(outputDir, RSS_OUTPUT_NAME), 'utf8');
+
+  assert.match(archiveIndexHtml, /<a class="active" href="index\.html">Archive<\/a>/);
+  assert.match(archiveIndexHtml, /Browse 1 dated portfolio page in reverse chronological order\./);
+  assert.match(archiveIndexHtml, /<a href="2026\/index\.html">2026<\/a>/);
+  assert.match(archiveYearHtml, /<title>Archive: 2026<\/title>/);
+  assert.match(archiveYearHtml, /<a href="#month-2026-04">April 2026<\/a>/);
+  assert.match(archiveYearHtml, /<a href="\.\.\/\.\.\/posts\/first-post\.html">First Post<\/a>/);
+  assert.doesNotMatch(archiveYearHtml, /Draft Post/);
 
   assert.match(sitemapXml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
   assert.match(sitemapXml, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
   assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/<\/loc>/);
+  assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/archives\/<\/loc>/);
+  assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/archives\/2026\/<\/loc>/);
   assert.match(sitemapXml, /<loc>https:\/\/example\.com\/portfolio\/posts\/first-post\.html<\/loc>/);
   assert.match(sitemapXml, /<lastmod>2026-04-16T00:00:00\.000Z<\/lastmod>/);
   assert.match(sitemapXml, /<changefreq>weekly<\/changefreq>/);

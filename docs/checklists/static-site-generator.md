@@ -240,4 +240,22 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
-- [ ] consider date-based archive pages or timeline indexes in a future run
+- [x] consider date-based archive pages or timeline indexes in a future run
+
+## 2026-04-17 vertical slice: dated archive index and yearly timeline pages
+- [x] identify `static-site-generator` as still unfinished because dated entries were available for RSS but not yet browseable as on-site archive pages
+- [x] do brief research on archive-page UX patterns for reverse-chronological year/month navigation
+- [x] skip extra language refresh because the slice stays inside the existing Node/CommonJS generator and test harness
+- [x] add a resumable checklist for the slice
+- [x] generate `archives/index.html` and yearly `archives/<year>/index.html` pages from dated content
+- [x] group yearly archive pages into reverse-chronological month sections with direct jump links
+- [x] support `archive: false` so dated draft pages can stay out of generated archive timelines
+- [x] expand automated tests for archive collection building, generated archive pages, and the synced duplicate test entrypoint
+- [x] update README and project checklist with the new archive workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [ ] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
