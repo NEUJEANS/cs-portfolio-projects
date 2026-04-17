@@ -1,6 +1,6 @@
 # Max-flow proof artifact: `sample_graph`
 
-- Generated: 2026-04-17T07:45:28Z
+- Generated: 2026-04-17T14:45:59Z
 - Algorithm: `dinic`
 - Max flow: `19`
 - Augmenting paths recorded: `4`

@@ -188,5 +188,7 @@
     },
     "phases": 1
   },
+  "markdown_output": "sample-matching-proof.md",
+  "svg_output": "sample-matching-proof.svg",
   "json_output": "sample-matching-result.json"
 }

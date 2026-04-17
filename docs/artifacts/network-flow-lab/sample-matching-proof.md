@@ -1,6 +1,6 @@
 # Bipartite matching proof artifact: `sample_matching_graph`
 
-- Generated: 2026-04-17T07:45:28Z
+- Generated: 2026-04-17T14:45:59Z
 - Flow algorithm: `dinic`
 - Match count: `3`
 - Minimum vertex cover size: `3`

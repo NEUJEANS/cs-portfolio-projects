@@ -117,5 +117,7 @@
     ]
   },
   "phases": 2,
+  "markdown_output": "sample-flow-proof.md",
+  "svg_output": "sample-flow-proof.svg",
   "json_output": "sample-flow-result.json"
 }

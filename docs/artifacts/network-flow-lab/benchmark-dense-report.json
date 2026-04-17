@@ -29,12 +29,12 @@
       "edge_density": 0.477,
       "edmonds-karp": {
         "max_flow": 169,
-        "elapsed_ms": 0.629,
+        "elapsed_ms": 0.618,
         "augmentations": 31
       },
       "dinic": {
         "max_flow": 169,
-        "elapsed_ms": 0.559,
+        "elapsed_ms": 0.56,
         "augmentations": 31,
         "phases": 4
       }
@@ -47,12 +47,12 @@
       "edge_density": 0.48,
       "edmonds-karp": {
         "max_flow": 167,
-        "elapsed_ms": 0.603,
+        "elapsed_ms": 0.609,
         "augmentations": 33
       },
       "dinic": {
         "max_flow": 167,
-        "elapsed_ms": 0.545,
+        "elapsed_ms": 0.546,
         "augmentations": 33,
         "phases": 4
       }
@@ -65,12 +65,12 @@
       "edge_density": 0.48,
       "edmonds-karp": {
         "max_flow": 132,
-        "elapsed_ms": 0.401,
+        "elapsed_ms": 0.409,
         "augmentations": 27
       },
       "dinic": {
         "max_flow": 132,
-        "elapsed_ms": 0.356,
+        "elapsed_ms": 0.33,
         "augmentations": 27,
         "phases": 2
       }
@@ -78,21 +78,23 @@
   ],
   "summary": {
     "edmonds-karp": {
-      "min_ms": 0.401,
-      "median_ms": 0.603,
-      "max_ms": 0.629,
-      "mean_ms": 0.544,
+      "min_ms": 0.409,
+      "median_ms": 0.609,
+      "max_ms": 0.618,
+      "mean_ms": 0.545,
       "mean_augmentations": 30.33
     },
     "dinic": {
-      "min_ms": 0.356,
-      "median_ms": 0.545,
-      "max_ms": 0.559,
-      "mean_ms": 0.487,
+      "min_ms": 0.33,
+      "median_ms": 0.546,
+      "max_ms": 0.56,
+      "mean_ms": 0.479,
       "mean_augmentations": 30.33,
       "mean_phases": 3.33
     },
-    "speedup_ratio": 1.119
+    "speedup_ratio": 1.138
   },
+  "markdown_output": "benchmark-dense-report.md",
+  "svg_output": "benchmark-dense-report.svg",
   "json_output": "benchmark-dense-report.json"
 }

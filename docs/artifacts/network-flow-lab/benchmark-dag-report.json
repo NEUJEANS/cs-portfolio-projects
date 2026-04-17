@@ -31,12 +31,12 @@
       "edge_density": 0.141,
       "edmonds-karp": {
         "max_flow": 28,
-        "elapsed_ms": 0.287,
+        "elapsed_ms": 0.282,
         "augmentations": 7
       },
       "dinic": {
         "max_flow": 28,
-        "elapsed_ms": 0.374,
+        "elapsed_ms": 0.399,
         "augmentations": 7,
         "phases": 3
       }
@@ -49,12 +49,12 @@
       "edge_density": 0.132,
       "edmonds-karp": {
         "max_flow": 23,
-        "elapsed_ms": 0.243,
+        "elapsed_ms": 0.213,
         "augmentations": 5
       },
       "dinic": {
         "max_flow": 23,
-        "elapsed_ms": 0.279,
+        "elapsed_ms": 0.277,
         "augmentations": 5,
         "phases": 2
       }
@@ -67,12 +67,12 @@
       "edge_density": 0.134,
       "edmonds-karp": {
         "max_flow": 21,
-        "elapsed_ms": 0.174,
+        "elapsed_ms": 0.181,
         "augmentations": 3
       },
       "dinic": {
         "max_flow": 21,
-        "elapsed_ms": 0.27,
+        "elapsed_ms": 0.268,
         "augmentations": 3,
         "phases": 2
       }
@@ -90,7 +90,7 @@
       },
       "dinic": {
         "max_flow": 34,
-        "elapsed_ms": 0.451,
+        "elapsed_ms": 0.448,
         "augmentations": 12,
         "phases": 6
       }
@@ -103,12 +103,12 @@
       "edge_density": 0.127,
       "edmonds-karp": {
         "max_flow": 25,
-        "elapsed_ms": 0.231,
+        "elapsed_ms": 0.217,
         "augmentations": 8
       },
       "dinic": {
         "max_flow": 25,
-        "elapsed_ms": 0.347,
+        "elapsed_ms": 0.344,
         "augmentations": 8,
         "phases": 4
       }
@@ -116,21 +116,23 @@
   ],
   "summary": {
     "edmonds-karp": {
-      "min_ms": 0.174,
-      "median_ms": 0.243,
+      "min_ms": 0.181,
+      "median_ms": 0.217,
       "max_ms": 0.312,
-      "mean_ms": 0.249,
+      "mean_ms": 0.241,
       "mean_augmentations": 7.0
     },
     "dinic": {
-      "min_ms": 0.27,
-      "median_ms": 0.347,
-      "max_ms": 0.451,
-      "mean_ms": 0.344,
+      "min_ms": 0.268,
+      "median_ms": 0.344,
+      "max_ms": 0.448,
+      "mean_ms": 0.347,
       "mean_augmentations": 7.0,
       "mean_phases": 3.4
     },
-    "speedup_ratio": 0.724
+    "speedup_ratio": 0.694
   },
+  "markdown_output": "benchmark-dag-report.md",
+  "svg_output": "benchmark-dag-report.svg",
   "json_output": "benchmark-dag-report.json"
 }
