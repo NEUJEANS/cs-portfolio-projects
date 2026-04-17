@@ -9,6 +9,47 @@ const DEFAULT_BUCKET_RULES = Object.freeze({
   archives: ['.zip', '.tar', '.gz', '.tgz'],
 });
 const DEFAULT_FALLBACK_BUCKET = 'other';
+const PRESET_LIBRARY = Object.freeze({
+  coursework: Object.freeze({
+    description: 'separate datasets, notebooks, slides, and diagram assets for class deliverables',
+    config: Object.freeze({
+      buckets: Object.freeze({
+        datasets: Object.freeze(['.csv', '.tsv', '.json']),
+        notebooks: Object.freeze(['.ipynb']),
+        slides: Object.freeze(['.ppt', '.pptx', '.key']),
+        diagrams: Object.freeze(['.drawio', '.vsdx']),
+      }),
+      fallbackBucket: 'coursework-misc',
+      extendDefaults: true,
+    }),
+  }),
+  'data-science': Object.freeze({
+    description: 'highlight datasets, notebooks, figures, and experiment manifests for analysis-heavy folders',
+    config: Object.freeze({
+      buckets: Object.freeze({
+        datasets: Object.freeze(['.csv', '.tsv', '.json', '.parquet']),
+        notebooks: Object.freeze(['.ipynb']),
+        figures: Object.freeze(['.png', '.jpg', '.jpeg', '.svg']),
+        experiments: Object.freeze(['.yaml', '.yml', '.toml']),
+      }),
+      fallbackBucket: 'lab-misc',
+      extendDefaults: true,
+    }),
+  }),
+  'frontend-assets': Object.freeze({
+    description: 'group mockups, vector design files, screen recordings, and handoff notes for UI portfolios',
+    config: Object.freeze({
+      buckets: Object.freeze({
+        mockups: Object.freeze(['.fig', '.sketch', '.xd']),
+        vectors: Object.freeze(['.ai', '.eps']),
+        captures: Object.freeze(['.mp4', '.mov', '.webm']),
+        handoff: Object.freeze(['.pdf', '.docx']),
+      }),
+      fallbackBucket: 'frontend-misc',
+      extendDefaults: true,
+    }),
+  }),
+});
 
 function normalizeBucketName(name, label = 'bucket name') {
   if (typeof name !== 'string') {
@@ -127,6 +168,81 @@ function buildBucketConfig(config = {}) {
 const DEFAULT_BUCKET_CONFIG = buildBucketConfig();
 const RESERVED_BUCKETS = Object.freeze([...DEFAULT_BUCKET_CONFIG.bucketNames]);
 
+function cloneBucketTemplate(config = {}) {
+  return {
+    buckets: Object.fromEntries(
+      Object.entries(config.buckets || {}).map(([bucketName, extensions]) => [bucketName, [...extensions]]),
+    ),
+    fallbackBucket: config.fallbackBucket || DEFAULT_FALLBACK_BUCKET,
+    extendDefaults: config.extendDefaults !== false,
+  };
+}
+
+function presetNames() {
+  return Object.keys(PRESET_LIBRARY).sort();
+}
+
+function getPresetDefinition(presetName) {
+  const preset = PRESET_LIBRARY[presetName];
+  if (!preset) {
+    throw new Error(`Unknown preset: ${presetName}. Supported presets: ${presetNames().join(', ')}`);
+  }
+  return preset;
+}
+
+function listPresetCatalog() {
+  return presetNames().map((name) => {
+    const preset = PRESET_LIBRARY[name];
+    const config = cloneBucketTemplate(preset.config);
+    return {
+      name,
+      description: preset.description,
+      bucketNames: Object.keys(config.buckets),
+      bucketCount: Object.keys(config.buckets).length,
+      fallbackBucket: config.fallbackBucket,
+      extendDefaults: config.extendDefaults,
+      config,
+    };
+  });
+}
+
+function loadPresetBucketConfig(presetName) {
+  const preset = getPresetDefinition(presetName);
+  return {
+    ...buildBucketConfig(cloneBucketTemplate(preset.config)),
+    presetName,
+    presetDescription: preset.description,
+  };
+}
+
+async function writePresetConfig(presetName, destinationPath, options = {}) {
+  const settings = {
+    force: false,
+    ...options,
+  };
+  const preset = getPresetDefinition(presetName);
+  const resolvedPath = path.resolve(destinationPath);
+
+  if (!settings.force && await pathExists(resolvedPath)) {
+    throw new Error(`Preset destination already exists: ${resolvedPath}`);
+  }
+
+  const config = cloneBucketTemplate(preset.config);
+  await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+  await fs.writeFile(resolvedPath, `${JSON.stringify(config, null, 2)}\n`);
+
+  return {
+    action: 'write-preset',
+    presetName,
+    description: preset.description,
+    destination: resolvedPath,
+    bucketNames: Object.keys(config.buckets),
+    bucketCount: Object.keys(config.buckets).length,
+    fallbackBucket: config.fallbackBucket,
+    extendDefaults: config.extendDefaults,
+  };
+}
+
 async function loadBucketConfig(configPath) {
   const resolvedPath = path.resolve(configPath);
   let raw;
@@ -156,6 +272,8 @@ async function loadBucketConfig(configPath) {
 function describeBucketConfig(bucketConfig) {
   return {
     configPath: bucketConfig.configPath,
+    presetName: bucketConfig.presetName || null,
+    presetDescription: bucketConfig.presetDescription || null,
     extendDefaults: bucketConfig.extendDefaults,
     fallbackBucket: bucketConfig.fallbackBucket,
     bucketNames: [...bucketConfig.bucketNames],
@@ -439,6 +557,11 @@ function parseArgs(argv) {
     manifestOut: null,
     undoManifest: null,
     configPath: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
   };
   let targetDir = '.';
   let targetDirExplicit = false;
@@ -473,6 +596,29 @@ function parseArgs(argv) {
       }
       options.configPath = nextArg;
       index += 1;
+    } else if (arg === '--preset') {
+      const nextArg = args[index + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Expected a preset name after --preset');
+      }
+      options.presetName = nextArg;
+      index += 1;
+    } else if (arg === '--list-presets') {
+      options.listPresets = true;
+    } else if (arg === '--write-preset') {
+      const presetName = args[index + 1];
+      const destination = args[index + 2];
+      if (!presetName || presetName.startsWith('-')) {
+        throw new Error('Expected a preset name after --write-preset');
+      }
+      if (!destination || destination.startsWith('-')) {
+        throw new Error('Expected a destination path after --write-preset <preset>');
+      }
+      options.writePresetName = presetName;
+      options.writePresetDestination = destination;
+      index += 2;
+    } else if (arg === '--force') {
+      options.force = true;
     } else if (arg === '--help' || arg === '-h') {
       options.help = true;
     } else if (!arg.startsWith('-')) {
@@ -502,6 +648,34 @@ function parseArgs(argv) {
     throw new Error('--config cannot be used with --undo');
   }
 
+  if (options.undoManifest && options.presetName) {
+    throw new Error('--preset cannot be used with --undo');
+  }
+
+  if (options.configPath && options.presetName) {
+    throw new Error('--config cannot be combined with --preset');
+  }
+
+  if (options.listPresets && targetDirExplicit) {
+    throw new Error('Target directory cannot be combined with --list-presets');
+  }
+
+  if (options.listPresets && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.presetName || options.writePresetName || options.force)) {
+    throw new Error('--list-presets only supports optional --json output');
+  }
+
+  if (options.writePresetName && targetDirExplicit) {
+    throw new Error('Target directory cannot be combined with --write-preset');
+  }
+
+  if (options.writePresetName && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.presetName || options.listPresets)) {
+    throw new Error('--write-preset cannot be combined with organize or undo flags');
+  }
+
+  if (options.force && !options.writePresetName) {
+    throw new Error('--force can only be used with --write-preset');
+  }
+
   return { targetDir, options };
 }
 
@@ -514,6 +688,10 @@ function formatOrganizeTextReport(result) {
     `total moves: ${result.summary.total}`,
     `renamed to avoid collisions: ${result.summary.renamed}`,
   ];
+
+  if (result.bucketConfig && result.bucketConfig.presetName) {
+    header.push(`preset: ${result.bucketConfig.presetName}`);
+  }
 
   if (result.bucketConfig && result.bucketConfig.configPath) {
     header.push(`config: ${result.bucketConfig.configPath}`);
@@ -566,9 +744,37 @@ function formatUndoTextReport(result) {
   return [...header, ...bucketLines, ...moveLines].join('\n');
 }
 
+function formatPresetListTextReport(result) {
+  const lines = ['action: list-presets', `available presets: ${result.presets.length}`];
+  for (const preset of result.presets) {
+    lines.push(`- ${preset.name}: ${preset.description}`);
+    lines.push(`  buckets: ${preset.bucketNames.join(', ')}`);
+    lines.push(`  fallback bucket: ${preset.fallbackBucket}`);
+    lines.push(`  extends defaults: ${preset.extendDefaults ? 'yes' : 'no'}`);
+  }
+  return lines.join('\n');
+}
+
+function formatWritePresetTextReport(result) {
+  return [
+    'action: write-preset',
+    `preset: ${result.presetName}`,
+    `destination: ${result.destination}`,
+    `fallback bucket: ${result.fallbackBucket}`,
+    `extends defaults: ${result.extendDefaults ? 'yes' : 'no'}`,
+    `custom buckets: ${result.bucketNames.join(', ')}`,
+  ].join('\n');
+}
+
 function formatTextReport(result) {
   if (result.action === 'undo') {
     return formatUndoTextReport(result);
+  }
+  if (result.action === 'list-presets') {
+    return formatPresetListTextReport(result);
+  }
+  if (result.action === 'write-preset') {
+    return formatWritePresetTextReport(result);
   }
   return formatOrganizeTextReport(result);
 }
@@ -577,18 +783,31 @@ async function main(argv = process.argv.slice(2)) {
   const { targetDir, options } = parseArgs(argv);
 
   if (options.help) {
-    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--manifest-out manifest.json]');
+    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--preset preset-name] [--manifest-out manifest.json]');
     console.log('       node organizer.js --undo manifest.json [--dry-run] [--json]');
+    console.log('       node organizer.js --list-presets [--json]');
+    console.log('       node organizer.js --write-preset preset-name destination.json [--force] [--json]');
     return;
   }
 
   let result;
-  if (options.undoManifest) {
+  if (options.listPresets) {
+    result = {
+      action: 'list-presets',
+      presets: listPresetCatalog(),
+    };
+  } else if (options.writePresetName) {
+    result = await writePresetConfig(options.writePresetName, options.writePresetDestination, {
+      force: options.force,
+    });
+  } else if (options.undoManifest) {
     result = await undoFromManifest(options.undoManifest, { dryRun: options.dryRun });
   } else {
     const bucketConfig = options.configPath
       ? await loadBucketConfig(options.configPath)
-      : DEFAULT_BUCKET_CONFIG;
+      : options.presetName
+        ? loadPresetBucketConfig(options.presetName)
+        : DEFAULT_BUCKET_CONFIG;
     result = await organize(targetDir, {
       dryRun: options.dryRun,
       recursive: options.recursive,
@@ -617,11 +836,18 @@ module.exports = {
   DEFAULT_BUCKET_RULES,
   DEFAULT_FALLBACK_BUCKET,
   DEFAULT_BUCKET_CONFIG,
+  PRESET_LIBRARY,
   RESERVED_BUCKETS,
   normalizeBucketName,
   normalizeExtension,
   normalizeCustomBuckets,
   buildBucketConfig,
+  cloneBucketTemplate,
+  presetNames,
+  getPresetDefinition,
+  listPresetCatalog,
+  loadPresetBucketConfig,
+  writePresetConfig,
   loadBucketConfig,
   describeBucketConfig,
   bucketFor,

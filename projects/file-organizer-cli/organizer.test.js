@@ -13,6 +13,9 @@ const {
   formatTextReport,
   uniqueDestination,
   loadBucketConfig,
+  listPresetCatalog,
+  loadPresetBucketConfig,
+  writePresetConfig,
 } = require('./organizer');
 
 test('bucketFor categorizes by default extension groups', () => {
@@ -67,6 +70,71 @@ test('loadBucketConfig reads JSON config files from disk', async () => {
   assert.equal(bucketFor('mystery.bin', bucketConfig), 'misc');
 });
 
+test('listPresetCatalog exposes named bucket presets', () => {
+  const presets = listPresetCatalog();
+  const names = presets.map(preset => preset.name);
+
+  assert.deepEqual(names, ['coursework', 'data-science', 'frontend-assets']);
+  assert.deepEqual(presets[0].bucketNames, ['datasets', 'notebooks', 'slides', 'diagrams']);
+  assert.equal(presets[1].fallbackBucket, 'lab-misc');
+});
+
+test('loadPresetBucketConfig builds organize-ready rules from a named preset', () => {
+  const bucketConfig = loadPresetBucketConfig('data-science');
+
+  assert.equal(bucketConfig.presetName, 'data-science');
+  assert.equal(bucketFor('results.parquet', bucketConfig), 'datasets');
+  assert.equal(bucketFor('analysis.ipynb', bucketConfig), 'notebooks');
+  assert.equal(bucketFor('plot.png', bucketConfig), 'figures');
+});
+
+test('writePresetConfig writes sharable preset JSON and honors force overwrite', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-preset-'));
+  const destination = path.join(tmp, 'coursework.json');
+
+  const firstWrite = await writePresetConfig('coursework', destination);
+  assert.equal(firstWrite.destination, path.resolve(destination));
+  assert.equal(firstWrite.bucketCount, 4);
+  const payload = JSON.parse(await fs.readFile(destination, 'utf8'));
+  assert.equal(payload.fallbackBucket, 'coursework-misc');
+  assert.deepEqual(payload.buckets.slides, ['.ppt', '.pptx', '.key']);
+
+  await assert.rejects(
+    writePresetConfig('coursework', destination),
+    /Preset destination already exists/,
+  );
+
+  const secondWrite = await writePresetConfig('coursework', destination, { force: true });
+  assert.equal(secondWrite.presetName, 'coursework');
+});
+
+test('exported preset configs round-trip through loadBucketConfig for shared reuse', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-preset-roundtrip-'));
+  const destination = path.join(tmp, 'frontend-assets.json');
+
+  await writePresetConfig('frontend-assets', destination);
+  const bucketConfig = await loadBucketConfig(destination);
+
+  assert.equal(bucketConfig.configPath, path.resolve(destination));
+  assert.equal(bucketFor('mockup.fig', bucketConfig), 'mockups');
+  assert.equal(bucketFor('walkthrough.webm', bucketConfig), 'captures');
+  assert.equal(bucketFor('notes.docx', bucketConfig), 'handoff');
+  assert.equal(bucketFor('readme.md', bucketConfig), 'documents');
+});
+
+test('preset helpers reject unknown preset names with the supported preset list', async () => {
+  assert.throws(
+    () => loadPresetBucketConfig('unknown-preset'),
+    /Unknown preset: unknown-preset\. Supported presets: coursework, data-science, frontend-assets/,
+  );
+
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-preset-unknown-'));
+  await assert.rejects(
+    writePresetConfig('unknown-preset', path.join(tmp, 'unknown.json')),
+    /Unknown preset: unknown-preset\. Supported presets: coursework, data-science, frontend-assets/,
+  );
+});
+
 test('uniqueDestination appends numbered suffix when file exists', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
   const target = path.join(tmp, 'notes.txt');
@@ -111,6 +179,22 @@ test('organize honors config-driven buckets and custom fallback buckets', async 
   assert.equal(await fs.readFile(path.join(tmp, 'slides', 'week1.pptx'), 'utf8'), 'slides');
   assert.equal(await fs.readFile(path.join(tmp, 'misc', 'unknown.bin'), 'utf8'), 'blob');
   assert.equal(result.bucketConfig.fallbackBucket, 'misc');
+});
+
+test('organize can use a named preset directly without a config file on disk', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const bucketConfig = loadPresetBucketConfig('frontend-assets');
+  await fs.writeFile(path.join(tmp, 'hero.fig'), 'figma');
+  await fs.writeFile(path.join(tmp, 'walkthrough.mov'), 'video');
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'handoff');
+
+  const result = await organize(tmp, { bucketConfig });
+
+  assert.equal(result.summary.total, 3);
+  assert.equal(result.bucketConfig.presetName, 'frontend-assets');
+  assert.equal(await fs.readFile(path.join(tmp, 'mockups', 'hero.fig'), 'utf8'), 'figma');
+  assert.equal(await fs.readFile(path.join(tmp, 'captures', 'walkthrough.mov'), 'utf8'), 'video');
+  assert.equal(await fs.readFile(path.join(tmp, 'documents', 'notes.txt'), 'utf8'), 'handoff');
 });
 
 test('organize skips the config file itself when it lives inside the target directory', async () => {
@@ -232,7 +316,7 @@ test('undo rejects manifests created from dry-run results', async () => {
   );
 });
 
-test('parseArgs supports config, manifest-out, and undo flags', () => {
+test('parseArgs supports config, preset, preset-export, and undo flags', () => {
   const organizeArgs = parseArgs(['~/Downloads', '--dry-run', '--recursive', '--json', '--config', 'buckets.json', '--manifest-out', 'runs/latest.json']);
   assert.equal(organizeArgs.targetDir, '~/Downloads');
   assert.deepEqual(organizeArgs.options, {
@@ -242,6 +326,26 @@ test('parseArgs supports config, manifest-out, and undo flags', () => {
     manifestOut: 'runs/latest.json',
     undoManifest: null,
     configPath: 'buckets.json',
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
+  });
+
+  const presetArgs = parseArgs(['~/Downloads', '--preset', 'coursework', '--manifest-out', 'runs/latest.json']);
+  assert.deepEqual(presetArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: false,
+    manifestOut: 'runs/latest.json',
+    undoManifest: null,
+    configPath: null,
+    presetName: 'coursework',
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
   });
 
   const undoArgs = parseArgs(['--undo', 'runs/latest.json', '--dry-run', '--json']);
@@ -253,6 +357,30 @@ test('parseArgs supports config, manifest-out, and undo flags', () => {
     manifestOut: null,
     undoManifest: 'runs/latest.json',
     configPath: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
+  });
+
+  const listArgs = parseArgs(['--list-presets', '--json']);
+  assert.equal(listArgs.options.listPresets, true);
+  assert.equal(listArgs.options.json, true);
+
+  const writePresetArgs = parseArgs(['--write-preset', 'data-science', 'presets/data-science.json', '--force', '--json']);
+  assert.deepEqual(writePresetArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: true,
+    manifestOut: null,
+    undoManifest: null,
+    configPath: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: 'data-science',
+    writePresetDestination: 'presets/data-science.json',
+    force: true,
   });
 
   assert.throws(
@@ -264,9 +392,34 @@ test('parseArgs supports config, manifest-out, and undo flags', () => {
     () => parseArgs(['--undo', 'runs/latest.json', '--config', 'buckets.json']),
     /--config cannot be used with --undo/,
   );
+
+  assert.throws(
+    () => parseArgs(['~/Downloads', '--config', 'buckets.json', '--preset', 'coursework']),
+    /--config cannot be combined with --preset/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--list-presets', '~/Downloads']),
+    /Target directory cannot be combined with --list-presets/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--list-presets', '--dry-run']),
+    /--list-presets only supports optional --json output/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--write-preset', 'coursework', 'preset.json', '--dry-run']),
+    /--write-preset cannot be combined with organize or undo flags/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--force']),
+    /--force can only be used with --write-preset/,
+  );
 });
 
-test('formatTextReport includes config and manifest details for organize runs', () => {
+test('formatTextReport includes config, preset, and manifest details for supported actions', () => {
   const organizeReport = formatTextReport({
     action: 'organize',
     rootDir: '/tmp/demo',
@@ -274,6 +427,7 @@ test('formatTextReport includes config and manifest details for organize runs', 
     recursive: false,
     bucketConfig: {
       configPath: '/tmp/demo/buckets.json',
+      presetName: 'coursework',
       extendDefaults: true,
       fallbackBucket: 'other',
       bucketNames: ['datasets', 'documents', 'other'],
@@ -293,10 +447,29 @@ test('formatTextReport includes config and manifest details for organize runs', 
     moves: [{ from: '/tmp/demo/documents/a.txt', to: '/tmp/demo/a (1).txt', requestedRestore: '/tmp/demo/a.txt', restoreRenamed: true, status: 'restored', bucket: 'documents' }],
   });
 
+  const listPresetsReport = formatTextReport({
+    action: 'list-presets',
+    presets: [{ name: 'coursework', description: 'demo', bucketNames: ['datasets', 'slides'], fallbackBucket: 'misc', extendDefaults: true }],
+  });
+
+  const writePresetReport = formatTextReport({
+    action: 'write-preset',
+    presetName: 'coursework',
+    destination: '/tmp/demo/coursework.json',
+    fallbackBucket: 'misc',
+    extendDefaults: true,
+    bucketNames: ['datasets', 'slides'],
+  });
+
+  assert.match(organizeReport, /preset: coursework/);
   assert.match(organizeReport, /config: \/tmp\/demo\/buckets\.json/);
   assert.match(organizeReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
   assert.match(organizeReport, /renamed to avoid collisions: 1/);
   assert.match(undoReport, /action: undo/);
   assert.match(undoReport, /renamed to avoid restore collisions: 1/);
   assert.match(undoReport, /restore-renamed from \/tmp\/demo\/a\.txt/);
+  assert.match(listPresetsReport, /action: list-presets/);
+  assert.match(listPresetsReport, /extends defaults: yes/);
+  assert.match(writePresetReport, /destination: \/tmp\/demo\/coursework\.json/);
+  assert.match(writePresetReport, /extends defaults: yes/);
 });
