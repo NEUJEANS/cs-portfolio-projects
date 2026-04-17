@@ -1,0 +1,47 @@
+digraph "sample_assignment_graph" {
+  rankdir=LR;
+  labelloc="t";
+  label="assignment count=3, cost=12, full_coverage=True";
+  graph [splines=true, ranksep=1.0, nodesep=0.55];
+  "source" [shape=diamond, style="filled", fillcolor="white", peripheries=2];
+  "sink" [shape=diamond, style="filled", fillcolor="white", peripheries=2];
+  subgraph "cluster_left_partition" {
+    label="left partition";
+    color="lightsteelblue4";
+    style="rounded,dashed";
+    rank="same";
+    node [shape=circle, style="filled", fillcolor="lightsteelblue1"];
+    "anna" [fillcolor="honeydew2"];
+    "ben" [fillcolor="honeydew2"];
+    "chloe" [fillcolor="mistyrose"];
+    "david" [fillcolor="honeydew2"];
+  }
+  subgraph "cluster_right_partition" {
+    label="right partition";
+    color="darkseagreen4";
+    style="rounded,dashed";
+    rank="same";
+    node [shape=box, style="filled", fillcolor="honeydew2"];
+    "api" [peripheries=2];
+    "compiler" [peripheries=2];
+    "database" [peripheries=2];
+  }
+  subgraph "source_rank" { rank="source"; "source"; }
+  subgraph "sink_rank" { rank="sink"; "sink"; }
+  "source" -> "anna" [style="dashed", color="gray50", label="1"];
+  "source" -> "ben" [style="dashed", color="gray50", label="1"];
+  "source" -> "chloe" [style="dashed", color="gray80", label="0/1"];
+  "source" -> "david" [style="dashed", color="gray50", label="1"];
+  "anna" -> "api" [label="cost 8", color="gray60"];
+  "anna" -> "compiler" [label="selected @ 4", color="forestgreen", penwidth=3];
+  "anna" -> "database" [label="cost 7", color="gray60"];
+  "ben" -> "api" [label="selected @ 2", color="forestgreen", penwidth=3];
+  "ben" -> "compiler" [label="cost 6", color="gray60"];
+  "chloe" -> "compiler" [label="cost 5", color="gray60"];
+  "chloe" -> "database" [label="cost 9", color="gray60"];
+  "david" -> "api" [label="cost 9", color="gray60"];
+  "david" -> "database" [label="selected @ 6", color="forestgreen", penwidth=3];
+  "api" -> "sink" [style="dashed", color="gray50", label="1"];
+  "compiler" -> "sink" [style="dashed", color="gray50", label="1"];
+  "database" -> "sink" [style="dashed", color="gray50", label="1"];
+}

@@ -33,6 +33,7 @@ render_flow_markdown = module.render_flow_markdown
 render_flow_svg = module.render_flow_svg
 render_matching_markdown = module.render_matching_markdown
 render_matching_svg = module.render_matching_svg
+render_assignment_dot = module.render_assignment_dot
 render_assignment_markdown = module.render_assignment_markdown
 render_assignment_svg = module.render_assignment_svg
 render_min_cost_flow_dot = module.render_min_cost_flow_dot
@@ -484,6 +485,25 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn("Min-cost-flow certificate", svg)
         self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
 
+    def test_render_assignment_dot_includes_ranked_partitions_and_selected_costs(self) -> None:
+        result = solve_weighted_assignment(
+            ["anna", "ben", "chloe"],
+            ["api", "db"],
+            [
+                ("anna", "api", 6),
+                ("anna", "db", 1),
+                ("ben", "api", 2),
+                ("chloe", "db", 4),
+            ],
+        )
+        dot = render_assignment_dot(result, graph_name="weighted_assignment")
+        self.assertIn('digraph "weighted_assignment"', dot)
+        self.assertIn('label="assignment count=2, cost=3, full_coverage=True";', dot)
+        self.assertIn('subgraph "cluster_left_partition" {', dot)
+        self.assertIn('rank="same";', dot)
+        self.assertIn('"anna" -> "db" [label="selected @ 1", color="forestgreen", penwidth=3];', dot)
+        self.assertIn('"source" -> "chloe" [style="dashed", color="gray80", label="0/1"];', dot)
+
     def test_load_costed_flow_graph_rejects_negative_cost_and_bad_target_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             negative_cost_path = Path(tmpdir) / "negative_cost_flow.json"
@@ -596,8 +616,9 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn("explanation", payload)
         self.assertTrue(payload["explanation"]["cost_matches_flow_total"])
 
-    def test_cli_assign_demo_can_write_markdown_and_svg_outputs(self) -> None:
+    def test_cli_assign_demo_can_write_dot_markdown_and_svg_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
+            dot_path = Path(tmpdir) / "assignment.dot"
             markdown_path = Path(tmpdir) / "assignment-proof.md"
             svg_path = Path(tmpdir) / "assignment-proof.svg"
             completed = subprocess.run(
@@ -605,6 +626,8 @@ class NetworkFlowLabTests(unittest.TestCase):
                     "python3",
                     str(MODULE_PATH),
                     "assign-demo",
+                    "--dot-out",
+                    str(dot_path),
                     "--markdown-out",
                     str(markdown_path),
                     "--svg-out",
@@ -616,10 +639,13 @@ class NetworkFlowLabTests(unittest.TestCase):
                 text=True,
             )
             payload = json.loads(completed.stdout)
+            self.assertEqual(payload["dot_output"], str(dot_path))
             self.assertEqual(payload["markdown_output"], str(markdown_path))
             self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(dot_path.exists())
             self.assertTrue(markdown_path.exists())
             self.assertTrue(svg_path.exists())
+            self.assertIn('digraph "sample_assignment_graph"', dot_path.read_text(encoding="utf-8"))
             self.assertIn("Weighted assignment proof artifact", markdown_path.read_text(encoding="utf-8"))
             self.assertIn("Weighted assignment proof card", svg_path.read_text(encoding="utf-8"))
 

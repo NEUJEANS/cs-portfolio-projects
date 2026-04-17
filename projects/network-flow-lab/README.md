@@ -26,7 +26,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - committed generic min-cost-flow Markdown/SVG proof artifacts for portfolio screenshots without terminal capture
 - reproducible benchmark mode that compares Edmonds-Karp vs Dinic on random DAGs, dense residual-style meshes, or layered cut-stress graphs
 - standalone benchmark report-card export in Markdown and SVG for quick portfolio screenshots and README embeds
-- Graphviz DOT export for solved flow graphs, bipartite matchings, and generic min-cost-flow graphs
+- Graphviz DOT export for solved flow graphs, bipartite matchings, weighted assignments, and generic min-cost-flow graphs
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--markdown-out` proof artifacts for flow, matching, assignment, and generic min-cost-flow runs so portfolio screenshots do not require terminal capture
 - standalone `--svg-out` proof cards for flow, matching, assignment, and generic min-cost-flow runs so the project ships screenshot-ready visual summaries without Graphviz
@@ -76,11 +76,13 @@ python3 projects/network-flow-lab/network_flow.py match projects/network-flow-la
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --algorithm dinic --pretty
 ```
 
-Run the bundled weighted-assignment sample or solve a custom weighted bipartite graph. This uses a successive-shortest-path min-cost-flow solver and returns the chosen assignment edges plus total cost:
+Run the bundled weighted-assignment sample or solve a custom weighted bipartite graph. This uses a successive-shortest-path min-cost-flow solver and returns the chosen assignment edges plus total cost. `--dot-out` now exports the reduction as a ranked left/right Graphviz diagram with selected edges highlighted:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py assign-demo --pretty
 python3 projects/network-flow-lab/network_flow.py assign-demo --explain --pretty
+python3 projects/network-flow-lab/network_flow.py assign-demo --dot-out /tmp/assignment.dot
+python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --dot-out /tmp/custom-assignment.dot --pretty
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --markdown-out /tmp/assignment-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --svg-out /tmp/assignment-proof.svg --pretty
 ```
@@ -179,6 +181,7 @@ Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/sample-flow-proof.svg`
 - `docs/artifacts/network-flow-lab/sample-matching-proof.md`
 - `docs/artifacts/network-flow-lab/sample-matching-proof.svg`
+- `docs/artifacts/network-flow-lab/sample-assignment.dot`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.md`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.svg`
 - `docs/artifacts/network-flow-lab/sample-cost-flow.dot`
@@ -212,9 +215,10 @@ python3 -m unittest tests/test_network_flow_lab.py
 - The benchmark mode generates reproducible graph families for three different stories: random DAGs, dense cyclic residual meshes, and layered cut-stress networks; it verifies both algorithms return the same max-flow value and summarizes elapsed time plus augmentation/phase counts.
 - Benchmark report-card export turns one benchmark run into committed Markdown/SVG artifacts with setup details, trial tables, and interview-ready headline metrics.
 - The standalone proof-card SVG export gives you screenshot-ready correctness summaries for both raw max-flow runs and bipartite-match reductions without requiring Graphviz.
+- Weighted-assignment DOT export keeps the left/right partitions on aligned ranks, highlights selected pairs in green, and leaves unmatched endpoints obvious for quick portfolio screenshots.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
-- add Graphviz DOT export for weighted-assignment reductions so the bipartite min-cost story can be diagrammed directly too
+- add a side-by-side artifact page that embeds the weighted-assignment DOT diagram next to the Markdown/SVG proof cards
 - render actual node-link SVG layouts for solved flow, matching, assignment, and generic min-cost-flow proofs instead of card-style summaries
 - add a tiny static web gallery that lets viewers toggle between Markdown, SVG, DOT, and raw JSON artifacts

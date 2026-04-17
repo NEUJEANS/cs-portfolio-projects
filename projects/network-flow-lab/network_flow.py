@@ -1256,6 +1256,95 @@ def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "b
     return "\n".join(lines)
 
 
+def render_assignment_dot(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
+    selected_pairs = {
+        (item["left"], item["right"]): item["cost"] for item in assignment_result.assignments
+    }
+    selected_left = {item["left"] for item in assignment_result.assignments}
+    selected_right = {item["right"] for item in assignment_result.assignments}
+    flow_edges = {
+        (item["source"], item["target"]): item for item in assignment_result.flow["edge_flows"]
+    }
+
+    lines = [
+        f'digraph "{graph_name}" {{',
+        '  rankdir=LR;',
+        '  labelloc="t";',
+        (
+            '  label="'
+            f'assignment count={len(assignment_result.assignments)}, cost={assignment_result.total_cost}, '
+            f'full_coverage={assignment_result.covers_smaller_partition}'
+            '";'
+        ),
+        '  graph [splines=true, ranksep=1.0, nodesep=0.55];',
+        '  "source" [shape=diamond, style="filled", fillcolor="white", peripheries=2];',
+        '  "sink" [shape=diamond, style="filled", fillcolor="white", peripheries=2];',
+        '  subgraph "cluster_left_partition" {',
+        '    label="left partition";',
+        '    color="lightsteelblue4";',
+        '    style="rounded,dashed";',
+        '    rank="same";',
+        '    node [shape=circle, style="filled", fillcolor="lightsteelblue1"];',
+    ]
+    for node in assignment_result.left_partition:
+        attrs = []
+        if node in assignment_result.unmatched_left:
+            attrs.append('fillcolor="mistyrose"')
+        elif node in selected_left:
+            attrs.append('fillcolor="honeydew2"')
+        lines.append(f'    "{node}" [{", ".join(attrs)}];' if attrs else f'    "{node}";')
+    lines.extend([
+        '  }',
+        '  subgraph "cluster_right_partition" {',
+        '    label="right partition";',
+        '    color="darkseagreen4";',
+        '    style="rounded,dashed";',
+        '    rank="same";',
+        '    node [shape=box, style="filled", fillcolor="honeydew2"];',
+    ])
+    for node in assignment_result.right_partition:
+        attrs = []
+        if node in assignment_result.unmatched_right:
+            attrs.append('fillcolor="moccasin"')
+        elif node in selected_right:
+            attrs.append('peripheries=2')
+        lines.append(f'    "{node}" [{", ".join(attrs)}];' if attrs else f'    "{node}";')
+    lines.extend([
+        '  }',
+        '  subgraph "source_rank" { rank="source"; "source"; }',
+        '  subgraph "sink_rank" { rank="sink"; "sink"; }',
+    ])
+
+    for node in assignment_result.left_partition:
+        edge = flow_edges.get((ASSIGN_SOURCE, node))
+        if edge and edge["flow"] == 1:
+            lines.append(f'  "source" -> "{node}" [style="dashed", color="gray50", label="1"];')
+        else:
+            lines.append(f'  "source" -> "{node}" [style="dashed", color="gray80", label="0/1"];')
+
+    for left_node in assignment_result.left_partition:
+        for right_node in assignment_result.right_partition:
+            edge = flow_edges.get((left_node, right_node))
+            if edge is None:
+                continue
+            attrs = [f'label="cost {edge["cost"]}"']
+            if (left_node, right_node) in selected_pairs:
+                attrs = [f'label="selected @ {edge["cost"]}"', 'color="forestgreen"', 'penwidth=3']
+            else:
+                attrs.append('color="gray60"')
+            lines.append(f'  "{left_node}" -> "{right_node}" [{", ".join(attrs)}];')
+
+    for node in assignment_result.right_partition:
+        edge = flow_edges.get((node, ASSIGN_SINK))
+        if edge and edge["flow"] == 1:
+            lines.append(f'  "{node}" -> "sink" [style="dashed", color="gray50", label="1"];')
+        else:
+            lines.append(f'  "{node}" -> "sink" [style="dashed", color="gray80", label="0/1"];')
+
+    lines.append('}')
+    return "\n".join(lines)
+
+
 def render_min_cost_flow_dot(
     flow_result: MinCostFlowResult,
     *,
@@ -2171,12 +2260,14 @@ def build_parser() -> argparse.ArgumentParser:
     assign_parser = subparsers.add_parser("assign", help="solve a weighted assignment JSON file")
     assign_parser.add_argument("graph", type=Path, help="path to weighted assignment JSON")
     assign_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    assign_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved weighted assignment graph")
     assign_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved assignment graph")
     assign_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved assignment graph")
     add_explain_argument(assign_parser)
 
     assign_demo_parser = subparsers.add_parser("assign-demo", help="run the bundled weighted assignment sample")
     assign_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    assign_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample weighted assignment graph")
     assign_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample assignment graph")
     assign_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample assignment graph")
     add_explain_argument(assign_demo_parser)
@@ -2313,6 +2404,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         payload = {"command": args.command, "graph": str(graph_path), **assignment_result.to_dict()}
         if getattr(args, "explain", False):
             payload["explanation"] = build_assignment_explanation(assignment_result)
+        if getattr(args, "dot_out", None):
+            write_dot_output(args.dot_out, render_assignment_dot(assignment_result, graph_name=graph_path.stem))
+            payload["dot_output"] = str(args.dot_out)
         if getattr(args, "markdown_out", None):
             write_markdown_output(args.markdown_out, render_assignment_markdown(assignment_result, graph_name=graph_path.stem))
             payload["markdown_output"] = str(args.markdown_out)
@@ -2328,6 +2422,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         payload = {"command": args.command, "graph": str(graph_path), **assignment_result.to_dict()}
         if getattr(args, "explain", False):
             payload["explanation"] = build_assignment_explanation(assignment_result)
+        if getattr(args, "dot_out", None):
+            write_dot_output(args.dot_out, render_assignment_dot(assignment_result, graph_name=graph_path.stem))
+            payload["dot_output"] = str(args.dot_out)
         if getattr(args, "markdown_out", None):
             write_markdown_output(args.markdown_out, render_assignment_markdown(assignment_result, graph_name=graph_path.stem))
             payload["markdown_output"] = str(args.markdown_out)
