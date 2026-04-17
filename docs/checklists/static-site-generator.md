@@ -183,7 +183,7 @@
 - [x] complete review pass 1 and fix issues found
 - [x] complete review pass 2 and fix issues found
 - [x] complete review pass 3 and fix issues found
-- [ ] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
 - [ ] consider reviewer callout panels for architecture notes or “why this code matters” annotations in a future run
