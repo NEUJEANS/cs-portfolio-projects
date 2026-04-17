@@ -2,6 +2,17 @@
 
 A compact gallery of committed comparison cards for `branch-predictor-lab`, meant for README linking, recruiter screenshots, and quick before/after predictor discussions.
 
+## Sweep overview card
+
+Use this when you want one artifact that summarizes how the best predictor changes across loop, bias, aliasing, hybrid-history, and perceptron-friendly traces.
+
+<p>
+  <strong>Trace-family sweep overview</strong><br />
+  <img src="./trace-family-sweep.svg" alt="Branch predictor trace-family sweep overview card" />
+  <br />
+  <a href="./trace-family-sweep.md">Markdown report</a>
+</p>
+
 ## Comparison cards
 
 <table>
@@ -37,6 +48,7 @@ A compact gallery of committed comparison cards for `branch-predictor-lab`, mean
 
 ## Trace setup
 
+- Sweep overview: `python3 projects/branch-predictor-lab/branch_predictor.py sweep --trace-dir artifacts/branch-predictor-lab/sweep --markdown-out docs/artifacts/branch-predictor-lab/trace-family-sweep.md --svg-out docs/artifacts/branch-predictor-lab/trace-family-sweep.svg`
 - Bundled sample trace: `projects/branch-predictor-lab/sample_trace.txt` with `--table-size 16 --history-bits 2`
 - Synthetic trace: `artifacts/branch-predictor-lab/tournament-style-seed5.trace` generated with `generate tournament-style --branches 48 --seed 5`, then compared with `--table-size 16 --history-bits 4`
 - Alias trace: `artifacts/branch-predictor-lab/alias-thrash-seed7.trace` generated with `generate alias-thrash --branches 48 --seed 7`, then compared with `--table-size 16 --history-bits 4`
@@ -44,6 +56,7 @@ A compact gallery of committed comparison cards for `branch-predictor-lab`, mean
 
 ## Suggested portfolio usage
 
+- Use the sweep overview card when you want one slide that proves different workload families reward different predictors and configs.
 - Use the sample trace card when you want a clean teaching story for loop exits, alternating phases, and cache-ish branches.
 - Use the `tournament-style` card when you want to show that local/global/hybrid predictors can tie or trade places depending on the trace family and history depth.
 - Use the `alias-thrash` card when you want to explain table interference, conflicting branch biases, and why increasing table size can improve simple predictors without changing the trace.

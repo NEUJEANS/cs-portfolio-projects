@@ -13,5 +13,9 @@
 - [x] add Markdown/SVG comparison-card export plus committed artifact-gallery assets
 - [x] add alias-thrash synthetic workload and PC-index aliasing summaries for table-size trade-off demos
 - [x] add a perceptron predictor plus a linearly separable long-history workload for stronger architecture coverage
+- [x] add a trace-family sweep CLI plus committed Markdown/SVG overview artifacts
 - [x] log at least 3 review passes and fix issues found
 - [x] list next candidate slices for advanced architecture follow-ups
+- [ ] add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
+- [ ] add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
+- [ ] add budget-normalized sweeps so predictors can compete under similar state-bit budgets

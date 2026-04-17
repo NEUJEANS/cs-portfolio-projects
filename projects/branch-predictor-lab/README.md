@@ -72,6 +72,15 @@ python3 projects/branch-predictor-lab/branch_predictor.py generate \
   --output /tmp/loop-heavy.trace
 ```
 
+Generate one overview artifact that compares all built-in synthetic workload families with their recommended configs:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py sweep \
+  --trace-dir artifacts/branch-predictor-lab/sweep \
+  --markdown-out docs/artifacts/branch-predictor-lab/trace-family-sweep.md \
+  --svg-out docs/artifacts/branch-predictor-lab/trace-family-sweep.svg
+```
+
 Example comparison output:
 
 ```text
@@ -180,6 +189,16 @@ python3 projects/branch-predictor-lab/branch_predictor.py compare \
   --json
 ```
 
+To reproduce the committed trace-family sweep overview artifact, run the batch command with the committed output paths:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py sweep \
+  --trace-dir artifacts/branch-predictor-lab/sweep \
+  --markdown-out docs/artifacts/branch-predictor-lab/trace-family-sweep.md \
+  --svg-out docs/artifacts/branch-predictor-lab/trace-family-sweep.svg \
+  --json
+```
+
 Export recruiter-friendly Markdown and SVG comparison cards from the same compare command:
 
 ```bash
@@ -210,6 +229,7 @@ Run the tests:
 - compare output includes a static aliasing summary for the PC-indexed predictor tables so you can point at exact colliding buckets when discussing table-size trade-offs
 - the `alias-thrash` generator intentionally maps opposite-bias branches into the same low-order index bits, which makes interference easy to show without external trace corpora
 - the synthetic generator is intentionally lightweight and reproducible so you can build demos, tests, and benchmark sweeps without needing a large external trace corpus
+- the `sweep` command uses per-workload recommended table/history settings so one overview artifact can stay fair to loop, bias, aliasing, hybrid, and perceptron-friendly traces instead of flattening everything into one generic config
 
 ## Portfolio talking points
 - explain why one-bit predictors mispredict both loop exit and loop re-entry while two-bit predictors usually miss only on the exit
@@ -217,9 +237,10 @@ Run the tests:
 - use the `alias-thrash` workload plus the compare JSON/Markdown alias summary to explain predictor-table interference and why larger tables can recover accuracy
 - compare `local-history`, `gshare`, `perceptron`, and `tournament` on the same trace to talk through local/global/neural/hybrid trade-offs instead of stopping at bimodal counters
 - use the `perceptron-majority` workload to explain linearly separable branch behavior and why perceptrons can use longer histories without exploding the table size
+- use the trace-family sweep card when you want one overview slide that shows different workloads favor different predictors instead of implying there is one universal winner
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
-- add trace-family sweep commands that run multiple generated workloads in one shot
 - add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
 - add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
+- add budget-normalized sweeps so predictors can be compared under similar total state-bit limits instead of only by table/history knobs

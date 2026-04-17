@@ -28,11 +28,15 @@ TournamentPredictor = module.TournamentPredictor
 TwoBitPredictor = module.TwoBitPredictor
 build_predictor = module.build_predictor
 compare_predictors = module.compare_predictors
+format_sweep_summary_table = module.format_sweep_summary_table
 generate_synthetic_trace = module.generate_synthetic_trace
 load_trace = module.load_trace
 parse_trace_line = module.parse_trace_line
 render_comparison_markdown = module.render_comparison_markdown
 render_comparison_svg = module.render_comparison_svg
+render_sweep_markdown = module.render_sweep_markdown
+render_sweep_svg = module.render_sweep_svg
+run_workload_sweep = module.run_workload_sweep
 simulate_trace = module.simulate_trace
 summarize_table_aliasing = module.summarize_table_aliasing
 summarize_trace = module.summarize_trace
@@ -431,6 +435,74 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertEqual(len(written_lines), 12)
             self.assertEqual(len(payload["records"]), 12)
             self.assertIn("history-follower", output_path.read_text(encoding="utf-8"))
+
+    def test_run_workload_sweep_uses_profiles_and_writes_trace_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_dir = Path(tmpdir) / "sweep-traces"
+            scenarios = run_workload_sweep(["loop-heavy", "alias-thrash", "perceptron-majority"], trace_dir=trace_dir)
+
+            self.assertEqual([scenario["workload"] for scenario in scenarios], ["loop-heavy", "alias-thrash", "perceptron-majority"])
+            self.assertEqual(scenarios[0]["config"]["table_size"], 8)
+            self.assertEqual(scenarios[1]["alias_summary"]["conflicting_indices"], 2)
+            self.assertEqual(scenarios[2]["best_predictor"], "perceptron")
+            self.assertTrue((trace_dir / "loop-heavy-seed7.trace").exists())
+            self.assertTrue((trace_dir / "alias-thrash-seed7.trace").exists())
+            self.assertIn("perceptron-majority-target", (trace_dir / "perceptron-majority-seed13.trace").read_text(encoding="utf-8"))
+
+    def test_render_sweep_outputs_include_overview_and_predictor_story(self) -> None:
+        scenarios = run_workload_sweep(["loop-heavy", "alias-thrash", "perceptron-majority"])
+
+        markdown = render_sweep_markdown(scenarios=scenarios)
+        svg = render_sweep_svg(scenarios=scenarios)
+        summary = format_sweep_summary_table(scenarios)
+
+        self.assertIn("# Branch predictor trace-family sweep", markdown)
+        self.assertIn("## Per-workload notes", markdown)
+        self.assertIn("`alias-thrash`", markdown)
+        self.assertIn("perceptron-majority", markdown)
+        self.assertIn("<svg", svg)
+        self.assertIn("Branch predictor trace-family sweep", svg)
+        self.assertIn("Simple vs advanced", svg)
+        self.assertIn("loop-heavy", summary)
+        self.assertIn("perceptron", summary)
+
+    def test_cli_sweep_json_writes_markdown_svg_and_trace_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_dir = Path(tmpdir) / "traces"
+            markdown_path = Path(tmpdir) / "trace-family-sweep.md"
+            svg_path = Path(tmpdir) / "trace-family-sweep.svg"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "sweep",
+                    "loop-heavy",
+                    "alias-thrash",
+                    "perceptron-majority",
+                    "--trace-dir",
+                    str(trace_dir),
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["scenario_count"], 3)
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertTrue((trace_dir / "loop-heavy-seed7.trace").exists())
+            self.assertTrue((trace_dir / "alias-thrash-seed7.trace").exists())
+            self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())
+            self.assertIn("## Overview", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Simple vs advanced", svg_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

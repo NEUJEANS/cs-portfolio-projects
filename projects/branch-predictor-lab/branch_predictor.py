@@ -20,6 +20,45 @@ SYNTHETIC_WORKLOADS = (
     "alias-thrash",
     "perceptron-majority",
 )
+SIMPLE_PREDICTOR_NAMES = {"always-taken", "always-not-taken", "one-bit", "two-bit"}
+ADVANCED_PREDICTOR_NAMES = {"local-history", "gshare", "perceptron", "tournament"}
+WORKLOAD_SWEEP_PROFILES: dict[str, dict[str, Any]] = {
+    "loop-heavy": {
+        "branches": 40,
+        "seed": 7,
+        "table_size": 8,
+        "history_bits": 4,
+        "headline": "loop backedges and exits",
+    },
+    "random-biased": {
+        "branches": 96,
+        "seed": 11,
+        "table_size": 16,
+        "history_bits": 2,
+        "headline": "biased hot/cold guard branches",
+    },
+    "tournament-style": {
+        "branches": 48,
+        "seed": 5,
+        "table_size": 16,
+        "history_bits": 4,
+        "headline": "mixed local/global correlation",
+    },
+    "alias-thrash": {
+        "branches": 64,
+        "seed": 7,
+        "table_size": 16,
+        "history_bits": 4,
+        "headline": "small-table alias interference",
+    },
+    "perceptron-majority": {
+        "branches": 96,
+        "seed": 13,
+        "table_size": 32,
+        "history_bits": 12,
+        "headline": "long-history linearly separable branch",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -853,6 +892,92 @@ def compare_predictors(records: list[BranchRecord], table_size: int = 16, histor
     return sorted(results, key=lambda item: (-item.accuracy, item.mispredictions, item.predictor))
 
 
+def _first_result_from_group(results: list[SimulationResult], allowed_names: set[str]) -> SimulationResult:
+    match = next((result for result in results if result.predictor in allowed_names), None)
+    if match is None:
+        raise ValueError(f"missing predictors from group: {sorted(allowed_names)}")
+    return match
+
+
+def run_workload_sweep(
+    workloads: list[str] | None = None,
+    *,
+    branches_override: int | None = None,
+    table_size_override: int | None = None,
+    history_bits_override: int | None = None,
+    seed_override: int | None = None,
+    trace_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    selected = workloads or list(SYNTHETIC_WORKLOADS)
+    scenarios: list[dict[str, Any]] = []
+    if trace_dir is not None:
+        trace_dir.mkdir(parents=True, exist_ok=True)
+
+    for workload in selected:
+        if workload not in WORKLOAD_SWEEP_PROFILES:
+            supported = ", ".join(sorted(WORKLOAD_SWEEP_PROFILES))
+            raise ValueError(f"unsupported sweep workload: {workload}. Expected one of: {supported}")
+        profile = WORKLOAD_SWEEP_PROFILES[workload]
+        branches = branches_override if branches_override is not None else int(profile["branches"])
+        table_size = table_size_override if table_size_override is not None else int(profile["table_size"])
+        history_bits = history_bits_override if history_bits_override is not None else int(profile["history_bits"])
+        seed = seed_override if seed_override is not None else int(profile["seed"])
+
+        records = generate_synthetic_trace(workload, branches=branches, seed=seed)
+        trace_output: Path | None = None
+        if trace_dir is not None:
+            trace_output = trace_dir / f"{workload}-seed{seed}.trace"
+            trace_output.write_text(f"{format_trace(records)}\n", encoding="utf-8")
+
+        trace_summary = summarize_trace(records)
+        alias_summary = summarize_table_aliasing(records, table_size=table_size)
+        results = compare_predictors(records, table_size=table_size, history_bits=history_bits)
+        best = results[0]
+        runner_up = results[1]
+        best_simple = _first_result_from_group(results, SIMPLE_PREDICTOR_NAMES)
+        best_advanced = _first_result_from_group(results, ADVANCED_PREDICTOR_NAMES)
+        scenarios.append(
+            {
+                "workload": workload,
+                "headline": profile["headline"],
+                "config": {
+                    "branches": branches,
+                    "seed": seed,
+                    "table_size": table_size,
+                    "history_bits": history_bits,
+                },
+                "trace_output": str(trace_output) if trace_output is not None else None,
+                "trace_summary": trace_summary,
+                "alias_summary": alias_summary,
+                "best_predictor": best.predictor,
+                "runner_up_predictor": runner_up.predictor,
+                "winner_margin_percent": round((best.accuracy - runner_up.accuracy) * 100, 3),
+                "best_simple_predictor": best_simple.predictor,
+                "best_simple_accuracy_percent": round(best_simple.accuracy * 100, 3),
+                "best_advanced_predictor": best_advanced.predictor,
+                "best_advanced_accuracy_percent": round(best_advanced.accuracy * 100, 3),
+                "results": [result.to_dict() for result in results],
+            }
+        )
+
+    return scenarios
+
+
+def format_sweep_summary_table(scenarios: list[dict[str, Any]]) -> str:
+    lines = [
+        "workload              best predictor    accuracy   gap     simple best       advanced best",
+        "--------------------  ----------------  ---------  ------  ----------------  ----------------",
+    ]
+    for scenario in scenarios:
+        lines.append(
+            f"{scenario['workload']:<20}  {scenario['best_predictor']:<16}  "
+            f"{scenario['results'][0]['accuracy_percent']:>7.2f}%  "
+            f"{scenario['winner_margin_percent']:>5.2f}pp  "
+            f"{scenario['best_simple_predictor']:<16}  {scenario['best_advanced_predictor']:<16}"
+        )
+    return "\n".join(lines)
+
+
 def build_predictor(name: str, table_size: int, history_bits: int) -> BranchPredictor:
     normalized = name.strip().lower()
     if normalized == "always-taken":
@@ -923,10 +1048,8 @@ def _build_comparison_talking_points(
                 f"({abs(delta):.2f} pp in favor of one-bit on this trace)."
             )
 
-    advanced_names = {"local-history", "gshare", "perceptron", "tournament"}
-    simple_names = {"always-taken", "always-not-taken", "one-bit", "two-bit"}
-    advanced_best = next((result for result in results if result.predictor in advanced_names), None)
-    simple_best = next((result for result in results if result.predictor in simple_names), None)
+    advanced_best = next((result for result in results if result.predictor in ADVANCED_PREDICTOR_NAMES), None)
+    simple_best = next((result for result in results if result.predictor in SIMPLE_PREDICTOR_NAMES), None)
     if advanced_best is not None and simple_best is not None:
         points.append(
             f"Best advanced predictor: {advanced_best.predictor} at {advanced_best.accuracy * 100:.2f}% "
@@ -1201,6 +1324,104 @@ def render_comparison_svg(
     return "".join(parts) + "\n"
 
 
+def render_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
+    generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    lines = [
+        "# Branch predictor trace-family sweep",
+        "",
+        f"- Generated: `{generated}`",
+        f"- Workloads: `{len(scenarios)}` synthetic families run in one batch command",
+        "- Goal: show how the recommended trace/config pairs shift the best predictor across loop, bias, aliasing, mixed-history, and perceptron-friendly cases.",
+        "",
+        "## Overview",
+        "",
+        "| Workload | Focus | Branches | Table | History | Best | Accuracy | Runner-up | Gap |",
+        "| --- | --- | ---: | ---: | ---: | --- | ---: | --- | ---: |",
+    ]
+    for scenario in scenarios:
+        best = scenario["results"][0]
+        lines.append(
+            f"| `{scenario['workload']}` | {scenario['headline']} | `{scenario['config']['branches']}` | `{scenario['config']['table_size']}` | `{scenario['config']['history_bits']}` | `{scenario['best_predictor']}` | `{best['accuracy_percent']:.2f}%` | `{scenario['runner_up_predictor']}` | `{scenario['winner_margin_percent']:.2f} pp` |"
+        )
+
+    lines.extend(["", "## Per-workload notes", ""])
+    for scenario in scenarios:
+        best = scenario["results"][0]
+        alias_summary = scenario["alias_summary"]
+        lines.extend(
+            [
+                f"### `{scenario['workload']}`",
+                "",
+                f"- Focus: {scenario['headline']}",
+                f"- Config: `branches={scenario['config']['branches']}` · `seed={scenario['config']['seed']}` · `table={scenario['config']['table_size']}` · `history={scenario['config']['history_bits']}`",
+                f"- Winner: `{scenario['best_predictor']}` at `{best['accuracy_percent']:.2f}%` with `{best['mispredictions']}` mispredictions.",
+                f"- Best simple baseline: `{scenario['best_simple_predictor']}` at `{scenario['best_simple_accuracy_percent']:.2f}%`.",
+                f"- Best advanced predictor: `{scenario['best_advanced_predictor']}` at `{scenario['best_advanced_accuracy_percent']:.2f}%`.",
+                f"- Static aliasing: `{alias_summary['colliding_indices']}` colliding buckets, `{alias_summary['conflicting_indices']}` with conflicting dominant biases.",
+                "",
+                "Top three predictors:",
+            ]
+        )
+        for result in scenario["results"][:3]:
+            lines.append(
+                f"- `{result['predictor']}` · `{result['accuracy_percent']:.2f}%` accuracy · `{result['mispredictions']}` mispredictions"
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Portfolio usage",
+            "",
+            "- Use this sweep report when you want one artifact that compares multiple branch families without manually running five separate `generate` + `compare` commands.",
+            "- Pair the sweep SVG with the existing per-trace cards when you need both an overview slide and deeper single-trace evidence.",
+            "- The report is intentionally configuration-aware so interviewers can see that long-history perceptron cases use deeper history than simple bias/loop demos.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
+    width = 1120
+    row_height = 92
+    height = 170 + (row_height * len(scenarios)) + 56
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Branch predictor trace-family sweep</title>',
+        '<desc id="desc">Batch branch predictor sweep summary across multiple synthetic workload families.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 40, "Branch predictor trace-family sweep", size=28, weight="700"),
+        _svg_text(28, 66, f"{len(scenarios)} workload families · one batch command · recommended configs per trace family", size=14, fill="#334155"),
+    ]
+    header_y = 104
+    parts.append(f'<rect x="28" y="{header_y}" width="1064" height="42" rx="14" fill="#e2e8f0" />')
+    for x, label in [(46, 'Workload'), (274, 'Focus'), (618, 'Winner'), (780, 'Accuracy'), (902, 'Gap'), (980, 'Simple vs advanced')]:
+        parts.append(_svg_text(x, header_y + 27, label, size=13, weight='700', fill='#334155'))
+
+    start_y = header_y + 60
+    for index, scenario in enumerate(scenarios):
+        y = start_y + index * row_height
+        best = scenario['results'][0]
+        advanced_gap = scenario['best_advanced_accuracy_percent'] - scenario['best_simple_accuracy_percent']
+        parts.append(f'<rect x="28" y="{y}" width="1064" height="76" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(46, y + 30, scenario['workload'], size=16, weight='700'))
+        _svg_add_wrapped_text(parts, 46, y + 50, scenario['headline'], max_chars=26, size=12, fill='#64748b')
+        _svg_add_wrapped_text(parts, 274, y + 30, f"branches={scenario['config']['branches']} · table={scenario['config']['table_size']} · history={scenario['config']['history_bits']} · seed={scenario['config']['seed']}", max_chars=42, size=12, fill='#334155')
+        parts.append(_svg_text(618, y + 30, scenario['best_predictor'], size=15, weight='700', fill='#0f172a'))
+        parts.append(_svg_text(618, y + 50, f"runner-up: {scenario['runner_up_predictor']}", size=12, fill='#64748b'))
+        parts.append(f'<rect x="780" y="{y + 20}" width="96" height="16" rx="8" fill="#e2e8f0" />')
+        parts.append(f'<rect x="780" y="{y + 20}" width="{96 * (best["accuracy_percent"] / 100):.1f}" height="16" rx="8" fill="#2563eb" />')
+        parts.append(_svg_text(780, y + 52, f"{best['accuracy_percent']:.2f}%", size=12, weight='700'))
+        parts.append(_svg_text(902, y + 38, f"{scenario['winner_margin_percent']:.2f} pp", size=13, weight='700', fill='#0f172a'))
+        parts.append(_svg_text(980, y + 30, scenario['best_simple_predictor'], size=13, weight='700', fill='#475569'))
+        parts.append(_svg_text(980, y + 50, f"{scenario['best_simple_accuracy_percent']:.2f}% → {scenario['best_advanced_predictor']} {scenario['best_advanced_accuracy_percent']:.2f}% ({advanced_gap:+.2f} pp)", size=11, fill='#64748b'))
+
+    footer_y = height - 24
+    parts.append(_svg_text(28, footer_y, 'Pair this sweep card with the per-trace Markdown/SVG cards when you need both overview and drill-down evidence.', size=12, fill='#475569'))
+    parts.append('</svg>')
+    return ''.join(parts) + '\n'
+
+
 def write_markdown_output(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(contents, encoding="utf-8")
@@ -1256,6 +1477,25 @@ def _build_parser() -> argparse.ArgumentParser:
     generate_parser.add_argument("--seed", type=int, default=7, help="Random seed for workloads that use randomness.")
     generate_parser.add_argument("--output", help="Optional path to write the generated trace text.")
     generate_parser.add_argument("--json", action="store_true", help="Emit a JSON summary instead of raw trace text.")
+
+    sweep_parser = subparsers.add_parser(
+        "sweep",
+        help="Batch-generate one or more synthetic workload families and compare predictors in one run.",
+    )
+    sweep_parser.add_argument(
+        "workloads",
+        nargs="*",
+        choices=list(SYNTHETIC_WORKLOADS),
+        help="Optional subset of workload families to sweep. Defaults to all built-in synthetic workloads.",
+    )
+    sweep_parser.add_argument("--branches", type=int, help="Override the branch count for every selected workload.")
+    sweep_parser.add_argument("--table-size", type=int, help="Override the predictor table size for every selected workload.")
+    sweep_parser.add_argument("--history-bits", type=int, help="Override the history bits for every selected workload.")
+    sweep_parser.add_argument("--seed", type=int, help="Override the random seed for every selected workload.")
+    sweep_parser.add_argument("--trace-dir", type=Path, help="Optional directory to write the generated trace files for the sweep.")
+    sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown sweep report.")
+    sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG sweep summary card.")
+    sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
     return parser
 
 
@@ -1292,6 +1532,38 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 print(format_trace(records))
+            return 0
+
+        if args.command == "sweep":
+            scenarios = run_workload_sweep(
+                list(args.workloads),
+                branches_override=args.branches,
+                table_size_override=args.table_size,
+                history_bits_override=args.history_bits,
+                seed_override=args.seed,
+                trace_dir=args.trace_dir,
+            )
+            payload = {
+                "workloads": [scenario["workload"] for scenario in scenarios],
+                "scenario_count": len(scenarios),
+                "scenarios": scenarios,
+            }
+            if getattr(args, "markdown_out", None):
+                write_markdown_output(args.markdown_out, render_sweep_markdown(scenarios=scenarios))
+                payload["markdown_output"] = str(args.markdown_out)
+            if getattr(args, "svg_out", None):
+                write_svg_output(args.svg_out, render_sweep_svg(scenarios=scenarios))
+                payload["svg_output"] = str(args.svg_out)
+            if args.json:
+                print(json.dumps(payload, indent=2, default=_json_default))
+            else:
+                print(format_sweep_summary_table(scenarios))
+                if "markdown_output" in payload:
+                    print(f"markdown report: {payload['markdown_output']}")
+                if "svg_output" in payload:
+                    print(f"svg card: {payload['svg_output']}")
+                if args.trace_dir is not None:
+                    print(f"trace directory: {args.trace_dir}")
             return 0
 
         records = load_trace(args.trace)
