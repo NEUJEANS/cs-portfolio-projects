@@ -13,6 +13,7 @@ PROJECT_DIR = PROJECT_ROOT / "projects" / "mini-mapreduce-lab"
 MODULE_PATH = PROJECT_DIR / "mapreduce.py"
 PLUGIN_PATH = PROJECT_DIR / "plugins_top_score.py"
 LATENCY_PLUGIN_PATH = PROJECT_DIR / "plugins_service_latency.py"
+SESSION_PLUGIN_PATH = PROJECT_DIR / "plugins_sessionization.py"
 
 spec = importlib.util.spec_from_file_location("mini_mapreduce_lab", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
@@ -90,6 +91,38 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(result.output["auth-gateway"], {"count": 2, "avg_ms": 150.0, "p95_ms": 180.0, "max_ms": 180.0})
             self.assertEqual(result.output["profile-read"]["count"], 1)
             self.assertTrue(str(result.plugin).endswith("plugins_service_latency.py"))
+
+    def test_plugin_job_can_emit_sessionization_summaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "sessions.csv"
+            source.write_text(
+                "alice,2026-04-17T08:00:00Z,home\n"
+                "alice,2026-04-17T08:12:00Z,quiz\n"
+                "alice,2026-04-17T08:41:00Z,editor\n"
+                "alice,2026-04-17T09:20:00Z,submit\n"
+                "bob,2026-04-17T08:05:00Z,home\n"
+                "bob,2026-04-17T08:55:00Z,forum\n",
+                encoding="utf-8",
+            )
+
+            result = execute_job("plugin", [source], shard_size=2, reducers=2, plugin_path=SESSION_PLUGIN_PATH)
+
+            self.assertEqual(result.job, "plugin-sessionization")
+            self.assertEqual(
+                result.output["alice"],
+                {
+                    "session_count": 2,
+                    "total_events": 4,
+                    "avg_events_per_session": 2.0,
+                    "avg_session_minutes": 20.5,
+                    "longest_session_events": 3,
+                    "longest_session_minutes": 41.0,
+                    "first_event_at": "2026-04-17T08:00:00Z",
+                    "last_event_at": "2026-04-17T09:20:00Z",
+                },
+            )
+            self.assertEqual(result.output["bob"]["session_count"], 2)
+            self.assertTrue(str(result.plugin).endswith("plugins_sessionization.py"))
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -435,6 +468,26 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.benchmark_note_annotations[0]["title"], "Auth gateway timeout storm")
         self.assertEqual(result.benchmark_note_annotations[1]["title"], "Session cache spillover")
         self.assertIn("auth-gateway", result.benchmark_note_annotations[0]["hotspot_keys"])
+
+    def test_plugin_sessionization_benchmark_reports_launch_day_metadata(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=SESSION_PLUGIN_PATH,
+            dataset_family="launch-day",
+        )
+
+        self.assertEqual(result.job, "plugin-sessionization")
+        self.assertEqual(result.available_dataset_families, ["default", "exam-revision", "launch-day"])
+        self.assertEqual(result.plugin_mapper, "plugins_sessionization.map_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_sessionization.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Release lead war room")
+        self.assertEqual(result.benchmark_note_annotations[1]["title"], "QA desk verification loop")
+        self.assertIn("release-lead", result.benchmark_note_annotations[0]["hotspot_keys"])
 
     def test_plugin_benchmark_supports_plugin_defined_note_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

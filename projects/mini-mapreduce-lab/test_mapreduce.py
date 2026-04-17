@@ -126,6 +126,44 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertEqual(result.output["auth-gateway"]["max_ms"], 180.0)
             self.assertEqual(result.output["search-api"]["count"], 1)
 
+    def test_plugin_job_can_emit_sessionization_summary_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "sessions.csv"
+            source.write_text(
+                "alice,2026-04-17T08:00:00Z,home\n"
+                "alice,2026-04-17T08:12:00Z,quiz\n"
+                "alice,2026-04-17T08:41:00Z,editor\n"
+                "alice,2026-04-17T09:20:00Z,submit\n"
+                "bob,2026-04-17T08:05:00Z,home\n"
+                "bob,2026-04-17T08:55:00Z,forum\n",
+                encoding="utf-8",
+            )
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=PROJECT_DIR / "plugins_sessionization.py",
+            )
+
+            self.assertEqual(result.job, "plugin-sessionization")
+            self.assertEqual(
+                result.output["alice"],
+                {
+                    "session_count": 2,
+                    "total_events": 4,
+                    "avg_events_per_session": 2.0,
+                    "avg_session_minutes": 20.5,
+                    "longest_session_events": 3,
+                    "longest_session_minutes": 41.0,
+                    "first_event_at": "2026-04-17T08:00:00Z",
+                    "last_event_at": "2026-04-17T09:20:00Z",
+                },
+            )
+            self.assertEqual(result.output["bob"]["session_count"], 2)
+            self.assertEqual(result.output["bob"]["longest_session_minutes"], 0.0)
+
     def test_plugin_job_rejects_non_json_serializable_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "scores.csv"
@@ -549,7 +587,7 @@ class MiniMapReduceTests(unittest.TestCase):
 
         self.assertEqual(
             [Path(item).name for item in refs],
-            ["plugins_average_score.py", "plugins_service_latency.py", "plugins_top_score.py"],
+            ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_top_score.py"],
         )
 
     def test_cli_catalog_plugins_writes_json_markdown_and_html(self) -> None:
@@ -580,9 +618,12 @@ class MiniMapReduceTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             markdown = report_output.read_text(encoding="utf-8")
             html_payload = html_output.read_text(encoding="utf-8")
-            self.assertEqual(payload["plugin_count"], 3)
-            self.assertEqual([Path(item["plugin"]).name for item in payload["plugins"]], ["plugins_average_score.py", "plugins_service_latency.py", "plugins_top_score.py"])
-            self.assertEqual(len(payload["diffs"]), 2)
+            self.assertEqual(payload["plugin_count"], 4)
+            self.assertEqual(
+                [Path(item["plugin"]).name for item in payload["plugins"]],
+                ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_top_score.py"],
+            )
+            self.assertEqual(len(payload["diffs"]), 3)
             self.assertIn("# Mini MapReduce plugin inspection", markdown)
             self.assertIn("## Catalog quick links", markdown)
             self.assertIn("plugin-average-score", markdown)
@@ -1243,6 +1284,31 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(result.benchmark_note_annotations[0]["severity"], "risk")
         self.assertIn("auth-gateway", result.benchmark_note_annotations[0]["hotspot_keys"])
         self.assertTrue(all(row["dataset_family"] == "incident-spike" for row in result.heatmap_rows))
+
+    def test_plugin_sessionization_benchmark_surfaces_launch_day_annotations(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_sessionization.py",
+            dataset_family="launch-day",
+        )
+
+        self.assertEqual(result.job, "plugin-sessionization")
+        self.assertEqual(result.dataset_family, "launch-day")
+        self.assertEqual(result.available_dataset_families, ["default", "exam-revision", "launch-day"])
+        self.assertEqual(result.plugin_mapper, "plugins_sessionization.map_records")
+        self.assertEqual(result.plugin_reducer, "plugins_sessionization.reduce_key")
+        self.assertEqual(result.plugin_combiner, "plugins_sessionization.combine_values")
+        self.assertEqual(result.plugin_benchmark_generator, "plugins_sessionization.benchmark_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_sessionization.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Release lead war room")
+        self.assertEqual(result.benchmark_note_annotations[0]["severity"], "risk")
+        self.assertIn("release-lead", result.benchmark_note_annotations[0]["hotspot_keys"])
+        self.assertTrue(all(row["dataset_family"] == "launch-day" for row in result.heatmap_rows))
 
     def test_benchmark_json_omits_annotation_view_when_unused(self) -> None:
         result = benchmark_job(

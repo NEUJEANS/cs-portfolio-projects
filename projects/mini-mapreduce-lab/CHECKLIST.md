@@ -12,8 +12,9 @@
 - [x] Add batch benchmark presets that export both full and filtered annotation views in one run
 - [x] Add a compact docs index page that links benchmark artifacts, plugin docs, and inspection diffs together
 - [x] Add a richer observability-style plugin example with service-latency summaries and incident/batch benchmark families
+- [x] Add a sessionization analytics plugin example with product-usage benchmark families and reviewer-friendly session summaries
 
 ## Next candidate slices
-- [ ] Add another richer plugin example beyond score aggregation, such as sessionization or streaming-window summaries
+- [ ] Add another richer plugin example beyond score aggregation/sessionization, such as streaming-window summaries
 - [ ] Add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases
 - [ ] Add docs-site navigation sidebars or cross-project landing pages if the artifact surface keeps growing
