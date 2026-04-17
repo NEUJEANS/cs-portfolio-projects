@@ -1,7 +1,7 @@
 # Bipartite matching proof artifact: `sample_matching_graph`
 
-- Generated: 2026-04-16T00:24:01Z
-- Flow algorithm: `edmonds-karp`
+- Generated: 2026-04-17T07:45:28Z
+- Flow algorithm: `dinic`
 - Match count: `3`
 - Minimum vertex cover size: `3`
 - König check: `True`

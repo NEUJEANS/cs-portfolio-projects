@@ -5,6 +5,7 @@ import json
 import math
 import random
 import statistics
+import textwrap
 import time
 from datetime import UTC, datetime
 from collections import defaultdict, deque
@@ -891,6 +892,42 @@ def _svg_text(x: float, y: float, text: str, *, size: int = 14, weight: str = "n
     )
 
 
+def _truncate_svg_text(text: str, limit: int = 72) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _wrap_svg_text(text: str, *, max_chars: int = 58) -> list[str]:
+    normalized = " ".join(text.split())
+    if not normalized:
+        return ["(none)"]
+    return textwrap.wrap(
+        normalized,
+        width=max_chars,
+        break_long_words=False,
+        break_on_hyphens=False,
+    ) or [normalized]
+
+
+def _svg_add_wrapped_text(
+    parts: list[str],
+    x: float,
+    y: float,
+    text: str,
+    *,
+    max_chars: int = 58,
+    line_height: int = 18,
+    size: int = 13,
+    weight: str = "normal",
+    fill: str = "#334155",
+) -> float:
+    lines = _wrap_svg_text(text, max_chars=max_chars)
+    for index, line in enumerate(lines):
+        parts.append(_svg_text(x, y + index * line_height, line, size=size, weight=weight, fill=fill))
+    return y + max(0, len(lines) - 1) * line_height
+
+
 def render_benchmark_markdown(report: dict[str, Any]) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
     generator = report["generator"]
@@ -1100,6 +1137,181 @@ def render_benchmark_svg(report: dict[str, Any]) -> str:
     return "".join(parts) + "\n"
 
 
+def render_flow_svg(flow_result: FlowResult, *, graph_name: str = "network_flow") -> str:
+    explanation = build_flow_explanation(flow_result)
+    width = 960
+    height = 640
+    source_side_text = ", ".join(flow_result.min_cut["source_side"])
+    sink_side_text = ", ".join(flow_result.min_cut["sink_side"])
+    cut_edges = explanation["cut_edges"]
+    displayed_cut_edges = cut_edges[:5]
+    hidden_cut_edges = max(0, len(cut_edges) - len(displayed_cut_edges))
+    displayed_paths = flow_result.augmenting_paths[:6]
+    hidden_paths = max(0, len(flow_result.augmenting_paths) - len(displayed_paths))
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Max-flow proof card</title>',
+        f'<desc id="desc">Proof-style summary card for {graph_name} showing the max flow, min cut, and augmenting paths.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 42, "Max-flow proof card", size=28, weight="700"),
+        _svg_text(28, 68, f"Graph: {graph_name} · source={flow_result.source} · sink={flow_result.sink}", size=14, fill="#334155"),
+    ]
+
+    stat_cards = [
+        (28, "Algorithm", flow_result.algorithm, "solver used for this certificate"),
+        (258, "Max flow", str(flow_result.max_flow), "total flow from source to sink"),
+        (488, "Cut capacity", str(explanation["min_cut_capacity"]), "must match the reported max flow"),
+        (718, "Augmenting paths", str(len(flow_result.augmenting_paths)), (f"Dinic phases: {flow_result.phases}" if flow_result.phases is not None else "recorded during the solve")),
+    ]
+    for x, label, value, subtitle in stat_cards:
+        parts.append(f'<rect x="{x}" y="94" width="214" height="86" rx="16" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(x + 18, 122, label, size=13, weight="700", fill="#475569"))
+        parts.append(_svg_text(x + 18, 154, value, size=28, weight="700", fill="#0f172a"))
+        parts.append(_svg_text(x + 18, 172, subtitle, size=11, fill="#64748b"))
+
+    parts.append('<rect x="28" y="206" width="420" height="170" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(48, 238, "Min-cut partition", size=18, weight="700"))
+    parts.append(_svg_text(48, 266, "Source side", size=13, weight="700", fill="#1d4ed8"))
+    _svg_add_wrapped_text(parts, 48, 288, source_side_text, max_chars=48, size=13)
+    parts.append(_svg_text(48, 330, "Sink side", size=13, weight="700", fill="#b45309"))
+    _svg_add_wrapped_text(parts, 48, 352, sink_side_text, max_chars=48, size=13)
+
+    parts.append('<rect x="480" y="206" width="452" height="170" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(500, 238, "Cut edges that certify the answer", size=18, weight="700"))
+    if displayed_cut_edges:
+        for index, edge in enumerate(displayed_cut_edges):
+            label = f"{edge['source']} → {edge['target']} · {edge['flow']}/{edge['capacity']} · saturated={edge['saturated']}"
+            parts.append(_svg_text(500, 272 + index * 22, _truncate_svg_text(label, 62), size=13, fill="#334155"))
+        if hidden_cut_edges:
+            parts.append(_svg_text(500, 272 + len(displayed_cut_edges) * 22, f"+{hidden_cut_edges} more cut edge(s)", size=12, fill="#64748b"))
+    else:
+        _svg_add_wrapped_text(
+            parts,
+            500,
+            272,
+            "No cut edges cross the partition because the sink is unreachable with zero flow.",
+            max_chars=52,
+            size=13,
+            fill="#334155",
+        )
+
+    parts.append('<rect x="28" y="398" width="420" height="208" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(48, 430, "Why this is a valid proof", size=18, weight="700"))
+    narrative_y = 462
+    for bullet in explanation["narrative"]:
+        parts.append(_svg_text(48, narrative_y, "•", size=16, weight="700", fill="#2563eb"))
+        narrative_y = _svg_add_wrapped_text(parts, 64, narrative_y, bullet, max_chars=46, size=13, fill="#334155") + 26
+
+    parts.append('<rect x="480" y="398" width="452" height="208" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(500, 430, "Augmenting paths", size=18, weight="700"))
+    if displayed_paths:
+        for index, step in enumerate(displayed_paths, start=1):
+            extra = f" · phase {step['phase']}" if "phase" in step else ""
+            label = f"{index}. {' → '.join(step['path'])} · bottleneck {step['bottleneck']}{extra}"
+            parts.append(_svg_text(500, 462 + (index - 1) * 24, _truncate_svg_text(label, 66), size=13, fill="#334155"))
+        if hidden_paths:
+            parts.append(_svg_text(500, 462 + len(displayed_paths) * 24, f"+{hidden_paths} more augmenting path(s)", size=12, fill="#64748b"))
+    else:
+        parts.append(_svg_text(500, 462, "No augmenting paths were found.", size=13, fill="#334155"))
+
+    footer = f"Certificate check: max flow = {flow_result.max_flow}, cut capacity = {explanation['min_cut_capacity']}, equality holds = {explanation['max_flow_equals_min_cut_capacity']}."
+    parts.append(_svg_text(28, 628, _truncate_svg_text(footer, 120), size=12, fill="#475569"))
+    parts.append('</svg>')
+    return "".join(parts) + "\n"
+
+
+def render_matching_svg(matching_result: MatchingResult, *, graph_name: str = "bipartite_matching") -> str:
+    explanation = build_matching_explanation(matching_result)
+    cover = matching_result.minimum_vertex_cover
+    width = 960
+    height = 640
+    displayed_matches = matching_result.matches[:6]
+    hidden_matches = max(0, len(matching_result.matches) - len(displayed_matches))
+    cover_text = f"Left: {', '.join(cover['left']) if cover['left'] else '(none)'} · Right: {', '.join(cover['right']) if cover['right'] else '(none)'}"
+    reach = cover['reachable_from_unmatched_left']
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Bipartite matching proof card</title>',
+        f'<desc id="desc">Proof-style summary card for {graph_name} showing the matching, minimum vertex cover, and König certificate.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 42, "Bipartite matching proof card", size=28, weight="700"),
+        _svg_text(28, 68, f"Graph: {graph_name} · left={len(matching_result.left_partition)} · right={len(matching_result.right_partition)}", size=14, fill="#334155"),
+    ]
+
+    stat_cards = [
+        (28, "Algorithm", matching_result.flow['algorithm'], "max-flow engine backing the reduction"),
+        (258, "Matches", str(len(matching_result.matches)), "selected left-right pairs"),
+        (488, "Min cover size", str(cover['size']), "should match the match count"),
+        (718, "König check", str(cover['konig_theorem_check']), f"unmatched left: {len(matching_result.unmatched_left)}"),
+    ]
+    for x, label, value, subtitle in stat_cards:
+        parts.append(f'<rect x="{x}" y="94" width="214" height="86" rx="16" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(x + 18, 122, label, size=13, weight="700", fill="#475569"))
+        parts.append(_svg_text(x + 18, 154, value, size=28, weight="700", fill="#0f172a"))
+        parts.append(_svg_text(x + 18, 172, subtitle, size=11, fill="#64748b"))
+
+    parts.append('<rect x="28" y="206" width="420" height="170" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(48, 238, "Selected matches", size=18, weight="700"))
+    if displayed_matches:
+        for index, pair in enumerate(displayed_matches, start=1):
+            parts.append(_svg_text(48, 272 + (index - 1) * 22, f"{index}. {pair['left']} → {pair['right']}", size=13, fill="#334155"))
+        if hidden_matches:
+            parts.append(_svg_text(48, 272 + len(displayed_matches) * 22, f"+{hidden_matches} more match(es)", size=12, fill="#64748b"))
+    else:
+        parts.append(_svg_text(48, 272, "No matches were selected.", size=13, fill="#334155"))
+    _svg_add_wrapped_text(
+        parts,
+        48,
+        344,
+        f"Unmatched left: {', '.join(matching_result.unmatched_left) if matching_result.unmatched_left else '(none)'}",
+        max_chars=46,
+        size=12,
+        fill="#64748b",
+    )
+    _svg_add_wrapped_text(
+        parts,
+        48,
+        364,
+        f"Unmatched right: {', '.join(matching_result.unmatched_right) if matching_result.unmatched_right else '(none)'}",
+        max_chars=46,
+        size=12,
+        fill="#64748b",
+    )
+
+    parts.append('<rect x="480" y="206" width="452" height="170" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(500, 238, "Recovered minimum vertex cover", size=18, weight="700"))
+    _svg_add_wrapped_text(parts, 500, 270, cover_text, max_chars=56, size=13, fill="#334155")
+    parts.append(_svg_text(500, 326, "Alternating reachability from unmatched left", size=13, weight="700", fill="#475569"))
+    _svg_add_wrapped_text(parts, 500, 348, f"Left reached: {', '.join(reach['left']) if reach['left'] else '(none)'}", max_chars=54, size=12, fill="#64748b")
+    _svg_add_wrapped_text(parts, 500, 372, f"Right reached: {', '.join(reach['right']) if reach['right'] else '(none)'}", max_chars=54, size=12, fill="#64748b")
+
+    parts.append('<rect x="28" y="398" width="420" height="208" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(48, 430, "Why the certificate works", size=18, weight="700"))
+    narrative_y = 462
+    for bullet in explanation["narrative"]:
+        parts.append(_svg_text(48, narrative_y, "•", size=16, weight="700", fill="#059669"))
+        narrative_y = _svg_add_wrapped_text(parts, 64, narrative_y, bullet, max_chars=46, size=13, fill="#334155") + 26
+
+    parts.append('<rect x="480" y="398" width="452" height="208" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(500, 430, "Certificate summary", size=18, weight="700"))
+    summary_lines = [
+        f"match count = {len(matching_result.matches)}",
+        f"minimum vertex cover size = {cover['size']}",
+        f"König theorem satisfied = {cover['konig_theorem_check']}",
+        f"flow max value used by reduction = {matching_result.flow['max_flow']}",
+    ]
+    for index, line in enumerate(summary_lines):
+        parts.append(_svg_text(500, 462 + index * 24, line, size=13, fill="#334155"))
+    parts.append(_svg_text(500, 570, "This card is meant to pair with the Markdown proof artifact for portfolio screenshots.", size=12, fill="#64748b"))
+
+    footer = f"König check ties the matching size ({len(matching_result.matches)}) to the recovered cover size ({cover['size']})."
+    parts.append(_svg_text(28, 628, _truncate_svg_text(footer, 120), size=12, fill="#475569"))
+    parts.append('</svg>')
+    return "".join(parts) + "\n"
+
+
 def render_flow_markdown(flow_result: FlowResult, *, graph_name: str = "network_flow") -> str:
     explanation = build_flow_explanation(flow_result)
     lines = [
@@ -1213,6 +1425,7 @@ def build_parser() -> argparse.ArgumentParser:
     solve_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     solve_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved flow graph")
     solve_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved flow graph")
+    solve_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved flow graph")
     add_explain_argument(solve_parser)
 
     demo_parser = subparsers.add_parser("demo", help="run the bundled sample graph")
@@ -1220,6 +1433,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample flow graph")
     demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample flow graph")
+    demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample flow graph")
     add_explain_argument(demo_parser)
 
     match_parser = subparsers.add_parser("match", help="solve a bipartite matching JSON file")
@@ -1228,6 +1442,7 @@ def build_parser() -> argparse.ArgumentParser:
     match_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     match_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved matching graph")
     match_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved matching graph")
+    match_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved matching graph")
     add_explain_argument(match_parser)
 
     match_demo_parser = subparsers.add_parser("match-demo", help="run the bundled matching sample")
@@ -1235,6 +1450,7 @@ def build_parser() -> argparse.ArgumentParser:
     match_demo_parser.add_argument("--algorithm", choices=SUPPORTED_ALGORITHMS, default=DEFAULT_ALGORITHM)
     match_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample matching graph")
     match_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample matching graph")
+    match_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample matching graph")
     add_explain_argument(match_demo_parser)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
@@ -1288,6 +1504,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "markdown_out", None):
             write_markdown_output(args.markdown_out, render_flow_markdown(flow_result, graph_name=graph_path.stem))
             payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(args.svg_out, render_flow_svg(flow_result, graph_name=graph_path.stem))
+            payload["svg_output"] = str(args.svg_out)
         return payload
 
     if args.command == "demo":
@@ -1303,6 +1522,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "markdown_out", None):
             write_markdown_output(args.markdown_out, render_flow_markdown(flow_result, graph_name=graph_path.stem))
             payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(args.svg_out, render_flow_svg(flow_result, graph_name=graph_path.stem))
+            payload["svg_output"] = str(args.svg_out)
         return payload
 
     if args.command == "match":
@@ -1318,6 +1540,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "markdown_out", None):
             write_markdown_output(args.markdown_out, render_matching_markdown(matching_result, graph_name=graph_path.stem))
             payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(args.svg_out, render_matching_svg(matching_result, graph_name=graph_path.stem))
+            payload["svg_output"] = str(args.svg_out)
         return payload
 
     if args.command == "match-demo":
@@ -1333,6 +1558,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, "markdown_out", None):
             write_markdown_output(args.markdown_out, render_matching_markdown(matching_result, graph_name=graph_path.stem))
             payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(args.svg_out, render_matching_svg(matching_result, graph_name=graph_path.stem))
+            payload["svg_output"] = str(args.svg_out)
         return payload
 
     payload = benchmark_algorithms(

@@ -28,7 +28,9 @@ load_bipartite_graph = module.load_bipartite_graph
 render_flow_dot = module.render_flow_dot
 render_matching_dot = module.render_matching_dot
 render_flow_markdown = module.render_flow_markdown
+render_flow_svg = module.render_flow_svg
 render_matching_markdown = module.render_matching_markdown
+render_matching_svg = module.render_matching_svg
 render_benchmark_markdown = module.render_benchmark_markdown
 render_benchmark_svg = module.render_benchmark_svg
 solve_max_flow = module.solve_max_flow
@@ -246,6 +248,35 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('"anna" -> "api" [color="forestgreen", penwidth=3, label="match"];', dot)
         self.assertIn('"api" [peripheries=2];', dot)
         self.assertIn('"db" [fillcolor="moccasin"];', dot)
+
+    def test_render_flow_svg_includes_certificate_sections_and_valid_xml(self) -> None:
+        result = solve_max_flow(
+            ["s", "a", "b", "t"],
+            [Edge("s", "a", 3), Edge("a", "t", 2), Edge("s", "b", 1), Edge("b", "t", 1)],
+            "s",
+            "t",
+            algorithm="dinic",
+        )
+        svg = render_flow_svg(result, graph_name="tiny_flow")
+        self.assertIn("<svg", svg)
+        self.assertIn("Max-flow proof card", svg)
+        self.assertIn("Min-cut partition", svg)
+        self.assertIn("Augmenting paths", svg)
+        self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
+
+    def test_render_matching_svg_includes_certificate_sections_and_valid_xml(self) -> None:
+        result = solve_bipartite_matching(
+            ["anna", "ben", "chloe"],
+            ["api", "compiler"],
+            [("anna", "api"), ("ben", "api"), ("chloe", "compiler")],
+            algorithm="dinic",
+        )
+        svg = render_matching_svg(result, graph_name="tiny_matching")
+        self.assertIn("<svg", svg)
+        self.assertIn("Bipartite matching proof card", svg)
+        self.assertIn("Recovered minimum vertex cover", svg)
+        self.assertIn("Certificate summary", svg)
+        self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
 
     def test_flow_explanation_matches_min_cut_certificate(self) -> None:
         result = solve_max_flow(
@@ -528,6 +559,40 @@ class NetworkFlowLabTests(unittest.TestCase):
             artifact = output_path.read_text(encoding="utf-8")
             self.assertIn('# Bipartite matching proof artifact: `sample_matching_graph`', artifact)
             self.assertIn('## Minimum vertex cover', artifact)
+
+    def test_cli_can_write_flow_svg_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "flow-proof.svg"
+            completed = subprocess.run(
+                ["python3", str(MODULE_PATH), "demo", "--svg-out", str(output_path)],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "demo")
+            self.assertEqual(payload["svg_output"], str(output_path))
+            svg = output_path.read_text(encoding="utf-8")
+            self.assertIn("Max-flow proof card", svg)
+            self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
+
+    def test_cli_can_write_matching_svg_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "matching-proof.svg"
+            completed = subprocess.run(
+                ["python3", str(MODULE_PATH), "match-demo", "--svg-out", str(output_path)],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "match-demo")
+            self.assertEqual(payload["svg_output"], str(output_path))
+            svg = output_path.read_text(encoding="utf-8")
+            self.assertIn("Bipartite matching proof card", svg)
+            self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
 
     def test_cli_benchmark_outputs_reproducible_summary(self) -> None:
         completed = subprocess.run(

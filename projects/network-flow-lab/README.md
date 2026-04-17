@@ -24,6 +24,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - Graphviz DOT export for solved flow graphs and bipartite matchings
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--markdown-out` proof artifacts for flow and matching runs so portfolio screenshots do not require terminal capture
+- standalone `--svg-out` proof cards for flow and matching runs so the project ships screenshot-ready visual summaries without Graphviz
 - bundled sample flow graph and sample matching graph
 - unit tests for correctness, validation, CLI behavior, algorithm parity, and benchmark behavior
 
@@ -44,11 +45,12 @@ python3 projects/network-flow-lab/network_flow.py solve projects/network-flow-la
 python3 projects/network-flow-lab/network_flow.py solve projects/network-flow-lab/sample_graph.json --algorithm dinic --pretty
 ```
 
-Export a DOT file for later rendering with Graphviz (the JSON response also includes a `dot_output` path when you use `--dot-out`):
+Export DOT, Markdown, or a standalone SVG proof card for later sharing (the JSON response includes the output paths you request):
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py demo --dot-out /tmp/network-flow.dot
 python3 projects/network-flow-lab/network_flow.py demo --markdown-out /tmp/network-flow-proof.md
+python3 projects/network-flow-lab/network_flow.py demo --svg-out /tmp/network-flow-proof.svg
 # optional render step if graphviz is installed:
 # dot -Tpng /tmp/network-flow.dot -o /tmp/network-flow.png
 ```
@@ -60,11 +62,12 @@ python3 projects/network-flow-lab/network_flow.py match-demo --pretty
 python3 projects/network-flow-lab/network_flow.py match-demo --explain --pretty
 ```
 
-Solve a custom bipartite-matching graph and export a DOT diagram. The JSON output includes `minimum_vertex_cover`, and the DOT output double-outlines cover vertices:
+Solve a custom bipartite-matching graph and export a DOT diagram, Markdown proof, or SVG proof card. The JSON output includes `minimum_vertex_cover`, and the DOT output double-outlines cover vertices:
 
 ```bash
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --dot-out /tmp/matching.dot --pretty
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --markdown-out /tmp/matching-proof.md --pretty
+python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --svg-out /tmp/matching-proof.svg --pretty
 python3 projects/network-flow-lab/network_flow.py match projects/network-flow-lab/sample_matching_graph.json --algorithm dinic --pretty
 ```
 
@@ -114,8 +117,11 @@ Bipartite matching format:
 ```
 
 Committed sample proof artifacts:
+- `docs/artifacts/network-flow-lab/index.md`
 - `docs/artifacts/network-flow-lab/sample-flow-proof.md`
+- `docs/artifacts/network-flow-lab/sample-flow-proof.svg`
 - `docs/artifacts/network-flow-lab/sample-matching-proof.md`
+- `docs/artifacts/network-flow-lab/sample-matching-proof.svg`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.md`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.svg`
 - `docs/artifacts/network-flow-lab/benchmark-dense-report.md`
@@ -140,10 +146,10 @@ python3 -m unittest tests/test_network_flow_lab.py
 - In matching mode, `--explain` surfaces the alternating-path reachability sets and the recovered cover vertices so the proof can be demoed without reading code.
 - The benchmark mode generates reproducible graph families for three different stories: random DAGs, dense cyclic residual meshes, and layered cut-stress networks; it verifies both algorithms return the same max-flow value and summarizes elapsed time plus augmentation/phase counts.
 - Benchmark report-card export turns one benchmark run into committed Markdown/SVG artifacts with setup details, trial tables, and interview-ready headline metrics.
+- The standalone proof-card SVG export gives you screenshot-ready correctness summaries for both raw max-flow runs and bipartite-match reductions without requiring Graphviz.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
 - add weighted assignment or min-cost flow as a follow-up advanced slice
-- ship more polished SVG proof cards built on top of the Markdown artifact pipeline
-- ship pre-rendered SVG examples in the docs for portfolio screenshots
-- add a small artifact index page that compares DAG, dense, and layered benchmark cards side by side
+- render actual node-link SVG layouts for solved flow and matching proofs instead of card-style summaries
+- add a tiny static web gallery that lets viewers toggle between Markdown, SVG, and raw JSON artifacts

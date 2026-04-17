@@ -1,9 +1,10 @@
 # Max-flow proof artifact: `sample_graph`
 
-- Generated: 2026-04-16T00:24:01Z
-- Algorithm: `edmonds-karp`
+- Generated: 2026-04-17T07:45:28Z
+- Algorithm: `dinic`
 - Max flow: `19`
 - Augmenting paths recorded: `4`
+- Dinic phases: `2`
 
 ## Min-cut certificate
 
@@ -19,10 +20,10 @@
 
 ## Augmenting paths
 
-1. `s -> a -> b -> t` | bottleneck `4`
-2. `s -> a -> d -> t` | bottleneck `6`
-3. `s -> c -> d -> t` | bottleneck `4`
-4. `s -> c -> d -> b -> t` | bottleneck `5`
+1. `s -> a -> b -> t` | bottleneck `4` (phase 1)
+2. `s -> a -> d -> t` | bottleneck `6` (phase 1)
+3. `s -> c -> d -> t` | bottleneck `4` (phase 1)
+4. `s -> c -> d -> b -> t` | bottleneck `5` (phase 2)
 
 ## Narrative
 

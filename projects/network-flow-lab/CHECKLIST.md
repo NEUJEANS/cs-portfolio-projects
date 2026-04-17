@@ -12,7 +12,7 @@
 ## Next candidate slices
 - [x] Export proof views as standalone Markdown artifacts for portfolio screenshots
 - [ ] Add weighted assignment / min-cost flow as an advanced follow-up
-- [ ] Ship pre-rendered SVG examples in docs for quick visual browsing
+- [x] Ship pre-rendered SVG examples in docs for quick visual browsing
 - [x] Expand the benchmark generator with denser residual-heavy stress cases
 - [x] Export benchmark suites as committed Markdown/SVG report cards
-- [ ] Add a compact artifact index page that compares DAG, dense, and layered benchmark cards side by side
+- [x] Add a compact artifact index page that compares DAG, dense, and layered benchmark cards side by side
