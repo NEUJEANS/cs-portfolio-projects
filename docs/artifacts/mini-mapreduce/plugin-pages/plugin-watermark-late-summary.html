@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin doc — plugin-watermark-late-summary</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1080px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.8rem; }
+    .badge { display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }
+    article { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin doc: <code>plugin-watermark-late-summary</code></h1>
+  <ul class="meta"><li><strong>Plugin path</strong><br><code>projects/mini-mapreduce-lab/plugins_watermark_late_summary.py</code></li><li><strong>Summary</strong><br>Watermark-aware late-event summary plugin for out-of-order stream-processing demos.</li><li><strong>Dataset families</strong><br><code>default, sensor-backfill, live-replay</code></li><li><strong>Catalog badges</strong><br><span class="badge">5 hooks</span><span class="badge">3 dataset families</span><span class="badge">commit pinned</span><span class="badge">github linked</span></li><li><strong>Repository commit</strong><br><code>8e9ad856e42484ad83d46bfe15fe4f0823004f77</code></li><li><strong>Catalog index</strong><br><a href="../plugin-catalog.html">plugin catalog</a></li><li><strong>Alternate format</strong><br><a href="plugin-watermark-late-summary.md">Markdown</a></li></ul>
+  <section>
+    <h2>Hook summary</h2>
+    <table>
+      <thead><tr><th>Hook</th><th>Export</th><th>Signature</th><th>Details</th><th>Source</th></tr></thead>
+      <tbody><tr><td>Mapper</td><td><code>plugins_watermark_late_summary.map_records</code></td><td><code>map_records(lines)</code></td><td>Emit per-stream event batches from stream,event_time,arrival_time,value rows.<br>line 136<br>anchor <code>plugins_watermark_late_summary.py#L136-L147</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147">commit</a></td></tr><tr><td>Reducer</td><td><code>plugins_watermark_late_summary.reduce_key</code></td><td><code>reduce_key(key, values)</code></td><td>Summarize watermark-aware acceptance, late updates, and dropped events for one stream.<br>line 155<br>anchor <code>plugins_watermark_late_summary.py#L155-L223</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223">commit</a></td></tr><tr><td>Combiner</td><td><code>plugins_watermark_late_summary.combine_values</code></td><td><code>combine_values(_key, values)</code></td><td>Keep shard-local stream event batches JSON-safe before watermark evaluation.<br>line 150<br>anchor <code>plugins_watermark_late_summary.py#L150-L152</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152">commit</a></td></tr><tr><td>Benchmark generator</td><td><code>plugins_watermark_late_summary.benchmark_records</code></td><td><code>benchmark_records(scenario, records, seed, dataset_family=&#x27;default&#x27;)</code></td><td>Generate deterministic out-of-order event streams for watermark-summary demos.<br>line 266<br>anchor <code>plugins_watermark_late_summary.py#L266-L341</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341">commit</a></td></tr><tr><td>Benchmark note hook</td><td><code>plugins_watermark_late_summary.benchmark_notes</code></td><td><code>benchmark_notes(scenario, dataset_family=&#x27;default&#x27;)</code></td><td>Describe the intended late-event hotspot story for each synthetic family.<br>line 344<br>anchor <code>plugins_watermark_late_summary.py#L344-L413</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413">commit</a></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Hook source excerpts</h2>
+    <article><h2>Mapper: <code>plugins_watermark_late_summary.map_records</code></h2><p><strong>Summary:</strong> Emit per-stream event batches from stream,event_time,arrival_time,value rows.</p><p><strong>Source line:</strong> <code>136</code></p><p><strong>Source anchor:</strong> <code>plugins_watermark_late_summary.py#L136-L147</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147">https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147</a></p><pre><code>def map_records(lines):
+    &quot;&quot;&quot;Emit per-stream event batches from stream,event_time,arrival_time,value rows.&quot;&quot;&quot;
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        stream, event_at, arrived_at, value = [part.strip() for part in stripped.split(&quot;,&quot;, maxsplit=3)]
+        yield stream.lower(), {
+            &quot;event_at&quot;: _isoformat_z(_parse_timestamp(event_at)),
+            &quot;arrived_at&quot;: _isoformat_z(_parse_timestamp(arrived_at)),
+            &quot;value&quot;: round(float(value), 3),
+        }</code></pre></article><article><h2>Reducer: <code>plugins_watermark_late_summary.reduce_key</code></h2><p><strong>Summary:</strong> Summarize watermark-aware acceptance, late updates, and dropped events for one stream.</p><p><strong>Source line:</strong> <code>155</code></p><p><strong>Source anchor:</strong> <code>plugins_watermark_late_summary.py#L155-L223</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223">https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223</a></p><pre><code>def reduce_key(key, values):
+    &quot;&quot;&quot;Summarize watermark-aware acceptance, late updates, and dropped events for one stream.&quot;&quot;&quot;
+    merged = _merge_event_batches(values)
+    events = merged[&quot;events&quot;]
+    windows = {}
+    max_seen_event_time = None
+    first_arrival_at = None
+    last_arrival_at = None
+    max_watermark_gap_minutes = 0.0
+    late_events_seen = 0
+
+    for item in events:
+        event_at = _parse_timestamp(item[&quot;event_at&quot;])
+        arrived_at = _parse_timestamp(item[&quot;arrived_at&quot;])
+        value = float(item[&quot;value&quot;])
+        if first_arrival_at is None or arrived_at &lt; first_arrival_at:
+            first_arrival_at = arrived_at
+        if last_arrival_at is None or arrived_at &gt; last_arrival_at:
+            last_arrival_at = arrived_at
+
+        watermark_before = _watermark_for(max_seen_event_time)
+        window_start = _window_start(event_at)
+        window_key = _isoformat_z(window_start)
+        summary = windows.setdefault(window_key, _new_window_summary(window_start))
+        window_close_at = _parse_timestamp(summary[&quot;window_close_at&quot;])
+        late = watermark_before is not None and event_at &lt; watermark_before
+        dropped = watermark_before is not None and watermark_before &gt; window_close_at
+        if late and watermark_before is not None:
+            late_events_seen += 1
+            max_watermark_gap_minutes = max(
+                max_watermark_gap_minutes,
+                round((watermark_before - event_at).total_seconds() / 60, 3),
+            )
+
+        _update_window_summary(summary, event_at=event_at, arrived_at=arrived_at, value=value, late=late, dropped=dropped)
+        max_seen_event_time = event_at if max_seen_event_time is None else max(max_seen_event_time, event_at)
+
+    finalized_windows = [_finalize_window_summary(windows[key]) for key in sorted(windows)]
+    accepted_events = sum(item[&quot;accepted_events&quot;] for item in finalized_windows)
+    on_time_events = sum(item[&quot;on_time_events&quot;] for item in finalized_windows)
+    late_accepted_events = sum(item[&quot;late_accepted_events&quot;] for item in finalized_windows)
+    dropped_late_events = sum(item[&quot;dropped_late_events&quot;] for item in finalized_windows)
+    total_events_seen = sum(item[&quot;events_seen&quot;] for item in finalized_windows)
+    hottest_window = max(
+        finalized_windows,
+        key=lambda item: (item[&quot;late_accepted_events&quot;] + item[&quot;dropped_late_events&quot;], item[&quot;accepted_events&quot;], item[&quot;window_start&quot;]),
+        default=None,
+    )
+    return {
+        &quot;stream&quot;: key,
+        &quot;window_count&quot;: len(finalized_windows),
+        &quot;total_events_seen&quot;: total_events_seen,
+        &quot;accepted_events&quot;: accepted_events,
+        &quot;on_time_events&quot;: on_time_events,
+        &quot;late_events_seen&quot;: late_events_seen,
+        &quot;late_accepted_events&quot;: late_accepted_events,
+        &quot;dropped_late_events&quot;: dropped_late_events,
+        &quot;late_acceptance_rate&quot;: round(late_accepted_events / accepted_events, 3) if accepted_events else 0.0,
+        &quot;drop_rate&quot;: round(dropped_late_events / total_events_seen, 3) if total_events_seen else 0.0,
+        &quot;first_arrival_at&quot;: _isoformat_z(first_arrival_at) if first_arrival_at else None,
+        &quot;last_arrival_at&quot;: _isoformat_z(last_arrival_at) if last_arrival_at else None,
+        &quot;final_watermark&quot;: _isoformat_z(_watermark_for(max_seen_event_time)) if max_seen_event_time else None,
+        &quot;max_watermark_gap_minutes&quot;: round(max_watermark_gap_minutes, 3),
+        &quot;hottest_window_start&quot;: hottest_window[&quot;window_start&quot;] if hottest_window else None,
+        &quot;hottest_window_late_events&quot;: (
+            hottest_window[&quot;late_accepted_events&quot;] + hottest_window[&quot;dropped_late_events&quot;]
+        ) if hottest_window else 0,
+        &quot;windows&quot;: finalized_windows,
+    }</code></pre></article><article><h2>Combiner: <code>plugins_watermark_late_summary.combine_values</code></h2><p><strong>Summary:</strong> Keep shard-local stream event batches JSON-safe before watermark evaluation.</p><p><strong>Source line:</strong> <code>150</code></p><p><strong>Source anchor:</strong> <code>plugins_watermark_late_summary.py#L150-L152</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152">https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152</a></p><pre><code>def combine_values(_key, values):
+    &quot;&quot;&quot;Keep shard-local stream event batches JSON-safe before watermark evaluation.&quot;&quot;&quot;
+    return {&quot;events&quot;: sorted(values, key=lambda event: (event[&quot;arrived_at&quot;], event[&quot;event_at&quot;], event[&quot;value&quot;]))}</code></pre></article><article><h2>Benchmark generator: <code>plugins_watermark_late_summary.benchmark_records</code></h2><p><strong>Summary:</strong> Generate deterministic out-of-order event streams for watermark-summary demos.</p><p><strong>Source line:</strong> <code>266</code></p><p><strong>Source anchor:</strong> <code>plugins_watermark_late_summary.py#L266-L341</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341">https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341</a></p><pre><code>def benchmark_records(scenario, records, seed, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Generate deterministic out-of-order event streams for watermark-summary demos.&quot;&quot;&quot;
+    if records &lt;= 0:
+        raise ValueError(&quot;records must be positive&quot;)
+    rng = random.Random(seed)
+    base_time = datetime(2026, 4, 17, 9, 0, tzinfo=timezone.utc)
+
+    families = {
+        &quot;default&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;stream&quot;: &quot;sensor-alpha&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10], &quot;base_value&quot;: 20.5, &quot;spread&quot;: 0.9, &quot;drift&quot;: 0.2, &quot;late_offsets&quot;: [5]},
+                {&quot;stream&quot;: &quot;sensor-beta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 15], &quot;base_value&quot;: 22.0, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2, &quot;late_offsets&quot;: [10]},
+                {&quot;stream&quot;: &quot;sensor-gamma&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 10, 15], &quot;base_value&quot;: 19.4, &quot;spread&quot;: 0.8, &quot;drift&quot;: 0.2, &quot;late_offsets&quot;: [5]},
+                {&quot;stream&quot;: &quot;sensor-delta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 15], &quot;base_value&quot;: 21.2, &quot;spread&quot;: 0.9, &quot;drift&quot;: 0.1},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;stream&quot;: &quot;sensor-alpha&quot;, &quot;weight&quot;: 3.6, &quot;window_offsets&quot;: [5, 10, 10], &quot;base_value&quot;: 25.6, &quot;spread&quot;: 1.2, &quot;drift&quot;: 0.4, &quot;late_offsets&quot;: [5, 10], &quot;drop_offsets&quot;: [5], &quot;hotspot_offsets&quot;: [10], &quot;hotspot_bonus&quot;: 3.8},
+                {&quot;stream&quot;: &quot;sensor-beta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 15], &quot;base_value&quot;: 22.4, &quot;spread&quot;: 0.9, &quot;drift&quot;: 0.2, &quot;late_offsets&quot;: [10]},
+                {&quot;stream&quot;: &quot;sensor-gamma&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [0, 5, 15], &quot;base_value&quot;: 19.8, &quot;spread&quot;: 0.8, &quot;drift&quot;: 0.1},
+                {&quot;stream&quot;: &quot;sensor-delta&quot;, &quot;weight&quot;: 0.8, &quot;window_offsets&quot;: [5, 15, 20], &quot;base_value&quot;: 21.1, &quot;spread&quot;: 0.9, &quot;drift&quot;: 0.2},
+            ],
+        },
+        &quot;sensor-backfill&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;stream&quot;: &quot;meter-east&quot;, &quot;weight&quot;: 1.1, &quot;window_offsets&quot;: [0, 5, 10], &quot;base_value&quot;: 34.5, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.3, &quot;late_offsets&quot;: [5]},
+                {&quot;stream&quot;: &quot;meter-west&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 15], &quot;base_value&quot;: 33.8, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2, &quot;late_offsets&quot;: [10]},
+                {&quot;stream&quot;: &quot;pipeline-north&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 10, 20], &quot;base_value&quot;: 31.2, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2, &quot;late_offsets&quot;: [5]},
+                {&quot;stream&quot;: &quot;pipeline-south&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [0, 15, 20], &quot;base_value&quot;: 32.1, &quot;spread&quot;: 0.9, &quot;drift&quot;: 0.2},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;stream&quot;: &quot;meter-east&quot;, &quot;weight&quot;: 4.0, &quot;window_offsets&quot;: [5, 10, 15], &quot;base_value&quot;: 39.2, &quot;spread&quot;: 1.4, &quot;drift&quot;: 0.5, &quot;late_offsets&quot;: [5, 10], &quot;drop_offsets&quot;: [5, 10], &quot;hotspot_offsets&quot;: [10], &quot;hotspot_bonus&quot;: 6.2},
+                {&quot;stream&quot;: &quot;meter-west&quot;, &quot;weight&quot;: 1.2, &quot;window_offsets&quot;: [0, 10, 20], &quot;base_value&quot;: 35.1, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.2, &quot;late_offsets&quot;: [10]},
+                {&quot;stream&quot;: &quot;pipeline-north&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 15, 20], &quot;base_value&quot;: 31.6, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2},
+                {&quot;stream&quot;: &quot;pipeline-south&quot;, &quot;weight&quot;: 0.8, &quot;window_offsets&quot;: [0, 15, 25], &quot;base_value&quot;: 32.4, &quot;spread&quot;: 0.9, &quot;drift&quot;: 0.2},
+            ],
+        },
+        &quot;live-replay&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;stream&quot;: &quot;chat-ingest&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10], &quot;base_value&quot;: 44.0, &quot;spread&quot;: 1.2, &quot;drift&quot;: 0.3, &quot;late_offsets&quot;: [5]},
+                {&quot;stream&quot;: &quot;reaction-fanout&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 15], &quot;base_value&quot;: 41.5, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.3, &quot;late_offsets&quot;: [10]},
+                {&quot;stream&quot;: &quot;presence-sync&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 10, 20], &quot;base_value&quot;: 37.2, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2},
+                {&quot;stream&quot;: &quot;moderation-queue&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 15, 20], &quot;base_value&quot;: 40.1, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.3, &quot;late_offsets&quot;: [15]},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;stream&quot;: &quot;moderation-queue&quot;, &quot;weight&quot;: 3.9, &quot;window_offsets&quot;: [15, 20, 20], &quot;base_value&quot;: 50.3, &quot;spread&quot;: 1.6, &quot;drift&quot;: 0.6, &quot;late_offsets&quot;: [15, 20], &quot;drop_offsets&quot;: [15], &quot;hotspot_offsets&quot;: [20], &quot;hotspot_bonus&quot;: 7.1},
+                {&quot;stream&quot;: &quot;reaction-fanout&quot;, &quot;weight&quot;: 1.5, &quot;window_offsets&quot;: [10, 15, 20], &quot;base_value&quot;: 43.4, &quot;spread&quot;: 1.2, &quot;drift&quot;: 0.3, &quot;late_offsets&quot;: [15]},
+                {&quot;stream&quot;: &quot;chat-ingest&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 25], &quot;base_value&quot;: 44.2, &quot;spread&quot;: 1.1, &quot;drift&quot;: 0.2},
+                {&quot;stream&quot;: &quot;presence-sync&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [5, 15, 25], &quot;base_value&quot;: 37.8, &quot;spread&quot;: 1.0, &quot;drift&quot;: 0.2},
+            ],
+        },
+    }
+    if dataset_family not in families or scenario not in families[dataset_family]:
+        raise ValueError(f&quot;unsupported plugin benchmark scenario/family: {scenario}/{dataset_family}&quot;)
+
+    profiles = families[dataset_family][scenario]
+    counts = _allocate_counts(records, [profile[&quot;weight&quot;] for profile in profiles])
+    lines = []
+    for profile, count in zip(profiles, counts):
+        lines.extend(
+            _generate_stream_events(
+                stream=profile[&quot;stream&quot;],
+                count=count,
+                base_time=base_time,
+                window_offsets=profile[&quot;window_offsets&quot;],
+                base_value=profile[&quot;base_value&quot;],
+                spread=profile[&quot;spread&quot;],
+                drift=profile[&quot;drift&quot;],
+                rng=rng,
+                late_window_offsets=profile.get(&quot;late_offsets&quot;),
+                drop_window_offsets=profile.get(&quot;drop_offsets&quot;),
+                hotspot_window_offsets=profile.get(&quot;hotspot_offsets&quot;),
+                hotspot_bonus=profile.get(&quot;hotspot_bonus&quot;, 0.0),
+            )
+        )
+    lines.sort(key=lambda line: tuple(line.split(&quot;,&quot;, maxsplit=3)[1:3]))
+    return lines[:records]</code></pre></article><article><h2>Benchmark note hook: <code>plugins_watermark_late_summary.benchmark_notes</code></h2><p><strong>Summary:</strong> Describe the intended late-event hotspot story for each synthetic family.</p><p><strong>Source line:</strong> <code>344</code></p><p><strong>Source anchor:</strong> <code>plugins_watermark_late_summary.py#L344-L413</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413">https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413</a></p><pre><code>def benchmark_notes(scenario, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Describe the intended late-event hotspot story for each synthetic family.&quot;&quot;&quot;
+    notes = {
+        (&quot;balanced&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Mostly on-time telemetry baseline&quot;,
+                &quot;detail&quot;: &quot;The default balanced family keeps late updates mild and spread across four streams, so the report should read like a healthy watermark configuration rather than an incident.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the before state for explaining why a single stream with repeated backfills changes both lateness and drop rates.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Sensor alpha late-event hotspot&quot;,
+                &quot;detail&quot;: &quot;`sensor-alpha` is intentionally overloaded with backfilled windows, so the hottest reducer should show one stream dominating both late-accepted updates and dropped events.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;sensor-alpha&quot;],
+                &quot;takeaway&quot;: &quot;This is the simplest portfolio story for explaining event time, watermarks, and allowed lateness without needing a full streaming framework.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;sensor-backfill&quot;): [
+            {
+                &quot;title&quot;: &quot;Routine meter replays&quot;,
+                &quot;detail&quot;: &quot;The balanced sensor-backfill family makes every stream tolerate a few delayed packets, so the output reads like normal AMI backfill handling instead of a broken ingest pipeline.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Good for showing how watermark-aware summaries stay useful even when the late path is healthy and controlled.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;sensor-backfill&quot;): [
+            {
+                &quot;title&quot;: &quot;Meter east replay storm&quot;,
+                &quot;detail&quot;: &quot;`meter-east` dominates this family with both accepted and dropped backfills, so the report should look like a utility stream replaying stale packets after a connectivity gap.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;meter-east&quot;],
+                &quot;takeaway&quot;: &quot;Call out how the drop rate only climbs after the watermark passes the allowed-lateness boundary for the same windows.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Meter west secondary lag&quot;,
+                &quot;detail&quot;: &quot;`meter-west` forms a smaller second-tier late stream behind meter-east, which helps the benchmark tell a richer story about regional spillover instead of a single broken key.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;meter-west&quot;],
+                &quot;takeaway&quot;: &quot;Keep this note when you want a fuller data-engineering narrative instead of focusing only on the worst offender.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;live-replay&quot;): [
+            {
+                &quot;title&quot;: &quot;Steady live-ops baseline&quot;,
+                &quot;detail&quot;: &quot;The balanced live-replay family keeps ingest, reactions, presence, and moderation close enough that the report reads like a normal stream-processing pipeline with occasional harmless replays.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the calm baseline before showing how moderation replays create visible watermark pressure.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;live-replay&quot;): [
+            {
+                &quot;title&quot;: &quot;Moderation replay pile-up&quot;,
+                &quot;detail&quot;: &quot;`moderation-queue` becomes the obvious hotspot here with repeated stale replays, so the watermark summary looks like one downstream queue absorbing late chat events during a live launch.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;moderation-queue&quot;],
+                &quot;takeaway&quot;: &quot;This turns the plugin into a streaming-systems case study about out-of-order handling instead of only fixed windows or batch reducers.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Reaction fanout echo&quot;,
+                &quot;detail&quot;: &quot;`reaction-fanout` is the supporting late stream behind moderation, which helps explain how one replay wave can surface in multiple downstream consumers.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;reaction-fanout&quot;],
+                &quot;takeaway&quot;: &quot;Keep this annotation when you want the report to highlight pipeline-wide replay propagation.&quot;,
+            },
+        ],
+    }
+    return notes.get((scenario, dataset_family), [])</code></pre></article>
+  </section>
+</body>
+</html>

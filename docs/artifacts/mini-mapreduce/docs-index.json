@@ -1,156 +1,228 @@
 {
-  "artifacts_root": ".",
-  "plugin_catalog": {
-    "markdown": "plugin-catalog.md",
-    "html": "plugin-catalog.html",
-    "json": "plugin-catalog.json",
-    "csv": "plugin-catalog.csv",
-    "heatmap_csv": null
-  },
-  "plugin_pages": [
-    {
-      "slug": "plugin-average-score",
-      "title": "Plugin Average Score",
-      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
-      "links": {
-        "markdown": "plugin-pages/plugin-average-score.md",
-        "html": "plugin-pages/plugin-average-score.html",
-        "json": null,
-        "csv": null,
-        "heatmap_csv": null
-      }
-    },
-    {
-      "slug": "plugin-max-score",
-      "title": "Plugin Max Score",
-      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
-      "links": {
-        "markdown": "plugin-pages/plugin-max-score.md",
-        "html": "plugin-pages/plugin-max-score.html",
-        "json": null,
-        "csv": null,
-        "heatmap_csv": null
-      }
-    },
-    {
-      "slug": "plugin-service-latency",
-      "title": "Plugin Service Latency",
-      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
-      "links": {
-        "markdown": "plugin-pages/plugin-service-latency.md",
-        "html": "plugin-pages/plugin-service-latency.html",
-        "json": null,
-        "csv": null,
-        "heatmap_csv": null
-      }
-    }
-  ],
-  "inspection_diffs": [
-    {
-      "slug": "plugin-comparison",
-      "title": "Plugin Comparison",
-      "description": "Adjacent plugin contract comparison bundle with publishable Markdown/HTML plus machine-readable JSON.",
-      "links": {
-        "markdown": "plugin-comparison-diff.md",
-        "html": "plugin-comparison-diff.html",
-        "json": "plugin-comparison-diff.json",
-        "csv": null,
-        "heatmap_csv": null
-      }
-    }
-  ],
-  "benchmark_reports": [
-    {
-      "slug": "2026-04-17-annotation-view",
-      "title": "2026-04-17 \u00b7 Annotation View",
-      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
-      "links": {
-        "markdown": "2026-04-17-annotation-view-report.md",
-        "html": "2026-04-17-annotation-view-report.html",
-        "json": "2026-04-17-annotation-view-benchmark.json",
-        "csv": "2026-04-17-annotation-view-benchmark.csv",
-        "heatmap_csv": "2026-04-17-annotation-view-heatmap.csv"
-      }
-    },
-    {
-      "slug": "2026-04-17-incident-spike-latency",
-      "title": "2026-04-17 \u00b7 Incident Spike Latency",
-      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
-      "links": {
-        "markdown": "2026-04-17-incident-spike-latency-report.md",
-        "html": "2026-04-17-incident-spike-latency-report.html",
-        "json": "2026-04-17-incident-spike-latency-benchmark.json",
-        "csv": "2026-04-17-incident-spike-latency-benchmark.csv",
-        "heatmap_csv": "2026-04-17-incident-spike-latency-heatmap.csv"
-      }
-    },
-    {
-      "slug": "2026-04-17-project-week",
-      "title": "2026-04-17 \u00b7 Project Week",
-      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
-      "links": {
-        "markdown": "2026-04-17-project-week-report.md",
-        "html": "2026-04-17-project-week-report.html",
-        "json": "2026-04-17-project-week-benchmark.json",
-        "csv": "2026-04-17-project-week-benchmark.csv",
-        "heatmap_csv": "2026-04-17-project-week-heatmap.csv"
-      }
-    },
-    {
-      "slug": "2026-04-17-structured-annotations",
-      "title": "2026-04-17 \u00b7 Structured Annotations",
-      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
-      "links": {
-        "markdown": "2026-04-17-structured-annotations-report.md",
-        "html": "2026-04-17-structured-annotations-report.html",
-        "json": "2026-04-17-structured-annotations-benchmark.json",
-        "csv": "2026-04-17-structured-annotations-benchmark.csv",
-        "heatmap_csv": "2026-04-17-structured-annotations-heatmap.csv"
-      }
-    }
-  ],
   "annotation_batches": [
     {
-      "slug": "2026-04-17-annotation-batch",
-      "title": "2026-04-17 \u00b7 Annotation Batch",
       "manifest": "2026-04-17-annotation-batch-manifest.json",
-      "shared_artifacts": {
-        "csv": "2026-04-17-annotation-batch-shared.csv",
-        "heatmap_csv": "2026-04-17-annotation-batch-shared-heatmap.csv"
-      },
       "presets": [
         {
-          "name": "full",
-          "description": "Full annotation view with every structured reviewer callout rendered.",
-          "annotation_severities": null,
           "annotation_limit": null,
           "annotation_overflow": null,
+          "annotation_severities": null,
+          "description": "Full annotation view with every structured reviewer callout rendered.",
           "links": {
-            "markdown": "2026-04-17-annotation-batch-full.md",
+            "csv": null,
+            "heatmap_csv": null,
             "html": "2026-04-17-annotation-batch-full.html",
             "json": "2026-04-17-annotation-batch-full.json",
-            "csv": null,
-            "heatmap_csv": null
-          }
+            "markdown": "2026-04-17-annotation-batch-full.md"
+          },
+          "name": "full"
         },
         {
-          "name": "portfolio-tight",
-          "description": "Filtered annotation view for portfolio screenshots: keep risk/watch callouts, show one card, and collapse the rest into a summary.",
+          "annotation_limit": 1,
+          "annotation_overflow": "summary",
           "annotation_severities": [
             "risk",
             "watch"
           ],
-          "annotation_limit": 1,
-          "annotation_overflow": "summary",
+          "description": "Filtered annotation view for portfolio screenshots: keep risk/watch callouts, show one card, and collapse the rest into a summary.",
           "links": {
-            "markdown": "2026-04-17-annotation-batch-portfolio-tight.md",
+            "csv": null,
+            "heatmap_csv": null,
             "html": "2026-04-17-annotation-batch-portfolio-tight.html",
             "json": "2026-04-17-annotation-batch-portfolio-tight.json",
-            "csv": null,
-            "heatmap_csv": null
-          }
+            "markdown": "2026-04-17-annotation-batch-portfolio-tight.md"
+          },
+          "name": "portfolio-tight"
         }
-      ]
+      ],
+      "shared_artifacts": {
+        "csv": "2026-04-17-annotation-batch-shared.csv",
+        "heatmap_csv": "2026-04-17-annotation-batch-shared-heatmap.csv"
+      },
+      "slug": "2026-04-17-annotation-batch",
+      "title": "2026-04-17 \u00b7 Annotation Batch"
+    }
+  ],
+  "artifacts_root": ".",
+  "benchmark_reports": [
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "csv": "2026-04-17-annotation-view-benchmark.csv",
+        "heatmap_csv": "2026-04-17-annotation-view-heatmap.csv",
+        "html": "2026-04-17-annotation-view-report.html",
+        "json": "2026-04-17-annotation-view-benchmark.json",
+        "markdown": "2026-04-17-annotation-view-report.md"
+      },
+      "slug": "2026-04-17-annotation-view",
+      "title": "2026-04-17 \u00b7 Annotation View"
+    },
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "csv": "2026-04-17-incident-spike-latency-benchmark.csv",
+        "heatmap_csv": "2026-04-17-incident-spike-latency-heatmap.csv",
+        "html": "2026-04-17-incident-spike-latency-report.html",
+        "json": "2026-04-17-incident-spike-latency-benchmark.json",
+        "markdown": "2026-04-17-incident-spike-latency-report.md"
+      },
+      "slug": "2026-04-17-incident-spike-latency",
+      "title": "2026-04-17 \u00b7 Incident Spike Latency"
+    },
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "csv": "2026-04-17-iot-burst-streaming-window-benchmark.csv",
+        "heatmap_csv": "2026-04-17-iot-burst-streaming-window-heatmap.csv",
+        "html": "2026-04-17-iot-burst-streaming-window-report.html",
+        "json": "2026-04-17-iot-burst-streaming-window-benchmark.json",
+        "markdown": "2026-04-17-iot-burst-streaming-window-report.md"
+      },
+      "slug": "2026-04-17-iot-burst-streaming-window",
+      "title": "2026-04-17 \u00b7 IoT Burst Streaming Window"
+    },
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "csv": "2026-04-17-project-week-benchmark.csv",
+        "heatmap_csv": "2026-04-17-project-week-heatmap.csv",
+        "html": "2026-04-17-project-week-report.html",
+        "json": "2026-04-17-project-week-benchmark.json",
+        "markdown": "2026-04-17-project-week-report.md"
+      },
+      "slug": "2026-04-17-project-week",
+      "title": "2026-04-17 \u00b7 Project Week"
+    },
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "csv": "2026-04-17-sensor-backfill-watermark-late-summary-benchmark.csv",
+        "heatmap_csv": "2026-04-17-sensor-backfill-watermark-late-summary-heatmap.csv",
+        "html": "2026-04-17-sensor-backfill-watermark-late-summary-report.html",
+        "json": "2026-04-17-sensor-backfill-watermark-late-summary-benchmark.json",
+        "markdown": "2026-04-17-sensor-backfill-watermark-late-summary-report.md"
+      },
+      "slug": "2026-04-17-sensor-backfill-watermark-late-summary",
+      "title": "2026-04-17 \u00b7 Sensor Backfill Watermark Late Summary"
+    },
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "csv": "2026-04-17-structured-annotations-benchmark.csv",
+        "heatmap_csv": "2026-04-17-structured-annotations-heatmap.csv",
+        "html": "2026-04-17-structured-annotations-report.html",
+        "json": "2026-04-17-structured-annotations-benchmark.json",
+        "markdown": "2026-04-17-structured-annotations-report.md"
+      },
+      "slug": "2026-04-17-structured-annotations",
+      "title": "2026-04-17 \u00b7 Structured Annotations"
+    },
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
+        "csv": "launch-day-sessionization-benchmark.csv",
+        "heatmap_csv": "launch-day-sessionization-heatmap.csv",
+        "html": "launch-day-sessionization-report.html",
+        "json": "launch-day-sessionization-benchmark.json",
+        "markdown": "launch-day-sessionization-report.md"
+      },
+      "slug": "launch-day-sessionization",
+      "title": "Launch Day Sessionization"
+    }
+  ],
+  "inspection_diffs": [
+    {
+      "description": "Adjacent plugin contract comparison bundle with publishable Markdown/HTML plus machine-readable JSON.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-comparison-diff.html",
+        "json": "plugin-comparison-diff.json",
+        "markdown": "plugin-comparison-diff.md"
+      },
+      "slug": "plugin-comparison",
+      "title": "Plugin Comparison"
+    }
+  ],
+  "plugin_catalog": {
+    "csv": "plugin-catalog.csv",
+    "heatmap_csv": null,
+    "html": "plugin-catalog.html",
+    "json": "plugin-catalog.json",
+    "markdown": "plugin-catalog.md"
+  },
+  "plugin_pages": [
+    {
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-pages/plugin-average-score.html",
+        "json": null,
+        "markdown": "plugin-pages/plugin-average-score.md"
+      },
+      "slug": "plugin-average-score",
+      "title": "Plugin Average Score"
+    },
+    {
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-pages/plugin-max-score.html",
+        "json": null,
+        "markdown": "plugin-pages/plugin-max-score.md"
+      },
+      "slug": "plugin-max-score",
+      "title": "Plugin Max Score"
+    },
+    {
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-pages/plugin-service-latency.html",
+        "json": null,
+        "markdown": "plugin-pages/plugin-service-latency.md"
+      },
+      "slug": "plugin-service-latency",
+      "title": "Plugin Service Latency"
+    },
+    {
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-pages/plugin-sessionization.html",
+        "json": null,
+        "markdown": "plugin-pages/plugin-sessionization.md"
+      },
+      "slug": "plugin-sessionization",
+      "title": "Plugin Sessionization"
+    },
+    {
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-pages/plugin-streaming-window.html",
+        "json": null,
+        "markdown": "plugin-pages/plugin-streaming-window.md"
+      },
+      "slug": "plugin-streaming-window",
+      "title": "Plugin Streaming Window"
+    },
+    {
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-pages/plugin-watermark-late-summary.html",
+        "json": null,
+        "markdown": "plugin-pages/plugin-watermark-late-summary.md"
+      },
+      "slug": "plugin-watermark-late-summary",
+      "title": "Plugin Watermark Late Summary"
     }
   ]
 }

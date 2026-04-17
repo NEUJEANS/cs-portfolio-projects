@@ -6,7 +6,7 @@
 - Summary: Service-latency summary plugin for observability-style benchmark demos.
 - Dataset families: `default, incident-spike, batch-window`
 - Catalog badges: `5 hooks` · `3 dataset families` · `commit pinned` · `github linked`
-- Repository commit: `1a9d76c8641bfd14dfa216fa6236e65807bd27d7`
+- Repository commit: `8e9ad856e42484ad83d46bfe15fe4f0823004f77`
 - Catalog index: [plugin catalog](../plugin-catalog.md)
 - Alternate format: [HTML](plugin-service-latency.html)
 
@@ -14,11 +14,11 @@
 
 | Hook | Export | Signature | Details | Source |
 | --- | --- | --- | --- | --- |
-| Mapper | `plugins_service_latency.map_records` | `map_records(lines)` | Parse comma-separated service/latency rows into partial latency summaries.<br>line 33<br>anchor `plugins_service_latency.py#L33-L46` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46) |
-| Reducer | `plugins_service_latency.reduce_key` | `reduce_key(_key, values)` | Return count, average, p95, and max latency for one service key.<br>line 54<br>anchor `plugins_service_latency.py#L54-L64` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64) |
-| Combiner | `plugins_service_latency.combine_values` | `combine_values(_key, values)` | Merge shard-local latency summaries before the final reduce step.<br>line 49<br>anchor `plugins_service_latency.py#L49-L51` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51) |
-| Benchmark generator | `plugins_service_latency.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic latency fixtures for multiple observability-style families.<br>line 67<br>anchor `plugins_service_latency.py#L67-L131` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131) |
-| Benchmark note hook | `plugins_service_latency.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hot services for each synthetic latency family.<br>line 134<br>anchor `plugins_service_latency.py#L134-L203` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203) |
+| Mapper | `plugins_service_latency.map_records` | `map_records(lines)` | Parse comma-separated service/latency rows into partial latency summaries.<br>line 33<br>anchor `plugins_service_latency.py#L33-L46` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46) |
+| Reducer | `plugins_service_latency.reduce_key` | `reduce_key(_key, values)` | Return count, average, p95, and max latency for one service key.<br>line 54<br>anchor `plugins_service_latency.py#L54-L64` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64) |
+| Combiner | `plugins_service_latency.combine_values` | `combine_values(_key, values)` | Merge shard-local latency summaries before the final reduce step.<br>line 49<br>anchor `plugins_service_latency.py#L49-L51` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51) |
+| Benchmark generator | `plugins_service_latency.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic latency fixtures for multiple observability-style families.<br>line 67<br>anchor `plugins_service_latency.py#L67-L131` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131) |
+| Benchmark note hook | `plugins_service_latency.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hot services for each synthetic latency family.<br>line 134<br>anchor `plugins_service_latency.py#L134-L203` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203) |
 
 ## Hook source excerpts
 
@@ -28,7 +28,7 @@
 - Source line: `33`
 - Source anchor: `plugins_service_latency.py#L33-L46`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L33-L46>
 
 ```python
 def map_records(lines):
@@ -53,7 +53,7 @@ def map_records(lines):
 - Source line: `54`
 - Source anchor: `plugins_service_latency.py#L54-L64`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L54-L64>
 
 ```python
 def reduce_key(_key, values):
@@ -75,7 +75,7 @@ def reduce_key(_key, values):
 - Source line: `49`
 - Source anchor: `plugins_service_latency.py#L49-L51`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L49-L51>
 
 ```python
 def combine_values(_key, values):
@@ -89,7 +89,7 @@ def combine_values(_key, values):
 - Source line: `67`
 - Source anchor: `plugins_service_latency.py#L67-L131`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L67-L131>
 
 ```python
 def benchmark_records(scenario, records, seed, dataset_family="default"):
@@ -165,7 +165,7 @@ def benchmark_records(scenario, records, seed, dataset_family="default"):
 - Source line: `134`
 - Source anchor: `plugins_service_latency.py#L134-L203`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/1a9d76c8641bfd14dfa216fa6236e65807bd27d7/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_service_latency.py#L134-L203>
 
 ```python
 def benchmark_notes(scenario, dataset_family="default"):
