@@ -4,8 +4,10 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 
 ## Browser landing pages
 
+- [Open the top-level showcase hub](./showcase.html)
 - [Open the combined optimization artifact gallery](./artifact-gallery.html)
 - [Open the benchmark gallery](./benchmark-gallery.html)
+- Use the showcase hub when you want one filterable page for proof cards, walkthroughs, benchmark reports, Markdown companions, and DOT diagrams.
 - Use the optimization gallery when you want the weighted-assignment and generic min-cost-flow walkthroughs in one browser tab before drilling into the individual proof/DOT files.
 - Use the benchmark gallery when you want the DAG, dense, and layered performance cards together beside the optimization story.
 
@@ -56,3 +58,4 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 - Use the generic min-cost-flow card when you want to show the same optimization engine on a non-bipartite shipping/routing-style graph.
 - Link the new side-by-side HTML pages when you want GitHub Pages viewers to browse the diagrams and proof cards without opening separate files.
 - Link this gallery from project-level README files so reviewers can jump straight into the artifacts.
+- When someone only has time for one click, send them the showcase hub first and let them filter down from there.

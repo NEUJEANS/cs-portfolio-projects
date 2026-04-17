@@ -20,6 +20,7 @@
 - [x] Export benchmark suites as committed Markdown/SVG report cards
 - [x] Add a compact artifact index page that compares DAG, dense, and layered benchmark cards side by side
 - [x] Add a lightweight benchmark HTML gallery page so the benchmark cards are browsable beside the optimization artifact gallery
+- [x] Add a filterable showcase page that links proof cards, HTML walkthroughs, benchmark reports, and their Markdown/DOT companions from one browser hub
 - [x] Generalize weighted assignment into a custom min-cost-flow graph input format
 - [x] Add Graphviz DOT export for generic min-cost-flow graphs
 - [x] Add Graphviz DOT export for weighted-assignment reductions

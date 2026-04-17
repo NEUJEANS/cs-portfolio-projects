@@ -1511,6 +1511,32 @@ def build_benchmark_gallery_paths(*, html_out: Path, artifact_dir: Path | None =
     }
 
 
+def build_showcase_paths(*, html_out: Path, artifact_dir: Path | None = None) -> dict[str, Path]:
+    base_dir = artifact_dir if artifact_dir is not None else html_out.parent
+    return {
+        "artifact_gallery": base_dir / "artifact-gallery.html",
+        "benchmark_gallery": base_dir / "benchmark-gallery.html",
+        "flow_svg": base_dir / "sample-flow-proof.svg",
+        "flow_markdown": base_dir / "sample-flow-proof.md",
+        "matching_svg": base_dir / "sample-matching-proof.svg",
+        "matching_markdown": base_dir / "sample-matching-proof.md",
+        "assignment_page": base_dir / "sample-assignment-artifact-page.html",
+        "assignment_svg": base_dir / "sample-assignment-proof.svg",
+        "assignment_markdown": base_dir / "sample-assignment-proof.md",
+        "assignment_dot": base_dir / "sample-assignment.dot",
+        "cost_page": base_dir / "sample-cost-flow-artifact-page.html",
+        "cost_svg": base_dir / "sample-cost-flow-proof.svg",
+        "cost_markdown": base_dir / "sample-cost-flow-proof.md",
+        "cost_dot": base_dir / "sample-cost-flow.dot",
+        "dag_svg": base_dir / "benchmark-dag-report.svg",
+        "dag_markdown": base_dir / "benchmark-dag-report.md",
+        "dense_svg": base_dir / "benchmark-dense-report.svg",
+        "dense_markdown": base_dir / "benchmark-dense-report.md",
+        "layered_svg": base_dir / "benchmark-layered-report.svg",
+        "layered_markdown": base_dir / "benchmark-layered-report.md",
+    }
+
+
 def _compute_vertical_positions(count: int, *, top: float, bottom: float) -> list[float]:
     if count <= 0:
         return []
@@ -2551,6 +2577,232 @@ def render_benchmark_gallery_html(
 
 
 
+def render_showcase_html(
+    *,
+    artifact_gallery: str,
+    benchmark_gallery: str,
+    flow_svg: str,
+    flow_markdown: str,
+    matching_svg: str,
+    matching_markdown: str,
+    assignment_page: str,
+    assignment_svg: str,
+    assignment_markdown: str,
+    assignment_dot: str,
+    cost_page: str,
+    cost_svg: str,
+    cost_markdown: str,
+    cost_dot: str,
+    dag_svg: str,
+    dag_markdown: str,
+    dense_svg: str,
+    dense_markdown: str,
+    layered_svg: str,
+    layered_markdown: str,
+) -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    cards = [
+        {
+            "title": "Max-flow proof card",
+            "eyebrow": "Core proof",
+            "summary": "Lead with this when you want the pure Edmonds-Karp / Dinic correctness story without extra reductions.",
+            "preview_kind": "image",
+            "preview": flow_svg,
+            "preview_title": "Max-flow proof SVG preview",
+            "tags": ["proof", "svg", "markdown"],
+            "links": [("Open SVG card", flow_svg), ("Open Markdown proof", flow_markdown)],
+        },
+        {
+            "title": "Bipartite matching proof card",
+            "eyebrow": "Core proof",
+            "summary": "Shows the matching-to-flow reduction and the minimum vertex-cover follow-up in one interviewer-friendly artifact.",
+            "preview_kind": "image",
+            "preview": matching_svg,
+            "preview_title": "Matching proof SVG preview",
+            "tags": ["proof", "svg", "markdown"],
+            "links": [("Open SVG card", matching_svg), ("Open Markdown proof", matching_markdown)],
+        },
+        {
+            "title": "Weighted assignment walkthrough",
+            "eyebrow": "Optimization walkthrough",
+            "summary": "Browser-friendly assignment story with the HTML walkthrough, proof SVG, Markdown explanation, and DOT diagram grouped together.",
+            "preview_kind": "iframe",
+            "preview": assignment_page,
+            "preview_title": "Weighted assignment walkthrough preview",
+            "tags": ["walkthrough", "html", "proof", "svg", "markdown", "dot"],
+            "links": [
+                ("Open HTML walkthrough", assignment_page),
+                ("Open SVG card", assignment_svg),
+                ("Open Markdown proof", assignment_markdown),
+                ("Open DOT diagram", assignment_dot),
+            ],
+        },
+        {
+            "title": "Generic min-cost-flow walkthrough",
+            "eyebrow": "Optimization walkthrough",
+            "summary": "Use this when the same engine needs to look like a shipping/routing optimization demo instead of a bipartite assignment reduction.",
+            "preview_kind": "iframe",
+            "preview": cost_page,
+            "preview_title": "Generic min-cost-flow walkthrough preview",
+            "tags": ["walkthrough", "html", "proof", "svg", "markdown", "dot"],
+            "links": [
+                ("Open HTML walkthrough", cost_page),
+                ("Open SVG card", cost_svg),
+                ("Open Markdown proof", cost_markdown),
+                ("Open DOT diagram", cost_dot),
+            ],
+        },
+        {
+            "title": "DAG baseline benchmark",
+            "eyebrow": "Benchmark report",
+            "summary": "The simplest performance story: a clean acyclic baseline before the denser residual-heavy families.",
+            "preview_kind": "image",
+            "preview": dag_svg,
+            "preview_title": "DAG benchmark SVG preview",
+            "tags": ["benchmark", "svg", "markdown"],
+            "links": [("Open SVG card", dag_svg), ("Open Markdown report", dag_markdown)],
+        },
+        {
+            "title": "Dense residual benchmark",
+            "eyebrow": "Benchmark report",
+            "summary": "Best for showing rerouting pressure and how the algorithm traces diverge once the graph gets messy.",
+            "preview_kind": "image",
+            "preview": dense_svg,
+            "preview_title": "Dense benchmark SVG preview",
+            "tags": ["benchmark", "svg", "markdown"],
+            "links": [("Open SVG card", dense_svg), ("Open Markdown report", dense_markdown)],
+        },
+        {
+            "title": "Layered cut-stress benchmark",
+            "eyebrow": "Benchmark report",
+            "summary": "The strongest companion when you want a blocking-flow / cut-heavy performance follow-up beside the optimization walkthroughs.",
+            "preview_kind": "image",
+            "preview": layered_svg,
+            "preview_title": "Layered benchmark SVG preview",
+            "tags": ["benchmark", "svg", "markdown"],
+            "links": [("Open SVG card", layered_svg), ("Open Markdown report", layered_markdown)],
+        },
+    ]
+
+    card_parts = []
+    for card in cards:
+        links_html = ''.join(
+            f'<a class="chip" href="{_html_escape(path)}">{_html_escape(label)}</a>'
+            for label, path in card["links"]
+        )
+        badges_html = ''.join(
+            f'<span class="badge">{_html_escape(tag)}</span>'
+            for tag in card["tags"]
+        )
+        if card["preview_kind"] == "iframe":
+            preview_html = (
+                f'<iframe src="{_html_escape(card["preview"])}" '
+                f'title="{_html_escape(card["preview_title"])}" loading="lazy"></iframe>'
+            )
+        else:
+            preview_html = (
+                f'<a class="preview-frame" href="{_html_escape(card["preview"])}" '
+                f'aria-label="{_html_escape(card["preview_title"])}">'
+                f'<img src="{_html_escape(card["preview"])}" alt="{_html_escape(card["preview_title"])}" loading="lazy" />'
+                '</a>'
+            )
+        card_parts.append(
+            f'''<article class="showcase-card" data-tags="{' '.join(card["tags"])}">
+      <p class="eyebrow">{_html_escape(card["eyebrow"])}</p>
+      <h2>{_html_escape(card["title"])}</h2>
+      <p>{_html_escape(card["summary"])}</p>
+      <div class="badge-row">{badges_html}</div>
+      {preview_html}
+      <div class="chip-row">{links_html}</div>
+    </article>'''
+        )
+    cards_html = "\n".join(card_parts)
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network-flow lab showcase</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1680px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2 {{ line-height: 1.1; }}
+    p {{ line-height: 1.55; }}
+    .hero {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.5rem; padding: 1.5rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.94), rgba(236, 253, 245, 0.92)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
+    .hero p {{ max-width: 78ch; }}
+    .hero-meta, .hero-links, .filter-row, .chip-row, .badge-row {{ display: flex; flex-wrap: wrap; gap: 0.75rem; }}
+    .hero-meta {{ margin-top: 1rem; }}
+    .hero-meta span, .badge {{ padding: 0.45rem 0.78rem; border-radius: 999px; background: rgba(255, 255, 255, 0.78); border: 1px solid rgba(148, 163, 184, 0.35); font-size: 0.92rem; }}
+    .hero-links {{ margin-top: 1rem; }}
+    .hero-link, .chip, .filter-button {{ display: inline-flex; align-items: center; justify-content: center; padding: 0.58rem 0.9rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 700; cursor: pointer; }}
+    .hero-link:hover, .chip:hover, .filter-button:hover {{ background: rgba(219, 234, 254, 1); }}
+    .filter-button[aria-pressed="true"] {{ background: #1d4ed8; color: white; border-color: #1d4ed8; }}
+    .filters {{ margin-top: 1.35rem; border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 1.2rem; padding: 1rem; background: rgba(255, 255, 255, 0.76); }}
+    .filters p {{ margin: 0 0 0.85rem; color: #334155; }}
+    .showcase-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }}
+    .showcase-card {{ border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1.25rem; padding: 1.05rem; background: rgba(255, 255, 255, 0.88); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }}
+    .showcase-card[hidden] {{ display: none; }}
+    .showcase-card h2 {{ margin: 0.22rem 0 0.7rem; }}
+    .eyebrow {{ margin: 0; font-size: 0.86rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #0f766e; }}
+    .preview-frame {{ display: block; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; padding: 0.85rem; text-decoration: none; margin-top: 0.95rem; }}
+    .preview-frame img {{ display: block; width: 100%; height: auto; border-radius: 0.75rem; }}
+    iframe {{ width: 100%; min-height: 420px; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; margin-top: 0.95rem; }}
+    .chip-row {{ margin-top: 1rem; }}
+    @media (max-width: 760px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+      iframe {{ min-height: 320px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Network-flow lab showcase</h1>
+      <p>A single browser-friendly hub for the committed <code>network-flow-lab</code> artifacts. Use the filters to jump between proof cards, HTML walkthroughs, DOT-backed optimization demos, and benchmark reports without digging through the repo tree. The two gallery pages are still linked directly when you want a broader optimization-only or benchmark-only view.</p>
+      <div class="hero-meta">
+        <span>Generated <strong>{generated}</strong></span>
+        <span>Includes <strong>7</strong> artifact groups</span>
+        <span>Filters: proof / html / benchmark / markdown / dot</span>
+      </div>
+      <div class="hero-links">
+        <a class="hero-link" href="{_html_escape(artifact_gallery)}">Open optimization gallery</a>
+        <a class="hero-link" href="{_html_escape(benchmark_gallery)}">Open benchmark gallery</a>
+      </div>
+      <section class="filters" aria-labelledby="showcase-filter-heading">
+        <p id="showcase-filter-heading"><strong>Quick filters</strong> — cards stay visible when they match the selected tag.</p>
+        <div class="filter-row" role="toolbar" aria-label="Artifact filters">
+          <button type="button" class="filter-button" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" class="filter-button" data-filter="proof" aria-pressed="false">Proof cards</button>
+          <button type="button" class="filter-button" data-filter="html" aria-pressed="false">HTML walkthroughs</button>
+          <button type="button" class="filter-button" data-filter="benchmark" aria-pressed="false">Benchmark reports</button>
+          <button type="button" class="filter-button" data-filter="markdown" aria-pressed="false">Markdown companions</button>
+          <button type="button" class="filter-button" data-filter="dot" aria-pressed="false">DOT diagrams</button>
+        </div>
+      </section>
+    </section>
+    <section class="showcase-grid" id="showcase-grid">
+{cards_html}
+    </section>
+  </main>
+  <script>
+    const buttons = Array.from(document.querySelectorAll('.filter-button'));
+    const cards = Array.from(document.querySelectorAll('.showcase-card'));
+    const applyFilter = (filter) => {{
+      buttons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.filter === filter)));
+      cards.forEach((card) => {{
+        const tags = (card.dataset.tags || '').split(/\\s+/).filter(Boolean);
+        card.hidden = filter !== 'all' && !tags.includes(filter);
+      }});
+    }};
+    buttons.forEach((button) => button.addEventListener('click', () => applyFilter(button.dataset.filter || 'all')));
+  </script>
+</body>
+</html>
+'''
+
+
 def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
     explanation = build_assignment_explanation(assignment_result)
     width = 960
@@ -3184,6 +3436,11 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_gallery_demo_parser.add_argument("--artifact-dir", type=Path, help="directory that already contains the sample benchmark Markdown/SVG artifacts; defaults to the output directory")
     benchmark_gallery_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
 
+    showcase_demo_parser = subparsers.add_parser("showcase-demo", help="write a filterable HTML hub for the bundled proof, walkthrough, and benchmark artifacts")
+    showcase_demo_parser.add_argument("--html-out", type=Path, required=True, help="write a static HTML showcase page that links the committed artifact galleries plus their core proof/report companions")
+    showcase_demo_parser.add_argument("--artifact-dir", type=Path, help="directory that already contains the committed HTML/SVG/Markdown/DOT artifacts; defaults to the output directory")
+    showcase_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
     benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated benchmark graph")
     benchmark_parser.add_argument(
@@ -3226,6 +3483,19 @@ def validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace)
         if missing:
             parser.error(
                 "benchmark-gallery-demo requires the bundled benchmark markdown/svg artifacts to exist first; missing: "
+                + ", ".join(sorted(missing))
+            )
+        return
+
+    if args.command == "showcase-demo":
+        artifact_paths = build_showcase_paths(
+            html_out=args.html_out,
+            artifact_dir=getattr(args, "artifact_dir", None),
+        )
+        missing = [path.name for path in artifact_paths.values() if not path.exists()]
+        if missing:
+            parser.error(
+                "showcase-demo requires the bundled galleries and proof/report artifacts to exist first; missing: "
                 + ", ".join(sorted(missing))
             )
         return
@@ -3501,6 +3771,47 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 layered_svg=relative_paths["layered_svg"],
                 layered_markdown=relative_paths["layered_markdown"],
                 artifact_gallery=optimization_gallery_relative,
+            ),
+        )
+        return {
+            "command": args.command,
+            "artifact_dir": str((getattr(args, "artifact_dir", None) or args.html_out.parent)),
+            "html_output": str(args.html_out),
+            **{key: str(path) for key, path in artifact_paths.items()},
+        }
+
+    if args.command == "showcase-demo":
+        artifact_paths = build_showcase_paths(
+            html_out=args.html_out,
+            artifact_dir=getattr(args, "artifact_dir", None),
+        )
+        relative_paths = {
+            key: _relative_output_path(path, args.html_out.parent)
+            for key, path in artifact_paths.items()
+        }
+        write_html_output(
+            args.html_out,
+            render_showcase_html(
+                artifact_gallery=relative_paths["artifact_gallery"],
+                benchmark_gallery=relative_paths["benchmark_gallery"],
+                flow_svg=relative_paths["flow_svg"],
+                flow_markdown=relative_paths["flow_markdown"],
+                matching_svg=relative_paths["matching_svg"],
+                matching_markdown=relative_paths["matching_markdown"],
+                assignment_page=relative_paths["assignment_page"],
+                assignment_svg=relative_paths["assignment_svg"],
+                assignment_markdown=relative_paths["assignment_markdown"],
+                assignment_dot=relative_paths["assignment_dot"],
+                cost_page=relative_paths["cost_page"],
+                cost_svg=relative_paths["cost_svg"],
+                cost_markdown=relative_paths["cost_markdown"],
+                cost_dot=relative_paths["cost_dot"],
+                dag_svg=relative_paths["dag_svg"],
+                dag_markdown=relative_paths["dag_markdown"],
+                dense_svg=relative_paths["dense_svg"],
+                dense_markdown=relative_paths["dense_markdown"],
+                layered_svg=relative_paths["layered_svg"],
+                layered_markdown=relative_paths["layered_markdown"],
             ),
         )
         return {
