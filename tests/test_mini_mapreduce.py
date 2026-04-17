@@ -15,6 +15,7 @@ PLUGIN_PATH = PROJECT_DIR / "plugins_top_score.py"
 LATENCY_PLUGIN_PATH = PROJECT_DIR / "plugins_service_latency.py"
 SESSION_PLUGIN_PATH = PROJECT_DIR / "plugins_sessionization.py"
 STREAMING_PLUGIN_PATH = PROJECT_DIR / "plugins_streaming_window.py"
+JOIN_PLUGIN_PATH = PROJECT_DIR / "plugins_rolling_window_join.py"
 WATERMARK_PLUGIN_PATH = PROJECT_DIR / "plugins_watermark_late_summary.py"
 
 spec = importlib.util.spec_from_file_location("mini_mapreduce_lab", MODULE_PATH)
@@ -152,6 +153,34 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(result.output["turnstile-east@2026-04-17T09:05:00Z"]["max_value"], 28.0)
             self.assertEqual(result.output["camera-lobby@2026-04-17T09:00:00Z"]["count"], 1)
             self.assertTrue(str(result.plugin).endswith("plugins_streaming_window.py"))
+
+    def test_plugin_job_can_emit_rolling_window_join_summaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "joins.csv"
+            source.write_text(
+                "checkout-core,left,2026-04-17T09:00:00Z,cart-update\n"
+                "checkout-core,right,2026-04-17T09:01:15Z,payment-auth\n"
+                "checkout-core,left,2026-04-17T09:06:00Z,cart-update\n"
+                "checkout-core,right,2026-04-17T09:07:00Z,payment-auth\n"
+                "checkout-core,left,2026-04-17T09:08:30Z,cart-update-pending\n"
+                "checkout-core,right,2026-04-17T09:15:30Z,payment-auth-orphan\n",
+                encoding="utf-8",
+            )
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=JOIN_PLUGIN_PATH,
+            )
+
+            self.assertEqual(result.job, "plugin-rolling-window-join")
+            self.assertEqual(result.output["checkout-core"]["matched_pairs"], 2)
+            self.assertEqual(result.output["checkout-core"]["unmatched_left_events"], 1)
+            self.assertEqual(result.output["checkout-core"]["unmatched_right_events"], 1)
+            self.assertEqual(result.output["checkout-core"]["windows"][0]["sample_pair"]["right_label"], "payment-auth")
+            self.assertTrue(str(result.plugin).endswith("plugins_rolling_window_join.py"))
 
     def test_plugin_job_can_emit_watermark_late_event_summaries(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -567,6 +596,26 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.benchmark_note_annotations[0]["title"], "Turnstile rush-hour burst")
         self.assertEqual(result.benchmark_note_annotations[1]["title"], "Lobby camera spillover")
         self.assertIn("turnstile-east@2026-04-17T09:10:00Z", result.benchmark_note_annotations[0]["hotspot_keys"])
+
+    def test_plugin_rolling_window_join_benchmark_reports_checkout_funnel_metadata(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=JOIN_PLUGIN_PATH,
+            dataset_family="checkout-funnel",
+        )
+
+        self.assertEqual(result.job, "plugin-rolling-window-join")
+        self.assertEqual(result.available_dataset_families, ["default", "checkout-funnel", "incident-correlation"])
+        self.assertEqual(result.plugin_mapper, "plugins_rolling_window_join.map_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_rolling_window_join.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Checkout core backlog")
+        self.assertEqual(result.benchmark_note_annotations[1]["title"], "Promo retry spillover")
+        self.assertIn("checkout-core", result.benchmark_note_annotations[0]["hotspot_keys"])
 
     def test_plugin_watermark_benchmark_reports_sensor_backfill_metadata(self) -> None:
         result = benchmark_job(
