@@ -10,10 +10,12 @@
 - [x] Add portfolio-facing README notes, research notes, review logs, and wrap-up support
 - [x] Add synthetic workload generators for loop-heavy, random-biased, and tournament-style traces
 - [x] Add generator CLI coverage plus reproducibility checks for the new synthetic workloads
-- [x] Add local-history and tournament predictors with advanced-predictor tests and JSON-visible chooser snapshots
+- [x] Add local-history, perceptron, and tournament predictors with advanced-predictor tests and JSON-visible state snapshots
 - [x] Render Markdown/SVG predictor comparison cards for the docs artifact gallery
+- [x] Add aliasing-focused traces and compare-output summaries so table-size trade-offs become easier to show in portfolio screenshots
+- [x] Add a perceptron-majority synthetic workload and perceptron predictor follow-up for advanced architecture coverage
 
 ## Next candidate slices
-- [ ] Add a perceptron predictor follow-up for advanced architecture coverage
 - [ ] Add trace-family sweep commands that batch-generate workloads and compare predictors in one run
-- [x] Add aliasing-focused traces and compare-output summaries so table-size trade-offs become easier to show in portfolio screenshots
+- [ ] Add perceptron threshold/weight-limit sweep artifacts so neural tuning is visible in the gallery
+- [ ] Add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view

@@ -12,5 +12,6 @@
 - [x] add local-history and tournament predictor coverage plus chooser-state inspection
 - [x] add Markdown/SVG comparison-card export plus committed artifact-gallery assets
 - [x] add alias-thrash synthetic workload and PC-index aliasing summaries for table-size trade-off demos
+- [x] add a perceptron predictor plus a linearly separable long-history workload for stronger architecture coverage
 - [x] log at least 3 review passes and fix issues found
 - [x] list next candidate slices for advanced architecture follow-ups

@@ -13,7 +13,13 @@ from typing import Any, Callable
 
 TAKEN_TOKENS = {"1", "t", "taken", "true", "y", "yes"}
 NOT_TAKEN_TOKENS = {"0", "f", "false", "n", "no", "not-taken", "not_taken", "nottaken", "untaken"}
-SYNTHETIC_WORKLOADS = ("loop-heavy", "random-biased", "tournament-style", "alias-thrash")
+SYNTHETIC_WORKLOADS = (
+    "loop-heavy",
+    "random-biased",
+    "tournament-style",
+    "alias-thrash",
+    "perceptron-majority",
+)
 
 
 @dataclass(frozen=True)
@@ -262,6 +268,65 @@ class GSharePredictor(BranchPredictor):
         }
 
 
+class PerceptronPredictor(BranchPredictor):
+    name = "perceptron"
+
+    def __init__(
+        self,
+        table_size: int = 16,
+        history_bits: int = 8,
+        threshold: int | None = None,
+        weight_limit: int | None = None,
+    ) -> None:
+        _validate_power_of_two(table_size, "table_size")
+        if history_bits < 1:
+            raise ValueError("history_bits must be at least 1")
+        self.table_size = table_size
+        self.mask = table_size - 1
+        self.history_bits = history_bits
+        self.threshold = max(1, threshold if threshold is not None else int((1.93 * history_bits) + 14))
+        self.weight_limit = max(1, weight_limit if weight_limit is not None else max(31, self.threshold * 2))
+        self.history = [-1] * history_bits
+        self.perceptrons = [[0] * (history_bits + 1) for _ in range(table_size)]
+
+    def _index(self, address: int) -> int:
+        return (address >> 2) & self.mask
+
+    def _activation(self, address: int) -> int:
+        weights = self.perceptrons[self._index(address)]
+        return weights[0] + sum(weight * history_bit for weight, history_bit in zip(weights[1:], self.history))
+
+    def predict(self, branch: BranchRecord) -> bool:
+        return self._activation(branch.address) >= 0
+
+    def update(self, branch: BranchRecord) -> None:
+        target = 1 if branch.taken else -1
+        index = self._index(branch.address)
+        weights = self.perceptrons[index]
+        activation = weights[0] + sum(weight * history_bit for weight, history_bit in zip(weights[1:], self.history))
+        prediction = activation >= 0
+        if prediction != branch.taken or abs(activation) <= self.threshold:
+            weights[0] = _clamp_to_limit(weights[0] + target, self.weight_limit)
+            for offset, history_bit in enumerate(self.history, start=1):
+                weights[offset] = _clamp_to_limit(weights[offset] + (target * history_bit), self.weight_limit)
+        self.history = [target, *self.history[:-1]]
+
+    def snapshot(self) -> dict[str, Any]:
+        trained_perceptrons = sum(1 for weights in self.perceptrons if any(weight != 0 for weight in weights))
+        non_zero_weights = sum(1 for weights in self.perceptrons for weight in weights if weight != 0)
+        max_abs_weight = max((abs(weight) for weights in self.perceptrons for weight in weights), default=0)
+        return {
+            "table_size": self.table_size,
+            "history_bits": self.history_bits,
+            "threshold": self.threshold,
+            "weight_limit": self.weight_limit,
+            "trained_perceptrons": trained_perceptrons,
+            "non_zero_weights": non_zero_weights,
+            "max_abs_weight": max_abs_weight,
+            "final_history": "".join("1" if bit > 0 else "0" for bit in self.history),
+        }
+
+
 class TournamentPredictor(BranchPredictor):
     name = "tournament"
 
@@ -330,6 +395,10 @@ class TournamentPredictor(BranchPredictor):
 def _validate_power_of_two(value: int, label: str) -> None:
     if value < 2 or value & (value - 1) != 0:
         raise ValueError(f"{label} must be a power of two >= 2")
+
+
+def _clamp_to_limit(value: int, limit: int) -> int:
+    return max(-limit, min(limit, value))
 
 
 def parse_outcome(token: str) -> bool:
@@ -536,11 +605,34 @@ def _generate_alias_thrash_trace(branches: int, seed: int) -> list[BranchRecord]
     return records
 
 
+def _generate_perceptron_majority_trace(branches: int, seed: int) -> list[BranchRecord]:
+    rng = random.Random(seed)
+    records: list[BranchRecord] = []
+    history = [1 if rng.random() < 0.5 else -1 for _ in range(12)]
+    weights = [3, 2, -2, 2, 1, -1, 1, 1, -1, 2, -2, 1]
+    bias = -1
+
+    while len(records) < branches:
+        score = bias + sum(weight * history_bit for weight, history_bit in zip(weights, history))
+        taken = score >= 0
+        target = 0x4B0 if taken else 0x484
+        _append_generated_record(
+            records,
+            address=0x480,
+            taken=taken,
+            target=target,
+            label="perceptron-majority-target",
+        )
+        history = [1 if taken else -1, *history[:-1]]
+    return records
+
+
 SYNTHETIC_TRACE_BUILDERS: dict[str, Callable[[int, int], list[BranchRecord]]] = {
     "loop-heavy": _generate_loop_heavy_trace,
     "random-biased": _generate_random_biased_trace,
     "tournament-style": _generate_tournament_style_trace,
     "alias-thrash": _generate_alias_thrash_trace,
+    "perceptron-majority": _generate_perceptron_majority_trace,
 }
 
 
@@ -755,6 +847,7 @@ def compare_predictors(records: list[BranchRecord], table_size: int = 16, histor
         simulate_trace(records, TwoBitPredictor(table_size=table_size)),
         simulate_trace(records, LocalHistoryPredictor(table_size=table_size, history_bits=history_bits)),
         simulate_trace(records, GSharePredictor(table_size=table_size, history_bits=history_bits)),
+        simulate_trace(records, PerceptronPredictor(table_size=table_size, history_bits=history_bits)),
         simulate_trace(records, TournamentPredictor(table_size=table_size, history_bits=history_bits)),
     ]
     return sorted(results, key=lambda item: (-item.accuracy, item.mispredictions, item.predictor))
@@ -774,6 +867,8 @@ def build_predictor(name: str, table_size: int, history_bits: int) -> BranchPred
         return LocalHistoryPredictor(table_size=table_size, history_bits=history_bits)
     if normalized == "gshare":
         return GSharePredictor(table_size=table_size, history_bits=history_bits)
+    if normalized == "perceptron":
+        return PerceptronPredictor(table_size=table_size, history_bits=history_bits)
     if normalized == "tournament":
         return TournamentPredictor(table_size=table_size, history_bits=history_bits)
     raise ValueError(f"unsupported predictor: {name}")
@@ -828,7 +923,7 @@ def _build_comparison_talking_points(
                 f"({abs(delta):.2f} pp in favor of one-bit on this trace)."
             )
 
-    advanced_names = {"local-history", "gshare", "tournament"}
+    advanced_names = {"local-history", "gshare", "perceptron", "tournament"}
     simple_names = {"always-taken", "always-not-taken", "one-bit", "two-bit"}
     advanced_best = next((result for result in results if result.predictor in advanced_names), None)
     simple_best = next((result for result in results if result.predictor in simple_names), None)
@@ -1068,7 +1163,7 @@ def render_comparison_svg(
     for index, result in enumerate(results):
         row_y = row_top + index * row_height
         bar_width = chart_width * result.accuracy
-        bar_color = "#2563eb" if index == 0 else ("#7c3aed" if result.predictor in {"local-history", "gshare", "tournament"} else "#94a3b8")
+        bar_color = "#2563eb" if index == 0 else ("#7c3aed" if result.predictor in {"local-history", "gshare", "perceptron", "tournament"} else "#94a3b8")
         parts.append(_svg_text(left_x + 20, row_y + 16, result.predictor, size=13, weight="700", fill="#0f172a"))
         parts.append(f'<rect x="{chart_left}" y="{row_y}" width="{chart_width:.1f}" height="18" rx="9" fill="#e2e8f0" />')
         parts.append(f'<rect x="{chart_left}" y="{row_y}" width="{bar_width:.1f}" height="18" rx="9" fill="{bar_color}" />')
@@ -1144,7 +1239,7 @@ def _build_parser() -> argparse.ArgumentParser:
     simulate_parser.add_argument("trace", **common_help["trace"])
     simulate_parser.add_argument(
         "--predictor",
-        choices=["always-taken", "always-not-taken", "one-bit", "two-bit", "local-history", "gshare", "tournament"],
+        choices=["always-taken", "always-not-taken", "one-bit", "two-bit", "local-history", "gshare", "perceptron", "tournament"],
         default="two-bit",
         help="Predictor to simulate.",
     )
@@ -1154,7 +1249,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     generate_parser = subparsers.add_parser(
         "generate",
-        help="Generate a synthetic branch trace for loop-heavy, random-biased, alias-thrash, or mixed tournament-style workloads.",
+        help="Generate a synthetic branch trace for loop-heavy, random-biased, alias-thrash, perceptron-majority, or mixed tournament-style workloads.",
     )
     generate_parser.add_argument("workload", choices=list(SYNTHETIC_WORKLOADS), help="Synthetic workload family to generate.")
     generate_parser.add_argument("--branches", type=int, default=32, help="How many branch records to generate.")

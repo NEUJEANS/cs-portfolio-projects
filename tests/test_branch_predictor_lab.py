@@ -23,6 +23,7 @@ BranchRecord = module.BranchRecord
 GSharePredictor = module.GSharePredictor
 LocalHistoryPredictor = module.LocalHistoryPredictor
 OneBitPredictor = module.OneBitPredictor
+PerceptronPredictor = module.PerceptronPredictor
 TournamentPredictor = module.TournamentPredictor
 TwoBitPredictor = module.TwoBitPredictor
 build_predictor = module.build_predictor
@@ -153,9 +154,10 @@ class BranchPredictorLabTests(unittest.TestCase):
         shallow_by_name = {result.predictor: result for result in shallow_results}
         deep_by_name = {result.predictor: result for result in deep_results}
 
-        self.assertEqual(deep_results[0].predictor, "gshare")
+        self.assertEqual(deep_results[0].predictor, "perceptron")
         self.assertGreater(deep_by_name["gshare"].accuracy, deep_by_name["two-bit"].accuracy)
         self.assertGreater(deep_by_name["gshare"].accuracy, shallow_by_name["gshare"].accuracy)
+        self.assertGreater(deep_by_name["perceptron"].accuracy, shallow_by_name["perceptron"].accuracy)
 
     def test_generate_alias_thrash_trace_creates_conflicting_collision_groups(self) -> None:
         trace = generate_synthetic_trace("alias-thrash", branches=24, seed=7)
@@ -180,6 +182,66 @@ class BranchPredictorLabTests(unittest.TestCase):
 
         self.assertGreater(large_by_name["two-bit"].accuracy, small_by_name["two-bit"].accuracy)
         self.assertGreater(large_by_name["one-bit"].accuracy, small_by_name["one-bit"].accuracy)
+
+    def test_generate_perceptron_majority_trace_is_seed_reproducible(self) -> None:
+        left = generate_synthetic_trace("perceptron-majority", branches=24, seed=13)
+        right = generate_synthetic_trace("perceptron-majority", branches=24, seed=13)
+        other = generate_synthetic_trace("perceptron-majority", branches=24, seed=14)
+
+        self.assertEqual(left, right)
+        self.assertNotEqual(left, other)
+        self.assertTrue(all(record.address == 0x480 for record in left))
+        self.assertTrue(all(record.label == "perceptron-majority-target" for record in left))
+
+    def test_perceptron_learns_linearly_separable_history_pattern(self) -> None:
+        trace = generate_synthetic_trace("perceptron-majority", branches=128, seed=13)
+
+        perceptron = simulate_trace(trace, PerceptronPredictor(table_size=32, history_bits=12))
+        gshare = simulate_trace(trace, GSharePredictor(table_size=32, history_bits=12))
+        two_bit = simulate_trace(trace, TwoBitPredictor(table_size=32))
+
+        self.assertGreater(perceptron.accuracy, 0.9)
+        self.assertGreater(perceptron.accuracy, gshare.accuracy)
+        self.assertGreater(perceptron.accuracy, two_bit.accuracy)
+        self.assertGreaterEqual(perceptron.final_state["trained_perceptrons"], 1)
+        self.assertGreater(perceptron.final_state["non_zero_weights"], 0)
+
+    def test_cli_simulate_perceptron_json_includes_weight_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_path = Path(tmpdir) / "perceptron-majority.trace"
+            trace_path.write_text(
+                "\n".join(
+                    "0x480 T 0x4b0 perceptron-majority-target" if record.taken else "0x480 N 0x484 perceptron-majority-target"
+                    for record in generate_synthetic_trace("perceptron-majority", branches=48, seed=13)
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "simulate",
+                    str(trace_path),
+                    "--predictor",
+                    "perceptron",
+                    "--table-size",
+                    "32",
+                    "--history-bits",
+                    "12",
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["predictor"], "perceptron")
+        self.assertEqual(payload["final_state"]["history_bits"], 12)
+        self.assertIn("threshold", payload["final_state"])
+        self.assertIn("weight_limit", payload["final_state"])
+        self.assertGreater(payload["final_state"]["non_zero_weights"], 0)
 
     def test_cli_compare_json_emits_best_predictor(self) -> None:
         completed = subprocess.run(

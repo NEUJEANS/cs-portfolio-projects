@@ -14,6 +14,7 @@ A compact computer-architecture portfolio project for simulating classic branch 
 - `two-bit` saturating-counter bimodal table
 - `local-history` two-level predictor with per-PC history registers
 - `gshare` with XOR-based global history
+- `perceptron` neural predictor with signed global-history weights
 - `tournament` chooser that combines local-history and gshare
 
 ## Implemented synthetic workloads
@@ -21,6 +22,7 @@ A compact computer-architecture portfolio project for simulating classic branch 
 - `random-biased` — several static branches with different taken probabilities for reproducible baseline sweeps
 - `tournament-style` — a mixed trace that combines correlated-history branches, loop behavior, and biased cleanup branches to motivate hybrid predictors
 - `alias-thrash` — paired static PCs deliberately collide in the same small predictor-table buckets with opposite taken biases so aliasing is visible in reports
+- `perceptron-majority` — a linearly separable long-history trace designed to show why perceptrons can generalize beyond small saturating-counter tables
 
 ## Trace format
 Use one branch per line:
@@ -146,6 +148,38 @@ python3 projects/branch-predictor-lab/branch_predictor.py compare \
   --json
 ```
 
+Generate a long-history workload that gives the perceptron predictor a fair demo case:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py generate \
+  perceptron-majority \
+  --branches 96 \
+  --seed 13 \
+  --output /tmp/perceptron-majority.trace
+python3 projects/branch-predictor-lab/branch_predictor.py compare \
+  /tmp/perceptron-majority.trace \
+  --table-size 32 \
+  --history-bits 12 \
+  --json
+```
+
+To reproduce the committed gallery artifact for this slice, use the seeded trace and committed docs paths:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py generate \
+  perceptron-majority \
+  --branches 96 \
+  --seed 13 \
+  --output artifacts/branch-predictor-lab/perceptron-majority-seed13.trace
+python3 projects/branch-predictor-lab/branch_predictor.py compare \
+  artifacts/branch-predictor-lab/perceptron-majority-seed13.trace \
+  --table-size 32 \
+  --history-bits 12 \
+  --markdown-out docs/artifacts/branch-predictor-lab/perceptron-majority-comparison.md \
+  --svg-out docs/artifacts/branch-predictor-lab/perceptron-majority-comparison.svg \
+  --json
+```
+
 Export recruiter-friendly Markdown and SVG comparison cards from the same compare command:
 
 ```bash
@@ -171,6 +205,7 @@ Run the tests:
 - the two-bit predictor uses the standard 2-bit saturating states (`00`, `01`, `10`, `11`) and defaults to weakly taken
 - the local-history predictor keeps a short per-PC history register and uses that pattern to pick a saturating counter, which makes repeated branch-local motifs easy to demonstrate
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
+- the perceptron predictor keeps a signed weight vector per static branch bucket and trains it with the classic update rule when the prediction is wrong or not confident, which makes long-history correlations explainable instead of purely table-lookup based
 - the tournament predictor tracks when local-history vs gshare is doing better for a given PC and exposes chooser-state snapshots so the hybrid behavior is inspectable in JSON output
 - compare output includes a static aliasing summary for the PC-indexed predictor tables so you can point at exact colliding buckets when discussing table-size trade-offs
 - the `alias-thrash` generator intentionally maps opposite-bias branches into the same low-order index bits, which makes interference easy to show without external trace corpora
@@ -180,11 +215,11 @@ Run the tests:
 - explain why one-bit predictors mispredict both loop exit and loop re-entry while two-bit predictors usually miss only on the exit
 - use the `tournament-style` workload to show why some branches want local-history tracking while others benefit from recent-history correlation
 - use the `alias-thrash` workload plus the compare JSON/Markdown alias summary to explain predictor-table interference and why larger tables can recover accuracy
-- compare `local-history`, `gshare`, and `tournament` on the same trace to talk through hybrid prediction instead of stopping at bimodal counters
+- compare `local-history`, `gshare`, `perceptron`, and `tournament` on the same trace to talk through local/global/neural/hybrid trade-offs instead of stopping at bimodal counters
+- use the `perceptron-majority` workload to explain linearly separable branch behavior and why perceptrons can use longer histories without exploding the table size
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
-- extend the simulator with perceptron prediction if you want a stronger architecture capstone story
 
 ## Future improvements
-- add a perceptron predictor follow-up for advanced architecture coverage
 - add trace-family sweep commands that run multiple generated workloads in one shot
 - add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
+- add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
