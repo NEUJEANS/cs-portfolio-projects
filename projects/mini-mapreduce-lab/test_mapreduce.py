@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
+WATERMARK_PLUGIN_PATH = PROJECT_DIR / "plugins_watermark_late_summary.py"
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
@@ -203,6 +204,35 @@ class MiniMapReduceTests(unittest.TestCase):
             )
             self.assertEqual(result.output["turnstile-east@2026-04-17T09:05:00Z"]["count"], 2)
             self.assertEqual(result.output["camera-lobby@2026-04-17T09:00:00Z"]["avg_value"], 5.0)
+
+    def test_plugin_job_can_emit_watermark_late_event_summary_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "late-events.csv"
+            source.write_text(
+                "camera-lobby,2026-04-17T09:00:00Z,2026-04-17T09:00:00Z,10\n"
+                "camera-lobby,2026-04-17T09:09:00Z,2026-04-17T09:09:00Z,20\n"
+                "camera-lobby,2026-04-17T09:03:00Z,2026-04-17T09:10:00Z,15\n"
+                "camera-lobby,2026-04-17T09:13:00Z,2026-04-17T09:13:00Z,25\n"
+                "camera-lobby,2026-04-17T09:02:00Z,2026-04-17T09:14:00Z,12\n"
+                "turnstile-east,2026-04-17T09:01:00Z,2026-04-17T09:01:00Z,5\n",
+                encoding="utf-8",
+            )
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=WATERMARK_PLUGIN_PATH,
+            )
+
+            self.assertEqual(result.job, "plugin-watermark-late-summary")
+            self.assertEqual(result.output["camera-lobby"]["late_events_seen"], 2)
+            self.assertEqual(result.output["camera-lobby"]["late_accepted_events"], 1)
+            self.assertEqual(result.output["camera-lobby"]["dropped_late_events"], 1)
+            self.assertEqual(result.output["camera-lobby"]["hottest_window_start"], "2026-04-17T09:00:00Z")
+            self.assertEqual(result.output["camera-lobby"]["windows"][0]["accepted_events"], 2)
+            self.assertEqual(result.output["turnstile-east"]["accepted_events"], 1)
 
     def test_plugin_job_rejects_non_json_serializable_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -627,7 +657,14 @@ class MiniMapReduceTests(unittest.TestCase):
 
         self.assertEqual(
             [Path(item).name for item in refs],
-            ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_streaming_window.py", "plugins_top_score.py"],
+            [
+                "plugins_average_score.py",
+                "plugins_service_latency.py",
+                "plugins_sessionization.py",
+                "plugins_streaming_window.py",
+                "plugins_top_score.py",
+                "plugins_watermark_late_summary.py",
+            ],
         )
 
     def test_cli_catalog_plugins_writes_json_markdown_and_html(self) -> None:
@@ -658,12 +695,19 @@ class MiniMapReduceTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8"))
             markdown = report_output.read_text(encoding="utf-8")
             html_payload = html_output.read_text(encoding="utf-8")
-            self.assertEqual(payload["plugin_count"], 5)
+            self.assertEqual(payload["plugin_count"], 6)
             self.assertEqual(
                 [Path(item["plugin"]).name for item in payload["plugins"]],
-                ["plugins_average_score.py", "plugins_service_latency.py", "plugins_sessionization.py", "plugins_streaming_window.py", "plugins_top_score.py"],
+                [
+                    "plugins_average_score.py",
+                    "plugins_service_latency.py",
+                    "plugins_sessionization.py",
+                    "plugins_streaming_window.py",
+                    "plugins_top_score.py",
+                    "plugins_watermark_late_summary.py",
+                ],
             )
-            self.assertEqual(len(payload["diffs"]), 4)
+            self.assertEqual(len(payload["diffs"]), 5)
             self.assertIn("# Mini MapReduce plugin inspection", markdown)
             self.assertIn("## Catalog quick links", markdown)
             self.assertIn("plugin-average-score", markdown)
@@ -1374,6 +1418,31 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertEqual(result.benchmark_note_annotations[0]["severity"], "risk")
         self.assertIn("turnstile-east@2026-04-17T09:10:00Z", result.benchmark_note_annotations[0]["hotspot_keys"])
         self.assertTrue(all(row["dataset_family"] == "iot-burst" for row in result.heatmap_rows))
+
+    def test_plugin_watermark_benchmark_surfaces_sensor_backfill_annotations(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=WATERMARK_PLUGIN_PATH,
+            dataset_family="sensor-backfill",
+        )
+
+        self.assertEqual(result.job, "plugin-watermark-late-summary")
+        self.assertEqual(result.dataset_family, "sensor-backfill")
+        self.assertEqual(result.available_dataset_families, ["default", "sensor-backfill", "live-replay"])
+        self.assertEqual(result.plugin_mapper, "plugins_watermark_late_summary.map_records")
+        self.assertEqual(result.plugin_reducer, "plugins_watermark_late_summary.reduce_key")
+        self.assertEqual(result.plugin_combiner, "plugins_watermark_late_summary.combine_values")
+        self.assertEqual(result.plugin_benchmark_generator, "plugins_watermark_late_summary.benchmark_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_watermark_late_summary.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Meter east replay storm")
+        self.assertEqual(result.benchmark_note_annotations[0]["severity"], "risk")
+        self.assertIn("meter-east", result.benchmark_note_annotations[0]["hotspot_keys"])
+        self.assertTrue(all(row["dataset_family"] == "sensor-backfill" for row in result.heatmap_rows))
 
     def test_benchmark_json_omits_annotation_view_when_unused(self) -> None:
         result = benchmark_job(

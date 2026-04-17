@@ -15,6 +15,7 @@ PLUGIN_PATH = PROJECT_DIR / "plugins_top_score.py"
 LATENCY_PLUGIN_PATH = PROJECT_DIR / "plugins_service_latency.py"
 SESSION_PLUGIN_PATH = PROJECT_DIR / "plugins_sessionization.py"
 STREAMING_PLUGIN_PATH = PROJECT_DIR / "plugins_streaming_window.py"
+WATERMARK_PLUGIN_PATH = PROJECT_DIR / "plugins_watermark_late_summary.py"
 
 spec = importlib.util.spec_from_file_location("mini_mapreduce_lab", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
@@ -151,6 +152,36 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(result.output["turnstile-east@2026-04-17T09:05:00Z"]["max_value"], 28.0)
             self.assertEqual(result.output["camera-lobby@2026-04-17T09:00:00Z"]["count"], 1)
             self.assertTrue(str(result.plugin).endswith("plugins_streaming_window.py"))
+
+    def test_plugin_job_can_emit_watermark_late_event_summaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "late-events.csv"
+            source.write_text(
+                "camera-lobby,2026-04-17T09:00:00Z,2026-04-17T09:00:00Z,10\n"
+                "camera-lobby,2026-04-17T09:09:00Z,2026-04-17T09:09:00Z,20\n"
+                "camera-lobby,2026-04-17T09:03:00Z,2026-04-17T09:10:00Z,15\n"
+                "camera-lobby,2026-04-17T09:13:00Z,2026-04-17T09:13:00Z,25\n"
+                "camera-lobby,2026-04-17T09:02:00Z,2026-04-17T09:14:00Z,12\n"
+                "turnstile-east,2026-04-17T09:01:00Z,2026-04-17T09:01:00Z,5\n",
+                encoding="utf-8",
+            )
+
+            result = execute_job(
+                "plugin",
+                [source],
+                shard_size=2,
+                reducers=2,
+                plugin_path=WATERMARK_PLUGIN_PATH,
+            )
+
+            self.assertEqual(result.job, "plugin-watermark-late-summary")
+            self.assertEqual(result.output["camera-lobby"]["late_events_seen"], 2)
+            self.assertEqual(result.output["camera-lobby"]["late_accepted_events"], 1)
+            self.assertEqual(result.output["camera-lobby"]["dropped_late_events"], 1)
+            self.assertEqual(result.output["camera-lobby"]["hottest_window_start"], "2026-04-17T09:00:00Z")
+            self.assertEqual(result.output["camera-lobby"]["windows"][0]["accepted_events"], 2)
+            self.assertEqual(result.output["turnstile-east"]["accepted_events"], 1)
+            self.assertTrue(str(result.plugin).endswith("plugins_watermark_late_summary.py"))
 
     def test_load_plugin_rejects_missing_mapper(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -536,6 +567,26 @@ class MiniMapReduceRepoTests(unittest.TestCase):
         self.assertEqual(result.benchmark_note_annotations[0]["title"], "Turnstile rush-hour burst")
         self.assertEqual(result.benchmark_note_annotations[1]["title"], "Lobby camera spillover")
         self.assertIn("turnstile-east@2026-04-17T09:10:00Z", result.benchmark_note_annotations[0]["hotspot_keys"])
+
+    def test_plugin_watermark_benchmark_reports_sensor_backfill_metadata(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=WATERMARK_PLUGIN_PATH,
+            dataset_family="sensor-backfill",
+        )
+
+        self.assertEqual(result.job, "plugin-watermark-late-summary")
+        self.assertEqual(result.available_dataset_families, ["default", "sensor-backfill", "live-replay"])
+        self.assertEqual(result.plugin_mapper, "plugins_watermark_late_summary.map_records")
+        self.assertEqual(result.plugin_benchmark_note_hook, "plugins_watermark_late_summary.benchmark_notes")
+        self.assertEqual(result.benchmark_note_annotations[0]["title"], "Meter east replay storm")
+        self.assertEqual(result.benchmark_note_annotations[1]["title"], "Meter west secondary lag")
+        self.assertIn("meter-east", result.benchmark_note_annotations[0]["hotspot_keys"])
 
     def test_plugin_benchmark_supports_plugin_defined_note_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

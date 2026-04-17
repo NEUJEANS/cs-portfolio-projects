@@ -36,7 +36,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
 - plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts with quick-link landing cards and review-friendly badge summaries, without repeating `--plugin` flags manually
 - optional dedicated per-plugin Markdown/HTML docs pages from the catalog flow so each bundled plugin can ship as its own review-friendly portfolio page
-- bundled richer plugin examples for score aggregation, observability latency summaries, product-analytics sessionization, and streaming-window telemetry rollups so the portfolio spans multiple systems stories
+- bundled richer plugin examples for score aggregation, observability latency summaries, product-analytics sessionization, streaming-window telemetry rollups, and watermark-aware late-event summaries so the portfolio spans multiple systems stories
 - lightweight `docs-index` landing-page export that scans the committed artifact bundle and links plugin catalogs, plugin docs, inspection diffs, benchmark reports, and annotation-batch presets from one place
 - repo-relative plugin references in run/benchmark outputs so committed JSON/CSV/Markdown/HTML artifacts stay portable across machines
 
@@ -212,6 +212,8 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
   --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
   --plugin projects/mini-mapreduce-lab/plugins_sessionization.py \
+  --plugin projects/mini-mapreduce-lab/plugins_streaming_window.py \
+  --plugin projects/mini-mapreduce-lab/plugins_watermark_late_summary.py \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
   --output plugin-batch.json \
   --csv-output plugin-batch.csv
@@ -224,6 +226,8 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --plugin projects/mini-mapreduce-lab/plugins_average_score.py \
   --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
   --plugin projects/mini-mapreduce-lab/plugins_sessionization.py \
+  --plugin projects/mini-mapreduce-lab/plugins_streaming_window.py \
+  --plugin projects/mini-mapreduce-lab/plugins_watermark_late_summary.py \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
   --diff \
   --output plugin-diff.json
@@ -237,6 +241,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py inspect-plugin \
   --plugin projects/mini-mapreduce-lab/plugins_service_latency.py \
   --plugin projects/mini-mapreduce-lab/plugins_sessionization.py \
   --plugin projects/mini-mapreduce-lab/plugins_streaming_window.py \
+  --plugin projects/mini-mapreduce-lab/plugins_watermark_late_summary.py \
   --plugin projects/mini-mapreduce-lab/plugins_top_score.py \
   --diff \
   --report-output plugin-diff-report.md \
@@ -264,7 +269,7 @@ python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \
   --docs-dir docs/plugin-pages
 ```
 
-Switch benchmark dataset families to model different workload shapes. For example, the built-in `json-group-count` benchmark now supports `default`, `incidents`, and `deployments` families, the average-score plugin exposes `default`, `exam-cram`, and `project-week`, the service-latency plugin exposes `default`, `incident-spike`, and `batch-window`, the sessionization plugin exposes `default`, `exam-revision`, and `launch-day`, and the streaming-window plugin exposes `default`, `iot-burst`, and `live-ops`:
+Switch benchmark dataset families to model different workload shapes. For example, the built-in `json-group-count` benchmark now supports `default`, `incidents`, and `deployments` families, the average-score plugin exposes `default`, `exam-cram`, and `project-week`, the service-latency plugin exposes `default`, `incident-spike`, and `batch-window`, the sessionization plugin exposes `default`, `exam-revision`, and `launch-day`, the streaming-window plugin exposes `default`, `iot-burst`, and `live-ops`, and the watermark late-summary plugin exposes `default`, `sensor-backfill`, and `live-replay`:
 
 ```bash
 python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
@@ -317,6 +322,19 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --html-output iot-burst-streaming-window-report.html
 ```
 
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
+  --job plugin \
+  --plugin projects/mini-mapreduce-lab/plugins_watermark_late_summary.py \
+  --scenario skewed \
+  --dataset-family sensor-backfill \
+  --records 240 \
+  --shard-size 30 \
+  --reducers 2 4 \
+  --report-output sensor-backfill-watermark-late-summary-report.md \
+  --html-output sensor-backfill-watermark-late-summary-report.html
+```
+
 Filter the structured reviewer callouts down to the highest-priority severities and collapse the rest into one summary card when you want a tighter benchmark write-up:
 
 ```bash
@@ -362,8 +380,8 @@ python3 projects/mini-mapreduce-lab/mapreduce.py docs-index \
 The current committed bundle includes:
 - Markdown index: [`../../docs/artifacts/mini-mapreduce/docs-index.md`](../../docs/artifacts/mini-mapreduce/docs-index.md)
 - HTML index: [`../../docs/artifacts/mini-mapreduce/docs-index.html`](../../docs/artifacts/mini-mapreduce/docs-index.html)
-- plugin catalog + dedicated plugin pages (including the service-latency, sessionization, and streaming-window examples) under [`../../docs/artifacts/mini-mapreduce/`](../../docs/artifacts/mini-mapreduce/)
-- incident-spike latency, launch-day sessionization, iot-burst streaming-window, and project-week score benchmark reports so reviewers can see four different portfolio stories from the same runner
+- plugin catalog + dedicated plugin pages (including the service-latency, sessionization, streaming-window, and watermark late-summary examples) under [`../../docs/artifacts/mini-mapreduce/`](../../docs/artifacts/mini-mapreduce/)
+- incident-spike latency, launch-day sessionization, iot-burst streaming-window, sensor-backfill watermark late-summary, and project-week score benchmark reports so reviewers can see five different portfolio stories from the same runner
 
 ## Plugin contract
 
@@ -388,6 +406,8 @@ The new `plugins_service_latency.py` example pushes the same contract into an ob
 The `plugins_sessionization.py` example pushes the runner toward product analytics: the mapper emits `user,timestamp,page` events, the combiner keeps shard-local event batches portable, and the reducer turns each user into a session summary with `session_count`, `total_events`, average session length, and longest-session metrics. Its benchmark families (`default`, `exam-revision`, `launch-day`) make the same runner look useful for clickstream/session-window discussions, and the structured annotations give you interview-ready narratives about cram-week traffic or launch-day war-room behavior.
 
 The `plugins_streaming_window.py` example reframes the runner as a mini streaming analytics lab: the mapper buckets `stream,timestamp,value` rows into deterministic five-minute windows, the combiner keeps count/sum/min/max timestamps JSON-safe, and the reducer returns window summaries with average value, min/max range, event rate, and first/last event times. Its benchmark families (`default`, `iot-burst`, `live-ops`) give you interview-friendly stories about rush-hour building telemetry or live-launch event bursts without changing the core runner.
+
+The `plugins_watermark_late_summary.py` example pushes the same lab one step closer to real stream-processing terminology: the mapper emits `stream,event_time,arrival_time,value` records, the combiner preserves deterministic arrival-order batches, and the reducer tracks a fixed-delay watermark so it can distinguish on-time updates, accepted late arrivals, and dropped late arrivals after the allowed-lateness boundary. Its benchmark families (`default`, `sensor-backfill`, `live-replay`) make the portfolio useful for talking about event time, replay storms, watermarks, and late-data trade-offs without requiring a full Flink or Beam setup.
 
 ## Output shape
 
@@ -448,8 +468,9 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how shard-to-reducer heatmaps make hot-key skew visible in demos, write-ups, and interviews
 - how generated Markdown reports make benchmark evidence easier to reuse in READMEs, blogs, and portfolio case studies
 - how standalone HTML artifacts with inline SVG charts make systems benchmarks easier to present visually without a notebook stack
+- how event time, watermark delay, and allowed lateness change what a streaming summary counts as on-time, acceptable replay, or too-late-to-keep data
 
 ## Future improvements
-- add another richer plugin example such as rolling-window joins or watermark-aware summaries so the portfolio spans more than score/latency/sessionization/windowing stories
+- add another richer plugin example such as rolling-window joins so the portfolio spans correlation stories as well as score/latency/sessionization/windowing/watermark demos
 - add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases, not just adjacent runs
 - add docs-site navigation sidebars or a cross-project portfolio landing page if the artifact surface keeps growing beyond one project bundle
