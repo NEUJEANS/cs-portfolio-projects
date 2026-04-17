@@ -77,6 +77,37 @@ class KDTree:
     def nearest_neighbor(self, target_x: float, target_y: float) -> Point:
         return self.k_nearest_neighbors(target_x, target_y, k=1)[0]
 
+    def radius_query(self, target_x: float, target_y: float, radius: float, limit: int | None = None) -> List[Point]:
+        if self.root is None:
+            raise ValueError("cannot query an empty tree")
+        if radius < 0:
+            raise ValueError("radius must be non-negative")
+        if limit is not None and limit <= 0:
+            raise ValueError("limit must be positive when provided")
+
+        radius_squared = radius**2
+        results: List[Point] = []
+
+        def visit(node: Optional[KDNode]) -> None:
+            if node is None:
+                return
+            point = node.point
+            if squared_distance(point, target_x, target_y) <= radius_squared:
+                results.append(point)
+
+            axis_value = target_x if node.axis == 0 else target_y
+            split_value = point.x if node.axis == 0 else point.y
+            first, second = (node.left, node.right) if axis_value <= split_value else (node.right, node.left)
+            visit(first)
+            if (axis_value - split_value) ** 2 <= radius_squared:
+                visit(second)
+
+        visit(self.root)
+        ordered = sorted(results, key=lambda point: (squared_distance(point, target_x, target_y), point_sort_key(point)))
+        if limit is not None:
+            return ordered[:limit]
+        return ordered
+
     def k_nearest_neighbors(self, target_x: float, target_y: float, k: int) -> List[Point]:
         if self.root is None:
             raise ValueError("cannot query an empty tree")
@@ -135,6 +166,29 @@ def invert_sort_key(key: tuple[float, float, str]) -> tuple[float, float, tuple[
 
 def squared_distance(point: Point, target_x: float, target_y: float) -> float:
     return (point.x - target_x) ** 2 + (point.y - target_y) ** 2
+
+
+def euclidean_distance(point: Point, target_x: float, target_y: float) -> float:
+    return math.sqrt(squared_distance(point, target_x, target_y))
+
+
+def brute_force_radius(points: Iterable[Point], target_x: float, target_y: float, radius: float, limit: int | None = None) -> List[Point]:
+    materialized = list(points)
+    if not materialized:
+        raise ValueError("cannot query an empty point set")
+    if radius < 0:
+        raise ValueError("radius must be non-negative")
+    if limit is not None and limit <= 0:
+        raise ValueError("limit must be positive when provided")
+
+    radius_squared = radius**2
+    ranked = sorted(
+        (point for point in materialized if squared_distance(point, target_x, target_y) <= radius_squared),
+        key=lambda point: (squared_distance(point, target_x, target_y), point_sort_key(point)),
+    )
+    if limit is not None:
+        return ranked[:limit]
+    return ranked
 
 
 def brute_force_k_nearest(points: Iterable[Point], target_x: float, target_y: float, k: int) -> List[Point]:
@@ -214,6 +268,12 @@ def build_parser() -> argparse.ArgumentParser:
     knearest.add_argument("y", type=float)
     knearest.add_argument("k", type=int)
 
+    radius = subparsers.add_parser("radius", help="Find points inside a circular radius")
+    radius.add_argument("x", type=float)
+    radius.add_argument("y", type=float)
+    radius.add_argument("radius", type=float)
+    radius.add_argument("--limit", type=int, default=None, help="Optional cap on the number of returned matches")
+
     range_parser = subparsers.add_parser("range", help="Find points inside a rectangle")
     range_parser.add_argument("min_x", type=float)
     range_parser.add_argument("min_y", type=float)
@@ -244,6 +304,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(
             json.dumps(
                 {"query": {"x": args.x, "y": args.y, "k": args.k}, "count": len(matches), "matches": [point.as_dict() for point in matches]},
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "radius":
+        tree = KDTree(points)
+        matches = tree.radius_query(args.x, args.y, args.radius, limit=args.limit)
+        print(
+            json.dumps(
+                {
+                    "query": {"x": args.x, "y": args.y, "radius": args.radius, "limit": args.limit},
+                    "count": len(matches),
+                    "matches": [
+                        {**point.as_dict(), "distance": round(euclidean_distance(point, args.x, args.y), 6)} for point in matches
+                    ],
+                },
                 indent=2,
             )
         )
