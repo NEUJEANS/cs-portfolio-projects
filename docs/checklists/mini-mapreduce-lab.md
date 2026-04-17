@@ -423,5 +423,5 @@
 - [x] generate committed example preset-batch artifacts for the project-week plugin benchmark
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider a lightweight landing page that links plugin catalogs, plugin doc pages, benchmark reports, and annotation-batch manifests into one portfolio-friendly docs index
