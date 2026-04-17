@@ -16,4 +16,5 @@
 - [x] Expand the benchmark generator with denser residual-heavy stress cases
 - [x] Export benchmark suites as committed Markdown/SVG report cards
 - [x] Add a compact artifact index page that compares DAG, dense, and layered benchmark cards side by side
-- [ ] Generalize weighted assignment into a custom min-cost-flow graph input format
+- [x] Generalize weighted assignment into a custom min-cost-flow graph input format
+- [ ] Add Graphviz DOT export for generic min-cost-flow graphs

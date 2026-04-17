@@ -197,6 +197,39 @@ def build_assignment_explanation(assignment_result: AssignmentResult) -> dict[st
     }
 
 
+def build_min_cost_flow_explanation(
+    flow_result: MinCostFlowResult,
+    *,
+    target_flow: int | None = None,
+) -> dict[str, Any]:
+    positive_flow_edges = [edge for edge in flow_result.edge_flows if edge["flow"] > 0]
+    used_edge_cost = sum(edge["flow"] * edge["cost"] for edge in positive_flow_edges)
+    average_cost_per_unit = round(flow_result.total_cost / flow_result.total_flow, 3) if flow_result.total_flow else None
+    target_reached = target_flow is None or flow_result.total_flow >= target_flow
+    return {
+        "total_flow": flow_result.total_flow,
+        "target_flow": target_flow,
+        "target_reached": target_reached,
+        "total_cost": flow_result.total_cost,
+        "average_cost_per_unit": average_cost_per_unit,
+        "cost_matches_used_edges": used_edge_cost == flow_result.total_cost,
+        "positive_flow_edges": positive_flow_edges,
+        "narrative": [
+            (
+                f"The solver shipped {flow_result.total_flow} unit(s) of flow"
+                f"{' out of the requested ' + str(target_flow) if target_flow is not None else ''}"
+                f" with total cost {flow_result.total_cost}."
+            ),
+            "Every positive-flow edge contributes `flow × cost` to the certificate, so the selected residual paths can be audited directly from the exported edge table.",
+            (
+                "The requested flow target was reached before the residual graph ran out of augmenting paths."
+                if target_reached
+                else "The residual graph ran out of augmenting paths before the requested flow target was reached, so the result is a best-effort partial shipment."
+            ),
+        ],
+    }
+
+
 MATCH_SOURCE = "__source__"
 MATCH_SINK = "__sink__"
 ASSIGN_SOURCE = "__assignment_source__"
@@ -328,6 +361,54 @@ def load_weighted_assignment_graph(path: Path) -> tuple[list[str], list[str], li
             raise ValueError("assignment edge cost must be non-negative")
         edges.append((source, target, cost))
     return left_nodes, right_nodes, edges
+
+
+def load_costed_flow_graph(path: Path) -> tuple[list[str], list[WeightedEdge], str, str, int | None]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    nodes = payload.get("nodes")
+    source = str(payload.get("source"))
+    sink = str(payload.get("sink"))
+    raw_edges = payload.get("edges")
+    target_flow = payload.get("target_flow")
+
+    if not isinstance(nodes, list) or not nodes:
+        raise ValueError("costed flow graph must include a non-empty 'nodes' list")
+    if not isinstance(raw_edges, list):
+        raise ValueError("costed flow graph must include an 'edges' list")
+
+    node_names = [str(node) for node in nodes]
+    if len(set(node_names)) != len(node_names):
+        raise ValueError("costed flow graph nodes must not contain duplicates")
+    if source not in node_names or sink not in node_names:
+        raise ValueError("costed flow graph source and sink must both appear in nodes")
+    if source == sink:
+        raise ValueError("costed flow graph source and sink must differ")
+
+    parsed_target_flow = int(target_flow) if target_flow is not None else None
+    if parsed_target_flow is not None and parsed_target_flow < 0:
+        raise ValueError("target_flow must be non-negative when provided")
+
+    node_set = set(node_names)
+    edges: list[WeightedEdge] = []
+    for item in raw_edges:
+        if not isinstance(item, dict):
+            raise ValueError("each costed flow edge must be an object")
+        edge = WeightedEdge(
+            source=str(item.get("source")),
+            target=str(item.get("target")),
+            capacity=int(item.get("capacity", -1)),
+            cost=int(item.get("cost", -1)),
+        )
+        if edge.source not in node_set or edge.target not in node_set:
+            raise ValueError("costed flow edge endpoints must appear in nodes")
+        if edge.source == edge.target:
+            raise ValueError("costed flow self-loops are not supported")
+        if edge.capacity < 0:
+            raise ValueError("costed flow edge capacity must be non-negative")
+        if edge.cost < 0:
+            raise ValueError("costed flow edge cost must be non-negative")
+        edges.append(edge)
+    return node_names, edges, source, sink, parsed_target_flow
 
 
 def build_bipartite_matching_flow(
@@ -1620,6 +1701,96 @@ def render_matching_svg(matching_result: MatchingResult, *, graph_name: str = "b
     return "".join(parts) + "\n"
 
 
+def render_min_cost_flow_svg(
+    flow_result: MinCostFlowResult,
+    *,
+    graph_name: str = "costed_flow",
+    target_flow: int | None = None,
+) -> str:
+    explanation = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+    width = 960
+    height = 640
+    displayed_edges = explanation["positive_flow_edges"][:6]
+    hidden_edges = max(0, len(explanation["positive_flow_edges"]) - len(displayed_edges))
+    displayed_paths = flow_result.augmenting_paths[:5]
+    hidden_paths = max(0, len(flow_result.augmenting_paths) - len(displayed_paths))
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Min-cost flow proof card</title>',
+        f'<desc id="desc">Proof-style summary card for {graph_name} showing the chosen min-cost flow edges and residual certificate.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 42, "Min-cost flow proof card", size=28, weight="700"),
+        _svg_text(28, 68, f"Graph: {graph_name} · flow={flow_result.total_flow} · cost={flow_result.total_cost}", size=14, fill="#334155"),
+    ]
+
+    requested_flow_label = str(target_flow) if target_flow is not None else "maximize"
+    stat_cards = [
+        (28, "Algorithm", flow_result.algorithm, "successive shortest paths over the residual graph"),
+        (258, "Requested flow", requested_flow_label, "explicit target or saturate until no path remains"),
+        (488, "Delivered flow", str(flow_result.total_flow), f"target reached: {explanation['target_reached']}"),
+        (718, "Total cost", str(flow_result.total_cost), f"avg cost/unit: {explanation['average_cost_per_unit']}"),
+    ]
+    for x, label, value, subtitle in stat_cards:
+        parts.append(f'<rect x="{x}" y="96" width="202" height="88" rx="18" fill="#ffffff" stroke="#cbd5e1" />')
+        parts.append(_svg_text(x + 16, 124, label, size=13, weight="600", fill="#475569"))
+        parts.append(_svg_text(x + 16, 154, value, size=24, weight="700"))
+        parts.append(_svg_text(x + 16, 176, _truncate_svg_text(subtitle, 34), size=12, fill="#64748b"))
+
+    section_top = 218
+    parts.append('<rect x="28" y="218" width="420" height="380" rx="24" fill="#ffffff" stroke="#cbd5e1" />')
+    parts.append(_svg_text(48, section_top + 26, "Edges carrying flow", size=20, weight="700"))
+    current_y = section_top + 56
+    if displayed_edges:
+        for edge in displayed_edges:
+            line = f"{edge['source']} -> {edge['target']} ({edge['flow']}/{edge['capacity']} @ cost {edge['cost']})"
+            parts.append(_svg_text(48, current_y, _truncate_svg_text(line, 46), size=15, weight="600", fill="#0f172a"))
+            current_y += 26
+    else:
+        parts.append(_svg_text(48, current_y, "(no edges carried positive flow)", size=15, fill="#475569"))
+        current_y += 26
+    if hidden_edges:
+        parts.append(_svg_text(48, current_y, f"+ {hidden_edges} more positive-flow edge(s)", size=13, fill="#64748b"))
+        current_y += 24
+    current_y += 10
+    current_y = _svg_add_wrapped_text(
+        parts,
+        48,
+        current_y,
+        f"Cost matches used edges: {explanation['cost_matches_used_edges']}",
+        max_chars=46,
+        size=13,
+        weight="600",
+    ) + 24
+    _svg_add_wrapped_text(
+        parts,
+        48,
+        current_y,
+        f"Target reached: {explanation['target_reached']}",
+        max_chars=46,
+        size=13,
+        weight="600",
+    )
+
+    parts.append('<rect x="478" y="218" width="454" height="380" rx="24" fill="#ffffff" stroke="#cbd5e1" />')
+    parts.append(_svg_text(498, section_top + 26, "Residual-path certificate", size=20, weight="700"))
+    current_y = section_top + 54
+    for line in explanation["narrative"]:
+        current_y = _svg_add_wrapped_text(parts, 498, current_y, line, max_chars=50, size=13) + 22
+    parts.append(_svg_text(498, current_y, "Augmenting paths", size=16, weight="700"))
+    current_y += 24
+    for index, step in enumerate(displayed_paths, start=1):
+        summary = f"#{index}: bottleneck {step['bottleneck']} · unit cost {step['cost_per_unit']} · total {step['path_cost']}"
+        current_y = _svg_add_wrapped_text(parts, 498, current_y, summary, max_chars=50, size=13, weight="600", fill="#0f172a") + 18
+        current_y = _svg_add_wrapped_text(parts, 514, current_y, ' -> '.join(step['path']), max_chars=46, size=12, fill="#475569") + 20
+    if hidden_paths:
+        parts.append(_svg_text(498, min(current_y, 572), f"+ {hidden_paths} more augmenting path(s)", size=12, fill="#64748b"))
+
+    parts.append(_svg_text(28, 622, "Tip: pair this card with the assignment proof card to show the same min-cost engine in both generic and bipartite settings.", size=12, fill="#64748b"))
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
 def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
     explanation = build_assignment_explanation(assignment_result)
     width = 960
@@ -1704,6 +1875,52 @@ def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: st
     parts.append("</svg>")
     return "\n".join(parts)
 
+
+
+def render_min_cost_flow_markdown(
+    flow_result: MinCostFlowResult,
+    *,
+    graph_name: str = "costed_flow",
+    target_flow: int | None = None,
+) -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    explanation = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+    positive_edge_lines = "\n".join(
+        f"- `{edge['source']} -> {edge['target']}` carries `{edge['flow']}/{edge['capacity']}` at unit cost `{edge['cost']}`"
+        for edge in explanation["positive_flow_edges"]
+    ) or "- (no edges carried positive flow)"
+    path_lines = "\n".join(
+        f"- `{ ' -> '.join(step['path']) }` · bottleneck `{step['bottleneck']}` · unit cost `{step['cost_per_unit']}` · path cost `{step['path_cost']}`"
+        for step in flow_result.augmenting_paths
+    ) or "- (no augmenting paths)"
+    narrative = "\n".join(f"- {line}" for line in explanation["narrative"])
+    requested_flow = target_flow if target_flow is not None else "maximize until no augmenting path remains"
+    return f"""# Min-cost flow proof artifact: `{graph_name}`
+
+- Generated: `{generated}`
+- Solver: `{flow_result.algorithm}`
+- Requested flow: `{requested_flow}`
+- Delivered flow: `{flow_result.total_flow}`
+- Total cost: `{flow_result.total_cost}`
+- Average cost per unit: `{explanation['average_cost_per_unit']}`
+
+## Edges carrying flow
+
+{positive_edge_lines}
+
+## Coverage summary
+
+- Target reached: `{explanation['target_reached']}`
+- Cost matches used edges: `{explanation['cost_matches_used_edges']}`
+
+## Residual-path narrative
+
+{narrative}
+
+## Augmenting paths
+
+{path_lines}
+"""
 
 
 def render_assignment_markdown(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
@@ -1853,7 +2070,7 @@ def add_explain_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Solve max-flow graphs, bipartite matchings, and weighted assignments.")
+    parser = argparse.ArgumentParser(description="Solve max-flow graphs, bipartite matchings, weighted assignments, and generic min-cost-flow graphs.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     solve_parser = subparsers.add_parser("solve", help="solve a graph JSON file")
@@ -1902,6 +2119,19 @@ def build_parser() -> argparse.ArgumentParser:
     assign_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample assignment graph")
     assign_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample assignment graph")
     add_explain_argument(assign_demo_parser)
+
+    cost_parser = subparsers.add_parser("cost-solve", help="solve a generic min-cost-flow JSON file")
+    cost_parser.add_argument("graph", type=Path, help="path to generic min-cost-flow JSON")
+    cost_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    cost_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved costed flow graph")
+    cost_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved costed flow graph")
+    add_explain_argument(cost_parser)
+
+    cost_demo_parser = subparsers.add_parser("cost-demo", help="run the bundled generic min-cost-flow sample")
+    cost_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    cost_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample costed flow graph")
+    cost_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample costed flow graph")
+    add_explain_argument(cost_demo_parser)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
     benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated benchmark graph")
@@ -2040,6 +2270,60 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             payload["markdown_output"] = str(args.markdown_out)
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_assignment_svg(assignment_result, graph_name=graph_path.stem))
+            payload["svg_output"] = str(args.svg_out)
+        return payload
+
+    if args.command == "cost-solve":
+        graph_path = args.graph
+        nodes, edges, source, sink, target_flow = load_costed_flow_graph(graph_path)
+        flow_result = solve_min_cost_max_flow(nodes, edges, source, sink, target_flow=target_flow)
+        payload = {
+            "command": args.command,
+            "graph": str(graph_path),
+            "target_flow": target_flow,
+            "target_reached": target_flow is None or flow_result.total_flow >= target_flow,
+            **flow_result.to_dict(),
+        }
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(
+                args.markdown_out,
+                render_min_cost_flow_markdown(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
+            )
+            payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(
+                args.svg_out,
+                render_min_cost_flow_svg(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
+            )
+            payload["svg_output"] = str(args.svg_out)
+        return payload
+
+    if args.command == "cost-demo":
+        graph_path = Path(__file__).with_name("sample_cost_flow_graph.json")
+        nodes, edges, source, sink, target_flow = load_costed_flow_graph(graph_path)
+        flow_result = solve_min_cost_max_flow(nodes, edges, source, sink, target_flow=target_flow)
+        payload = {
+            "command": args.command,
+            "graph": str(graph_path),
+            "target_flow": target_flow,
+            "target_reached": target_flow is None or flow_result.total_flow >= target_flow,
+            **flow_result.to_dict(),
+        }
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(
+                args.markdown_out,
+                render_min_cost_flow_markdown(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
+            )
+            payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(
+                args.svg_out,
+                render_min_cost_flow_svg(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
+            )
             payload["svg_output"] = str(args.svg_out)
         return payload
 

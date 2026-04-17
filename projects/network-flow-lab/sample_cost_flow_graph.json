@@ -1,0 +1,16 @@
+{
+  "nodes": ["s", "a", "b", "c", "t"],
+  "source": "s",
+  "sink": "t",
+  "target_flow": 2,
+  "edges": [
+    {"source": "s", "target": "a", "capacity": 2, "cost": 0},
+    {"source": "s", "target": "b", "capacity": 1, "cost": 0},
+    {"source": "a", "target": "b", "capacity": 1, "cost": 1},
+    {"source": "a", "target": "c", "capacity": 1, "cost": 2},
+    {"source": "a", "target": "t", "capacity": 1, "cost": 7},
+    {"source": "b", "target": "c", "capacity": 1, "cost": 1},
+    {"source": "b", "target": "t", "capacity": 1, "cost": 3},
+    {"source": "c", "target": "t", "capacity": 2, "cost": 1}
+  ]
+}

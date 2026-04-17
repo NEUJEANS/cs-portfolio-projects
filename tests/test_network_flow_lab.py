@@ -26,6 +26,7 @@ generate_layered_flow_graph = module.generate_layered_flow_graph
 load_graph = module.load_graph
 load_bipartite_graph = module.load_bipartite_graph
 load_weighted_assignment_graph = module.load_weighted_assignment_graph
+load_costed_flow_graph = module.load_costed_flow_graph
 render_flow_dot = module.render_flow_dot
 render_matching_dot = module.render_matching_dot
 render_flow_markdown = module.render_flow_markdown
@@ -34,6 +35,8 @@ render_matching_markdown = module.render_matching_markdown
 render_matching_svg = module.render_matching_svg
 render_assignment_markdown = module.render_assignment_markdown
 render_assignment_svg = module.render_assignment_svg
+render_min_cost_flow_markdown = module.render_min_cost_flow_markdown
+render_min_cost_flow_svg = module.render_min_cost_flow_svg
 render_benchmark_markdown = module.render_benchmark_markdown
 render_benchmark_svg = module.render_benchmark_svg
 solve_max_flow = module.solve_max_flow
@@ -44,6 +47,7 @@ solve_weighted_assignment = module.solve_weighted_assignment
 build_flow_explanation = module.build_flow_explanation
 build_matching_explanation = module.build_matching_explanation
 build_assignment_explanation = module.build_assignment_explanation
+build_min_cost_flow_explanation = module.build_min_cost_flow_explanation
 
 
 class NetworkFlowLabTests(unittest.TestCase):
@@ -479,6 +483,84 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn("Min-cost-flow certificate", svg)
         self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
 
+    def test_load_costed_flow_graph_rejects_negative_cost_and_bad_target_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            negative_cost_path = Path(tmpdir) / "negative_cost_flow.json"
+            negative_cost_path.write_text(
+                json.dumps(
+                    {
+                        "nodes": ["s", "t"],
+                        "source": "s",
+                        "sink": "t",
+                        "edges": [{"source": "s", "target": "t", "capacity": 1, "cost": -1}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "cost must be non-negative"):
+                load_costed_flow_graph(negative_cost_path)
+
+            bad_target_path = Path(tmpdir) / "bad_target_flow.json"
+            bad_target_path.write_text(
+                json.dumps(
+                    {
+                        "nodes": ["s", "t"],
+                        "source": "s",
+                        "sink": "t",
+                        "target_flow": -1,
+                        "edges": [{"source": "s", "target": "t", "capacity": 1, "cost": 2}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "target_flow"):
+                load_costed_flow_graph(bad_target_path)
+
+    def test_min_cost_flow_respects_target_flow_on_generic_graph(self) -> None:
+        nodes = ["s", "a", "b", "c", "t"]
+        edges = [
+            module.WeightedEdge("s", "a", 2, 0),
+            module.WeightedEdge("s", "b", 1, 0),
+            module.WeightedEdge("a", "b", 1, 1),
+            module.WeightedEdge("a", "c", 1, 2),
+            module.WeightedEdge("a", "t", 1, 7),
+            module.WeightedEdge("b", "c", 1, 1),
+            module.WeightedEdge("b", "t", 1, 3),
+            module.WeightedEdge("c", "t", 2, 1),
+        ]
+
+        result = solve_min_cost_max_flow(nodes, edges, "s", "t", target_flow=2)
+
+        self.assertEqual(result.total_flow, 2)
+        self.assertEqual(result.total_cost, 5)
+        explanation = build_min_cost_flow_explanation(result, target_flow=2)
+        self.assertTrue(explanation["target_reached"])
+        self.assertTrue(explanation["cost_matches_used_edges"])
+        self.assertEqual(explanation["average_cost_per_unit"], 2.5)
+
+    def test_render_min_cost_flow_markdown_and_svg_include_certificate_details(self) -> None:
+        result = solve_min_cost_max_flow(
+            ["s", "a", "t"],
+            [
+                module.WeightedEdge("s", "a", 2, 0),
+                module.WeightedEdge("a", "t", 2, 3),
+            ],
+            "s",
+            "t",
+            target_flow=2,
+        )
+
+        markdown = render_min_cost_flow_markdown(result, graph_name="tiny_cost_flow", target_flow=2)
+        self.assertIn('# Min-cost flow proof artifact: `tiny_cost_flow`', markdown)
+        self.assertIn('## Edges carrying flow', markdown)
+        self.assertIn('## Augmenting paths', markdown)
+
+        svg = render_min_cost_flow_svg(result, graph_name="tiny_cost_flow", target_flow=2)
+        self.assertIn("<svg", svg)
+        self.assertIn("Min-cost flow proof card", svg)
+        self.assertIn("Residual-path certificate", svg)
+        self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
+
     def test_cli_assign_demo_outputs_assignment_payload(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "assign-demo", "--explain"],
@@ -521,6 +603,50 @@ class NetworkFlowLabTests(unittest.TestCase):
             self.assertTrue(svg_path.exists())
             self.assertIn("Weighted assignment proof artifact", markdown_path.read_text(encoding="utf-8"))
             self.assertIn("Weighted assignment proof card", svg_path.read_text(encoding="utf-8"))
+
+    def test_cli_cost_demo_outputs_min_cost_flow_payload(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "cost-demo", "--explain"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "cost-demo")
+        self.assertEqual(payload["target_flow"], 2)
+        self.assertTrue(payload["target_reached"])
+        self.assertEqual(payload["total_flow"], 2)
+        self.assertEqual(payload["total_cost"], 5)
+        self.assertIn("explanation", payload)
+        self.assertTrue(payload["explanation"]["cost_matches_used_edges"])
+
+    def test_cli_cost_demo_can_write_markdown_and_svg_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "cost-flow-proof.md"
+            svg_path = Path(tmpdir) / "cost-flow-proof.svg"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "cost-demo",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertIn("Min-cost flow proof artifact", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Min-cost flow proof card", svg_path.read_text(encoding="utf-8"))
 
     def test_random_graph_generator_is_reproducible_and_connected(self) -> None:
         graph_a = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)

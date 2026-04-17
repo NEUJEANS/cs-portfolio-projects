@@ -4,10 +4,15 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 
 ## Proof cards
 
-| Flow proof card | Matching proof card | Weighted assignment proof card |
-| --- | --- | --- |
-| ![Max-flow proof card](./sample-flow-proof.svg) | ![Bipartite matching proof card](./sample-matching-proof.svg) | ![Weighted assignment proof card](./sample-assignment-proof.svg) |
-| [Markdown proof](./sample-flow-proof.md) | [Markdown proof](./sample-matching-proof.md) | [Markdown proof](./sample-assignment-proof.md) |
+| Flow proof card | Matching proof card |
+| --- | --- |
+| ![Max-flow proof card](./sample-flow-proof.svg) | ![Bipartite matching proof card](./sample-matching-proof.svg) |
+| [Markdown proof](./sample-flow-proof.md) | [Markdown proof](./sample-matching-proof.md) |
+
+| Weighted assignment proof card | Generic min-cost-flow proof card |
+| --- | --- |
+| ![Weighted assignment proof card](./sample-assignment-proof.svg) | ![Min-cost flow proof card](./sample-cost-flow-proof.svg) |
+| [Markdown proof](./sample-assignment-proof.md) | [Markdown proof](./sample-cost-flow-proof.md) |
 
 ## Benchmark report cards
 
@@ -39,4 +44,5 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 - Lead with the SVG cards when you need a visual summary without terminal screenshots.
 - Pair one proof card with one benchmark report to show both correctness and performance storytelling.
 - Use the weighted assignment card when you want a recruiter-friendly optimization example instead of only a feasibility/cut proof.
+- Use the generic min-cost-flow card when you want to show the same optimization engine on a non-bipartite shipping/routing-style graph.
 - Link this gallery from project-level README files so reviewers can jump straight into the artifacts.

@@ -1,13 +1,13 @@
 # network-flow-lab
 
-A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, extends that story into weighted assignment via min-cost flow, and now ships a reproducible benchmark mode with multiple graph families, a bipartite minimum-vertex-cover explainer via König's theorem, Graphviz DOT export for explainable visuals, plus optional proof views that narrate why the reported cut/cover/cost certificate is correct.
+A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, extends that story into weighted assignment via min-cost flow, and now also solves generic source/sink min-cost-flow graphs with reusable proof artifacts. The lab ships a reproducible benchmark mode with multiple graph families, a bipartite minimum-vertex-cover explainer via König's theorem, Graphviz DOT export for explainable visuals, plus optional proof views that narrate why the reported cut/cover/cost certificate is correct.
 
 ## Why it is interesting
 - demonstrates a classic graph algorithm used in routing, scheduling, and resource allocation
 - shows how residual graphs and breadth-first search interact in a clean implementation
-- connects max flow to two interview-friendly follow-ups: maximum bipartite matching and weighted assignment
+- connects max flow to interview-friendly follow-ups: maximum bipartite matching, weighted assignment, and generic min-cost shipping/routing graphs
 - demonstrates the matching/vertex-cover duality that often comes up in algorithms classes and interviews
-- shows how min-cost flow turns a weighted bipartite graph into an optimization story instead of only a feasibility story
+- shows how min-cost flow turns a weighted bipartite graph into an optimization story instead of only a feasibility story, then generalizes the same engine to reusable source/sink costed networks
 - produces explainable output instead of only a final number
 - gives interview-ready material around correctness, complexity, and cut/flow duality
 - adds visualization-ready artifacts that make demos and README screenshots easier to build
@@ -21,15 +21,17 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - bipartite-matching mode that reduces assignments to unit-capacity flow
 - minimum vertex cover recovery for bipartite graphs using alternating paths after the matching is found
 - weighted assignment mode that solves a min-cost max-flow reduction with successive shortest augmenting paths
+- generic min-cost-flow mode for custom source/sink graphs with capacities, non-negative edge costs, and optional `target_flow`
 - committed weighted-assignment Markdown/SVG proof artifacts for portfolio screenshots without terminal capture
+- committed generic min-cost-flow Markdown/SVG proof artifacts for portfolio screenshots without terminal capture
 - reproducible benchmark mode that compares Edmonds-Karp vs Dinic on random DAGs, dense residual-style meshes, or layered cut-stress graphs
 - standalone benchmark report-card export in Markdown and SVG for quick portfolio screenshots and README embeds
 - Graphviz DOT export for solved flow graphs and bipartite matchings
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
-- standalone `--markdown-out` proof artifacts for flow and matching runs so portfolio screenshots do not require terminal capture
-- standalone `--svg-out` proof cards for flow and matching runs so the project ships screenshot-ready visual summaries without Graphviz
-- bundled sample flow, matching, and weighted-assignment graphs
-- unit tests for correctness, validation, CLI behavior, algorithm parity, and benchmark behavior
+- standalone `--markdown-out` proof artifacts for flow, matching, assignment, and generic min-cost-flow runs so portfolio screenshots do not require terminal capture
+- standalone `--svg-out` proof cards for flow, matching, assignment, and generic min-cost-flow runs so the project ships screenshot-ready visual summaries without Graphviz
+- bundled sample flow, matching, weighted-assignment, and generic cost-flow graphs
+- unit tests for correctness, validation, CLI behavior, algorithm parity, min-cost-flow behavior, and benchmark behavior
 
 ## Usage
 
@@ -83,6 +85,15 @@ python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-l
 python3 projects/network-flow-lab/network_flow.py assign projects/network-flow-lab/sample_assignment_graph.json --svg-out /tmp/assignment-proof.svg --pretty
 ```
 
+Run the bundled generic min-cost-flow sample or solve a custom costed network. This mode keeps the same min-cost engine but drops the bipartite-only assumptions, so it works for small shipping/routing-style source/sink graphs too:
+
+```bash
+python3 projects/network-flow-lab/network_flow.py cost-demo --pretty
+python3 projects/network-flow-lab/network_flow.py cost-demo --explain --pretty
+python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --markdown-out /tmp/cost-flow-proof.md --pretty
+python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --svg-out /tmp/cost-flow-proof.svg --pretty
+```
+
 Weighted-assignment format:
 
 ```json
@@ -94,6 +105,24 @@ Weighted-assignment format:
     {"source": "anna", "target": "compiler", "cost": 4},
     {"source": "ben", "target": "api", "cost": 2},
     {"source": "chloe", "target": "database", "cost": 6}
+  ]
+}
+```
+
+Generic min-cost-flow format (non-negative costs only, with optional `target_flow` if you want a fixed amount shipped before the solver stops):
+
+```json
+{
+  "nodes": ["s", "a", "b", "t"],
+  "source": "s",
+  "sink": "t",
+  "target_flow": 2,
+  "edges": [
+    {"source": "s", "target": "a", "capacity": 2, "cost": 0},
+    {"source": "s", "target": "b", "capacity": 1, "cost": 0},
+    {"source": "a", "target": "t", "capacity": 1, "cost": 4},
+    {"source": "a", "target": "b", "capacity": 1, "cost": 1},
+    {"source": "b", "target": "t", "capacity": 2, "cost": 2}
   ]
 }
 ```
@@ -151,6 +180,8 @@ Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/sample-matching-proof.svg`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.md`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.svg`
+- `docs/artifacts/network-flow-lab/sample-cost-flow-proof.md`
+- `docs/artifacts/network-flow-lab/sample-cost-flow-proof.svg`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.md`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.svg`
 - `docs/artifacts/network-flow-lab/benchmark-dense-report.md`
@@ -174,12 +205,13 @@ python3 -m unittest tests/test_network_flow_lab.py
 - Once a maximum matching is known, the lab derives a minimum vertex cover by alternating-path reachability from unmatched left-side vertices, giving a constructive König's theorem witness.
 - In matching mode, `--explain` surfaces the alternating-path reachability sets and the recovered cover vertices so the proof can be demoed without reading code.
 - Weighted assignment is modeled as a min-cost max-flow reduction with unit capacities on left/right partitions and non-negative costs on compatibility edges; successive shortest augmenting paths with reduced-cost potentials keep the residual shortest-path search deterministic and interview-explainable.
+- The same min-cost engine now also accepts generic source/sink costed-flow graphs with capacities, non-negative costs, and an optional `target_flow`, which makes the project useful for small shipping/routing stories beyond bipartite assignment.
 - The benchmark mode generates reproducible graph families for three different stories: random DAGs, dense cyclic residual meshes, and layered cut-stress networks; it verifies both algorithms return the same max-flow value and summarizes elapsed time plus augmentation/phase counts.
 - Benchmark report-card export turns one benchmark run into committed Markdown/SVG artifacts with setup details, trial tables, and interview-ready headline metrics.
 - The standalone proof-card SVG export gives you screenshot-ready correctness summaries for both raw max-flow runs and bipartite-match reductions without requiring Graphviz.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
-- generalize the min-cost-flow engine from weighted assignment into a custom costed-flow graph input format
-- render actual node-link SVG layouts for solved flow, matching, and assignment proofs instead of card-style summaries
+- add Graphviz DOT export for generic min-cost-flow graphs so costed routes can be diagrammed like the max-flow and matching modes
+- render actual node-link SVG layouts for solved flow, matching, assignment, and generic min-cost-flow proofs instead of card-style summaries
 - add a tiny static web gallery that lets viewers toggle between Markdown, SVG, and raw JSON artifacts
