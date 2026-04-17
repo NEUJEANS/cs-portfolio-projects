@@ -17,4 +17,5 @@
 - [x] Add focused reviewer callouts for code samples or architecture notes
 - [x] Add side-by-side comparison blocks for before/after refactors or benchmark deltas
 - [x] Add sitemap.xml and RSS feed generation for blog-style portfolio sites
-- [ ] Add date-based archive pages or timeline indexes for dated portfolio posts
+- [x] Add date-based archive pages or timeline indexes for dated portfolio posts
+- [ ] Add richer archive layouts such as featured entries or excerpt cards inside archive pages
