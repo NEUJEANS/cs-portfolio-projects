@@ -22,7 +22,7 @@
 - sync safety: fetched `origin/main` before editing and again immediately before commit/push; branch stayed in sync throughout the slice
 
 ## Commit hash
-- implementation commit: `PENDING_COMMIT_HASH`
+- implementation commit: `464e316a0d7e839c08966adf1601fdd2253a6f01`
 
 ## Next step
 - add optional benchmark-annotation filters or collapse modes so larger plugins can emit many reviewer callouts without overwhelming Markdown/HTML reports
