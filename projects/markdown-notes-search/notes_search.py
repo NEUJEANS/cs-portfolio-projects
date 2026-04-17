@@ -592,6 +592,67 @@ def build_grouped_section_result(group_results):
     return group_note
 
 
+def format_section_reference(section_match):
+    label = section_match.get('path_with_anchor') or section_match.get('path') or ''
+    if section_match.get('line_number'):
+        label += f":{section_match['line_number']}"
+    return label
+
+
+def section_hits_for_note(note):
+    if note.get('section_hits'):
+        return list(note['section_hits'])
+    if note.get('group_results'):
+        return [item.get('section_match') for item in note['group_results'] if item.get('section_match')]
+    return []
+
+
+def build_collapsed_section_result(group_results):
+    top_result = group_results[0]
+    section_hits = section_hits_for_note({'group_results': group_results})
+    headings = [grouped_section_label(result) for result in group_results]
+    count = len(group_results)
+    listed_headings = ', '.join(headings[:3])
+    if len(headings) > 3:
+        listed_headings += f', +{len(headings) - 3} more'
+    snippet = f'{count} related sections: {listed_headings}' if listed_headings else f'{count} related sections'
+
+    collapsed_note = dict(top_result)
+    collapsed_note['scope'] = 'section-group'
+    collapsed_note['snippet'] = snippet
+    collapsed_note['group_count'] = count
+    collapsed_note['group_headings'] = headings
+    collapsed_note['group_results'] = list(group_results)
+    collapsed_note['section_hits'] = section_hits
+    return collapsed_note
+
+
+def collapse_results_for_output(results):
+    counts = section_cluster_counts(results)
+
+    collapsed_results = []
+    pending_groups = {}
+    for note in results:
+        if note.get('scope') != 'section' or counts.get(note['path'], 0) < 2:
+            collapsed_results.append(note)
+            continue
+
+        bucket = pending_groups.get(note['path'])
+        if bucket is None:
+            bucket = []
+            pending_groups[note['path']] = bucket
+            collapsed_results.append(bucket)
+        bucket.append(note)
+
+    output = []
+    for item in collapsed_results:
+        if isinstance(item, list):
+            output.append(build_collapsed_section_result(item))
+        else:
+            output.append(item)
+    return output
+
+
 def group_results_for_tui(results):
     counts = section_cluster_counts(results)
 
@@ -719,10 +780,15 @@ def format_result(note, show_backlinks=False, show_section_match=False, show_ope
     if show_backlinks and note.get('backlinks'):
         backlinks = f"\n  backlinks: {', '.join(note['backlinks'])}"
     section = ''
-    if show_section_match and note.get('section_match'):
-        line_number = note['section_match'].get('line_number')
-        line_suffix = f':{line_number}' if line_number else ''
-        section = f"\n  section: {note['section_match']['path_with_anchor']}{line_suffix}"
+    if show_section_match:
+        section_hits = section_hits_for_note(note)
+        if note.get('scope') == 'section-group' and section_hits:
+            section_labels = [format_section_reference(hit) for hit in section_hits[:3]]
+            if len(section_hits) > 3:
+                section_labels.append(f"+{len(section_hits) - 3} more")
+            section = f"\n  sections: {', '.join(section_labels)}"
+        elif note.get('section_match'):
+            section = f"\n  section: {format_section_reference(note['section_match'])}"
     open_command = ''
     if show_open_command:
         command = build_editor_command(note, editor=editor, base_directory=base_directory)
@@ -841,6 +907,7 @@ def export_results(results, destination, export_format='markdown', editor=None, 
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     selected = []
     for note in results:
+        section_hits = section_hits_for_note(note)
         payload = {
             'path': note['path'],
             'path_display': result_display_path(note),
@@ -849,6 +916,8 @@ def export_results(results, destination, export_format='markdown', editor=None, 
             'tags': note.get('tags', []),
             'snippet': note.get('snippet', ''),
             'section_match': note.get('section_match'),
+            'section_hits': section_hits,
+            'group_count': note.get('group_count'),
             'open_command': build_editor_command(note, editor=editor, base_directory=base_directory),
         }
         selected.append(payload)
@@ -868,12 +937,13 @@ def export_results(results, destination, export_format='markdown', editor=None, 
         lines.append(f"- score: {note['score']}")
         if note['tags']:
             lines.append(f"- tags: {' '.join('#' + tag for tag in note['tags'])}")
-        if note['section_match']:
-            section = note['section_match']
-            label = f"{section['path_with_anchor']}"
-            if section.get('line_number'):
-                label += f":{section['line_number']}"
-            lines.append(f"- section: `{label}`")
+        if note['section_hits'] and note['scope'] == 'section-group':
+            lines.append(f"- grouped section hits: {note['group_count'] or len(note['section_hits'])}")
+            lines.append('- section hits:')
+            for section in note['section_hits']:
+                lines.append(f"  - `{format_section_reference(section)}`")
+        elif note['section_match']:
+            lines.append(f"- section: `{format_section_reference(note['section_match'])}`")
         if note['snippet']:
             lines.append(f"- snippet: {note['snippet']}")
         command = ' '.join(shlex.quote(part) for part in note['open_command'])
@@ -1047,6 +1117,7 @@ def main(argv=None):
     parser.add_argument('--export-format', choices=('markdown', 'json'), default='markdown', help='export format for --export-results')
     parser.add_argument('--tui', action='store_true', help='browse results in a terminal UI with a preview pane')
     parser.add_argument('--section-results', action='store_true', help='expand ranked note matches into section-level results when headings or bodies contain the query')
+    parser.add_argument('--collapse-sections', action='store_true', help='collapse multi-section hits from the same note into one plain-text/JSON/export entry')
     parser.add_argument(
         '--index-file',
         default=None,
@@ -1063,6 +1134,7 @@ def main(argv=None):
         rebuild_index=args.rebuild_index,
     )
     results = search_notes(notes, args.query, limit=args.limit, section_results=args.section_results)
+    display_results = collapse_results_for_output(results) if args.collapse_sections else results
     if args.json:
         payload = [
             {
@@ -1078,9 +1150,11 @@ def main(argv=None):
                 'snippet': note['snippet'],
                 'matched_terms': note.get('matched_terms', []),
                 'section_match': note.get('section_match'),
+                'section_hits': note.get('section_hits'),
+                'group_count': note.get('group_count'),
                 'open_command': build_editor_command(note, editor=args.editor, base_directory=args.directory),
             }
-            for note in results
+            for note in display_results
         ]
         print(json.dumps(payload, indent=2))
         return
@@ -1095,7 +1169,7 @@ def main(argv=None):
         )
         return
 
-    for note in results:
+    for note in display_results:
         print(
             format_result(
                 note,
@@ -1109,15 +1183,15 @@ def main(argv=None):
 
     if args.export_results:
         export_results(
-            results,
+            display_results,
             args.export_results,
             export_format=args.export_format,
             editor=args.editor,
             base_directory=args.directory,
         )
 
-    if args.open_result and results:
-        open_result_in_editor(results[0], editor=args.editor, base_directory=args.directory)
+    if args.open_result and display_results:
+        open_result_in_editor(display_results[0], editor=args.editor, base_directory=args.directory)
 
 
 if __name__ == '__main__':

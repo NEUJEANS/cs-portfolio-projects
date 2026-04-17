@@ -158,9 +158,25 @@ Last updated: 2026-04-17
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+## Vertical slice 11 — collapsed section bundles outside the TUI
+- [x] confirm markdown-notes-search still had a clear unfinished follow-up because dense `--section-results` clusters were only collapsible inside the TUI
+- [x] skip external web research because the next slice was already scoped in the local checklist, README, and prior wrap-up
+- [x] skip extra language refresh because the slice reuses the same section-grouping patterns as the recent TUI work
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--collapse-sections` for plain-text, JSON, and export flows so multi-section note hits can bundle into one review-friendly entry
+- [x] keep grouped output actionable by preserving the strongest section jump target plus the full grouped section-hit list in exported bundles
+- [x] expand automated coverage for output-collapsing helpers, collapsed formatting, export payloads, and CLI behavior
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Next slice candidates
 - [ ] richer posting-list style incremental index rather than storing full note bodies in cache
 - [x] multi-result TUI actions such as bulk-open or export
 - [x] section-scoped retrieval with heading anchors and open-in-editor actions for multiple selected hits
 - [x] collapse/group dense section-result clusters from the same note in TUI mode
-- [ ] add plain-text or export-side collapse controls for closely related section-scoped hits
+- [x] add plain-text or export-side collapse controls for closely related section-scoped hits
+- [ ] add tunable collapse thresholds or section-distance clustering for very large notes with dozens of near-duplicate hits

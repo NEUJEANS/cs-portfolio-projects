@@ -12,7 +12,9 @@ from notes_search import (
     INDEX_VERSION,
     build_editor_command,
     build_preview_lines,
+    collapse_results_for_output,
     export_results,
+    format_result,
     group_results_for_tui,
     index_notes,
     search_notes,
@@ -539,6 +541,151 @@ class NotesSearchTests(unittest.TestCase):
         )
         self.assertEqual(selection_label([grouped_note], {0}), '2 selected results')
         self.assertIn('[2 sections]', summarize_result_line(grouped_note, 48))
+
+    def test_collapse_results_for_output_groups_multi_section_note_clusters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\n## Failure Detection\nHeartbeat timeout and phi accrual.\n## Failure Recovery\nFailure detection retries and timers.',
+                encoding='utf-8',
+            )
+            (root / 'storage.md').write_text('# Storage\nCompaction overview.', encoding='utf-8')
+
+            results = search_notes(index_notes(root), 'failure OR compaction', section_results=True)
+            collapsed = collapse_results_for_output(results)
+
+            self.assertEqual([item['scope'] for item in collapsed], ['section-group', 'section'])
+            self.assertEqual(collapsed[0]['group_count'], 2)
+            self.assertIn(
+                collapsed[0]['section_match']['path_with_anchor'],
+                {'systems.md#failure-detection', 'systems.md#failure-recovery'},
+            )
+            self.assertEqual(
+                sorted(item['path_with_anchor'] for item in collapsed[0]['section_hits']),
+                ['systems.md#failure-detection', 'systems.md#failure-recovery'],
+            )
+
+    def test_format_result_shows_collapsed_section_labels(self):
+        note = {
+            'path': 'systems.md',
+            'score': 188,
+            'scope': 'section-group',
+            'tags': ['systems'],
+            'snippet': '2 related sections: Failure Detection (#failure-detection), Failure Recovery (#failure-recovery)',
+            'section_match': {
+                'heading': 'Failure Detection',
+                'anchor': 'failure-detection',
+                'path': 'systems.md',
+                'path_with_anchor': 'systems.md#failure-detection',
+                'line_number': 3,
+            },
+            'section_hits': [
+                {
+                    'heading': 'Failure Detection',
+                    'anchor': 'failure-detection',
+                    'path': 'systems.md',
+                    'path_with_anchor': 'systems.md#failure-detection',
+                    'line_number': 3,
+                },
+                {
+                    'heading': 'Failure Recovery',
+                    'anchor': 'failure-recovery',
+                    'path': 'systems.md',
+                    'path_with_anchor': 'systems.md#failure-recovery',
+                    'line_number': 6,
+                },
+            ],
+        }
+
+        rendered = format_result(note, show_section_match=True, show_open_command=True, editor='code', base_directory='/tmp/notes')
+
+        self.assertIn('systems.md (score=188)', rendered)
+        self.assertIn('2 related sections', rendered)
+        self.assertIn('sections: systems.md#failure-detection:3, systems.md#failure-recovery:6', rendered)
+        self.assertIn('open: code --goto', rendered)
+
+    def test_export_results_writes_grouped_section_bundles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            grouped_note = {
+                'path': 'systems.md',
+                'score': 188,
+                'scope': 'section-group',
+                'tags': ['systems'],
+                'snippet': '2 related sections: Failure Detection (#failure-detection), Failure Recovery (#failure-recovery)',
+                'group_count': 2,
+                'section_match': {
+                    'heading': 'Failure Detection',
+                    'anchor': 'failure-detection',
+                    'path': 'systems.md',
+                    'path_with_anchor': 'systems.md#failure-detection',
+                    'line_number': 3,
+                },
+                'section_hits': [
+                    {
+                        'heading': 'Failure Detection',
+                        'anchor': 'failure-detection',
+                        'path': 'systems.md',
+                        'path_with_anchor': 'systems.md#failure-detection',
+                        'line_number': 3,
+                    },
+                    {
+                        'heading': 'Failure Recovery',
+                        'anchor': 'failure-recovery',
+                        'path': 'systems.md',
+                        'path_with_anchor': 'systems.md#failure-recovery',
+                        'line_number': 6,
+                    },
+                ],
+            }
+
+            markdown_path = root / 'exports' / 'collapsed.md'
+            json_path = root / 'exports' / 'collapsed.json'
+            export_results([grouped_note], markdown_path, editor='code', base_directory=root)
+            export_results([grouped_note], json_path, export_format='json', editor='code', base_directory=root)
+
+            markdown_payload = markdown_path.read_text(encoding='utf-8')
+            json_payload = json.loads(json_path.read_text(encoding='utf-8'))
+
+            self.assertIn('- grouped section hits: 2', markdown_payload)
+            self.assertIn('  - `systems.md#failure-recovery:6`', markdown_payload)
+            self.assertEqual(json_payload[0]['scope'], 'section-group')
+            self.assertEqual(
+                [item['path_with_anchor'] for item in json_payload[0]['section_hits']],
+                ['systems.md#failure-detection', 'systems.md#failure-recovery'],
+            )
+
+    def test_cli_collapse_sections_collapses_plain_text_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'systems.md').write_text(
+                '# Distributed Systems\n## Failure Detection\nHeartbeat timeout and phi accrual.\n## Failure Recovery\nFailure detection retries and timers.',
+                encoding='utf-8',
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'notes_search.py',
+                    str(root),
+                    'failure',
+                    '--section-results',
+                    '--collapse-sections',
+                    '--show-sections',
+                ],
+                cwd=Path(__file__).resolve().parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.stdout.count('(score='), 1)
+            self.assertIn('systems.md (score=', completed.stdout)
+            self.assertIn('2 related sections:', completed.stdout)
+            self.assertIn('Failure Detection (#failure-detection)', completed.stdout)
+            self.assertIn('Failure Recovery (#failure-recovery)', completed.stdout)
+            self.assertIn('systems.md#failure-detection:2', completed.stdout)
+            self.assertIn('systems.md#failure-recovery:4', completed.stdout)
 
     def test_group_results_for_tui_keeps_duplicate_heading_anchors_distinct(self):
         results = [
