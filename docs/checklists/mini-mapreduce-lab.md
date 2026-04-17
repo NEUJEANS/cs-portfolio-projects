@@ -451,6 +451,6 @@
 - [x] extend project-level and repo-level tests for structured latency output, benchmark metadata, and catalog discovery
 - [x] regenerate the committed Mini MapReduce artifact bundle so the catalog, plugin pages, diff report, and docs index include the new service-latency plugin
 - [x] run targeted tests and 3 review passes (link audit, publishability audit, and commit-pinned/source-path review fixed the absolute-path leak in inspection artifacts before publish)
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 - [ ] consider a follow-up plugin example such as sessionization or streaming-window summaries
