@@ -1256,6 +1256,67 @@ def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "b
     return "\n".join(lines)
 
 
+def render_min_cost_flow_dot(
+    flow_result: MinCostFlowResult,
+    *,
+    graph_name: str = "costed_flow",
+    target_flow: int | None = None,
+) -> str:
+    explanation = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+    node_pool = (
+        {flow_result.source, flow_result.sink}
+        | {edge["source"] for edge in flow_result.edge_flows}
+        | {edge["target"] for edge in flow_result.edge_flows}
+    )
+    node_names = [flow_result.source]
+    node_names.extend(sorted(node for node in node_pool if node not in {flow_result.source, flow_result.sink}))
+    node_names.append(flow_result.sink)
+    positive_nodes = {
+        edge["source"]
+        for edge in flow_result.edge_flows
+        if edge["flow"] > 0
+    } | {
+        edge["target"]
+        for edge in flow_result.edge_flows
+        if edge["flow"] > 0
+    }
+    requested_flow = target_flow if target_flow is not None else "maximize"
+
+    lines = [
+        f'digraph "{graph_name}" {{',
+        '  rankdir=LR;',
+        '  labelloc="t";',
+        (
+            '  label="'
+            f'min-cost flow={flow_result.total_flow}, cost={flow_result.total_cost}, '
+            f'target={requested_flow}, reached={explanation["target_reached"]}'
+            '";'
+        ),
+        '  node [shape=circle, style="filled", fillcolor="white"];',
+    ]
+
+    for node in node_names:
+        attrs: list[str] = []
+        if node == flow_result.source:
+            attrs.extend(['fillcolor="lightblue"', 'peripheries=2'])
+        elif node == flow_result.sink:
+            attrs.extend(['fillcolor="lightgoldenrod1"', 'peripheries=2'])
+        elif node in positive_nodes:
+            attrs.append('fillcolor="honeydew2"')
+        lines.append(f'  "{node}" [{", ".join(attrs)}];' if attrs else f'  "{node}";')
+
+    for edge in flow_result.edge_flows:
+        attrs = [f'label="{edge["flow"]}/{edge["capacity"]} @ {edge["cost"]}"']
+        if edge["flow"] > 0:
+            attrs.extend(['color="forestgreen"', 'penwidth=3'])
+        else:
+            attrs.append('color="gray60"')
+        lines.append(f'  "{edge["source"]}" -> "{edge["target"]}" [{", ".join(attrs)}];')
+
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def _humanize_assignment_path(path: list[str]) -> list[str]:
     labels = {
         ASSIGN_SOURCE: "source",
@@ -2123,12 +2184,14 @@ def build_parser() -> argparse.ArgumentParser:
     cost_parser = subparsers.add_parser("cost-solve", help="solve a generic min-cost-flow JSON file")
     cost_parser.add_argument("graph", type=Path, help="path to generic min-cost-flow JSON")
     cost_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    cost_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved costed flow graph")
     cost_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved costed flow graph")
     cost_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved costed flow graph")
     add_explain_argument(cost_parser)
 
     cost_demo_parser = subparsers.add_parser("cost-demo", help="run the bundled generic min-cost-flow sample")
     cost_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    cost_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample costed flow graph")
     cost_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample costed flow graph")
     cost_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample costed flow graph")
     add_explain_argument(cost_demo_parser)
@@ -2286,6 +2349,12 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         }
         if getattr(args, "explain", False):
             payload["explanation"] = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+        if getattr(args, "dot_out", None):
+            write_dot_output(
+                args.dot_out,
+                render_min_cost_flow_dot(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
+            )
+            payload["dot_output"] = str(args.dot_out)
         if getattr(args, "markdown_out", None):
             write_markdown_output(
                 args.markdown_out,
@@ -2313,6 +2382,12 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         }
         if getattr(args, "explain", False):
             payload["explanation"] = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+        if getattr(args, "dot_out", None):
+            write_dot_output(
+                args.dot_out,
+                render_min_cost_flow_dot(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
+            )
+            payload["dot_output"] = str(args.dot_out)
         if getattr(args, "markdown_out", None):
             write_markdown_output(
                 args.markdown_out,

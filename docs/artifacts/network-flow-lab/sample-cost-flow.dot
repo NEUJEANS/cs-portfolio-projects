@@ -1,0 +1,19 @@
+digraph "sample_cost_flow_graph" {
+  rankdir=LR;
+  labelloc="t";
+  label="min-cost flow=2, cost=5, target=2, reached=True";
+  node [shape=circle, style="filled", fillcolor="white"];
+  "s" [fillcolor="lightblue", peripheries=2];
+  "a" [fillcolor="honeydew2"];
+  "b" [fillcolor="honeydew2"];
+  "c" [fillcolor="honeydew2"];
+  "t" [fillcolor="lightgoldenrod1", peripheries=2];
+  "a" -> "b" [label="0/1 @ 1", color="gray60"];
+  "a" -> "c" [label="1/1 @ 2", color="forestgreen", penwidth=3];
+  "a" -> "t" [label="0/1 @ 7", color="gray60"];
+  "b" -> "c" [label="1/1 @ 1", color="forestgreen", penwidth=3];
+  "b" -> "t" [label="0/1 @ 3", color="gray60"];
+  "c" -> "t" [label="2/2 @ 1", color="forestgreen", penwidth=3];
+  "s" -> "a" [label="1/2 @ 0", color="forestgreen", penwidth=3];
+  "s" -> "b" [label="1/1 @ 0", color="forestgreen", penwidth=3];
+}

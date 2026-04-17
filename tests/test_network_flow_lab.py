@@ -35,6 +35,7 @@ render_matching_markdown = module.render_matching_markdown
 render_matching_svg = module.render_matching_svg
 render_assignment_markdown = module.render_assignment_markdown
 render_assignment_svg = module.render_assignment_svg
+render_min_cost_flow_dot = module.render_min_cost_flow_dot
 render_min_cost_flow_markdown = module.render_min_cost_flow_markdown
 render_min_cost_flow_svg = module.render_min_cost_flow_svg
 render_benchmark_markdown = module.render_benchmark_markdown
@@ -538,6 +539,24 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertTrue(explanation["cost_matches_used_edges"])
         self.assertEqual(explanation["average_cost_per_unit"], 2.5)
 
+    def test_render_min_cost_flow_dot_includes_cost_labels_and_highlights_positive_flow(self) -> None:
+        result = solve_min_cost_max_flow(
+            ["s", "a", "t"],
+            [
+                module.WeightedEdge("s", "a", 2, 0),
+                module.WeightedEdge("a", "t", 2, 3),
+            ],
+            "s",
+            "t",
+            target_flow=2,
+        )
+
+        dot = render_min_cost_flow_dot(result, graph_name="tiny_cost_flow", target_flow=2)
+        self.assertIn('digraph "tiny_cost_flow"', dot)
+        self.assertIn('label="min-cost flow=2, cost=6, target=2, reached=True";', dot)
+        self.assertIn('"s" [fillcolor="lightblue", peripheries=2];', dot)
+        self.assertIn('"a" -> "t" [label="2/2 @ 3", color="forestgreen", penwidth=3];', dot)
+
     def test_render_min_cost_flow_markdown_and_svg_include_certificate_details(self) -> None:
         result = solve_min_cost_max_flow(
             ["s", "a", "t"],
@@ -621,8 +640,9 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn("explanation", payload)
         self.assertTrue(payload["explanation"]["cost_matches_used_edges"])
 
-    def test_cli_cost_demo_can_write_markdown_and_svg_outputs(self) -> None:
+    def test_cli_cost_demo_can_write_dot_markdown_and_svg_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
+            dot_path = Path(tmpdir) / "cost-flow.dot"
             markdown_path = Path(tmpdir) / "cost-flow-proof.md"
             svg_path = Path(tmpdir) / "cost-flow-proof.svg"
             completed = subprocess.run(
@@ -630,6 +650,8 @@ class NetworkFlowLabTests(unittest.TestCase):
                     "python3",
                     str(MODULE_PATH),
                     "cost-demo",
+                    "--dot-out",
+                    str(dot_path),
                     "--markdown-out",
                     str(markdown_path),
                     "--svg-out",
@@ -641,10 +663,13 @@ class NetworkFlowLabTests(unittest.TestCase):
                 text=True,
             )
             payload = json.loads(completed.stdout)
+            self.assertEqual(payload["dot_output"], str(dot_path))
             self.assertEqual(payload["markdown_output"], str(markdown_path))
             self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(dot_path.exists())
             self.assertTrue(markdown_path.exists())
             self.assertTrue(svg_path.exists())
+            self.assertIn('digraph "sample_cost_flow_graph"', dot_path.read_text(encoding="utf-8"))
             self.assertIn("Min-cost flow proof artifact", markdown_path.read_text(encoding="utf-8"))
             self.assertIn("Min-cost flow proof card", svg_path.read_text(encoding="utf-8"))
 

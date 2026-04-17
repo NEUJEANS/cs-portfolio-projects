@@ -1,6 +1,6 @@
 # network-flow-lab
 
-A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, extends that story into weighted assignment via min-cost flow, and now also solves generic source/sink min-cost-flow graphs with reusable proof artifacts. The lab ships a reproducible benchmark mode with multiple graph families, a bipartite minimum-vertex-cover explainer via König's theorem, Graphviz DOT export for explainable visuals, plus optional proof views that narrate why the reported cut/cover/cost certificate is correct.
+A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp or Dinic, records each augmenting path, reports the resulting min cut, includes a bipartite-matching helper built on the same flow engine, extends that story into weighted assignment via min-cost flow, and now also solves generic source/sink min-cost-flow graphs with reusable proof artifacts. The lab ships a reproducible benchmark mode with multiple graph families, a bipartite minimum-vertex-cover explainer via König's theorem, Graphviz DOT export for explainable visuals across flow/matching/generic cost-flow variants, plus optional proof views that narrate why the reported cut/cover/cost certificate is correct.
 
 ## Why it is interesting
 - demonstrates a classic graph algorithm used in routing, scheduling, and resource allocation
@@ -26,7 +26,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - committed generic min-cost-flow Markdown/SVG proof artifacts for portfolio screenshots without terminal capture
 - reproducible benchmark mode that compares Edmonds-Karp vs Dinic on random DAGs, dense residual-style meshes, or layered cut-stress graphs
 - standalone benchmark report-card export in Markdown and SVG for quick portfolio screenshots and README embeds
-- Graphviz DOT export for solved flow graphs and bipartite matchings
+- Graphviz DOT export for solved flow graphs, bipartite matchings, and generic min-cost-flow graphs
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--markdown-out` proof artifacts for flow, matching, assignment, and generic min-cost-flow runs so portfolio screenshots do not require terminal capture
 - standalone `--svg-out` proof cards for flow, matching, assignment, and generic min-cost-flow runs so the project ships screenshot-ready visual summaries without Graphviz
@@ -90,6 +90,7 @@ Run the bundled generic min-cost-flow sample or solve a custom costed network. T
 ```bash
 python3 projects/network-flow-lab/network_flow.py cost-demo --pretty
 python3 projects/network-flow-lab/network_flow.py cost-demo --explain --pretty
+python3 projects/network-flow-lab/network_flow.py cost-demo --dot-out /tmp/cost-flow.dot
 python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --markdown-out /tmp/cost-flow-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --svg-out /tmp/cost-flow-proof.svg --pretty
 ```
@@ -180,6 +181,7 @@ Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/sample-matching-proof.svg`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.md`
 - `docs/artifacts/network-flow-lab/sample-assignment-proof.svg`
+- `docs/artifacts/network-flow-lab/sample-cost-flow.dot`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.md`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.svg`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.md`
@@ -206,12 +208,13 @@ python3 -m unittest tests/test_network_flow_lab.py
 - In matching mode, `--explain` surfaces the alternating-path reachability sets and the recovered cover vertices so the proof can be demoed without reading code.
 - Weighted assignment is modeled as a min-cost max-flow reduction with unit capacities on left/right partitions and non-negative costs on compatibility edges; successive shortest augmenting paths with reduced-cost potentials keep the residual shortest-path search deterministic and interview-explainable.
 - The same min-cost engine now also accepts generic source/sink costed-flow graphs with capacities, non-negative costs, and an optional `target_flow`, which makes the project useful for small shipping/routing stories beyond bipartite assignment.
+- Generic min-cost-flow DOT export labels each edge with `flow/capacity @ cost`, so the chosen shipment paths can be diagrammed alongside the Markdown/SVG proof artifacts.
 - The benchmark mode generates reproducible graph families for three different stories: random DAGs, dense cyclic residual meshes, and layered cut-stress networks; it verifies both algorithms return the same max-flow value and summarizes elapsed time plus augmentation/phase counts.
 - Benchmark report-card export turns one benchmark run into committed Markdown/SVG artifacts with setup details, trial tables, and interview-ready headline metrics.
 - The standalone proof-card SVG export gives you screenshot-ready correctness summaries for both raw max-flow runs and bipartite-match reductions without requiring Graphviz.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
-- add Graphviz DOT export for generic min-cost-flow graphs so costed routes can be diagrammed like the max-flow and matching modes
+- add Graphviz DOT export for weighted-assignment reductions so the bipartite min-cost story can be diagrammed directly too
 - render actual node-link SVG layouts for solved flow, matching, assignment, and generic min-cost-flow proofs instead of card-style summaries
-- add a tiny static web gallery that lets viewers toggle between Markdown, SVG, and raw JSON artifacts
+- add a tiny static web gallery that lets viewers toggle between Markdown, SVG, DOT, and raw JSON artifacts
