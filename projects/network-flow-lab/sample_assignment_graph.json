@@ -1,0 +1,15 @@
+{
+  "left": ["anna", "ben", "chloe", "david"],
+  "right": ["api", "compiler", "database"],
+  "edges": [
+    {"source": "anna", "target": "api", "cost": 8},
+    {"source": "anna", "target": "compiler", "cost": 4},
+    {"source": "anna", "target": "database", "cost": 7},
+    {"source": "ben", "target": "api", "cost": 2},
+    {"source": "ben", "target": "compiler", "cost": 6},
+    {"source": "chloe", "target": "compiler", "cost": 5},
+    {"source": "chloe", "target": "database", "cost": 9},
+    {"source": "david", "target": "api", "cost": 9},
+    {"source": "david", "target": "database", "cost": 6}
+  ]
+}

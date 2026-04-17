@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import heapq
 import json
 import math
 import random
@@ -19,6 +20,14 @@ class Edge:
     source: str
     target: str
     capacity: int
+
+
+@dataclass(frozen=True)
+class WeightedEdge:
+    source: str
+    target: str
+    capacity: int
+    cost: int
 
 
 @dataclass(frozen=True)
@@ -66,6 +75,53 @@ class MatchingResult:
             "unmatched_left": self.unmatched_left,
             "unmatched_right": self.unmatched_right,
             "minimum_vertex_cover": self.minimum_vertex_cover,
+            "flow": self.flow,
+        }
+
+
+@dataclass(frozen=True)
+class MinCostFlowResult:
+    source: str
+    sink: str
+    total_flow: int
+    total_cost: int
+    augmenting_paths: list[dict[str, Any]]
+    edge_flows: list[dict[str, Any]]
+    algorithm: str = "successive-shortest-path"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "sink": self.sink,
+            "algorithm": self.algorithm,
+            "total_flow": self.total_flow,
+            "total_cost": self.total_cost,
+            "augmenting_paths": self.augmenting_paths,
+            "edge_flows": self.edge_flows,
+        }
+
+
+@dataclass(frozen=True)
+class AssignmentResult:
+    left_partition: list[str]
+    right_partition: list[str]
+    assignments: list[dict[str, Any]]
+    unmatched_left: list[str]
+    unmatched_right: list[str]
+    total_cost: int
+    covers_smaller_partition: bool
+    flow: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "left_partition": self.left_partition,
+            "right_partition": self.right_partition,
+            "assignments": self.assignments,
+            "assignment_count": len(self.assignments),
+            "unmatched_left": self.unmatched_left,
+            "unmatched_right": self.unmatched_right,
+            "total_cost": self.total_cost,
+            "covers_smaller_partition": self.covers_smaller_partition,
             "flow": self.flow,
         }
 
@@ -122,8 +178,29 @@ def build_matching_explanation(matching_result: MatchingResult) -> dict[str, Any
     }
 
 
+def build_assignment_explanation(assignment_result: AssignmentResult) -> dict[str, Any]:
+    assignment_cost = sum(item["cost"] for item in assignment_result.assignments)
+    assignment_count = len(assignment_result.assignments)
+    average_cost = round(assignment_cost / assignment_count, 3) if assignment_count else None
+    return {
+        "assignment_count": assignment_count,
+        "total_cost": assignment_result.total_cost,
+        "average_cost": average_cost,
+        "covers_smaller_partition": assignment_result.covers_smaller_partition,
+        "cost_matches_flow_total": assignment_cost == assignment_result.total_cost,
+        "selected_pairs": assignment_result.assignments,
+        "narrative": [
+            f"The min-cost flow picked {assignment_count} assignment edge(s) with total cost {assignment_result.total_cost}.",
+            "Each left node and right node is capped at one unit of flow, so any positive-cost path corresponds to a valid one-to-one assignment.",
+            f"Coverage of the smaller partition is {'complete' if assignment_result.covers_smaller_partition else 'partial'}, which makes it easy to see whether the input graph admitted a full assignment.",
+        ],
+    }
+
+
 MATCH_SOURCE = "__source__"
 MATCH_SINK = "__sink__"
+ASSIGN_SOURCE = "__assignment_source__"
+ASSIGN_SINK = "__assignment_sink__"
 DEFAULT_ALGORITHM = "edmonds-karp"
 SUPPORTED_ALGORITHMS = ("edmonds-karp", "dinic")
 BENCHMARK_GRAPH_FAMILIES = ("dag", "dense", "layered")
@@ -208,6 +285,51 @@ def load_bipartite_graph(path: Path) -> tuple[list[str], list[str], list[tuple[s
     return left_nodes, right_nodes, edges
 
 
+def load_weighted_assignment_graph(path: Path) -> tuple[list[str], list[str], list[tuple[str, str, int]]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    left = payload.get("left")
+    right = payload.get("right")
+    raw_edges = payload.get("edges")
+
+    if not isinstance(left, list) or not left:
+        raise ValueError("assignment graph must include a non-empty 'left' list")
+    if not isinstance(right, list) or not right:
+        raise ValueError("assignment graph must include a non-empty 'right' list")
+    if not isinstance(raw_edges, list):
+        raise ValueError("assignment graph must include an 'edges' list")
+
+    left_nodes = [str(node) for node in left]
+    right_nodes = [str(node) for node in right]
+    if len(set(left_nodes)) != len(left_nodes) or len(set(right_nodes)) != len(right_nodes):
+        raise ValueError("left and right partitions must not contain duplicate node names")
+    reserved = {ASSIGN_SOURCE, ASSIGN_SINK, MATCH_SOURCE, MATCH_SINK}
+    if reserved & set(left_nodes + right_nodes):
+        raise ValueError("assignment graphs may not use reserved internal node names")
+    left_set = set(left_nodes)
+    right_set = set(right_nodes)
+    if left_set & right_set:
+        raise ValueError("left and right partitions must be disjoint")
+
+    edges: list[tuple[str, str, int]] = []
+    seen_edges: set[tuple[str, str]] = set()
+    for item in raw_edges:
+        if not isinstance(item, dict):
+            raise ValueError("each assignment edge must be an object")
+        source = str(item.get("source"))
+        target = str(item.get("target"))
+        if source not in left_set or target not in right_set:
+            raise ValueError("assignment edges must point from left nodes to right nodes")
+        pair = (source, target)
+        if pair in seen_edges:
+            raise ValueError("assignment graphs must not repeat the same left/right pair")
+        seen_edges.add(pair)
+        cost = int(item.get("cost", -1))
+        if cost < 0:
+            raise ValueError("assignment edge cost must be non-negative")
+        edges.append((source, target, cost))
+    return left_nodes, right_nodes, edges
+
+
 def build_bipartite_matching_flow(
     left: list[str], right: list[str], edges: list[tuple[str, str]]
 ) -> tuple[list[str], list[Edge], str, str]:
@@ -216,6 +338,16 @@ def build_bipartite_matching_flow(
     flow_edges.extend(Edge(source, target, 1) for source, target in edges)
     flow_edges.extend(Edge(node, MATCH_SINK, 1) for node in right)
     return nodes, flow_edges, MATCH_SOURCE, MATCH_SINK
+
+
+def build_weighted_assignment_flow(
+    left: list[str], right: list[str], edges: list[tuple[str, str, int]]
+) -> tuple[list[str], list[WeightedEdge], str, str]:
+    nodes = [ASSIGN_SOURCE, *left, *right, ASSIGN_SINK]
+    flow_edges = [WeightedEdge(ASSIGN_SOURCE, node, 1, 0) for node in left]
+    flow_edges.extend(WeightedEdge(source, target, 1, cost) for source, target, cost in edges)
+    flow_edges.extend(WeightedEdge(node, ASSIGN_SINK, 1, 0) for node in right)
+    return nodes, flow_edges, ASSIGN_SOURCE, ASSIGN_SINK
 
 
 def derive_minimum_vertex_cover(
@@ -293,6 +425,174 @@ def solve_bipartite_matching(
         unmatched_left=sorted(node for node in left if node not in matched_left),
         unmatched_right=sorted(node for node in right if node not in matched_right),
         minimum_vertex_cover=minimum_vertex_cover,
+        flow=flow_result.to_dict(),
+    )
+
+
+@dataclass
+class _MinCostResidualEdge:
+    target: str
+    rev: int
+    capacity: int
+    cost: int
+    original_capacity: int = 0
+
+
+def solve_min_cost_max_flow(
+    nodes: list[str],
+    edges: list[WeightedEdge],
+    source: str,
+    sink: str,
+    *,
+    target_flow: int | None = None,
+) -> MinCostFlowResult:
+    graph: dict[str, list[_MinCostResidualEdge]] = {node: [] for node in nodes}
+    original_edge_refs: list[tuple[WeightedEdge, _MinCostResidualEdge]] = []
+
+    def add_edge(edge: WeightedEdge) -> None:
+        if edge.capacity < 0:
+            raise ValueError("min-cost flow capacity must be non-negative")
+        forward = _MinCostResidualEdge(
+            target=edge.target,
+            rev=len(graph[edge.target]),
+            capacity=edge.capacity,
+            cost=edge.cost,
+            original_capacity=edge.capacity,
+        )
+        reverse = _MinCostResidualEdge(
+            target=edge.source,
+            rev=len(graph[edge.source]),
+            capacity=0,
+            cost=-edge.cost,
+            original_capacity=0,
+        )
+        graph[edge.source].append(forward)
+        graph[edge.target].append(reverse)
+        original_edge_refs.append((edge, forward))
+
+    for edge in edges:
+        add_edge(edge)
+
+    if target_flow is not None and target_flow < 0:
+        raise ValueError("target_flow must be non-negative")
+
+    total_flow = 0
+    total_cost = 0
+    augmenting_paths: list[dict[str, Any]] = []
+    potentials = {node: 0 for node in nodes}
+
+    while target_flow is None or total_flow < target_flow:
+        dist = {node: math.inf for node in nodes}
+        previous: dict[str, tuple[str, int]] = {}
+        dist[source] = 0
+        heap: list[tuple[int, str]] = [(0, source)]
+
+        while heap:
+            current_dist, node = heapq.heappop(heap)
+            if current_dist != dist[node]:
+                continue
+            for edge_index, edge in enumerate(graph[node]):
+                if edge.capacity <= 0:
+                    continue
+                reduced_cost = edge.cost + potentials[node] - potentials[edge.target]
+                candidate = current_dist + reduced_cost
+                if candidate < dist[edge.target]:
+                    dist[edge.target] = candidate
+                    previous[edge.target] = (node, edge_index)
+                    heapq.heappush(heap, (candidate, edge.target))
+
+        if math.isinf(dist[sink]):
+            break
+
+        for node in nodes:
+            if not math.isinf(dist[node]):
+                potentials[node] += int(dist[node])
+
+        bottleneck = target_flow - total_flow if target_flow is not None else 10**18
+        path_edges: list[tuple[str, int]] = []
+        path_nodes = [sink]
+        path_cost = 0
+        cursor = sink
+        while cursor != source:
+            if cursor not in previous:
+                raise AssertionError("missing predecessor while reconstructing min-cost path")
+            previous_node, edge_index = previous[cursor]
+            edge = graph[previous_node][edge_index]
+            bottleneck = min(bottleneck, edge.capacity)
+            path_cost += edge.cost
+            path_edges.append((previous_node, edge_index))
+            cursor = previous_node
+            path_nodes.append(cursor)
+        path_nodes.reverse()
+
+        for previous_node, edge_index in path_edges:
+            edge = graph[previous_node][edge_index]
+            reverse_edge = graph[edge.target][edge.rev]
+            edge.capacity -= bottleneck
+            reverse_edge.capacity += bottleneck
+
+        total_flow += bottleneck
+        total_cost += bottleneck * path_cost
+        augmenting_paths.append(
+            {
+                "path": path_nodes,
+                "bottleneck": bottleneck,
+                "cost_per_unit": path_cost,
+                "path_cost": bottleneck * path_cost,
+            }
+        )
+
+    edge_flows: list[dict[str, Any]] = []
+    for original_edge, forward_edge in sorted(
+        original_edge_refs,
+        key=lambda item: (item[0].source, item[0].target, item[0].cost, item[0].capacity),
+    ):
+        edge_flows.append(
+            {
+                "source": original_edge.source,
+                "target": original_edge.target,
+                "capacity": original_edge.capacity,
+                "cost": original_edge.cost,
+                "flow": original_edge.capacity - forward_edge.capacity,
+            }
+        )
+
+    return MinCostFlowResult(
+        source=source,
+        sink=sink,
+        total_flow=total_flow,
+        total_cost=total_cost,
+        augmenting_paths=augmenting_paths,
+        edge_flows=edge_flows,
+    )
+
+
+def solve_weighted_assignment(
+    left: list[str], right: list[str], edges: list[tuple[str, str, int]]
+) -> AssignmentResult:
+    nodes, flow_edges, source, sink = build_weighted_assignment_flow(left, right, edges)
+    target_flow = min(len(left), len(right))
+    flow_result = solve_min_cost_max_flow(nodes, flow_edges, source, sink, target_flow=target_flow)
+    edge_lookup = {(item["source"], item["target"]): item for item in flow_result.edge_flows}
+    assignments: list[dict[str, Any]] = []
+    matched_left: set[str] = set()
+    matched_right: set[str] = set()
+
+    for left_node, right_node, cost in sorted(edges):
+        edge = edge_lookup.get((left_node, right_node))
+        if edge and edge["flow"] == 1:
+            assignments.append({"left": left_node, "right": right_node, "cost": cost})
+            matched_left.add(left_node)
+            matched_right.add(right_node)
+
+    return AssignmentResult(
+        left_partition=sorted(left),
+        right_partition=sorted(right),
+        assignments=assignments,
+        unmatched_left=sorted(node for node in left if node not in matched_left),
+        unmatched_right=sorted(node for node in right if node not in matched_right),
+        total_cost=flow_result.total_cost,
+        covers_smaller_partition=flow_result.total_flow == target_flow,
         flow=flow_result.to_dict(),
     )
 
@@ -875,6 +1175,14 @@ def render_matching_dot(matching_result: MatchingResult, *, graph_name: str = "b
     return "\n".join(lines)
 
 
+def _humanize_assignment_path(path: list[str]) -> list[str]:
+    labels = {
+        ASSIGN_SOURCE: "source",
+        ASSIGN_SINK: "sink",
+    }
+    return [labels.get(node, node) for node in path]
+
+
 def _svg_escape(text: str) -> str:
     return (
         text.replace("&", "&amp;")
@@ -1312,6 +1620,135 @@ def render_matching_svg(matching_result: MatchingResult, *, graph_name: str = "b
     return "".join(parts) + "\n"
 
 
+def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
+    explanation = build_assignment_explanation(assignment_result)
+    width = 960
+    height = 640
+    displayed_assignments = assignment_result.assignments[:6]
+    hidden_assignments = max(0, len(assignment_result.assignments) - len(displayed_assignments))
+    displayed_paths = assignment_result.flow["augmenting_paths"][:5]
+    hidden_paths = max(0, len(assignment_result.flow["augmenting_paths"]) - len(displayed_paths))
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Weighted assignment proof card</title>',
+        f'<desc id="desc">Proof-style summary card for {graph_name} showing the chosen weighted assignment and min-cost-flow certificate.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 42, "Weighted assignment proof card", size=28, weight="700"),
+        _svg_text(28, 68, f"Graph: {graph_name} · left={len(assignment_result.left_partition)} · right={len(assignment_result.right_partition)}", size=14, fill="#334155"),
+    ]
+
+    stat_cards = [
+        (28, "Algorithm", assignment_result.flow["algorithm"], "successive shortest paths over the residual graph"),
+        (258, "Assignments", str(len(assignment_result.assignments)), "selected left-right pairs"),
+        (488, "Total cost", str(assignment_result.total_cost), "sum of chosen edge weights"),
+        (718, "Full coverage", str(assignment_result.covers_smaller_partition), f"augmenting paths: {len(assignment_result.flow['augmenting_paths'])}"),
+    ]
+    for x, label, value, subtitle in stat_cards:
+        parts.append(f'<rect x="{x}" y="96" width="202" height="88" rx="18" fill="#ffffff" stroke="#cbd5e1" />')
+        parts.append(_svg_text(x + 16, 124, label, size=13, weight="600", fill="#475569"))
+        parts.append(_svg_text(x + 16, 154, value, size=24, weight="700"))
+        parts.append(_svg_text(x + 16, 176, _truncate_svg_text(subtitle, 34), size=12, fill="#64748b"))
+
+    section_top = 218
+    parts.append('<rect x="28" y="218" width="420" height="380" rx="24" fill="#ffffff" stroke="#cbd5e1" />')
+    parts.append(_svg_text(48, section_top + 26, "Selected assignments", size=20, weight="700"))
+    current_y = section_top + 56
+    if displayed_assignments:
+        for item in displayed_assignments:
+            line = f"{item['left']} -> {item['right']} (cost {item['cost']})"
+            parts.append(_svg_text(48, current_y, _truncate_svg_text(line, 46), size=15, weight="600", fill="#0f172a"))
+            current_y += 26
+    else:
+        parts.append(_svg_text(48, current_y, "(no feasible assignment edges carried flow)", size=15, fill="#475569"))
+        current_y += 26
+    if hidden_assignments:
+        parts.append(_svg_text(48, current_y, f"+ {hidden_assignments} more selected pair(s)", size=13, fill="#64748b"))
+        current_y += 24
+    current_y += 10
+    current_y = _svg_add_wrapped_text(
+        parts,
+        48,
+        current_y,
+        f"Unmatched left: {', '.join(assignment_result.unmatched_left) if assignment_result.unmatched_left else '(none)'}",
+        max_chars=46,
+        size=13,
+        weight="600",
+    ) + 24
+    _svg_add_wrapped_text(
+        parts,
+        48,
+        current_y,
+        f"Unmatched right: {', '.join(assignment_result.unmatched_right) if assignment_result.unmatched_right else '(none)'}",
+        max_chars=46,
+        size=13,
+        weight="600",
+    )
+
+    parts.append('<rect x="478" y="218" width="454" height="380" rx="24" fill="#ffffff" stroke="#cbd5e1" />')
+    parts.append(_svg_text(498, section_top + 26, "Min-cost-flow certificate", size=20, weight="700"))
+    current_y = section_top + 54
+    for line in explanation["narrative"]:
+        current_y = _svg_add_wrapped_text(parts, 498, current_y, line, max_chars=50, size=13) + 22
+    parts.append(_svg_text(498, current_y, "Augmenting paths", size=16, weight="700"))
+    current_y += 24
+    for index, step in enumerate(displayed_paths, start=1):
+        path_text = " -> ".join(_humanize_assignment_path(step["path"]))
+        summary = f"#{index}: bottleneck {step['bottleneck']} · unit cost {step['cost_per_unit']} · total {step['path_cost']}"
+        current_y = _svg_add_wrapped_text(parts, 498, current_y, summary, max_chars=50, size=13, weight="600", fill="#0f172a") + 18
+        current_y = _svg_add_wrapped_text(parts, 514, current_y, path_text, max_chars=46, size=12, fill="#475569") + 20
+    if hidden_paths:
+        parts.append(_svg_text(498, min(current_y, 572), f"+ {hidden_paths} more augmenting path(s)", size=12, fill="#64748b"))
+
+    parts.append(_svg_text(28, 622, "Tip: pair this card with the max-flow proof SVGs to show both feasibility and optimization storytelling.", size=12, fill="#64748b"))
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+
+def render_assignment_markdown(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    explanation = build_assignment_explanation(assignment_result)
+    assignment_lines = "\n".join(
+        f"- `{item['left']} -> {item['right']}` with cost `{item['cost']}`"
+        for item in assignment_result.assignments
+    ) or "- (no selected assignments)"
+    unmatched_left = ", ".join(assignment_result.unmatched_left) if assignment_result.unmatched_left else "(none)"
+    unmatched_right = ", ".join(assignment_result.unmatched_right) if assignment_result.unmatched_right else "(none)"
+    path_lines = "\n".join(
+        f"- `{ ' -> '.join(_humanize_assignment_path(step['path'])) }` · bottleneck `{step['bottleneck']}` · unit cost `{step['cost_per_unit']}` · path cost `{step['path_cost']}`"
+        for step in assignment_result.flow["augmenting_paths"]
+    ) or "- (no augmenting paths)"
+    narrative = "\n".join(f"- {line}" for line in explanation["narrative"])
+    return f"""# Weighted assignment proof artifact: `{graph_name}`
+
+- Generated: `{generated}`
+- Solver: `{assignment_result.flow['algorithm']}`
+- Selected assignments: `{len(assignment_result.assignments)}`
+- Total cost: `{assignment_result.total_cost}`
+- Covers smaller partition: `{assignment_result.covers_smaller_partition}`
+
+## Selected assignments
+
+{assignment_lines}
+
+## Coverage summary
+
+- Unmatched left: `{unmatched_left}`
+- Unmatched right: `{unmatched_right}`
+- Cost matches selected edges: `{explanation['cost_matches_flow_total']}`
+
+## Min-cost-flow narrative
+
+{narrative}
+
+## Augmenting paths
+
+{path_lines}
+"""
+
+
+
 def render_flow_markdown(flow_result: FlowResult, *, graph_name: str = "network_flow") -> str:
     explanation = build_flow_explanation(flow_result)
     lines = [
@@ -1416,7 +1853,7 @@ def add_explain_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Solve max-flow graphs and bipartite matchings.")
+    parser = argparse.ArgumentParser(description="Solve max-flow graphs, bipartite matchings, and weighted assignments.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     solve_parser = subparsers.add_parser("solve", help="solve a graph JSON file")
@@ -1452,6 +1889,19 @@ def build_parser() -> argparse.ArgumentParser:
     match_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample matching graph")
     match_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample matching graph")
     add_explain_argument(match_demo_parser)
+
+    assign_parser = subparsers.add_parser("assign", help="solve a weighted assignment JSON file")
+    assign_parser.add_argument("graph", type=Path, help="path to weighted assignment JSON")
+    assign_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    assign_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved assignment graph")
+    assign_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved assignment graph")
+    add_explain_argument(assign_parser)
+
+    assign_demo_parser = subparsers.add_parser("assign-demo", help="run the bundled weighted assignment sample")
+    assign_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    assign_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample assignment graph")
+    assign_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample assignment graph")
+    add_explain_argument(assign_demo_parser)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
     benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated benchmark graph")
@@ -1560,6 +2010,36 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             payload["markdown_output"] = str(args.markdown_out)
         if getattr(args, "svg_out", None):
             write_svg_output(args.svg_out, render_matching_svg(matching_result, graph_name=graph_path.stem))
+            payload["svg_output"] = str(args.svg_out)
+        return payload
+
+    if args.command == "assign":
+        graph_path = args.graph
+        left, right, edges = load_weighted_assignment_graph(graph_path)
+        assignment_result = solve_weighted_assignment(left, right, edges)
+        payload = {"command": args.command, "graph": str(graph_path), **assignment_result.to_dict()}
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_assignment_explanation(assignment_result)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(args.markdown_out, render_assignment_markdown(assignment_result, graph_name=graph_path.stem))
+            payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(args.svg_out, render_assignment_svg(assignment_result, graph_name=graph_path.stem))
+            payload["svg_output"] = str(args.svg_out)
+        return payload
+
+    if args.command == "assign-demo":
+        graph_path = Path(__file__).with_name("sample_assignment_graph.json")
+        left, right, edges = load_weighted_assignment_graph(graph_path)
+        assignment_result = solve_weighted_assignment(left, right, edges)
+        payload = {"command": args.command, "graph": str(graph_path), **assignment_result.to_dict()}
+        if getattr(args, "explain", False):
+            payload["explanation"] = build_assignment_explanation(assignment_result)
+        if getattr(args, "markdown_out", None):
+            write_markdown_output(args.markdown_out, render_assignment_markdown(assignment_result, graph_name=graph_path.stem))
+            payload["markdown_output"] = str(args.markdown_out)
+        if getattr(args, "svg_out", None):
+            write_svg_output(args.svg_out, render_assignment_svg(assignment_result, graph_name=graph_path.stem))
             payload["svg_output"] = str(args.svg_out)
         return payload
 

@@ -25,19 +25,25 @@ generate_dense_flow_graph = module.generate_dense_flow_graph
 generate_layered_flow_graph = module.generate_layered_flow_graph
 load_graph = module.load_graph
 load_bipartite_graph = module.load_bipartite_graph
+load_weighted_assignment_graph = module.load_weighted_assignment_graph
 render_flow_dot = module.render_flow_dot
 render_matching_dot = module.render_matching_dot
 render_flow_markdown = module.render_flow_markdown
 render_flow_svg = module.render_flow_svg
 render_matching_markdown = module.render_matching_markdown
 render_matching_svg = module.render_matching_svg
+render_assignment_markdown = module.render_assignment_markdown
+render_assignment_svg = module.render_assignment_svg
 render_benchmark_markdown = module.render_benchmark_markdown
 render_benchmark_svg = module.render_benchmark_svg
 solve_max_flow = module.solve_max_flow
+solve_min_cost_max_flow = module.solve_min_cost_max_flow
 derive_minimum_vertex_cover = module.derive_minimum_vertex_cover
 solve_bipartite_matching = module.solve_bipartite_matching
+solve_weighted_assignment = module.solve_weighted_assignment
 build_flow_explanation = module.build_flow_explanation
 build_matching_explanation = module.build_matching_explanation
+build_assignment_explanation = module.build_assignment_explanation
 
 
 class NetworkFlowLabTests(unittest.TestCase):
@@ -317,6 +323,204 @@ class NetworkFlowLabTests(unittest.TestCase):
             {(item["side"], item["node"]) for item in explanation["cover_vertices"]},
             {("right", "api"), ("right", "compiler"), ("right", "database")},
         )
+
+    def test_load_weighted_assignment_graph_rejects_duplicate_pairs_and_negative_costs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            duplicate_path = Path(tmpdir) / "duplicate_assignment.json"
+            duplicate_path.write_text(
+                json.dumps(
+                    {
+                        "left": ["anna"],
+                        "right": ["api"],
+                        "edges": [
+                            {"source": "anna", "target": "api", "cost": 3},
+                            {"source": "anna", "target": "api", "cost": 4},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "must not repeat"):
+                load_weighted_assignment_graph(duplicate_path)
+
+            negative_path = Path(tmpdir) / "negative_assignment.json"
+            negative_path.write_text(
+                json.dumps(
+                    {
+                        "left": ["anna"],
+                        "right": ["api"],
+                        "edges": [{"source": "anna", "target": "api", "cost": -1}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "non-negative"):
+                load_weighted_assignment_graph(negative_path)
+
+    def test_load_weighted_assignment_graph_rejects_reserved_and_cross_partition_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reserved_path = Path(tmpdir) / "reserved_assignment.json"
+            reserved_path.write_text(
+                json.dumps(
+                    {
+                        "left": ["__assignment_source__"],
+                        "right": ["api"],
+                        "edges": [{"source": "__assignment_source__", "target": "api", "cost": 1}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "reserved"):
+                load_weighted_assignment_graph(reserved_path)
+
+            cross_partition_path = Path(tmpdir) / "cross_partition_assignment.json"
+            cross_partition_path.write_text(
+                json.dumps(
+                    {
+                        "left": ["anna"],
+                        "right": ["api"],
+                        "edges": [{"source": "api", "target": "anna", "cost": 1}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "left nodes"):
+                load_weighted_assignment_graph(cross_partition_path)
+
+    def test_min_cost_flow_prefers_lower_total_cost_assignment_paths(self) -> None:
+        left = ["anna", "ben"]
+        right = ["api", "db"]
+        edges = [
+            ("anna", "api", 4),
+            ("anna", "db", 1),
+            ("ben", "api", 2),
+            ("ben", "db", 6),
+        ]
+
+        result = solve_weighted_assignment(left, right, edges).to_dict()
+
+        self.assertEqual(result["assignment_count"], 2)
+        self.assertEqual(result["total_cost"], 3)
+        self.assertEqual(
+            {(item["left"], item["right"], item["cost"]) for item in result["assignments"]},
+            {("anna", "db", 1), ("ben", "api", 2)},
+        )
+        self.assertTrue(result["covers_smaller_partition"])
+        self.assertEqual(result["flow"]["total_flow"], 2)
+        self.assertEqual(result["flow"]["algorithm"], "successive-shortest-path")
+
+    def test_weighted_assignment_reports_partial_coverage_when_graph_is_incomplete(self) -> None:
+        result = solve_weighted_assignment(
+            ["anna", "ben", "chloe"],
+            ["api", "db"],
+            [
+                ("anna", "api", 2),
+                ("ben", "api", 1),
+                ("chloe", "db", 3),
+            ],
+        ).to_dict()
+
+        self.assertEqual(result["assignment_count"], 2)
+        self.assertEqual(result["total_cost"], 4)
+        self.assertEqual(result["unmatched_left"], ["anna"])
+        self.assertEqual(result["unmatched_right"], [])
+        self.assertTrue(result["covers_smaller_partition"])
+
+    def test_assignment_explanation_reports_cost_consistency(self) -> None:
+        result = solve_weighted_assignment(
+            ["anna", "ben"],
+            ["api", "db"],
+            [
+                ("anna", "api", 4),
+                ("anna", "db", 1),
+                ("ben", "api", 2),
+                ("ben", "db", 6),
+            ],
+        )
+        explanation = build_assignment_explanation(result)
+        self.assertEqual(explanation["assignment_count"], 2)
+        self.assertEqual(explanation["total_cost"], 3)
+        self.assertTrue(explanation["cost_matches_flow_total"])
+        self.assertEqual(explanation["average_cost"], 1.5)
+
+    def test_render_assignment_markdown_includes_selected_pairs(self) -> None:
+        result = solve_weighted_assignment(
+            ["anna", "ben"],
+            ["api", "db"],
+            [
+                ("anna", "api", 4),
+                ("anna", "db", 1),
+                ("ben", "api", 2),
+                ("ben", "db", 6),
+            ],
+        )
+        artifact = render_assignment_markdown(result, graph_name="weighted_assignment")
+        self.assertIn('# Weighted assignment proof artifact: `weighted_assignment`', artifact)
+        self.assertIn('## Selected assignments', artifact)
+        self.assertIn('`anna -> db` with cost `1`', artifact)
+        self.assertIn('`source -> anna -> db -> sink`', artifact)
+        self.assertNotIn('__assignment_source__', artifact)
+        self.assertNotIn('__assignment_sink__', artifact)
+
+    def test_render_assignment_svg_includes_certificate_sections_and_valid_xml(self) -> None:
+        result = solve_weighted_assignment(
+            ["anna", "ben"],
+            ["api", "db"],
+            [
+                ("anna", "api", 4),
+                ("anna", "db", 1),
+                ("ben", "api", 2),
+                ("ben", "db", 6),
+            ],
+        )
+        svg = render_assignment_svg(result, graph_name="weighted_assignment")
+        self.assertIn("<svg", svg)
+        self.assertIn("Weighted assignment proof card", svg)
+        self.assertIn("Min-cost-flow certificate", svg)
+        self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
+
+    def test_cli_assign_demo_outputs_assignment_payload(self) -> None:
+        completed = subprocess.run(
+            ["python3", str(MODULE_PATH), "assign-demo", "--explain"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["command"], "assign-demo")
+        self.assertEqual(payload["assignment_count"], 3)
+        self.assertEqual(payload["total_cost"], 12)
+        self.assertTrue(payload["covers_smaller_partition"])
+        self.assertIn("explanation", payload)
+        self.assertTrue(payload["explanation"]["cost_matches_flow_total"])
+
+    def test_cli_assign_demo_can_write_markdown_and_svg_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "assignment-proof.md"
+            svg_path = Path(tmpdir) / "assignment-proof.svg"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "assign-demo",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertIn("Weighted assignment proof artifact", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Weighted assignment proof card", svg_path.read_text(encoding="utf-8"))
 
     def test_random_graph_generator_is_reproducible_and_connected(self) -> None:
         graph_a = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)
