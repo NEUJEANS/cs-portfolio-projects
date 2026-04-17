@@ -276,4 +276,22 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
-- [ ] consider featured entries or excerpt cards inside archive pages in a future run
+- [x] consider featured entries or excerpt cards inside archive pages in a future run
+
+## 2026-04-17 vertical slice: featured archive cards
+- [x] identify `static-site-generator` as still unfinished because the archive pages still used plain lists without highlighted entry cards
+- [x] skip extra web research because the next slice was already explicitly scoped in the local README/checklist and fit the current archive pipeline directly
+- [x] skip extra language refresh because the slice stays inside the existing Node/CommonJS renderer and test harness
+- [x] add a resumable checklist for the slice
+- [x] generate richer archive layouts with a featured latest entry card plus excerpt cards for remaining dated entries
+- [x] derive archive card excerpts from front matter/body content without breaking existing archive navigation
+- [x] expand automated tests for featured archive cards, excerpt fallbacks, generated archive pages, and the synced duplicate test entrypoint
+- [x] update README and project checklists with the richer archive-card workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
+- [ ] consider archive pinning or pagination controls for larger portfolio timelines in a future run

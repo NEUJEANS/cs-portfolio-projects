@@ -963,6 +963,7 @@ function buildDateArchiveCollections(pages) {
       return {
         title: page.metadata.title || page.slug,
         description: page.metadata.description || '',
+        excerpt: resolveArchiveEntryExcerpt(page),
         outputName: page.outputName,
         sourceName: page.sourceName,
         isoDate: date.toISOString(),
@@ -1097,8 +1098,128 @@ function formatArchiveDateLabel(date) {
   return `${MONTH_LABELS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
 }
 
+function stripMarkdownToText(text) {
+  return String(text || '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncateExcerpt(text, maxLength = 220) {
+  const normalized = String(text || '').trim();
+  if (!normalized || normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const clipped = normalized.slice(0, maxLength - 1);
+  const boundary = clipped.lastIndexOf(' ');
+  const safeClip = boundary >= Math.max(40, Math.floor(maxLength * 0.55)) ? clipped.slice(0, boundary) : clipped;
+  return `${safeClip.replace(/[\s.,;:!?-]+$/g, '')}…`;
+}
+
+function extractArchiveExcerptParagraph(markdown) {
+  const lines = String(markdown || '').replace(/\r/g, '').split('\n');
+  const paragraph = [];
+  let inCodeBlock = false;
+  let inComparisonBlock = false;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+
+    if (/^```/.test(trimmed)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+
+    if (/^:::\s*(comparison|compare)\b/.test(trimmed)) {
+      inComparisonBlock = true;
+      continue;
+    }
+
+    if (inComparisonBlock && trimmed === ':::') {
+      inComparisonBlock = false;
+      continue;
+    }
+
+    if (inCodeBlock || inComparisonBlock) {
+      continue;
+    }
+
+    if (!trimmed) {
+      if (paragraph.length) {
+        break;
+      }
+      continue;
+    }
+
+    if (
+      /^#{1,6}\s+/.test(trimmed) ||
+      /^>\s?/.test(trimmed) ||
+      /^[-*]\s+/.test(trimmed) ||
+      /^\d+\.\s+/.test(trimmed) ||
+      /^::(?:before|after|delta)::/.test(trimmed)
+    ) {
+      if (paragraph.length) {
+        break;
+      }
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  return paragraph.join(' ');
+}
+
+function resolveArchiveEntryExcerpt(page) {
+  const explicitExcerpt = typeof page.metadata?.excerpt === 'string' ? page.metadata.excerpt.trim() : '';
+  const bodyParagraph = extractArchiveExcerptParagraph(page.body || '');
+  const description = typeof page.metadata?.description === 'string' ? page.metadata.description.trim() : '';
+  return truncateExcerpt(stripMarkdownToText(explicitExcerpt || bodyParagraph || description));
+}
+
+function renderDateArchiveEntryMeta(entry) {
+  return `<p class="date-archive-entry__meta"><time datetime="${escapeHtml(entry.isoDate)}">${escapeHtml(entry.dateLabel)}</time> <span aria-hidden="true">·</span> <code>${escapeHtml(entry.sourceName)}</code></p>`;
+}
+
+function renderDateArchiveEntryCard(entry, page, options = {}) {
+  const featured = options.featured === true;
+  const headingLevel = Number.isInteger(options.headingLevel) ? Math.min(Math.max(options.headingLevel, 2), 6) : featured ? 2 : 3;
+  const headingTag = `h${headingLevel}`;
+  const eyebrow = options.eyebrow ? `<p class="date-archive-eyebrow date-archive-entry__eyebrow">${escapeHtml(options.eyebrow)}</p>` : '';
+  const excerpt = entry.excerpt ? `<p class="date-archive-entry__excerpt">${escapeHtml(entry.excerpt)}</p>` : '';
+  const href = escapeHtml(relativeLink(page.outputName, entry.outputName));
+  const actions = featured ? `<p class="date-archive-entry__actions"><a href="${href}">Read entry</a></p>` : '';
+  const className = featured ? 'date-archive-entry date-archive-entry--featured' : 'date-archive-entry';
+
+  return `<article class="${className}">${eyebrow}${renderDateArchiveEntryMeta(entry)}<${headingTag}><a href="${href}">${escapeHtml(entry.title)}</a></${headingTag}>${excerpt}${actions}</article>`;
+}
+
 function renderDateArchiveEntry(entry, page) {
-  return `<li><article class="date-archive-entry"><p class="date-archive-entry__meta"><time datetime="${escapeHtml(entry.isoDate)}">${escapeHtml(entry.dateLabel)}</time> <span aria-hidden="true">·</span> <code>${escapeHtml(entry.sourceName)}</code></p><h3><a href="${escapeHtml(relativeLink(page.outputName, entry.outputName))}">${escapeHtml(entry.title)}</a></h3>${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ''}</article></li>`;
+  return `<li>${renderDateArchiveEntryCard(entry, page)}</li>`;
+}
+
+function renderDateArchiveFeaturedEntry(entry, page, options = {}) {
+  return renderDateArchiveEntryCard(entry, page, {
+    ...options,
+    featured: true,
+  });
+}
+
+function renderDateArchiveEntryGrid(entries, page) {
+  if (!entries.length) {
+    return '';
+  }
+
+  return `<ol class="date-archive-entry-list date-archive-entry-list--cards">${entries.map((entry) => renderDateArchiveEntry(entry, page)).join('')}</ol>`;
 }
 
 function renderDateArchiveIndexContent(dateArchiveCollections, page) {
@@ -1106,38 +1227,50 @@ function renderDateArchiveIndexContent(dateArchiveCollections, page) {
   return `<section class="date-archive-index">
   <p>Browse ${totalPages} dated portfolio page${totalPages === 1 ? '' : 's'} in reverse chronological order. Use these generated archive pages for project logs, shipped slices, and timeline-style portfolio updates.</p>
   <ul class="date-archive-year-list">${dateArchiveCollections
-    .map(
-      (collection) => `<li><article class="date-archive-year-card"><p class="date-archive-eyebrow">Year archive</p><h2><a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)}</a></h2><p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} across ${collection.months.length} month${collection.months.length === 1 ? '' : 's'}.</p><ul class="date-archive-month-list">${collection.months
+    .map((collection) => {
+      const featuredEntry = collection.months[0]?.pages[0] || null;
+      return `<li><article class="date-archive-year-card"><p class="date-archive-eyebrow">Year archive</p><h2><a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)}</a></h2><p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} across ${collection.months.length} month${collection.months.length === 1 ? '' : 's'}.</p>${featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 3 }) : ''}<ul class="date-archive-month-list">${collection.months
         .map((month) => {
           const latestEntry = month.pages[0];
           return `<li><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span>${latestEntry ? ` <span class="date-archive-latest">Latest: <a href="${escapeHtml(relativeLink(page.outputName, latestEntry.outputName))}">${escapeHtml(latestEntry.title)}</a></span>` : ''}</li>`;
         })
-        .join('')}</ul></article></li>`
-    )
+        .join('')}</ul></article></li>`;
+    })
     .join('')}</ul>
 </section>`;
 }
 
 function renderDateArchiveYearContent(collection, page) {
+  const featuredEntry = collection.months[0]?.pages[0] || null;
   return `<section class="date-archive-year">
   <p><a href="${escapeHtml(relativeLink(page.outputName, ARCHIVE_INDEX_OUTPUT_NAME))}">← All archives</a></p>
   <p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month for ${escapeHtml(collection.year)}.</p>
+  ${featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 2 }) : ''}
   <ul class="date-archive-month-jump-list">${collection.months
     .map(
       (month) => `<li><a href="#${month.anchorId}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span> <a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Open month page</a></li>`
     )
     .join('')}</ul>
   ${collection.months
-    .map((month) => `<section class="date-archive-month-section" id="${month.anchorId}"><p class="date-archive-eyebrow">Month archive</p><h2>${escapeHtml(month.label)}</h2><p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Browse ${escapeHtml(month.label)}</a></p><ol class="date-archive-entry-list">${month.pages.map((entry) => renderDateArchiveEntry(entry, page)).join('')}</ol></section>`)
+    .map((month) => {
+      const monthLeadEntry = month.pages[0] || null;
+      const repeatsYearFeature = featuredEntry && monthLeadEntry && monthLeadEntry.outputName === featuredEntry.outputName;
+      const featuredMonthEntry = repeatsYearFeature ? null : monthLeadEntry;
+      const remainingEntries = repeatsYearFeature ? month.pages : month.pages.slice(1);
+      return `<section class="date-archive-month-section" id="${month.anchorId}"><p class="date-archive-eyebrow">Month archive</p><h2>${escapeHtml(month.label)}</h2><p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Browse ${escapeHtml(month.label)}</a></p>${featuredMonthEntry ? renderDateArchiveFeaturedEntry(featuredMonthEntry, page, { eyebrow: 'Featured entry', headingLevel: 3 }) : ''}${renderDateArchiveEntryGrid(remainingEntries, page)}</section>`;
+    })
     .join('')}
 </section>`;
 }
 
 function renderDateArchiveMonthContent(collection, month, page) {
+  const featuredEntry = month.pages[0] || null;
+  const remainingEntries = month.pages.slice(1);
   return `<section class="date-archive-month-page">
   <p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, ARCHIVE_INDEX_OUTPUT_NAME))}">← All archives</a> <span aria-hidden="true">·</span> <a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)} archive</a></p>
   <p>${month.pages.length} dated page${month.pages.length === 1 ? '' : 's'} published in ${escapeHtml(month.label)}.</p>
-  <ol class="date-archive-entry-list">${month.pages.map((entry) => renderDateArchiveEntry(entry, page)).join('')}</ol>
+  ${featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${month.label}`, headingLevel: 2 }) : ''}
+  ${renderDateArchiveEntryGrid(remainingEntries, page)}
 </section>`;
 }
 
@@ -1430,14 +1563,20 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .comparison-block { display: grid; gap: 1rem; padding: 1.15rem; border: 1px solid #cbd5e1; border-radius: 1.1rem; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); box-shadow: 0 14px 32px -28px #0f172a; }
       .date-archive-eyebrow { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
       .date-archive-year-list, .date-archive-month-list, .date-archive-month-jump-list, .date-archive-entry-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.85rem; }
-      .date-archive-year-card, .date-archive-month-section, .date-archive-entry { padding: 1rem 1.05rem; border: 1px solid #cbd5e1; border-radius: 1rem; background: #ffffffcc; box-shadow: 0 10px 24px -24px #0f172a; }
-      .date-archive-year, .date-archive-index, .date-archive-month-page { display: grid; gap: 1rem; }
+      .date-archive-year-card, .date-archive-month-section { padding: 1rem 1.05rem; border: 1px solid #cbd5e1; border-radius: 1rem; background: #ffffffcc; box-shadow: 0 10px 24px -24px #0f172a; }
+      .date-archive-entry { display: grid; gap: 0.65rem; padding: 1rem 1.05rem; border: 1px solid #cbd5e1; border-radius: 1rem; background: #ffffffcc; box-shadow: 0 10px 24px -24px #0f172a; height: 100%; }
+      .date-archive-entry--featured { border-left: 4px solid #2563eb; background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); box-shadow: 0 16px 30px -26px #1d4ed8; }
+      .date-archive-year, .date-archive-index, .date-archive-month-page, .date-archive-year-card, .date-archive-month-section { display: grid; gap: 1rem; }
       .date-archive-month-jump-list { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
       .date-archive-month-list li, .date-archive-month-jump-list li { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; }
       .date-archive-entry-list { counter-reset: archive-item; }
       .date-archive-entry-list > li { counter-increment: archive-item; }
+      .date-archive-entry-list--cards { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
       .date-archive-entry__meta, .date-archive-count, .date-archive-latest, .date-archive-section-links { margin: 0; color: #475569; font-size: 0.92rem; }
-      .date-archive-entry h3, .date-archive-year-card h2, .date-archive-month-section h2 { margin-top: 0.35rem; margin-bottom: 0.45rem; }
+      .date-archive-entry__eyebrow { color: #1d4ed8; }
+      .date-archive-entry__excerpt { margin: 0; color: #334155; }
+      .date-archive-entry__actions { margin: 0; font-weight: 600; }
+      .date-archive-entry h2, .date-archive-entry h3, .date-archive-year-card h2, .date-archive-month-section h2 { margin-top: 0.1rem; margin-bottom: 0.2rem; }
       .date-archive-entry p:last-child, .date-archive-year-card p:last-child, .date-archive-month-section p:last-child, .date-archive-month-page p:last-child { margin-bottom: 0; }
       .comparison-block__header { display: grid; gap: 0.55rem; }
       .comparison-block__eyebrow, .comparison-panel__eyebrow { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
@@ -1482,6 +1621,9 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
         .comparison-block { border-color: #334155; background: linear-gradient(180deg, #0f172a 0%, #111827 100%); box-shadow: none; }
         .date-archive-eyebrow, .date-archive-entry__meta, .date-archive-count, .date-archive-latest, .date-archive-section-links { color: #cbd5e1; }
         .date-archive-year-card, .date-archive-month-section, .date-archive-entry { border-color: #334155; background: #111827; box-shadow: none; }
+        .date-archive-entry--featured { border-left-color: #60a5fa; background: linear-gradient(180deg, #172554 0%, #111827 100%); }
+        .date-archive-entry__eyebrow { color: #93c5fd; }
+        .date-archive-entry__excerpt { color: #e2e8f0; }
         .comparison-block__eyebrow { color: #cbd5e1; }
         .comparison-block__summary { color: #cbd5e1; }
         .comparison-panel { border-color: #334155; color: #e5e7eb; }

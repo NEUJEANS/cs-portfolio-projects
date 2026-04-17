@@ -474,24 +474,32 @@ test('buildDateArchiveCollections groups dated pages into reverse-chronological 
       outputName: 'posts/alpha.html',
       sourceName: 'posts/alpha.md',
       metadata: { title: 'Alpha', date: '2026-04-16T10:30:00Z' },
+      body: `# Alpha
+
+Shipped [archive](../archives/index.md) cards with \`excerpt\` fallbacks for portfolio review.`,
     },
     {
       slug: 'beta',
       outputName: 'posts/beta.html',
       sourceName: 'posts/beta.md',
-      metadata: { title: 'Beta', date: '2026-02-01T08:00:00Z' },
+      metadata: { title: 'Beta', date: '2026-02-01T08:00:00Z', excerpt: 'Front matter excerpt for Beta.' },
+      body: `# Beta
+
+This paragraph should not override the explicit excerpt.`,
     },
     {
       slug: 'gamma',
       outputName: 'posts/gamma.html',
       sourceName: 'posts/gamma.md',
-      metadata: { title: 'Gamma', date: '2025-12-31T23:00:00Z' },
+      metadata: { title: 'Gamma', date: '2025-12-31T23:00:00Z', description: 'Description fallback for Gamma.' },
+      body: '# Gamma',
     },
     {
       slug: 'hidden',
       outputName: 'posts/hidden.html',
       sourceName: 'posts/hidden.md',
       metadata: { title: 'Hidden', date: '2026-04-01T00:00:00Z', archive: false },
+      body: '# Hidden',
     },
   ];
 
@@ -503,8 +511,11 @@ test('buildDateArchiveCollections groups dated pages into reverse-chronological 
   assert.deepEqual(collections[0].months.map((month) => month.label), ['April 2026', 'February 2026']);
   assert.equal(collections[0].months[0].outputName, 'archives/2026/04/index.html');
   assert.equal(collections[0].months[0].pages[0].title, 'Alpha');
+  assert.equal(collections[0].months[0].pages[0].excerpt, 'Shipped archive cards with excerpt fallbacks for portfolio review.');
+  assert.equal(collections[0].months[1].pages[0].excerpt, 'Front matter excerpt for Beta.');
   assert.equal(collections[1].months[0].outputName, 'archives/2025/12/index.html');
   assert.equal(collections[1].months[0].pages[0].title, 'Gamma');
+  assert.equal(collections[1].months[0].pages[0].excerpt, 'Description fallback for Gamma.');
 });
 
 test('buildSite generates sitemap.xml, rss.xml, and date archives from optional site config', () => {
@@ -623,6 +634,80 @@ archive: false
   assert.match(rssXml, /<category>portfolio<\/category>/);
   assert.match(rssXml, /<category>node<\/category>/);
   assert.doesNotMatch(rssXml, /Draft Post/);
+});
+
+
+test('buildSite renders featured archive cards and excerpt grids from dated content', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'posts'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Home
+order: 1
+---
+# Welcome`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'launch.md'),
+    `---
+title: Launch Notes
+slug: launch-notes
+date: 2026-04-20T09:00:00Z
+---
+# Launch Notes
+
+Shipped [archive](../archives/index.md) cards with \`excerpt\` fallbacks so reviewers can scan recent work quickly.
+
+- extra implementation detail`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'benchmarks.md'),
+    `---
+title: Benchmark Notes
+slug: benchmark-notes
+date: 2026-04-10T09:00:00Z
+excerpt: Front matter excerpt keeps the benchmark summary tight for archive cards.
+---
+# Benchmark Notes
+
+Longer body that should not replace the explicit excerpt.`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'winter.md'),
+    `---
+title: Winter Update
+slug: winter-update
+date: 2026-02-03T09:00:00Z
+description: Description fallback for older archive cards.
+---
+# Winter Update`,
+    'utf8'
+  );
+
+  buildSite(contentDir, outputDir);
+
+  const archiveIndexHtml = fs.readFileSync(path.join(outputDir, 'archives', 'index.html'), 'utf8');
+  const archiveYearHtml = fs.readFileSync(path.join(outputDir, 'archives', '2026', 'index.html'), 'utf8');
+  const archiveMonthHtml = fs.readFileSync(path.join(outputDir, 'archives', '2026', '04', 'index.html'), 'utf8');
+
+  assert.match(archiveIndexHtml, /Latest in 2026/);
+  assert.match(archiveIndexHtml, /Shipped archive cards with excerpt fallbacks so reviewers can scan recent work quickly\./);
+  assert.match(archiveYearHtml, /class="date-archive-entry date-archive-entry--featured"/);
+  assert.match(archiveYearHtml, /Featured entry/);
+  assert.match(archiveYearHtml, /Front matter excerpt keeps the benchmark summary tight for archive cards\./);
+  assert.match(archiveYearHtml, /href="\.\.\/\.\.\/posts\/launch-notes\.html">Launch Notes<\/a>/);
+  assert.match(archiveMonthHtml, /Latest in April 2026/);
+  assert.match(archiveMonthHtml, /class="date-archive-entry-list date-archive-entry-list--cards"/);
+  assert.match(archiveMonthHtml, /href="\.\.\/\.\.\/\.\.\/posts\/benchmark-notes\.html">Benchmark Notes<\/a>/);
 });
 test('buildSite lets authors provide a custom 404 page without adding it to navigation by default', () => {
   const contentDir = makeTempDir();
