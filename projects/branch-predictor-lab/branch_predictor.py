@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 TAKEN_TOKENS = {"1", "t", "taken", "true", "y", "yes"}
 NOT_TAKEN_TOKENS = {"0", "f", "false", "n", "no", "not-taken", "not_taken", "nottaken", "untaken"}
-SYNTHETIC_WORKLOADS = ("loop-heavy", "random-biased", "tournament-style")
+SYNTHETIC_WORKLOADS = ("loop-heavy", "random-biased", "tournament-style", "alias-thrash")
 
 
 @dataclass(frozen=True)
@@ -503,10 +503,44 @@ def _generate_tournament_style_trace(branches: int, seed: int) -> list[BranchRec
     return records
 
 
+def _generate_alias_thrash_trace(branches: int, seed: int) -> list[BranchRecord]:
+    rng = random.Random(seed)
+    records: list[BranchRecord] = []
+    collision_groups = [
+        (
+            {"address": 0x100, "target": 0x0F0, "taken_probability": 0.92, "label": "alias-hot-taken-a"},
+            {"address": 0x140, "target": 0x144, "taken_probability": 0.12, "label": "alias-cold-not-a"},
+        ),
+        (
+            {"address": 0x110, "target": 0x100, "taken_probability": 0.82, "label": "alias-hot-taken-b"},
+            {"address": 0x150, "target": 0x154, "taken_probability": 0.18, "label": "alias-cold-not-b"},
+        ),
+    ]
+
+    pair_index = 0
+    while len(records) < branches:
+        hot_branch, cold_branch = collision_groups[pair_index % len(collision_groups)]
+        for branch in (hot_branch, cold_branch):
+            if len(records) >= branches:
+                break
+            taken = rng.random() < branch["taken_probability"]
+            target = branch["target"] if taken else branch["address"] + 4
+            _append_generated_record(
+                records,
+                address=branch["address"],
+                taken=taken,
+                target=target,
+                label=branch["label"],
+            )
+        pair_index += 1
+    return records
+
+
 SYNTHETIC_TRACE_BUILDERS: dict[str, Callable[[int, int], list[BranchRecord]]] = {
     "loop-heavy": _generate_loop_heavy_trace,
     "random-biased": _generate_random_biased_trace,
     "tournament-style": _generate_tournament_style_trace,
+    "alias-thrash": _generate_alias_thrash_trace,
 }
 
 
@@ -551,6 +585,87 @@ def summarize_trace(records: list[BranchRecord]) -> dict[str, Any]:
         "unique_addresses": len(address_counts),
         "address_counts": {hex(address): count for address, count in sorted(address_counts.items())},
         "label_counts": dict(sorted(label_counts.items())),
+    }
+
+
+def summarize_table_aliasing(records: list[BranchRecord], table_size: int) -> dict[str, Any]:
+    if not records:
+        raise ValueError("records must not be empty")
+    _validate_power_of_two(table_size, "table_size")
+
+    groups: dict[int, dict[str, Any]] = {}
+    for record in records:
+        index = (record.address >> 2) & (table_size - 1)
+        group = groups.setdefault(index, {"index": index, "addresses": {}})
+        address_entry = group["addresses"].setdefault(
+            record.address,
+            {
+                "total": 0,
+                "taken": 0,
+                "not_taken": 0,
+                "labels": set(),
+            },
+        )
+        address_entry["total"] += 1
+        if record.taken:
+            address_entry["taken"] += 1
+        else:
+            address_entry["not_taken"] += 1
+        if record.label:
+            address_entry["labels"].add(record.label)
+
+    collision_groups: list[dict[str, Any]] = []
+    total_collision_events = 0
+    for index, group in sorted(groups.items()):
+        addresses = group["addresses"]
+        if len(addresses) < 2:
+            continue
+        sorted_addresses: list[dict[str, Any]] = []
+        dominant_outcomes: set[str] = set()
+        branch_events = 0
+        for address, stats in sorted(addresses.items()):
+            taken_percent = round((stats["taken"] / stats["total"]) * 100, 3)
+            dominant_outcome = "mixed"
+            if stats["taken"] > stats["not_taken"]:
+                dominant_outcome = "taken"
+            elif stats["not_taken"] > stats["taken"]:
+                dominant_outcome = "not-taken"
+            dominant_outcomes.add(dominant_outcome)
+            branch_events += stats["total"]
+            sorted_addresses.append(
+                {
+                    "address": hex(address),
+                    "total": stats["total"],
+                    "taken": stats["taken"],
+                    "not_taken": stats["not_taken"],
+                    "taken_percent": taken_percent,
+                    "dominant_outcome": dominant_outcome,
+                    "labels": sorted(stats["labels"]),
+                }
+            )
+        total_collision_events += branch_events
+        collision_groups.append(
+            {
+                "index": index,
+                "index_hex": hex(index),
+                "address_count": len(sorted_addresses),
+                "branch_events": branch_events,
+                "conflicting_biases": len(dominant_outcomes) > 1,
+                "addresses": sorted_addresses,
+            }
+        )
+
+    conflict_groups = [group for group in collision_groups if group["conflicting_biases"]]
+    return {
+        "table_size": table_size,
+        "unique_indices": len(groups),
+        "colliding_indices": len(collision_groups),
+        "conflicting_indices": len(conflict_groups),
+        "branch_events_in_collisions": total_collision_events,
+        "collision_groups": sorted(
+            collision_groups,
+            key=lambda group: (-group["conflicting_biases"], -group["branch_events"], group["index"]),
+        )[:5],
     }
 
 
@@ -680,6 +795,7 @@ def format_summary_table(results: list[SimulationResult]) -> str:
 def _build_comparison_talking_points(
     results: list[SimulationResult],
     trace_summary: dict[str, Any],
+    alias_summary: dict[str, Any],
 ) -> list[str]:
     by_name = {result.predictor: result for result in results}
     best = results[0]
@@ -729,6 +845,20 @@ def _build_comparison_talking_points(
             f"{hardest['mispredictions']} misses across {hardest['total']} executions."
         )
 
+    if alias_summary["colliding_indices"]:
+        points.append(
+            f"Static table aliasing: {alias_summary['colliding_indices']} colliding indices at table size {alias_summary['table_size']} "
+            f"({alias_summary['conflicting_indices']} with conflicting taken/not-taken biases)."
+        )
+        top_collision = next(
+            (group for group in alias_summary["collision_groups"] if group["conflicting_biases"]),
+            alias_summary["collision_groups"][0],
+        )
+        addresses = ", ".join(item["address"] for item in top_collision["addresses"])
+        points.append(
+            f"Worst alias bucket: index {top_collision['index_hex']} merges {addresses} across {top_collision['branch_events']} branch events."
+        )
+
     label_counts = trace_summary.get("label_counts", {})
     if label_counts:
         top_labels = sorted(label_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
@@ -743,6 +873,7 @@ def render_comparison_markdown(
     *,
     trace_path: Path,
     trace_summary: dict[str, Any],
+    alias_summary: dict[str, Any],
     results: list[SimulationResult],
     table_size: int,
     history_bits: int,
@@ -750,7 +881,7 @@ def render_comparison_markdown(
     generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     best = results[0]
     worst = results[-1]
-    talking_points = _build_comparison_talking_points(results, trace_summary)
+    talking_points = _build_comparison_talking_points(results, trace_summary, alias_summary)
     address_counts = list(trace_summary["address_counts"].items())[:5]
     label_counts = list(trace_summary["label_counts"].items())[:5]
 
@@ -792,6 +923,26 @@ def render_comparison_markdown(
         )
     else:
         lines.append("- Top labels: `(none)`")
+
+    lines.extend(["", "## Table aliasing", ""])
+    lines.append(
+        f"- `{alias_summary['colliding_indices']}` colliding index groups at table size `{alias_summary['table_size']}`; "
+        f"`{alias_summary['conflicting_indices']}` groups mix opposite dominant biases."
+    )
+    lines.append(
+        f"- `{alias_summary['branch_events_in_collisions']}` branch events land in colliding buckets on this trace."
+    )
+    if alias_summary["collision_groups"]:
+        for group in alias_summary["collision_groups"]:
+            members = ", ".join(
+                f"`{item['address']}` ({item['taken_percent']:.1f}% taken)" for item in group["addresses"]
+            )
+            suffix = "conflicting biases" if group["conflicting_biases"] else "similar biases"
+            lines.append(
+                f"- Index `{group['index_hex']}`: {members} · `{group['branch_events']}` events · {suffix}."
+            )
+    else:
+        lines.append("- No static PC aliasing for this table size.")
 
     if best.hardest_branches:
         lines.extend(["", "## Hardest branches for the winning predictor", ""])
@@ -861,6 +1012,7 @@ def render_comparison_svg(
     *,
     trace_path: Path,
     trace_summary: dict[str, Any],
+    alias_summary: dict[str, Any],
     results: list[SimulationResult],
     table_size: int,
     history_bits: int,
@@ -869,7 +1021,7 @@ def render_comparison_svg(
     height = 640
     best = results[0]
     runner_up = results[1]
-    talking_points = _build_comparison_talking_points(results, trace_summary)[:3]
+    talking_points = _build_comparison_talking_points(results, trace_summary, alias_summary)[:3]
     hardest_branches = best.hardest_branches[:3]
     gap_text = (
         f"Tie at {best.accuracy * 100:.2f}%"
@@ -1002,7 +1154,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     generate_parser = subparsers.add_parser(
         "generate",
-        help="Generate a synthetic branch trace for loop-heavy, random-biased, or mixed tournament-style workloads.",
+        help="Generate a synthetic branch trace for loop-heavy, random-biased, alias-thrash, or mixed tournament-style workloads.",
     )
     generate_parser.add_argument("workload", choices=list(SYNTHETIC_WORKLOADS), help="Synthetic workload family to generate.")
     generate_parser.add_argument("--branches", type=int, default=32, help="How many branch records to generate.")
@@ -1051,12 +1203,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "compare":
             trace_path = Path(args.trace)
             trace_summary = summarize_trace(records)
+            alias_summary = summarize_table_aliasing(records, table_size=args.table_size)
             results = compare_predictors(records, table_size=args.table_size, history_bits=args.history_bits)
             payload = {
                 "trace": str(trace_path),
                 "table_size": args.table_size,
                 "history_bits": args.history_bits,
                 "trace_summary": trace_summary,
+                "alias_summary": alias_summary,
                 "total_branches": len(records),
                 "results": [result.to_dict() for result in results],
                 "best_predictor": results[0].predictor,
@@ -1067,6 +1221,7 @@ def main(argv: list[str] | None = None) -> int:
                     render_comparison_markdown(
                         trace_path=trace_path,
                         trace_summary=trace_summary,
+                        alias_summary=alias_summary,
                         results=results,
                         table_size=args.table_size,
                         history_bits=args.history_bits,
@@ -1079,6 +1234,7 @@ def main(argv: list[str] | None = None) -> int:
                     render_comparison_svg(
                         trace_path=trace_path,
                         trace_summary=trace_summary,
+                        alias_summary=alias_summary,
                         results=results,
                         table_size=args.table_size,
                         history_bits=args.history_bits,
@@ -1091,6 +1247,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(format_summary_table(results))
                 print()
                 print(f"best predictor: {results[0].predictor} ({results[0].accuracy * 100:.2f}% accuracy)")
+                print(
+                    f"static aliasing: {alias_summary['colliding_indices']} colliding indices at table size {alias_summary['table_size']} "
+                    f"({alias_summary['conflicting_indices']} conflicting bias groups)"
+                )
                 if "markdown_output" in payload:
                     print(f"markdown card: {payload['markdown_output']}")
                 if "svg_output" in payload:

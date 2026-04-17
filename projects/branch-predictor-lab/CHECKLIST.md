@@ -16,4 +16,4 @@
 ## Next candidate slices
 - [ ] Add a perceptron predictor follow-up for advanced architecture coverage
 - [ ] Add trace-family sweep commands that batch-generate workloads and compare predictors in one run
-- [ ] Add aliasing-focused traces or counters so table-size trade-offs become easier to show in portfolio screenshots
+- [x] Add aliasing-focused traces and compare-output summaries so table-size trade-offs become easier to show in portfolio screenshots

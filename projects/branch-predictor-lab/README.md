@@ -20,6 +20,7 @@ A compact computer-architecture portfolio project for simulating classic branch 
 - `loop-heavy` — repeated loop backedges with explicit exits so one-bit vs two-bit behavior is easy to show
 - `random-biased` — several static branches with different taken probabilities for reproducible baseline sweeps
 - `tournament-style` — a mixed trace that combines correlated-history branches, loop behavior, and biased cleanup branches to motivate hybrid predictors
+- `alias-thrash` — paired static PCs deliberately collide in the same small predictor-table buckets with opposite taken biases so aliasing is visible in reports
 
 ## Trace format
 Use one branch per line:
@@ -130,6 +131,21 @@ python3 projects/branch-predictor-lab/branch_predictor.py compare \
   --history-bits 4
 ```
 
+Generate an alias-heavy trace to show how small tables force unrelated PCs to share the same predictor entries:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py generate \
+  alias-thrash \
+  --branches 48 \
+  --seed 7 \
+  --output /tmp/alias-thrash.trace
+python3 projects/branch-predictor-lab/branch_predictor.py compare \
+  /tmp/alias-thrash.trace \
+  --table-size 16 \
+  --history-bits 4 \
+  --json
+```
+
 Export recruiter-friendly Markdown and SVG comparison cards from the same compare command:
 
 ```bash
@@ -156,11 +172,14 @@ Run the tests:
 - the local-history predictor keeps a short per-PC history register and uses that pattern to pick a saturating counter, which makes repeated branch-local motifs easy to demonstrate
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
 - the tournament predictor tracks when local-history vs gshare is doing better for a given PC and exposes chooser-state snapshots so the hybrid behavior is inspectable in JSON output
+- compare output includes a static aliasing summary for the PC-indexed predictor tables so you can point at exact colliding buckets when discussing table-size trade-offs
+- the `alias-thrash` generator intentionally maps opposite-bias branches into the same low-order index bits, which makes interference easy to show without external trace corpora
 - the synthetic generator is intentionally lightweight and reproducible so you can build demos, tests, and benchmark sweeps without needing a large external trace corpus
 
 ## Portfolio talking points
 - explain why one-bit predictors mispredict both loop exit and loop re-entry while two-bit predictors usually miss only on the exit
 - use the `tournament-style` workload to show why some branches want local-history tracking while others benefit from recent-history correlation
+- use the `alias-thrash` workload plus the compare JSON/Markdown alias summary to explain predictor-table interference and why larger tables can recover accuracy
 - compare `local-history`, `gshare`, and `tournament` on the same trace to talk through hybrid prediction instead of stopping at bimodal counters
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 - extend the simulator with perceptron prediction if you want a stronger architecture capstone story
@@ -168,4 +187,4 @@ Run the tests:
 ## Future improvements
 - add a perceptron predictor follow-up for advanced architecture coverage
 - add trace-family sweep commands that run multiple generated workloads in one shot
-- add aliasing-focused traces or summaries so table-size trade-offs are easier to show in artifact cards
+- add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view

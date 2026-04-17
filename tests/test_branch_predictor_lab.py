@@ -33,6 +33,7 @@ parse_trace_line = module.parse_trace_line
 render_comparison_markdown = module.render_comparison_markdown
 render_comparison_svg = module.render_comparison_svg
 simulate_trace = module.simulate_trace
+summarize_table_aliasing = module.summarize_table_aliasing
 summarize_trace = module.summarize_trace
 
 
@@ -156,6 +157,30 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertGreater(deep_by_name["gshare"].accuracy, deep_by_name["two-bit"].accuracy)
         self.assertGreater(deep_by_name["gshare"].accuracy, shallow_by_name["gshare"].accuracy)
 
+    def test_generate_alias_thrash_trace_creates_conflicting_collision_groups(self) -> None:
+        trace = generate_synthetic_trace("alias-thrash", branches=24, seed=7)
+        summary = summarize_table_aliasing(trace, table_size=16)
+
+        self.assertEqual(len(trace), 24)
+        self.assertGreaterEqual(summary["colliding_indices"], 2)
+        self.assertGreaterEqual(summary["conflicting_indices"], 2)
+        top_group = summary["collision_groups"][0]
+        addresses = {entry["address"] for entry in top_group["addresses"]}
+        self.assertTrue({"0x100", "0x140"}.issubset(addresses) or {"0x110", "0x150"}.issubset(addresses))
+        dominant_outcomes = {entry["dominant_outcome"] for entry in top_group["addresses"]}
+        self.assertIn("taken", dominant_outcomes)
+        self.assertIn("not-taken", dominant_outcomes)
+
+    def test_alias_thrash_trace_improves_with_larger_table(self) -> None:
+        trace = generate_synthetic_trace("alias-thrash", branches=64, seed=7)
+        small = compare_predictors(trace, table_size=16, history_bits=4)
+        large = compare_predictors(trace, table_size=32, history_bits=4)
+        small_by_name = {result.predictor: result for result in small}
+        large_by_name = {result.predictor: result for result in large}
+
+        self.assertGreater(large_by_name["two-bit"].accuracy, small_by_name["two-bit"].accuracy)
+        self.assertGreater(large_by_name["one-bit"].accuracy, small_by_name["one-bit"].accuracy)
+
     def test_cli_compare_json_emits_best_predictor(self) -> None:
         completed = subprocess.run(
             [
@@ -178,6 +203,8 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertEqual(payload["best_predictor"], payload["results"][0]["predictor"])
         self.assertEqual(payload["results"][0]["predictor"], "local-history")
         self.assertEqual(payload["total_branches"], 24)
+        self.assertIn("alias_summary", payload)
+        self.assertEqual(payload["alias_summary"]["table_size"], 16)
 
     def test_cli_simulate_local_history_json_includes_snapshot(self) -> None:
         completed = subprocess.run(
@@ -237,11 +264,13 @@ class BranchPredictorLabTests(unittest.TestCase):
     def test_render_comparison_markdown_includes_rankings_and_talking_points(self) -> None:
         records = load_trace(TRACE_PATH)
         trace_summary = summarize_trace(records)
+        alias_summary = summarize_table_aliasing(records, table_size=16)
         results = compare_predictors(records, table_size=16, history_bits=2)
 
         rendered = render_comparison_markdown(
             trace_path=TRACE_PATH,
             trace_summary=trace_summary,
+            alias_summary=alias_summary,
             results=results,
             table_size=16,
             history_bits=2,
@@ -252,15 +281,18 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("`local-history`", rendered)
         self.assertIn("## Portfolio talking points", rendered)
         self.assertIn("Two-bit vs one-bit", rendered)
+        self.assertIn("## Table aliasing", rendered)
 
     def test_render_comparison_svg_includes_expected_labels(self) -> None:
         records = load_trace(TRACE_PATH)
         trace_summary = summarize_trace(records)
+        alias_summary = summarize_table_aliasing(records, table_size=16)
         results = compare_predictors(records, table_size=16, history_bits=2)
 
         rendered = render_comparison_svg(
             trace_path=TRACE_PATH,
             trace_summary=trace_summary,
+            alias_summary=alias_summary,
             results=results,
             table_size=16,
             history_bits=2,
