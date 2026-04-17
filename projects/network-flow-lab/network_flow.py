@@ -1960,6 +1960,322 @@ def render_min_cost_flow_svg(
     return "\n".join(parts)
 
 
+def _compute_min_cost_flow_diagram_columns(flow_result: MinCostFlowResult) -> list[list[str]]:
+    nodes = sorted({flow_result.source, flow_result.sink} | {edge["source"] for edge in flow_result.edge_flows} | {edge["target"] for edge in flow_result.edge_flows})
+    outgoing: dict[str, set[str]] = {node: set() for node in nodes}
+    incoming: dict[str, set[str]] = {node: set() for node in nodes}
+    for edge in flow_result.edge_flows:
+        outgoing[edge["source"]].add(edge["target"])
+        incoming[edge["target"]].add(edge["source"])
+
+    source_distance: dict[str, int] = {flow_result.source: 0}
+    queue: deque[str] = deque([flow_result.source])
+    while queue:
+        node = queue.popleft()
+        for nxt in sorted(outgoing[node]):
+            if nxt in source_distance:
+                continue
+            source_distance[nxt] = source_distance[node] + 1
+            queue.append(nxt)
+
+    sink_distance: dict[str, int] = {flow_result.sink: 0}
+    queue = deque([flow_result.sink])
+    while queue:
+        node = queue.popleft()
+        for prev in sorted(incoming[node]):
+            if prev in sink_distance:
+                continue
+            sink_distance[prev] = sink_distance[node] + 1
+            queue.append(prev)
+
+    fallback_middle_depth = max(1, max(source_distance.values(), default=0))
+    sink_depth = max(
+        source_distance.get(flow_result.sink, 0),
+        max((distance + 1 for distance in source_distance.values()), default=1),
+    )
+    columns: dict[int, list[str]] = {depth: [] for depth in range(sink_depth + 1)}
+    for node in nodes:
+        if node == flow_result.source:
+            depth = 0
+        elif node == flow_result.sink:
+            depth = sink_depth
+        elif node in source_distance:
+            depth = min(source_distance[node], sink_depth - 1)
+        elif node in sink_distance:
+            depth = max(1, sink_depth - sink_distance[node])
+        else:
+            depth = fallback_middle_depth
+        columns.setdefault(depth, []).append(node)
+
+    return [sorted(columns.get(depth, [])) for depth in range(sink_depth + 1)]
+
+
+
+def render_min_cost_flow_diagram_svg(
+    flow_result: MinCostFlowResult,
+    *,
+    graph_name: str = "costed_flow",
+    target_flow: int | None = None,
+) -> str:
+    width = 940
+    columns = _compute_min_cost_flow_diagram_columns(flow_result)
+    max_rows = max((len(column) for column in columns), default=1)
+    height = max(430, 240 + max_rows * 108)
+    top_y = 176
+    bottom_y = height - 118
+    column_left = 112
+    column_right = width - 120
+    circle_radius = 28
+    diamond_half = 30
+    label_font = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    explanation = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+    node_positions: dict[str, tuple[float, float]] = {}
+    positive_nodes = {
+        edge["source"]
+        for edge in flow_result.edge_flows
+        if edge["flow"] > 0
+    } | {
+        edge["target"]
+        for edge in flow_result.edge_flows
+        if edge["flow"] > 0
+    }
+
+    def add_label(parts: list[str], x: float, y: float, text: str, *, fill: str = "#475569", size: int = 12, weight: str = "600") -> None:
+        parts.append(
+            f"<text x=\"{x:.1f}\" y=\"{y:.1f}\" text-anchor=\"middle\" font-size=\"{size}\" font-weight=\"{weight}\" "
+            f"fill=\"{fill}\" font-family='{label_font}'>{_svg_escape(text)}</text>"
+        )
+
+    def add_diamond(parts: list[str], x: float, y: float, label: str, *, fill: str) -> None:
+        points = f"{x:.1f},{y - diamond_half:.1f} {x + diamond_half:.1f},{y:.1f} {x:.1f},{y + diamond_half:.1f} {x - diamond_half:.1f},{y:.1f}"
+        parts.append(f'<polygon points="{points}" fill="{fill}" stroke="#0f172a" stroke-width="2.2" />')
+        add_label(parts, x, y + 5, label, fill="#0f172a", size=14, weight="700")
+
+    def edge_anchor(point: tuple[float, float], *, direction: str, diamond: bool = False) -> tuple[float, float]:
+        x, y = point
+        offset = diamond_half if diamond else circle_radius
+        if direction == "left":
+            return (x - offset, y)
+        if direction == "right":
+            return (x + offset, y)
+        return (x, y)
+
+    def line_label_position(x1: float, y1: float, x2: float, y2: float, *, offset: float = 0) -> tuple[float, float]:
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        slope_offset = -16 if y2 < y1 else (18 if y2 > y1 else -10)
+        return (mid_x, mid_y + slope_offset + offset)
+
+    usable_width = max(1, len(columns) - 1)
+    for index, column_nodes in enumerate(columns):
+        x = column_left + (column_right - column_left) * (index / usable_width)
+        if len(column_nodes) == 1:
+            positions = [(top_y + bottom_y) / 2]
+        else:
+            positions = _compute_vertical_positions(len(column_nodes), top=top_y, bottom=bottom_y)
+        for node, y in zip(column_nodes, positions):
+            node_positions[node] = (x, y)
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Generic min-cost-flow diagram</title>',
+        f'<desc id="desc">DOT-style generic min-cost-flow diagram for {graph_name} showing used shipment paths, unused edges, and the requested flow target.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" rx="26" fill="#f8fafc" />',
+        _svg_text(40, 42, "Generic min-cost-flow diagram", size=28, weight="700"),
+        _svg_text(
+            40,
+            68,
+            (
+                f"Graph: {graph_name} · delivered={flow_result.total_flow} · cost={flow_result.total_cost} · "
+                f"target={target_flow if target_flow is not None else 'maximize'} · reached={explanation['target_reached']}"
+            ),
+            size=14,
+            fill="#334155",
+        ),
+    ]
+
+    for column_index, column_nodes in enumerate(columns):
+        if not column_nodes:
+            continue
+        xs = [node_positions[node][0] for node in column_nodes]
+        ys = [node_positions[node][1] for node in column_nodes]
+        left = min(xs) - 54
+        top = min(ys) - 54
+        right = max(xs) + 54
+        bottom = max(ys) + 54
+        fill = "#e0f2fe" if column_index == 0 else ("#fef3c7" if column_index == len(columns) - 1 else "#ffffff")
+        parts.append(
+            f'<rect x="{left:.1f}" y="{top:.1f}" width="{right - left:.1f}" height="{bottom - top:.1f}" rx="24" '
+            f'fill="{fill}" fill-opacity="0.65" stroke="#d7dee8" stroke-dasharray="7 6" />'
+        )
+        label = "source" if column_index == 0 else ("sink" if column_index == len(columns) - 1 else f"stage {column_index}")
+        parts.append(_svg_text(left + 18, top - 12, label, size=13, weight="700", fill="#475569"))
+
+    marker = (
+        '<defs>'
+        '<marker id="arrowhead-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">'
+        '<polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" /></marker>'
+        '<marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">'
+        '<polygon points="0 0, 10 3.5, 0 7" fill="#15803d" /></marker>'
+        '</defs>'
+    )
+    parts.insert(4, marker)
+
+    for edge in sorted(flow_result.edge_flows, key=lambda item: (item["source"], item["target"], item["cost"], item["capacity"])):
+        source_point = node_positions[edge["source"]]
+        target_point = node_positions[edge["target"]]
+        start_x, start_y = edge_anchor(source_point, direction="right", diamond=edge["source"] == flow_result.source)
+        end_x, end_y = edge_anchor(target_point, direction="left", diamond=edge["target"] == flow_result.sink)
+        positive = edge["flow"] > 0
+        stroke = "#15803d" if positive else "#94a3b8"
+        stroke_width = 4 if positive else 1.6
+        stroke_opacity = 0.95 if positive else 0.72
+        marker_id = "arrowhead-green" if positive else "arrowhead-gray"
+        parts.append(
+            f'<line x1="{start_x:.1f}" y1="{start_y:.1f}" x2="{end_x:.1f}" y2="{end_y:.1f}" '
+            f'stroke="{stroke}" stroke-width="{stroke_width}" stroke-opacity="{stroke_opacity}" marker-end="url(#{marker_id})" />'
+        )
+        label_x, label_y = line_label_position(start_x, start_y, end_x, end_y)
+        add_label(
+            parts,
+            label_x,
+            label_y,
+            f"{edge['flow']}/{edge['capacity']} @ {edge['cost']}",
+            fill="#166534" if positive else "#64748b",
+            size=11,
+            weight="700" if positive else "500",
+        )
+
+    for node, (x, y) in node_positions.items():
+        if node == flow_result.source:
+            add_diamond(parts, x, y, node, fill="#dbeafe")
+            continue
+        if node == flow_result.sink:
+            add_diamond(parts, x, y, node, fill="#fef3c7")
+            continue
+        fill = "#dcfce7" if node in positive_nodes else "#ffffff"
+        stroke = "#15803d" if node in positive_nodes else "#475569"
+        parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{circle_radius}" fill="{fill}" stroke="{stroke}" stroke-width="2.4" />')
+        add_label(parts, x, y + 4, node, fill="#0f172a", size=13, weight="700")
+
+    parts.append(f'<rect x="36" y="{height - 82}" width="868" height="48" rx="16" fill="#ffffff" stroke="#dbe4ee" />')
+    add_label(parts, 210, height - 53, "green edge = shipped path segment", fill="#166534", size=12)
+    add_label(parts, 492, height - 53, "label = flow/capacity @ unit cost", fill="#475569", size=12)
+    add_label(parts, 748, height - 53, "green node = touched by positive flow", fill="#166534", size=12)
+    parts.append('</svg>')
+    return "\n".join(parts) + "\n"
+
+
+
+def render_min_cost_flow_artifact_html(
+    flow_result: MinCostFlowResult,
+    *,
+    graph_name: str = "costed_flow",
+    target_flow: int | None = None,
+    companion_links: dict[str, str] | None = None,
+) -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    explanation = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
+    diagram_svg = render_min_cost_flow_diagram_svg(flow_result, graph_name=graph_name, target_flow=target_flow)
+    proof_svg = render_min_cost_flow_svg(flow_result, graph_name=graph_name, target_flow=target_flow)
+    positive_flow_items = "".join(
+        f"<li><code>{_html_escape(edge['source'])} -&gt; {_html_escape(edge['target'])}</code> · <code>{edge['flow']}/{edge['capacity']}</code> @ cost <code>{edge['cost']}</code></li>"
+        for edge in explanation["positive_flow_edges"]
+    ) or "<li>No edges carried positive flow.</li>"
+    path_items = "".join(
+        f"<li><code>{_html_escape(' -&gt; '.join(step['path']))}</code> · bottleneck <code>{step['bottleneck']}</code> · unit cost <code>{step['cost_per_unit']}</code> · path cost <code>{step['path_cost']}</code></li>"
+        for step in flow_result.augmenting_paths
+    ) or "<li>No augmenting paths were found.</li>"
+    narrative_items = "".join(
+        f"<li>{_html_escape(line)}</li>"
+        for line in explanation["narrative"]
+    )
+    companion_links = companion_links or {}
+    link_labels = {
+        "dot": "DOT source",
+        "markdown": "Markdown proof",
+        "svg": "Standalone proof SVG",
+    }
+    companion_links_html = "".join(
+        f'<li><a href="{_html_escape(path)}">{_html_escape(link_labels[key])}</a></li>'
+        for key, path in companion_links.items()
+        if key in link_labels
+    )
+    if not companion_links_html:
+        companion_links_html = "<li>This HTML file is self-contained; add --dot-out, --markdown-out, or --svg-out if you want companion artifacts too.</li>"
+
+    requested_flow = target_flow if target_flow is not None else "maximize"
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generic min-cost-flow artifact page ({_html_escape(graph_name)})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1500px; padding: 0 1rem 3rem; line-height: 1.5; }}
+    h1, h2, h3 {{ line-height: 1.2; }}
+    code, pre {{ font-family: 'SFMono-Regular', Consolas, monospace; }}
+    .meta, .links {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 2rem; padding: 0; }}
+    .meta li, .links li {{ list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.9rem; background: rgba(255, 255, 255, 0.45); }}
+    .artifact-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(540px, 1fr)); gap: 1.25rem; margin: 1.5rem 0 2rem; }}
+    .artifact-card {{ border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.52); }}
+    .artifact-card h2 {{ margin-top: 0; }}
+    svg {{ width: 100%; height: auto; display: block; }}
+    .detail-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem; }}
+    .detail-card {{ padding: 1rem; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1rem; background: rgba(248, 250, 252, 0.82); }}
+    .detail-card h3 {{ margin-top: 0; margin-bottom: 0.75rem; }}
+    ul {{ padding-left: 1.2rem; }}
+    p.caption {{ margin-top: 0.75rem; color: #475569; }}
+  </style>
+</head>
+<body>
+  <h1>Generic min-cost-flow artifact page</h1>
+  <p>This page pairs a browser-friendly shipping/routing diagram with the proof card so the generic min-cost-flow story is easy to browse on GitHub Pages without DOT rendering or terminal screenshots.</p>
+  <ul class="meta">
+    <li><strong>Graph</strong><br><code>{_html_escape(graph_name)}</code></li>
+    <li><strong>Generated</strong><br><code>{generated}</code></li>
+    <li><strong>Requested flow</strong><br><code>{requested_flow}</code></li>
+    <li><strong>Delivered flow</strong><br><code>{flow_result.total_flow}</code></li>
+    <li><strong>Total cost</strong><br><code>{flow_result.total_cost}</code></li>
+    <li><strong>Target reached</strong><br><code>{str(explanation['target_reached']).lower()}</code></li>
+  </ul>
+  <div class="artifact-grid">
+    <section class="artifact-card">
+      <h2>DOT-style shipping/routing diagram</h2>
+      {diagram_svg}
+      <p class="caption">Green paths show the shipped flow, while gray edges still reveal the unused residual options that the solver chose against.</p>
+    </section>
+    <section class="artifact-card">
+      <h2>Proof card</h2>
+      {proof_svg}
+      <p class="caption">Use this card when you want the augmenting-path evidence, edge-cost certificate, and target-flow status in one screenshot-friendly block.</p>
+    </section>
+  </div>
+  <div class="detail-grid">
+    <section class="detail-card">
+      <h3>Edges carrying flow</h3>
+      <ul>{positive_flow_items}</ul>
+    </section>
+    <section class="detail-card">
+      <h3>Residual-path narrative</h3>
+      <ul>{narrative_items}</ul>
+    </section>
+    <section class="detail-card">
+      <h3>Augmenting paths</h3>
+      <ul>{path_items}</ul>
+    </section>
+    <section class="detail-card">
+      <h3>Companion artifacts</h3>
+      <ul class="links">{companion_links_html}</ul>
+    </section>
+  </div>
+</body>
+</html>
+'''
+
+
+
 def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
     explanation = build_assignment_explanation(assignment_result)
     width = 960
@@ -2566,6 +2882,7 @@ def build_parser() -> argparse.ArgumentParser:
     cost_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the solved costed flow graph")
     cost_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the solved costed flow graph")
     cost_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the solved costed flow graph")
+    cost_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the shipping/routing diagram next to the proof card")
     add_explain_argument(cost_parser)
 
     cost_demo_parser = subparsers.add_parser("cost-demo", help="run the bundled generic min-cost-flow sample")
@@ -2573,6 +2890,7 @@ def build_parser() -> argparse.ArgumentParser:
     cost_demo_parser.add_argument("--dot-out", type=Path, help="write a Graphviz DOT file for the sample costed flow graph")
     cost_demo_parser.add_argument("--markdown-out", type=Path, help="write a standalone Markdown proof artifact for the sample costed flow graph")
     cost_demo_parser.add_argument("--svg-out", type=Path, help="write a standalone SVG proof card for the sample costed flow graph")
+    cost_demo_parser.add_argument("--html-out", type=Path, help="write a self-contained HTML artifact page that places the shipping/routing diagram next to the proof card")
     add_explain_argument(cost_demo_parser)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
@@ -2790,6 +3108,26 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 render_min_cost_flow_svg(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
             )
             payload["svg_output"] = str(args.svg_out)
+        if getattr(args, "html_out", None):
+            companion_links = {
+                key: _relative_output_path(Path(value), args.html_out.parent)
+                for key, value in {
+                    "dot": payload.get("dot_output"),
+                    "markdown": payload.get("markdown_output"),
+                    "svg": payload.get("svg_output"),
+                }.items()
+                if value is not None
+            }
+            write_html_output(
+                args.html_out,
+                render_min_cost_flow_artifact_html(
+                    flow_result,
+                    graph_name=graph_path.stem,
+                    target_flow=target_flow,
+                    companion_links=companion_links,
+                ),
+            )
+            payload["html_output"] = str(args.html_out)
         return payload
 
     if args.command == "cost-demo":
@@ -2823,6 +3161,26 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 render_min_cost_flow_svg(flow_result, graph_name=graph_path.stem, target_flow=target_flow),
             )
             payload["svg_output"] = str(args.svg_out)
+        if getattr(args, "html_out", None):
+            companion_links = {
+                key: _relative_output_path(Path(value), args.html_out.parent)
+                for key, value in {
+                    "dot": payload.get("dot_output"),
+                    "markdown": payload.get("markdown_output"),
+                    "svg": payload.get("svg_output"),
+                }.items()
+                if value is not None
+            }
+            write_html_output(
+                args.html_out,
+                render_min_cost_flow_artifact_html(
+                    flow_result,
+                    graph_name=graph_path.stem,
+                    target_flow=target_flow,
+                    companion_links=companion_links,
+                ),
+            )
+            payload["html_output"] = str(args.html_out)
         return payload
 
     payload = benchmark_algorithms(

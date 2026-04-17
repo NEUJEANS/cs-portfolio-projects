@@ -12,7 +12,7 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 | Weighted assignment proof card | Generic min-cost-flow proof card |
 | --- | --- |
 | ![Weighted assignment proof card](./sample-assignment-proof.svg) | ![Min-cost flow proof card](./sample-cost-flow-proof.svg) |
-| [Markdown proof](./sample-assignment-proof.md) · [DOT diagram source](./sample-assignment.dot) · [Side-by-side artifact page](./sample-assignment-artifact-page.html) | [Markdown proof](./sample-cost-flow-proof.md) · [DOT diagram source](./sample-cost-flow.dot) |
+| [Markdown proof](./sample-assignment-proof.md) · [DOT diagram source](./sample-assignment.dot) · [Side-by-side artifact page](./sample-assignment-artifact-page.html) | [Markdown proof](./sample-cost-flow-proof.md) · [DOT diagram source](./sample-cost-flow.dot) · [Side-by-side artifact page](./sample-cost-flow-artifact-page.html) |
 
 ## Benchmark report cards
 
@@ -45,4 +45,5 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 - Pair one proof card with one benchmark report to show both correctness and performance storytelling.
 - Use the weighted assignment card when you want a recruiter-friendly optimization example instead of only a feasibility/cut proof.
 - Use the generic min-cost-flow card when you want to show the same optimization engine on a non-bipartite shipping/routing-style graph.
+- Link the new side-by-side HTML pages when you want GitHub Pages viewers to browse the diagrams and proof cards without opening separate files.
 - Link this gallery from project-level README files so reviewers can jump straight into the artifacts.

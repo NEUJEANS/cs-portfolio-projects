@@ -31,6 +31,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - standalone `--markdown-out` proof artifacts for flow, matching, assignment, and generic min-cost-flow runs so portfolio screenshots do not require terminal capture
 - standalone `--svg-out` proof cards for flow, matching, assignment, and generic min-cost-flow runs so the project ships screenshot-ready visual summaries without Graphviz
 - standalone `--html-out` assignment artifact pages that place a DOT-style weighted-assignment diagram next to the proof card for GitHub Pages or portfolio browsing
+- standalone `--html-out` generic min-cost-flow artifact pages that place a shipping/routing diagram next to the proof card for GitHub Pages or portfolio browsing
 - bundled sample flow, matching, weighted-assignment, and generic cost-flow graphs
 - unit tests for correctness, validation, CLI behavior, algorithm parity, min-cost-flow behavior, and benchmark behavior
 
@@ -96,8 +97,10 @@ Run the bundled generic min-cost-flow sample or solve a custom costed network. T
 python3 projects/network-flow-lab/network_flow.py cost-demo --pretty
 python3 projects/network-flow-lab/network_flow.py cost-demo --explain --pretty
 python3 projects/network-flow-lab/network_flow.py cost-demo --dot-out /tmp/cost-flow.dot
+python3 projects/network-flow-lab/network_flow.py cost-demo --html-out /tmp/cost-flow-artifact-page.html
 python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --markdown-out /tmp/cost-flow-proof.md --pretty
 python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --svg-out /tmp/cost-flow-proof.svg --pretty
+python3 projects/network-flow-lab/network_flow.py cost-solve projects/network-flow-lab/sample_cost_flow_graph.json --html-out /tmp/cost-flow-artifact-page.html --pretty
 ```
 
 Weighted-assignment format:
@@ -191,6 +194,7 @@ Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/sample-cost-flow.dot`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.md`
 - `docs/artifacts/network-flow-lab/sample-cost-flow-proof.svg`
+- `docs/artifacts/network-flow-lab/sample-cost-flow-artifact-page.html`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.md`
 - `docs/artifacts/network-flow-lab/benchmark-dag-report.svg`
 - `docs/artifacts/network-flow-lab/benchmark-dense-report.md`
@@ -221,9 +225,10 @@ python3 -m unittest tests/test_network_flow_lab.py
 - The standalone proof-card SVG export gives you screenshot-ready correctness summaries for both raw max-flow runs and bipartite-match reductions without requiring Graphviz.
 - Weighted-assignment DOT export keeps the left/right partitions on aligned ranks, highlights selected pairs in green, and leaves unmatched endpoints obvious for quick portfolio screenshots.
 - The assignment HTML artifact page mirrors that same DOT story as an inline browser-friendly SVG diagram next to the proof card, so GitHub Pages viewers do not need Graphviz installed to browse it.
+- The generic min-cost-flow HTML artifact page gives the shipping/routing example the same browser-friendly treatment, pairing the chosen shipment diagram with the proof card and augmenting-path summary.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
-- add a similar side-by-side artifact page for the generic min-cost-flow sample so the shipping/routing story gets the same browser-friendly treatment
+- add a tiny static web gallery that lets viewers toggle between the assignment and generic min-cost-flow HTML artifact pages without digging through the repo tree
 - render actual node-link SVG layouts for solved flow, matching, assignment, and generic min-cost-flow proofs instead of card-style summaries
 - add a tiny static web gallery that lets viewers toggle between Markdown, SVG, DOT, and raw JSON artifacts

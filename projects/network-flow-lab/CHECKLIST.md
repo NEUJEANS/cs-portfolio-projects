@@ -11,7 +11,8 @@
 
 ## Next candidate slices
 - [x] Add a side-by-side artifact page that embeds the weighted-assignment DOT diagram next to the proof cards
-- [ ] Add a similar side-by-side artifact page for the generic min-cost-flow sample so the shipping/routing story also has a browser-friendly gallery view
+- [x] Add a similar side-by-side artifact page for the generic min-cost-flow sample so the shipping/routing story also has a browser-friendly gallery view
+- [ ] Add a tiny static gallery index that links the assignment and generic min-cost-flow HTML artifact pages together
 - [x] Export proof views as standalone Markdown artifacts for portfolio screenshots
 - [x] Add weighted assignment / min-cost flow as an advanced follow-up
 - [x] Ship pre-rendered SVG examples in docs for quick visual browsing

@@ -41,6 +41,8 @@ render_assignment_artifact_html = module.render_assignment_artifact_html
 render_min_cost_flow_dot = module.render_min_cost_flow_dot
 render_min_cost_flow_markdown = module.render_min_cost_flow_markdown
 render_min_cost_flow_svg = module.render_min_cost_flow_svg
+render_min_cost_flow_diagram_svg = module.render_min_cost_flow_diagram_svg
+render_min_cost_flow_artifact_html = module.render_min_cost_flow_artifact_html
 render_benchmark_markdown = module.render_benchmark_markdown
 render_benchmark_svg = module.render_benchmark_svg
 solve_max_flow = module.solve_max_flow
@@ -644,6 +646,51 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn("Residual-path certificate", svg)
         self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
 
+    def test_render_min_cost_flow_diagram_svg_highlights_positive_edges_and_valid_xml(self) -> None:
+        result = solve_min_cost_max_flow(
+            ["s", "a", "b", "t"],
+            [
+                module.WeightedEdge("s", "a", 1, 0),
+                module.WeightedEdge("s", "b", 1, 0),
+                module.WeightedEdge("a", "t", 1, 2),
+                module.WeightedEdge("b", "t", 1, 5),
+            ],
+            "s",
+            "t",
+            target_flow=1,
+        )
+        svg = render_min_cost_flow_diagram_svg(result, graph_name="tiny_cost_flow", target_flow=1)
+        self.assertIn("<svg", svg)
+        self.assertIn("Generic min-cost-flow diagram", svg)
+        self.assertIn("1/1 @ 2", svg)
+        self.assertIn("green edge = shipped path segment", svg)
+        self.assertEqual(ET.fromstring(svg).tag, "{http://www.w3.org/2000/svg}svg")
+
+    def test_render_min_cost_flow_artifact_html_embeds_diagram_and_proof(self) -> None:
+        result = solve_min_cost_max_flow(
+            ["s", "a", "t"],
+            [
+                module.WeightedEdge("s", "a", 2, 0),
+                module.WeightedEdge("a", "t", 2, 3),
+            ],
+            "s",
+            "t",
+            target_flow=2,
+        )
+        html = render_min_cost_flow_artifact_html(
+            result,
+            graph_name="tiny_cost_flow",
+            target_flow=2,
+            companion_links={"dot": "cost-flow.dot", "markdown": "cost-flow-proof.md", "svg": "cost-flow-proof.svg"},
+        )
+        self.assertIn("<!DOCTYPE html>", html)
+        self.assertIn("Generic min-cost-flow artifact page", html)
+        self.assertIn("DOT-style shipping/routing diagram", html)
+        self.assertIn("Min-cost flow proof card", html)
+        self.assertIn('href="cost-flow.dot"', html)
+        self.assertIn('href="cost-flow-proof.md"', html)
+        self.assertIn('href="cost-flow-proof.svg"', html)
+
     def test_cli_assign_demo_outputs_assignment_payload(self) -> None:
         completed = subprocess.run(
             ["python3", str(MODULE_PATH), "assign-demo", "--explain"],
@@ -800,6 +847,64 @@ class NetworkFlowLabTests(unittest.TestCase):
             self.assertIn('digraph "sample_cost_flow_graph"', dot_path.read_text(encoding="utf-8"))
             self.assertIn("Min-cost flow proof artifact", markdown_path.read_text(encoding="utf-8"))
             self.assertIn("Min-cost flow proof card", svg_path.read_text(encoding="utf-8"))
+
+    def test_cli_cost_demo_can_write_self_contained_html_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dot_path = Path(tmpdir) / "cost-flow.dot"
+            markdown_path = Path(tmpdir) / "cost-flow-proof.md"
+            svg_path = Path(tmpdir) / "cost-flow-proof.svg"
+            html_path = Path(tmpdir) / "cost-flow-artifact-page.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "cost-demo",
+                    "--dot-out",
+                    str(dot_path),
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--html-out",
+                    str(html_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["html_output"], str(html_path))
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("Generic min-cost-flow artifact page", html)
+            self.assertIn("DOT-style shipping/routing diagram", html)
+            self.assertIn("Min-cost flow proof card", html)
+            self.assertIn('href="cost-flow.dot"', html)
+            self.assertIn('href="cost-flow-proof.md"', html)
+            self.assertIn('href="cost-flow-proof.svg"', html)
+
+    def test_cli_cost_demo_html_output_works_without_companion_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            html_path = Path(tmpdir) / "cost-flow-artifact-page.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "cost-demo",
+                    "--html-out",
+                    str(html_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["html_output"], str(html_path))
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("Generic min-cost-flow artifact page", html)
+            self.assertIn("self-contained", html)
+            self.assertNotIn('href="cost-flow.dot"', html)
 
     def test_random_graph_generator_is_reproducible_and_connected(self) -> None:
         graph_a = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)
