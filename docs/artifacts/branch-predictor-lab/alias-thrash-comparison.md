@@ -1,6 +1,6 @@
 # Branch predictor comparison card: `alias-thrash-seed7`
 
-- Generated: `2026-04-17T10:39:46Z`
+- Generated: `2026-04-17T10:52:47Z`
 - Trace: `artifacts/branch-predictor-lab/alias-thrash-seed7.trace`
 - Branches: `48` across `4` static PCs
 - Taken rate: `56.250%` (`27` taken / `21` not taken)
