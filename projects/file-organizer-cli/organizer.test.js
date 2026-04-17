@@ -4,6 +4,7 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 const {
+  buildBucketConfig,
   bucketFor,
   organize,
   writeManifest,
@@ -11,14 +12,59 @@ const {
   parseArgs,
   formatTextReport,
   uniqueDestination,
+  loadBucketConfig,
 } = require('./organizer');
 
-test('bucketFor categorizes by extension', () => {
+test('bucketFor categorizes by default extension groups', () => {
   assert.equal(bucketFor('photo.png'), 'images');
   assert.equal(bucketFor('notes.md'), 'documents');
   assert.equal(bucketFor('main.py'), 'code');
   assert.equal(bucketFor('archive.zip'), 'archives');
   assert.equal(bucketFor('mystery.bin'), 'other');
+});
+
+test('buildBucketConfig merges custom buckets before defaults and normalizes extensions', () => {
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      datasets: ['csv', '.JSON', '.csv'],
+      slides: ['ppt', '.pptx'],
+    },
+  });
+
+  assert.equal(bucketFor('results.csv', bucketConfig), 'datasets');
+  assert.equal(bucketFor('report.json', bucketConfig), 'datasets');
+  assert.equal(bucketFor('lecture.pptx', bucketConfig), 'slides');
+  assert.equal(bucketFor('notes.txt', bucketConfig), 'documents');
+  assert.deepEqual(bucketConfig.customBuckets.datasets, ['.csv', '.json']);
+});
+
+test('buildBucketConfig rejects duplicate custom extensions across buckets', () => {
+  assert.throws(
+    () => buildBucketConfig({
+      buckets: {
+        datasets: ['.csv'],
+        spreadsheets: ['csv'],
+      },
+    }),
+    /assigned to multiple custom buckets/,
+  );
+});
+
+test('loadBucketConfig reads JSON config files from disk', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-'));
+  const configPath = path.join(tmp, 'bucket-config.json');
+  await fs.writeFile(configPath, JSON.stringify({
+    buckets: {
+      datasets: ['csv', 'tsv'],
+    },
+    fallbackBucket: 'misc',
+  }));
+
+  const bucketConfig = await loadBucketConfig(configPath);
+
+  assert.equal(bucketConfig.configPath, path.resolve(configPath));
+  assert.equal(bucketFor('values.tsv', bucketConfig), 'datasets');
+  assert.equal(bucketFor('mystery.bin', bucketConfig), 'misc');
 });
 
 test('uniqueDestination appends numbered suffix when file exists', async () => {
@@ -45,6 +91,46 @@ test('organize moves files into folders and preserves existing targets', async (
   assert.equal(existing, 'existing');
 });
 
+test('organize honors config-driven buckets and custom fallback buckets', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      datasets: ['csv'],
+      slides: ['pptx'],
+    },
+    fallbackBucket: 'misc',
+  });
+  await fs.writeFile(path.join(tmp, 'grades.csv'), 'scores');
+  await fs.writeFile(path.join(tmp, 'week1.pptx'), 'slides');
+  await fs.writeFile(path.join(tmp, 'unknown.bin'), 'blob');
+
+  const result = await organize(tmp, { bucketConfig });
+
+  assert.equal(result.summary.total, 3);
+  assert.equal(await fs.readFile(path.join(tmp, 'datasets', 'grades.csv'), 'utf8'), 'scores');
+  assert.equal(await fs.readFile(path.join(tmp, 'slides', 'week1.pptx'), 'utf8'), 'slides');
+  assert.equal(await fs.readFile(path.join(tmp, 'misc', 'unknown.bin'), 'utf8'), 'blob');
+  assert.equal(result.bucketConfig.fallbackBucket, 'misc');
+});
+
+test('organize skips the config file itself when it lives inside the target directory', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const configPath = path.join(tmp, 'buckets.json');
+  await fs.writeFile(path.join(tmp, 'grades.csv'), 'scores');
+  await fs.writeFile(configPath, JSON.stringify({
+    buckets: {
+      datasets: ['csv'],
+    },
+  }));
+
+  const bucketConfig = await loadBucketConfig(configPath);
+  const result = await organize(tmp, { bucketConfig, recursive: true });
+
+  assert.equal(result.summary.total, 1);
+  assert.equal(await fs.readFile(path.join(tmp, 'datasets', 'grades.csv'), 'utf8'), 'scores');
+  assert.equal(await fs.readFile(configPath, 'utf8').then(JSON.parse).then(config => config.buckets.datasets[0]), 'csv');
+});
+
 test('organize dry-run reports work without mutating the filesystem', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
   await fs.writeFile(path.join(tmp, 'song.mp3'), 'audio');
@@ -58,20 +144,25 @@ test('organize dry-run reports work without mutating the filesystem', async () =
   assert.equal(original, 'audio');
 });
 
-test('organize recursively handles nested folders but skips bucket folders', async () => {
+test('organize recursively handles nested folders but skips configured bucket folders', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      datasets: ['csv'],
+    },
+  });
   await fs.mkdir(path.join(tmp, 'semester1'), { recursive: true });
-  await fs.mkdir(path.join(tmp, 'images'), { recursive: true });
-  await fs.writeFile(path.join(tmp, 'semester1', 'script.js'), 'code');
-  await fs.writeFile(path.join(tmp, 'images', 'kept.png'), 'img');
+  await fs.mkdir(path.join(tmp, 'datasets'), { recursive: true });
+  await fs.writeFile(path.join(tmp, 'semester1', 'table.csv'), 'csv');
+  await fs.writeFile(path.join(tmp, 'datasets', 'kept.csv'), 'keep');
 
-  const result = await organize(tmp, { recursive: true });
+  const result = await organize(tmp, { recursive: true, bucketConfig });
 
   assert.equal(result.summary.total, 1);
-  const nestedMoved = await fs.readFile(path.join(tmp, 'semester1', 'code', 'script.js'), 'utf8');
-  const bucketPreserved = await fs.readFile(path.join(tmp, 'images', 'kept.png'), 'utf8');
-  assert.equal(nestedMoved, 'code');
-  assert.equal(bucketPreserved, 'img');
+  const nestedMoved = await fs.readFile(path.join(tmp, 'semester1', 'datasets', 'table.csv'), 'utf8');
+  const bucketPreserved = await fs.readFile(path.join(tmp, 'datasets', 'kept.csv'), 'utf8');
+  assert.equal(nestedMoved, 'csv');
+  assert.equal(bucketPreserved, 'keep');
 });
 
 test('writeManifest persists organize results and undo restores files plus empty bucket cleanup', async () => {
@@ -141,8 +232,8 @@ test('undo rejects manifests created from dry-run results', async () => {
   );
 });
 
-test('parseArgs supports manifest-out and undo flags', () => {
-  const organizeArgs = parseArgs(['~/Downloads', '--dry-run', '--recursive', '--json', '--manifest-out', 'runs/latest.json']);
+test('parseArgs supports config, manifest-out, and undo flags', () => {
+  const organizeArgs = parseArgs(['~/Downloads', '--dry-run', '--recursive', '--json', '--config', 'buckets.json', '--manifest-out', 'runs/latest.json']);
   assert.equal(organizeArgs.targetDir, '~/Downloads');
   assert.deepEqual(organizeArgs.options, {
     dryRun: true,
@@ -150,6 +241,7 @@ test('parseArgs supports manifest-out and undo flags', () => {
     json: true,
     manifestOut: 'runs/latest.json',
     undoManifest: null,
+    configPath: 'buckets.json',
   });
 
   const undoArgs = parseArgs(['--undo', 'runs/latest.json', '--dry-run', '--json']);
@@ -160,23 +252,36 @@ test('parseArgs supports manifest-out and undo flags', () => {
     json: true,
     manifestOut: null,
     undoManifest: 'runs/latest.json',
+    configPath: null,
   });
 
   assert.throws(
     () => parseArgs(['--undo', 'runs/latest.json', '--manifest-out', 'other.json']),
     /--manifest-out cannot be used with --undo/,
   );
+
+  assert.throws(
+    () => parseArgs(['--undo', 'runs/latest.json', '--config', 'buckets.json']),
+    /--config cannot be used with --undo/,
+  );
 });
 
-test('formatTextReport includes manifest and undo summary details', () => {
+test('formatTextReport includes config and manifest details for organize runs', () => {
   const organizeReport = formatTextReport({
     action: 'organize',
     rootDir: '/tmp/demo',
     dryRun: true,
     recursive: false,
+    bucketConfig: {
+      configPath: '/tmp/demo/buckets.json',
+      extendDefaults: true,
+      fallbackBucket: 'other',
+      bucketNames: ['datasets', 'documents', 'other'],
+      customBuckets: { datasets: ['.csv'] },
+    },
     manifestPath: '/tmp/demo/manifests/latest.json',
-    summary: { total: 1, renamed: 1, byBucket: { documents: 1 } },
-    moves: [{ from: '/tmp/demo/a.txt', to: '/tmp/demo/documents/a (1).txt', renamed: true }],
+    summary: { total: 1, renamed: 1, byBucket: { datasets: 1 } },
+    moves: [{ from: '/tmp/demo/a.csv', to: '/tmp/demo/datasets/a (1).csv', renamed: true }],
   });
 
   const undoReport = formatTextReport({
@@ -188,6 +293,7 @@ test('formatTextReport includes manifest and undo summary details', () => {
     moves: [{ from: '/tmp/demo/documents/a.txt', to: '/tmp/demo/a (1).txt', requestedRestore: '/tmp/demo/a.txt', restoreRenamed: true, status: 'restored', bucket: 'documents' }],
   });
 
+  assert.match(organizeReport, /config: \/tmp\/demo\/buckets\.json/);
   assert.match(organizeReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
   assert.match(organizeReport, /renamed to avoid collisions: 1/);
   assert.match(undoReport, /action: undo/);

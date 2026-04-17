@@ -16,6 +16,7 @@
 - [x] commit and push
 
 ## Next candidate improvements
-- [ ] add config-driven custom buckets instead of hard-coded extension lists
+- [x] add config-driven custom buckets instead of hard-coded extension lists
 - [ ] add file-type detection beyond extensions for better categorization
 - [ ] optionally sign or checksum manifests for tamper-evident history
+- [ ] add import/export helpers for sharing team-wide bucket presets

@@ -1,21 +1,171 @@
 const fs = require('fs/promises');
 const path = require('path');
 
-const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
-const DOCUMENT_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.md', '.rtf'];
-const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.flac', '.m4a'];
-const CODE_EXTENSIONS = ['.js', '.py', '.ts', '.java', '.cpp', '.c', '.cs', '.go', '.rs'];
-const ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.gz', '.tgz'];
-const RESERVED_BUCKETS = ['images', 'documents', 'audio', 'code', 'archives', 'other'];
+const DEFAULT_BUCKET_RULES = Object.freeze({
+  images: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
+  documents: ['.pdf', '.doc', '.docx', '.txt', '.md', '.rtf'],
+  audio: ['.mp3', '.wav', '.flac', '.m4a'],
+  code: ['.js', '.py', '.ts', '.java', '.cpp', '.c', '.cs', '.go', '.rs'],
+  archives: ['.zip', '.tar', '.gz', '.tgz'],
+});
+const DEFAULT_FALLBACK_BUCKET = 'other';
 
-function bucketFor(filename) {
+function normalizeBucketName(name, label = 'bucket name') {
+  if (typeof name !== 'string') {
+    throw new Error(`Expected ${label} to be a string.`);
+  }
+
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error(`Expected ${label} to be a non-empty string.`);
+  }
+
+  if (trimmed === '.' || trimmed === '..' || trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new Error(`Bucket names must be simple directory names: ${trimmed}`);
+  }
+
+  return trimmed;
+}
+
+function normalizeExtension(extension, bucketName) {
+  if (typeof extension !== 'string') {
+    throw new Error(`Expected every extension in bucket ${bucketName} to be a string.`);
+  }
+
+  const trimmed = extension.trim().toLowerCase();
+  if (!trimmed || trimmed === '.') {
+    throw new Error(`Extensions in bucket ${bucketName} must be non-empty.`);
+  }
+
+  return trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
+}
+
+function normalizeCustomBuckets(buckets) {
+  if (buckets == null) {
+    return {};
+  }
+
+  if (Array.isArray(buckets) || typeof buckets !== 'object') {
+    throw new Error('Bucket config field "buckets" must be a JSON object that maps bucket names to extension arrays.');
+  }
+
+  const normalized = {};
+  const extensionOwners = new Map();
+
+  for (const [rawBucketName, rawExtensions] of Object.entries(buckets)) {
+    const bucketName = normalizeBucketName(rawBucketName, 'bucket name');
+
+    if (!Array.isArray(rawExtensions) || rawExtensions.length === 0) {
+      throw new Error(`Bucket ${bucketName} must list at least one extension.`);
+    }
+
+    const extensions = [];
+    for (const rawExtension of rawExtensions) {
+      const extension = normalizeExtension(rawExtension, bucketName);
+      const owner = extensionOwners.get(extension);
+      if (owner && owner !== bucketName) {
+        throw new Error(`Extension ${extension} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+      }
+      extensionOwners.set(extension, bucketName);
+      if (!extensions.includes(extension)) {
+        extensions.push(extension);
+      }
+    }
+
+    normalized[bucketName] = extensions;
+  }
+
+  return normalized;
+}
+
+function buildBucketConfig(config = {}) {
+  if (config == null || Array.isArray(config) || typeof config !== 'object') {
+    throw new Error('Bucket config must be a JSON object.');
+  }
+
+  const extendDefaults = config.extendDefaults !== false;
+  const fallbackBucket = normalizeBucketName(
+    config.fallbackBucket || DEFAULT_FALLBACK_BUCKET,
+    'fallback bucket',
+  );
+  const customBuckets = normalizeCustomBuckets(config.buckets);
+  const extensionToBucket = new Map();
+  const bucketNames = [];
+
+  const registerBucketRules = (rules) => {
+    for (const [bucketName, extensions] of Object.entries(rules)) {
+      if (!bucketNames.includes(bucketName)) {
+        bucketNames.push(bucketName);
+      }
+
+      for (const extension of extensions) {
+        if (!extensionToBucket.has(extension)) {
+          extensionToBucket.set(extension, bucketName);
+        }
+      }
+    }
+  };
+
+  registerBucketRules(customBuckets);
+  if (extendDefaults) {
+    registerBucketRules(DEFAULT_BUCKET_RULES);
+  }
+  if (!bucketNames.includes(fallbackBucket)) {
+    bucketNames.push(fallbackBucket);
+  }
+
+  return {
+    configPath: null,
+    extendDefaults,
+    fallbackBucket,
+    customBuckets,
+    bucketNames,
+    extensionToBucket,
+  };
+}
+
+const DEFAULT_BUCKET_CONFIG = buildBucketConfig();
+const RESERVED_BUCKETS = Object.freeze([...DEFAULT_BUCKET_CONFIG.bucketNames]);
+
+async function loadBucketConfig(configPath) {
+  const resolvedPath = path.resolve(configPath);
+  let raw;
+
+  try {
+    raw = await fs.readFile(resolvedPath, 'utf8');
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      throw new Error(`Bucket config file not found: ${resolvedPath}`);
+    }
+    throw error;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Bucket config file must contain valid JSON: ${resolvedPath}`);
+  }
+
+  return {
+    ...buildBucketConfig(parsed),
+    configPath: resolvedPath,
+  };
+}
+
+function describeBucketConfig(bucketConfig) {
+  return {
+    configPath: bucketConfig.configPath,
+    extendDefaults: bucketConfig.extendDefaults,
+    fallbackBucket: bucketConfig.fallbackBucket,
+    bucketNames: [...bucketConfig.bucketNames],
+    customBuckets: bucketConfig.customBuckets,
+  };
+}
+
+function bucketFor(filename, bucketConfig = DEFAULT_BUCKET_CONFIG) {
   const ext = path.extname(filename).toLowerCase();
-  if (IMAGE_EXTENSIONS.includes(ext)) return 'images';
-  if (DOCUMENT_EXTENSIONS.includes(ext)) return 'documents';
-  if (AUDIO_EXTENSIONS.includes(ext)) return 'audio';
-  if (CODE_EXTENSIONS.includes(ext)) return 'code';
-  if (ARCHIVE_EXTENSIONS.includes(ext)) return 'archives';
-  return 'other';
+  return bucketConfig.extensionToBucket.get(ext) || bucketConfig.fallbackBucket;
 }
 
 async function pathExists(targetPath) {
@@ -59,12 +209,18 @@ async function moveFile(from, to) {
   }
 }
 
-async function collectFiles(dir, { recursive, reservedBuckets }) {
+async function collectFiles(dir, { recursive, reservedBuckets, skipPaths }) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const files = [];
 
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
+    const resolvedFullPath = path.resolve(fullPath);
+
+    if (skipPaths.has(resolvedFullPath)) {
+      continue;
+    }
+
     if (entry.isFile()) {
       files.push(fullPath);
       continue;
@@ -74,7 +230,7 @@ async function collectFiles(dir, { recursive, reservedBuckets }) {
       continue;
     }
 
-    const nestedFiles = await collectFiles(fullPath, { recursive, reservedBuckets });
+    const nestedFiles = await collectFiles(fullPath, { recursive, reservedBuckets, skipPaths });
     files.push(...nestedFiles);
   }
 
@@ -120,17 +276,23 @@ async function organize(dir, options = {}) {
   const settings = {
     dryRun: false,
     recursive: false,
+    bucketConfig: DEFAULT_BUCKET_CONFIG,
+    skipPaths: [],
     ...options,
   };
 
-  const reservedBuckets = new Set(RESERVED_BUCKETS);
-  const files = await collectFiles(dir, { recursive: settings.recursive, reservedBuckets });
+  const reservedBuckets = new Set(settings.bucketConfig.bucketNames);
+  const skipPaths = new Set(settings.skipPaths.map(candidate => path.resolve(candidate)));
+  if (settings.bucketConfig.configPath) {
+    skipPaths.add(path.resolve(settings.bucketConfig.configPath));
+  }
+  const files = await collectFiles(dir, { recursive: settings.recursive, reservedBuckets, skipPaths });
   const moves = [];
 
   for (const sourcePath of files) {
     const filename = path.basename(sourcePath);
     const sourceDirectory = path.dirname(sourcePath);
-    const bucket = bucketFor(filename);
+    const bucket = bucketFor(filename, settings.bucketConfig);
     const targetDir = path.join(sourceDirectory, bucket);
     const requestedDestination = path.join(targetDir, filename);
     const destinationPath = await uniqueDestination(requestedDestination);
@@ -156,6 +318,7 @@ async function organize(dir, options = {}) {
     rootDir: path.resolve(dir),
     dryRun: settings.dryRun,
     recursive: settings.recursive,
+    bucketConfig: describeBucketConfig(settings.bucketConfig),
     moves,
     summary: summarizeMoves(moves),
   };
@@ -275,6 +438,7 @@ function parseArgs(argv) {
     json: false,
     manifestOut: null,
     undoManifest: null,
+    configPath: null,
   };
   let targetDir = '.';
   let targetDirExplicit = false;
@@ -302,6 +466,13 @@ function parseArgs(argv) {
       }
       options.undoManifest = nextArg;
       index += 1;
+    } else if (arg === '--config') {
+      const nextArg = args[index + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Expected a path after --config');
+      }
+      options.configPath = nextArg;
+      index += 1;
     } else if (arg === '--help' || arg === '-h') {
       options.help = true;
     } else if (!arg.startsWith('-')) {
@@ -327,6 +498,10 @@ function parseArgs(argv) {
     throw new Error('--manifest-out cannot be used with --undo');
   }
 
+  if (options.undoManifest && options.configPath) {
+    throw new Error('--config cannot be used with --undo');
+  }
+
   return { targetDir, options };
 }
 
@@ -339,6 +514,10 @@ function formatOrganizeTextReport(result) {
     `total moves: ${result.summary.total}`,
     `renamed to avoid collisions: ${result.summary.renamed}`,
   ];
+
+  if (result.bucketConfig && result.bucketConfig.configPath) {
+    header.push(`config: ${result.bucketConfig.configPath}`);
+  }
 
   if (result.manifestPath) {
     header.push(`manifest: ${result.manifestPath}`);
@@ -398,7 +577,7 @@ async function main(argv = process.argv.slice(2)) {
   const { targetDir, options } = parseArgs(argv);
 
   if (options.help) {
-    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--manifest-out manifest.json]');
+    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--manifest-out manifest.json]');
     console.log('       node organizer.js --undo manifest.json [--dry-run] [--json]');
     return;
   }
@@ -407,7 +586,14 @@ async function main(argv = process.argv.slice(2)) {
   if (options.undoManifest) {
     result = await undoFromManifest(options.undoManifest, { dryRun: options.dryRun });
   } else {
-    result = await organize(targetDir, options);
+    const bucketConfig = options.configPath
+      ? await loadBucketConfig(options.configPath)
+      : DEFAULT_BUCKET_CONFIG;
+    result = await organize(targetDir, {
+      dryRun: options.dryRun,
+      recursive: options.recursive,
+      bucketConfig,
+    });
     if (options.manifestOut) {
       result = await writeManifest(result, options.manifestOut);
     }
@@ -428,7 +614,16 @@ if (require.main === module) {
 }
 
 module.exports = {
+  DEFAULT_BUCKET_RULES,
+  DEFAULT_FALLBACK_BUCKET,
+  DEFAULT_BUCKET_CONFIG,
   RESERVED_BUCKETS,
+  normalizeBucketName,
+  normalizeExtension,
+  normalizeCustomBuckets,
+  buildBucketConfig,
+  loadBucketConfig,
+  describeBucketConfig,
   bucketFor,
   pathExists,
   uniqueDestination,
