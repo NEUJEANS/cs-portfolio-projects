@@ -21,6 +21,7 @@ spec.loader.exec_module(module)
 
 benchmark_job = module.benchmark_job
 diff_plugin_inspections = module.diff_plugin_inspections
+discover_mini_mapreduce_docs_index = module.discover_mini_mapreduce_docs_index
 execute_job = module.execute_job
 inspect_plugin = module.inspect_plugin
 inspect_plugins = module.inspect_plugins
@@ -670,6 +671,97 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertIn('href="../plugin-catalog.html"', plugin_html)
             self.assertIn("Hook source excerpts", plugin_markdown)
             self.assertIn("Hook source excerpts", plugin_html)
+
+
+    def test_cli_docs_index_writes_markdown_and_html_landing_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifacts_root = Path(tmpdir) / "artifacts"
+            report_prefix = artifacts_root / "project-week-report"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "catalog-plugins",
+                    "--root",
+                    str(PROJECT_DIR),
+                    "--output",
+                    str(artifacts_root / "plugin-catalog.json"),
+                    "--report-output",
+                    str(artifacts_root / "plugin-catalog.md"),
+                    "--html-output",
+                    str(artifacts_root / "plugin-catalog.html"),
+                    "--docs-dir",
+                    str(artifacts_root / "plugin-pages"),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--job",
+                    "plugin",
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_average_score.py"),
+                    "--scenario",
+                    "skewed",
+                    "--dataset-family",
+                    "project-week",
+                    "--records",
+                    "48",
+                    "--shard-size",
+                    "12",
+                    "--reducers",
+                    "2",
+                    "4",
+                    "--output",
+                    str(report_prefix.with_name(report_prefix.name + "-benchmark.json")),
+                    "--csv-output",
+                    str(report_prefix.with_name(report_prefix.name + "-benchmark.csv")),
+                    "--heatmap-output",
+                    str(report_prefix.with_name(report_prefix.name + "-heatmap.csv")),
+                    "--report-output",
+                    str(report_prefix.with_name(report_prefix.name + "-report.md")),
+                    "--html-output",
+                    str(report_prefix.with_name(report_prefix.name + "-report.html")),
+                    "--annotation-batch-dir",
+                    str(artifacts_root),
+                    "--annotation-batch-prefix",
+                    "project-week-batch",
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            markdown_output = artifacts_root / "index.md"
+            html_output = artifacts_root / "index.html"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "docs-index",
+                    "--artifacts-root",
+                    str(artifacts_root),
+                    "--output",
+                    str(markdown_output),
+                    "--html-output",
+                    str(html_output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            markdown = markdown_output.read_text(encoding="utf-8")
+            html_payload = html_output.read_text(encoding="utf-8")
+            self.assertIn("# Mini MapReduce docs index", markdown)
+            self.assertIn("plugin-pages/plugin-average-score.html", markdown)
+            self.assertIn("project-week-report-report.html", markdown)
+            self.assertIn("project-week-batch-full.html", markdown)
+            self.assertIn("Mini MapReduce docs index", html_payload)
+            self.assertIn("plugin-catalog.html", html_payload)
+            self.assertIn("project-week-batch-portfolio-tight.html", html_payload)
 
     def test_cli_inspect_plugin_rejects_diff_with_single_plugin(self) -> None:
         completed = subprocess.run(

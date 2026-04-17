@@ -16,6 +16,7 @@ from mapreduce import (
     benchmark_note_items_for,
     build_benchmark_preset_batch,
     build_plugin_page_links,
+    discover_mini_mapreduce_docs_index,
     diff_plugin_inspections,
     discover_plugin_refs,
     execute_job,
@@ -604,6 +605,110 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertIn("projects/mini-mapreduce-lab/plugins_average_score.py", plugin_html)
             self.assertIn("Catalog index: [plugin catalog](../plugin-catalog.md)", plugin_markdown)
             self.assertIn('href="../plugin-catalog.html"', plugin_html)
+
+
+    def test_discover_mini_mapreduce_docs_index_links_catalog_reports_and_batches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifacts_root = Path(tmpdir) / "artifacts"
+            report_prefix = artifacts_root / "project-week-report"
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "catalog-plugins",
+                    "--root",
+                    "projects/mini-mapreduce-lab",
+                    "--output",
+                    str(artifacts_root / "plugin-catalog.json"),
+                    "--report-output",
+                    str(artifacts_root / "plugin-catalog.md"),
+                    "--html-output",
+                    str(artifacts_root / "plugin-catalog.html"),
+                    "--docs-dir",
+                    str(artifacts_root / "plugin-pages"),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "inspect-plugin",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_average_score.py",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_top_score.py",
+                    "--diff",
+                    "--output",
+                    str(artifacts_root / "plugin-comparison-diff.json"),
+                    "--report-output",
+                    str(artifacts_root / "plugin-comparison-diff.md"),
+                    "--html-output",
+                    str(artifacts_root / "plugin-comparison-diff.html"),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "benchmark",
+                    "--job",
+                    "plugin",
+                    "--plugin",
+                    "projects/mini-mapreduce-lab/plugins_average_score.py",
+                    "--scenario",
+                    "skewed",
+                    "--dataset-family",
+                    "project-week",
+                    "--records",
+                    "48",
+                    "--shard-size",
+                    "12",
+                    "--reducers",
+                    "2",
+                    "4",
+                    "--output",
+                    str(report_prefix.with_name(report_prefix.name + "-benchmark.json")),
+                    "--csv-output",
+                    str(report_prefix.with_name(report_prefix.name + "-benchmark.csv")),
+                    "--heatmap-output",
+                    str(report_prefix.with_name(report_prefix.name + "-heatmap.csv")),
+                    "--report-output",
+                    str(report_prefix.with_name(report_prefix.name + "-report.md")),
+                    "--html-output",
+                    str(report_prefix.with_name(report_prefix.name + "-report.html")),
+                    "--annotation-batch-dir",
+                    str(artifacts_root),
+                    "--annotation-batch-prefix",
+                    "project-week-batch",
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            index = discover_mini_mapreduce_docs_index(artifacts_root)
+            payload = index.as_dict()
+            self.assertEqual(payload["plugin_catalog"]["html"], "plugin-catalog.html")
+            self.assertEqual(payload["plugin_pages"][0]["links"]["html"], "plugin-pages/plugin-average-score.html")
+            self.assertEqual(payload["inspection_diffs"][0]["links"]["html"], "plugin-comparison-diff.html")
+            self.assertEqual(payload["benchmark_reports"][0]["links"]["html"], "project-week-report-report.html")
+            self.assertEqual(payload["annotation_batches"][0]["manifest"], "project-week-batch-manifest.json")
+            self.assertEqual(payload["annotation_batches"][0]["presets"][0]["links"]["html"], "project-week-batch-full.html")
+
+            markdown = index.to_markdown()
+            html_output = index.to_html()
+            self.assertIn("# Mini MapReduce docs index", markdown)
+            self.assertIn("plugin-pages/plugin-average-score.html", markdown)
+            self.assertIn("plugin-comparison-diff.html", markdown)
+            self.assertIn("project-week-report-report.html", markdown)
+            self.assertIn("project-week-batch-portfolio-tight.html", markdown)
+            self.assertIn("Mini MapReduce docs index", html_output)
+            self.assertIn("plugin-catalog.html", html_output)
+            self.assertIn("plugin-comparison-diff.html", html_output)
+            self.assertIn("project-week-batch-full.html", html_output)
 
     def test_cli_catalog_plugins_rejects_empty_matches(self) -> None:
         completed = subprocess.run(

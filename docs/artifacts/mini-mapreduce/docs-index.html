@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce docs index</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1180px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .hero, section { margin-top: 2rem; }
+    .hero { padding: 1.2rem 1.25rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: rgba(148, 163, 184, 0.08); }
+    .hero ul { margin-bottom: 0; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.85rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce docs index</h1>
+  <p>A lightweight landing page for the committed Mini MapReduce artifacts so reviewers can browse plugin catalogs, dedicated plugin docs, inspection diffs, benchmark reports, and annotation-batch presets from one place.</p>
+  <ul class="meta">
+    <li><strong>Plugin pages</strong><br><code>2</code></li>
+    <li><strong>Inspection diffs</strong><br><code>1</code></li>
+    <li><strong>Benchmark bundles</strong><br><code>3</code></li>
+    <li><strong>Annotation batches</strong><br><code>1</code></li>
+  </ul>
+  <div class="hero">
+    <h2>Browser-first links</h2>
+    <ul><li><a href="plugin-catalog.html">Plugin catalog HTML</a></li><li><a href="plugin-comparison-diff.html">Inspection diff HTML — Plugin Comparison</a></li><li><a href="2026-04-17-annotation-view-report.html">Benchmark report HTML — 2026-04-17 · Annotation View</a></li><li><a href="2026-04-17-project-week-report.html">Benchmark report HTML — 2026-04-17 · Project Week</a></li><li><a href="2026-04-17-structured-annotations-report.html">Benchmark report HTML — 2026-04-17 · Structured Annotations</a></li><li><a href="2026-04-17-annotation-batch-full.html">Annotation batch HTML — 2026-04-17 · Annotation Batch / <code>full</code></a></li><li><a href="2026-04-17-annotation-batch-portfolio-tight.html">Annotation batch HTML — 2026-04-17 · Annotation Batch / <code>portfolio-tight</code></a></li></ul>
+  </div>
+  <section>
+    <h2>Plugin catalog</h2>
+    <p><a href="plugin-catalog.md">Markdown</a> · <a href="plugin-catalog.html">HTML</a> · <a href="plugin-catalog.json">JSON</a> · <a href="plugin-catalog.csv">CSV</a></p>
+  </section>
+  <section>
+    <h2>Plugin pages</h2>
+    <table><thead><tr><th>Plugin page</th><th>Description</th><th>Links</th></tr></thead><tbody><tr><td><code>plugin-average-score</code></td><td>Dedicated plugin reference page with hook summaries and source excerpts.</td><td><a href="plugin-pages/plugin-average-score.md">Markdown</a> · <a href="plugin-pages/plugin-average-score.html">HTML</a></td></tr><tr><td><code>plugin-max-score</code></td><td>Dedicated plugin reference page with hook summaries and source excerpts.</td><td><a href="plugin-pages/plugin-max-score.md">Markdown</a> · <a href="plugin-pages/plugin-max-score.html">HTML</a></td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Inspection diffs</h2>
+    <table><thead><tr><th>Diff bundle</th><th>Description</th><th>Links</th></tr></thead><tbody><tr><td>Plugin Comparison</td><td>Adjacent plugin contract comparison bundle with publishable Markdown/HTML plus machine-readable JSON.</td><td><a href="plugin-comparison-diff.md">Markdown</a> · <a href="plugin-comparison-diff.html">HTML</a> · <a href="plugin-comparison-diff.json">JSON</a></td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Benchmark reports</h2>
+    <table><thead><tr><th>Report bundle</th><th>Description</th><th>Links</th></tr></thead><tbody><tr><td>2026-04-17 · Annotation View</td><td>Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.</td><td><a href="2026-04-17-annotation-view-report.md">Markdown</a> · <a href="2026-04-17-annotation-view-report.html">HTML</a> · <a href="2026-04-17-annotation-view-benchmark.json">JSON</a> · <a href="2026-04-17-annotation-view-benchmark.csv">CSV</a> · <a href="2026-04-17-annotation-view-heatmap.csv">Heatmap CSV</a></td></tr><tr><td>2026-04-17 · Project Week</td><td>Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.</td><td><a href="2026-04-17-project-week-report.md">Markdown</a> · <a href="2026-04-17-project-week-report.html">HTML</a> · <a href="2026-04-17-project-week-benchmark.json">JSON</a> · <a href="2026-04-17-project-week-benchmark.csv">CSV</a> · <a href="2026-04-17-project-week-heatmap.csv">Heatmap CSV</a></td></tr><tr><td>2026-04-17 · Structured Annotations</td><td>Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.</td><td><a href="2026-04-17-structured-annotations-report.md">Markdown</a> · <a href="2026-04-17-structured-annotations-report.html">HTML</a> · <a href="2026-04-17-structured-annotations-benchmark.json">JSON</a> · <a href="2026-04-17-structured-annotations-benchmark.csv">CSV</a> · <a href="2026-04-17-structured-annotations-heatmap.csv">Heatmap CSV</a></td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Annotation batch manifests</h2>
+    <section><h3>2026-04-17 · Annotation Batch</h3><p><strong>Manifest:</strong> <a href="2026-04-17-annotation-batch-manifest.json">JSON</a></p><p><strong>Shared artifacts:</strong> <a href="2026-04-17-annotation-batch-shared.csv">Shared CSV</a> · <a href="2026-04-17-annotation-batch-shared-heatmap.csv">Shared heatmap CSV</a></p><table><thead><tr><th>Preset</th><th>Filter summary</th><th>Links</th></tr></thead><tbody><tr><td><code>full</code></td><td>Full annotation view with every structured reviewer callout rendered.</td><td><a href="2026-04-17-annotation-batch-full.md">Markdown</a> · <a href="2026-04-17-annotation-batch-full.html">HTML</a> · <a href="2026-04-17-annotation-batch-full.json">JSON</a></td></tr><tr><td><code>portfolio-tight</code></td><td>Filtered annotation view for portfolio screenshots: keep risk/watch callouts, show one card, and collapse the rest into a summary.<br><small>severity=risk, watch · limit=1 · overflow=summary</small></td><td><a href="2026-04-17-annotation-batch-portfolio-tight.md">Markdown</a> · <a href="2026-04-17-annotation-batch-portfolio-tight.html">HTML</a> · <a href="2026-04-17-annotation-batch-portfolio-tight.json">JSON</a></td></tr></tbody></table></section>
+  </section>
+  <section>
+    <h2>Suggested portfolio usage</h2>
+    <ul>
+      <li>Lead with the HTML report links when you want a browser-friendly walkthrough instead of raw terminal output.</li>
+      <li>Use the plugin catalog first when someone wants to understand the extensibility story before reading the benchmark results.</li>
+      <li>Use the inspection diff bundle when you want to compare how two plugins expose different hook contracts or dataset families.</li>
+      <li>Use the annotation-batch manifest when you want both the full and portfolio-tight reviewer narratives from one shared benchmark run.</li>
+      <li>Link this index from the project README so future slices stay discoverable as more artifact families are added.</li>
+    </ul>
+  </section>
+</body>
+</html>

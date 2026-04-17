@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin doc — plugin-average-score</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1080px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.8rem; }
+    .badge { display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }
+    article { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin doc: <code>plugin-average-score</code></h1>
+  <ul class="meta"><li><strong>Plugin path</strong><br><code>projects/mini-mapreduce-lab/plugins_average_score.py</code></li><li><strong>Summary</strong><br>Average-score analytics plugin with synthetic cohort benchmark families.</li><li><strong>Dataset families</strong><br><code>default, exam-cram, project-week</code></li><li><strong>Catalog badges</strong><br><span class="badge">5 hooks</span><span class="badge">3 dataset families</span><span class="badge">commit pinned</span><span class="badge">github linked</span></li><li><strong>Repository commit</strong><br><code>2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8</code></li><li><strong>Catalog index</strong><br><a href="../plugin-catalog.html">plugin catalog</a></li><li><strong>Alternate format</strong><br><a href="plugin-average-score.md">Markdown</a></li></ul>
+  <section>
+    <h2>Hook summary</h2>
+    <table>
+      <thead><tr><th>Hook</th><th>Export</th><th>Signature</th><th>Details</th><th>Source</th></tr></thead>
+      <tbody><tr><td>Mapper</td><td><code>plugins_average_score.map_records</code></td><td><code>map_records(lines)</code></td><td>Emit per-student sum/count records from comma-separated score lines.<br>line 7<br>anchor <code>plugins_average_score.py#L7-L13</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13">commit</a></td></tr><tr><td>Reducer</td><td><code>plugins_average_score.reduce_key</code></td><td><code>reduce_key(_key, values)</code></td><td>Return a rounded average score for one student key.<br>line 23<br>anchor <code>plugins_average_score.py#L23-L27</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27">commit</a></td></tr><tr><td>Combiner</td><td><code>plugins_average_score.combine_values</code></td><td><code>combine_values(_key, values)</code></td><td>Merge shard-local sum/count objects before the final reduce step.<br>line 16<br>anchor <code>plugins_average_score.py#L16-L20</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20">commit</a></td></tr><tr><td>Benchmark generator</td><td><code>plugins_average_score.benchmark_records</code></td><td><code>benchmark_records(scenario, records, seed, dataset_family=&#x27;default&#x27;)</code></td><td>Generate deterministic cohort score fixtures for benchmark scenarios.<br>line 30<br>anchor <code>plugins_average_score.py#L30-L60</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60">commit</a></td></tr><tr><td>Benchmark note hook</td><td><code>plugins_average_score.benchmark_notes</code></td><td><code>benchmark_notes(scenario, dataset_family=&#x27;default&#x27;)</code></td><td>Describe the intended hot keys for each synthetic benchmark family.<br>line 63<br>anchor <code>plugins_average_score.py#L63-L132</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132">commit</a></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Hook source excerpts</h2>
+    <article><h2>Mapper: <code>plugins_average_score.map_records</code></h2><p><strong>Summary:</strong> Emit per-student sum/count records from comma-separated score lines.</p><p><strong>Source line:</strong> <code>7</code></p><p><strong>Source anchor:</strong> <code>plugins_average_score.py#L7-L13</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L7-L13</a></p><pre><code>def map_records(lines):
+    &quot;&quot;&quot;Emit per-student sum/count records from comma-separated score lines.&quot;&quot;&quot;
+    for line in lines:
+        if not line.strip():
+            continue
+        name, score = line.split(&quot;,&quot;, 1)
+        yield name.strip().lower(), {&quot;sum&quot;: float(score), &quot;count&quot;: 1}</code></pre></article><article><h2>Reducer: <code>plugins_average_score.reduce_key</code></h2><p><strong>Summary:</strong> Return a rounded average score for one student key.</p><p><strong>Source line:</strong> <code>23</code></p><p><strong>Source anchor:</strong> <code>plugins_average_score.py#L23-L27</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L23-L27</a></p><pre><code>def reduce_key(_key, values):
+    &quot;&quot;&quot;Return a rounded average score for one student key.&quot;&quot;&quot;
+    total = sum(item[&quot;sum&quot;] for item in values)
+    count = sum(item[&quot;count&quot;] for item in values)
+    return round(total / count, 3) if count else 0.0</code></pre></article><article><h2>Combiner: <code>plugins_average_score.combine_values</code></h2><p><strong>Summary:</strong> Merge shard-local sum/count objects before the final reduce step.</p><p><strong>Source line:</strong> <code>16</code></p><p><strong>Source anchor:</strong> <code>plugins_average_score.py#L16-L20</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L16-L20</a></p><pre><code>def combine_values(_key, values):
+    &quot;&quot;&quot;Merge shard-local sum/count objects before the final reduce step.&quot;&quot;&quot;
+    total = sum(item[&quot;sum&quot;] for item in values)
+    count = sum(item[&quot;count&quot;] for item in values)
+    return {&quot;sum&quot;: total, &quot;count&quot;: count}</code></pre></article><article><h2>Benchmark generator: <code>plugins_average_score.benchmark_records</code></h2><p><strong>Summary:</strong> Generate deterministic cohort score fixtures for benchmark scenarios.</p><p><strong>Source line:</strong> <code>30</code></p><p><strong>Source anchor:</strong> <code>plugins_average_score.py#L30-L60</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L30-L60</a></p><pre><code>def benchmark_records(scenario, records, seed, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Generate deterministic cohort score fixtures for benchmark scenarios.&quot;&quot;&quot;
+    import random
+
+    if records &lt;= 0:
+        raise ValueError(&quot;records must be positive&quot;)
+    rng = random.Random(seed)
+
+    if dataset_family == &quot;default&quot;:
+        if scenario == &quot;balanced&quot;:
+            students = [f&quot;team-{index:02d}&quot; for index in range(12)]
+            return [f&quot;{students[index % len(students)]},{72 + ((index * 9) % 19)}&quot; for index in range(records)]
+        if scenario == &quot;skewed&quot;:
+            hot_students = [&quot;capstone-core&quot;] * 16 + [f&quot;rotation-{index}&quot; for index in range(4)] + [f&quot;elective-{index}&quot; for index in range(10)]
+            return [f&quot;{rng.choice(hot_students)},{65 + rng.randint(0, 30)}&quot; for _ in range(records)]
+    elif dataset_family == &quot;exam-cram&quot;:
+        if scenario == &quot;balanced&quot;:
+            cohorts = [f&quot;study-group-{index:02d}&quot; for index in range(10)]
+            return [f&quot;{cohorts[index % len(cohorts)]},{78 + ((index * 7) % 15)}&quot; for index in range(records)]
+        if scenario == &quot;skewed&quot;:
+            hot_students = [&quot;midterm-sprint&quot;] * 18 + [f&quot;review-{index}&quot; for index in range(4)] + [f&quot;prep-{index}&quot; for index in range(12)]
+            return [f&quot;{rng.choice(hot_students)},{70 + rng.randint(0, 25)}&quot; for _ in range(records)]
+    elif dataset_family == &quot;project-week&quot;:
+        if scenario == &quot;balanced&quot;:
+            squads = [f&quot;studio-{index:02d}&quot; for index in range(8)]
+            return [f&quot;{squads[index % len(squads)]},{74 + ((index * 5) % 21)}&quot; for index in range(records)]
+        if scenario == &quot;skewed&quot;:
+            hot_students = [&quot;demo-day-core&quot;] * 12 + [f&quot;integration-{index}&quot; for index in range(6)] + [f&quot;feature-{index}&quot; for index in range(14)]
+            return [f&quot;{rng.choice(hot_students)},{68 + rng.randint(0, 28)}&quot; for _ in range(records)]
+
+    raise ValueError(f&quot;unsupported plugin benchmark scenario/family: {scenario}/{dataset_family}&quot;)</code></pre></article><article><h2>Benchmark note hook: <code>plugins_average_score.benchmark_notes</code></h2><p><strong>Summary:</strong> Describe the intended hot keys for each synthetic benchmark family.</p><p><strong>Source line:</strong> <code>63</code></p><p><strong>Source anchor:</strong> <code>plugins_average_score.py#L63-L132</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8/projects/mini-mapreduce-lab/plugins_average_score.py#L63-L132</a></p><pre><code>def benchmark_notes(scenario, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Describe the intended hot keys for each synthetic benchmark family.&quot;&quot;&quot;
+    notes = {
+        (&quot;balanced&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Even cohort rotation&quot;,
+                &quot;detail&quot;: &quot;The default balanced cohort rotates evenly across team labels, so average-score aggregation stays spread out and mostly tests framework overhead rather than hot students.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Treat any noticeable reducer imbalance here as partition spread, not as a workload-shaped hotspot.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Capstone leader hotspot&quot;,
+                &quot;detail&quot;: &quot;`capstone-core` is the dominant student key here, so the hottest reducer should look like one heavy project lead soaking up repeated score updates.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;capstone-core&quot;],
+                &quot;takeaway&quot;: &quot;Use this scenario to explain how a single standout key can dominate reducer traffic even when the final averages remain correct.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;exam-cram&quot;): [
+            {
+                &quot;title&quot;: &quot;Distributed study groups&quot;,
+                &quot;detail&quot;: &quot;Balanced exam-cram fixtures distribute scores across study groups, which makes them a clean baseline before simulating deadline pressure.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;This is the calm comparison point for the cram-week hotspot run.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;exam-cram&quot;): [
+            {
+                &quot;title&quot;: &quot;Cram-week surge&quot;,
+                &quot;detail&quot;: &quot;`midterm-sprint` is intentionally overrepresented, so the report should surface one study cohort as the obvious hotspot during cram-week traffic.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;midterm-sprint&quot;],
+                &quot;takeaway&quot;: &quot;The skew should read like deadline-driven traffic, not like a partitioner bug.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;project-week&quot;): [
+            {
+                &quot;title&quot;: &quot;Studio squad baseline&quot;,
+                &quot;detail&quot;: &quot;Balanced project-week fixtures rotate across studio squads so reducer load stays close even though the labels feel more portfolio-realistic than generic teams.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;This family keeps the story portfolio-friendly without manufacturing a hotspot.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;project-week&quot;): [
+            {
+                &quot;title&quot;: &quot;Demo-day crunch hotspot&quot;,
+                &quot;detail&quot;: &quot;`demo-day-core` is the main hotspot here, with integration and feature tails behind it, so you can narrate the skew as a deadline-driven project crunch.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;demo-day-core&quot;, &quot;integration-0&quot;, &quot;feature-0&quot;],
+                &quot;takeaway&quot;: &quot;This slice is meant to read like a real project-week bottleneck where one squad absorbs the final demo push.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Integration review backlog&quot;,
+                &quot;detail&quot;: &quot;The `integration-*` keys form a second-tier hotspot behind the demo-day core, which makes a good reviewer note when you want to talk about handoff queues instead of only the primary spike.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;integration-0&quot;, &quot;integration-1&quot;, &quot;integration-2&quot;],
+                &quot;takeaway&quot;: &quot;Keep this card when you want a fuller systems story about follow-on bottlenecks after the main project crunch.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Feature-lane tail&quot;,
+                &quot;detail&quot;: &quot;The `feature-*` keys stay spread out and comparatively cooler, so they are useful as a low-priority reviewer note but often safe to collapse in tighter portfolio reports.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;hotspot_keys&quot;: [&quot;feature-0&quot;, &quot;feature-1&quot;],
+                &quot;takeaway&quot;: &quot;Use annotation filters or overflow summaries when you want to hide softer follow-up notes and keep the report focused on the highest-risk queues.&quot;,
+            },
+        ],
+    }
+    return notes.get((scenario, dataset_family), [])</code></pre></article>
+  </section>
+</body>
+</html>

@@ -36,6 +36,7 @@ A compact Python project that demonstrates the map → combine → partition →
 - optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
 - plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts with quick-link landing cards and review-friendly badge summaries, without repeating `--plugin` flags manually
 - optional dedicated per-plugin Markdown/HTML docs pages from the catalog flow so each bundled plugin can ship as its own review-friendly portfolio page
+- lightweight `docs-index` landing-page export that scans the committed artifact bundle and links plugin catalogs, plugin docs, inspection diffs, benchmark reports, and annotation-batch presets from one place
 - repo-relative plugin references in run/benchmark outputs so committed JSON/CSV/Markdown/HTML artifacts stay portable across machines
 
 ## Usage
@@ -302,6 +303,19 @@ python3 projects/mini-mapreduce-lab/mapreduce.py benchmark \
   --annotation-batch-prefix project-week-annotation-batch
 ```
 
+Once those artifact families exist, scan the committed bundle into one lightweight landing page so reviewers can browse the docs from a single starting point:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py docs-index \
+  --artifacts-root docs/artifacts/mini-mapreduce \
+  --output docs/artifacts/mini-mapreduce/docs-index.md \
+  --html-output docs/artifacts/mini-mapreduce/docs-index.html
+```
+
+The current committed bundle includes:
+- Markdown index: [`../../docs/artifacts/mini-mapreduce/docs-index.md`](../../docs/artifacts/mini-mapreduce/docs-index.md)
+- HTML index: [`../../docs/artifacts/mini-mapreduce/docs-index.html`](../../docs/artifacts/mini-mapreduce/docs-index.html)
+
 ## Plugin contract
 
 A plugin is a Python file with:
@@ -382,4 +396,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 
 ## Future improvements
 - add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases, not just adjacent runs
-- add a lightweight landing page that links plugin catalogs, plugin doc pages, benchmark reports, and annotation-batch manifests into one portfolio-friendly docs index
+- add docs-site navigation sidebars or a cross-project portfolio landing page if the artifact surface keeps growing beyond one project bundle

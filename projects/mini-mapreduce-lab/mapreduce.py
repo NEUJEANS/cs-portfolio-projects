@@ -36,6 +36,12 @@ BenchmarkGenerator = Callable[..., list[str]]
 BenchmarkNoteHook = Callable[..., list[BenchmarkNoteItem] | tuple[BenchmarkNoteItem, ...] | None]
 
 
+def write_text_output(path: str | Path, content: str) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(content, encoding="utf-8")
+
+
 PLUGIN_INSPECTION_FIELDNAMES = [
     "name",
     "plugin",
@@ -2072,6 +2078,538 @@ def build_benchmark_preset_batch(
         presets=preset_artifacts,
     )
 
+@dataclass(slots=True)
+class DocsArtifactLinks:
+    markdown_path: str | None = None
+    html_path: str | None = None
+    json_path: str | None = None
+    csv_path: str | None = None
+    heatmap_csv_path: str | None = None
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "markdown": self.markdown_path,
+            "html": self.html_path,
+            "json": self.json_path,
+            "csv": self.csv_path,
+            "heatmap_csv": self.heatmap_csv_path,
+        }
+
+    def labeled_paths(self) -> list[tuple[str, str]]:
+        labeled: list[tuple[str, str]] = []
+        for label, value in [
+            ("Markdown", self.markdown_path),
+            ("HTML", self.html_path),
+            ("JSON", self.json_path),
+            ("CSV", self.csv_path),
+            ("Heatmap CSV", self.heatmap_csv_path),
+        ]:
+            if value:
+                labeled.append((label, value))
+        return labeled
+
+
+@dataclass(slots=True)
+class DocsArtifactEntry:
+    slug: str
+    title: str
+    description: str
+    links: DocsArtifactLinks
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "slug": self.slug,
+            "title": self.title,
+            "description": self.description,
+            "links": self.links.as_dict(),
+        }
+
+
+@dataclass(slots=True)
+class DocsAnnotationBatchPreset:
+    name: str
+    description: str
+    annotation_severities: list[str] | None
+    annotation_limit: int | None
+    annotation_overflow: str | None
+    links: DocsArtifactLinks
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "annotation_severities": list(self.annotation_severities) if self.annotation_severities else None,
+            "annotation_limit": self.annotation_limit,
+            "annotation_overflow": self.annotation_overflow,
+            "links": self.links.as_dict(),
+        }
+
+
+@dataclass(slots=True)
+class DocsAnnotationBatch:
+    slug: str
+    title: str
+    manifest_path: str
+    shared_csv_path: str | None
+    shared_heatmap_path: str | None
+    presets: list[DocsAnnotationBatchPreset]
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "slug": self.slug,
+            "title": self.title,
+            "manifest": self.manifest_path,
+            "shared_artifacts": {
+                "csv": self.shared_csv_path,
+                "heatmap_csv": self.shared_heatmap_path,
+            },
+            "presets": [preset.as_dict() for preset in self.presets],
+        }
+
+
+@dataclass(slots=True)
+class MiniMapReduceDocsIndex:
+    artifacts_root: str
+    plugin_catalog: DocsArtifactLinks | None
+    plugin_pages: list[DocsArtifactEntry]
+    inspection_diffs: list[DocsArtifactEntry]
+    benchmark_reports: list[DocsArtifactEntry]
+    annotation_batches: list[DocsAnnotationBatch]
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "artifacts_root": self.artifacts_root,
+            "plugin_catalog": self.plugin_catalog.as_dict() if self.plugin_catalog else None,
+            "plugin_pages": [entry.as_dict() for entry in self.plugin_pages],
+            "inspection_diffs": [entry.as_dict() for entry in self.inspection_diffs],
+            "benchmark_reports": [entry.as_dict() for entry in self.benchmark_reports],
+            "annotation_batches": [batch.as_dict() for batch in self.annotation_batches],
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.as_dict(), indent=2, sort_keys=True)
+
+    def to_markdown(self) -> str:
+        lines = [
+            "# Mini MapReduce docs index",
+            "",
+            "A lightweight landing page for the committed Mini MapReduce artifacts so reviewers can jump from the top-level project README into plugin catalogs, dedicated plugin docs, inspection diffs, benchmark reports, and annotation-batch presets without hunting through the repo tree.",
+            "",
+            "## Browser-first links",
+            "",
+        ]
+        browser_links: list[tuple[str, str]] = []
+        if self.plugin_catalog and self.plugin_catalog.html_path:
+            browser_links.append(("Plugin catalog HTML", self.plugin_catalog.html_path))
+        browser_links.extend((f"Inspection diff HTML — {entry.title}", entry.links.html_path) for entry in self.inspection_diffs if entry.links.html_path)
+        browser_links.extend((f"Benchmark report HTML — {entry.title}", entry.links.html_path) for entry in self.benchmark_reports if entry.links.html_path)
+        browser_links.extend(
+            (
+                f"Annotation batch HTML — {batch.title} / {preset.name}",
+                preset.links.html_path,
+            )
+            for batch in self.annotation_batches
+            for preset in batch.presets
+            if preset.links.html_path
+        )
+        if browser_links:
+            for label, target in browser_links:
+                lines.append(f"- [{label}]({target})")
+        else:
+            lines.append("- No HTML artifacts discovered yet.")
+
+        lines.extend(["", "## Plugin catalog", ""])
+        if self.plugin_catalog and self.plugin_catalog.labeled_paths():
+            lines.append("- " + " · ".join(f"[{label}]({path})" for label, path in self.plugin_catalog.labeled_paths()))
+        else:
+            lines.append("- Plugin catalog artifacts have not been generated yet.")
+
+        lines.extend(["", "## Plugin pages", ""])
+        if self.plugin_pages:
+            lines.extend([
+                "| Plugin page | Description | Links |",
+                "| --- | --- | --- |",
+            ])
+            for entry in self.plugin_pages:
+                links = " · ".join(f"[{label}]({path})" for label, path in entry.links.labeled_paths()) or "-"
+                lines.append(f"| `{entry.slug}` | {entry.description} | {links} |")
+        else:
+            lines.append("- No dedicated plugin pages discovered yet.")
+
+        lines.extend(["", "## Inspection diffs", ""])
+        if self.inspection_diffs:
+            lines.extend([
+                "| Diff bundle | Description | Links |",
+                "| --- | --- | --- |",
+            ])
+            for entry in self.inspection_diffs:
+                links = " · ".join(f"[{label}]({path})" for label, path in entry.links.labeled_paths()) or "-"
+                lines.append(f"| {entry.title} | {entry.description} | {links} |")
+        else:
+            lines.append("- No inspection diff bundles discovered yet.")
+
+        lines.extend(["", "## Benchmark reports", ""])
+        if self.benchmark_reports:
+            lines.extend([
+                "| Report bundle | Description | Links |",
+                "| --- | --- | --- |",
+            ])
+            for entry in self.benchmark_reports:
+                links = " · ".join(f"[{label}]({path})" for label, path in entry.links.labeled_paths()) or "-"
+                lines.append(f"| {entry.title} | {entry.description} | {links} |")
+        else:
+            lines.append("- No benchmark report bundles discovered yet.")
+
+        lines.extend(["", "## Annotation batch manifests", ""])
+        if self.annotation_batches:
+            for batch in self.annotation_batches:
+                lines.append(f"### {batch.title}")
+                lines.append("")
+                lines.append(f"- Manifest: [JSON]({batch.manifest_path})")
+                shared_bits = []
+                if batch.shared_csv_path:
+                    shared_bits.append(f"[Shared CSV]({batch.shared_csv_path})")
+                if batch.shared_heatmap_path:
+                    shared_bits.append(f"[Shared heatmap CSV]({batch.shared_heatmap_path})")
+                lines.append(f"- Shared artifacts: {' · '.join(shared_bits) if shared_bits else '-'}")
+                lines.append("")
+                lines.extend([
+                    "| Preset | Filter summary | Links |",
+                    "| --- | --- | --- |",
+                ])
+                for preset in batch.presets:
+                    filters: list[str] = []
+                    if preset.annotation_severities:
+                        filters.append(f"severity={', '.join(preset.annotation_severities)}")
+                    if preset.annotation_limit is not None:
+                        filters.append(f"limit={preset.annotation_limit}")
+                    if preset.annotation_overflow:
+                        filters.append(f"overflow={preset.annotation_overflow}")
+                    link_bits = " · ".join(f"[{label}]({path})" for label, path in preset.links.labeled_paths()) or "-"
+                    filter_suffix = f" <br>{'<br>'.join(filters)}" if filters else ""
+                    lines.append(f"| `{preset.name}` | {preset.description}{filter_suffix} | {link_bits} |")
+                lines.append("")
+        else:
+            lines.append("- No annotation-batch manifests discovered yet.")
+
+        lines.extend([
+            "## Suggested portfolio usage",
+            "",
+            "- Lead with the HTML report links when you want a browser-friendly walkthrough instead of raw terminal output.",
+            "- Use the plugin catalog first when someone wants to understand the extensibility story before reading the benchmark results.",
+            "- Use the inspection diff bundle when you want to compare how two plugins expose different hook contracts or dataset families.",
+            "- Use the annotation-batch manifest when you want both the full and portfolio-tight reviewer narratives from one shared benchmark run.",
+            "- Link this index from the project README so future slices stay discoverable as more artifact families are added.",
+        ])
+        return "\n".join(lines).rstrip() + "\n"
+
+    def to_html(self) -> str:
+        def esc(value: object) -> str:
+            return html.escape(str(value), quote=True)
+
+        def links_html(links: DocsArtifactLinks | None) -> str:
+            if links is None:
+                return "-"
+            labeled = links.labeled_paths()
+            if not labeled:
+                return "-"
+            return " · ".join(f'<a href="{esc(path)}">{esc(label)}</a>' for label, path in labeled)
+
+        browser_links: list[str] = []
+        if self.plugin_catalog and self.plugin_catalog.html_path:
+            browser_links.append(f'<li><a href="{esc(self.plugin_catalog.html_path)}">Plugin catalog HTML</a></li>')
+        browser_links.extend(
+            f'<li><a href="{esc(entry.links.html_path)}">Inspection diff HTML — {esc(entry.title)}</a></li>'
+            for entry in self.inspection_diffs
+            if entry.links.html_path
+        )
+        browser_links.extend(
+            f'<li><a href="{esc(entry.links.html_path)}">Benchmark report HTML — {esc(entry.title)}</a></li>'
+            for entry in self.benchmark_reports
+            if entry.links.html_path
+        )
+        browser_links.extend(
+            f'<li><a href="{esc(preset.links.html_path)}">Annotation batch HTML — {esc(batch.title)} / <code>{esc(preset.name)}</code></a></li>'
+            for batch in self.annotation_batches
+            for preset in batch.presets
+            if preset.links.html_path
+        )
+
+        plugin_page_rows = ''.join(
+            "<tr>"
+            f"<td><code>{esc(entry.slug)}</code></td>"
+            f"<td>{esc(entry.description)}</td>"
+            f"<td>{links_html(entry.links)}</td>"
+            "</tr>"
+            for entry in self.plugin_pages
+        )
+        inspection_rows = ''.join(
+            "<tr>"
+            f"<td>{esc(entry.title)}</td>"
+            f"<td>{esc(entry.description)}</td>"
+            f"<td>{links_html(entry.links)}</td>"
+            "</tr>"
+            for entry in self.inspection_diffs
+        )
+        report_rows = ''.join(
+            "<tr>"
+            f"<td>{esc(entry.title)}</td>"
+            f"<td>{esc(entry.description)}</td>"
+            f"<td>{links_html(entry.links)}</td>"
+            "</tr>"
+            for entry in self.benchmark_reports
+        )
+        annotation_sections = []
+        for batch in self.annotation_batches:
+            preset_rows = []
+            for preset in batch.presets:
+                filters: list[str] = []
+                if preset.annotation_severities:
+                    filters.append(f"severity={', '.join(preset.annotation_severities)}")
+                if preset.annotation_limit is not None:
+                    filters.append(f"limit={preset.annotation_limit}")
+                if preset.annotation_overflow:
+                    filters.append(f"overflow={preset.annotation_overflow}")
+                filter_html = esc(preset.description)
+                if filters:
+                    filter_html += "<br><small>" + esc(" · ".join(filters)) + "</small>"
+                preset_rows.append(
+                    "<tr>"
+                    f"<td><code>{esc(preset.name)}</code></td>"
+                    f"<td>{filter_html}</td>"
+                    f"<td>{links_html(preset.links)}</td>"
+                    "</tr>"
+                )
+            shared_bits = []
+            if batch.shared_csv_path:
+                shared_bits.append(f'<a href="{esc(batch.shared_csv_path)}">Shared CSV</a>')
+            if batch.shared_heatmap_path:
+                shared_bits.append(f'<a href="{esc(batch.shared_heatmap_path)}">Shared heatmap CSV</a>')
+            annotation_sections.append(
+                "<section>"
+                f"<h3>{esc(batch.title)}</h3>"
+                f"<p><strong>Manifest:</strong> <a href=\"{esc(batch.manifest_path)}\">JSON</a></p>"
+                f"<p><strong>Shared artifacts:</strong> {' · '.join(shared_bits) if shared_bits else '-'}</p>"
+                "<table><thead><tr><th>Preset</th><th>Filter summary</th><th>Links</th></tr></thead>"
+                f"<tbody>{''.join(preset_rows)}</tbody></table>"
+                "</section>"
+            )
+
+        plugin_catalog_html = links_html(self.plugin_catalog)
+        return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce docs index</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1180px; padding: 0 1rem 3rem; line-height: 1.5; }}
+    code {{ font-family: 'SFMono-Regular', Consolas, monospace; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }}
+    th, td {{ border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }}
+    thead th {{ background: rgba(148, 163, 184, 0.14); }}
+    .hero, section {{ margin-top: 2rem; }}
+    .hero {{ padding: 1.2rem 1.25rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: rgba(148, 163, 184, 0.08); }}
+    .hero ul {{ margin-bottom: 0; }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; padding: 0; }}
+    .meta li {{ list-style: none; padding: 0.85rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.9rem; }}
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce docs index</h1>
+  <p>A lightweight landing page for the committed Mini MapReduce artifacts so reviewers can browse plugin catalogs, dedicated plugin docs, inspection diffs, benchmark reports, and annotation-batch presets from one place.</p>
+  <ul class="meta">
+    <li><strong>Plugin pages</strong><br><code>{esc(len(self.plugin_pages))}</code></li>
+    <li><strong>Inspection diffs</strong><br><code>{esc(len(self.inspection_diffs))}</code></li>
+    <li><strong>Benchmark bundles</strong><br><code>{esc(len(self.benchmark_reports))}</code></li>
+    <li><strong>Annotation batches</strong><br><code>{esc(len(self.annotation_batches))}</code></li>
+  </ul>
+  <div class="hero">
+    <h2>Browser-first links</h2>
+    <ul>{''.join(browser_links) if browser_links else '<li>No HTML artifacts discovered yet.</li>'}</ul>
+  </div>
+  <section>
+    <h2>Plugin catalog</h2>
+    <p>{plugin_catalog_html}</p>
+  </section>
+  <section>
+    <h2>Plugin pages</h2>
+    {'<table><thead><tr><th>Plugin page</th><th>Description</th><th>Links</th></tr></thead><tbody>' + plugin_page_rows + '</tbody></table>' if self.plugin_pages else '<p>No dedicated plugin pages discovered yet.</p>'}
+  </section>
+  <section>
+    <h2>Inspection diffs</h2>
+    {'<table><thead><tr><th>Diff bundle</th><th>Description</th><th>Links</th></tr></thead><tbody>' + inspection_rows + '</tbody></table>' if self.inspection_diffs else '<p>No inspection diff bundles discovered yet.</p>'}
+  </section>
+  <section>
+    <h2>Benchmark reports</h2>
+    {'<table><thead><tr><th>Report bundle</th><th>Description</th><th>Links</th></tr></thead><tbody>' + report_rows + '</tbody></table>' if self.benchmark_reports else '<p>No benchmark report bundles discovered yet.</p>'}
+  </section>
+  <section>
+    <h2>Annotation batch manifests</h2>
+    {''.join(annotation_sections) if annotation_sections else '<p>No annotation-batch manifests discovered yet.</p>'}
+  </section>
+  <section>
+    <h2>Suggested portfolio usage</h2>
+    <ul>
+      <li>Lead with the HTML report links when you want a browser-friendly walkthrough instead of raw terminal output.</li>
+      <li>Use the plugin catalog first when someone wants to understand the extensibility story before reading the benchmark results.</li>
+      <li>Use the inspection diff bundle when you want to compare how two plugins expose different hook contracts or dataset families.</li>
+      <li>Use the annotation-batch manifest when you want both the full and portfolio-tight reviewer narratives from one shared benchmark run.</li>
+      <li>Link this index from the project README so future slices stay discoverable as more artifact families are added.</li>
+    </ul>
+  </section>
+</body>
+</html>'''
+
+
+def _is_dated_slug(parts: list[str]) -> bool:
+    return (
+        len(parts) >= 4
+        and len(parts[0]) == 4
+        and len(parts[1]) == 2
+        and len(parts[2]) == 2
+        and all(part.isdigit() for part in parts[:3])
+    )
+
+
+def humanize_docs_slug(slug: str) -> str:
+    parts = [part for part in slug.split('-') if part]
+    date_prefix: str | None = None
+    body_parts = parts
+    if _is_dated_slug(parts):
+        date_prefix = "-".join(parts[:3])
+        body_parts = parts[3:]
+    special = {"json": "JSON", "csv": "CSV", "html": "HTML", "api": "API"}
+    label = " ".join(special.get(part.lower(), part.capitalize()) for part in body_parts) or slug
+    return f"{date_prefix} · {label}" if date_prefix else label
+
+
+def _artifact_relpath(root: Path, path: Path) -> str:
+    return path.resolve().relative_to(root.resolve()).as_posix()
+
+
+def _existing_relpath(root: Path, path: Path) -> str | None:
+    return _artifact_relpath(root, path) if path.exists() else None
+
+
+def discover_mini_mapreduce_docs_index(artifacts_root: Path) -> MiniMapReduceDocsIndex:
+    root = artifacts_root.resolve()
+    if not root.exists():
+        raise ValueError(f"artifacts root does not exist: {root}")
+    if not root.is_dir():
+        raise ValueError(f"artifacts root is not a directory: {root}")
+
+    plugin_catalog = DocsArtifactLinks(
+        markdown_path=_existing_relpath(root, root / 'plugin-catalog.md'),
+        html_path=_existing_relpath(root, root / 'plugin-catalog.html'),
+        json_path=_existing_relpath(root, root / 'plugin-catalog.json'),
+        csv_path=_existing_relpath(root, root / 'plugin-catalog.csv'),
+    )
+    if not plugin_catalog.labeled_paths():
+        plugin_catalog = None
+
+    plugin_pages: list[DocsArtifactEntry] = []
+    plugin_pages_dir = root / 'plugin-pages'
+    if plugin_pages_dir.exists() and plugin_pages_dir.is_dir():
+        stems = sorted({path.stem for path in plugin_pages_dir.iterdir() if path.suffix in {'.md', '.html'}})
+        for stem in stems:
+            links = DocsArtifactLinks(
+                markdown_path=_existing_relpath(root, plugin_pages_dir / f'{stem}.md'),
+                html_path=_existing_relpath(root, plugin_pages_dir / f'{stem}.html'),
+            )
+            plugin_pages.append(
+                DocsArtifactEntry(
+                    slug=stem,
+                    title=humanize_docs_slug(stem),
+                    description='Dedicated plugin reference page with hook summaries and source excerpts.',
+                    links=links,
+                )
+            )
+
+    inspection_diff_prefixes = sorted(
+        {path.stem[:-5] for path in root.iterdir() if path.is_file() and path.suffix in {'.md', '.html', '.json'} and path.stem.endswith('-diff')}
+    )
+    inspection_diffs: list[DocsArtifactEntry] = []
+    for prefix in inspection_diff_prefixes:
+        inspection_diffs.append(
+            DocsArtifactEntry(
+                slug=prefix,
+                title=humanize_docs_slug(prefix),
+                description='Adjacent plugin contract comparison bundle with publishable Markdown/HTML plus machine-readable JSON.',
+                links=DocsArtifactLinks(
+                    markdown_path=_existing_relpath(root, root / f'{prefix}-diff.md'),
+                    html_path=_existing_relpath(root, root / f'{prefix}-diff.html'),
+                    json_path=_existing_relpath(root, root / f'{prefix}-diff.json'),
+                ),
+            )
+        )
+
+    report_prefixes = sorted(
+        {path.stem[:-7] for path in root.iterdir() if path.is_file() and path.suffix in {'.md', '.html'} and path.stem.endswith('-report')}
+    )
+    benchmark_reports: list[DocsArtifactEntry] = []
+    for prefix in report_prefixes:
+        links = DocsArtifactLinks(
+            markdown_path=_existing_relpath(root, root / f'{prefix}-report.md'),
+            html_path=_existing_relpath(root, root / f'{prefix}-report.html'),
+            json_path=_existing_relpath(root, root / f'{prefix}-benchmark.json'),
+            csv_path=_existing_relpath(root, root / f'{prefix}-benchmark.csv'),
+            heatmap_csv_path=_existing_relpath(root, root / f'{prefix}-heatmap.csv'),
+        )
+        if not links.labeled_paths():
+            continue
+        benchmark_reports.append(
+            DocsArtifactEntry(
+                slug=prefix,
+                title=humanize_docs_slug(prefix),
+                description='Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.',
+                links=links,
+            )
+        )
+
+    annotation_batches: list[DocsAnnotationBatch] = []
+    for manifest_path in sorted(root.glob('*-manifest.json')):
+        payload = json.loads(manifest_path.read_text(encoding='utf-8'))
+        prefix = str(payload.get('prefix') or manifest_path.stem.removesuffix('-manifest'))
+        shared_artifacts = payload.get('shared_artifacts') if isinstance(payload.get('shared_artifacts'), dict) else {}
+        presets: list[DocsAnnotationBatchPreset] = []
+        for preset in payload.get('presets', []):
+            artifacts = preset.get('artifacts') if isinstance(preset.get('artifacts'), dict) else {}
+            presets.append(
+                DocsAnnotationBatchPreset(
+                    name=str(preset.get('name') or 'preset'),
+                    description=str(preset.get('description') or '-'),
+                    annotation_severities=list(preset.get('annotation_severities')) if isinstance(preset.get('annotation_severities'), list) else None,
+                    annotation_limit=int(preset['annotation_limit']) if preset.get('annotation_limit') is not None else None,
+                    annotation_overflow=str(preset.get('annotation_overflow')) if preset.get('annotation_overflow') is not None else None,
+                    links=DocsArtifactLinks(
+                        markdown_path=str(artifacts.get('report')) if artifacts.get('report') else None,
+                        html_path=str(artifacts.get('html')) if artifacts.get('html') else None,
+                        json_path=str(artifacts.get('json')) if artifacts.get('json') else None,
+                    ),
+                )
+            )
+        annotation_batches.append(
+            DocsAnnotationBatch(
+                slug=prefix,
+                title=humanize_docs_slug(prefix),
+                manifest_path=_artifact_relpath(root, manifest_path),
+                shared_csv_path=str(shared_artifacts.get('csv')) if shared_artifacts.get('csv') else None,
+                shared_heatmap_path=str(shared_artifacts.get('heatmap_csv')) if shared_artifacts.get('heatmap_csv') else None,
+                presets=presets,
+            )
+        )
+
+    return MiniMapReduceDocsIndex(
+        artifacts_root='.',
+        plugin_catalog=plugin_catalog,
+        plugin_pages=plugin_pages,
+        inspection_diffs=inspection_diffs,
+        benchmark_reports=benchmark_reports,
+        annotation_batches=annotation_batches,
+    )
+
 
 def chunked(items: list[str], size: int) -> Iterator[list[str]]:
     if size <= 0:
@@ -2848,6 +3386,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="include adjacent plugin metadata diffs in the JSON/report catalog payload",
     )
 
+    docs_index_parser = subparsers.add_parser(
+        "docs-index",
+        help="scan committed Mini MapReduce docs artifacts and emit a landing-page index",
+    )
+    docs_index_parser.add_argument(
+        "--artifacts-root",
+        required=True,
+        help="directory containing the committed docs/artifacts bundle to index",
+    )
+    docs_index_parser.add_argument("--output", help="optional Markdown docs index output path")
+    docs_index_parser.add_argument("--html-output", help="optional HTML docs index output path")
+
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
     benchmark_parser.add_argument("--job", choices=["wordcount", "json-group-count", "plugin"], default="wordcount")
     benchmark_parser.add_argument("--scenario", choices=["balanced", "skewed"], default="skewed")
@@ -2919,7 +3469,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         rendered = result.to_json()
         if args.output:
-            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+            write_text_output(args.output, rendered + "\n")
         else:
             print(rendered)
         return 0
@@ -2933,15 +3483,15 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         rendered = result.plugins[0].to_json() if len(result.plugins) == 1 and not args.diff else result.to_json()
         if args.output:
-            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+            write_text_output(args.output, rendered + "\n")
         elif not args.csv_output and not args.report_output and not args.html_output:
             print(rendered)
         if args.csv_output:
-            Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
+            write_text_output(args.csv_output, result.to_csv())
         if args.report_output:
-            Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
+            write_text_output(args.report_output, result.to_markdown())
         if args.html_output:
-            Path(args.html_output).write_text(result.to_html(), encoding="utf-8")
+            write_text_output(args.html_output, result.to_html())
         return 0
 
     if args.command == "catalog-plugins":
@@ -2953,11 +3503,11 @@ def main(argv: list[str] | None = None) -> int:
         rendered = result.to_json()
         docs_dir = Path(args.docs_dir) if args.docs_dir else None
         if args.output:
-            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+            write_text_output(args.output, rendered + "\n")
         elif not args.csv_output and not args.report_output and not args.html_output and not args.docs_dir:
             print(rendered)
         if args.csv_output:
-            Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
+            write_text_output(args.csv_output, result.to_csv())
         if args.report_output:
             markdown_links = (
                 build_plugin_page_links(
@@ -2969,7 +3519,7 @@ def main(argv: list[str] | None = None) -> int:
                 if docs_dir
                 else None
             )
-            Path(args.report_output).write_text(result.to_markdown(page_links=markdown_links), encoding="utf-8")
+            write_text_output(args.report_output, result.to_markdown(page_links=markdown_links))
         if args.html_output:
             html_links = (
                 build_plugin_page_links(
@@ -2981,7 +3531,7 @@ def main(argv: list[str] | None = None) -> int:
                 if docs_dir
                 else None
             )
-            Path(args.html_output).write_text(result.to_html(page_links=html_links), encoding="utf-8")
+            write_text_output(args.html_output, result.to_html(page_links=html_links))
         if docs_dir:
             write_plugin_doc_pages(
                 result.plugins,
@@ -2989,6 +3539,20 @@ def main(argv: list[str] | None = None) -> int:
                 catalog_markdown_path=Path(args.report_output).resolve() if args.report_output else None,
                 catalog_html_path=Path(args.html_output).resolve() if args.html_output else None,
             )
+        return 0
+
+    if args.command == "docs-index":
+        try:
+            result = discover_mini_mapreduce_docs_index(Path(args.artifacts_root))
+        except (ValueError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
+        rendered = result.to_json()
+        if args.output:
+            write_text_output(args.output, result.to_markdown())
+        if args.html_output:
+            write_text_output(args.html_output, result.to_html())
+        if not args.output and not args.html_output:
+            print(rendered)
         return 0
 
     if args.command == "benchmark":
@@ -3040,20 +3604,20 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         rendered = result.to_json()
         if args.output:
-            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+            write_text_output(args.output, rendered + "\n")
         elif not args.annotation_batch_dir:
             print(rendered)
         if args.csv_output:
-            Path(args.csv_output).write_text(result.to_csv(), encoding="utf-8")
+            write_text_output(args.csv_output, result.to_csv())
         if args.heatmap_output:
-            Path(args.heatmap_output).write_text(result.heatmap_to_csv(), encoding="utf-8")
+            write_text_output(args.heatmap_output, result.heatmap_to_csv())
         if args.report_output:
-            Path(args.report_output).write_text(result.to_markdown(), encoding="utf-8")
+            write_text_output(args.report_output, result.to_markdown())
         if args.html_output:
-            Path(args.html_output).write_text(result.to_html(), encoding="utf-8")
+            write_text_output(args.html_output, result.to_html())
         if batch_manifest is not None:
             manifest_path = Path(args.annotation_batch_dir) / f"{batch_manifest.prefix}-manifest.json"
-            manifest_path.write_text(batch_manifest.to_json() + "\n", encoding="utf-8")
+            write_text_output(manifest_path, batch_manifest.to_json() + "\n")
         return 0
 
     parser.error("unsupported command")

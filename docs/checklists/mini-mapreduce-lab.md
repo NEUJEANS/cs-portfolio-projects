@@ -424,4 +424,18 @@
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider a lightweight landing page that links plugin catalogs, plugin doc pages, benchmark reports, and annotation-batch manifests into one portfolio-friendly docs index
+- [x] consider a lightweight landing page that links plugin catalogs, plugin doc pages, benchmark reports, and annotation-batch manifests into one portfolio-friendly docs index
+
+## Docs index slice (2026-04-17 19:06 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the previous wrap-up already scoped the docs-index follow-up clearly
+- [x] do a short Python `Path` / relative-link refresh and self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add a `docs-index` landing-page flow that links plugin catalogs, plugin docs, inspection diffs, benchmark reports, and annotation-batch manifests
+- [x] generate committed Mini MapReduce docs artifacts for the plugin catalog, per-plugin pages, diff bundle, project-week benchmark bundle, and docs index
+- [x] extend project-level and repo-level tests for real docs-index discovery and CLI output
+- [x] run targeted tests and 3 review passes
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider richer plugin examples beyond score aggregation, such as sessionization or log-latency summaries
