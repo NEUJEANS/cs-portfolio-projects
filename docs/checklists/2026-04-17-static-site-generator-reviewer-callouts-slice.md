@@ -15,4 +15,4 @@
 - [x] complete review pass 2 and fix issues found
 - [x] complete review pass 3 and fix issues found
 - [x] run secret scan
-- [ ] commit, push, and append wrap-up
+- [x] commit, push, and append wrap-up
