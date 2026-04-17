@@ -994,6 +994,62 @@ def render_benchmark_note_annotation_html(annotation: BenchmarkNoteAnnotation) -
     )
 
 
+def render_annotation_view_markdown(annotation_view: dict[str, JSONValue]) -> list[str]:
+    lines = ["### Annotation view", ""]
+    lines.append(f"- Total structured annotations: `{annotation_view['total_annotations']}`")
+    lines.append(f"- Matched annotations after filtering: `{annotation_view['matched_annotations']}`")
+    lines.append(f"- Rendered annotation cards: `{annotation_view['rendered_annotations']}`")
+    severity_filter = annotation_view.get("severity_filter")
+    if isinstance(severity_filter, list) and severity_filter:
+        lines.append(f"- Severity filter: `{', '.join(str(item) for item in severity_filter)}`")
+    limit = annotation_view.get("limit")
+    if limit is not None:
+        lines.append(f"- Annotation limit: `{limit}`")
+    overflow = annotation_view.get("overflow")
+    if overflow:
+        lines.append(f"- Overflow mode: `{overflow}`")
+    hidden_by_severity = annotation_view.get("hidden_by_severity")
+    if isinstance(hidden_by_severity, int) and hidden_by_severity:
+        lines.append(f"- Hidden by severity filter: `{hidden_by_severity}`")
+    hidden_by_limit = annotation_view.get("hidden_by_limit")
+    if isinstance(hidden_by_limit, int) and hidden_by_limit:
+        lines.append(f"- Hidden by annotation limit: `{hidden_by_limit}`")
+    if annotation_view.get("overflow_summary_emitted"):
+        lines.append("- Overflow summary card emitted: `true`")
+    return lines
+
+
+def render_annotation_view_html(annotation_view: dict[str, JSONValue]) -> str:
+    def esc(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
+    items = [
+        f"<li><strong>Total structured annotations</strong><br><code>{esc(annotation_view['total_annotations'])}</code></li>",
+        f"<li><strong>Matched after filtering</strong><br><code>{esc(annotation_view['matched_annotations'])}</code></li>",
+        f"<li><strong>Rendered annotation cards</strong><br><code>{esc(annotation_view['rendered_annotations'])}</code></li>",
+    ]
+    severity_filter = annotation_view.get("severity_filter")
+    if isinstance(severity_filter, list) and severity_filter:
+        items.append(
+            f"<li><strong>Severity filter</strong><br><code>{esc(', '.join(str(item) for item in severity_filter))}</code></li>"
+        )
+    limit = annotation_view.get("limit")
+    if limit is not None:
+        items.append(f"<li><strong>Annotation limit</strong><br><code>{esc(limit)}</code></li>")
+    overflow = annotation_view.get("overflow")
+    if overflow:
+        items.append(f"<li><strong>Overflow mode</strong><br><code>{esc(overflow)}</code></li>")
+    hidden_by_severity = annotation_view.get("hidden_by_severity")
+    if isinstance(hidden_by_severity, int) and hidden_by_severity:
+        items.append(f"<li><strong>Hidden by severity filter</strong><br><code>{esc(hidden_by_severity)}</code></li>")
+    hidden_by_limit = annotation_view.get("hidden_by_limit")
+    if isinstance(hidden_by_limit, int) and hidden_by_limit:
+        items.append(f"<li><strong>Hidden by annotation limit</strong><br><code>{esc(hidden_by_limit)}</code></li>")
+    if annotation_view.get("overflow_summary_emitted"):
+        items.append("<li><strong>Overflow summary card emitted</strong><br><code>true</code></li>")
+    return f"<div class='annotation-view'><h3>Annotation view</h3><ul class='meta'>{''.join(items)}</ul></div>"
+
+
 @dataclass(slots=True)
 class JobResult:
     job: str
@@ -1040,6 +1096,7 @@ class BenchmarkResult:
     available_dataset_families: list[str] | None = None
     benchmark_notes: list[str] | None = None
     benchmark_note_annotations: list[BenchmarkNoteAnnotation] | None = None
+    annotation_view: dict[str, JSONValue] | None = None
     plugin_mapper: str | None = None
     plugin_reducer: str | None = None
     plugin_combiner: str | None = None
@@ -1047,31 +1104,30 @@ class BenchmarkResult:
     plugin_benchmark_note_hook: str | None = None
 
     def to_json(self) -> str:
-        return json.dumps(
-            {
-                "job": self.job,
-                "plugin": self.plugin,
-                "scenario": self.scenario,
-                "dataset_family": self.dataset_family,
-                "seed": self.seed,
-                "total_records": self.total_records,
-                "unique_keys": self.unique_keys,
-                "shard_size": self.shard_size,
-                "reducers": self.reducers,
-                "timings_ms": self.timings_ms,
-                "heatmap_rows": self.heatmap_rows,
-                "available_dataset_families": self.available_dataset_families,
-                "benchmark_notes": self.benchmark_notes,
-                "benchmark_note_annotations": self.benchmark_note_annotations,
-                "plugin_mapper": self.plugin_mapper,
-                "plugin_reducer": self.plugin_reducer,
-                "plugin_combiner": self.plugin_combiner,
-                "plugin_benchmark_generator": self.plugin_benchmark_generator,
-                "plugin_benchmark_note_hook": self.plugin_benchmark_note_hook,
-            },
-            indent=2,
-            sort_keys=True,
-        )
+        payload = {
+            "job": self.job,
+            "plugin": self.plugin,
+            "scenario": self.scenario,
+            "dataset_family": self.dataset_family,
+            "seed": self.seed,
+            "total_records": self.total_records,
+            "unique_keys": self.unique_keys,
+            "shard_size": self.shard_size,
+            "reducers": self.reducers,
+            "timings_ms": self.timings_ms,
+            "heatmap_rows": self.heatmap_rows,
+            "available_dataset_families": self.available_dataset_families,
+            "benchmark_notes": self.benchmark_notes,
+            "benchmark_note_annotations": self.benchmark_note_annotations,
+            "plugin_mapper": self.plugin_mapper,
+            "plugin_reducer": self.plugin_reducer,
+            "plugin_combiner": self.plugin_combiner,
+            "plugin_benchmark_generator": self.plugin_benchmark_generator,
+            "plugin_benchmark_note_hook": self.plugin_benchmark_note_hook,
+        }
+        if self.annotation_view is not None:
+            payload["annotation_view"] = self.annotation_view
+        return json.dumps(payload, indent=2, sort_keys=True)
 
     def to_csv(self) -> str:
         fieldnames = [
@@ -1259,12 +1315,19 @@ class BenchmarkResult:
             lines.append("## Dataset notes")
             lines.append("")
             lines.extend(f"- {note}" for note in self.benchmark_notes)
-        if self.benchmark_note_annotations:
+        if self.benchmark_note_annotations or (self.annotation_view and int(self.annotation_view.get("total_annotations", 0)) > 0):
             lines.append("")
             lines.append("## Structured benchmark annotations")
             lines.append("")
-            for annotation in self.benchmark_note_annotations:
-                lines.extend(render_benchmark_note_annotation_markdown(annotation))
+            if self.annotation_view:
+                lines.extend(render_annotation_view_markdown(self.annotation_view))
+                lines.append("")
+            if self.benchmark_note_annotations:
+                for annotation in self.benchmark_note_annotations:
+                    lines.extend(render_benchmark_note_annotation_markdown(annotation))
+                    lines.append("")
+            else:
+                lines.append("- No structured annotations matched the current view.")
                 lines.append("")
             if lines[-1] == "":
                 lines.pop()
@@ -1390,10 +1453,17 @@ class BenchmarkResult:
             )
 
         annotation_html = ""
-        if self.benchmark_note_annotations:
+        if self.benchmark_note_annotations or (self.annotation_view and int(self.annotation_view.get("total_annotations", 0)) > 0):
+            annotation_view_html = render_annotation_view_html(self.annotation_view) if self.annotation_view else ""
+            annotation_cards_html = (
+                f"<div class='annotation-grid'>{''.join(render_benchmark_note_annotation_html(annotation) for annotation in self.benchmark_note_annotations)}</div>"
+                if self.benchmark_note_annotations
+                else "<p>No structured annotations matched the current view.</p>"
+            )
             annotation_html = (
                 "<h2>Structured benchmark annotations</h2>"
-                f"<div class='annotation-grid'>{''.join(render_benchmark_note_annotation_html(annotation) for annotation in self.benchmark_note_annotations)}</div>"
+                f"{annotation_view_html}"
+                f"{annotation_cards_html}"
             )
 
         return f"""<!DOCTYPE html>
@@ -1415,6 +1485,8 @@ class BenchmarkResult:
     .meta li {{ list-style: none; padding: 0.75rem 0.9rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.75rem; }}
     .chart-card {{ margin: 1rem 0 1.5rem; padding: 1rem; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1rem; background: rgba(255, 255, 255, 0.45); }}
     .chart-card h3 {{ margin-top: 0; margin-bottom: 0.75rem; }}
+    .annotation-view {{ margin: 1rem 0 1.25rem; }}
+    .annotation-view h3 {{ margin-bottom: 0.75rem; }}
     .annotation-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1rem 0 2rem; }}
     .annotation-card {{ padding: 1rem; border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 1rem; background: rgba(239, 246, 255, 0.52); }}
     .annotation-card h3 {{ margin-top: 0; margin-bottom: 0.75rem; }}
@@ -1601,6 +1673,118 @@ def normalize_benchmark_note_items(
     return notes, annotations
 
 
+def normalize_annotation_severities(values: list[str] | None) -> list[str] | None:
+    if not values:
+        return None
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("annotation severity filters must be non-empty strings")
+        severity = item.strip().lower()
+        if severity in seen:
+            continue
+        seen.add(severity)
+        normalized.append(severity)
+    return normalized
+
+
+def build_annotation_overflow_summary(
+    hidden_annotations: list[BenchmarkNoteAnnotation],
+    *,
+    limit: int,
+) -> BenchmarkNoteAnnotation:
+    hidden_titles = [str(annotation["title"]) for annotation in hidden_annotations[:5]]
+    hidden_severities = sorted(
+        {
+            str(annotation["severity"])
+            for annotation in hidden_annotations
+            if isinstance(annotation.get("severity"), str) and str(annotation["severity"]).strip()
+        }
+    )
+    detail = (
+        f"Collapsed {len(hidden_annotations)} additional structured reviewer callout(s) after the first {limit} visible annotation(s)."
+    )
+    if hidden_titles:
+        suffix = " …" if len(hidden_annotations) > len(hidden_titles) else ""
+        detail += f" Hidden titles: {', '.join(hidden_titles)}{suffix}."
+    return {
+        "title": "Collapsed reviewer callouts",
+        "detail": detail,
+        "severity": "info",
+        "collapsed_count": len(hidden_annotations),
+        "collapsed_titles": hidden_titles,
+        "collapsed_severities": hidden_severities,
+        "takeaway": "Raise --annotation-limit or narrow --annotation-severity when you want the full set of reviewer callouts.",
+    }
+
+
+def apply_benchmark_annotation_view(
+    note_values: list[BenchmarkNoteItem] | tuple[BenchmarkNoteItem, ...],
+    *,
+    source: str,
+    annotation_severities: list[str] | None = None,
+    annotation_limit: int | None = None,
+    annotation_overflow: str = "drop",
+) -> tuple[list[str], list[BenchmarkNoteAnnotation], dict[str, JSONValue] | None]:
+    if annotation_limit is not None and annotation_limit <= 0:
+        raise ValueError("annotation_limit must be positive when provided")
+    if annotation_overflow not in {"drop", "summary"}:
+        raise ValueError("annotation_overflow must be one of: drop, summary")
+
+    normalized_severities = normalize_annotation_severities(annotation_severities)
+    selected_items: list[BenchmarkNoteItem] = []
+    hidden_annotations: list[BenchmarkNoteAnnotation] = []
+    total_annotations = 0
+    matched_annotations = 0
+    hidden_by_severity = 0
+    hidden_by_limit = 0
+
+    for index, item in enumerate(note_values):
+        if isinstance(item, str):
+            if not item.strip():
+                raise ValueError(f"{source} must contain only non-empty strings or annotation objects")
+            selected_items.append(item.strip())
+            continue
+        if not isinstance(item, dict):
+            raise ValueError(f"{source} must contain only non-empty strings or annotation objects")
+
+        annotation = normalize_benchmark_note_annotation(item, source=source, index=index)
+        total_annotations += 1
+        severity = annotation.get("severity")
+        if normalized_severities and severity not in normalized_severities:
+            hidden_by_severity += 1
+            continue
+
+        matched_annotations += 1
+        if annotation_limit is not None and matched_annotations > annotation_limit:
+            hidden_by_limit += 1
+            hidden_annotations.append(annotation)
+            continue
+        selected_items.append(annotation)
+
+    overflow_summary_emitted = False
+    if hidden_annotations and annotation_limit is not None and annotation_overflow == "summary":
+        selected_items.append(build_annotation_overflow_summary(hidden_annotations, limit=annotation_limit))
+        overflow_summary_emitted = True
+
+    notes, annotations = normalize_benchmark_note_items(selected_items, source=source)
+    annotation_view: dict[str, JSONValue] | None = None
+    if total_annotations > 0 or normalized_severities is not None or annotation_limit is not None:
+        annotation_view = {
+            "severity_filter": normalized_severities,
+            "limit": annotation_limit,
+            "overflow": annotation_overflow if annotation_limit is not None else None,
+            "total_annotations": total_annotations,
+            "matched_annotations": matched_annotations,
+            "rendered_annotations": len(annotations),
+            "hidden_by_severity": hidden_by_severity,
+            "hidden_by_limit": hidden_by_limit,
+            "overflow_summary_emitted": overflow_summary_emitted,
+        }
+    return notes, annotations, annotation_view
+
+
 def call_benchmark_note_hook(
     hook: BenchmarkNoteHook,
     *,
@@ -1645,7 +1829,10 @@ def benchmark_notes_for(
     records: int,
     seed: int,
     plugin: PluginJob | None = None,
-) -> tuple[list[str], list[BenchmarkNoteAnnotation]]:
+    annotation_severities: list[str] | None = None,
+    annotation_limit: int | None = None,
+    annotation_overflow: str = "drop",
+) -> tuple[list[str], list[BenchmarkNoteAnnotation], dict[str, JSONValue] | None]:
     note_items = list(BUILTIN_JOB_BENCHMARK_NOTES.get((job, scenario, dataset_family), []))
     if job == "plugin" and plugin is not None and plugin.benchmark_note_hook is not None:
         note_items.extend(
@@ -1657,7 +1844,13 @@ def benchmark_notes_for(
                 seed=seed,
             )
         )
-    return normalize_benchmark_note_items(note_items, source="benchmark notes")
+    return apply_benchmark_annotation_view(
+        note_items,
+        source="benchmark notes",
+        annotation_severities=annotation_severities,
+        annotation_limit=annotation_limit,
+        annotation_overflow=annotation_overflow,
+    )
 
 
 def chunked(items: list[str], size: int) -> Iterator[list[str]]:
@@ -2262,6 +2455,9 @@ def benchmark_job(
     plugin_path: str | None = None,
     dataset_family: str = "default",
     group_field: str | None = None,
+    annotation_severities: list[str] | None = None,
+    annotation_limit: int | None = None,
+    annotation_overflow: str = "drop",
 ) -> BenchmarkResult:
     if shard_size <= 0:
         raise ValueError("shard_size must be positive")
@@ -2269,6 +2465,8 @@ def benchmark_job(
         raise ValueError("at least one reducer count is required")
     if any(count <= 0 for count in reducers):
         raise ValueError("reducers must be positive")
+    if annotation_limit is not None and annotation_limit <= 0:
+        raise ValueError("annotation_limit must be positive")
 
     benchmark_plugin: PluginJob | None = None
     resolved_group_field = group_field or "status"
@@ -2347,13 +2545,16 @@ def benchmark_job(
         input_path.unlink(missing_ok=True)
 
     inspection = inspect_plugin(plugin_path) if benchmark_plugin and plugin_path is not None else None
-    benchmark_notes, benchmark_note_annotations = benchmark_notes_for(
+    benchmark_notes, benchmark_note_annotations, annotation_view = benchmark_notes_for(
         job,
         scenario,
         dataset_family,
         records=records,
         seed=seed,
         plugin=benchmark_plugin,
+        annotation_severities=annotation_severities,
+        annotation_limit=annotation_limit,
+        annotation_overflow=annotation_overflow,
     )
     return BenchmarkResult(
         job=job if job != "plugin" or benchmark_plugin is None else benchmark_plugin.name,
@@ -2365,6 +2566,7 @@ def benchmark_job(
         ),
         benchmark_notes=benchmark_notes,
         benchmark_note_annotations=benchmark_note_annotations or None,
+        annotation_view=annotation_view,
         plugin_mapper=inspection.mapper if inspection else None,
         plugin_reducer=inspection.reducer if inspection else None,
         plugin_combiner=inspection.combiner if inspection else None,
@@ -2435,6 +2637,20 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--seed", type=int, default=42, help="seed for deterministic synthetic data generation")
     benchmark_parser.add_argument("--dataset-family", default="default", help="synthetic dataset family to use for benchmark generation")
     benchmark_parser.add_argument("--group-field", default="status", help="JSON field to group for json-group-count benchmarks")
+    benchmark_parser.add_argument(
+        "--annotation-severity",
+        dest="annotation_severities",
+        nargs="+",
+        action="extend",
+        help="optional structured-annotation severities to keep (for example: --annotation-severity risk watch)",
+    )
+    benchmark_parser.add_argument("--annotation-limit", type=int, help="optional maximum number of structured annotation cards to render")
+    benchmark_parser.add_argument(
+        "--annotation-overflow",
+        choices=["drop", "summary"],
+        default="drop",
+        help="how to handle structured annotations beyond --annotation-limit",
+    )
     benchmark_parser.add_argument("--plugin", help="plugin file path or importable Python module for plugin benchmarks")
     benchmark_parser.add_argument("--output", help="optional output JSON path")
     benchmark_parser.add_argument("--csv-output", help="optional benchmark CSV output path")
@@ -2548,6 +2764,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--shard-size must be positive")
         if any(count <= 0 for count in args.reducers):
             parser.error("--reducers values must be positive")
+        if args.annotation_limit is not None and args.annotation_limit <= 0:
+            parser.error("--annotation-limit must be positive")
         if args.job == "plugin" and not args.plugin:
             parser.error("--plugin is required for plugin benchmarks")
         try:
@@ -2561,6 +2779,9 @@ def main(argv: list[str] | None = None) -> int:
                 plugin_path=args.plugin if args.plugin else None,
                 dataset_family=args.dataset_family,
                 group_field=args.group_field if args.job == "json-group-count" else None,
+                annotation_severities=args.annotation_severities,
+                annotation_limit=args.annotation_limit,
+                annotation_overflow=args.annotation_overflow,
             )
         except ValueError as exc:
             parser.error(str(exc))

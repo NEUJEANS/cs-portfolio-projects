@@ -1090,6 +1090,66 @@ class MiniMapReduceTests(unittest.TestCase):
         self.assertIn("Studio squad baseline", html_report)
         self.assertIn("default, exam-cram, project-week", html_report)
 
+    def test_benchmark_json_omits_annotation_view_when_unused(self) -> None:
+        result = benchmark_job(
+            "wordcount",
+            "balanced",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+        )
+
+        self.assertIsNone(result.annotation_view)
+        payload = json.loads(result.to_json())
+        self.assertNotIn("annotation_view", payload)
+
+    def test_plugin_benchmark_can_filter_and_collapse_annotations(self) -> None:
+        result = benchmark_job(
+            "plugin",
+            "skewed",
+            records=48,
+            shard_size=12,
+            reducers=[2],
+            seed=11,
+            plugin_path=PROJECT_DIR / "plugins_average_score.py",
+            dataset_family="project-week",
+            annotation_severities=["risk", "watch"],
+            annotation_limit=1,
+            annotation_overflow="summary",
+        )
+
+        self.assertEqual(result.annotation_view["severity_filter"], ["risk", "watch"])
+        self.assertEqual(result.annotation_view["total_annotations"], 3)
+        self.assertEqual(result.annotation_view["matched_annotations"], 2)
+        self.assertEqual(result.annotation_view["rendered_annotations"], 2)
+        self.assertEqual(result.annotation_view["hidden_by_severity"], 1)
+        self.assertEqual(result.annotation_view["hidden_by_limit"], 1)
+        self.assertTrue(result.annotation_view["overflow_summary_emitted"])
+        self.assertEqual(
+            [annotation["title"] for annotation in result.benchmark_note_annotations],
+            ["Demo-day crunch hotspot", "Collapsed reviewer callouts"],
+        )
+        self.assertIn("Integration review backlog", result.benchmark_note_annotations[1]["detail"])
+
+        payload = json.loads(result.to_json())
+        self.assertEqual(payload["annotation_view"]["overflow"], "summary")
+        self.assertEqual(payload["annotation_view"]["hidden_by_limit"], 1)
+        self.assertEqual(payload["annotation_view"]["hidden_by_severity"], 1)
+        self.assertEqual(payload["benchmark_note_annotations"][1]["title"], "Collapsed reviewer callouts")
+
+        report = result.to_markdown()
+        html_report = result.to_html()
+        self.assertIn("### Annotation view", report)
+        self.assertIn("- Severity filter: `risk, watch`", report)
+        self.assertIn("- Hidden by severity filter: `1`", report)
+        self.assertIn("- Hidden by annotation limit: `1`", report)
+        self.assertIn("Collapsed reviewer callouts", report)
+        self.assertIn("Annotation view", html_report)
+        self.assertIn("Hidden by severity filter", html_report)
+        self.assertIn("Hidden by annotation limit", html_report)
+        self.assertIn("Collapsed reviewer callouts", html_report)
+
     def test_plugin_benchmark_rejects_unsupported_declared_dataset_family(self) -> None:
         with self.assertRaisesRegex(ValueError, "supported: default, exam-cram, project-week"):
             benchmark_job(

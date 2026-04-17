@@ -726,6 +726,55 @@ class MiniMapReduceRepoTests(unittest.TestCase):
             self.assertEqual(payload["plugin"], "projects/mini-mapreduce-lab/plugins_top_score.py")
             self.assertEqual(payload["reducers"], [2, 4])
 
+    def test_cli_plugin_benchmark_can_filter_and_summarize_annotations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "plugin-annotation-benchmark.json"
+            report_output = Path(tmpdir) / "plugin-annotation-benchmark.md"
+            subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark",
+                    "--job",
+                    "plugin",
+                    "--plugin",
+                    str(PROJECT_DIR / "plugins_average_score.py"),
+                    "--scenario",
+                    "skewed",
+                    "--dataset-family",
+                    "project-week",
+                    "--records",
+                    "48",
+                    "--shard-size",
+                    "12",
+                    "--reducers",
+                    "2",
+                    "--annotation-severity",
+                    "risk",
+                    "watch",
+                    "--annotation-limit",
+                    "1",
+                    "--annotation-overflow",
+                    "summary",
+                    "--output",
+                    str(output),
+                    "--report-output",
+                    str(report_output),
+                ],
+                check=True,
+                cwd=PROJECT_ROOT,
+            )
+
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            report = report_output.read_text(encoding="utf-8")
+            self.assertEqual(payload["annotation_view"]["severity_filter"], ["risk", "watch"])
+            self.assertEqual(payload["annotation_view"]["hidden_by_severity"], 1)
+            self.assertEqual(payload["annotation_view"]["hidden_by_limit"], 1)
+            self.assertTrue(payload["annotation_view"]["overflow_summary_emitted"])
+            self.assertEqual(payload["benchmark_note_annotations"][1]["title"], "Collapsed reviewer callouts")
+            self.assertIn("### Annotation view", report)
+            self.assertIn("Collapsed reviewer callouts", report)
+
     def test_cli_benchmark_rejects_unsupported_dataset_family_cleanly(self) -> None:
         completed = subprocess.run(
             [

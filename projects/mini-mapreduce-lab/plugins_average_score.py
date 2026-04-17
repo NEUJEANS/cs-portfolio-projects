@@ -113,6 +113,20 @@ def benchmark_notes(scenario, dataset_family="default"):
                 "hotspot_keys": ["demo-day-core", "integration-0", "feature-0"],
                 "takeaway": "This slice is meant to read like a real project-week bottleneck where one squad absorbs the final demo push.",
             },
+            {
+                "title": "Integration review backlog",
+                "detail": "The `integration-*` keys form a second-tier hotspot behind the demo-day core, which makes a good reviewer note when you want to talk about handoff queues instead of only the primary spike.",
+                "severity": "watch",
+                "hotspot_keys": ["integration-0", "integration-1", "integration-2"],
+                "takeaway": "Keep this card when you want a fuller systems story about follow-on bottlenecks after the main project crunch.",
+            },
+            {
+                "title": "Feature-lane tail",
+                "detail": "The `feature-*` keys stay spread out and comparatively cooler, so they are useful as a low-priority reviewer note but often safe to collapse in tighter portfolio reports.",
+                "severity": "info",
+                "hotspot_keys": ["feature-0", "feature-1"],
+                "takeaway": "Use annotation filters or overflow summaries when you want to hide softer follow-up notes and keep the report focused on the highest-risk queues.",
+            },
         ],
     }
     return notes.get((scenario, dataset_family), [])
