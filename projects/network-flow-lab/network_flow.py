@@ -1499,6 +1499,18 @@ def build_artifact_gallery_paths(*, html_out: Path, artifact_dir: Path | None = 
     }
 
 
+def build_benchmark_gallery_paths(*, html_out: Path, artifact_dir: Path | None = None) -> dict[str, Path]:
+    base_dir = artifact_dir if artifact_dir is not None else html_out.parent
+    return {
+        "dag_svg": base_dir / "benchmark-dag-report.svg",
+        "dag_markdown": base_dir / "benchmark-dag-report.md",
+        "dense_svg": base_dir / "benchmark-dense-report.svg",
+        "dense_markdown": base_dir / "benchmark-dense-report.md",
+        "layered_svg": base_dir / "benchmark-layered-report.svg",
+        "layered_markdown": base_dir / "benchmark-layered-report.md",
+    }
+
+
 def _compute_vertical_positions(count: int, *, top: float, bottom: float) -> list[float]:
     if count <= 0:
         return []
@@ -2412,6 +2424,133 @@ def render_artifact_gallery_html(
 '''
 
 
+
+def render_benchmark_gallery_html(
+    *,
+    dag_svg: str,
+    dag_markdown: str,
+    dense_svg: str,
+    dense_markdown: str,
+    layered_svg: str,
+    layered_markdown: str,
+    artifact_gallery: str | None = None,
+) -> str:
+    generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    sections = [
+        {
+            "eyebrow": "Benchmark family #1",
+            "title": "DAG baseline",
+            "summary": "The simplest story: acyclic graphs that keep the Edmonds-Karp vs Dinic comparison easy to explain in interviews before moving into nastier residual behavior.",
+            "preview": dag_svg,
+            "preview_title": "DAG benchmark SVG preview",
+            "links": [
+                ("Open SVG card", dag_svg),
+                ("Open Markdown report", dag_markdown),
+            ],
+        },
+        {
+            "eyebrow": "Benchmark family #2",
+            "title": "Dense residual mesh",
+            "summary": "Use this when you want to show rerouting pressure: shortcut edges, backward middle-layer edges, and more chances for the algorithms to diverge on path work.",
+            "preview": dense_svg,
+            "preview_title": "Dense benchmark SVG preview",
+            "links": [
+                ("Open SVG card", dense_svg),
+                ("Open Markdown report", dense_markdown),
+            ],
+        },
+        {
+            "eyebrow": "Benchmark family #3",
+            "title": "Layered cut stress",
+            "summary": "This family emphasizes blocking-flow phases and cut-heavy structure, making it the strongest companion when the optimization walkthroughs need a performance-story follow-up.",
+            "preview": layered_svg,
+            "preview_title": "Layered benchmark SVG preview",
+            "links": [
+                ("Open SVG card", layered_svg),
+                ("Open Markdown report", layered_markdown),
+            ],
+        },
+    ]
+
+    cards = []
+    for section in sections:
+        links_html = "".join(
+            f'<a class="chip" href="{_html_escape(path)}">{_html_escape(label)}</a>'
+            for label, path in section["links"]
+        )
+        cards.append(
+            f'''<section class="gallery-card">
+      <p class="eyebrow">{_html_escape(section["eyebrow"])}</p>
+      <h2>{_html_escape(section["title"])}</h2>
+      <p>{_html_escape(section["summary"])}</p>
+      <a class="preview-frame" href="{_html_escape(section["preview"])}" aria-label="{_html_escape(section["preview_title"])}">
+        <img src="{_html_escape(section["preview"])}" alt="{_html_escape(section["preview_title"])}" loading="lazy" />
+      </a>
+      <div class="chip-row">{links_html}</div>
+    </section>'''
+        )
+    cards_html = "\n".join(cards)
+    sibling_gallery_html = (
+        f'<a class="hero-link" href="{_html_escape(artifact_gallery)}">Open optimization artifact gallery</a>'
+        if artifact_gallery is not None
+        else ''
+    )
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network-flow lab benchmark gallery</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1580px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2 {{ line-height: 1.15; }}
+    p {{ line-height: 1.55; }}
+    .hero {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(254, 249, 195, 0.92), rgba(219, 234, 254, 0.92)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
+    .hero p {{ max-width: 74ch; }}
+    .hero-meta {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }}
+    .hero-meta span {{ padding: 0.55rem 0.85rem; border-radius: 999px; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(148, 163, 184, 0.35); font-size: 0.95rem; }}
+    .hero-links {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }}
+    .hero-link {{ display: inline-flex; align-items: center; padding: 0.6rem 0.9rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 700; }}
+    .hero-link:hover {{ background: rgba(219, 234, 254, 1); }}
+    .gallery-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }}
+    .gallery-card {{ border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1.2rem; padding: 1.1rem; background: rgba(255, 255, 255, 0.88); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }}
+    .gallery-card h2 {{ margin: 0.2rem 0 0.7rem; }}
+    .eyebrow {{ margin: 0; font-size: 0.86rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1d4ed8; }}
+    .preview-frame {{ display: block; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; padding: 0.8rem; text-decoration: none; }}
+    .preview-frame img {{ display: block; width: 100%; height: auto; border-radius: 0.75rem; }}
+    .chip-row {{ display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1rem; }}
+    .chip {{ display: inline-flex; align-items: center; padding: 0.55rem 0.85rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 600; }}
+    .chip:hover {{ background: rgba(219, 234, 254, 1); }}
+    @media (max-width: 760px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Network-flow lab benchmark gallery</h1>
+      <p>A lightweight browser landing page for the committed benchmark report cards. Use it when the algorithm walkthroughs need a performance companion: reviewers can compare the DAG baseline, dense residual mesh, and layered cut-stress stories without digging through the repo tree.</p>
+      <div class="hero-meta">
+        <span>Generated <strong>{generated}</strong></span>
+        <span>Includes <strong>3</strong> benchmark report families</span>
+        <span>Optimized for GitHub Pages / recruiter browsing</span>
+      </div>
+      <div class="hero-links">{sibling_gallery_html}</div>
+    </section>
+    <div class="gallery-grid">
+{cards_html}
+    </div>
+  </main>
+</body>
+</html>
+'''
+
+
+
 def render_assignment_svg(assignment_result: AssignmentResult, *, graph_name: str = "weighted_assignment") -> str:
     explanation = build_assignment_explanation(assignment_result)
     width = 960
@@ -3040,6 +3179,11 @@ def build_parser() -> argparse.ArgumentParser:
     gallery_demo_parser.add_argument("--artifact-dir", type=Path, help="directory that already contains the sample assignment/cost-flow HTML pages plus their proof companions; defaults to the output directory")
     gallery_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
 
+    benchmark_gallery_demo_parser = subparsers.add_parser("benchmark-gallery-demo", help="write a tiny HTML gallery that links the bundled benchmark report cards")
+    benchmark_gallery_demo_parser.add_argument("--html-out", type=Path, required=True, help="write a static HTML gallery that links the committed benchmark report cards")
+    benchmark_gallery_demo_parser.add_argument("--artifact-dir", type=Path, help="directory that already contains the sample benchmark Markdown/SVG artifacts; defaults to the output directory")
+    benchmark_gallery_demo_parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+
     benchmark_parser = subparsers.add_parser("benchmark", help="compare Edmonds-Karp vs Dinic on generated graphs")
     benchmark_parser.add_argument("--nodes", type=int, default=24, help="number of nodes in each generated benchmark graph")
     benchmark_parser.add_argument(
@@ -3069,6 +3213,19 @@ def validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace)
         if missing:
             parser.error(
                 "gallery-demo requires the bundled assignment/cost-flow artifacts to exist first; missing: "
+                + ", ".join(sorted(missing))
+            )
+        return
+
+    if args.command == "benchmark-gallery-demo":
+        artifact_paths = build_benchmark_gallery_paths(
+            html_out=args.html_out,
+            artifact_dir=getattr(args, "artifact_dir", None),
+        )
+        missing = [path.name for path in artifact_paths.values() if not path.exists()]
+        if missing:
+            parser.error(
+                "benchmark-gallery-demo requires the bundled benchmark markdown/svg artifacts to exist first; missing: "
                 + ", ".join(sorted(missing))
             )
         return
@@ -3310,6 +3467,40 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
                 cost_proof_svg=relative_paths["cost_proof_svg"],
                 cost_markdown=relative_paths["cost_markdown"],
                 cost_dot=relative_paths["cost_dot"],
+            ),
+        )
+        return {
+            "command": args.command,
+            "artifact_dir": str((getattr(args, "artifact_dir", None) or args.html_out.parent)),
+            "html_output": str(args.html_out),
+            **{key: str(path) for key, path in artifact_paths.items()},
+        }
+
+    if args.command == "benchmark-gallery-demo":
+        artifact_paths = build_benchmark_gallery_paths(
+            html_out=args.html_out,
+            artifact_dir=getattr(args, "artifact_dir", None),
+        )
+        relative_paths = {
+            key: _relative_output_path(path, args.html_out.parent)
+            for key, path in artifact_paths.items()
+        }
+        optimization_gallery_path = (getattr(args, "artifact_dir", None) or args.html_out.parent) / "artifact-gallery.html"
+        optimization_gallery_relative = (
+            _relative_output_path(optimization_gallery_path, args.html_out.parent)
+            if optimization_gallery_path.exists()
+            else None
+        )
+        write_html_output(
+            args.html_out,
+            render_benchmark_gallery_html(
+                dag_svg=relative_paths["dag_svg"],
+                dag_markdown=relative_paths["dag_markdown"],
+                dense_svg=relative_paths["dense_svg"],
+                dense_markdown=relative_paths["dense_markdown"],
+                layered_svg=relative_paths["layered_svg"],
+                layered_markdown=relative_paths["layered_markdown"],
+                artifact_gallery=optimization_gallery_relative,
             ),
         )
         return {

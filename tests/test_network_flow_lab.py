@@ -44,6 +44,7 @@ render_min_cost_flow_svg = module.render_min_cost_flow_svg
 render_min_cost_flow_diagram_svg = module.render_min_cost_flow_diagram_svg
 render_min_cost_flow_artifact_html = module.render_min_cost_flow_artifact_html
 render_artifact_gallery_html = module.render_artifact_gallery_html
+render_benchmark_gallery_html = module.render_benchmark_gallery_html
 render_benchmark_markdown = module.render_benchmark_markdown
 render_benchmark_svg = module.render_benchmark_svg
 solve_max_flow = module.solve_max_flow
@@ -999,6 +1000,69 @@ class NetworkFlowLabTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("gallery-demo requires the bundled assignment/cost-flow artifacts to exist first", completed.stderr)
+
+    def test_cli_benchmark_gallery_demo_writes_bundled_benchmark_gallery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "artifacts"
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            for name in [
+                "benchmark-dag-report.svg",
+                "benchmark-dag-report.md",
+                "benchmark-dense-report.svg",
+                "benchmark-dense-report.md",
+                "benchmark-layered-report.svg",
+                "benchmark-layered-report.md",
+                "artifact-gallery.html",
+            ]:
+                (artifact_dir / name).write_text(f"placeholder for {name}\n", encoding="utf-8")
+
+            html_path = artifact_dir / "benchmark-gallery.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark-gallery-demo",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--html-out",
+                    str(html_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["html_output"], str(html_path))
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("Network-flow lab benchmark gallery", html)
+            self.assertIn('href="benchmark-dag-report.svg"', html)
+            self.assertIn('href="benchmark-layered-report.md"', html)
+            self.assertIn('href="artifact-gallery.html"', html)
+            self.assertIn('<img src="benchmark-dense-report.svg"', html)
+
+    def test_cli_benchmark_gallery_demo_requires_existing_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "artifacts"
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            html_path = artifact_dir / "benchmark-gallery.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "benchmark-gallery-demo",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--html-out",
+                    str(html_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("benchmark-gallery-demo requires the bundled benchmark markdown/svg artifacts to exist first", completed.stderr)
 
     def test_random_graph_generator_is_reproducible_and_connected(self) -> None:
         graph_a = generate_random_flow_graph(seed=7, node_count=6, edge_probability=0.4)

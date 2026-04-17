@@ -26,6 +26,7 @@ A portfolio-friendly algorithms lab that computes maximum flow with Edmonds-Karp
 - committed generic min-cost-flow Markdown/SVG proof artifacts for portfolio screenshots without terminal capture
 - reproducible benchmark mode that compares Edmonds-Karp vs Dinic on random DAGs, dense residual-style meshes, or layered cut-stress graphs
 - standalone benchmark report-card export in Markdown and SVG for quick portfolio screenshots and README embeds
+- standalone `benchmark-gallery-demo --html-out` landing page that makes the committed benchmark cards browsable beside the optimization walkthrough gallery
 - Graphviz DOT export for solved flow graphs, bipartite matchings, weighted assignments, and generic min-cost-flow graphs
 - optional `--explain` proof view that turns max-flow/min-cut and matching/cover results into compact correctness certificates
 - standalone `--markdown-out` proof artifacts for flow, matching, assignment, and generic min-cost-flow runs so portfolio screenshots do not require terminal capture
@@ -110,6 +111,12 @@ Build a tiny browser landing page that links both optimization walkthroughs toge
 python3 projects/network-flow-lab/network_flow.py gallery-demo --artifact-dir docs/artifacts/network-flow-lab --html-out docs/artifacts/network-flow-lab/artifact-gallery.html --pretty
 ```
 
+Build a sibling benchmark landing page that keeps the DAG, dense, and layered report cards browsable in one tab (and links back to the optimization gallery when it exists):
+
+```bash
+python3 projects/network-flow-lab/network_flow.py benchmark-gallery-demo --artifact-dir docs/artifacts/network-flow-lab --html-out docs/artifacts/network-flow-lab/benchmark-gallery.html --pretty
+```
+
 Weighted-assignment format:
 
 ```json
@@ -191,6 +198,7 @@ Bipartite matching format:
 Committed sample proof artifacts:
 - `docs/artifacts/network-flow-lab/index.md`
 - `docs/artifacts/network-flow-lab/artifact-gallery.html`
+- `docs/artifacts/network-flow-lab/benchmark-gallery.html`
 - `docs/artifacts/network-flow-lab/sample-flow-proof.md`
 - `docs/artifacts/network-flow-lab/sample-flow-proof.svg`
 - `docs/artifacts/network-flow-lab/sample-matching-proof.md`
@@ -235,9 +243,10 @@ python3 -m unittest tests/test_network_flow_lab.py
 - The assignment HTML artifact page mirrors that same DOT story as an inline browser-friendly SVG diagram next to the proof card, so GitHub Pages viewers do not need Graphviz installed to browse it.
 - The generic min-cost-flow HTML artifact page gives the shipping/routing example the same browser-friendly treatment, pairing the chosen shipment diagram with the proof card and augmenting-path summary.
 - `gallery-demo` produces a compact landing page that frames those two HTML walkthroughs together, keeps proof/DOT companions nearby, and uses relative links so the committed gallery stays portable.
+- `benchmark-gallery-demo` does the same for the committed benchmark cards, giving the performance story its own browser-friendly page and linking back to the optimization gallery when both live side by side.
 - DOT export colors the source-side cut, sink-side cut, saturated cut edges, and chosen matching edges so the textual output and the diagram tell the same story.
 
 ## Future improvements
 - render actual node-link SVG layouts for solved flow, matching, assignment, and generic min-cost-flow proofs instead of card-style summaries
-- add a tiny static web gallery that lets viewers toggle between Markdown, SVG, DOT, and raw JSON artifacts
-- add a lightweight benchmark gallery page so the performance cards are browsable alongside the optimization artifacts
+- add a tiny static web gallery that lets viewers toggle between Markdown, SVG, DOT, HTML walkthroughs, and raw JSON artifacts
+- add downloadable PNG snapshots for the benchmark and optimization galleries so README embeds can reuse the browser-friendly layouts directly

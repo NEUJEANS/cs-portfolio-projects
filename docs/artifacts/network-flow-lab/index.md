@@ -2,10 +2,12 @@
 
 A compact index of the committed artifacts for `network-flow-lab`, aimed at quick README linking, recruiter-friendly browsing, and fast screenshot selection.
 
-## Browser landing page
+## Browser landing pages
 
-- [Open the combined HTML artifact gallery](./artifact-gallery.html)
-- Use it when you want the weighted-assignment and generic min-cost-flow walkthroughs in one browser tab before drilling into the individual proof/DOT files.
+- [Open the combined optimization artifact gallery](./artifact-gallery.html)
+- [Open the benchmark gallery](./benchmark-gallery.html)
+- Use the optimization gallery when you want the weighted-assignment and generic min-cost-flow walkthroughs in one browser tab before drilling into the individual proof/DOT files.
+- Use the benchmark gallery when you want the DAG, dense, and layered performance cards together beside the optimization story.
 
 ## Proof cards
 
@@ -20,6 +22,8 @@ A compact index of the committed artifacts for `network-flow-lab`, aimed at quic
 | [Markdown proof](./sample-assignment-proof.md) · [DOT diagram source](./sample-assignment.dot) · [Side-by-side artifact page](./sample-assignment-artifact-page.html) | [Markdown proof](./sample-cost-flow-proof.md) · [DOT diagram source](./sample-cost-flow.dot) · [Side-by-side artifact page](./sample-cost-flow-artifact-page.html) |
 
 ## Benchmark report cards
+
+- Prefer the [benchmark gallery](./benchmark-gallery.html) when you want a single browser tab for all three report families.
 
 <table>
   <tr>

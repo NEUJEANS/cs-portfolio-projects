@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network-flow lab benchmark gallery</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1580px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    h1, h2 { line-height: 1.15; }
+    p { line-height: 1.55; }
+    .hero { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(254, 249, 195, 0.92), rgba(219, 234, 254, 0.92)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }
+    .hero p { max-width: 74ch; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+    .hero-meta span { padding: 0.55rem 0.85rem; border-radius: 999px; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(148, 163, 184, 0.35); font-size: 0.95rem; }
+    .hero-links { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+    .hero-link { display: inline-flex; align-items: center; padding: 0.6rem 0.9rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 700; }
+    .hero-link:hover { background: rgba(219, 234, 254, 1); }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
+    .gallery-card { border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 1.2rem; padding: 1.1rem; background: rgba(255, 255, 255, 0.88); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }
+    .gallery-card h2 { margin: 0.2rem 0 0.7rem; }
+    .eyebrow { margin: 0; font-size: 0.86rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1d4ed8; }
+    .preview-frame { display: block; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; padding: 0.8rem; text-decoration: none; }
+    .preview-frame img { display: block; width: 100%; height: auto; border-radius: 0.75rem; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1rem; }
+    .chip { display: inline-flex; align-items: center; padding: 0.55rem 0.85rem; border-radius: 999px; border: 1px solid rgba(59, 130, 246, 0.28); background: rgba(239, 246, 255, 0.95); color: #1d4ed8; text-decoration: none; font-weight: 600; }
+    .chip:hover { background: rgba(219, 234, 254, 1); }
+    @media (max-width: 760px) {
+      main { padding: 1rem 0.75rem 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Network-flow lab benchmark gallery</h1>
+      <p>A lightweight browser landing page for the committed benchmark report cards. Use it when the algorithm walkthroughs need a performance companion: reviewers can compare the DAG baseline, dense residual mesh, and layered cut-stress stories without digging through the repo tree.</p>
+      <div class="hero-meta">
+        <span>Generated <strong>2026-04-17T14:00:31Z</strong></span>
+        <span>Includes <strong>3</strong> benchmark report families</span>
+        <span>Optimized for GitHub Pages / recruiter browsing</span>
+      </div>
+      <div class="hero-links"><a class="hero-link" href="artifact-gallery.html">Open optimization artifact gallery</a></div>
+    </section>
+    <div class="gallery-grid">
+<section class="gallery-card">
+      <p class="eyebrow">Benchmark family #1</p>
+      <h2>DAG baseline</h2>
+      <p>The simplest story: acyclic graphs that keep the Edmonds-Karp vs Dinic comparison easy to explain in interviews before moving into nastier residual behavior.</p>
+      <a class="preview-frame" href="benchmark-dag-report.svg" aria-label="DAG benchmark SVG preview">
+        <img src="benchmark-dag-report.svg" alt="DAG benchmark SVG preview" loading="lazy" />
+      </a>
+      <div class="chip-row"><a class="chip" href="benchmark-dag-report.svg">Open SVG card</a><a class="chip" href="benchmark-dag-report.md">Open Markdown report</a></div>
+    </section>
+<section class="gallery-card">
+      <p class="eyebrow">Benchmark family #2</p>
+      <h2>Dense residual mesh</h2>
+      <p>Use this when you want to show rerouting pressure: shortcut edges, backward middle-layer edges, and more chances for the algorithms to diverge on path work.</p>
+      <a class="preview-frame" href="benchmark-dense-report.svg" aria-label="Dense benchmark SVG preview">
+        <img src="benchmark-dense-report.svg" alt="Dense benchmark SVG preview" loading="lazy" />
+      </a>
+      <div class="chip-row"><a class="chip" href="benchmark-dense-report.svg">Open SVG card</a><a class="chip" href="benchmark-dense-report.md">Open Markdown report</a></div>
+    </section>
+<section class="gallery-card">
+      <p class="eyebrow">Benchmark family #3</p>
+      <h2>Layered cut stress</h2>
+      <p>This family emphasizes blocking-flow phases and cut-heavy structure, making it the strongest companion when the optimization walkthroughs need a performance-story follow-up.</p>
+      <a class="preview-frame" href="benchmark-layered-report.svg" aria-label="Layered benchmark SVG preview">
+        <img src="benchmark-layered-report.svg" alt="Layered benchmark SVG preview" loading="lazy" />
+      </a>
+      <div class="chip-row"><a class="chip" href="benchmark-layered-report.svg">Open SVG card</a><a class="chip" href="benchmark-layered-report.md">Open Markdown report</a></div>
+    </section>
+    </div>
+  </main>
+</body>
+</html>

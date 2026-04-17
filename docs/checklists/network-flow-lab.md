@@ -15,4 +15,5 @@
 - [x] expand the benchmark generator with dense and layered stress-case families
 - [x] export benchmark runs as committed Markdown/SVG report cards
 - [x] export standalone proof-card SVGs and commit a browsable artifact gallery page
+- [x] add a lightweight benchmark HTML gallery page beside the optimization artifact gallery
 - [x] add Graphviz DOT export for generic min-cost-flow diagrams
