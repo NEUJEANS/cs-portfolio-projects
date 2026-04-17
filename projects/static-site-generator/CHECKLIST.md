@@ -19,4 +19,5 @@
 - [x] Add sitemap.xml and RSS feed generation for blog-style portfolio sites
 - [x] Add date-based archive pages or timeline indexes for dated portfolio posts
 - [x] Add richer archive layouts such as featured entries or excerpt cards inside archive pages
-- [ ] Add archive pinning or pagination controls for larger portfolio timelines
+- [x] Add archive pinning controls so evergreen portfolio updates stay surfaced ahead of larger timelines
+- [ ] Add archive pagination controls or page-size options for very large portfolio timelines

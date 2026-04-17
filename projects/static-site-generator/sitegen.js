@@ -969,6 +969,8 @@ function buildDateArchiveCollections(pages) {
         isoDate: date.toISOString(),
         dateLabel: formatArchiveDateLabel(date),
         sortKey: date.getTime(),
+        archivePin: page.metadata?.archivePin === true,
+        archivePinRank: Number.isInteger(page.metadata?.archivePinRank) ? page.metadata.archivePinRank : Number.MAX_SAFE_INTEGER,
         year,
         monthNumber,
       };
@@ -1190,21 +1192,48 @@ function renderDateArchiveEntryMeta(entry) {
   return `<p class="date-archive-entry__meta"><time datetime="${escapeHtml(entry.isoDate)}">${escapeHtml(entry.dateLabel)}</time> <span aria-hidden="true">·</span> <code>${escapeHtml(entry.sourceName)}</code></p>`;
 }
 
-function renderDateArchiveEntryCard(entry, page, options = {}) {
-  const featured = options.featured === true;
-  const headingLevel = Number.isInteger(options.headingLevel) ? Math.min(Math.max(options.headingLevel, 2), 6) : featured ? 2 : 3;
-  const headingTag = `h${headingLevel}`;
-  const eyebrow = options.eyebrow ? `<p class="date-archive-eyebrow date-archive-entry__eyebrow">${escapeHtml(options.eyebrow)}</p>` : '';
-  const excerpt = entry.excerpt ? `<p class="date-archive-entry__excerpt">${escapeHtml(entry.excerpt)}</p>` : '';
-  const href = escapeHtml(relativeLink(page.outputName, entry.outputName));
-  const actions = featured ? `<p class="date-archive-entry__actions"><a href="${href}">Read entry</a></p>` : '';
-  const className = featured ? 'date-archive-entry date-archive-entry--featured' : 'date-archive-entry';
-
-  return `<article class="${className}">${eyebrow}${renderDateArchiveEntryMeta(entry)}<${headingTag}><a href="${href}">${escapeHtml(entry.title)}</a></${headingTag}>${excerpt}${actions}</article>`;
+function collectArchiveEntries(collection) {
+  return collection.months.flatMap((month) => month.pages);
 }
 
-function renderDateArchiveEntry(entry, page) {
-  return `<li>${renderDateArchiveEntryCard(entry, page)}</li>`;
+function getPinnedArchiveEntries(entries) {
+  return entries
+    .filter((entry) => entry.archivePin === true)
+    .sort(
+      (left, right) =>
+        left.archivePinRank - right.archivePinRank ||
+        right.sortKey - left.sortKey ||
+        left.outputName.localeCompare(right.outputName)
+    );
+}
+
+function getChronologicalArchiveEntries(entries) {
+  return entries.filter((entry) => entry.archivePin !== true);
+}
+
+function selectArchiveLeadEntry(entries) {
+  return getChronologicalArchiveEntries(entries)[0] || entries[0] || null;
+}
+
+function renderDateArchiveEntryCard(entry, page, options = {}) {
+  const featured = options.featured === true;
+  const pinned = options.pinned === true || entry.archivePin === true;
+  const headingLevel = Number.isInteger(options.headingLevel) ? Math.min(Math.max(options.headingLevel, 2), 6) : featured ? 2 : 3;
+  const headingTag = `h${headingLevel}`;
+  const eyebrowLabel = options.eyebrow || (pinned ? 'Pinned entry' : '');
+  const eyebrow = eyebrowLabel ? `<p class="date-archive-eyebrow date-archive-entry__eyebrow">${escapeHtml(eyebrowLabel)}</p>` : '';
+  const excerpt = entry.excerpt ? `<p class="date-archive-entry__excerpt">${escapeHtml(entry.excerpt)}</p>` : '';
+  const href = escapeHtml(relativeLink(page.outputName, entry.outputName));
+  const actions = featured || pinned ? `<p class="date-archive-entry__actions"><a href="${href}">Read entry</a></p>` : '';
+  const classNames = ['date-archive-entry'];
+  if (featured) classNames.push('date-archive-entry--featured');
+  if (pinned) classNames.push('date-archive-entry--pinned');
+
+  return `<article class="${classNames.join(' ')}">${eyebrow}${renderDateArchiveEntryMeta(entry)}<${headingTag}><a href="${href}">${escapeHtml(entry.title)}</a></${headingTag}>${excerpt}${actions}</article>`;
+}
+
+function renderDateArchiveEntry(entry, page, options = {}) {
+  return `<li>${renderDateArchiveEntryCard(entry, page, options)}</li>`;
 }
 
 function renderDateArchiveFeaturedEntry(entry, page, options = {}) {
@@ -1214,12 +1243,34 @@ function renderDateArchiveFeaturedEntry(entry, page, options = {}) {
   });
 }
 
-function renderDateArchiveEntryGrid(entries, page) {
+function renderDateArchiveEntryGrid(entries, page, options = {}) {
   if (!entries.length) {
     return '';
   }
 
-  return `<ol class="date-archive-entry-list date-archive-entry-list--cards">${entries.map((entry) => renderDateArchiveEntry(entry, page)).join('')}</ol>`;
+  const classNames = ['date-archive-entry-list', 'date-archive-entry-list--cards'];
+  if (options.variant === 'pinned') {
+    classNames.push('date-archive-entry-list--pinned');
+  }
+
+  return `<ol class="${classNames.join(' ')}">${entries
+    .map((entry) =>
+      renderDateArchiveEntry(entry, page, {
+        pinned: options.variant === 'pinned',
+        eyebrow: options.eyebrow,
+      })
+    )
+    .join('')}</ol>`;
+}
+
+function renderDateArchivePinnedSection(entries, page, options = {}) {
+  if (!entries.length) {
+    return '';
+  }
+
+  const title = options.title || 'Pinned archive entries';
+  const description = options.description || `${entries.length} pinned update${entries.length === 1 ? ' stays' : 's stay'} surfaced for quick recruiter or reviewer scans.`;
+  return `<section class="date-archive-pinned"><div class="date-archive-pinned__header"><p class="date-archive-eyebrow">Pinned</p><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></div>${renderDateArchiveEntryGrid(entries, page, { variant: 'pinned' })}</section>`;
 }
 
 function renderDateArchiveIndexContent(dateArchiveCollections, page) {
@@ -1228,11 +1279,14 @@ function renderDateArchiveIndexContent(dateArchiveCollections, page) {
   <p>Browse ${totalPages} dated portfolio page${totalPages === 1 ? '' : 's'} in reverse chronological order. Use these generated archive pages for project logs, shipped slices, and timeline-style portfolio updates.</p>
   <ul class="date-archive-year-list">${dateArchiveCollections
     .map((collection) => {
-      const featuredEntry = collection.months[0]?.pages[0] || null;
-      return `<li><article class="date-archive-year-card"><p class="date-archive-eyebrow">Year archive</p><h2><a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)}</a></h2><p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} across ${collection.months.length} month${collection.months.length === 1 ? '' : 's'}.</p>${featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 3 }) : ''}<ul class="date-archive-month-list">${collection.months
+      const yearEntries = collectArchiveEntries(collection);
+      const pinnedEntries = getPinnedArchiveEntries(yearEntries);
+      const featuredEntry = selectArchiveLeadEntry(yearEntries);
+      return `<li><article class="date-archive-year-card"><p class="date-archive-eyebrow">Year archive</p><h2><a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)}</a></h2><p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} across ${collection.months.length} month${collection.months.length === 1 ? '' : 's'}.</p>${pinnedEntries.length ? renderDateArchivePinnedSection(pinnedEntries, page, { title: `${collection.year} pinned updates`, description: `${pinnedEntries.length} pinned update${pinnedEntries.length === 1 ? ' stays' : 's stay'} visible ahead of the generated timeline.` }) : ''}${featuredEntry && featuredEntry.archivePin !== true ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 3 }) : ''}<ul class="date-archive-month-list">${collection.months
         .map((month) => {
-          const latestEntry = month.pages[0];
-          return `<li><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span>${latestEntry ? ` <span class="date-archive-latest">Latest: <a href="${escapeHtml(relativeLink(page.outputName, latestEntry.outputName))}">${escapeHtml(latestEntry.title)}</a></span>` : ''}</li>`;
+          const latestEntry = selectArchiveLeadEntry(month.pages);
+          const pinnedCount = getPinnedArchiveEntries(month.pages).length;
+          return `<li><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span>${pinnedCount ? ` <span class="date-archive-pinned-count">${pinnedCount} pinned</span>` : ''}${latestEntry ? ` <span class="date-archive-latest">Latest: <a href="${escapeHtml(relativeLink(page.outputName, latestEntry.outputName))}">${escapeHtml(latestEntry.title)}</a></span>` : ''}</li>`;
         })
         .join('')}</ul></article></li>`;
     })
@@ -1241,34 +1295,44 @@ function renderDateArchiveIndexContent(dateArchiveCollections, page) {
 }
 
 function renderDateArchiveYearContent(collection, page) {
-  const featuredEntry = collection.months[0]?.pages[0] || null;
+  const yearEntries = collectArchiveEntries(collection);
+  const pinnedEntries = getPinnedArchiveEntries(yearEntries);
+  const featuredEntry = selectArchiveLeadEntry(yearEntries);
   return `<section class="date-archive-year">
   <p><a href="${escapeHtml(relativeLink(page.outputName, ARCHIVE_INDEX_OUTPUT_NAME))}">← All archives</a></p>
   <p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month for ${escapeHtml(collection.year)}.</p>
-  ${featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 2 }) : ''}
+  ${renderDateArchivePinnedSection(pinnedEntries, page, { title: `${collection.year} pinned updates`, description: `${pinnedEntries.length} pinned update${pinnedEntries.length === 1 ? ' stays' : 's stay'} ahead of the reverse-chronological monthly timeline.` })}
+  ${featuredEntry && featuredEntry.archivePin !== true ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 2 }) : ''}
   <ul class="date-archive-month-jump-list">${collection.months
-    .map(
-      (month) => `<li><a href="#${month.anchorId}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span> <a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Open month page</a></li>`
-    )
+    .map((month) => {
+      const monthLeadEntry = selectArchiveLeadEntry(month.pages);
+      const pinnedCount = getPinnedArchiveEntries(month.pages).length;
+      return `<li><a href="#${month.anchorId}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span>${pinnedCount ? ` <span class="date-archive-pinned-count">${pinnedCount} pinned</span>` : ''} <a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Open month page</a>${monthLeadEntry ? ` <span class="date-archive-latest">Latest: <a href="${escapeHtml(relativeLink(page.outputName, monthLeadEntry.outputName))}">${escapeHtml(monthLeadEntry.title)}</a></span>` : ''}</li>`;
+    })
     .join('')}</ul>
   ${collection.months
     .map((month) => {
-      const monthLeadEntry = month.pages[0] || null;
+      const pinnedMonthEntries = getPinnedArchiveEntries(month.pages);
+      const visibleEntries = getChronologicalArchiveEntries(month.pages);
+      const monthLeadEntry = visibleEntries[0] || null;
       const repeatsYearFeature = featuredEntry && monthLeadEntry && monthLeadEntry.outputName === featuredEntry.outputName;
       const featuredMonthEntry = repeatsYearFeature ? null : monthLeadEntry;
-      const remainingEntries = repeatsYearFeature ? month.pages : month.pages.slice(1);
-      return `<section class="date-archive-month-section" id="${month.anchorId}"><p class="date-archive-eyebrow">Month archive</p><h2>${escapeHtml(month.label)}</h2><p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Browse ${escapeHtml(month.label)}</a></p>${featuredMonthEntry ? renderDateArchiveFeaturedEntry(featuredMonthEntry, page, { eyebrow: 'Featured entry', headingLevel: 3 }) : ''}${renderDateArchiveEntryGrid(remainingEntries, page)}</section>`;
+      const remainingEntries = visibleEntries.slice(monthLeadEntry ? 1 : 0);
+      return `<section class="date-archive-month-section" id="${month.anchorId}"><p class="date-archive-eyebrow">Month archive</p><h2>${escapeHtml(month.label)}</h2><p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Browse ${escapeHtml(month.label)}</a></p>${renderDateArchivePinnedSection(pinnedMonthEntries, page, { title: `${month.label} pinned updates`, description: `${pinnedMonthEntries.length} pinned update${pinnedMonthEntries.length === 1 ? ' stays' : 's stay'} attached to this month page and yearly archive.` })}${featuredMonthEntry ? renderDateArchiveFeaturedEntry(featuredMonthEntry, page, { eyebrow: 'Featured entry', headingLevel: 3 }) : ''}${renderDateArchiveEntryGrid(remainingEntries, page)}</section>`;
     })
     .join('')}
 </section>`;
 }
 
 function renderDateArchiveMonthContent(collection, month, page) {
-  const featuredEntry = month.pages[0] || null;
-  const remainingEntries = month.pages.slice(1);
+  const pinnedEntries = getPinnedArchiveEntries(month.pages);
+  const visibleEntries = getChronologicalArchiveEntries(month.pages);
+  const featuredEntry = visibleEntries[0] || null;
+  const remainingEntries = visibleEntries.slice(featuredEntry ? 1 : 0);
   return `<section class="date-archive-month-page">
   <p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, ARCHIVE_INDEX_OUTPUT_NAME))}">← All archives</a> <span aria-hidden="true">·</span> <a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)} archive</a></p>
   <p>${month.pages.length} dated page${month.pages.length === 1 ? '' : 's'} published in ${escapeHtml(month.label)}.</p>
+  ${renderDateArchivePinnedSection(pinnedEntries, page, { title: `${month.label} pinned updates`, description: `${pinnedEntries.length} pinned update${pinnedEntries.length === 1 ? ' stays' : 's stay'} surfaced above the monthly timeline.` })}
   ${featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${month.label}`, headingLevel: 2 }) : ''}
   ${renderDateArchiveEntryGrid(remainingEntries, page)}
 </section>`;
@@ -1566,18 +1630,23 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .date-archive-year-card, .date-archive-month-section { padding: 1rem 1.05rem; border: 1px solid #cbd5e1; border-radius: 1rem; background: #ffffffcc; box-shadow: 0 10px 24px -24px #0f172a; }
       .date-archive-entry { display: grid; gap: 0.65rem; padding: 1rem 1.05rem; border: 1px solid #cbd5e1; border-radius: 1rem; background: #ffffffcc; box-shadow: 0 10px 24px -24px #0f172a; height: 100%; }
       .date-archive-entry--featured { border-left: 4px solid #2563eb; background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); box-shadow: 0 16px 30px -26px #1d4ed8; }
-      .date-archive-year, .date-archive-index, .date-archive-month-page, .date-archive-year-card, .date-archive-month-section { display: grid; gap: 1rem; }
+      .date-archive-entry--pinned { border-style: dashed; border-color: #f59e0b; background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%); }
+      .date-archive-year, .date-archive-index, .date-archive-month-page, .date-archive-year-card, .date-archive-month-section, .date-archive-pinned { display: grid; gap: 1rem; }
+      .date-archive-pinned { padding: 1rem 1.05rem; border: 1px solid #fbbf24; border-radius: 1rem; background: #fffbebcc; box-shadow: 0 10px 24px -24px #d97706; }
+      .date-archive-pinned__header { display: grid; gap: 0.4rem; }
       .date-archive-month-jump-list { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
       .date-archive-month-list li, .date-archive-month-jump-list li { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; }
       .date-archive-entry-list { counter-reset: archive-item; }
       .date-archive-entry-list > li { counter-increment: archive-item; }
       .date-archive-entry-list--cards { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-      .date-archive-entry__meta, .date-archive-count, .date-archive-latest, .date-archive-section-links { margin: 0; color: #475569; font-size: 0.92rem; }
+      .date-archive-entry-list--pinned { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+      .date-archive-entry__meta, .date-archive-count, .date-archive-latest, .date-archive-pinned-count, .date-archive-section-links { margin: 0; color: #475569; font-size: 0.92rem; }
       .date-archive-entry__eyebrow { color: #1d4ed8; }
+      .date-archive-entry--pinned .date-archive-entry__eyebrow, .date-archive-pinned .date-archive-eyebrow { color: #b45309; }
       .date-archive-entry__excerpt { margin: 0; color: #334155; }
       .date-archive-entry__actions { margin: 0; font-weight: 600; }
-      .date-archive-entry h2, .date-archive-entry h3, .date-archive-year-card h2, .date-archive-month-section h2 { margin-top: 0.1rem; margin-bottom: 0.2rem; }
-      .date-archive-entry p:last-child, .date-archive-year-card p:last-child, .date-archive-month-section p:last-child, .date-archive-month-page p:last-child { margin-bottom: 0; }
+      .date-archive-entry h2, .date-archive-entry h3, .date-archive-year-card h2, .date-archive-month-section h2, .date-archive-pinned h2 { margin-top: 0.1rem; margin-bottom: 0.2rem; }
+      .date-archive-entry p:last-child, .date-archive-year-card p:last-child, .date-archive-month-section p:last-child, .date-archive-month-page p:last-child, .date-archive-pinned p:last-child { margin-bottom: 0; }
       .comparison-block__header { display: grid; gap: 0.55rem; }
       .comparison-block__eyebrow, .comparison-panel__eyebrow { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
       .comparison-block__title, .comparison-panel__title { margin: 0; }
@@ -1619,10 +1688,12 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
         .callout--tip { --callout-bg: #052e16; --callout-fg: #bbf7d0; }
         .callout--warning { --callout-bg: #450a0a; --callout-fg: #fecaca; }
         .comparison-block { border-color: #334155; background: linear-gradient(180deg, #0f172a 0%, #111827 100%); box-shadow: none; }
-        .date-archive-eyebrow, .date-archive-entry__meta, .date-archive-count, .date-archive-latest, .date-archive-section-links { color: #cbd5e1; }
+        .date-archive-eyebrow, .date-archive-entry__meta, .date-archive-count, .date-archive-latest, .date-archive-pinned-count, .date-archive-section-links { color: #cbd5e1; }
         .date-archive-year-card, .date-archive-month-section, .date-archive-entry { border-color: #334155; background: #111827; box-shadow: none; }
         .date-archive-entry--featured { border-left-color: #60a5fa; background: linear-gradient(180deg, #172554 0%, #111827 100%); }
+        .date-archive-entry--pinned, .date-archive-pinned { border-color: #b45309; background: linear-gradient(180deg, #451a03 0%, #111827 100%); }
         .date-archive-entry__eyebrow { color: #93c5fd; }
+        .date-archive-entry--pinned .date-archive-entry__eyebrow, .date-archive-pinned .date-archive-eyebrow { color: #fdba74; }
         .date-archive-entry__excerpt { color: #e2e8f0; }
         .comparison-block__eyebrow { color: #cbd5e1; }
         .comparison-block__summary { color: #cbd5e1; }

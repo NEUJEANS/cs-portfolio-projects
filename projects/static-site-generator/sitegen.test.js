@@ -709,6 +709,95 @@ description: Description fallback for older archive cards.
   assert.match(archiveMonthHtml, /class="date-archive-entry-list date-archive-entry-list--cards"/);
   assert.match(archiveMonthHtml, /href="\.\.\/\.\.\/\.\.\/posts\/benchmark-notes\.html">Benchmark Notes<\/a>/);
 });
+test('buildSite supports archive pinning without disturbing reverse-chronological timeline cards', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'posts'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Home
+order: 1
+---
+# Welcome`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'capstone.md'),
+    `---
+title: Capstone Case Study
+slug: capstone-case-study
+date: 2026-04-25T09:00:00Z
+archivePin: true
+archivePinRank: 2
+excerpt: Evergreen capstone walkthrough stays pinned for recruiter scans.
+---
+# Capstone Case Study`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'internship.md'),
+    `---
+title: Internship Deep Dive
+slug: internship-deep-dive
+date: 2026-04-15T09:00:00Z
+archivePin: true
+archivePinRank: 1
+---
+# Internship Deep Dive
+
+Pinned architecture recap for interview follow-ups.`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'launch.md'),
+    `---
+title: Launch Notes
+slug: launch-notes
+date: 2026-04-20T09:00:00Z
+---
+# Launch Notes
+
+Chronological launch note should remain the latest non-pinned archive entry.`,
+    'utf8'
+  );
+
+  fs.writeFileSync(
+    path.join(contentDir, 'posts', 'benchmarks.md'),
+    `---
+title: Benchmark Notes
+slug: benchmark-notes
+date: 2026-04-10T09:00:00Z
+---
+# Benchmark Notes
+
+Chronological benchmark note should remain in the standard archive grid.`,
+    'utf8'
+  );
+
+  buildSite(contentDir, outputDir);
+
+  const archiveIndexHtml = fs.readFileSync(path.join(outputDir, 'archives', 'index.html'), 'utf8');
+  const archiveYearHtml = fs.readFileSync(path.join(outputDir, 'archives', '2026', 'index.html'), 'utf8');
+  const archiveMonthHtml = fs.readFileSync(path.join(outputDir, 'archives', '2026', '04', 'index.html'), 'utf8');
+
+  assert.match(archiveIndexHtml, /2026 pinned updates/);
+  assert.match(archiveIndexHtml, /2 pinned/);
+  assert.match(archiveYearHtml, /2026 pinned updates/);
+  assert.match(archiveMonthHtml, /April 2026 pinned updates/);
+  assert.match(archiveYearHtml, /Latest in 2026/);
+  assert.match(archiveYearHtml, /href="\.\.\/\.\.\/posts\/launch-notes\.html">Launch Notes<\/a>/);
+  assert.match(archiveMonthHtml, /Latest in April 2026/);
+  assert.match(archiveMonthHtml, /href="\.\.\/\.\.\/\.\.\/posts\/benchmark-notes\.html">Benchmark Notes<\/a>/);
+  const pinnedSection = archiveYearHtml.match(/2026 pinned updates[\s\S]*?<\/section>/)?.[0] || '';
+  assert.ok(pinnedSection.indexOf('Internship Deep Dive') < pinnedSection.indexOf('Capstone Case Study'));
+  assert.equal((pinnedSection.match(/href="\.\.\/\.\.\/posts\/capstone-case-study\.html">Capstone Case Study<\/a>/g) || []).length, 1);
+});
+
 test('buildSite lets authors provide a custom 404 page without adding it to navigation by default', () => {
   const contentDir = makeTempDir();
   const outputDir = makeTempDir();
