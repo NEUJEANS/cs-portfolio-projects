@@ -1,6 +1,6 @@
 # Weighted assignment proof artifact: `sample_assignment_graph`
 
-- Generated: `2026-04-17T12:52:58Z`
+- Generated: `2026-04-17T13:45:27Z`
 - Solver: `successive-shortest-path`
 - Selected assignments: `3`
 - Total cost: `12`

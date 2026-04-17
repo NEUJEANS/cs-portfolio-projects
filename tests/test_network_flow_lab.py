@@ -531,6 +531,10 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('href="assignment.dot"', html)
         self.assertIn('href="assignment-proof.md"', html)
         self.assertIn('href="assignment-proof.svg"', html)
+        self.assertIn('id="assignment-diagram-title"', html)
+        self.assertIn('id="assignment-proof-title"', html)
+        self.assertNotIn('id="title"', html)
+        self.assertNotIn('id="desc"', html)
 
     def test_render_assignment_dot_includes_ranked_partitions_and_selected_costs(self) -> None:
         result = solve_weighted_assignment(
@@ -691,6 +695,12 @@ class NetworkFlowLabTests(unittest.TestCase):
         self.assertIn('href="cost-flow.dot"', html)
         self.assertIn('href="cost-flow-proof.md"', html)
         self.assertIn('href="cost-flow-proof.svg"', html)
+        self.assertIn('id="cost-diagram-title"', html)
+        self.assertIn('id="cost-proof-title"', html)
+        self.assertNotIn('id="title"', html)
+        self.assertNotIn('id="desc"', html)
+        self.assertIn('<code>s -&gt; a -&gt; t</code>', html)
+        self.assertNotIn('&amp;gt;', html)
 
     def test_render_artifact_gallery_html_links_assignment_and_cost_pages(self) -> None:
         html = render_artifact_gallery_html(

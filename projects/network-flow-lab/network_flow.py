@@ -1473,6 +1473,14 @@ def _html_escape(text: str) -> str:
     return html.escape(text, quote=True)
 
 
+def _namespace_embedded_svg_accessibility(svg: str, *, prefix: str) -> str:
+    return (
+        svg.replace('aria-labelledby="title desc"', f'aria-labelledby="{prefix}-title {prefix}-desc"')
+        .replace('id="title"', f'id="{prefix}-title"')
+        .replace('id="desc"', f'id="{prefix}-desc"')
+    )
+
+
 def _relative_output_path(target: Path, base_dir: Path) -> str:
     return Path(os.path.relpath(target, start=base_dir)).as_posix()
 
@@ -2190,14 +2198,20 @@ def render_min_cost_flow_artifact_html(
 ) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
     explanation = build_min_cost_flow_explanation(flow_result, target_flow=target_flow)
-    diagram_svg = render_min_cost_flow_diagram_svg(flow_result, graph_name=graph_name, target_flow=target_flow)
-    proof_svg = render_min_cost_flow_svg(flow_result, graph_name=graph_name, target_flow=target_flow)
+    diagram_svg = _namespace_embedded_svg_accessibility(
+        render_min_cost_flow_diagram_svg(flow_result, graph_name=graph_name, target_flow=target_flow),
+        prefix="cost-diagram",
+    )
+    proof_svg = _namespace_embedded_svg_accessibility(
+        render_min_cost_flow_svg(flow_result, graph_name=graph_name, target_flow=target_flow),
+        prefix="cost-proof",
+    )
     positive_flow_items = "".join(
         f"<li><code>{_html_escape(edge['source'])} -&gt; {_html_escape(edge['target'])}</code> · <code>{edge['flow']}/{edge['capacity']}</code> @ cost <code>{edge['cost']}</code></li>"
         for edge in explanation["positive_flow_edges"]
     ) or "<li>No edges carried positive flow.</li>"
     path_items = "".join(
-        f"<li><code>{_html_escape(' -&gt; '.join(step['path']))}</code> · bottleneck <code>{step['bottleneck']}</code> · unit cost <code>{step['cost_per_unit']}</code> · path cost <code>{step['path_cost']}</code></li>"
+        f"<li><code>{_html_escape(' -> '.join(step['path']))}</code> · bottleneck <code>{step['bottleneck']}</code> · unit cost <code>{step['cost_per_unit']}</code> · path cost <code>{step['path_cost']}</code></li>"
         for step in flow_result.augmenting_paths
     ) or "<li>No augmenting paths were found.</li>"
     narrative_items = "".join(
@@ -2655,8 +2669,14 @@ def render_assignment_artifact_html(
 ) -> str:
     generated = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
     explanation = build_assignment_explanation(assignment_result)
-    diagram_svg = render_assignment_diagram_svg(assignment_result, graph_name=graph_name)
-    proof_svg = render_assignment_svg(assignment_result, graph_name=graph_name)
+    diagram_svg = _namespace_embedded_svg_accessibility(
+        render_assignment_diagram_svg(assignment_result, graph_name=graph_name),
+        prefix="assignment-diagram",
+    )
+    proof_svg = _namespace_embedded_svg_accessibility(
+        render_assignment_svg(assignment_result, graph_name=graph_name),
+        prefix="assignment-proof",
+    )
     selected_assignment_items = "".join(
         f"<li><code>{_html_escape(item['left'])} -&gt; {_html_escape(item['right'])}</code> · cost <code>{item['cost']}</code></li>"
         for item in assignment_result.assignments
