@@ -60,6 +60,18 @@
     {
       "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
       "links": {
+        "csv": "2026-04-17-checkout-funnel-rolling-window-join-benchmark.csv",
+        "heatmap_csv": "2026-04-17-checkout-funnel-rolling-window-join-heatmap.csv",
+        "html": "2026-04-17-checkout-funnel-rolling-window-join-report.html",
+        "json": "2026-04-17-checkout-funnel-rolling-window-join-benchmark.json",
+        "markdown": "2026-04-17-checkout-funnel-rolling-window-join-report.md"
+      },
+      "slug": "2026-04-17-checkout-funnel-rolling-window-join",
+      "title": "2026-04-17 \u00b7 Checkout Funnel Rolling Window Join"
+    },
+    {
+      "description": "Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions.",
+      "links": {
         "csv": "2026-04-17-incident-spike-latency-benchmark.csv",
         "heatmap_csv": "2026-04-17-incident-spike-latency-heatmap.csv",
         "html": "2026-04-17-incident-spike-latency-report.html",
@@ -175,6 +187,18 @@
       },
       "slug": "plugin-max-score",
       "title": "Plugin Max Score"
+    },
+    {
+      "description": "Dedicated plugin reference page with hook summaries and source excerpts.",
+      "links": {
+        "csv": null,
+        "heatmap_csv": null,
+        "html": "plugin-pages/plugin-rolling-window-join.html",
+        "json": null,
+        "markdown": "plugin-pages/plugin-rolling-window-join.md"
+      },
+      "slug": "plugin-rolling-window-join",
+      "title": "Plugin Rolling Window Join"
     },
     {
       "description": "Dedicated plugin reference page with hook summaries and source excerpts.",

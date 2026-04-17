@@ -7,6 +7,7 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 - [Plugin catalog HTML](plugin-catalog.html)
 - [Inspection diff HTML — Plugin Comparison](plugin-comparison-diff.html)
 - [Benchmark report HTML — 2026-04-17 · Annotation View](2026-04-17-annotation-view-report.html)
+- [Benchmark report HTML — 2026-04-17 · Checkout Funnel Rolling Window Join](2026-04-17-checkout-funnel-rolling-window-join-report.html)
 - [Benchmark report HTML — 2026-04-17 · Incident Spike Latency](2026-04-17-incident-spike-latency-report.html)
 - [Benchmark report HTML — 2026-04-17 · IoT Burst Streaming Window](2026-04-17-iot-burst-streaming-window-report.html)
 - [Benchmark report HTML — 2026-04-17 · Project Week](2026-04-17-project-week-report.html)
@@ -26,6 +27,7 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 | --- | --- | --- |
 | `plugin-average-score` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-average-score.md) · [HTML](plugin-pages/plugin-average-score.html) |
 | `plugin-max-score` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-max-score.md) · [HTML](plugin-pages/plugin-max-score.html) |
+| `plugin-rolling-window-join` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-rolling-window-join.md) · [HTML](plugin-pages/plugin-rolling-window-join.html) |
 | `plugin-service-latency` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-service-latency.md) · [HTML](plugin-pages/plugin-service-latency.html) |
 | `plugin-sessionization` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-sessionization.md) · [HTML](plugin-pages/plugin-sessionization.html) |
 | `plugin-streaming-window` | Dedicated plugin reference page with hook summaries and source excerpts. | [Markdown](plugin-pages/plugin-streaming-window.md) · [HTML](plugin-pages/plugin-streaming-window.html) |
@@ -42,6 +44,7 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 | Report bundle | Description | Links |
 | --- | --- | --- |
 | 2026-04-17 · Annotation View | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-annotation-view-report.md) · [HTML](2026-04-17-annotation-view-report.html) · [JSON](2026-04-17-annotation-view-benchmark.json) · [CSV](2026-04-17-annotation-view-benchmark.csv) · [Heatmap CSV](2026-04-17-annotation-view-heatmap.csv) |
+| 2026-04-17 · Checkout Funnel Rolling Window Join | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-checkout-funnel-rolling-window-join-report.md) · [HTML](2026-04-17-checkout-funnel-rolling-window-join-report.html) · [JSON](2026-04-17-checkout-funnel-rolling-window-join-benchmark.json) · [CSV](2026-04-17-checkout-funnel-rolling-window-join-benchmark.csv) · [Heatmap CSV](2026-04-17-checkout-funnel-rolling-window-join-heatmap.csv) |
 | 2026-04-17 · Incident Spike Latency | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-incident-spike-latency-report.md) · [HTML](2026-04-17-incident-spike-latency-report.html) · [JSON](2026-04-17-incident-spike-latency-benchmark.json) · [CSV](2026-04-17-incident-spike-latency-benchmark.csv) · [Heatmap CSV](2026-04-17-incident-spike-latency-heatmap.csv) |
 | 2026-04-17 · IoT Burst Streaming Window | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-iot-burst-streaming-window-report.md) · [HTML](2026-04-17-iot-burst-streaming-window-report.html) · [JSON](2026-04-17-iot-burst-streaming-window-benchmark.json) · [CSV](2026-04-17-iot-burst-streaming-window-benchmark.csv) · [Heatmap CSV](2026-04-17-iot-burst-streaming-window-heatmap.csv) |
 | 2026-04-17 · Project Week | Benchmark report bundle with browser-friendly HTML plus raw JSON/CSV companions. | [Markdown](2026-04-17-project-week-report.md) · [HTML](2026-04-17-project-week-report.html) · [JSON](2026-04-17-project-week-benchmark.json) · [CSV](2026-04-17-project-week-benchmark.csv) · [Heatmap CSV](2026-04-17-project-week-heatmap.csv) |

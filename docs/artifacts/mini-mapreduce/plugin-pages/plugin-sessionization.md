@@ -6,7 +6,7 @@
 - Summary: Sessionization analytics plugin for product-usage benchmark demos.
 - Dataset families: `default, exam-revision, launch-day`
 - Catalog badges: `5 hooks` · `3 dataset families` · `commit pinned` · `github linked`
-- Repository commit: `8e9ad856e42484ad83d46bfe15fe4f0823004f77`
+- Repository commit: `2332425c37ad2eb7d0399cb11e91a2354e189d22`
 - Catalog index: [plugin catalog](../plugin-catalog.md)
 - Alternate format: [HTML](plugin-sessionization.html)
 
@@ -14,11 +14,11 @@
 
 | Hook | Export | Signature | Details | Source |
 | --- | --- | --- | --- | --- |
-| Mapper | `plugins_sessionization.map_records` | `map_records(lines)` | Emit per-user session events from comma-separated user,timestamp,page rows.<br>line 52<br>anchor `plugins_sessionization.py#L52-L62` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62) |
-| Reducer | `plugins_sessionization.reduce_key` | `reduce_key(_key, values)` | Summarize session count, duration, and activity intensity for one user.<br>line 70<br>anchor `plugins_sessionization.py#L70-L91` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91) |
-| Combiner | `plugins_sessionization.combine_values` | `combine_values(_key, values)` | Keep shard-local event batches JSON-safe before global sessionization.<br>line 65<br>anchor `plugins_sessionization.py#L65-L67` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67) |
-| Benchmark generator | `plugins_sessionization.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic product-analytics event streams for sessionization demos.<br>line 135<br>anchor `plugins_sessionization.py#L135-L206` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206) |
-| Benchmark note hook | `plugins_sessionization.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hotspot users and browsing patterns for each family.<br>line 209<br>anchor `plugins_sessionization.py#L209-L278` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278) |
+| Mapper | `plugins_sessionization.map_records` | `map_records(lines)` | Emit per-user session events from comma-separated user,timestamp,page rows.<br>line 52<br>anchor `plugins_sessionization.py#L52-L62` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62) |
+| Reducer | `plugins_sessionization.reduce_key` | `reduce_key(_key, values)` | Summarize session count, duration, and activity intensity for one user.<br>line 70<br>anchor `plugins_sessionization.py#L70-L91` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91) |
+| Combiner | `plugins_sessionization.combine_values` | `combine_values(_key, values)` | Keep shard-local event batches JSON-safe before global sessionization.<br>line 65<br>anchor `plugins_sessionization.py#L65-L67` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67) |
+| Benchmark generator | `plugins_sessionization.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic product-analytics event streams for sessionization demos.<br>line 135<br>anchor `plugins_sessionization.py#L135-L206` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206) |
+| Benchmark note hook | `plugins_sessionization.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hotspot users and browsing patterns for each family.<br>line 209<br>anchor `plugins_sessionization.py#L209-L278` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278) |
 
 ## Hook source excerpts
 
@@ -28,7 +28,7 @@
 - Source line: `52`
 - Source anchor: `plugins_sessionization.py#L52-L62`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L52-L62>
 
 ```python
 def map_records(lines):
@@ -50,7 +50,7 @@ def map_records(lines):
 - Source line: `70`
 - Source anchor: `plugins_sessionization.py#L70-L91`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L70-L91>
 
 ```python
 def reduce_key(_key, values):
@@ -83,7 +83,7 @@ def reduce_key(_key, values):
 - Source line: `65`
 - Source anchor: `plugins_sessionization.py#L65-L67`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L65-L67>
 
 ```python
 def combine_values(_key, values):
@@ -97,7 +97,7 @@ def combine_values(_key, values):
 - Source line: `135`
 - Source anchor: `plugins_sessionization.py#L135-L206`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L135-L206>
 
 ```python
 def benchmark_records(scenario, records, seed, dataset_family="default"):
@@ -180,7 +180,7 @@ def benchmark_records(scenario, records, seed, dataset_family="default"):
 - Source line: `209`
 - Source anchor: `plugins_sessionization.py#L209-L278`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_sessionization.py#L209-L278>
 
 ```python
 def benchmark_notes(scenario, dataset_family="default"):

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin doc — plugin-rolling-window-join</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1080px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.8rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.8rem; }
+    .badge { display: inline-block; margin: 0.15rem 0.3rem 0.15rem 0; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(59, 130, 246, 0.10); }
+    article { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin doc: <code>plugin-rolling-window-join</code></h1>
+  <ul class="meta"><li><strong>Plugin path</strong><br><code>projects/mini-mapreduce-lab/plugins_rolling_window_join.py</code></li><li><strong>Summary</strong><br>Rolling-window join plugin for multi-stream correlation and pipeline-debug demos.</li><li><strong>Dataset families</strong><br><code>default, checkout-funnel, incident-correlation</code></li><li><strong>Catalog badges</strong><br><span class="badge">5 hooks</span><span class="badge">3 dataset families</span><span class="badge">commit pinned</span><span class="badge">github linked</span></li><li><strong>Repository commit</strong><br><code>2332425c37ad2eb7d0399cb11e91a2354e189d22</code></li><li><strong>Catalog index</strong><br><a href="../plugin-catalog.html">plugin catalog</a></li><li><strong>Alternate format</strong><br><a href="plugin-rolling-window-join.md">Markdown</a></li></ul>
+  <section>
+    <h2>Hook summary</h2>
+    <table>
+      <thead><tr><th>Hook</th><th>Export</th><th>Signature</th><th>Details</th><th>Source</th></tr></thead>
+      <tbody><tr><td>Mapper</td><td><code>plugins_rolling_window_join.map_records</code></td><td><code>map_records(lines)</code></td><td>Emit per-correlation-key event batches from key,side,timestamp,label rows.<br>line 182<br>anchor <code>plugins_rolling_window_join.py#L182-L196</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L182-L196">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L182-L196">commit</a></td></tr><tr><td>Reducer</td><td><code>plugins_rolling_window_join.reduce_key</code></td><td><code>reduce_key(key, values)</code></td><td>Pair left/right events within a rolling join window and summarize unmatched spillover.<br>line 204<br>anchor <code>plugins_rolling_window_join.py#L204-L270</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L204-L270">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L204-L270">commit</a></td></tr><tr><td>Combiner</td><td><code>plugins_rolling_window_join.combine_values</code></td><td><code>combine_values(_key, values)</code></td><td>Keep shard-local join candidates JSON-safe before final pairing.<br>line 199<br>anchor <code>plugins_rolling_window_join.py#L199-L201</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L199-L201">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L199-L201">commit</a></td></tr><tr><td>Benchmark generator</td><td><code>plugins_rolling_window_join.benchmark_records</code></td><td><code>benchmark_records(scenario, records, seed, dataset_family=&#x27;default&#x27;)</code></td><td>Generate deterministic two-stream correlation fixtures for rolling join demos.<br>line 273<br>anchor <code>plugins_rolling_window_join.py#L273-L348</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L273-L348">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L273-L348">commit</a></td></tr><tr><td>Benchmark note hook</td><td><code>plugins_rolling_window_join.benchmark_notes</code></td><td><code>benchmark_notes(scenario, dataset_family=&#x27;default&#x27;)</code></td><td>Describe the intended join hotspot and portfolio story for each synthetic family.<br>line 351<br>anchor <code>plugins_rolling_window_join.py#L351-L420</code></td><td><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L351-L420">github</a><br><a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L351-L420">commit</a></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Hook source excerpts</h2>
+    <article><h2>Mapper: <code>plugins_rolling_window_join.map_records</code></h2><p><strong>Summary:</strong> Emit per-correlation-key event batches from key,side,timestamp,label rows.</p><p><strong>Source line:</strong> <code>182</code></p><p><strong>Source anchor:</strong> <code>plugins_rolling_window_join.py#L182-L196</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L182-L196">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L182-L196</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L182-L196">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L182-L196</a></p><pre><code>def map_records(lines):
+    &quot;&quot;&quot;Emit per-correlation-key event batches from key,side,timestamp,label rows.&quot;&quot;&quot;
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        key, side, event_at, label = [part.strip() for part in stripped.split(&quot;,&quot;, maxsplit=3)]
+        normalized_side = side.lower()
+        if normalized_side not in {&quot;left&quot;, &quot;right&quot;}:
+            raise ValueError(&quot;rolling-window-join side must be &#x27;left&#x27; or &#x27;right&#x27;&quot;)
+        yield key.lower(), {
+            &quot;side&quot;: normalized_side,
+            &quot;event_at&quot;: _isoformat_z(_parse_timestamp(event_at)),
+            &quot;label&quot;: label,
+        }</code></pre></article><article><h2>Reducer: <code>plugins_rolling_window_join.reduce_key</code></h2><p><strong>Summary:</strong> Pair left/right events within a rolling join window and summarize unmatched spillover.</p><p><strong>Source line:</strong> <code>204</code></p><p><strong>Source anchor:</strong> <code>plugins_rolling_window_join.py#L204-L270</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L204-L270">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L204-L270</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L204-L270">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L204-L270</a></p><pre><code>def reduce_key(key, values):
+    &quot;&quot;&quot;Pair left/right events within a rolling join window and summarize unmatched spillover.&quot;&quot;&quot;
+    merged = _merge_event_batches(values)
+    events = merged[&quot;events&quot;]
+    left_events = [event for event in events if event[&quot;side&quot;] == &quot;left&quot;]
+    right_events = [event for event in events if event[&quot;side&quot;] == &quot;right&quot;]
+    used_right = set()
+    windows = {}
+    gap_seconds_values = []
+
+    for left_event in left_events:
+        left_time = _parse_timestamp(left_event[&quot;event_at&quot;])
+        best_index = None
+        best_gap = None
+        for index, right_event in enumerate(right_events):
+            if index in used_right:
+                continue
+            right_time = _parse_timestamp(right_event[&quot;event_at&quot;])
+            gap_seconds = abs((right_time - left_time).total_seconds())
+            if gap_seconds &gt; JOIN_WINDOW_SECONDS:
+                continue
+            if best_index is None or gap_seconds &lt; best_gap or (
+                gap_seconds == best_gap and right_event[&quot;event_at&quot;] &lt; right_events[best_index][&quot;event_at&quot;]
+            ):
+                best_index = index
+                best_gap = gap_seconds
+        if best_index is None:
+            _record_unmatched(windows, event=left_event, side=&quot;left&quot;)
+            continue
+        used_right.add(best_index)
+        matched_right = right_events[best_index]
+        gap_seconds = float(best_gap if best_gap is not None else 0.0)
+        gap_seconds_values.append(gap_seconds)
+        _record_matched_pair(windows, left_event=left_event, right_event=matched_right, gap_seconds=gap_seconds)
+
+    for index, right_event in enumerate(right_events):
+        if index not in used_right:
+            _record_unmatched(windows, event=right_event, side=&quot;right&quot;)
+
+    finalized_windows = [_finalize_window_summary(windows[window_key]) for window_key in sorted(windows)]
+    matched_pairs = sum(item[&quot;matched_pairs&quot;] for item in finalized_windows)
+    unmatched_left = sum(item[&quot;left_only_events&quot;] for item in finalized_windows)
+    unmatched_right = sum(item[&quot;right_only_events&quot;] for item in finalized_windows)
+    total_left = sum(item[&quot;left_events&quot;] for item in finalized_windows)
+    total_right = sum(item[&quot;right_events&quot;] for item in finalized_windows)
+    hottest_window = max(
+        finalized_windows,
+        key=lambda item: (item[&quot;matched_pairs&quot;], item[&quot;left_events&quot;] + item[&quot;right_events&quot;], item[&quot;window_start&quot;]),
+        default=None,
+    )
+    matched_candidate_total = min(total_left, total_right)
+    return {
+        &quot;correlation_key&quot;: key,
+        &quot;window_count&quot;: len(finalized_windows),
+        &quot;left_events&quot;: total_left,
+        &quot;right_events&quot;: total_right,
+        &quot;matched_pairs&quot;: matched_pairs,
+        &quot;unmatched_left_events&quot;: unmatched_left,
+        &quot;unmatched_right_events&quot;: unmatched_right,
+        &quot;join_coverage_rate&quot;: round(matched_pairs / matched_candidate_total, 3) if matched_candidate_total else 0.0,
+        &quot;avg_gap_seconds&quot;: round(sum(gap_seconds_values) / len(gap_seconds_values), 3) if gap_seconds_values else 0.0,
+        &quot;max_gap_seconds&quot;: round(max(gap_seconds_values), 3) if gap_seconds_values else 0.0,
+        &quot;join_window_minutes&quot;: JOIN_WINDOW_MINUTES,
+        &quot;hottest_window_start&quot;: hottest_window[&quot;window_start&quot;] if hottest_window else None,
+        &quot;hottest_window_matches&quot;: hottest_window[&quot;matched_pairs&quot;] if hottest_window else 0,
+        &quot;windows&quot;: finalized_windows,
+    }</code></pre></article><article><h2>Combiner: <code>plugins_rolling_window_join.combine_values</code></h2><p><strong>Summary:</strong> Keep shard-local join candidates JSON-safe before final pairing.</p><p><strong>Source line:</strong> <code>199</code></p><p><strong>Source anchor:</strong> <code>plugins_rolling_window_join.py#L199-L201</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L199-L201">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L199-L201</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L199-L201">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L199-L201</a></p><pre><code>def combine_values(_key, values):
+    &quot;&quot;&quot;Keep shard-local join candidates JSON-safe before final pairing.&quot;&quot;&quot;
+    return {&quot;events&quot;: sorted(values, key=lambda event: (event[&quot;event_at&quot;], event[&quot;side&quot;], event[&quot;label&quot;]))}</code></pre></article><article><h2>Benchmark generator: <code>plugins_rolling_window_join.benchmark_records</code></h2><p><strong>Summary:</strong> Generate deterministic two-stream correlation fixtures for rolling join demos.</p><p><strong>Source line:</strong> <code>273</code></p><p><strong>Source anchor:</strong> <code>plugins_rolling_window_join.py#L273-L348</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L273-L348">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L273-L348</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L273-L348">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L273-L348</a></p><pre><code>def benchmark_records(scenario, records, seed, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Generate deterministic two-stream correlation fixtures for rolling join demos.&quot;&quot;&quot;
+    if records &lt;= 0:
+        raise ValueError(&quot;records must be positive&quot;)
+    rng = random.Random(seed)
+    base_time = datetime(2026, 4, 17, 9, 0, tzinfo=timezone.utc)
+
+    families = {
+        &quot;default&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;key&quot;: &quot;join-pod-alpha&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.86, &quot;right_lag_seconds&quot;: 52},
+                {&quot;key&quot;: &quot;join-pod-beta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 5, 10], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.84, &quot;right_lag_seconds&quot;: 61},
+                {&quot;key&quot;: &quot;join-pod-gamma&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 10, 15], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.83, &quot;right_lag_seconds&quot;: 57},
+                {&quot;key&quot;: &quot;join-pod-delta&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 15], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.82, &quot;right_lag_seconds&quot;: 68},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;key&quot;: &quot;join-hotspot&quot;, &quot;weight&quot;: 4.0, &quot;window_offsets&quot;: [10, 10, 15], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.72, &quot;right_lag_seconds&quot;: 97, &quot;hotspot_offsets&quot;: [10], &quot;hotspot_bonus&quot;: 40, &quot;left_only_share&quot;: 0.7},
+                {&quot;key&quot;: &quot;join-pod-beta&quot;, &quot;weight&quot;: 1.1, &quot;window_offsets&quot;: [0, 10, 15], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.82, &quot;right_lag_seconds&quot;: 64},
+                {&quot;key&quot;: &quot;join-pod-gamma&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 15, 20], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.8, &quot;right_lag_seconds&quot;: 70},
+                {&quot;key&quot;: &quot;join-pod-delta&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [0, 15, 20], &quot;left_label&quot;: &quot;request-start&quot;, &quot;right_label&quot;: &quot;request-finish&quot;, &quot;match_ratio&quot;: 0.78, &quot;right_lag_seconds&quot;: 75},
+            ],
+        },
+        &quot;checkout-funnel&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;key&quot;: &quot;checkout-core&quot;, &quot;weight&quot;: 1.2, &quot;window_offsets&quot;: [5, 10, 15], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.88, &quot;right_lag_seconds&quot;: 48},
+                {&quot;key&quot;: &quot;express-lane&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 10, 15], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.9, &quot;right_lag_seconds&quot;: 38},
+                {&quot;key&quot;: &quot;promo-retry&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 20], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.8, &quot;right_lag_seconds&quot;: 66},
+                {&quot;key&quot;: &quot;inventory-sync&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [0, 5, 15], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.84, &quot;right_lag_seconds&quot;: 58},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;key&quot;: &quot;checkout-core&quot;, &quot;weight&quot;: 4.3, &quot;window_offsets&quot;: [10, 10, 15], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.7, &quot;right_lag_seconds&quot;: 102, &quot;hotspot_offsets&quot;: [10], &quot;hotspot_bonus&quot;: 55, &quot;left_only_share&quot;: 0.75},
+                {&quot;key&quot;: &quot;promo-retry&quot;, &quot;weight&quot;: 1.5, &quot;window_offsets&quot;: [10, 15, 20], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.76, &quot;right_lag_seconds&quot;: 88, &quot;hotspot_offsets&quot;: [15], &quot;hotspot_bonus&quot;: 32, &quot;left_only_share&quot;: 0.65},
+                {&quot;key&quot;: &quot;express-lane&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 15, 20], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.86, &quot;right_lag_seconds&quot;: 42},
+                {&quot;key&quot;: &quot;inventory-sync&quot;, &quot;weight&quot;: 0.8, &quot;window_offsets&quot;: [0, 10, 20], &quot;left_label&quot;: &quot;cart-update&quot;, &quot;right_label&quot;: &quot;payment-auth&quot;, &quot;match_ratio&quot;: 0.8, &quot;right_lag_seconds&quot;: 63},
+            ],
+        },
+        &quot;incident-correlation&quot;: {
+            &quot;balanced&quot;: [
+                {&quot;key&quot;: &quot;payments-api&quot;, &quot;weight&quot;: 1.1, &quot;window_offsets&quot;: [0, 5, 10], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.83, &quot;right_lag_seconds&quot;: 74},
+                {&quot;key&quot;: &quot;auth-gateway&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [0, 10, 15], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.82, &quot;right_lag_seconds&quot;: 81},
+                {&quot;key&quot;: &quot;search-api&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 10, 20], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.84, &quot;right_lag_seconds&quot;: 72},
+                {&quot;key&quot;: &quot;edge-cache&quot;, &quot;weight&quot;: 0.9, &quot;window_offsets&quot;: [0, 15, 20], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.8, &quot;right_lag_seconds&quot;: 90},
+            ],
+            &quot;skewed&quot;: [
+                {&quot;key&quot;: &quot;payments-api&quot;, &quot;weight&quot;: 4.1, &quot;window_offsets&quot;: [15, 20, 20], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.68, &quot;right_lag_seconds&quot;: 118, &quot;hotspot_offsets&quot;: [20], &quot;hotspot_bonus&quot;: 48, &quot;left_only_share&quot;: 0.72},
+                {&quot;key&quot;: &quot;auth-gateway&quot;, &quot;weight&quot;: 1.4, &quot;window_offsets&quot;: [10, 15, 20], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.74, &quot;right_lag_seconds&quot;: 96, &quot;hotspot_offsets&quot;: [15], &quot;hotspot_bonus&quot;: 26, &quot;left_only_share&quot;: 0.62},
+                {&quot;key&quot;: &quot;search-api&quot;, &quot;weight&quot;: 1.0, &quot;window_offsets&quot;: [5, 15, 25], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.82, &quot;right_lag_seconds&quot;: 77},
+                {&quot;key&quot;: &quot;edge-cache&quot;, &quot;weight&quot;: 0.8, &quot;window_offsets&quot;: [0, 10, 25], &quot;left_label&quot;: &quot;alert-fired&quot;, &quot;right_label&quot;: &quot;deploy-event&quot;, &quot;match_ratio&quot;: 0.78, &quot;right_lag_seconds&quot;: 88},
+            ],
+        },
+    }
+    if dataset_family not in families or scenario not in families[dataset_family]:
+        raise ValueError(f&quot;unsupported plugin benchmark scenario/family: {scenario}/{dataset_family}&quot;)
+
+    profiles = families[dataset_family][scenario]
+    counts = _allocate_counts(records, [profile[&quot;weight&quot;] for profile in profiles])
+    lines = []
+    for profile, count in zip(profiles, counts):
+        lines.extend(
+            _generate_join_events(
+                key=profile[&quot;key&quot;],
+                count=count,
+                base_time=base_time,
+                window_offsets=profile[&quot;window_offsets&quot;],
+                left_label=profile[&quot;left_label&quot;],
+                right_label=profile[&quot;right_label&quot;],
+                rng=rng,
+                match_ratio=profile[&quot;match_ratio&quot;],
+                right_lag_seconds=profile[&quot;right_lag_seconds&quot;],
+                hotspot_offsets=profile.get(&quot;hotspot_offsets&quot;),
+                hotspot_bonus=profile.get(&quot;hotspot_bonus&quot;, 0),
+                left_only_share=profile.get(&quot;left_only_share&quot;, 0.5),
+            )
+        )
+    lines.sort(key=lambda line: tuple(line.split(&quot;,&quot;, maxsplit=3)[:3]))
+    return lines[:records]</code></pre></article><article><h2>Benchmark note hook: <code>plugins_rolling_window_join.benchmark_notes</code></h2><p><strong>Summary:</strong> Describe the intended join hotspot and portfolio story for each synthetic family.</p><p><strong>Source line:</strong> <code>351</code></p><p><strong>Source anchor:</strong> <code>plugins_rolling_window_join.py#L351-L420</code></p><p><strong>GitHub source:</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L351-L420">https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L351-L420</a></p><p><strong>GitHub source (commit pinned):</strong> <a href="https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L351-L420">https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_rolling_window_join.py#L351-L420</a></p><pre><code>def benchmark_notes(scenario, dataset_family=&quot;default&quot;):
+    &quot;&quot;&quot;Describe the intended join hotspot and portfolio story for each synthetic family.&quot;&quot;&quot;
+    notes = {
+        (&quot;balanced&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Steady correlation baseline&quot;,
+                &quot;detail&quot;: &quot;The default balanced family keeps four correlation keys close together with only mild spillover, so the report reads like a healthy request/response join workload instead of an incident.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the before state when explaining how one correlation key can dominate a rolling join workload even if the reducer partitioner stays deterministic.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;default&quot;): [
+            {
+                &quot;title&quot;: &quot;Join hotspot concentration&quot;,
+                &quot;detail&quot;: &quot;`join-hotspot` absorbs most of the left/right traffic here, so the hottest reducer should read like one correlation key monopolizing the join stage and leaving extra unmatched left events behind.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;join-hotspot&quot;],
+                &quot;takeaway&quot;: &quot;This is the simplest story for showing why stream joins introduce both hotspot pressure and mismatch cleanup work.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;checkout-funnel&quot;): [
+            {
+                &quot;title&quot;: &quot;Healthy checkout handoff&quot;,
+                &quot;detail&quot;: &quot;The balanced checkout family keeps `cart-update` and `payment-auth` events closely paired across several flows, so the join output reads like a normal purchase funnel rather than a broken queue.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Good for presenting the plugin as a product/commerce analytics example instead of only infra telemetry.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;checkout-funnel&quot;): [
+            {
+                &quot;title&quot;: &quot;Checkout core backlog&quot;,
+                &quot;detail&quot;: &quot;`checkout-core` becomes the dominant join key with the worst pairing lag, so the report looks like a spike of cart updates outrunning payment authorizations during a launch or sale.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;checkout-core&quot;],
+                &quot;takeaway&quot;: &quot;Call out the combination of lower coverage and higher gap when telling the story of queue lag or degraded downstream auth capacity.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Promo retry spillover&quot;,
+                &quot;detail&quot;: &quot;`promo-retry` is the second-tier correlation hotspot behind checkout-core, which helps explain how retries can spread join pressure to a supporting flow instead of one isolated key.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;promo-retry&quot;],
+                &quot;takeaway&quot;: &quot;Keep this note when you want the benchmark to feel like a fuller checkout system instead of one synthetic broken key.&quot;,
+            },
+        ],
+        (&quot;balanced&quot;, &quot;incident-correlation&quot;): [
+            {
+                &quot;title&quot;: &quot;Routine alert/deploy audit trail&quot;,
+                &quot;detail&quot;: &quot;The balanced incident-correlation family keeps alerts and deploy events close enough that the join output reads like a calm incident-review dashboard instead of a chaotic release.&quot;,
+                &quot;severity&quot;: &quot;info&quot;,
+                &quot;takeaway&quot;: &quot;Use this as the steady baseline before a noisy release or rollback starts separating alerts from the deploys that explain them.&quot;,
+            },
+        ],
+        (&quot;skewed&quot;, &quot;incident-correlation&quot;): [
+            {
+                &quot;title&quot;: &quot;Payments incident war room&quot;,
+                &quot;detail&quot;: &quot;`payments-api` dominates the skewed incident family with long join gaps and extra unmatched alerts, so the benchmark looks like a release that triggered alarms faster than deploy metadata propagated.&quot;,
+                &quot;severity&quot;: &quot;risk&quot;,
+                &quot;hotspot_keys&quot;: [&quot;payments-api&quot;],
+                &quot;takeaway&quot;: &quot;This turns the plugin into a systems-debugging narrative about correlating alerts, deploys, and lagging metadata streams.&quot;,
+            },
+            {
+                &quot;title&quot;: &quot;Auth gateway follow-on noise&quot;,
+                &quot;detail&quot;: &quot;`auth-gateway` forms a smaller supporting hotspot that helps the report tell a more realistic multi-service release story instead of one isolated outage key.&quot;,
+                &quot;severity&quot;: &quot;watch&quot;,
+                &quot;hotspot_keys&quot;: [&quot;auth-gateway&quot;],
+                &quot;takeaway&quot;: &quot;Keep this note when you want to explain correlated release fallout across adjacent services.&quot;,
+            },
+        ],
+    }
+    return notes.get((scenario, dataset_family), [])</code></pre></article>
+  </section>
+</body>
+</html>

@@ -6,7 +6,7 @@
 - Summary: Streaming-window aggregation plugin for telemetry-style benchmark demos.
 - Dataset families: `default, iot-burst, live-ops`
 - Catalog badges: `5 hooks` · `3 dataset families` · `commit pinned` · `github linked`
-- Repository commit: `8e9ad856e42484ad83d46bfe15fe4f0823004f77`
+- Repository commit: `2332425c37ad2eb7d0399cb11e91a2354e189d22`
 - Catalog index: [plugin catalog](../plugin-catalog.md)
 - Alternate format: [HTML](plugin-streaming-window.html)
 
@@ -14,11 +14,11 @@
 
 | Hook | Export | Signature | Details | Source |
 | --- | --- | --- | --- | --- |
-| Mapper | `plugins_streaming_window.map_records` | `map_records(lines)` | Emit per-stream, per-window summary objects from stream,timestamp,value rows.<br>line 73<br>anchor `plugins_streaming_window.py#L73-L90` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90) |
-| Reducer | `plugins_streaming_window.reduce_key` | `reduce_key(key, values)` | Return window-level count, range, and rate metrics for one stream bucket.<br>line 98<br>anchor `plugins_streaming_window.py#L98-L123` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123) |
-| Combiner | `plugins_streaming_window.combine_values` | `combine_values(_key, values)` | Merge shard-local window summaries before the final reduce step.<br>line 93<br>anchor `plugins_streaming_window.py#L93-L95` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95) |
-| Benchmark generator | `plugins_streaming_window.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic windowed telemetry fixtures for benchmark scenarios.<br>line 139<br>anchor `plugins_streaming_window.py#L139-L212` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212) |
-| Benchmark note hook | `plugins_streaming_window.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hot windows and portfolio story for each family.<br>line 215<br>anchor `plugins_streaming_window.py#L215-L284` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284) |
+| Mapper | `plugins_streaming_window.map_records` | `map_records(lines)` | Emit per-stream, per-window summary objects from stream,timestamp,value rows.<br>line 73<br>anchor `plugins_streaming_window.py#L73-L90` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90) |
+| Reducer | `plugins_streaming_window.reduce_key` | `reduce_key(key, values)` | Return window-level count, range, and rate metrics for one stream bucket.<br>line 98<br>anchor `plugins_streaming_window.py#L98-L123` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123) |
+| Combiner | `plugins_streaming_window.combine_values` | `combine_values(_key, values)` | Merge shard-local window summaries before the final reduce step.<br>line 93<br>anchor `plugins_streaming_window.py#L93-L95` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95) |
+| Benchmark generator | `plugins_streaming_window.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic windowed telemetry fixtures for benchmark scenarios.<br>line 139<br>anchor `plugins_streaming_window.py#L139-L212` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212) |
+| Benchmark note hook | `plugins_streaming_window.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended hot windows and portfolio story for each family.<br>line 215<br>anchor `plugins_streaming_window.py#L215-L284` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284) |
 
 ## Hook source excerpts
 
@@ -28,7 +28,7 @@
 - Source line: `73`
 - Source anchor: `plugins_streaming_window.py#L73-L90`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L73-L90>
 
 ```python
 def map_records(lines):
@@ -57,7 +57,7 @@ def map_records(lines):
 - Source line: `98`
 - Source anchor: `plugins_streaming_window.py#L98-L123`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L98-L123>
 
 ```python
 def reduce_key(key, values):
@@ -94,7 +94,7 @@ def reduce_key(key, values):
 - Source line: `93`
 - Source anchor: `plugins_streaming_window.py#L93-L95`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L93-L95>
 
 ```python
 def combine_values(_key, values):
@@ -108,7 +108,7 @@ def combine_values(_key, values):
 - Source line: `139`
 - Source anchor: `plugins_streaming_window.py#L139-L212`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L139-L212>
 
 ```python
 def benchmark_records(scenario, records, seed, dataset_family="default"):
@@ -193,7 +193,7 @@ def benchmark_records(scenario, records, seed, dataset_family="default"):
 - Source line: `215`
 - Source anchor: `plugins_streaming_window.py#L215-L284`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_streaming_window.py#L215-L284>
 
 ```python
 def benchmark_notes(scenario, dataset_family="default"):

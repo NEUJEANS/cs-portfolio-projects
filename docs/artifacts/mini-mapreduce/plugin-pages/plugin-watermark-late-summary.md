@@ -6,7 +6,7 @@
 - Summary: Watermark-aware late-event summary plugin for out-of-order stream-processing demos.
 - Dataset families: `default, sensor-backfill, live-replay`
 - Catalog badges: `5 hooks` · `3 dataset families` · `commit pinned` · `github linked`
-- Repository commit: `8e9ad856e42484ad83d46bfe15fe4f0823004f77`
+- Repository commit: `2332425c37ad2eb7d0399cb11e91a2354e189d22`
 - Catalog index: [plugin catalog](../plugin-catalog.md)
 - Alternate format: [HTML](plugin-watermark-late-summary.html)
 
@@ -14,11 +14,11 @@
 
 | Hook | Export | Signature | Details | Source |
 | --- | --- | --- | --- | --- |
-| Mapper | `plugins_watermark_late_summary.map_records` | `map_records(lines)` | Emit per-stream event batches from stream,event_time,arrival_time,value rows.<br>line 136<br>anchor `plugins_watermark_late_summary.py#L136-L147` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147) |
-| Reducer | `plugins_watermark_late_summary.reduce_key` | `reduce_key(key, values)` | Summarize watermark-aware acceptance, late updates, and dropped events for one stream.<br>line 155<br>anchor `plugins_watermark_late_summary.py#L155-L223` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223) |
-| Combiner | `plugins_watermark_late_summary.combine_values` | `combine_values(_key, values)` | Keep shard-local stream event batches JSON-safe before watermark evaluation.<br>line 150<br>anchor `plugins_watermark_late_summary.py#L150-L152` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152) |
-| Benchmark generator | `plugins_watermark_late_summary.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic out-of-order event streams for watermark-summary demos.<br>line 266<br>anchor `plugins_watermark_late_summary.py#L266-L341` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341) |
-| Benchmark note hook | `plugins_watermark_late_summary.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended late-event hotspot story for each synthetic family.<br>line 344<br>anchor `plugins_watermark_late_summary.py#L344-L413` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413) |
+| Mapper | `plugins_watermark_late_summary.map_records` | `map_records(lines)` | Emit per-stream event batches from stream,event_time,arrival_time,value rows.<br>line 136<br>anchor `plugins_watermark_late_summary.py#L136-L147` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147) |
+| Reducer | `plugins_watermark_late_summary.reduce_key` | `reduce_key(key, values)` | Summarize watermark-aware acceptance, late updates, and dropped events for one stream.<br>line 155<br>anchor `plugins_watermark_late_summary.py#L155-L223` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223) |
+| Combiner | `plugins_watermark_late_summary.combine_values` | `combine_values(_key, values)` | Keep shard-local stream event batches JSON-safe before watermark evaluation.<br>line 150<br>anchor `plugins_watermark_late_summary.py#L150-L152` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152) |
+| Benchmark generator | `plugins_watermark_late_summary.benchmark_records` | `benchmark_records(scenario, records, seed, dataset_family='default')` | Generate deterministic out-of-order event streams for watermark-summary demos.<br>line 266<br>anchor `plugins_watermark_late_summary.py#L266-L341` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341) |
+| Benchmark note hook | `plugins_watermark_late_summary.benchmark_notes` | `benchmark_notes(scenario, dataset_family='default')` | Describe the intended late-event hotspot story for each synthetic family.<br>line 344<br>anchor `plugins_watermark_late_summary.py#L344-L413` | [github](https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413)<br>[commit](https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413) |
 
 ## Hook source excerpts
 
@@ -28,7 +28,7 @@
 - Source line: `136`
 - Source anchor: `plugins_watermark_late_summary.py#L136-L147`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L136-L147>
 
 ```python
 def map_records(lines):
@@ -51,7 +51,7 @@ def map_records(lines):
 - Source line: `155`
 - Source anchor: `plugins_watermark_late_summary.py#L155-L223`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L155-L223>
 
 ```python
 def reduce_key(key, values):
@@ -131,7 +131,7 @@ def reduce_key(key, values):
 - Source line: `150`
 - Source anchor: `plugins_watermark_late_summary.py#L150-L152`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L150-L152>
 
 ```python
 def combine_values(_key, values):
@@ -145,7 +145,7 @@ def combine_values(_key, values):
 - Source line: `266`
 - Source anchor: `plugins_watermark_late_summary.py#L266-L341`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L266-L341>
 
 ```python
 def benchmark_records(scenario, records, seed, dataset_family="default"):
@@ -232,7 +232,7 @@ def benchmark_records(scenario, records, seed, dataset_family="default"):
 - Source line: `344`
 - Source anchor: `plugins_watermark_late_summary.py#L344-L413`
 - GitHub source: <https://github.com/NEUJEANS/cs-portfolio-projects/blob/main/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413>
-- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/8e9ad856e42484ad83d46bfe15fe4f0823004f77/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413>
+- GitHub source (commit pinned): <https://github.com/NEUJEANS/cs-portfolio-projects/blob/2332425c37ad2eb7d0399cb11e91a2354e189d22/projects/mini-mapreduce-lab/plugins_watermark_late_summary.py#L344-L413>
 
 ```python
 def benchmark_notes(scenario, dataset_family="default"):
