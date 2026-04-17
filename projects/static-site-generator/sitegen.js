@@ -1096,6 +1096,101 @@ function buildArchiveMonthOutputName(year, monthNumber) {
   return `archives/${year}/${monthNumber}/index.html`;
 }
 
+function buildPaginatedOutputName(baseOutputName, pageNumber) {
+  const normalizedBase = toPosixPath(baseOutputName);
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+    throw new Error(`Invalid archive page number for ${normalizedBase}: ${pageNumber}`);
+  }
+  if (pageNumber === 1) {
+    return normalizedBase;
+  }
+
+  const directory = path.posix.dirname(normalizedBase);
+  const prefix = directory === '.' ? '' : `${directory}/`;
+  return `${prefix}page/${pageNumber}/index.html`;
+}
+
+function chunkItems(items, pageSize) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += pageSize) {
+    chunks.push(items.slice(index, index + pageSize));
+  }
+  return chunks.length ? chunks : [[]];
+}
+
+function buildArchiveListPageDescriptors(items, baseOutputName, pageSize) {
+  if (!pageSize || items.length <= pageSize) {
+    return [
+      {
+        pageNumber: 1,
+        totalPages: 1,
+        outputName: baseOutputName,
+        items,
+      },
+    ];
+  }
+
+  const chunks = chunkItems(items, pageSize);
+  return chunks.map((chunk, index) => ({
+    pageNumber: index + 1,
+    totalPages: chunks.length,
+    outputName: buildPaginatedOutputName(baseOutputName, index + 1),
+    items: chunk,
+  }));
+}
+
+function buildArchiveMonthPageDescriptors(month, pageSize) {
+  const pinnedEntries = getPinnedArchiveEntries(month.pages);
+  const chronologicalEntries = getChronologicalArchiveEntries(month.pages);
+
+  if (!pageSize || chronologicalEntries.length <= pageSize) {
+    return [
+      {
+        pageNumber: 1,
+        totalPages: 1,
+        outputName: month.outputName,
+        pinnedEntries,
+        featuredEntry: chronologicalEntries[0] || null,
+        entries: chronologicalEntries.slice(chronologicalEntries[0] ? 1 : 0),
+      },
+    ];
+  }
+
+  const descriptors = [];
+  const featuredEntry = chronologicalEntries[0] || null;
+  const firstPageGridSize = Math.max(pageSize - 1, 0);
+  descriptors.push({
+    pageNumber: 1,
+    outputName: month.outputName,
+    pinnedEntries,
+    featuredEntry,
+    entries: chronologicalEntries.slice(1, 1 + firstPageGridSize),
+  });
+
+  let offset = 1 + firstPageGridSize;
+  while (offset < chronologicalEntries.length) {
+    const pageNumber = descriptors.length + 1;
+    descriptors.push({
+      pageNumber,
+      outputName: buildPaginatedOutputName(month.outputName, pageNumber),
+      pinnedEntries: [],
+      featuredEntry: null,
+      entries: chronologicalEntries.slice(offset, offset + pageSize),
+    });
+    offset += pageSize;
+  }
+
+  const totalPages = descriptors.length;
+  return descriptors.map((descriptor) => ({
+    ...descriptor,
+    totalPages,
+  }));
+}
+
+function formatPaginatedTitle(baseTitle, pageNumber) {
+  return pageNumber > 1 ? `${baseTitle} — Page ${pageNumber}` : baseTitle;
+}
+
 function formatArchiveDateLabel(date) {
   return `${MONTH_LABELS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
 }
@@ -1273,11 +1368,48 @@ function renderDateArchivePinnedSection(entries, page, options = {}) {
   return `<section class="date-archive-pinned"><div class="date-archive-pinned__header"><p class="date-archive-eyebrow">Pinned</p><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></div>${renderDateArchiveEntryGrid(entries, page, { variant: 'pinned' })}</section>`;
 }
 
-function renderDateArchiveIndexContent(dateArchiveCollections, page) {
-  const totalPages = dateArchiveCollections.reduce((sum, collection) => sum + collection.totalPages, 0);
+function renderArchivePaginationNav(page, baseOutputName, pageNumber, totalPages, options = {}) {
+  if (totalPages <= 1) {
+    return '';
+  }
+
+  const label = options.label || 'Archive pagination';
+  const pageLinks = [];
+  if (pageNumber > 1) {
+    pageLinks.push(`<li><a href="${escapeHtml(relativeLink(page.outputName, buildPaginatedOutputName(baseOutputName, pageNumber - 1)))}" rel="prev">← Newer</a></li>`);
+  }
+
+  for (let index = 1; index <= totalPages; index += 1) {
+    const className = index === pageNumber ? ' class="is-active"' : '';
+    const href = escapeHtml(relativeLink(page.outputName, buildPaginatedOutputName(baseOutputName, index)));
+    pageLinks.push(
+      index === pageNumber
+        ? `<li${className}><span aria-current="page">Page ${index}</span></li>`
+        : `<li${className}><a href="${href}">Page ${index}</a></li>`
+    );
+  }
+
+  if (pageNumber < totalPages) {
+    pageLinks.push(`<li><a href="${escapeHtml(relativeLink(page.outputName, buildPaginatedOutputName(baseOutputName, pageNumber + 1)))}" rel="next">Older →</a></li>`);
+  }
+
+  return `<nav class="archive-pagination" aria-label="${escapeHtml(label)}"><p class="archive-pagination__summary">Page ${pageNumber} of ${totalPages}</p><ol class="archive-pagination__list">${pageLinks.join('')}</ol></nav>`;
+}
+
+function renderDateArchiveIndexContent(dateArchiveCollections, page, pagination = {}) {
+  const visibleCollections = pagination.collections || dateArchiveCollections;
+  const pageNumber = pagination.pageNumber || 1;
+  const totalPages = pagination.totalPages || 1;
+  const totalEntries = dateArchiveCollections.reduce((sum, collection) => sum + collection.totalPages, 0);
+  const continuation =
+    totalPages > 1
+      ? `<p class="date-archive-section-links">Showing year archive page ${pageNumber} of ${totalPages}. Use the pager to move between older and newer yearly archive cards.</p>`
+      : '';
+
   return `<section class="date-archive-index">
-  <p>Browse ${totalPages} dated portfolio page${totalPages === 1 ? '' : 's'} in reverse chronological order. Use these generated archive pages for project logs, shipped slices, and timeline-style portfolio updates.</p>
-  <ul class="date-archive-year-list">${dateArchiveCollections
+  <p>Browse ${totalEntries} dated portfolio page${totalEntries === 1 ? '' : 's'} in reverse chronological order. Use these generated archive pages for project logs, shipped slices, and timeline-style portfolio updates.</p>
+  ${continuation}
+  <ul class="date-archive-year-list">${visibleCollections
     .map((collection) => {
       const yearEntries = collectArchiveEntries(collection);
       const pinnedEntries = getPinnedArchiveEntries(yearEntries);
@@ -1291,50 +1423,77 @@ function renderDateArchiveIndexContent(dateArchiveCollections, page) {
         .join('')}</ul></article></li>`;
     })
     .join('')}</ul>
+  ${renderArchivePaginationNav(page, ARCHIVE_INDEX_OUTPUT_NAME, pageNumber, totalPages, { label: 'Archive index pagination' })}
 </section>`;
 }
 
-function renderDateArchiveYearContent(collection, page) {
+function renderDateArchiveYearContent(collection, page, pagination = {}) {
+  const visibleMonths = pagination.months || collection.months;
+  const pageNumber = pagination.pageNumber || 1;
+  const totalPages = pagination.totalPages || 1;
   const yearEntries = collectArchiveEntries(collection);
-  const pinnedEntries = getPinnedArchiveEntries(yearEntries);
-  const featuredEntry = selectArchiveLeadEntry(yearEntries);
+  const pinnedEntries = pageNumber === 1 ? getPinnedArchiveEntries(yearEntries) : [];
+  const featuredEntry = pageNumber === 1 ? selectArchiveLeadEntry(yearEntries) : null;
+  const intro =
+    pageNumber === 1
+      ? `${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month for ${escapeHtml(collection.year)}.`
+      : `Continuing the ${escapeHtml(collection.year)} archive timeline. Return to page 1 for pinned and featured entries.`;
+  const continuation =
+    totalPages > 1
+      ? `<p class="date-archive-section-links">Showing archive page ${pageNumber} of ${totalPages} for ${escapeHtml(collection.year)}.</p>`
+      : '';
+
   return `<section class="date-archive-year">
   <p><a href="${escapeHtml(relativeLink(page.outputName, ARCHIVE_INDEX_OUTPUT_NAME))}">← All archives</a></p>
-  <p>${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month for ${escapeHtml(collection.year)}.</p>
-  ${renderDateArchivePinnedSection(pinnedEntries, page, { title: `${collection.year} pinned updates`, description: `${pinnedEntries.length} pinned update${pinnedEntries.length === 1 ? ' stays' : 's stay'} ahead of the reverse-chronological monthly timeline.` })}
-  ${featuredEntry && featuredEntry.archivePin !== true ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 2 }) : ''}
-  <ul class="date-archive-month-jump-list">${collection.months
+  <p>${intro}</p>
+  ${continuation}
+  ${pageNumber === 1 ? renderDateArchivePinnedSection(pinnedEntries, page, { title: `${collection.year} pinned updates`, description: `${pinnedEntries.length} pinned update${pinnedEntries.length === 1 ? ' stays' : 's stay'} ahead of the reverse-chronological monthly timeline.` }) : ''}
+  ${pageNumber === 1 && featuredEntry && featuredEntry.archivePin !== true ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${collection.year}`, headingLevel: 2 }) : ''}
+  <ul class="date-archive-month-jump-list">${visibleMonths
     .map((month) => {
       const monthLeadEntry = selectArchiveLeadEntry(month.pages);
       const pinnedCount = getPinnedArchiveEntries(month.pages).length;
       return `<li><a href="#${month.anchorId}">${escapeHtml(month.label)}</a> <span class="date-archive-count">${month.pages.length} page${month.pages.length === 1 ? '' : 's'}</span>${pinnedCount ? ` <span class="date-archive-pinned-count">${pinnedCount} pinned</span>` : ''} <a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Open month page</a>${monthLeadEntry ? ` <span class="date-archive-latest">Latest: <a href="${escapeHtml(relativeLink(page.outputName, monthLeadEntry.outputName))}">${escapeHtml(monthLeadEntry.title)}</a></span>` : ''}</li>`;
     })
     .join('')}</ul>
-  ${collection.months
+  ${visibleMonths
     .map((month) => {
       const pinnedMonthEntries = getPinnedArchiveEntries(month.pages);
-      const visibleEntries = getChronologicalArchiveEntries(month.pages);
-      const monthLeadEntry = visibleEntries[0] || null;
-      const repeatsYearFeature = featuredEntry && monthLeadEntry && monthLeadEntry.outputName === featuredEntry.outputName;
+      const chronologicalEntries = getChronologicalArchiveEntries(month.pages);
+      const monthLeadEntry = chronologicalEntries[0] || null;
+      const repeatsYearFeature = pageNumber === 1 && featuredEntry && monthLeadEntry && monthLeadEntry.outputName === featuredEntry.outputName;
       const featuredMonthEntry = repeatsYearFeature ? null : monthLeadEntry;
-      const remainingEntries = visibleEntries.slice(monthLeadEntry ? 1 : 0);
-      return `<section class="date-archive-month-section" id="${month.anchorId}"><p class="date-archive-eyebrow">Month archive</p><h2>${escapeHtml(month.label)}</h2><p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Browse ${escapeHtml(month.label)}</a></p>${renderDateArchivePinnedSection(pinnedMonthEntries, page, { title: `${month.label} pinned updates`, description: `${pinnedMonthEntries.length} pinned update${pinnedMonthEntries.length === 1 ? ' stays' : 's stay'} attached to this month page and yearly archive.` })}${featuredMonthEntry ? renderDateArchiveFeaturedEntry(featuredMonthEntry, page, { eyebrow: 'Featured entry', headingLevel: 3 }) : ''}${renderDateArchiveEntryGrid(remainingEntries, page)}</section>`;
+      const remainingEntries = chronologicalEntries.slice(monthLeadEntry ? 1 : 0);
+      return `<section class="date-archive-month-section" id="${month.anchorId}"><p class="date-archive-eyebrow">Month archive</p><h2>${escapeHtml(month.label)}</h2><p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, month.outputName))}">Browse ${escapeHtml(month.label)}</a></p>${pageNumber === 1 ? renderDateArchivePinnedSection(pinnedMonthEntries, page, { title: `${month.label} pinned updates`, description: `${pinnedMonthEntries.length} pinned update${pinnedMonthEntries.length === 1 ? ' stays' : 's stay'} attached to this month page and yearly archive.` }) : ''}${featuredMonthEntry ? renderDateArchiveFeaturedEntry(featuredMonthEntry, page, { eyebrow: 'Featured entry', headingLevel: 3 }) : ''}${renderDateArchiveEntryGrid(remainingEntries, page)}</section>`;
     })
     .join('')}
+  ${renderArchivePaginationNav(page, collection.outputName, pageNumber, totalPages, { label: `${collection.year} archive pagination` })}
 </section>`;
 }
 
-function renderDateArchiveMonthContent(collection, month, page) {
-  const pinnedEntries = getPinnedArchiveEntries(month.pages);
-  const visibleEntries = getChronologicalArchiveEntries(month.pages);
-  const featuredEntry = visibleEntries[0] || null;
-  const remainingEntries = visibleEntries.slice(featuredEntry ? 1 : 0);
+function renderDateArchiveMonthContent(collection, month, page, pagination = {}) {
+  const pageNumber = pagination.pageNumber || 1;
+  const totalPages = pagination.totalPages || 1;
+  const pinnedEntries = pagination.pinnedEntries || [];
+  const featuredEntry = pagination.featuredEntry === undefined ? getChronologicalArchiveEntries(month.pages)[0] || null : pagination.featuredEntry;
+  const entries = pagination.entries || [];
+  const intro =
+    pageNumber === 1
+      ? `${month.pages.length} dated page${month.pages.length === 1 ? '' : 's'} published in ${escapeHtml(month.label)}.`
+      : `Continuing the ${escapeHtml(month.label)} timeline. Return to page 1 for pinned and featured entries.`;
+  const continuation =
+    totalPages > 1
+      ? `<p class="date-archive-section-links">Showing archive page ${pageNumber} of ${totalPages} for ${escapeHtml(month.label)}.</p>`
+      : '';
+
   return `<section class="date-archive-month-page">
   <p class="date-archive-section-links"><a href="${escapeHtml(relativeLink(page.outputName, ARCHIVE_INDEX_OUTPUT_NAME))}">← All archives</a> <span aria-hidden="true">·</span> <a href="${escapeHtml(relativeLink(page.outputName, collection.outputName))}">${escapeHtml(collection.year)} archive</a></p>
-  <p>${month.pages.length} dated page${month.pages.length === 1 ? '' : 's'} published in ${escapeHtml(month.label)}.</p>
-  ${renderDateArchivePinnedSection(pinnedEntries, page, { title: `${month.label} pinned updates`, description: `${pinnedEntries.length} pinned update${pinnedEntries.length === 1 ? ' stays' : 's stay'} surfaced above the monthly timeline.` })}
-  ${featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${month.label}`, headingLevel: 2 }) : ''}
-  ${renderDateArchiveEntryGrid(remainingEntries, page)}
+  <p>${intro}</p>
+  ${continuation}
+  ${pageNumber === 1 ? renderDateArchivePinnedSection(pinnedEntries, page, { title: `${month.label} pinned updates`, description: `${pinnedEntries.length} pinned update${pinnedEntries.length === 1 ? ' stays' : 's stay'} surfaced above the monthly timeline.` }) : ''}
+  ${pageNumber === 1 && featuredEntry ? renderDateArchiveFeaturedEntry(featuredEntry, page, { eyebrow: `Latest in ${month.label}`, headingLevel: 2 }) : ''}
+  ${renderDateArchiveEntryGrid(entries, page)}
+  ${renderArchivePaginationNav(page, month.outputName, pageNumber, totalPages, { label: `${month.label} archive pagination` })}
 </section>`;
 }
 
@@ -1647,6 +1806,13 @@ function renderTemplate(page, navigation, contentHtml, tagCollectionsBySlug = ne
       .date-archive-entry__actions { margin: 0; font-weight: 600; }
       .date-archive-entry h2, .date-archive-entry h3, .date-archive-year-card h2, .date-archive-month-section h2, .date-archive-pinned h2 { margin-top: 0.1rem; margin-bottom: 0.2rem; }
       .date-archive-entry p:last-child, .date-archive-year-card p:last-child, .date-archive-month-section p:last-child, .date-archive-month-page p:last-child, .date-archive-pinned p:last-child { margin-bottom: 0; }
+      .archive-pagination { display: grid; gap: 0.7rem; padding-top: 0.25rem; }
+      .archive-pagination__summary { margin: 0; color: #475569; font-size: 0.92rem; }
+      .archive-pagination__list { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.55rem; }
+      .archive-pagination__list li { margin: 0; }
+      .archive-pagination__list a, .archive-pagination__list span { display: inline-flex; align-items: center; justify-content: center; min-width: 3.5rem; padding: 0.4rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 999px; background: #ffffffcc; color: inherit; text-decoration: none; font-size: 0.92rem; }
+      .archive-pagination__list a:hover { border-color: #2563eb; }
+      .archive-pagination__list .is-active span { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 700; }
       .comparison-block__header { display: grid; gap: 0.55rem; }
       .comparison-block__eyebrow, .comparison-panel__eyebrow { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
       .comparison-block__title, .comparison-panel__title { margin: 0; }
@@ -1838,7 +2004,7 @@ function assertNoGeneratedAssetConflicts(assetOutputNames, generatedOutputNames)
   }
 }
 
-function buildSite(contentDir, outputDir) {
+function buildSite(contentDir, outputDir, buildOptions = {}) {
   if (!fs.existsSync(contentDir)) {
     throw new Error(`Content directory not found: ${contentDir}`);
   }
@@ -1852,8 +2018,23 @@ function buildSite(contentDir, outputDir) {
   const partials = loadTemplatePartials(contentDir);
   fs.mkdirSync(outputDir, { recursive: true });
 
+  const archivePageSize =
+    buildOptions.archivePageSize === undefined || buildOptions.archivePageSize === null
+      ? null
+      : parseArchivePageSize(buildOptions.archivePageSize);
   const tagCollections = buildTagCollections(pages);
   const dateArchiveCollections = buildDateArchiveCollections(pages);
+  const archiveIndexPageDescriptors = dateArchiveCollections.length
+    ? buildArchiveListPageDescriptors(dateArchiveCollections, ARCHIVE_INDEX_OUTPUT_NAME, archivePageSize)
+    : [];
+  const archiveYearPageDescriptors = dateArchiveCollections.map((collection) => ({
+    collection,
+    pages: buildArchiveListPageDescriptors(collection.months, collection.outputName, archivePageSize),
+    months: collection.months.map((month) => ({
+      month,
+      pages: buildArchiveMonthPageDescriptors(month, archivePageSize),
+    })),
+  }));
   const tagCollectionsBySlug = new Map(tagCollections.map((collection) => [collection.slug, collection]));
   const hasAuthoredNotFoundPage = pages.some((page) => isNotFoundOutputName(page.outputName));
   const generatedOutputNames = [];
@@ -1862,8 +2043,11 @@ function buildSite(contentDir, outputDir) {
   }
   if (dateArchiveCollections.length) {
     generatedOutputNames.push(
-      ARCHIVE_INDEX_OUTPUT_NAME,
-      ...dateArchiveCollections.flatMap((collection) => [collection.outputName, ...collection.months.map((month) => month.outputName)])
+      ...archiveIndexPageDescriptors.map((descriptor) => descriptor.outputName),
+      ...archiveYearPageDescriptors.flatMap((descriptor) => [
+        ...descriptor.pages.map((page) => page.outputName),
+        ...descriptor.months.flatMap((monthDescriptor) => monthDescriptor.pages.map((page) => page.outputName)),
+      ])
     );
   }
   if (tagCollections.length) {
@@ -1914,38 +2098,17 @@ function buildSite(contentDir, outputDir) {
   }
 
   if (dateArchiveCollections.length) {
-    const archiveIndexPage = {
-      slug: 'archive',
-      outputName: ARCHIVE_INDEX_OUTPUT_NAME,
-      section: 'archives',
-      metadata: {
-        title: 'Archive',
-        description: 'Browse dated portfolio updates grouped into generated yearly and monthly archives.',
-      },
-      sourceName: '(generated)',
-      tags: [],
-    };
-
-    writeRenderedPage(
-      outputDir,
-      archiveIndexPage.outputName,
-      renderTemplate(archiveIndexPage, navigation, renderDateArchiveIndexContent(dateArchiveCollections, archiveIndexPage), tagCollectionsBySlug, partials)
-    );
-    generatedPages.push({
-      source: '(generated)',
-      output: archiveIndexPage.outputName,
-      title: archiveIndexPage.metadata.title,
-    });
-    generatedHtmlPages.push(archiveIndexPage);
-
-    for (const collection of dateArchiveCollections) {
-      const archiveYearPage = {
-        slug: `archive-${collection.year}`,
-        outputName: collection.outputName,
+    for (const descriptor of archiveIndexPageDescriptors) {
+      const archiveIndexPage = {
+        slug: descriptor.pageNumber === 1 ? 'archive' : `archive-page-${descriptor.pageNumber}`,
+        outputName: descriptor.outputName,
         section: 'archives',
         metadata: {
-          title: `Archive: ${collection.year}`,
-          description: `${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month in ${collection.year}.`,
+          title: formatPaginatedTitle('Archive', descriptor.pageNumber),
+          description:
+            descriptor.pageNumber === 1
+              ? 'Browse dated portfolio updates grouped into generated yearly and monthly archives.'
+              : `Continuation of the generated archive index (page ${descriptor.pageNumber} of ${descriptor.totalPages}).`,
         },
         sourceName: '(generated)',
         tags: [],
@@ -1953,24 +2116,40 @@ function buildSite(contentDir, outputDir) {
 
       writeRenderedPage(
         outputDir,
-        archiveYearPage.outputName,
-        renderTemplate(archiveYearPage, navigation, renderDateArchiveYearContent(collection, archiveYearPage), tagCollectionsBySlug, partials)
+        archiveIndexPage.outputName,
+        renderTemplate(
+          archiveIndexPage,
+          navigation,
+          renderDateArchiveIndexContent(dateArchiveCollections, archiveIndexPage, {
+            collections: descriptor.items,
+            pageNumber: descriptor.pageNumber,
+            totalPages: descriptor.totalPages,
+          }),
+          tagCollectionsBySlug,
+          partials
+        )
       );
       generatedPages.push({
         source: '(generated)',
-        output: archiveYearPage.outputName,
-        title: archiveYearPage.metadata.title,
+        output: archiveIndexPage.outputName,
+        title: archiveIndexPage.metadata.title,
       });
-      generatedHtmlPages.push(archiveYearPage);
+      generatedHtmlPages.push(archiveIndexPage);
+    }
 
-      for (const month of collection.months) {
-        const archiveMonthPage = {
-          slug: `archive-${collection.year}-${month.monthNumber}`,
-          outputName: month.outputName,
+    for (const yearDescriptor of archiveYearPageDescriptors) {
+      const { collection } = yearDescriptor;
+      for (const descriptor of yearDescriptor.pages) {
+        const archiveYearPage = {
+          slug: descriptor.pageNumber === 1 ? `archive-${collection.year}` : `archive-${collection.year}-page-${descriptor.pageNumber}`,
+          outputName: descriptor.outputName,
           section: 'archives',
           metadata: {
-            title: `Archive: ${month.label}`,
-            description: `${month.pages.length} dated page${month.pages.length === 1 ? '' : 's'} published in ${month.label}.`,
+            title: formatPaginatedTitle(`Archive: ${collection.year}`, descriptor.pageNumber),
+            description:
+              descriptor.pageNumber === 1
+                ? `${collection.totalPages} dated page${collection.totalPages === 1 ? '' : 's'} grouped by month in ${collection.year}.`
+                : `Continuation of the ${collection.year} archive timeline (page ${descriptor.pageNumber} of ${descriptor.totalPages}).`,
           },
           sourceName: '(generated)',
           tags: [],
@@ -1978,15 +2157,66 @@ function buildSite(contentDir, outputDir) {
 
         writeRenderedPage(
           outputDir,
-          archiveMonthPage.outputName,
-          renderTemplate(archiveMonthPage, navigation, renderDateArchiveMonthContent(collection, month, archiveMonthPage), tagCollectionsBySlug, partials)
+          archiveYearPage.outputName,
+          renderTemplate(
+            archiveYearPage,
+            navigation,
+            renderDateArchiveYearContent(collection, archiveYearPage, {
+              months: descriptor.items,
+              pageNumber: descriptor.pageNumber,
+              totalPages: descriptor.totalPages,
+            }),
+            tagCollectionsBySlug,
+            partials
+          )
         );
         generatedPages.push({
           source: '(generated)',
-          output: archiveMonthPage.outputName,
-          title: archiveMonthPage.metadata.title,
+          output: archiveYearPage.outputName,
+          title: archiveYearPage.metadata.title,
         });
-        generatedHtmlPages.push(archiveMonthPage);
+        generatedHtmlPages.push(archiveYearPage);
+      }
+
+      for (const monthDescriptor of yearDescriptor.months) {
+        const { month } = monthDescriptor;
+        for (const descriptor of monthDescriptor.pages) {
+          const archiveMonthPage = {
+            slug:
+              descriptor.pageNumber === 1
+                ? `archive-${collection.year}-${month.monthNumber}`
+                : `archive-${collection.year}-${month.monthNumber}-page-${descriptor.pageNumber}`,
+            outputName: descriptor.outputName,
+            section: 'archives',
+            metadata: {
+              title: formatPaginatedTitle(`Archive: ${month.label}`, descriptor.pageNumber),
+              description:
+                descriptor.pageNumber === 1
+                  ? `${month.pages.length} dated page${month.pages.length === 1 ? '' : 's'} published in ${month.label}.`
+                  : `Continuation of the ${month.label} archive timeline (page ${descriptor.pageNumber} of ${descriptor.totalPages}).`,
+            },
+            sourceName: '(generated)',
+            tags: [],
+          };
+
+          writeRenderedPage(
+            outputDir,
+            archiveMonthPage.outputName,
+            renderTemplate(
+              archiveMonthPage,
+              navigation,
+              renderDateArchiveMonthContent(collection, month, archiveMonthPage, descriptor),
+              tagCollectionsBySlug,
+              partials
+            )
+          );
+          generatedPages.push({
+            source: '(generated)',
+            output: archiveMonthPage.outputName,
+            title: archiveMonthPage.metadata.title,
+          });
+          generatedHtmlPages.push(archiveMonthPage);
+        }
       }
     }
   }
@@ -2120,11 +2350,11 @@ function formatBuildSummary(result) {
   return lines.join('\n');
 }
 
-function buildWithLogging(contentDir, outputDir, reason) {
+function buildWithLogging(contentDir, outputDir, reason, buildOptions = {}) {
   const timestamp = new Date().toISOString();
 
   try {
-    const result = buildSite(contentDir, outputDir);
+    const result = buildSite(contentDir, outputDir, buildOptions);
     console.log(`[${timestamp}] ${reason} succeeded.`);
     console.log(formatBuildSummary(result));
     return { ok: true, result };
@@ -2151,6 +2381,14 @@ function parseServePort(rawValue) {
   return parsed;
 }
 
+function parseArchivePageSize(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error('Archive page size must be an integer >= 1.');
+  }
+  return parsed;
+}
+
 function parseCliArgs(argv) {
   const positional = [];
   const options = {
@@ -2159,6 +2397,7 @@ function parseCliArgs(argv) {
     watchIntervalMs: 500,
     serve: false,
     servePort: DEFAULT_SERVE_PORT,
+    archivePageSize: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -2206,6 +2445,21 @@ function parseCliArgs(argv) {
 
     if (arg.startsWith('--serve-port=')) {
       options.servePort = parseServePort(arg.split('=')[1]);
+      continue;
+    }
+
+    if (arg === '--archive-page-size') {
+      const value = argv[index + 1];
+      if (value === undefined) {
+        throw new Error('Missing value for --archive-page-size.');
+      }
+      options.archivePageSize = parseArchivePageSize(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith('--archive-page-size=')) {
+      options.archivePageSize = parseArchivePageSize(arg.split('=')[1]);
       continue;
     }
 
@@ -2487,7 +2741,7 @@ function watchSite(contentDir, outputDir, options = {}) {
   let lastSnapshot = createWatchSnapshot(contentDir);
 
   if (!options.skipInitialBuild) {
-    const initialBuild = buildWithLogging(contentDir, outputDir, 'Initial build');
+    const initialBuild = buildWithLogging(contentDir, outputDir, 'Initial build', options.buildOptions || {});
     if (initialBuild.ok && onBuildSuccess) {
       onBuildSuccess({ reason: 'initial-build', result: initialBuild.result });
     }
@@ -2503,7 +2757,7 @@ function watchSite(contentDir, outputDir, options = {}) {
 
     lastSnapshot = nextSnapshot;
     console.log(`[${new Date().toISOString()}] Change detected. Rebuilding...`);
-    const rebuild = buildWithLogging(contentDir, outputDir, 'Rebuild');
+    const rebuild = buildWithLogging(contentDir, outputDir, 'Rebuild', options.buildOptions || {});
     if (rebuild.ok && onBuildSuccess) {
       onBuildSuccess({ reason: 'rebuild', result: rebuild.result });
     }
@@ -2557,7 +2811,7 @@ async function main(argv) {
   const { contentDir, outputDir, options } = parsed;
   if (options.help || !contentDir || !outputDir) {
     console.error(
-      'Usage: node sitegen.js <content-dir> <output-dir> [--watch] [--watch-interval <ms>] [--serve] [--serve-port <port>]'
+      'Usage: node sitegen.js <content-dir> <output-dir> [--watch] [--watch-interval <ms>] [--serve] [--serve-port <port>] [--archive-page-size <count>]'
     );
     process.exitCode = options.help ? 0 : 1;
     return;
@@ -2567,7 +2821,9 @@ async function main(argv) {
   const resolvedOutputDir = path.resolve(outputDir);
 
   if (options.watch) {
-    const initialOutcome = buildWithLogging(resolvedContentDir, resolvedOutputDir, 'Initial build');
+    const initialOutcome = buildWithLogging(resolvedContentDir, resolvedOutputDir, 'Initial build', {
+      archivePageSize: options.archivePageSize,
+    });
     const preview = options.serve
       ? await startPreviewServer(resolvedOutputDir, {
           host: DEFAULT_SERVE_HOST,
@@ -2581,6 +2837,9 @@ async function main(argv) {
       watchIntervalMs: options.watchIntervalMs,
       onBuildSuccess: preview ? ({ reason }) => preview.broadcastReload(reason) : undefined,
       onStop: preview ? () => preview.close() : undefined,
+      buildOptions: {
+        archivePageSize: options.archivePageSize,
+      },
     });
 
     if (!initialOutcome.ok) {
@@ -2589,7 +2848,9 @@ async function main(argv) {
     return;
   }
 
-  const outcome = buildWithLogging(resolvedContentDir, resolvedOutputDir, 'Build');
+  const outcome = buildWithLogging(resolvedContentDir, resolvedOutputDir, 'Build', {
+    archivePageSize: options.archivePageSize,
+  });
   if (!outcome.ok) {
     process.exitCode = 1;
     return;
@@ -2675,9 +2936,11 @@ module.exports = {
   sendPreviewFile,
   slugify,
   buildAbsoluteSiteUrl,
+  buildPaginatedOutputName,
   startPreviewServer,
   toOutputPath,
   walkContentEntries,
   walkWatchFiles,
   watchSite,
+  parseArchivePageSize,
 };

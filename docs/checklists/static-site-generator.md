@@ -295,3 +295,21 @@
 - [x] commit and push
 - [x] append wrap-up
 - [ ] consider archive pinning or pagination controls for larger portfolio timelines in a future run
+
+## 2026-04-17 vertical slice: archive pagination controls
+- [x] identify `static-site-generator` as still unfinished because the project checklist still had archive pagination/page-size controls open for larger dated timelines
+- [x] do brief research on accessible pagination semantics, especially `nav` labelling plus `aria-current="page"` and `rel="prev"` / `rel="next"` link patterns
+- [x] skip extra language refresh because the slice stays inside the existing Node/CommonJS archive renderer and CLI parser
+- [x] add a resumable checklist for the slice
+- [x] implement configurable `--archive-page-size` handling for archive index, yearly archive pages, and monthly archive pages
+- [x] keep page 1 focused on pinned / featured entries while follow-on archive pages continue the remaining timeline entries cleanly
+- [x] expand automated tests for CLI parsing, paginated output naming, generated archive pagination pages, and the synced duplicate test entrypoint
+- [x] update README and project checklists with the new archive pagination workflow and next follow-up
+- [x] run project tests
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
+- [ ] consider head-level canonical or `rel="prev"` / `rel="next"` metadata for paginated archive pages in a future run

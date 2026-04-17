@@ -20,4 +20,5 @@
 - [x] Add date-based archive pages or timeline indexes for dated portfolio posts
 - [x] Add richer archive layouts such as featured entries or excerpt cards inside archive pages
 - [x] Add archive pinning controls so evergreen portfolio updates stay surfaced ahead of larger timelines
-- [ ] Add archive pagination controls or page-size options for very large portfolio timelines
+- [x] Add archive pagination controls or page-size options for very large portfolio timelines
+- [ ] Add head-level canonical or `rel="prev"` / `rel="next"` metadata for paginated archive pages

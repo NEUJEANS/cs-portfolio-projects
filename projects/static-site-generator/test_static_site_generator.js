@@ -17,6 +17,7 @@ const {
   SITEMAP_OUTPUT_NAME,
   applyPreviewPlaceholders,
   buildDateArchiveCollections,
+  buildPaginatedOutputName,
   buildSite,
   copyStaticAssets,
   createCodeBlockEnhancementSnippet,
@@ -25,6 +26,7 @@ const {
   loadPages,
   markdownToHtml,
   parseCliArgs,
+  parseArchivePageSize,
   parseCodeFenceInfo,
   parseComparisonFenceInfo,
   parseFrontMatter,
@@ -83,14 +85,39 @@ test('parseFrontMatter extracts metadata and body', () => {
   assert.equal(parsed.body, '# Heading');
 });
 
-test('parseCliArgs enables watch mode, preview serving, and custom ports', () => {
-  const parsed = parseCliArgs(['content', 'dist', '--watch', '--watch-interval', '750', '--serve', '--serve-port', '4321']);
+test('parseCliArgs enables watch mode, preview serving, custom ports, and archive page sizing', () => {
+  const parsed = parseCliArgs([
+    'content',
+    'dist',
+    '--watch',
+    '--watch-interval',
+    '750',
+    '--serve',
+    '--serve-port',
+    '4321',
+    '--archive-page-size',
+    '3',
+  ]);
   assert.equal(parsed.contentDir, 'content');
   assert.equal(parsed.outputDir, 'dist');
   assert.equal(parsed.options.watch, true);
   assert.equal(parsed.options.watchIntervalMs, 750);
   assert.equal(parsed.options.serve, true);
   assert.equal(parsed.options.servePort, 4321);
+  assert.equal(parsed.options.archivePageSize, 3);
+});
+
+test('parseArchivePageSize only accepts positive integers', () => {
+  assert.equal(parseArchivePageSize('12'), 12);
+  assert.throws(() => parseArchivePageSize('0'), /Archive page size must be an integer >= 1\./);
+  assert.throws(() => parseArchivePageSize('2.5'), /Archive page size must be an integer >= 1\./);
+});
+
+test('buildPaginatedOutputName nests later archive pages under page/<n>/index.html', () => {
+  assert.equal(buildPaginatedOutputName('archives/index.html', 1), 'archives/index.html');
+  assert.equal(buildPaginatedOutputName('archives/index.html', 2), 'archives/page/2/index.html');
+  assert.equal(buildPaginatedOutputName('archives/2026/04/index.html', 3), 'archives/2026/04/page/3/index.html');
+  assert.throws(() => buildPaginatedOutputName('archives/index.html', 0), /Invalid archive page number/);
 });
 
 test('parseCodeFenceInfo extracts language aliases and optional code titles', () => {
@@ -796,6 +823,88 @@ Chronological benchmark note should remain in the standard archive grid.`,
   const pinnedSection = archiveYearHtml.match(/2026 pinned updates[\s\S]*?<\/section>/)?.[0] || '';
   assert.ok(pinnedSection.indexOf('Internship Deep Dive') < pinnedSection.indexOf('Capstone Case Study'));
   assert.equal((pinnedSection.match(/href="\.\.\/\.\.\/posts\/capstone-case-study\.html">Capstone Case Study<\/a>/g) || []).length, 1);
+});
+
+test('buildSite paginates archive index, yearly archives, and monthly archives when archivePageSize is set', () => {
+  const contentDir = makeTempDir();
+  const outputDir = makeTempDir();
+  fs.mkdirSync(path.join(contentDir, 'posts'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(contentDir, 'index.md'),
+    `---
+title: Home
+order: 1
+---
+# Welcome`,
+    'utf8'
+  );
+
+  const datedPosts = [
+    ['2026-04-28T09:00:00Z', 'April 28 Update', 'april-28-update'],
+    ['2026-04-21T09:00:00Z', 'April 21 Update', 'april-21-update'],
+    ['2026-04-14T09:00:00Z', 'April 14 Update', 'april-14-update'],
+    ['2026-04-07T09:00:00Z', 'April 07 Update', 'april-07-update'],
+    ['2026-03-05T09:00:00Z', 'March Update', 'march-update'],
+    ['2026-02-02T09:00:00Z', 'February Update', 'february-update'],
+    ['2025-12-15T09:00:00Z', 'December 2025 Update', 'december-2025-update'],
+    ['2024-01-10T09:00:00Z', 'January 2024 Update', 'january-2024-update'],
+  ];
+
+  for (const [date, title, slug] of datedPosts) {
+    fs.writeFileSync(
+      path.join(contentDir, 'posts', `${slug}.md`),
+      `---
+title: ${title}
+slug: ${slug}
+date: ${date}
+---
+# ${title}
+
+Timeline entry for ${title}.`,
+      'utf8'
+    );
+  }
+
+  buildSite(contentDir, outputDir, { archivePageSize: 2 });
+
+  const archiveIndexOutput = ARCHIVE_INDEX_OUTPUT_NAME;
+  const archiveIndexPage2Output = buildPaginatedOutputName(archiveIndexOutput, 2);
+  const archiveYearOutput = 'archives/2026/index.html';
+  const archiveYearPage2Output = buildPaginatedOutputName(archiveYearOutput, 2);
+  const archiveMonthOutput = 'archives/2026/04/index.html';
+  const archiveMonthPage2Output = buildPaginatedOutputName(archiveMonthOutput, 2);
+
+  const archiveIndexHtml = fs.readFileSync(path.join(outputDir, archiveIndexOutput), 'utf8');
+  const archiveIndexPage2Html = fs.readFileSync(path.join(outputDir, archiveIndexPage2Output), 'utf8');
+  const archiveYearHtml = fs.readFileSync(path.join(outputDir, archiveYearOutput), 'utf8');
+  const archiveYearPage2Html = fs.readFileSync(path.join(outputDir, archiveYearPage2Output), 'utf8');
+  const archiveMonthHtml = fs.readFileSync(path.join(outputDir, archiveMonthOutput), 'utf8');
+  const archiveMonthPage2Html = fs.readFileSync(path.join(outputDir, archiveMonthPage2Output), 'utf8');
+
+  assert.match(archiveIndexHtml, /Page 1 of 2/);
+  assert.ok(archiveIndexHtml.includes(`href="${relativeLink(archiveIndexOutput, archiveIndexPage2Output)}">Page 2</a>`));
+  assert.match(archiveIndexPage2Html, /Showing year archive page 2 of 2\./);
+  assert.ok(archiveIndexPage2Html.includes(`href="${relativeLink(archiveIndexPage2Output, archiveIndexOutput)}" rel="prev">← Newer</a>`));
+  assert.ok(archiveIndexPage2Html.includes(`href="${relativeLink(archiveIndexPage2Output, 'archives/2024/index.html')}">2024</a>`));
+
+  assert.match(archiveYearHtml, /Page 1 of 2/);
+  assert.ok(archiveYearHtml.includes(`href="${relativeLink(archiveYearOutput, archiveYearPage2Output)}">Page 2</a>`));
+  assert.match(archiveYearPage2Html, /Continuing the 2026 archive timeline\./);
+  assert.match(archiveYearPage2Html, /Showing archive page 2 of 2 for 2026\./);
+  assert.ok(archiveYearPage2Html.includes(`href="${relativeLink(archiveYearPage2Output, 'archives/2026/02/index.html')}">Browse February 2026</a>`));
+  assert.doesNotMatch(archiveYearPage2Html, /Latest in 2026/);
+
+  assert.match(archiveMonthHtml, /Page 1 of 2/);
+  assert.ok(archiveMonthHtml.includes(`href="${relativeLink(archiveMonthOutput, archiveMonthPage2Output)}">Page 2</a>`));
+  assert.match(archiveMonthHtml, /Latest in April 2026/);
+  assert.match(archiveMonthPage2Html, /Continuing the April 2026 timeline\./);
+  assert.match(archiveMonthPage2Html, /Showing archive page 2 of 2 for April 2026\./);
+  assert.ok(archiveMonthPage2Html.includes(`href="${relativeLink(archiveMonthPage2Output, archiveMonthOutput)}" rel="prev">← Newer</a>`));
+  assert.ok(archiveMonthPage2Html.includes('April 14 Update'));
+  assert.ok(archiveMonthPage2Html.includes('April 07 Update'));
+  assert.doesNotMatch(archiveMonthPage2Html, /Latest in April 2026/);
+  assert.doesNotMatch(archiveMonthPage2Html, /April 2026 pinned updates/);
 });
 
 test('buildSite lets authors provide a custom 404 page without adding it to navigation by default', () => {
