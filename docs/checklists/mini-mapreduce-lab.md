@@ -20,8 +20,8 @@
 - [x] extend project-level and repo-level tests for snapshot loading, CLI output, and docs-index discovery
 - [x] generate a committed historical release-comparison artifact for the mini-mapreduce docs bundle
 - [x] run tests and 3 review passes
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 
 ## Reducer partitioning slice (2026-04-14 20:49 UTC run)
 - [x] confirm repo sync before editing
