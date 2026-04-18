@@ -10,8 +10,8 @@
 - [x] extend tests for crossover summaries plus CLI export coverage
 - [x] regenerate the committed budget-sweep artifacts and gallery copy
 - [x] run targeted tests and 3 review passes
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 - [ ] consider annotating crossover cells directly on the winner matrix or exporting slide-ready crossover-only cards in a future run
 
 - [x] pick a computer-architecture project that broadens the portfolio beyond algorithms and systems tooling
