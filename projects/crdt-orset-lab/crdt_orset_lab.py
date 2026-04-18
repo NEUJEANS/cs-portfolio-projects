@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from html import escape as escape_html
 from pathlib import Path
@@ -543,6 +544,177 @@ def render_timeline_svg(snapshot: dict[str, object], title: str) -> str:
     return "\n".join(svg) + "\n"
 
 
+def count_timeline_ops(snapshot: dict[str, object]) -> dict[str, int]:
+    counts = {"add": 0, "remove": 0, "sync": 0}
+    for event in snapshot["timeline"]:
+        op = str(event["op"])
+        counts[op] = counts.get(op, 0) + 1
+    return counts
+
+
+def build_companion_links(
+    *,
+    html_path: str | Path,
+    markdown_path: str | Path | None = None,
+    mermaid_path: str | Path | None = None,
+    svg_path: str | Path | None = None,
+    json_path: str | Path | None = None,
+    script_path: str | Path | None = None,
+) -> dict[str, str]:
+    base_dir = Path(html_path).parent
+    output_links: dict[str, str] = {}
+    for label, target in (
+        ("Scenario script", script_path),
+        ("Markdown timeline", markdown_path),
+        ("Mermaid source", mermaid_path),
+        ("SVG card", svg_path),
+        ("JSON snapshot", json_path),
+    ):
+        if target is None:
+            continue
+        relative = os.path.relpath(Path(target), base_dir)
+        output_links[label] = Path(relative).as_posix()
+    return output_links
+
+
+def render_timeline_html(
+    snapshot: dict[str, object],
+    title: str,
+    *,
+    companion_links: dict[str, str] | None = None,
+) -> str:
+    replica_states = {replica: dict(state) for replica, state in dict(snapshot["replicas"]).items()}
+    replicas = sorted(replica_states)
+    replica_count = len(replicas)
+    step_count = len(snapshot["timeline"])
+    counts = count_timeline_ops(snapshot)
+    element_views = {tuple(state["elements"]) for state in replica_states.values()}
+    tombstone_views = {tuple(state["tombstones"]) for state in replica_states.values()}
+    if not replica_states:
+        final_elements = "∅"
+        tombstones = "∅"
+    else:
+        final_elements = ", ".join(next(iter(element_views))) if len(element_views) == 1 else "mixed by replica"
+        tombstones = ", ".join(next(iter(tombstone_views))) if len(tombstone_views) == 1 else "mixed by replica"
+        if not final_elements:
+            final_elements = "∅"
+        if not tombstones:
+            tombstones = "∅"
+    inline_svg = render_timeline_svg(snapshot, title)
+    rows = build_timeline_rows(snapshot)
+    final_states_html = "".join(
+        f'<li><strong><code>{escape_html(replica)}</code></strong><span>{escape_html(summarize_state(state))}</span></li>'
+        for replica, state in replica_states.items()
+    )
+    timeline_rows_html = "".join(
+        "<tr>"
+        f"<td>{row['step']}</td>"
+        f"<td>{escape_html(str(row['event']))}</td>"
+        f"<td>{''.join(f'<div>{escape_html(str(detail))}</div>' for detail in row['details'])}</td>"
+        "</tr>"
+        for row in rows
+    )
+    companion_links_html = "".join(
+        f'<li><a href="{escape_html(path)}">{escape_html(label)}</a></li>'
+        for label, path in (companion_links or {}).items()
+    )
+    if not companion_links_html:
+        companion_links_html = "<li>This HTML page is self-contained, but companion file links appear when you export Markdown, Mermaid, SVG, or JSON outputs alongside it.</li>"
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set artifact gallery — {escape_html(title)}</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --ok-bg: #dcfce7;
+        --ok-text: #166534;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1380px; margin: 0 auto; padding: 32px 20px 64px; }}
+      a {{ color: var(--accent); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p {{ color: var(--muted); max-width: 980px; }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }}
+      .summary-grid strong {{ display: block; font-size: 1.35rem; margin-bottom: 6px; }}
+      .layout {{ display: grid; gap: 24px; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr); align-items: start; }}
+      .panel {{ padding: 22px; }}
+      .panel h2, .panel h3 {{ margin-top: 0; }}
+      .artifact-links {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      .artifact-links li + li, .replica-list li + li {{ margin-top: 10px; }}
+      .preview {{ margin: 0; overflow-x: auto; }}
+      .preview svg {{ width: 100%; height: auto; min-width: 720px; display: block; border-radius: 20px; }}
+      .replica-list {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      .replica-list strong {{ color: var(--text); display: block; margin-bottom: 4px; }}
+      .replica-list span {{ display: block; line-height: 1.5; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      .story {{ padding: 14px 16px; border-radius: 18px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }}
+      .status-ok {{ display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: var(--ok-bg); color: var(--ok-text); font-weight: 700; }}
+      @media (max-width: 1020px) {{
+        .layout {{ grid-template-columns: 1fr; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set artifact gallery</h1>
+        <p>This page packages the screenshot-ready OR-Set timeline card with the exact companion files that explain the same run in Markdown, Mermaid, SVG, and JSON. It is meant to make the observed-remove story quick to inspect in a browser while still leaving the raw machine-readable state one click away.</p>
+        <p class="story">{escape_html(timeline_story(snapshot))}</p>
+        <ul class="summary-grid">
+          <li><strong>{replica_count}</strong> replicas ({escape_html(', '.join(replicas) or 'none')})</li>
+          <li><strong>{step_count}</strong> timeline steps</li>
+          <li><strong>{counts['add']}/{counts['remove']}/{counts['sync']}</strong> add/remove/sync ops</li>
+          <li><strong>{escape_html(final_elements)}</strong> final membership</li>
+          <li><strong>{escape_html(tombstones)}</strong> final tombstones</li>
+          <li><strong><span class="status-ok">converged = {escape_html(str(snapshot['convergence']['converged']).lower())}</span></strong> full replica-state equality</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel">
+          <h2>{escape_html(title)}</h2>
+          <figure class="preview">
+{inline_svg}
+          </figure>
+        </article>
+        <aside class="panel">
+          <h2>Companion artifacts</h2>
+          <ul class="artifact-links">{companion_links_html}</ul>
+          <h3>Final replica states</h3>
+          <ul class="replica-list">{final_states_html}</ul>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Timeline steps</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Event</th><th>Details</th></tr>
+          </thead>
+          <tbody>{timeline_rows_html}</tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
 def write_text_output(path: str | Path, content: str) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -553,6 +725,8 @@ def add_timeline_output_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeline-markdown-out")
     parser.add_argument("--timeline-mermaid-out")
     parser.add_argument("--timeline-svg-out")
+    parser.add_argument("--timeline-html-out")
+    parser.add_argument("--json-out")
 
 
 def timeline_title_from_args(args: argparse.Namespace) -> str:
@@ -571,17 +745,34 @@ def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]
             args.timeline_markdown_out,
             args.timeline_mermaid_out,
             args.timeline_svg_out,
+            args.timeline_html_out,
+            args.json_out,
         ]
     ):
         return
 
     title = timeline_title_from_args(args)
+    if args.json_out:
+        write_text_output(args.json_out, json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
     if args.timeline_markdown_out:
         write_text_output(args.timeline_markdown_out, render_timeline_markdown(snapshot, title))
     if args.timeline_mermaid_out:
         write_text_output(args.timeline_mermaid_out, render_timeline_mermaid(snapshot, title))
     if args.timeline_svg_out:
         write_text_output(args.timeline_svg_out, render_timeline_svg(snapshot, title))
+    if args.timeline_html_out:
+        companion_links = build_companion_links(
+            html_path=args.timeline_html_out,
+            markdown_path=args.timeline_markdown_out,
+            mermaid_path=args.timeline_mermaid_out,
+            svg_path=args.timeline_svg_out,
+            json_path=args.json_out,
+            script_path=args.script if getattr(args, "command", None) == "run-script" else None,
+        )
+        write_text_output(
+            args.timeline_html_out,
+            render_timeline_html(snapshot, title, companion_links=companion_links),
+        )
 
 
 def build_parser() -> argparse.ArgumentParser:

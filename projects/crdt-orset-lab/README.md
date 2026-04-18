@@ -25,7 +25,8 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - sync can run `both`, `forward`, or `reverse` to model anti-entropy or one-way propagation
 - JSON snapshots expose converged membership plus per-replica `active_tags`, `observed_tags`, and `tombstones`
 - convergence checks require full replica-state equality, not just matching element membership
-- optional timeline exports render the same run as Markdown notes, Mermaid sequence diagrams, and static SVG portfolio cards
+- optional timeline exports render the same run as Markdown notes, Mermaid sequence diagrams, static SVG portfolio cards, and a small HTML gallery/index page
+- optional JSON snapshot export writes the exact machine-readable replica/timeline state that backs the gallery links
 - includes a committed sample scenario that demonstrates a remove not deleting a concurrent/new add
 
 ## Usage
@@ -43,10 +44,12 @@ python3 crdt_orset_lab.py run-script \
   --script sample_ops.json \
   --timeline-markdown-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.md \
   --timeline-mermaid-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd \
-  --timeline-svg-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg
+  --timeline-svg-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg \
+  --timeline-html-out ../../docs/artifacts/crdt-orset-lab/index.html \
+  --json-out ../../docs/artifacts/crdt-orset-lab/sample-ops-snapshot.json
 ```
 
-Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts.
+Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts. The HTML gallery is meant for browser-friendly navigation, while `--json-out` preserves the exact raw snapshot behind the rendered story.
 
 ### Script format
 `sample_ops.json` uses this shape, and the CLI also accepts a plain top-level JSON list of operation objects when you do not need wrapper metadata:
@@ -78,9 +81,11 @@ The committed `sample_ops.json` walks through this sequence:
 That makes the OR-Set semantics visible in a way students can explain during a systems interview.
 
 ## Committed artifact examples
+- `docs/artifacts/crdt-orset-lab/index.html` — browser-friendly gallery/index that links the source scenario script plus the full derived artifact bundle together
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.md` — step-by-step Markdown table for code review or notes
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd` — Mermaid sequence diagram source for editable replica timelines
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg` — screenshot-ready timeline card for README/slide use
+- `docs/artifacts/crdt-orset-lab/sample-ops-snapshot.json` — raw replica/timeline/convergence state for tooling or diffs
 
 ## Test
 ```bash
@@ -90,4 +95,4 @@ python3 -m unittest discover -s projects/crdt-orset-lab -p "test_*.py"
 ## Future improvements
 - add delta-state payload inspection so merge traffic size can be discussed explicitly
 - add another CRDT variant such as an LWW-element-set or PN-counter bundle for side-by-side comparison
-- add a small HTML gallery/index page that links the timeline artifacts and raw JSON snapshot together
+- add a comparison page that shows OR-Set vs LWW-element-set behavior on the same scripted scenario

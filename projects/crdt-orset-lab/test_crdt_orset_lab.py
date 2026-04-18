@@ -8,8 +8,10 @@ from pathlib import Path
 from crdt_orset_lab import (
     ORSet,
     ReplicaCluster,
+    build_companion_links,
     load_script,
     parse_tag,
+    render_timeline_html,
     render_timeline_markdown,
     render_timeline_mermaid,
     render_timeline_svg,
@@ -169,12 +171,48 @@ class ORSetLabTests(unittest.TestCase):
         self.assertIn("Final convergence", svg)
         self.assertIn("c:1", svg)
 
+    def test_timeline_html_links_companion_artifacts(self) -> None:
+        cluster = ReplicaCluster(["a", "b", "c"])
+        snapshot = cluster.run_script(load_script(SAMPLE_SCRIPT))
+        links = build_companion_links(
+            html_path=PROJECT_DIR / "artifacts" / "index.html",
+            markdown_path=PROJECT_DIR / "artifacts" / "timeline.md",
+            mermaid_path=PROJECT_DIR / "artifacts" / "timeline.mmd",
+            svg_path=PROJECT_DIR / "artifacts" / "timeline.svg",
+            json_path=PROJECT_DIR / "artifacts" / "timeline.json",
+            script_path=SAMPLE_SCRIPT,
+        )
+
+        html = render_timeline_html(snapshot, "sample timeline", companion_links=links)
+
+        self.assertIn("OR-Set artifact gallery", html)
+        self.assertIn('href="../sample_ops.json"', html)
+        self.assertIn('href="timeline.md"', html)
+        self.assertIn('href="timeline.mmd"', html)
+        self.assertIn('href="timeline.svg"', html)
+        self.assertIn('href="timeline.json"', html)
+        self.assertIn("Timeline steps", html)
+        self.assertIn("Final replica states", html)
+        self.assertIn("<svg", html)
+
+    def test_timeline_html_marks_non_converged_summaries_as_mixed(self) -> None:
+        cluster = ReplicaCluster(["a", "b"])
+        cluster.add("a", "notes")
+
+        html = render_timeline_html(cluster.snapshot(), "single add")
+
+        self.assertIn("mixed by replica", html)
+        self.assertIn("a: elements notes; active notes=a:1; tombstones ∅", html)
+        self.assertIn("b: elements ∅; active ∅; tombstones ∅", html)
+
     def test_cli_run_script_writes_timeline_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             artifact_dir = Path(temp_dir) / "artifacts"
             markdown_path = artifact_dir / "timeline.md"
             mermaid_path = artifact_dir / "timeline.mmd"
             svg_path = artifact_dir / "timeline.svg"
+            html_path = artifact_dir / "index.html"
+            json_path = artifact_dir / "timeline.json"
 
             result = run_cli(
                 "run-script",
@@ -190,15 +228,25 @@ class ORSetLabTests(unittest.TestCase):
                 str(mermaid_path),
                 "--timeline-svg-out",
                 str(svg_path),
+                "--timeline-html-out",
+                str(html_path),
+                "--json-out",
+                str(json_path),
             )
 
             self.assertTrue(result["convergence"]["converged"])
             self.assertTrue(markdown_path.exists())
             self.assertTrue(mermaid_path.exists())
             self.assertTrue(svg_path.exists())
+            self.assertTrue(html_path.exists())
+            self.assertTrue(json_path.exists())
             self.assertIn("OR-Set timeline", markdown_path.read_text())
             self.assertIn("sequenceDiagram", mermaid_path.read_text())
             self.assertIn("<svg", svg_path.read_text())
+            html = html_path.read_text()
+            self.assertIn('href="timeline.json"', html)
+            self.assertIn("sample_ops.json", html)
+            self.assertEqual(json.loads(json_path.read_text())["convergence"]["converged"], True)
 
     def test_cli_add_writes_timeline_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
