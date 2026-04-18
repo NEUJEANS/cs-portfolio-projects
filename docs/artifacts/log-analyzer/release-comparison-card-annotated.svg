@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="744" viewBox="0 0 1080 744" role="img" aria-labelledby="log-comparison-card-title log-comparison-card-desc">
+  <title id="log-comparison-card-title">Facet comparison card for release-comparison-sample.log</title>
+  <desc id="log-comparison-card-desc">Comparison card showing env=prod versus env=staging over 2026-04-18 09:00 → 09:03 UTC</desc>
+  <rect width="100%" height="100%" fill="#fff7ed" />
+  <rect x="24" y="20" width="1032" height="704" rx="30" fill="#fff1e6" stroke="#fdba74" stroke-width="2" />
+  <text x="54" y="64" font-size="32" font-weight="700" fill="#0f172a">Release comparison snapshot</text>
+  <text x="54" y="92" font-size="16" fill="#475569">release-comparison-sample.log · env=prod vs env=staging · 3 aligned bucket(s)</text>
+<rect x="54" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="72" y="142" font-size="14" fill="#64748b">env=prod</text>
+<text x="72" y="174" font-size="28" font-weight="700" fill="#0f172a">5</text>
+<text x="72" y="194" font-size="12" fill="#64748b">20% errors · top /api/report</text>
+<rect x="298" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="316" y="142" font-size="14" fill="#64748b">env=staging</text>
+<text x="316" y="174" font-size="28" font-weight="700" fill="#0f172a">6</text>
+<text x="316" y="194" font-size="12" fill="#64748b">16.7% errors · top /api/export</text>
+<rect x="542" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="560" y="142" font-size="14" fill="#64748b">Error-rate delta</text>
+<text x="560" y="174" font-size="28" font-weight="700" fill="#0f172a">-3.3 pp</text>
+<text x="560" y="194" font-size="12" fill="#64748b">staging minus prod</text>
+<rect x="786" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="804" y="142" font-size="14" fill="#64748b">P95 latency delta</text>
+<text x="804" y="174" font-size="28" font-weight="700" fill="#0f172a">-12 ms</text>
+<text x="804" y="194" font-size="12" fill="#64748b">avg Δ +25.8 ms</text>
+<rect x="54" y="234" width="296" height="294" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="74" y="268" font-size="18" font-weight="700" fill="#0f172a">Requests / bucket</text>
+<text x="74" y="292" font-size="14" fill="#475569">Largest gap +1 at 09:02</text>
+<line x1="74" y1="314" x2="92" y2="314" stroke="#2563eb" stroke-width="3" stroke-linecap="round" />
+<circle cx="83" cy="314" r="4" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.2" />
+<text x="102" y="318" font-size="12" fill="#64748b">prod</text>
+<line x1="202" y1="314" x2="220" y2="314" stroke="#f97316" stroke-width="3" stroke-linecap="round" />
+<circle cx="211" cy="314" r="4" fill="#ea580c" stroke="#ffffff" stroke-width="1.2" />
+<text x="230" y="318" font-size="12" fill="#64748b">staging</text>
+<line x1="74" y1="338.00" x2="330" y2="338.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="386.00" x2="330" y2="386.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="434.00" x2="330" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="482.00" x2="330" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="482" x2="330" y2="482" stroke="#0f172a" stroke-width="1.5" />
+<line x1="74.00" y1="338.00" x2="74.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="74.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="74.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<line x1="202.00" y1="338.00" x2="202.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="202.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="202.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<line x1="330.00" y1="338.00" x2="330.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="330.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="330.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="74.00,356.78 202.00,356.78 330.00,419.39" />
+<circle cx="74.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="202.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="330.00" cy="419.39" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<polyline fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="74.00,356.78 202.00,356.78 330.00,356.78" />
+<circle cx="74.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="202.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="330.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<text x="74" y="506" font-size="12" fill="#64748b">09:00</text>
+<text x="330" y="506" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="74" y="328" font-size="12" fill="#64748b">max 2</text>
+<text x="74" y="524" font-size="12" fill="#64748b">0</text>
+<rect x="378" y="234" width="296" height="294" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="398" y="268" font-size="18" font-weight="700" fill="#0f172a">Error rate / bucket</text>
+<text x="398" y="292" font-size="14" fill="#475569">Largest gap -50 pp at 09:00</text>
+<line x1="398" y1="314" x2="416" y2="314" stroke="#2563eb" stroke-width="3" stroke-linecap="round" />
+<circle cx="407" cy="314" r="4" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.2" />
+<text x="426" y="318" font-size="12" fill="#64748b">prod</text>
+<line x1="526" y1="314" x2="544" y2="314" stroke="#f97316" stroke-width="3" stroke-linecap="round" />
+<circle cx="535" cy="314" r="4" fill="#ea580c" stroke="#ffffff" stroke-width="1.2" />
+<text x="554" y="318" font-size="12" fill="#64748b">staging</text>
+<line x1="398" y1="338.00" x2="654" y2="338.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="386.00" x2="654" y2="386.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="434.00" x2="654" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="482.00" x2="654" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="482" x2="654" y2="482" stroke="#0f172a" stroke-width="1.5" />
+<line x1="398.00" y1="338.00" x2="398.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="398.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="398.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<line x1="526.00" y1="338.00" x2="526.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="526.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="526.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<line x1="654.00" y1="338.00" x2="654.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="654.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="654.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="398.00,356.78 526.00,482.00 654.00,482.00" />
+<circle cx="398.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="526.00" cy="482.00" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="654.00" cy="482.00" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<polyline fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="398.00,482.00 526.00,356.78 654.00,482.00" />
+<circle cx="398.00" cy="482.00" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="526.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="654.00" cy="482.00" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<text x="398" y="506" font-size="12" fill="#64748b">09:00</text>
+<text x="654" y="506" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="398" y="328" font-size="12" fill="#64748b">max 50%</text>
+<text x="398" y="524" font-size="12" fill="#64748b">0%</text>
+<rect x="702" y="234" width="296" height="294" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="722" y="268" font-size="18" font-weight="700" fill="#0f172a">Avg latency / bucket</text>
+<text x="722" y="292" font-size="14" fill="#475569">Largest gap +150 ms at 09:01</text>
+<line x1="722" y1="314" x2="740" y2="314" stroke="#2563eb" stroke-width="3" stroke-linecap="round" />
+<circle cx="731" cy="314" r="4" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.2" />
+<text x="750" y="318" font-size="12" fill="#64748b">prod</text>
+<line x1="850" y1="314" x2="868" y2="314" stroke="#f97316" stroke-width="3" stroke-linecap="round" />
+<circle cx="859" cy="314" r="4" fill="#ea580c" stroke="#ffffff" stroke-width="1.2" />
+<text x="878" y="318" font-size="12" fill="#64748b">staging</text>
+<line x1="722" y1="338.00" x2="978" y2="338.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="386.00" x2="978" y2="386.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="434.00" x2="978" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="482.00" x2="978" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="482" x2="978" y2="482" stroke="#0f172a" stroke-width="1.5" />
+<line x1="722.00" y1="338.00" x2="722.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="722.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="722.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<line x1="850.00" y1="338.00" x2="850.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="850.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="850.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<line x1="978.00" y1="338.00" x2="978.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="978.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<text x="978.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="722.00,372.72 850.00,425.08 978.00,472.89" />
+<circle cx="722.00" cy="372.72" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="850.00" cy="425.08" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="978.00" cy="472.89" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<polyline fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="722.00,420.53 850.00,356.78 978.00,428.50" />
+<circle cx="722.00" cy="420.53" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="850.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="978.00" cy="428.50" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<text x="722" y="506" font-size="12" fill="#64748b">09:00</text>
+<text x="978" y="506" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="722" y="328" font-size="12" fill="#64748b">max 275 ms</text>
+<text x="722" y="524" font-size="12" fill="#64748b">0 ms</text>
+  <rect x="54" y="554" width="972" height="138" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="78" y="588" font-size="14" fill="#334155">Comparison: env=prod vs env=staging (staging minus prod)</text>
+<text x="78" y="610" font-size="14" fill="#334155">Coverage: 2026-04-18 09:00 → 09:03 UTC</text>
+<text x="78" y="632" font-size="14" fill="#334155">Window filter: full log span</text>
+<text x="78" y="654" font-size="14" fill="#334155">Aligned buckets: 3 (minute)</text>
+<text x="78" y="676" font-size="14" fill="#334155">Annotations: 1. 09:00 Deploy started · 2. 09:01 Rollback triggered</text>
+<text x="78" y="698" font-size="14" fill="#334155">Annotations: 3. 09:02 Recovery confirmed</text>
+  <text x="78" y="724" font-size="12" fill="#64748b">Use the HTML companion for a browser-friendly release-review table, annotation legend, and exact per-bucket deltas.</text>
+</svg>

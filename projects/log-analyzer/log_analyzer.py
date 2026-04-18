@@ -5,6 +5,7 @@ import csv
 import json
 import math
 import re
+import textwrap
 from collections import Counter, defaultdict
 from html import escape
 from dataclasses import dataclass, field
@@ -675,6 +676,162 @@ def format_bucket_range_label(bucket_start: str, bucket_end: str) -> str:
     return f"{start:%Y-%m-%d %H:%M} → {end:%Y-%m-%d %H:%M} UTC"
 
 
+def build_chart_x_positions(*, value_count: int, left: float, width: float) -> list[float]:
+    if value_count <= 0:
+        return []
+    if value_count == 1:
+        return [left + (width / 2)]
+    step = width / (value_count - 1)
+    return [left + (step * index) for index in range(value_count)]
+
+
+def normalize_card_annotations(
+    raw_annotations: Iterable[str] | None,
+    *,
+    time_buckets: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    raw_items = list(raw_annotations or [])
+    if not raw_items:
+        return []
+    if not time_buckets:
+        raise ValueError("--card-annotation requires at least one matched time bucket")
+
+    bucket_ranges = [
+        (
+            index,
+            parse_bucket_datetime(str(bucket["bucket_start"])),
+            parse_bucket_datetime(str(bucket["bucket_end"])),
+            bucket,
+        )
+        for index, bucket in enumerate(time_buckets)
+    ]
+    coverage_label = format_bucket_range_label(
+        str(time_buckets[0]["bucket_start"]),
+        str(time_buckets[-1]["bucket_end"]),
+    )
+
+    grouped_labels: dict[int, list[str]] = defaultdict(list)
+    grouped_times: dict[int, list[datetime]] = defaultdict(list)
+    for raw_annotation in raw_items:
+        if "=" not in raw_annotation:
+            raise ValueError(
+                "--card-annotation must use TIMESTAMP=LABEL (for example "
+                "2026-04-18T09:00:30Z=Deploy started)"
+            )
+        raw_timestamp, raw_label = raw_annotation.split("=", 1)
+        parsed_time = parse_cli_datetime(raw_timestamp.strip())
+        if parsed_time is None:
+            raise ValueError(
+                "--card-annotation timestamps must be ISO-8601 or a common-log timestamp"
+            )
+        label = raw_label.strip()
+        if not label:
+            raise ValueError("--card-annotation labels cannot be empty")
+
+        annotation_time = parsed_time.astimezone(timezone.utc)
+        matched_bucket_index: int | None = None
+        for index, bucket_start, bucket_end, _bucket in bucket_ranges:
+            is_last_bucket = index == len(bucket_ranges) - 1
+            if bucket_start <= annotation_time < bucket_end or (
+                is_last_bucket and annotation_time == bucket_end
+            ):
+                matched_bucket_index = index
+                break
+        if matched_bucket_index is None:
+            raise ValueError(
+                f"--card-annotation timestamp {raw_timestamp.strip()} falls outside the current "
+                f"bucket coverage ({coverage_label})"
+            )
+
+        grouped_labels[matched_bucket_index].append(label)
+        grouped_times[matched_bucket_index].append(annotation_time)
+
+    if len(grouped_labels) > 4:
+        raise ValueError("--card-annotation supports at most 4 distinct bucket markers per export")
+
+    annotations: list[dict[str, object]] = []
+    for marker_index, bucket_index in enumerate(sorted(grouped_labels), start=1):
+        bucket = time_buckets[bucket_index]
+        event_times = sorted(grouped_times[bucket_index])
+        label = " · ".join(grouped_labels[bucket_index])
+        annotations.append(
+            {
+                "marker": str(marker_index),
+                "bucket_index": bucket_index,
+                "bucket_start": str(bucket["bucket_start"]),
+                "bucket_end": str(bucket["bucket_end"]),
+                "axis_label": format_bucket_axis_label(str(bucket["bucket_start"])),
+                "range_label": format_bucket_range_label(
+                    str(bucket["bucket_start"]),
+                    str(bucket["bucket_end"]),
+                ),
+                "event_time_label": ", ".join(dt.strftime("%H:%M:%S") for dt in event_times),
+                "label": label,
+                "short_label": textwrap.shorten(label, width=32, placeholder="…"),
+            }
+        )
+    return annotations
+
+
+def build_card_annotation_map(
+    annotations: Iterable[dict[str, object]] | None,
+) -> dict[str, dict[str, object]]:
+    return {
+        str(annotation["bucket_start"]): annotation
+        for annotation in (annotations or [])
+    }
+
+
+def build_card_annotation_footer_lines(
+    annotations: Iterable[dict[str, object]] | None,
+) -> list[str]:
+    items = [
+        f'{annotation["marker"]}. {annotation["axis_label"]} {annotation["short_label"]}'
+        for annotation in (annotations or [])
+    ]
+    if not items:
+        return []
+    chunk_size = 2
+    return [
+        "Annotations: " + " · ".join(items[index : index + chunk_size])
+        for index in range(0, len(items), chunk_size)
+    ]
+
+
+def render_chart_annotations(
+    *,
+    annotations: Iterable[dict[str, object]] | None,
+    chart_left: float,
+    chart_top: float,
+    chart_width: float,
+    chart_height: float,
+    marker_fill: str,
+    line_stroke: str,
+    value_count: int,
+) -> list[str]:
+    annotations_list = list(annotations or [])
+    if not annotations_list or value_count <= 0:
+        return []
+
+    x_positions = build_chart_x_positions(value_count=value_count, left=chart_left, width=chart_width)
+    chart_bottom = chart_top + chart_height
+    parts: list[str] = []
+    for annotation in annotations_list:
+        bucket_index = int(annotation["bucket_index"])
+        if bucket_index >= len(x_positions):
+            continue
+        x_position = x_positions[bucket_index]
+        marker_cy = chart_top + 16
+        parts.extend(
+            [
+                f'<line x1="{x_position:.2f}" y1="{chart_top:.2f}" x2="{x_position:.2f}" y2="{chart_bottom:.2f}" stroke="{line_stroke}" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />',
+                f'<circle cx="{x_position:.2f}" cy="{marker_cy:.2f}" r="10" fill="{marker_fill}" stroke="#ffffff" stroke-width="1.6" />',
+                f'<text x="{x_position:.2f}" y="{marker_cy + 4:.2f}" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">{escape(str(annotation["marker"]))}</text>',
+            ]
+        )
+    return parts
+
+
 def build_time_bucket_card_summary(result: dict) -> dict[str, object]:
     time_buckets = result["time_buckets"]
     time_bucketing = result["time_bucketing"] or {}
@@ -759,11 +916,7 @@ def build_svg_chart_points(
     if scale_max_value <= 0:
         scale_max_value = 1.0
 
-    if len(values) == 1:
-        x_positions = [left + (width / 2)]
-    else:
-        step = width / (len(values) - 1)
-        x_positions = [left + (step * index) for index in range(len(values))]
+    x_positions = build_chart_x_positions(value_count=len(values), left=left, width=width)
 
     segments: list[list[tuple[float, float]]] = []
     current_segment: list[tuple[float, float]] = []
@@ -793,6 +946,7 @@ def render_time_bucket_chart_panel(
     accent_color: str,
     summary_text: str,
     metric_suffix: str,
+    annotations: Iterable[dict[str, object]] | None = None,
 ) -> list[str]:
     parts = [
         f'<rect x="{panel_left}" y="{panel_top}" width="{panel_width}" height="{panel_height}" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
@@ -816,6 +970,19 @@ def render_time_bucket_chart_panel(
 
     parts.append(
         f'<line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_left + chart_width}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="1.5" />'
+    )
+
+    parts.extend(
+        render_chart_annotations(
+            annotations=annotations,
+            chart_left=chart_left,
+            chart_top=chart_top,
+            chart_width=chart_width,
+            chart_height=chart_height,
+            marker_fill="#0f172a",
+            line_stroke="#94a3b8",
+            value_count=len(values),
+        )
     )
 
     segments = build_svg_chart_points(
@@ -867,6 +1034,7 @@ def render_comparison_chart_panel(
     right_accent_color: str,
     summary_text: str,
     metric_suffix: str,
+    annotations: Iterable[dict[str, object]] | None = None,
 ) -> list[str]:
     parts = [
         f'<rect x="{panel_left}" y="{panel_top}" width="{panel_width}" height="{panel_height}" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
@@ -924,6 +1092,19 @@ def render_comparison_chart_panel(
         f'<line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_left + chart_width}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="1.5" />'
     )
 
+    parts.extend(
+        render_chart_annotations(
+            annotations=annotations,
+            chart_left=chart_left,
+            chart_top=chart_top,
+            chart_width=chart_width,
+            chart_height=chart_height,
+            marker_fill="#9a3412",
+            line_stroke="#fdba74",
+            value_count=max(len(left_values), len(right_values)),
+        )
+    )
+
     series = [
         (left_values, left_stroke_color, left_accent_color),
         (right_values, right_stroke_color, right_accent_color),
@@ -965,11 +1146,12 @@ def format_time_bucket_card_svg(
     *,
     source_label: str,
     id_prefix: str = "log-trend-card",
+    annotations: Iterable[dict[str, object]] | None = None,
 ) -> str:
     summary = build_time_bucket_card_summary(result)
     time_buckets = result["time_buckets"]
+    annotation_items = list(annotations or [])
     width = 1080
-    height = 680
     title_id = f"{id_prefix}-title"
     desc_id = f"{id_prefix}-desc"
     bucket_labels = [format_bucket_axis_label(bucket["bucket_start"]) for bucket in time_buckets]
@@ -1066,6 +1248,7 @@ def format_time_bucket_card_svg(
                 accent_color=chart_spec["accent_color"],
                 summary_text=chart_spec["summary_text"],
                 metric_suffix=chart_spec["metric_suffix"],
+                annotations=annotation_items,
             )
         )
 
@@ -1084,6 +1267,12 @@ def format_time_bucket_card_svg(
         )
     else:
         footer_lines.append("Facet fields: none selected for this run")
+    footer_lines.extend(build_card_annotation_footer_lines(annotation_items))
+
+    outer_height = 640 + (44 if annotation_items else 0)
+    footer_height = 94 + (44 if annotation_items else 0)
+    footer_note_y = 574 + (len(footer_lines) * 22) + 4
+    height = 680 + (44 if annotation_items else 0)
 
     return "\n".join(
         [
@@ -1091,28 +1280,42 @@ def format_time_bucket_card_svg(
             f'  <title id="{title_id}">Log trend card for {escape(source_label)}</title>',
             f'  <desc id="{desc_id}">Trend card covering {escape(coverage_label)} at {escape(str(granularity))} granularity</desc>',
             '  <rect width="100%" height="100%" fill="#f8fafc" />',
-            '  <rect x="24" y="20" width="1032" height="640" rx="30" fill="#eef2ff" stroke="#c7d2fe" stroke-width="2" />',
+            f'  <rect x="24" y="20" width="1032" height="{outer_height}" rx="30" fill="#eef2ff" stroke="#c7d2fe" stroke-width="2" />',
             '  <text x="54" y="64" font-size="32" font-weight="700" fill="#0f172a">Observability trend snapshot</text>',
             f'  <text x="54" y="92" font-size="16" fill="#475569">{escape(source_label)} · {escape(str(granularity))} buckets · {escape(str(summary["bucket_count"]))} bucket(s)</text>',
             *card_parts,
             *chart_parts,
-            '  <rect x="54" y="540" width="972" height="94" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+            f'  <rect x="54" y="540" width="972" height="{footer_height}" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
             *[
                 f'<text x="78" y="{574 + (index * 22)}" font-size="14" fill="#334155">{escape(line)}</text>'
                 for index, line in enumerate(footer_lines)
             ],
-            '  <text x="78" y="622" font-size="12" fill="#64748b">Use the standalone HTML companion for a browser-friendly summary table and quick portfolio caption copy.</text>',
+            f'  <text x="78" y="{footer_note_y}" font-size="12" fill="#64748b">Use the standalone HTML companion for a browser-friendly summary table, annotation legend, and quick portfolio caption copy.</text>',
             '</svg>',
         ]
     )
 
 
-def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
+def format_time_bucket_card_html(
+    result: dict,
+    *,
+    source_label: str,
+    annotations: Iterable[dict[str, object]] | None = None,
+) -> str:
     summary = build_time_bucket_card_summary(result)
     faceting = result["faceting"]
     time_window = result["time_window"]
+    annotation_items = list(annotations or [])
+    annotation_map = build_card_annotation_map(annotation_items)
     table_rows = []
     for bucket in result["time_buckets"]:
+        annotation = annotation_map.get(str(bucket["bucket_start"]))
+        annotation_cell = "—"
+        if annotation:
+            annotation_cell = (
+                f'<span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                f'{escape(str(annotation["label"]))}'
+            )
         table_rows.append(
             "".join(
                 [
@@ -1124,13 +1327,14 @@ def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
                     f"<td>{escape(format_card_metric_value(bucket['average_latency_ms'], suffix=' ms'))}</td>",
                     f"<td>{escape(format_card_metric_value(bucket['average_upstream_latency_ms'], suffix=' ms'))}</td>",
                     f"<td><code>{escape(bucket['top_path'] or '(none)')}</code></td>",
+                    f"<td>{annotation_cell}</td>",
                     "</tr>",
                 ]
             )
         )
     if not table_rows:
         table_rows.append(
-            '<tr><td colspan="7">No matched buckets were produced for this run.</td></tr>'
+            '<tr><td colspan="8">No matched buckets were produced for this run.</td></tr>'
         )
 
     meta_items = [
@@ -1156,16 +1360,40 @@ def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
                 format_card_metric_value(len(result["time_bucket_facet_breakdown"])),
             )
         )
+    if annotation_items:
+        meta_items.append(("Annotation markers", format_card_metric_value(len(annotation_items))))
 
     meta_html = "".join(
         f'<li><strong>{escape(label)}</strong><br><span>{escape(value)}</span></li>'
         for label, value in meta_items
     )
+    annotation_html = ""
+    if annotation_items:
+        annotation_html = "".join(
+            [
+                '<section>',
+                '  <h2>Annotation markers</h2>',
+                '  <p class="caption">These markers pin deploys, incidents, or other callouts onto the shared bucket timeline used by the SVG card.</p>',
+                '  <ul class="annotation-list">',
+                *[
+                    (
+                        f'    <li><span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                        f'<strong>{escape(str(annotation["range_label"]))}</strong><br>'
+                        f'<span>{escape(str(annotation["label"]))}</span><br>'
+                        f'<span class="annotation-time">Events: {escape(str(annotation["event_time_label"]))}</span></li>'
+                    )
+                    for annotation in annotation_items
+                ],
+                '  </ul>',
+                '</section>',
+            ]
+        )
 
     svg_payload = format_time_bucket_card_svg(
         result,
         source_label=source_label,
         id_prefix="log-trend-card-html",
+        annotations=annotation_items,
     )
 
     return f'''<!DOCTYPE html>
@@ -1187,6 +1415,10 @@ def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
     th, td {{ padding: 0.7rem 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.2); text-align: left; }}
     th {{ font-size: 0.9rem; color: #475569; }}
     .caption {{ color: #475569; margin-top: 0.8rem; }}
+    .annotation-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; list-style: none; padding: 0; margin: 1rem 0 0; }}
+    .annotation-list li {{ border: 1px solid rgba(99, 102, 241, 0.22); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }}
+    .annotation-chip {{ display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.35rem; border-radius: 999px; background: #0f172a; color: #ffffff; font-size: 0.82rem; font-weight: 700; margin-right: 0.45rem; }}
+    .annotation-time {{ color: #64748b; font-size: 0.9rem; }}
   </style>
 </head>
 <body>
@@ -1196,6 +1428,7 @@ def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
   <section class="card-shell">
     {svg_payload}
   </section>
+  {annotation_html}
   <section>
     <h2>Bucket summary table</h2>
     <p class="caption">Use this table when you want the exact bucket start/end boundaries plus the request/error/latency values beside the visual sparkline card.</p>
@@ -1209,6 +1442,7 @@ def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
           <th>Avg latency</th>
           <th>Avg upstream latency</th>
           <th>Top path</th>
+          <th>Annotation</th>
         </tr>
       </thead>
       <tbody>
@@ -1282,6 +1516,7 @@ def format_facet_comparison_card_svg(
     source_label: str,
     time_window: dict[str, str | int] | None = None,
     id_prefix: str = "log-comparison-card",
+    annotations: Iterable[dict[str, object]] | None = None,
 ) -> str:
     summary = build_facet_comparison_card_summary(comparison)
     left = summary["left"]
@@ -1291,8 +1526,8 @@ def format_facet_comparison_card_svg(
     right_summary = right["summary"]
     time_buckets = comparison["time_buckets"]
     bucket_labels = [format_bucket_axis_label(bucket["bucket_start"]) for bucket in time_buckets]
+    annotation_items = list(annotations or [])
     width = 1080
-    height = 700
     title_id = f"{id_prefix}-title"
     desc_id = f"{id_prefix}-desc"
     coverage_label = summary["coverage_label"]
@@ -1404,6 +1639,7 @@ def format_facet_comparison_card_svg(
                 right_accent_color="#ea580c",
                 summary_text=chart_spec["summary_text"],
                 metric_suffix=chart_spec["metric_suffix"],
+                annotations=annotation_items,
             )
         )
 
@@ -1423,6 +1659,12 @@ def format_facet_comparison_card_svg(
         )
     else:
         footer_lines.append("Aligned buckets: none (summary-only comparison)")
+    footer_lines.extend(build_card_annotation_footer_lines(annotation_items))
+
+    outer_height = 660 + (44 if annotation_items else 0)
+    footer_height = 94 + (44 if annotation_items else 0)
+    footer_note_y = 588 + (len(footer_lines) * 22) + 4
+    height = 700 + (44 if annotation_items else 0)
 
     return "\n".join(
         [
@@ -1430,17 +1672,17 @@ def format_facet_comparison_card_svg(
             f'  <title id="{title_id}">Facet comparison card for {escape(source_label)}</title>',
             f'  <desc id="{desc_id}">Comparison card showing {escape(left["label"])} versus {escape(right["label"])} over {escape(coverage_label)}</desc>',
             '  <rect width="100%" height="100%" fill="#fff7ed" />',
-            '  <rect x="24" y="20" width="1032" height="660" rx="30" fill="#fff1e6" stroke="#fdba74" stroke-width="2" />',
+            f'  <rect x="24" y="20" width="1032" height="{outer_height}" rx="30" fill="#fff1e6" stroke="#fdba74" stroke-width="2" />',
             '  <text x="54" y="64" font-size="32" font-weight="700" fill="#0f172a">Release comparison snapshot</text>',
             f'  <text x="54" y="92" font-size="16" fill="#475569">{escape(source_label)} · {escape(left["label"])} vs {escape(right["label"])} · {escape(str(summary["aligned_bucket_count"]))} aligned bucket(s)</text>',
             *card_parts,
             *chart_parts,
-            '  <rect x="54" y="554" width="972" height="94" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+            f'  <rect x="54" y="554" width="972" height="{footer_height}" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
             *[
                 f'<text x="78" y="{588 + (index * 22)}" font-size="14" fill="#334155">{escape(line)}</text>'
                 for index, line in enumerate(footer_lines)
             ],
-            '  <text x="78" y="636" font-size="12" fill="#64748b">Use the HTML companion for a browser-friendly release-review table with exact deltas and per-bucket rows.</text>',
+            f'  <text x="78" y="{footer_note_y}" font-size="12" fill="#64748b">Use the HTML companion for a browser-friendly release-review table, annotation legend, and exact per-bucket deltas.</text>',
             '</svg>',
         ]
     )
@@ -1451,6 +1693,7 @@ def format_facet_comparison_card_html(
     *,
     source_label: str,
     time_window: dict[str, str | int] | None = None,
+    annotations: Iterable[dict[str, object]] | None = None,
 ) -> str:
     summary = build_facet_comparison_card_summary(comparison)
     left = summary["left"]
@@ -1458,6 +1701,8 @@ def format_facet_comparison_card_html(
     delta = summary["delta"]
     left_summary = left["summary"]
     right_summary = right["summary"]
+    annotation_items = list(annotations or [])
+    annotation_map = build_card_annotation_map(annotation_items)
 
     meta_items = [
         ("Source", source_label),
@@ -1475,6 +1720,8 @@ def format_facet_comparison_card_html(
                 f'{time_window["start"] or "(open)"} → {time_window["end"] or "(open)"}',
             )
         )
+    if annotation_items:
+        meta_items.append(("Annotation markers", format_card_metric_value(len(annotation_items))))
 
     meta_html = "".join(
         f'<li><strong>{escape(label)}</strong><br><span>{escape(value)}</span></li>'
@@ -1553,6 +1800,13 @@ def format_facet_comparison_card_html(
 
     bucket_table_rows = []
     for bucket in comparison["time_buckets"]:
+        annotation = annotation_map.get(str(bucket["bucket_start"]))
+        annotation_cell = "—"
+        if annotation:
+            annotation_cell = (
+                f'<span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                f'{escape(str(annotation["label"]))}'
+            )
         bucket_table_rows.append(
             "".join(
                 [
@@ -1570,13 +1824,36 @@ def format_facet_comparison_card_html(
                     f'<td>{escape(format_signed_card_metric_value(bucket["average_latency_ms_delta"], suffix=" ms"))}</td>',
                     f'<td><code>{escape(bucket["left_top_path"] or "(none)")}</code></td>',
                     f'<td><code>{escape(bucket["right_top_path"] or "(none)")}</code></td>',
+                    f'<td>{annotation_cell}</td>',
                     "</tr>",
                 ]
             )
         )
     if not bucket_table_rows:
         bucket_table_rows.append(
-            '<tr><td colspan="13">No aligned bucket rows were produced for this run. Re-run with --time-bucket minute or --time-bucket hour for side-by-side charts and bucket tables.</td></tr>'
+            '<tr><td colspan="14">No aligned bucket rows were produced for this run. Re-run with --time-bucket minute or --time-bucket hour for side-by-side charts and bucket tables.</td></tr>'
+        )
+
+    annotation_html = ""
+    if annotation_items:
+        annotation_html = "".join(
+            [
+                '<section>',
+                '  <h2>Annotation markers</h2>',
+                '  <p class="caption">These markers pin deploys, incidents, or other callouts onto the aligned bucket timeline used by the SVG comparison card.</p>',
+                '  <ul class="annotation-list">',
+                *[
+                    (
+                        f'    <li><span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                        f'<strong>{escape(str(annotation["range_label"]))}</strong><br>'
+                        f'<span>{escape(str(annotation["label"]))}</span><br>'
+                        f'<span class="annotation-time">Events: {escape(str(annotation["event_time_label"]))}</span></li>'
+                    )
+                    for annotation in annotation_items
+                ],
+                '  </ul>',
+                '</section>',
+            ]
         )
 
     svg_payload = format_facet_comparison_card_svg(
@@ -1584,6 +1861,7 @@ def format_facet_comparison_card_html(
         source_label=source_label,
         time_window=time_window,
         id_prefix="log-comparison-card-html",
+        annotations=annotation_items,
     )
 
     return f'''<!DOCTYPE html>
@@ -1605,15 +1883,20 @@ def format_facet_comparison_card_html(
     th, td {{ padding: 0.7rem 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.2); text-align: left; vertical-align: top; }}
     th {{ font-size: 0.9rem; color: #475569; }}
     .caption {{ color: #475569; margin-top: 0.8rem; }}
+    .annotation-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; list-style: none; padding: 0; margin: 1rem 0 0; }}
+    .annotation-list li {{ border: 1px solid rgba(251, 146, 60, 0.28); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }}
+    .annotation-chip {{ display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.35rem; border-radius: 999px; background: #9a3412; color: #ffffff; font-size: 0.82rem; font-weight: 700; margin-right: 0.45rem; }}
+    .annotation-time {{ color: #7c2d12; font-size: 0.9rem; }}
   </style>
 </head>
 <body>
   <h1>Release comparison card</h1>
-  <p>This browser-friendly artifact turns facet comparisons into a slide-ready release review card with exact summary deltas and aligned per-bucket rows for screenshots, demos, and portfolio case studies.</p>
+  <p>This browser-friendly artifact turns facet comparisons into a slide-ready release review card with exact summary deltas, aligned per-bucket rows, and optional deploy/incident callouts for screenshots, demos, and portfolio case studies.</p>
   <ul class="meta">{meta_html}</ul>
   <section class="card-shell">
     {svg_payload}
   </section>
+  {annotation_html}
   <section>
     <h2>Summary delta table</h2>
     <table>
@@ -1632,7 +1915,7 @@ def format_facet_comparison_card_html(
   </section>
   <section>
     <h2>Aligned bucket rows</h2>
-    <p class="caption">Use these rows when you want exact per-bucket request, error-rate, and latency deltas beside the higher-level comparison card.</p>
+    <p class="caption">Use these rows when you want exact per-bucket request, error-rate, latency, and annotation deltas beside the higher-level comparison card.</p>
     <table>
       <thead>
         <tr>
@@ -1649,6 +1932,7 @@ def format_facet_comparison_card_html(
           <th>Δ avg latency</th>
           <th>{escape(left["value"])} top path</th>
           <th>{escape(right["value"])} top path</th>
+          <th>Annotation</th>
         </tr>
       </thead>
       <tbody>
@@ -2817,6 +3101,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--card-annotation",
+        action="append",
+        default=[],
+        help=(
+            "Optional TIMESTAMP=LABEL callout pinned onto matching card-export buckets "
+            "(repeatable; requires --time-bucket and at least one card export flag)"
+        ),
+    )
+    parser.add_argument(
         "--hotspot-status",
         action="append",
         default=[],
@@ -2973,6 +3266,18 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--time-bucket-card-svg requires --time-bucket")
     if args.time_bucket_card_html and not args.time_bucket:
         parser.error("--time-bucket-card-html requires --time-bucket")
+    has_card_exports = any(
+        [
+            args.time_bucket_card_svg,
+            args.time_bucket_card_html,
+            args.facet_compare_card_svg,
+            args.facet_compare_card_html,
+        ]
+    )
+    if args.card_annotation and not args.time_bucket:
+        parser.error("--card-annotation requires --time-bucket")
+    if args.card_annotation and not has_card_exports:
+        parser.error("--card-annotation requires at least one card export flag")
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
@@ -3021,6 +3326,19 @@ def main(argv: list[str] | None = None) -> int:
             facet_fields=normalized_facet_fields,
             facet_compare_field=normalized_facet_compare_field,
             facet_compare_values=normalized_facet_compare_values,
+        )
+
+    trend_card_annotations = None
+    comparison_card_annotations = None
+    if args.card_annotation and (args.time_bucket_card_svg or args.time_bucket_card_html):
+        trend_card_annotations = normalize_card_annotations(
+            args.card_annotation,
+            time_buckets=result["time_buckets"],
+        )
+    if args.card_annotation and (args.facet_compare_card_svg or args.facet_compare_card_html):
+        comparison_card_annotations = normalize_card_annotations(
+            args.card_annotation,
+            time_buckets=result["facet_comparison"]["time_buckets"],
         )
 
     if args.summary_csv:
@@ -3082,6 +3400,7 @@ def main(argv: list[str] | None = None) -> int:
                 result["facet_comparison"],
                 source_label=Path(args.logfile).name,
                 time_window=result["time_window"],
+                annotations=comparison_card_annotations,
             ),
         )
     if args.facet_compare_card_html and result["facet_comparison"]:
@@ -3091,6 +3410,7 @@ def main(argv: list[str] | None = None) -> int:
                 result["facet_comparison"],
                 source_label=Path(args.logfile).name,
                 time_window=result["time_window"],
+                annotations=comparison_card_annotations,
             ),
         )
     if args.time_bucket_card_svg:
@@ -3099,6 +3419,7 @@ def main(argv: list[str] | None = None) -> int:
             format_time_bucket_card_svg(
                 result,
                 source_label=Path(args.logfile).name,
+                annotations=trend_card_annotations,
             ),
         )
     if args.time_bucket_card_html:
@@ -3107,6 +3428,7 @@ def main(argv: list[str] | None = None) -> int:
             format_time_bucket_card_html(
                 result,
                 source_label=Path(args.logfile).name,
+                annotations=trend_card_annotations,
             ),
         )
 

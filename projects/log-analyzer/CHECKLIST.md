@@ -1,10 +1,10 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-18 16:10 UTC run)
-- [x] resume the queued comparison-card follow-up after confirming `main` matches `origin/main`
-- [x] finish dedicated `--facet-compare-card-svg` / `--facet-compare-card-html` exports built from `--facet-compare-*` output
-- [x] add helper/CLI regression coverage for comparison-card rendering and export validation
-- [x] generate a committed comparison-card sample artifact bundle for README/portfolio screenshots
+## Current slice (2026-04-18 17:01 UTC run)
+- [x] resume the queued annotation/callout follow-up after confirming `main` matches `origin/main`
+- [x] ship repeatable `--card-annotation TIMESTAMP=LABEL` support across trend-card and comparison-card SVG/HTML exports
+- [x] add helper + CLI regression coverage for annotation grouping, HTML legends/tables, export success cases, and validation failures
+- [x] generate committed annotated artifact samples for README/portfolio screenshots
 - [x] run targeted tests, smoke checks, and 3 review passes
 - [ ] run secret scan, commit, push, and write the wrap-up
 
@@ -20,13 +20,14 @@
 - [x] add standalone `--time-bucket-card-svg` / `--time-bucket-card-html` exports for slide-ready observability trend cards and browser-friendly bucket summary pages
 - [x] add `--facet-compare-field` / `--facet-compare-values` release-review helpers with side-by-side JSON/text summaries and dedicated comparison CSV exports
 - [x] add `--facet-compare-card-svg` / `--facet-compare-card-html` release-review artifacts plus a committed sample bundle under `docs/artifacts/log-analyzer/`
+- [x] add repeatable `--card-annotation` callouts so trend cards and comparison cards can pin deploy/incident markers onto selected buckets
 
 ## Current quality checks
-- [x] README reflects the shipped facet flags, side-by-side comparison helpers, hotspot/time-bucket workflows, trend-card exports, comparison-card exports, and export metadata
-- [x] unittest coverage includes named-field parsing, facet comparison summaries/CSV exports, comparison-card rendering, facet breakdowns, trend-card rendering, file exports, and CLI validation errors
-- [x] project is resumable via review logs and wrap-up notes in `docs/`
+- [x] README reflects the shipped facet flags, side-by-side comparison helpers, hotspot/time-bucket workflows, trend-card exports, comparison-card exports, annotation controls, and export metadata
+- [x] unittest coverage includes named-field parsing, facet comparison summaries/CSV exports, comparison-card rendering, annotation-aware card rendering, file exports, and CLI validation errors
+- [x] project is resumable via review logs, committed artifacts, and wrap-up notes in `docs/`
 
 ## Next follow-up ideas
 - [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
-- [ ] add compact annotation/callout controls so trend cards can optionally pin deploy markers or incident labels onto selected buckets
-- [ ] consider dedicated comparison-card SVG/HTML artifacts built from `--facet-compare-*` output for release-review screenshots
+- [ ] add per-annotation color/severity themes so deploy, rollback, and incident markers read differently at a glance
+- [ ] consider PNG export helpers or a small gallery index page that links trend cards and comparison cards together

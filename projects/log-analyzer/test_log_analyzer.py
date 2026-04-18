@@ -19,6 +19,7 @@ from log_analyzer import (
     format_text_report,
     format_time_bucket_card_html,
     format_time_bucket_card_svg,
+    normalize_card_annotations,
     parse_line,
 )
 
@@ -425,6 +426,45 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertNotIn('Time bucket facet breakdowns:', report)
         self.assertIn('Per-path latency hotspots by facet (ms): (filters: status=500; method=POST) (facets: env, region)', report)
 
+    def test_normalize_card_annotations_groups_bucket_labels(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050',
+                '10.0.0.2 - - [18/Apr/2026:09:01:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.060',
+            ],
+            top_n=2,
+            time_bucket_granularity='minute',
+        )
+        annotations = normalize_card_annotations(
+            [
+                '2026-04-18T09:00:10Z=Deploy started',
+                '2026-04-18T09:00:40Z=Error budget burn',
+                '2026-04-18T09:01:10Z=Rollback verified',
+            ],
+            time_buckets=result['time_buckets'],
+        )
+        self.assertEqual(len(annotations), 2)
+        self.assertEqual(annotations[0]['marker'], '1')
+        self.assertEqual(annotations[0]['bucket_start'], '2026-04-18T09:00:00+00:00')
+        self.assertEqual(annotations[0]['label'], 'Deploy started · Error budget burn')
+        self.assertEqual(annotations[0]['event_time_label'], '09:00:10, 09:00:40')
+        self.assertEqual(annotations[1]['marker'], '2')
+        self.assertEqual(annotations[1]['bucket_start'], '2026-04-18T09:01:00+00:00')
+
+    def test_normalize_card_annotations_rejects_out_of_range_timestamp(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050',
+            ],
+            top_n=1,
+            time_bucket_granularity='minute',
+        )
+        with self.assertRaisesRegex(ValueError, 'falls outside the current bucket coverage'):
+            normalize_card_annotations(
+                ['2026-04-18T09:05:00Z=Too late'],
+                time_buckets=result['time_buckets'],
+            )
+
     def test_format_time_bucket_card_svg_renders_metric_panels(self):
         result = analyze_lines(
             [
@@ -454,11 +494,26 @@ class LogAnalyzerTests(unittest.TestCase):
             time_bucket_granularity='minute',
             facet_fields=['env', 'region'],
         )
-        html = format_time_bucket_card_html(result, source_label='release-rollout.log')
+        annotations = normalize_card_annotations(
+            [
+                '2026-04-18T09:00:30Z=Deploy started',
+                '2026-04-18T09:01:10Z=Incident spike',
+            ],
+            time_buckets=result['time_buckets'],
+        )
+        html = format_time_bucket_card_html(
+            result,
+            source_label='release-rollout.log',
+            annotations=annotations,
+        )
         self.assertIn('<!DOCTYPE html>', html)
         self.assertIn('Log trend card', html)
         self.assertIn('Facet fields', html)
         self.assertIn('env, region', html)
+        self.assertIn('Annotation markers', html)
+        self.assertIn('Deploy started', html)
+        self.assertIn('Events: 09:00:30', html)
+        self.assertIn('<th>Annotation</th>', html)
         self.assertIn('<table>', html)
         self.assertIn('Bucket end', html)
         self.assertIn('<code>2026-04-18T09:01:00+00:00</code>', html)
@@ -503,15 +558,26 @@ class LogAnalyzerTests(unittest.TestCase):
             facet_compare_field='env',
             facet_compare_values=('prod', 'staging'),
         )
+        annotations = normalize_card_annotations(
+            [
+                '2026-04-18T09:00:20Z=Deploy started',
+                '2026-04-18T09:01:40Z=Rollback triggered',
+            ],
+            time_buckets=result['facet_comparison']['time_buckets'],
+        )
         html = format_facet_comparison_card_html(
             result['facet_comparison'],
             source_label='release-rollout.log',
             time_window=result['time_window'],
+            annotations=annotations,
         )
         self.assertIn('<!DOCTYPE html>', html)
         self.assertIn('Release comparison card', html)
         self.assertIn('Summary delta table', html)
         self.assertIn('Aligned bucket rows', html)
+        self.assertIn('Annotation markers', html)
+        self.assertIn('Rollback triggered', html)
+        self.assertIn('Events: 09:01:40', html)
         self.assertIn('env=prod', html)
         self.assertIn('env=staging', html)
         self.assertIn('<code>2026-04-18T09:01:00+00:00</code>', html)
@@ -1304,6 +1370,50 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Bucket summary table', html_text)
             self.assertIn('<code>/api/report</code>', html_text)
 
+    def test_cli_time_bucket_card_exports_support_annotations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            html_path = Path(tmpdir) / 'exports' / 'trend-card.html'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                    '--time-bucket-card-html',
+                    str(html_path),
+                    '--card-annotation',
+                    '2026-04-18T09:00:20Z=Deploy started',
+                    '--card-annotation',
+                    '2026-04-18T09:01:10Z=Rollback triggered',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            svg_text = svg_path.read_text(encoding='utf-8')
+            html_text = html_path.read_text(encoding='utf-8')
+            self.assertIn('Annotations: 1. 09:00 Deploy started', svg_text)
+            self.assertIn('>1</text>', svg_text)
+            self.assertIn('Annotation markers', html_text)
+            self.assertIn('Events: 09:00:20', html_text)
+            self.assertIn('Rollback triggered', html_text)
+
     def test_cli_rejects_time_bucket_card_export_without_granularity(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -1373,6 +1483,55 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Summary delta table', html_text)
             self.assertIn('Aligned bucket rows', html_text)
 
+    def test_cli_facet_comparison_card_exports_support_annotations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'compare-card.svg'
+            html_path = Path(tmpdir) / 'exports' / 'compare-card.html'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.120 upstream_response_time=0.090 env=staging
+                    10.0.0.4 - - [18/Apr/2026:09:01:45 +0000] "POST /api/report HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.450 env=staging
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-values',
+                    'prod',
+                    'staging',
+                    '--facet-compare-card-svg',
+                    str(svg_path),
+                    '--facet-compare-card-html',
+                    str(html_path),
+                    '--card-annotation',
+                    '2026-04-18T09:00:20Z=Deploy started',
+                    '--card-annotation',
+                    '2026-04-18T09:01:40Z=Rollback triggered',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            svg_text = svg_path.read_text(encoding='utf-8')
+            html_text = html_path.read_text(encoding='utf-8')
+            self.assertIn('Annotations: 1. 09:00 Deploy started', svg_text)
+            self.assertIn('Annotation markers', html_text)
+            self.assertIn('Events: 09:01:40', html_text)
+            self.assertIn('Rollback triggered', html_text)
+
     def test_cli_rejects_facet_comparison_card_exports_without_compare_args(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -1395,6 +1554,57 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('comparison-card export flags require --facet-compare-field and --facet-compare-values', completed.stderr)
+
+    def test_cli_rejects_card_annotation_without_card_export(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--card-annotation',
+                    '2026-04-18T09:00:00Z=Deploy started',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--card-annotation requires at least one card export flag', completed.stderr)
+
+    def test_cli_rejects_card_annotation_outside_bucket_range(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                    '--card-annotation',
+                    '2026-04-18T09:05:00Z=Too late',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('falls outside the current bucket coverage', completed.stderr)
 
     def test_cli_rejects_invalid_hotspot_status(self):
         with tempfile.TemporaryDirectory() as tmpdir:

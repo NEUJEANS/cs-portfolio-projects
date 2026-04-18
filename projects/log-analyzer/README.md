@@ -32,11 +32,11 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
 - supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
-- supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards and browser-friendly artifact pages
+- supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, and optional timeline annotations
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet hotspot and trend breakdowns in text, JSON, and dedicated CSV exports
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
-- supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots and browser-friendly comparison pages
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -48,11 +48,13 @@ python3 log_analyzer.py access.log --path-latency-csv request-hotspots.csv --ups
 python3 log_analyzer.py access.log --time-bucket minute --format json
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-csv minute-trends.csv --summary-csv summary.csv
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --time-bucket-card-html trend-card.html
+python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --card-annotation 2026-04-18T09:00:20Z=Deploy-started --card-annotation 2026-04-18T09:01:40Z=Rollback-triggered
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
 python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-csv release-compare.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html
+python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --card-annotation 2026-04-18T09:00:20Z=Deploy-started --card-annotation 2026-04-18T09:01:40Z=Rollback-triggered
 ```
 
 The parser accepts:
@@ -132,12 +134,14 @@ Behavior:
 - they reuse the existing comparison summary and aligned time-bucket rows instead of creating a separate analysis path
 - the SVG card highlights request/error/latency deltas plus three side-by-side bucket charts (requests, error rate, average latency)
 - the HTML companion repeats the card and adds exact summary + per-bucket tables for verification, captions, and copy/paste into docs
+- add repeatable `--card-annotation TIMESTAMP=LABEL` flags (with `--time-bucket`) to pin numbered deploy/incident markers onto shared bucket rows in both the SVG footer and HTML annotation/table views
 - when `--time-bucket` is omitted, the card still renders a summary-only comparison and the HTML table explains that no aligned bucket rows were produced
 
 Examples:
 - `--facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg`
 - `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html`
-- sample committed artifacts live under `docs/artifacts/log-analyzer/`
+- `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --card-annotation 2026-04-18T09:00:20Z=Deploy-started --card-annotation 2026-04-18T09:01:40Z=Rollback-triggered`
+- sample committed artifacts live under `docs/artifacts/log-analyzer/`, including annotated trend/comparison card bundles
 
 ## Trend card artifacts
 Use `--time-bucket-card-svg` when you want one standalone visual card for slides, README screenshots, or portfolio thumbnails. Use `--time-bucket-card-html` when you also want a browser-friendly artifact page with the same inline SVG plus a bucket summary table.
@@ -146,11 +150,13 @@ Behavior:
 - both flags require `--time-bucket`
 - the SVG card highlights matched requests, overall error rate, weighted average latency, and the busiest / noisiest / slowest buckets
 - the HTML companion repeats the card and adds a tabular per-bucket breakdown with explicit bucket start/end boundaries for copy/paste-friendly captions or verification
+- add repeatable `--card-annotation TIMESTAMP=LABEL` flags to pin numbered deploy/incident markers onto matching buckets in both the SVG footer and HTML legend/table
 - when `--facet-field` is active, the HTML page also surfaces the selected facet names plus how many facet trend rows were exported alongside the card
 
 Examples:
 - `--time-bucket minute --time-bucket-card-svg release-trend.svg`
 - `--time-bucket minute --time-bucket-card-svg release-trend.svg --time-bucket-card-html release-trend.html`
+- `--time-bucket minute --time-bucket-card-svg release-trend.svg --card-annotation 2026-04-18T09:00:20Z=Deploy-started --card-annotation 2026-04-18T09:01:40Z=Rollback-triggered`
 - combine with `--summary-csv`, `--time-bucket-csv`, and `--time-bucket-facet-csv` when you want both the visual card and spreadsheet/debugging companions in one run
 
 ## Hotspot drill-downs
@@ -298,5 +304,5 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 
 ## Future Improvements
 - optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
-- add compact annotation/callout controls so trend cards and comparison cards can pin deploy markers or incident labels onto selected buckets
+- add per-annotation color/severity themes so deploy, rollback, and incident markers read differently at a glance
 - consider PNG export helpers or a small gallery index page that links trend cards and comparison cards together

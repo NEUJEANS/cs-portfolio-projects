@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log trend card (release-comparison-sample.log)</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1240px; padding: 0 1rem 3rem; line-height: 1.5; background: #f8fafc; color: #0f172a; }
+    h1, h2 { line-height: 1.15; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem; padding: 0; margin: 1rem 0 1.5rem; }
+    .meta li { list-style: none; border: 1px solid rgba(148, 163, 184, 0.32); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }
+    .card-shell { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.2rem; padding: 1rem; background: rgba(255, 255, 255, 0.9); box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08); }
+    svg { width: 100%; height: auto; display: block; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: rgba(255, 255, 255, 0.86); }
+    th, td { padding: 0.7rem 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.2); text-align: left; }
+    th { font-size: 0.9rem; color: #475569; }
+    .caption { color: #475569; margin-top: 0.8rem; }
+    .annotation-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; list-style: none; padding: 0; margin: 1rem 0 0; }
+    .annotation-list li { border: 1px solid rgba(99, 102, 241, 0.22); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }
+    .annotation-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.35rem; border-radius: 999px; background: #0f172a; color: #ffffff; font-size: 0.82rem; font-weight: 700; margin-right: 0.45rem; }
+  </style>
+</head>
+<body>
+  <h1>Log trend card</h1>
+  <p>This browser-friendly artifact turns time-bucket exports into an easy-to-screenshot release / incident summary without requiring notebooks or spreadsheet chart cleanup.</p>
+  <ul class="meta"><li><strong>Source</strong><br><span>release-comparison-sample.log</span></li><li><strong>Granularity</strong><br><span>minute</span></li><li><strong>Coverage</strong><br><span>2026-04-18 09:00 → 09:03 UTC</span></li><li><strong>Matched requests</strong><br><span>11</span></li><li><strong>Overall error rate</strong><br><span>18.2%</span></li><li><strong>Weighted avg latency</strong><br><span>164.1 ms</span></li><li><strong>Annotation markers</strong><br><span>3</span></li></ul>
+  <section class="card-shell">
+    <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="724" viewBox="0 0 1080 724" role="img" aria-labelledby="log-trend-card-html-title log-trend-card-html-desc">
+  <title id="log-trend-card-html-title">Log trend card for release-comparison-sample.log</title>
+  <desc id="log-trend-card-html-desc">Trend card covering 2026-04-18 09:00 → 09:03 UTC at minute granularity</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="24" y="20" width="1032" height="684" rx="30" fill="#eef2ff" stroke="#c7d2fe" stroke-width="2" />
+  <text x="54" y="64" font-size="32" font-weight="700" fill="#0f172a">Observability trend snapshot</text>
+  <text x="54" y="92" font-size="16" fill="#475569">release-comparison-sample.log · minute buckets · 3 bucket(s)</text>
+<rect x="54" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="72" y="142" font-size="14" fill="#64748b">Matched requests</text>
+<text x="72" y="174" font-size="28" font-weight="700" fill="#0f172a">11</text>
+<text x="72" y="194" font-size="12" fill="#64748b">inside active buckets</text>
+<rect x="298" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="316" y="142" font-size="14" fill="#64748b">Overall error rate</text>
+<text x="316" y="174" font-size="28" font-weight="700" fill="#0f172a">18.2%</text>
+<text x="316" y="194" font-size="12" fill="#64748b">2 errors</text>
+<rect x="542" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="560" y="142" font-size="14" fill="#64748b">Weighted avg latency</text>
+<text x="560" y="174" font-size="28" font-weight="700" fill="#0f172a">164.1 ms</text>
+<text x="560" y="194" font-size="12" fill="#64748b">request-time samples only</text>
+<rect x="786" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="804" y="142" font-size="14" fill="#64748b">Buckets</text>
+<text x="804" y="174" font-size="28" font-weight="700" fill="#0f172a">3</text>
+<text x="804" y="194" font-size="12" fill="#64748b">minute granularity</text>
+<rect x="54" y="234" width="296" height="282" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="74" y="268" font-size="18" font-weight="700" fill="#0f172a">Requests / bucket</text>
+<text x="74" y="292" font-size="14" fill="#475569">Peak 4 requests at 09:00</text>
+<line x1="74" y1="320.00" x2="330" y2="320.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="370.00" x2="330" y2="370.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="420.00" x2="330" y2="420.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="470.00" x2="330" y2="470.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="470" x2="330" y2="470" stroke="#0f172a" stroke-width="1.5" />
+<line x1="74.00" y1="320.00" x2="74.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="74.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="74.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<line x1="202.00" y1="320.00" x2="202.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="202.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="202.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<line x1="330.00" y1="320.00" x2="330.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="330.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="330.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="74.00,339.57 202.00,339.57 330.00,372.17" />
+<circle cx="74.00" cy="339.57" r="4.5" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="202.00" cy="339.57" r="4.5" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="330.00" cy="372.17" r="4.5" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.5" />
+<text x="74" y="494" font-size="12" fill="#64748b">09:00</text>
+<text x="330" y="494" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="74" y="310" font-size="12" fill="#64748b">max 4</text>
+<text x="74" y="512" font-size="12" fill="#64748b">0</text>
+<rect x="378" y="234" width="296" height="282" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="398" y="268" font-size="18" font-weight="700" fill="#0f172a">Error rate / bucket</text>
+<text x="398" y="292" font-size="14" fill="#475569">Peak 25% at 09:00</text>
+<line x1="398" y1="320.00" x2="654" y2="320.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="370.00" x2="654" y2="370.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="420.00" x2="654" y2="420.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="470.00" x2="654" y2="470.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="470" x2="654" y2="470" stroke="#0f172a" stroke-width="1.5" />
+<line x1="398.00" y1="320.00" x2="398.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="398.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="398.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<line x1="526.00" y1="320.00" x2="526.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="526.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="526.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<line x1="654.00" y1="320.00" x2="654.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="654.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="654.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<polyline fill="none" stroke="#dc2626" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="398.00,339.57 526.00,339.57 654.00,470.00" />
+<circle cx="398.00" cy="339.57" r="4.5" fill="#b91c1c" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="526.00" cy="339.57" r="4.5" fill="#b91c1c" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="654.00" cy="470.00" r="4.5" fill="#b91c1c" stroke="#ffffff" stroke-width="1.5" />
+<text x="398" y="494" font-size="12" fill="#64748b">09:00</text>
+<text x="654" y="494" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="398" y="310" font-size="12" fill="#64748b">max 25%</text>
+<text x="398" y="512" font-size="12" fill="#64748b">0%</text>
+<rect x="702" y="234" width="296" height="282" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="722" y="268" font-size="18" font-weight="700" fill="#0f172a">Avg latency / bucket</text>
+<text x="722" y="292" font-size="14" fill="#475569">Peak 200 ms at 09:01</text>
+<line x1="722" y1="320.00" x2="978" y2="320.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="370.00" x2="978" y2="370.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="420.00" x2="978" y2="420.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="470.00" x2="978" y2="470.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="470" x2="978" y2="470" stroke="#0f172a" stroke-width="1.5" />
+<line x1="722.00" y1="320.00" x2="722.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="722.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="722.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<line x1="850.00" y1="320.00" x2="850.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="850.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="850.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<line x1="978.00" y1="320.00" x2="978.00" y2="470.00" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="978.00" cy="336.00" r="10" fill="#0f172a" stroke="#ffffff" stroke-width="1.6" />
+<text x="978.00" y="340.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<polyline fill="none" stroke="#7c3aed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="722.00,347.72 850.00,339.57 978.00,414.57" />
+<circle cx="722.00" cy="347.72" r="4.5" fill="#6d28d9" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="850.00" cy="339.57" r="4.5" fill="#6d28d9" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="978.00" cy="414.57" r="4.5" fill="#6d28d9" stroke="#ffffff" stroke-width="1.5" />
+<text x="722" y="494" font-size="12" fill="#64748b">09:00</text>
+<text x="978" y="494" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="722" y="310" font-size="12" fill="#64748b">max 200 ms</text>
+<text x="722" y="512" font-size="12" fill="#64748b">0 ms</text>
+  <rect x="54" y="540" width="972" height="138" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="78" y="574" font-size="14" fill="#334155">Coverage: 2026-04-18 09:00 → 09:03 UTC</text>
+<text x="78" y="596" font-size="14" fill="#334155">Window filter: full log span</text>
+<text x="78" y="618" font-size="14" fill="#334155">Facet fields: none selected for this run</text>
+<text x="78" y="640" font-size="14" fill="#334155">Annotations: 1. 09:00 Deploy started · 2. 09:01 Rollback triggered</text>
+<text x="78" y="662" font-size="14" fill="#334155">Annotations: 3. 09:02 Recovery confirmed</text>
+  <text x="78" y="688" font-size="12" fill="#64748b">Use the standalone HTML companion for a browser-friendly summary table, annotation legend, and quick portfolio caption copy.</text>
+</svg>
+  </section>
+  <section>  <h2>Annotation markers</h2>  <p class="caption">These markers pin deploys, incidents, or other callouts onto the shared bucket timeline used by the SVG card.</p>  <ul class="annotation-list">    <li><span class="annotation-chip">1</span> <strong>2026-04-18 09:00 → 09:01 UTC</strong><br><span>Deploy started</span></li>    <li><span class="annotation-chip">2</span> <strong>2026-04-18 09:01 → 09:02 UTC</strong><br><span>Rollback triggered</span></li>    <li><span class="annotation-chip">3</span> <strong>2026-04-18 09:02 → 09:03 UTC</strong><br><span>Recovery confirmed</span></li>  </ul></section>
+  <section>
+    <h2>Bucket summary table</h2>
+    <p class="caption">Use this table when you want the exact bucket start/end boundaries plus the request/error/latency values beside the visual sparkline card.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Bucket start</th>
+          <th>Bucket end</th>
+          <th>Requests</th>
+          <th>Error rate</th>
+          <th>Avg latency</th>
+          <th>Avg upstream latency</th>
+          <th>Top path</th>
+          <th>Annotation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>2026-04-18T09:00:00+00:00</code></td><td><code>2026-04-18T09:01:00+00:00</code></td><td>4</td><td>25%</td><td>187.5 ms</td><td>133.8 ms</td><td><code>/api/report</code></td><td><span class="annotation-chip">1</span> Deploy started</td></tr><tr><td><code>2026-04-18T09:01:00+00:00</code></td><td><code>2026-04-18T09:02:00+00:00</code></td><td>4</td><td>25%</td><td>200 ms</td><td>150 ms</td><td><code>/api/report</code></td><td><span class="annotation-chip">2</span> Rollback triggered</td></tr><tr><td><code>2026-04-18T09:02:00+00:00</code></td><td><code>2026-04-18T09:03:00+00:00</code></td><td>3</td><td>0%</td><td>85 ms</td><td>56 ms</td><td><code>/health</code></td><td><span class="annotation-chip">3</span> Recovery confirmed</td></tr>
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>
