@@ -26,7 +26,7 @@ Use this when you want a dedicated neural-predictor artifact that shows how thre
 
 ## Budget-normalized sweep
 
-Use this when you want to hold approximate predictor state budget constant and show that the winner can flip once hardware cost, not just raw accuracy, becomes the constraint.
+Use this when you want to hold approximate predictor state budget constant and show that the winner can flip once hardware cost, not just raw accuracy, becomes the constraint. The exported SVG now also includes a whole-grid stacked-bar summary and a budget-by-predictor win heatmap so you can tell the macro story before drilling into individual workload rows.
 
 <p>
   <strong>Budget-normalized winner matrix</strong><br />

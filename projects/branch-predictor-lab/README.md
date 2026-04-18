@@ -81,7 +81,7 @@ python3 projects/branch-predictor-lab/branch_predictor.py sweep \
   --svg-out docs/artifacts/branch-predictor-lab/trace-family-sweep.svg
 ```
 
-Generate a budget-normalized artifact that lets predictors compete under roughly equal state-bit budgets instead of one shared table/history setting:
+Generate a budget-normalized artifact that lets predictors compete under roughly equal state-bit budgets instead of one shared table/history setting, now with a whole-grid win summary inside the exported Markdown/SVG artifacts:
 
 ```bash
 python3 projects/branch-predictor-lab/branch_predictor.py budget-sweep \
@@ -311,8 +311,9 @@ Run the tests:
 - use the `perceptron-majority` workload to explain linearly separable branch behavior and why perceptrons can use longer histories without exploding the table size
 - use the perceptron tuning sweep when you want to show that confidence thresholds and hardware-friendly weight clamps still shape the final accuracy story
 - use the trace-family sweep card when you want one overview slide that shows different workloads favor different predictors instead of implying there is one universal winner
+- use the budget-sweep whole-grid summary when you want a fast macro answer for which predictors dominate the overall budget matrix before showing the per-workload cells underneath
 - use the alias table-size sweep when you want to explain why larger tables reduce some static collisions while history-aware indexing can still reshuffle dynamic conflicts in non-monotonic ways
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
-- add artifact-ready stacked bar / heatmap exports that summarize how often each predictor wins across the whole budget grid, not just per-workload rows
+- add budget-grid runner-up stability or winner-margin trend artifacts so near-ties are visible alongside outright wins

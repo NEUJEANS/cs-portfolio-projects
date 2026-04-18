@@ -1,11 +1,11 @@
 # Branch predictor budget-normalized sweep
 
-- Generated: `2026-04-18T04:05:15Z`
+- Generated: `2026-04-18T04:42:28Z`
 - Workloads: `5` synthetic families
 - Compared budgets: `64 bits, 128 bits, 256 bits, 512 bits, 1024 bits`
 - Search space: table sizes `4, 8, 16, 32, 64` · history bits `1, 2, 4, 8, 12` · perceptron weight limits `15, 31, 74`
 - Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.
-- Export note: pair this Markdown report with the committed CSV winner matrix when you want spreadsheet/chart-friendly reuse without re-parsing the table blocks.
+- Export note: the SVG now includes both a whole-grid stacked-bar summary and a budget-by-predictor heatmap, while the CSV remains the row-level winner matrix for spreadsheet/chart reuse.
 
 ## Overview
 
@@ -16,6 +16,31 @@
 | `tournament-style` | `gshare` 72.92% | `gshare` 77.08% | `gshare` 77.08% | `tournament` 83.33% | `tournament` 83.33% |
 | `alias-thrash` | `local-history` 79.69% | `gshare` 81.25% | `gshare` 81.25% | `gshare` 81.25% | `gshare` 81.25% |
 | `perceptron-majority` | `perceptron` 82.29% | `perceptron` 82.29% | `gshare` 83.33% | `perceptron` 92.71% | `perceptron` 92.71% |
+
+## Whole-grid winner summary
+
+- Grid cells: `25` workload-budget combinations.
+- Overall leader: `gshare` with `13` wins (`52.00%` of the grid).
+
+| Predictor | Grid wins | Share | Workloads won | Budgets won |
+| --- | ---: | ---: | ---: | --- |
+| `gshare` | `13` | `52.00%` | `4` | `64, 128, 256, 512, 1024` |
+| `two-bit` | `4` | `16.00%` | `1` | `128, 256, 512, 1024` |
+| `perceptron` | `4` | `16.00%` | `1` | `64, 128, 512, 1024` |
+| `tournament` | `2` | `8.00%` | `1` | `512, 1024` |
+| `always-taken` | `1` | `4.00%` | `1` | `64` |
+| `local-history` | `1` | `4.00%` | `1` | `64` |
+
+### Budget × predictor win counts
+
+| Predictor | `64 bits` | `128 bits` | `256 bits` | `512 bits` | `1024 bits` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `gshare` | `2` | `3` | `4` | `2` | `2` |
+| `two-bit` | `0` | `1` | `1` | `1` | `1` |
+| `perceptron` | `1` | `1` | `0` | `1` | `1` |
+| `tournament` | `0` | `0` | `0` | `1` | `1` |
+| `always-taken` | `1` | `0` | `0` | `0` | `0` |
+| `local-history` | `1` | `0` | `0` | `0` | `0` |
 
 ## Per-workload notes
 
@@ -127,6 +152,7 @@ Representative best-fit configs:
 ## Portfolio usage
 
 - Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.
+- Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.
 - Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.
 - The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.
 - Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.

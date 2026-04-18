@@ -22,4 +22,5 @@
 - [x] Add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family
 
 ## Next candidate slices
-- [ ] Add artifact-ready stacked bar / heatmap exports that summarize how often each predictor wins across the whole budget grid, not just per-workload rows
+- [x] Add artifact-ready stacked bar / heatmap exports that summarize how often each predictor wins across the whole budget grid, not just per-workload rows
+- [ ] Add budget-grid runner-up stability or winner-margin trend artifacts so near-ties are visible alongside outright wins

@@ -2079,12 +2079,112 @@ def _budget_predictor_fill(predictor: str) -> str:
     return palette.get(predictor, "#e2e8f0")
 
 
+def _budget_heatmap_fill(count: int, max_count: int) -> str:
+    palette = ["#f8fafc", "#dbeafe", "#bfdbfe", "#93c5fd", "#60a5fa", "#2563eb"]
+    if count <= 0 or max_count <= 0:
+        return palette[0]
+    ratio = count / max_count
+    index = min(len(palette) - 1, max(1, round(ratio * (len(palette) - 1))))
+    return palette[index]
+
+
 def _budget_winner_sequence_csv(budget_reports: list[dict[str, Any]]) -> str:
     return _budget_winner_sequence(budget_reports).replace(" → ", " -> ")
 
 
 def _format_budget_candidate_csv_label(candidate: dict[str, Any]) -> str:
     return _format_budget_candidate_label(candidate).replace(" · ", " | ")
+
+
+def summarize_budget_winner_grid(scenarios: list[dict[str, Any]]) -> dict[str, Any]:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    budgets = scenarios[0]["budgets"]
+    winners_only = {
+        entry["winner_predictor"]
+        for scenario in scenarios
+        for entry in scenario["budget_reports"]
+    }
+    predictor_order = [name for name in BUDGET_SWEEP_PREDICTOR_NAMES if name in winners_only]
+    if not predictor_order:
+        predictor_order = sorted(winners_only)
+
+    predictor_totals: dict[str, dict[str, Any]] = {
+        predictor: {
+            "predictor": predictor,
+            "wins": 0,
+            "workloads": set(),
+            "budget_bits": set(),
+        }
+        for predictor in predictor_order
+    }
+    budget_predictor_counts: dict[int, dict[str, int]] = {
+        budget: {predictor: 0 for predictor in predictor_order}
+        for budget in budgets
+    }
+    total_cells = 0
+    max_budget_wins = 0
+
+    for scenario in scenarios:
+        workload = scenario["workload"]
+        for entry in scenario["budget_reports"]:
+            predictor = entry["winner_predictor"]
+            predictor_totals[predictor]["wins"] += 1
+            predictor_totals[predictor]["workloads"].add(workload)
+            predictor_totals[predictor]["budget_bits"].add(entry["budget_bits"])
+            budget_predictor_counts[entry["budget_bits"]][predictor] += 1
+            max_budget_wins = max(max_budget_wins, budget_predictor_counts[entry["budget_bits"]][predictor])
+            total_cells += 1
+
+    predictor_rows = []
+    for predictor in predictor_order:
+        row = predictor_totals[predictor]
+        wins = int(row["wins"])
+        predictor_rows.append(
+            {
+                "predictor": predictor,
+                "wins": wins,
+                "share_percent": round((wins / total_cells) * 100, 3) if total_cells else 0.0,
+                "workload_count": len(row["workloads"]),
+                "budget_count": len(row["budget_bits"]),
+                "workloads": sorted(row["workloads"]),
+                "budgets": sorted(row["budget_bits"]),
+            }
+        )
+    predictor_rows.sort(
+        key=lambda row: (-row["wins"], predictor_order.index(row["predictor"]))
+    )
+
+    budget_rows = []
+    for budget in budgets:
+        counts = budget_predictor_counts[budget]
+        leaders = sorted(
+            (
+                {
+                    "predictor": predictor,
+                    "wins": wins,
+                }
+                for predictor, wins in counts.items()
+                if wins > 0
+            ),
+            key=lambda row: (-row["wins"], predictor_order.index(row["predictor"])),
+        )
+        budget_rows.append(
+            {
+                "budget_bits": budget,
+                "predictor_counts": counts,
+                "leaders": leaders,
+            }
+        )
+
+    return {
+        "total_cells": total_cells,
+        "workload_count": len(scenarios),
+        "predictors": [row["predictor"] for row in predictor_rows],
+        "predictor_rows": predictor_rows,
+        "budget_rows": budget_rows,
+        "max_budget_wins": max_budget_wins,
+    }
 
 
 def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
@@ -2095,6 +2195,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     table_sizes = scenarios[0]["table_sizes"]
     history_bits_options = scenarios[0]["history_bits_options"]
     weight_limits = scenarios[0]["weight_limits"]
+    winner_summary = summarize_budget_winner_grid(scenarios)
     lines = [
         "# Branch predictor budget-normalized sweep",
         "",
@@ -2103,7 +2204,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
         f"- Compared budgets: `{', '.join(f'{budget} bits' for budget in budgets)}`",
         f"- Search space: table sizes `{', '.join(str(value) for value in table_sizes)}` · history bits `{', '.join(str(value) for value in history_bits_options)}` · perceptron weight limits `{', '.join(str(value) for value in weight_limits)}`",
         "- Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.",
-        "- Export note: pair this Markdown report with the committed CSV winner matrix when you want spreadsheet/chart-friendly reuse without re-parsing the table blocks.",
+        "- Export note: the SVG now includes both a whole-grid stacked-bar summary and a budget-by-predictor heatmap, while the CSV remains the row-level winner matrix for spreadsheet/chart reuse.",
         "",
         "## Overview",
         "",
@@ -2115,6 +2216,43 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
         for entry in scenario["budget_reports"]:
             row.append(f"`{entry['winner_predictor']}` {entry['winner_accuracy_percent']:.2f}%")
         lines.append("| " + " | ".join(row) + " |")
+
+    lines.extend([
+        "",
+        "## Whole-grid winner summary",
+        "",
+        f"- Grid cells: `{winner_summary['total_cells']}` workload-budget combinations.",
+    ])
+    if winner_summary["predictor_rows"]:
+        leader = winner_summary["predictor_rows"][0]
+        lines.append(
+            f"- Overall leader: `{leader['predictor']}` with `{leader['wins']}` wins (`{leader['share_percent']:.2f}%` of the grid)."
+        )
+    lines.extend(
+        [
+            "",
+            "| Predictor | Grid wins | Share | Workloads won | Budgets won |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for row in winner_summary["predictor_rows"]:
+        budgets_text = ", ".join(str(value) for value in row["budgets"]) if row["budgets"] else "-"
+        lines.append(
+            f"| `{row['predictor']}` | `{row['wins']}` | `{row['share_percent']:.2f}%` | `{row['workload_count']}` | `{budgets_text}` |"
+        )
+
+    lines.extend([
+        "",
+        "### Budget × predictor win counts",
+        "",
+        "| Predictor | " + " | ".join(f"`{budget} bits`" for budget in budgets) + " |",
+        "| --- | " + " | ".join(["---:"] * len(budgets)) + " |",
+    ])
+    for predictor in winner_summary["predictors"]:
+        counts = []
+        for budget_row in winner_summary["budget_rows"]:
+            counts.append(f"`{budget_row['predictor_counts'][predictor]}`")
+        lines.append("| " + " | ".join([f"`{predictor}`", *counts]) + " |")
 
     lines.extend(["", "## Per-workload notes", ""])
     for scenario in scenarios:
@@ -2149,6 +2287,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
             "## Portfolio usage",
             "",
             "- Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.",
+            "- Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.",
             "- Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.",
             "- The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.",
             "- Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.",
@@ -2227,35 +2366,73 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
     if not scenarios:
         raise ValueError("scenarios must not be empty")
     budgets = scenarios[0]["budgets"]
+    winner_summary = summarize_budget_winner_grid(scenarios)
+    summary_predictors = winner_summary["predictors"]
     width = 1320
     cell_w = 180
     cell_h = 84
     left_w = 220
-    top_h = 164
-    height = top_h + (cell_h * len(scenarios)) + 82
+    summary_y = 100
+    stacked_w = 430
+    heatmap_x = 480
+    heatmap_w = width - heatmap_x - 28
+    stacked_h = max(156, 54 + (len(summary_predictors) * 28))
+    heatmap_h = max(156, 66 + (len(summary_predictors) * 28))
+    grid_y = summary_y + max(stacked_h, heatmap_h) + 34
+    height = grid_y + 56 + (cell_h * len(scenarios)) + 82
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
         '<title id="title">Budget-normalized branch predictor sweep</title>',
-        '<desc id="desc">Winner matrix across synthetic workloads and predictor state-bit budgets.</desc>',
+        '<desc id="desc">Winner matrix plus whole-grid summary across synthetic workloads and predictor state-bit budgets.</desc>',
         f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
         _svg_text(28, 40, "Budget-normalized branch predictor sweep", size=28, weight="700"),
         _svg_text(28, 66, "Best-fit predictor per workload after constraining each candidate by approximate state bits.", size=14, fill="#334155"),
     ]
     legend_x = 28
-    legend_y = 100
-    legend_seen = {
-        entry["winner_predictor"]
-        for scenario in scenarios
-        for entry in scenario["budget_reports"]
-    }
-    legend_items = [name for name in BUDGET_SWEEP_PREDICTOR_NAMES if name in legend_seen]
-    for index, predictor in enumerate(legend_items):
+    legend_y = 78
+    for index, predictor in enumerate(summary_predictors):
         x = legend_x + (index * 140)
         parts.append(f'<rect x="{x}" y="{legend_y}" width="18" height="18" rx="6" fill="{_budget_predictor_fill(predictor)}" />')
         parts.append(_svg_text(x + 26, legend_y + 14, predictor, size=12, weight="700", fill="#334155"))
 
+    parts.append(f'<rect x="28" y="{summary_y}" width="{stacked_w}" height="{stacked_h}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(46, summary_y + 32, "Grid win totals", size=20, weight="700"))
+    parts.append(_svg_text(46, summary_y + 52, f"{winner_summary['total_cells']} workload-budget cells across {winner_summary['workload_count']} workloads", size=12, fill="#64748b"))
+    bar_left = 170
+    bar_right = 28 + stacked_w - 22
+    bar_width = bar_right - bar_left
+    max_wins = max((row['wins'] for row in winner_summary['predictor_rows']), default=1)
+    for index, row in enumerate(winner_summary['predictor_rows']):
+        y = summary_y + 74 + (index * 28)
+        parts.append(_svg_text(46, y + 14, row['predictor'], size=12, weight='700', fill='#334155'))
+        parts.append(f'<rect x="{bar_left}" y="{y}" width="{bar_width}" height="16" rx="8" fill="#e2e8f0" />')
+        fill_width = 0 if max_wins == 0 else bar_width * (row['wins'] / max_wins)
+        parts.append(f'<rect x="{bar_left}" y="{y}" width="{fill_width:.1f}" height="16" rx="8" fill="{_budget_predictor_fill(row["predictor"])}" />')
+        parts.append(_svg_text(bar_left + 8, y + 12, f"{row['wins']} wins", size=10, weight='700', fill='#0f172a'))
+        parts.append(_svg_text(bar_right - 72, y + 12, f"{row['share_percent']:.1f}%", size=10, weight='700', fill='#0f172a'))
+
+    parts.append(f'<rect x="{heatmap_x}" y="{summary_y}" width="{heatmap_w}" height="{heatmap_h}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(heatmap_x + 18, summary_y + 32, "Budget winner heatmap", size=20, weight="700"))
+    parts.append(_svg_text(heatmap_x + 18, summary_y + 52, "Counts show how many workloads each predictor wins at each budget.", size=12, fill="#64748b"))
+    heatmap_left = heatmap_x + 130
+    heatmap_top = summary_y + 72
+    heatmap_cell_w = max(84, (heatmap_w - 160) // max(1, len(budgets)))
+    heatmap_cell_h = 24
+    for column, budget in enumerate(budgets):
+        x = heatmap_left + (column * heatmap_cell_w)
+        parts.append(_svg_text(x + 10, heatmap_top - 12, f"{budget}b", size=11, weight='700', fill='#475569'))
+    for row_index, predictor in enumerate(summary_predictors):
+        y = heatmap_top + (row_index * heatmap_cell_h)
+        parts.append(_svg_text(heatmap_x + 18, y + 16, predictor, size=11, weight='700', fill='#334155'))
+        for column, budget_row in enumerate(winner_summary['budget_rows']):
+            x = heatmap_left + (column * heatmap_cell_w)
+            count = budget_row['predictor_counts'][predictor]
+            parts.append(
+                f'<rect x="{x}" y="{y}" width="{heatmap_cell_w - 8}" height="18" rx="9" fill="{_budget_heatmap_fill(count, winner_summary["max_budget_wins"])}" stroke="#dbe4ee" />'
+            )
+            parts.append(_svg_text(x + (heatmap_cell_w / 2) - 4, y + 14, str(count), size=10, weight='700', fill='#0f172a'))
+
     grid_x = 28
-    grid_y = 138
     parts.append(f'<rect x="{grid_x}" y="{grid_y}" width="{left_w}" height="42" rx="14" fill="#e2e8f0" />')
     parts.append(_svg_text(grid_x + 18, grid_y + 27, "Workload", size=13, weight="700", fill="#334155"))
     for column, budget in enumerate(budgets):
@@ -2273,15 +2450,15 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
             x = grid_x + left_w + (column * cell_w)
             fill = _budget_predictor_fill(entry["winner_predictor"])
             parts.append(f'<rect x="{x}" y="{y}" width="{cell_w - 12}" height="{cell_h - 10}" rx="18" fill="{fill}" stroke="#dbe4ee" />')
-            text_fill = "#0f172a" if entry["winner_predictor"] in {"perceptron", "two-bit", "gshare", "tournament", "local-history"} else "#0f172a"
+            text_fill = "#0f172a"
             parts.append(_svg_text(x + 16, y + 28, entry["winner_predictor"], size=14, weight="700", fill=text_fill))
             parts.append(_svg_text(x + 16, y + 48, f"{entry['winner_accuracy_percent']:.2f}%", size=18, weight="700", fill=text_fill))
             parts.append(_svg_text(x + 16, y + 66, _truncate_svg_text(f"runner-up: {entry['runner_up_predictor']} (+{entry['winner_margin_percent']:.2f} pp)", 28), size=10, fill=text_fill))
 
     footer_y = height - 24
-    parts.append(_svg_text(28, footer_y, "Use this matrix next to the fixed-config sweep to explain how predictor rankings shift once the hardware budget is held roughly constant.", size=12, fill="#475569"))
+    parts.append(_svg_text(28, footer_y, "Use the top summary first for the whole-grid story, then the matrix below for workload-by-workload budget trade-offs.", size=12, fill="#475569"))
     parts.append('</svg>')
-    return ''.join(parts) + '\n'
+    return ''.join(parts) + "\n"
 
 
 def run_table_size_alias_sweep(
@@ -2987,6 +3164,7 @@ def main(argv: list[str] | None = None) -> int:
             payload = {
                 "workloads": [scenario["workload"] for scenario in scenarios],
                 "scenario_count": len(scenarios),
+                "winner_summary": summarize_budget_winner_grid(scenarios),
                 "scenarios": scenarios,
             }
             if args.trace_dir is not None:
