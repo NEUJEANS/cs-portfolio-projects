@@ -1184,6 +1184,7 @@ def build_replay_frames(snapshot: dict[str, object]) -> list[dict[str, object]]:
         {
             "step": 0,
             "op": "initial",
+            "sync_checkpoint": None,
             "label": "Cluster starts empty",
             "details": [
                 "No operations have run yet.",
@@ -1199,9 +1200,11 @@ def build_replay_frames(snapshot: dict[str, object]) -> list[dict[str, object]]:
         }
     ]
 
+    sync_checkpoint_number = 0
     for step, event in enumerate(snapshot["timeline"], start=1):
         op = str(event["op"])
         focus_replicas: list[str]
+        sync_checkpoint: int | None = None
         if op in {"add", "remove"}:
             replica = str(event["replica"])
             current_states[replica] = clone_state_view(dict(event["state"]))
@@ -1211,6 +1214,8 @@ def build_replay_frames(snapshot: dict[str, object]) -> list[dict[str, object]]:
                 "transfers": [],
             }
         else:
+            sync_checkpoint_number += 1
+            sync_checkpoint = sync_checkpoint_number
             source = str(event["source"])
             target = str(event["target"])
             current_states[source] = clone_state_view(dict(event["source_state"]))
@@ -1245,6 +1250,7 @@ def build_replay_frames(snapshot: dict[str, object]) -> list[dict[str, object]]:
         frame = {
             "step": step,
             "op": op,
+            "sync_checkpoint": sync_checkpoint,
             "label": str(timeline_rows[step - 1]["event"]),
             "details": [str(detail) for detail in timeline_rows[step - 1]["details"]],
             "focus_replicas": focus_replicas,
@@ -1326,9 +1332,10 @@ def render_replay_html(
       .inline-control {{ display: grid; gap: 8px; }}
       .inline-control select {{ border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; background: var(--panel); color: var(--text); }}
       .sync-jump-note {{ margin-top: 8px; color: var(--muted); }}
+      .link-list-note {{ margin: 0 0 12px; color: var(--muted); }}
       input[type=range] {{ width: 100%; }}
-      .detail-list, .artifact-links, .transfer-list {{ margin: 0; padding-left: 18px; color: var(--muted); }}
-      .detail-list li + li, .artifact-links li + li, .transfer-list li + li {{ margin-top: 8px; }}
+      .detail-list, .artifact-links, .transfer-list, .checkpoint-list {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      .detail-list li + li, .artifact-links li + li, .transfer-list li + li, .checkpoint-list li + li {{ margin-top: 8px; }}
       .replica-grid {{ display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }}
       .replica-card {{ border: 1px solid var(--border); border-radius: 20px; padding: 16px; background: #f8fafc; }}
       .replica-card.focus {{ border-color: #60a5fa; box-shadow: inset 0 0 0 1px #bfdbfe; background: #eff6ff; }}
@@ -1351,7 +1358,7 @@ def render_replay_html(
     <main>
       <section class="hero">
         <h1>OR-Set replay / animation</h1>
-        <p>This replay page turns the OR-Set timeline into a stepper you can scrub in a browser. It keeps the anti-entropy notes beside the replica states so a reviewer can see both the semantic change and the payload-cost story on the same screen, now with sync-jump shortcuts and adjustable playback speed for faster demos.</p>
+        <p>This replay page turns the OR-Set timeline into a stepper you can scrub in a browser. It keeps the anti-entropy notes beside the replica states so a reviewer can see both the semantic change and the payload-cost story on the same screen, now with sync-jump shortcuts, adjustable playback speed, and hash-based deep links that can open directly on a chosen replay or sync checkpoint.</p>
         <p class="note">{escape_html(timeline_story(snapshot))}</p>
         <ul class="summary-grid">
           <li><strong>{len(replicas)}</strong> replicas ({escape_html(', '.join(replicas) or 'none')})</li>
@@ -1400,6 +1407,15 @@ def render_replay_html(
             <ul id="replay-details" class="detail-list"></ul>
           </div>
           <div>
+            <h3>Deep links</h3>
+            <p id="replay-link-note" class="link-list-note">Open this artifact with a hash such as <code>#step-3</code> or <code>#sync-2</code> to jump directly to a chosen checkpoint.</p>
+            <ul id="replay-link-list" class="artifact-links"></ul>
+          </div>
+          <div>
+            <h3>Sync checkpoint links</h3>
+            <ul id="replay-sync-links" class="checkpoint-list"></ul>
+          </div>
+          <div>
             <h3>Companion artifacts</h3>
             <ul class="artifact-links">{companion_links_html}</ul>
           </div>
@@ -1437,6 +1453,9 @@ def render_replay_html(
       const stepCounter = document.getElementById('replay-step-counter');
       const statusPill = document.getElementById('replay-status');
       const detailList = document.getElementById('replay-details');
+      const linkNote = document.getElementById('replay-link-note');
+      const linkList = document.getElementById('replay-link-list');
+      const syncLinkList = document.getElementById('replay-sync-links');
       const replicaGrid = document.getElementById('replica-grid');
       const antiSummary = document.getElementById('anti-summary');
       const transferList = document.getElementById('transfer-list');
@@ -1450,7 +1469,8 @@ def render_replay_html(
       const speedSelect = document.getElementById('replay-speed');
       const syncNote = document.getElementById('replay-sync-note');
       const announce = document.getElementById('replay-announce');
-      const syncFrameIndexes = frames.filter((frame, index) => index > 0 && frame.op === 'sync').map((frame) => frame.step);
+      const syncFrames = frames.filter((frame) => frame.sync_checkpoint !== null);
+      const syncFrameIndexes = syncFrames.map((frame) => frame.step);
 
       let frameIndex = 0;
       let playTimer = null;
@@ -1502,6 +1522,76 @@ def render_replay_html(
         return null;
       }}
 
+      function hashForFrame(frame) {{
+        if (frame.sync_checkpoint !== null) {{
+          return `sync-${{frame.sync_checkpoint}}`;
+        }}
+        return `step-${{frame.step}}`;
+      }}
+
+      function absoluteUrlForHash(hash) {{
+        const url = new URL(window.location.href);
+        url.hash = hash;
+        return url.toString();
+      }}
+
+      function indexFromHash(hash) {{
+        const value = String(hash || '').replace(/^#/, '').trim().toLowerCase();
+        if (!value) {{
+          return 0;
+        }}
+        if (/^step-\\d+$/.test(value)) {{
+          const step = Number(value.slice(5));
+          return Number.isFinite(step) ? Math.max(0, Math.min(frames.length - 1, step)) : 0;
+        }}
+        if (/^sync-\\d+$/.test(value)) {{
+          const checkpoint = Number(value.slice(5));
+          const match = syncFrames.find((frame) => frame.sync_checkpoint === checkpoint);
+          return match ? match.step : 0;
+        }}
+        return 0;
+      }}
+
+      function updateUrlHash(frame) {{
+        const hash = `#${{hashForFrame(frame)}}`;
+        if (window.location.hash === hash) {{
+          return;
+        }}
+        if (window.history && typeof window.history.replaceState === 'function') {{
+          const url = new URL(window.location.href);
+          url.hash = hash;
+          window.history.replaceState(null, '', url);
+          return;
+        }}
+        window.location.hash = hash;
+      }}
+
+      function renderDeepLinks(frame) {{
+        const currentHash = hashForFrame(frame);
+        const exactStepHash = `step-${{frame.step}}`;
+        const items = [
+          `<li><strong>Exact frame:</strong> <a href="#${{exactStepHash}}"><code>${{absoluteUrlForHash(exactStepHash)}}</code></a></li>`,
+        ];
+        if (frame.sync_checkpoint !== null) {{
+          const syncHash = `sync-${{frame.sync_checkpoint}}`;
+          items.push(`<li><strong>Stable sync checkpoint:</strong> <a href="#${{syncHash}}"><code>${{absoluteUrlForHash(syncHash)}}</code></a></li>`);
+        }} else if (syncFrames.length) {{
+          const nextSync = findNextSyncIndex(frame.step);
+          if (nextSync !== null) {{
+            const nextFrame = frames[nextSync];
+            items.push(`<li><strong>Nearest forward sync:</strong> <a href="#sync-${{nextFrame.sync_checkpoint}}"><code>${{absoluteUrlForHash(`sync-${{nextFrame.sync_checkpoint}}`)}}</code></a></li>`);
+          }}
+        }}
+        linkList.innerHTML = items.join('');
+        linkNote.innerHTML = `Open this artifact with <code>#step-N</code> or <code>#sync-N</code>. The current canonical hash is <code>#${{currentHash}}</code>.`;
+        syncLinkList.innerHTML = syncFrames.length
+          ? syncFrames.map((syncFrame) => {{
+              const active = syncFrame.step === frame.step ? ' <strong>(current)</strong>' : '';
+              return `<li><a href="#sync-${{syncFrame.sync_checkpoint}}">Sync ${{syncFrame.sync_checkpoint}} · step ${{syncFrame.step}}</a> — ${{syncFrame.label}}${{active}}</li>`;
+            }}).join('')
+          : '<li>No sync checkpoints available in this scenario.</li>';
+      }}
+
       function renderReplicaCards(frame) {{
         replicaGrid.innerHTML = Object.entries(frame.replicas).map(([replica, state]) => {{
           const focused = frame.focus_replicas.includes(replica) ? ' focus' : '';
@@ -1528,9 +1618,10 @@ def render_replay_html(
           : '<tr><td colspan="6">No sync transfer on this step.</td></tr>';
       }}
 
-      function renderFrame(index) {{
+      function renderFrame(index, options = {{}}) {{
         frameIndex = index;
         const frame = frames[index];
+        const updateHash = options.updateHash !== false;
         range.value = String(index);
         const heading = index === 0 ? 'Initial state' : `Step ${{frame.step}}`;
         const previousSync = findPreviousSyncIndex(index);
@@ -1542,6 +1633,7 @@ def render_replay_html(
         statusPill.textContent = frame.converged ? 'state converged' : 'state diverged';
         statusPill.className = `status-pill ${{frame.converged ? 'ok' : 'warn'}}`;
         detailList.innerHTML = frame.details.map((detail) => `<li>${{detail}}</li>`).join('');
+        renderDeepLinks(frame);
         renderReplicaCards(frame);
         renderTransfers(frame);
         prevButton.disabled = index === 0;
@@ -1551,15 +1643,19 @@ def render_replay_html(
         if (!syncFrameIndexes.length) {{
           syncNote.textContent = 'This scenario has no sync steps yet, so jump-to-sync stays disabled.';
         }} else if (frame.op === 'sync' && syncPosition >= 0) {{
-          syncNote.textContent = `On sync step ${{index}} (${{syncPosition + 1}} of ${{syncFrameIndexes.length}} sync checkpoints).`;
+          syncNote.textContent = `On sync step ${{index}} (checkpoint #${{frame.sync_checkpoint}}, ${{syncPosition + 1}} of ${{syncFrameIndexes.length}} sync checkpoints).`;
         }} else if (nextSync !== null) {{
-          syncNote.textContent = `Next sync checkpoint: step ${{nextSync}}. Previous sync: ${{previousSync === null ? 'none yet' : `step ${{previousSync}}`}}.`;
+          const nextFrame = frames[nextSync];
+          syncNote.textContent = `Next sync checkpoint: step ${{nextSync}} (#${{nextFrame.sync_checkpoint}}). Previous sync: ${{previousSync === null ? 'none yet' : `step ${{previousSync}}`}}.`;
         }} else {{
           syncNote.textContent = previousSync === null
             ? 'No sync checkpoints appear in this scenario yet.'
             : `No later sync steps remain. Last sync checkpoint: step ${{previousSync}}.`;
         }}
         announce.textContent = `${{heading}} — ${{frame.label}}`;
+        if (updateHash) {{
+          updateUrlHash(frame);
+        }}
       }}
 
       prevButton.addEventListener('click', () => {{
@@ -1600,7 +1696,11 @@ def render_replay_html(
         stopPlayback();
         renderFrame(Number(event.target.value));
       }});
-      renderFrame(0);
+      window.addEventListener('hashchange', () => {{
+        stopPlayback();
+        renderFrame(indexFromHash(window.location.hash), {{ updateHash: false }});
+      }});
+      renderFrame(indexFromHash(window.location.hash), {{ updateHash: false }});
     </script>
   </body>
 </html>

@@ -1,6 +1,20 @@
 # crdt-orset-lab checklist
 
-## Current slice (2026-04-18 21:04 UTC run)
+## Current slice (2026-04-18 21:13 UTC run)
+- [x] confirm `main` still matches `origin/main` before editing
+- [x] do the brief hash-link / fragment-routing research needed for deep-linkable replay checkpoints
+- [x] do a short Python/CLI self-test refresh for replay hash parsing and canonical-link rendering
+- [x] update/add checklist markdown for the deep-link slice
+- [x] add hash-based replay links so the generated HTML can open directly on `#step-N` or `#sync-N`
+- [x] surface the current canonical link plus all sync checkpoint links inside the replay artifact itself
+- [x] regenerate updated replay artifacts for the baseline OR-Set sample and comparison scenario
+- [x] update README usage, committed artifact examples, and future follow-up notes
+- [x] extend regression coverage for replay-frame sync checkpoint metadata and deep-link rendering
+- [x] run targeted tests, smoke checks, and 3 review passes
+- [x] run secret scan
+- [ ] commit, push, and write the wrap-up
+
+## Previous slice (2026-04-18 21:04 UTC run)
 - [x] confirm `main` still matches `origin/main` before editing
 - [x] do only the brief replay-control accessibility refresh needed for jump/playback controls
 - [x] do a short Python/CLI self-test refresh for replay-control wiring
@@ -67,4 +81,4 @@
 ## Next follow-up ideas
 - [ ] add canned comparison presets that emit multiple OR-Set vs LWW scenarios at once
 - [ ] add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
-- [ ] add deep-linkable replay checkpoints or hash-based step links so demos can open directly on a chosen sync step
+- [ ] add copy-link or image-export affordances from replay checkpoints so slide decks can capture a chosen step even faster
