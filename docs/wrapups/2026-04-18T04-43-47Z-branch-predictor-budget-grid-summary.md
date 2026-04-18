@@ -1,7 +1,7 @@
 # Branch predictor budget-grid summary wrap-up
 
 - Timestamp: `2026-04-18T04-43-47Z`
-- Commit: `2fcda46`
+- Commit: `76dc714`
 
 ## What changed
 - Added `summarize_budget_winner_grid(...)` so the budget sweep can summarize winners across the entire workload × budget matrix.
