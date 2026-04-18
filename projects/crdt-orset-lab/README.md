@@ -31,7 +31,7 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - optional anti-entropy exports render Markdown/HTML/JSON reports that summarize per-sync transfer sizes, missing tags, tombstones, counters, and bytes saved vs full-state sync
 - replay exports keep the replica-state timeline and anti-entropy transfer table on one browser-friendly page for demos, screenshots, and narrated walk-throughs, now with jump-to-sync shortcuts, playback-speed presets, hash-based deep links such as `#step-3` or `#sync-2`, plus built-in copy-link and checkpoint-SVG export actions
 - optional `compare-script` runs the same scenario under OR-Set and timestamped LWW-element-set semantics, then emits Markdown/HTML/JSON comparison artifacts that explain where the models diverge
-- built-in comparison presets cover both divergence-heavy and control-case scenarios, and `compare-presets` turns them into a single portfolio-friendly summary gallery with optional per-preset detail bundles, portable landing pages, bundled scenario scripts, and downloadable ZIP packets
+- built-in comparison presets cover both divergence-heavy and control-case scenarios, and `compare-presets` turns them into a single portfolio-friendly summary gallery with optional per-preset detail bundles, portable landing pages, bundled scenario scripts, and downloadable deterministic ZIP packets
 - LWW comparison mode supports configurable tie bias (`add` or `remove`) and explicit logical timestamps in the script JSON
 
 ## Usage

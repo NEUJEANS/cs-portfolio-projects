@@ -8,7 +8,7 @@ Project-local source of truth: `projects/crdt-orset-lab/CHECKLIST.md`
 - [x] write a short Python/zip self-test note
 - [x] update resumable checklist state in the project and docs trees
 - [x] add a portable bundle landing page plus bundled scenario script inside each preset detail directory
-- [x] generate ZIP packets for the preset detail bundles and surface bundle/ZIP links from the suite outputs
+- [x] generate deterministic ZIP packets for the preset detail bundles and surface bundle/ZIP links from the suite outputs
 - [x] regenerate and commit the preset-suite summary artifacts plus updated per-preset bundles under `docs/artifacts/crdt-orset-lab/comparison-presets/`
 - [x] refresh README language and future follow-up notes
 - [x] add regression coverage for bundle landing pages, bundled scripts, and ZIP packet contents

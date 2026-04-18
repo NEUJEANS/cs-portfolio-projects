@@ -578,6 +578,7 @@ class ORSetLabTests(unittest.TestCase):
             self.assertIn('href="concurrent-readd-bundle.zip"', bundle_html)
             bundle_zip = detail_dir / "concurrent-readd" / "concurrent-readd-bundle.zip"
             self.assertTrue(bundle_zip.exists())
+            first_bytes = bundle_zip.read_bytes()
             with zipfile.ZipFile(bundle_zip) as archive:
                 self.assertEqual(
                     archive.namelist(),
@@ -598,6 +599,21 @@ class ORSetLabTests(unittest.TestCase):
                         "comparison.json",
                     ],
                 )
+                self.assertTrue(all(info.date_time == (2020, 1, 1, 0, 0, 0) for info in archive.infolist()))
+
+            rerun = run_cli(
+                "compare-presets",
+                "--suite-markdown-out",
+                str(markdown_path),
+                "--suite-html-out",
+                str(html_path),
+                "--suite-json-out",
+                str(json_path),
+                "--detail-output-dir",
+                str(detail_dir),
+            )
+            self.assertEqual(rerun["preset_count"], 3)
+            self.assertEqual(bundle_zip.read_bytes(), first_bytes)
 
     def test_cli_compare_presets_unknown_name_returns_parser_error(self) -> None:
         completed = subprocess.run(

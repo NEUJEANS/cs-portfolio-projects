@@ -23,4 +23,5 @@
 - Re-ran `python3 -m unittest discover -s projects/crdt-orset-lab -p 'test_*.py'` (`35/35` passing).
 - Re-ran `python3 projects/crdt-orset-lab/crdt_orset_lab.py compare-presets --suite-markdown-out docs/artifacts/crdt-orset-lab/comparison-presets.md --suite-html-out docs/artifacts/crdt-orset-lab/comparison-presets.html --suite-json-out docs/artifacts/crdt-orset-lab/comparison-presets.json --detail-output-dir docs/artifacts/crdt-orset-lab/comparison-presets`.
 - Listed `docs/artifacts/crdt-orset-lab/comparison-presets/concurrent-readd/concurrent-readd-bundle.zip` and confirmed it contains the landing page, bundled scenario script, HTML artifacts, Markdown companions, and JSON outputs.
+- After a review-found dirty rerun, updated the ZIP writer to use fixed metadata timestamps/permissions and re-ran the generator to confirm the bundle bytes stay unchanged when content is unchanged.
 - Re-ran `git diff --check`.

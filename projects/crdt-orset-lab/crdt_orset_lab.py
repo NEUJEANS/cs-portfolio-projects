@@ -20,6 +20,7 @@ class SyncOperation:
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
+DETERMINISTIC_ZIP_DATE_TIME = (2020, 1, 1, 0, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -3052,7 +3053,12 @@ def write_bundle_zip(paths: dict[str, Path]) -> None:
     ]
     with zipfile.ZipFile(bundle_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for file_path in ordered_files:
-            archive.write(file_path, file_path.relative_to(bundle_dir).as_posix())
+            relative_name = file_path.relative_to(bundle_dir).as_posix()
+            zip_info = zipfile.ZipInfo(relative_name, date_time=DETERMINISTIC_ZIP_DATE_TIME)
+            zip_info.compress_type = zipfile.ZIP_DEFLATED
+            zip_info.create_system = 3
+            zip_info.external_attr = 0o100644 << 16
+            archive.writestr(zip_info, file_path.read_bytes())
 
 
 def write_comparison_preset_detail_outputs(

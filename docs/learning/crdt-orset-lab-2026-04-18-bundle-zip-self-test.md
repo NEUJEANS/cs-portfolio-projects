@@ -9,6 +9,7 @@ This slice only needed a small refresh: if a generated artifact bundle is meant 
 - re-ran `compare-presets --detail-output-dir ...` to regenerate the committed suite summary and all preset bundles from the CLI
 - inspected the generated `concurrent-readd/index.html` to confirm it links only to bundle-local files such as `scenario-script.json`, `comparison.html`, and the ZIP packet
 - listed the generated ZIP contents to confirm the archive contains the expected portable bundle files in deterministic order
+- re-ran the generator after a clean pass to confirm the ZIP bytes stay stable when the bundle content itself has not changed
 - re-ran `git diff --check` after artifact regeneration
 
 ## Takeaway

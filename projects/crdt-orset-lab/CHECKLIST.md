@@ -6,7 +6,7 @@
 - [x] do a short Python/zipfile self-test refresh for bundle-local files and archive generation
 - [x] update/add checklist markdown for the preset bundle landing + ZIP slice
 - [x] add a portable `index.html` landing page and bundled `scenario-script.json` inside each preset detail directory
-- [x] generate a ZIP packet for each preset bundle and surface bundle/ZIP links from the suite outputs
+- [x] generate a deterministic ZIP packet for each preset bundle and surface bundle/ZIP links from the suite outputs
 - [x] regenerate and commit the updated preset-suite summary plus per-preset bundle artifacts under `docs/artifacts/crdt-orset-lab/comparison-presets/`
 - [x] update README language, committed artifact examples, and future follow-up notes
 - [x] extend regression coverage for bundle landing pages, bundled scripts, and ZIP packet contents
