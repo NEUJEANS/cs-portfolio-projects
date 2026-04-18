@@ -26,8 +26,8 @@
 - [x] run targeted tests and smoke checks
 - [x] run at least 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
-- [ ] consider a follow-up slice for status-filtered hotspot drill-downs
+- [x] commit, push, and add wrap-up
+- [x] consider a follow-up slice for status-filtered hotspot drill-downs
 
 - [x] inspect current parser and tests
 - [x] choose one meaningful upgrade slice
