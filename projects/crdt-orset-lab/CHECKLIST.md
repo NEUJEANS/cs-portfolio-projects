@@ -10,7 +10,7 @@
 - [x] update README usage, committed artifact examples, and future follow-up notes
 - [x] extend regression coverage for replay-control rendering and sync-step navigation metadata
 - [x] run targeted tests, smoke checks, and 3 review passes
-- [ ] run secret scan, commit, push, and write the wrap-up
+- [x] run secret scan, commit, push, and write the wrap-up
 
 ## Previous slice (2026-04-18 20:31 UTC run)
 - [x] confirm `main` still matches `origin/main` before editing and preserve the already-finished anti-entropy/checklist diff
