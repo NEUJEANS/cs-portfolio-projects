@@ -127,6 +127,48 @@ class PageReplacementSimulationTests(unittest.TestCase):
         classic = next(entry for entry in payload if entry["name"] == "classic-belady")
         self.assertEqual(classic["reference_length"], len(REFERENCE))
 
+    def test_cli_study_writes_markdown_svg_and_csv_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "study-report.md"
+            svg_path = Path(tmpdir) / "study-report.svg"
+            csv_path = Path(tmpdir) / "study-report.csv"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "study",
+                    "--min-frames",
+                    "2",
+                    "--max-frames",
+                    "5",
+                    "--preset",
+                    "classic-belady",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--csv-out",
+                    str(csv_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            self.assertIn("fifo Belady anomalies:", completed.stdout)
+            markdown = markdown_path.read_text(encoding="utf-8")
+            svg = svg_path.read_text(encoding="utf-8")
+            csv_output = csv_path.read_text(encoding="utf-8")
+
+            self.assertIn("# Page Replacement Study Report", markdown)
+            self.assertIn("| Frames | FIFO | Clock | LRU | OPT | Winner |", markdown)
+            self.assertIn("frames 3 -> 4", markdown)
+            self.assertIn("<svg", svg)
+            self.assertIn("Page faults vs frame count", svg)
+            self.assertIn("classic-belady", svg)
+            self.assertIn("frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source", csv_output)
+            self.assertIn("3,9,9,10,7,opt,preset:classic-belady", csv_output)
+
     def test_cli_rejects_missing_reference(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(SCRIPT), "simulate", "fifo", "--frames", "3"],

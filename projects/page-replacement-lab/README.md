@@ -18,6 +18,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - run a frame-range study to detect FIFO Belady anomalies and other fault regressions
 - list built-in workload presets for repeatable demos and screenshots
 - export structured JSON for reports, demos, or frontend visualizations later
+- export study results as Markdown, CSV, and self-contained SVG cards for README screenshots and portfolio pages
 
 ## Quick start
 
@@ -42,6 +43,15 @@ python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 3
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py study --min-frames 2 --max-frames 5 \
   --preset classic-belady
+```
+
+### Export screenshot-ready study artifacts
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py study --min-frames 2 --max-frames 6 \
+  --preset classic-belady \
+  --markdown-out docs/artifacts/page-replacement-lab/classic-belady-study.md \
+  --svg-out docs/artifacts/page-replacement-lab/classic-belady-study.svg \
+  --csv-out docs/artifacts/page-replacement-lab/classic-belady-study.csv
 ```
 
 ### Load pages from a file instead of a preset
@@ -72,6 +82,11 @@ opt        7       5      41.67%
 best faults: 7 (opt)
 ```
 
+## Committed artifact examples
+- `docs/artifacts/page-replacement-lab/classic-belady-study.md` — narrative study report with the winner table and anomaly callouts
+- `docs/artifacts/page-replacement-lab/classic-belady-study.svg` — screenshot-ready chart card for README or portfolio galleries
+- `docs/artifacts/page-replacement-lab/classic-belady-study.csv` — spreadsheet/chart-friendly export of the same frame sweep
+
 ## Testing
 ```bash
 python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
@@ -87,6 +102,6 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 
 ## Future improvements
 - import larger trace files for repeatable benchmark suites
-- export charts that show page faults vs. frame count across multiple workloads
+- add multi-workload chart bundles that compare page faults vs. frame count across several presets at once
 - add working-set or aging-style algorithms for richer policy comparisons
-- generate publishable Markdown/HTML study reports for portfolio screenshots
+- generate richer HTML gallery pages that embed the committed Markdown/SVG study artifacts
