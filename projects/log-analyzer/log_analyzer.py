@@ -6,6 +6,7 @@ import json
 import math
 import re
 from collections import Counter, defaultdict
+from html import escape
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -483,6 +484,476 @@ def format_bucket_latency_summary(
     return (
         f"samples={sample_count}, avg={average_ms}, p95={p95_ms}, max={max_ms}"
     )
+
+
+def write_text_output(destination: str | Path, content: str) -> None:
+    destination_path = ensure_parent_directory(destination)
+    destination_path.write_text(content, encoding="utf-8")
+
+
+def format_card_metric_value(
+    value: float | int | None,
+    *,
+    suffix: str = "",
+    decimals: int = 1,
+) -> str:
+    if value is None:
+        return "n/a"
+    numeric = float(value)
+    if numeric.is_integer():
+        return f"{int(numeric)}{suffix}"
+    return f"{numeric:.{decimals}f}{suffix}"
+
+
+def parse_bucket_datetime(raw_value: str) -> datetime:
+    return datetime.fromisoformat(raw_value).astimezone(timezone.utc)
+
+
+def format_bucket_axis_label(raw_value: str) -> str:
+    return parse_bucket_datetime(raw_value).strftime("%H:%M")
+
+
+def format_bucket_range_label(bucket_start: str, bucket_end: str) -> str:
+    start = parse_bucket_datetime(bucket_start)
+    end = parse_bucket_datetime(bucket_end)
+    if start.date() == end.date():
+        return f"{start:%Y-%m-%d %H:%M} → {end:%H:%M} UTC"
+    return f"{start:%Y-%m-%d %H:%M} → {end:%Y-%m-%d %H:%M} UTC"
+
+
+def build_time_bucket_card_summary(result: dict) -> dict[str, object]:
+    time_buckets = result["time_buckets"]
+    time_bucketing = result["time_bucketing"] or {}
+    total_requests = sum(bucket["request_count"] for bucket in time_buckets)
+    total_errors = sum(bucket["error_count"] for bucket in time_buckets)
+    overall_error_rate = round((total_errors / total_requests) * 100, 3) if total_requests else 0.0
+    latency_weighted_total = 0.0
+    latency_weighted_count = 0
+    for bucket in time_buckets:
+        sample_count = bucket["latency_sample_count"]
+        average_latency = bucket["average_latency_ms"]
+        if sample_count and average_latency is not None:
+            latency_weighted_total += sample_count * average_latency
+            latency_weighted_count += sample_count
+    weighted_latency_average = (
+        round(latency_weighted_total / latency_weighted_count, 3)
+        if latency_weighted_count
+        else None
+    )
+
+    busiest_bucket = max(
+        time_buckets,
+        key=lambda bucket: (
+            bucket["request_count"],
+            -parse_bucket_datetime(bucket["bucket_start"]).timestamp(),
+        ),
+        default=None,
+    )
+    highest_error_bucket = max(
+        time_buckets,
+        key=lambda bucket: (
+            bucket["error_rate_pct"],
+            bucket["error_count"],
+            -parse_bucket_datetime(bucket["bucket_start"]).timestamp(),
+        ),
+        default=None,
+    )
+    slowest_bucket = max(
+        (bucket for bucket in time_buckets if bucket["average_latency_ms"] is not None),
+        key=lambda bucket: (
+            bucket["average_latency_ms"],
+            -parse_bucket_datetime(bucket["bucket_start"]).timestamp(),
+        ),
+        default=None,
+    )
+    if time_buckets:
+        coverage_label = format_bucket_range_label(
+            time_buckets[0]["bucket_start"],
+            time_buckets[-1]["bucket_end"],
+        )
+    else:
+        coverage_label = "No matched buckets"
+
+    return {
+        "bucket_count": len(time_buckets),
+        "granularity": time_bucketing.get("granularity", "minute"),
+        "total_requests": total_requests,
+        "total_errors": total_errors,
+        "overall_error_rate": overall_error_rate,
+        "weighted_latency_average": weighted_latency_average,
+        "coverage_label": coverage_label,
+        "busiest_bucket": busiest_bucket,
+        "highest_error_bucket": highest_error_bucket,
+        "slowest_bucket": slowest_bucket,
+    }
+
+
+def build_svg_chart_points(
+    values: list[float | None],
+    *,
+    left: float,
+    top: float,
+    width: float,
+    height: float,
+    max_scale_value: float | None = None,
+) -> list[list[tuple[float, float]]]:
+    present_values = [value for value in values if value is not None]
+    if not present_values:
+        return []
+
+    scale_max_value = max_scale_value if max_scale_value is not None else max(present_values)
+    if scale_max_value <= 0:
+        scale_max_value = 1.0
+
+    if len(values) == 1:
+        x_positions = [left + (width / 2)]
+    else:
+        step = width / (len(values) - 1)
+        x_positions = [left + (step * index) for index in range(len(values))]
+
+    segments: list[list[tuple[float, float]]] = []
+    current_segment: list[tuple[float, float]] = []
+    for x_position, value in zip(x_positions, values, strict=True):
+        if value is None:
+            if current_segment:
+                segments.append(current_segment)
+                current_segment = []
+            continue
+        y_position = top + height - ((value / scale_max_value) * height)
+        current_segment.append((x_position, y_position))
+    if current_segment:
+        segments.append(current_segment)
+    return segments
+
+
+def render_time_bucket_chart_panel(
+    *,
+    title: str,
+    values: list[float | None],
+    bucket_labels: list[str],
+    panel_left: float,
+    panel_top: float,
+    panel_width: float,
+    panel_height: float,
+    stroke_color: str,
+    accent_color: str,
+    summary_text: str,
+    metric_suffix: str,
+) -> list[str]:
+    parts = [
+        f'<rect x="{panel_left}" y="{panel_top}" width="{panel_width}" height="{panel_height}" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+        f'<text x="{panel_left + 20}" y="{panel_top + 34}" font-size="18" font-weight="700" fill="#0f172a">{escape(title)}</text>',
+        f'<text x="{panel_left + 20}" y="{panel_top + 58}" font-size="14" fill="#475569">{escape(summary_text)}</text>',
+    ]
+
+    chart_left = panel_left + 20
+    chart_top = panel_top + 86
+    chart_width = panel_width - 40
+    chart_height = panel_height - 132
+    chart_bottom = chart_top + chart_height
+    actual_max_value = max((value for value in values if value is not None), default=0.0)
+    display_max_value = actual_max_value * 1.15 if actual_max_value > 0 else 1.0
+
+    for row in range(4):
+        y_position = chart_top + (chart_height * row / 3)
+        parts.append(
+            f'<line x1="{chart_left}" y1="{y_position:.2f}" x2="{chart_left + chart_width}" y2="{y_position:.2f}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />'
+        )
+
+    parts.append(
+        f'<line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_left + chart_width}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="1.5" />'
+    )
+
+    segments = build_svg_chart_points(
+        values,
+        left=chart_left,
+        top=chart_top,
+        width=chart_width,
+        height=chart_height,
+        max_scale_value=display_max_value,
+    )
+    for segment in segments:
+        if len(segment) >= 2:
+            parts.append(
+                '<polyline fill="none" '
+                f'stroke="{stroke_color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" '
+                f'points="{" ".join(f"{x:.2f},{y:.2f}" for x, y in segment)}" />'
+            )
+        for x_position, y_position in segment:
+            parts.append(
+                f'<circle cx="{x_position:.2f}" cy="{y_position:.2f}" r="4.5" fill="{accent_color}" stroke="#ffffff" stroke-width="1.5" />'
+            )
+
+    parts.extend(
+        [
+            f'<text x="{chart_left}" y="{chart_bottom + 24}" font-size="12" fill="#64748b">{escape(bucket_labels[0] if bucket_labels else "")}</text>',
+            f'<text x="{chart_left + chart_width}" y="{chart_bottom + 24}" font-size="12" text-anchor="end" fill="#64748b">{escape(bucket_labels[-1] if bucket_labels else "")}</text>',
+            f'<text x="{chart_left}" y="{chart_top - 10}" font-size="12" fill="#64748b">max {escape(format_card_metric_value(actual_max_value, suffix=metric_suffix))}</text>',
+            f'<text x="{chart_left}" y="{chart_bottom + 42}" font-size="12" fill="#64748b">0{escape(metric_suffix)}</text>',
+        ]
+    )
+    return parts
+
+
+def format_time_bucket_card_svg(
+    result: dict,
+    *,
+    source_label: str,
+    id_prefix: str = "log-trend-card",
+) -> str:
+    summary = build_time_bucket_card_summary(result)
+    time_buckets = result["time_buckets"]
+    width = 1080
+    height = 680
+    title_id = f"{id_prefix}-title"
+    desc_id = f"{id_prefix}-desc"
+    bucket_labels = [format_bucket_axis_label(bucket["bucket_start"]) for bucket in time_buckets]
+    coverage_label = summary["coverage_label"]
+    granularity = summary["granularity"]
+    time_window = result["time_window"]
+    faceting = result["faceting"]
+
+    requests_summary = "Peak "
+    if summary["busiest_bucket"]:
+        requests_summary += (
+            f"{summary['busiest_bucket']['request_count']} requests at "
+            f"{format_bucket_axis_label(summary['busiest_bucket']['bucket_start'])}"
+        )
+    else:
+        requests_summary += "n/a"
+
+    errors_summary = "Peak "
+    if summary["highest_error_bucket"]:
+        errors_summary += (
+            f"{format_card_metric_value(summary['highest_error_bucket']['error_rate_pct'], suffix='%')} at "
+            f"{format_bucket_axis_label(summary['highest_error_bucket']['bucket_start'])}"
+        )
+    else:
+        errors_summary += "n/a"
+
+    latency_summary = "Peak "
+    if summary["slowest_bucket"]:
+        latency_summary += (
+            f"{format_card_metric_value(summary['slowest_bucket']['average_latency_ms'], suffix=' ms')} at "
+            f"{format_bucket_axis_label(summary['slowest_bucket']['bucket_start'])}"
+        )
+    else:
+        latency_summary += "n/a"
+
+    metric_cards = [
+        ("Matched requests", format_card_metric_value(summary["total_requests"]), "inside active buckets"),
+        ("Overall error rate", format_card_metric_value(summary["overall_error_rate"], suffix="%"), format_card_metric_value(summary["total_errors"], suffix=" errors", decimals=0)),
+        ("Weighted avg latency", format_card_metric_value(summary["weighted_latency_average"], suffix=" ms"), "request-time samples only"),
+        ("Buckets", format_card_metric_value(summary["bucket_count"]), f"{granularity} granularity"),
+    ]
+
+    card_parts: list[str] = []
+    for index, (label, value, note) in enumerate(metric_cards):
+        card_left = 54 + (index * 244)
+        card_parts.extend(
+            [
+                f'<rect x="{card_left}" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+                f'<text x="{card_left + 18}" y="142" font-size="14" fill="#64748b">{escape(label)}</text>',
+                f'<text x="{card_left + 18}" y="174" font-size="28" font-weight="700" fill="#0f172a">{escape(value)}</text>',
+                f'<text x="{card_left + 18}" y="194" font-size="12" fill="#64748b">{escape(note)}</text>',
+            ]
+        )
+
+    chart_parts = []
+    chart_specs = [
+        {
+            "title": "Requests / bucket",
+            "values": [float(bucket["request_count"]) for bucket in time_buckets],
+            "summary_text": requests_summary,
+            "stroke_color": "#2563eb",
+            "accent_color": "#1d4ed8",
+            "metric_suffix": "",
+        },
+        {
+            "title": "Error rate / bucket",
+            "values": [float(bucket["error_rate_pct"]) for bucket in time_buckets],
+            "summary_text": errors_summary,
+            "stroke_color": "#dc2626",
+            "accent_color": "#b91c1c",
+            "metric_suffix": "%",
+        },
+        {
+            "title": "Avg latency / bucket",
+            "values": [bucket["average_latency_ms"] for bucket in time_buckets],
+            "summary_text": latency_summary,
+            "stroke_color": "#7c3aed",
+            "accent_color": "#6d28d9",
+            "metric_suffix": " ms",
+        },
+    ]
+    for index, chart_spec in enumerate(chart_specs):
+        panel_left = 54 + (index * 324)
+        chart_parts.extend(
+            render_time_bucket_chart_panel(
+                title=chart_spec["title"],
+                values=chart_spec["values"],
+                bucket_labels=bucket_labels,
+                panel_left=panel_left,
+                panel_top=234,
+                panel_width=296,
+                panel_height=282,
+                stroke_color=chart_spec["stroke_color"],
+                accent_color=chart_spec["accent_color"],
+                summary_text=chart_spec["summary_text"],
+                metric_suffix=chart_spec["metric_suffix"],
+            )
+        )
+
+    footer_lines = [
+        f"Coverage: {coverage_label}",
+    ]
+    if time_window:
+        footer_lines.append(
+            f"Window filter: {time_window['start'] or '(open)'} → {time_window['end'] or '(open)'}"
+        )
+    else:
+        footer_lines.append("Window filter: full log span")
+    if faceting:
+        footer_lines.append(
+            f"Facet fields available for companion CSV exports: {', '.join(faceting['fields'])}"
+        )
+    else:
+        footer_lines.append("Facet fields: none selected for this run")
+
+    return "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'  <title id="{title_id}">Log trend card for {escape(source_label)}</title>',
+            f'  <desc id="{desc_id}">Trend card covering {escape(coverage_label)} at {escape(str(granularity))} granularity</desc>',
+            '  <rect width="100%" height="100%" fill="#f8fafc" />',
+            '  <rect x="24" y="20" width="1032" height="640" rx="30" fill="#eef2ff" stroke="#c7d2fe" stroke-width="2" />',
+            '  <text x="54" y="64" font-size="32" font-weight="700" fill="#0f172a">Observability trend snapshot</text>',
+            f'  <text x="54" y="92" font-size="16" fill="#475569">{escape(source_label)} · {escape(str(granularity))} buckets · {escape(str(summary["bucket_count"]))} bucket(s)</text>',
+            *card_parts,
+            *chart_parts,
+            '  <rect x="54" y="540" width="972" height="94" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+            *[
+                f'<text x="78" y="{574 + (index * 22)}" font-size="14" fill="#334155">{escape(line)}</text>'
+                for index, line in enumerate(footer_lines)
+            ],
+            '  <text x="78" y="622" font-size="12" fill="#64748b">Use the standalone HTML companion for a browser-friendly summary table and quick portfolio caption copy.</text>',
+            '</svg>',
+        ]
+    )
+
+
+def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
+    summary = build_time_bucket_card_summary(result)
+    faceting = result["faceting"]
+    time_window = result["time_window"]
+    table_rows = []
+    for bucket in result["time_buckets"]:
+        table_rows.append(
+            "".join(
+                [
+                    "<tr>",
+                    f"<td><code>{escape(bucket['bucket_start'])}</code></td>",
+                    f"<td><code>{escape(bucket['bucket_end'])}</code></td>",
+                    f"<td>{bucket['request_count']}</td>",
+                    f"<td>{escape(format_card_metric_value(bucket['error_rate_pct'], suffix='%'))}</td>",
+                    f"<td>{escape(format_card_metric_value(bucket['average_latency_ms'], suffix=' ms'))}</td>",
+                    f"<td>{escape(format_card_metric_value(bucket['average_upstream_latency_ms'], suffix=' ms'))}</td>",
+                    f"<td><code>{escape(bucket['top_path'] or '(none)')}</code></td>",
+                    "</tr>",
+                ]
+            )
+        )
+    if not table_rows:
+        table_rows.append(
+            '<tr><td colspan="7">No matched buckets were produced for this run.</td></tr>'
+        )
+
+    meta_items = [
+        ("Source", source_label),
+        ("Granularity", str(summary["granularity"])),
+        ("Coverage", str(summary["coverage_label"])),
+        ("Matched requests", format_card_metric_value(summary["total_requests"])),
+        ("Overall error rate", format_card_metric_value(summary["overall_error_rate"], suffix="%")),
+        ("Weighted avg latency", format_card_metric_value(summary["weighted_latency_average"], suffix=" ms")),
+    ]
+    if time_window:
+        meta_items.append(
+            (
+                "Window filter",
+                f"{time_window['start'] or '(open)'} → {time_window['end'] or '(open)'}",
+            )
+        )
+    if faceting:
+        meta_items.append(("Facet fields", ", ".join(faceting["fields"])))
+        meta_items.append(
+            (
+                "Facet trend rows",
+                format_card_metric_value(len(result["time_bucket_facet_breakdown"])),
+            )
+        )
+
+    meta_html = "".join(
+        f'<li><strong>{escape(label)}</strong><br><span>{escape(value)}</span></li>'
+        for label, value in meta_items
+    )
+
+    svg_payload = format_time_bucket_card_svg(
+        result,
+        source_label=source_label,
+        id_prefix="log-trend-card-html",
+    )
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log trend card ({escape(source_label)})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1240px; padding: 0 1rem 3rem; line-height: 1.5; background: #f8fafc; color: #0f172a; }}
+    h1, h2 {{ line-height: 1.15; }}
+    code {{ font-family: "SFMono-Regular", Consolas, monospace; }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem; padding: 0; margin: 1rem 0 1.5rem; }}
+    .meta li {{ list-style: none; border: 1px solid rgba(148, 163, 184, 0.32); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }}
+    .card-shell {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.2rem; padding: 1rem; background: rgba(255, 255, 255, 0.9); box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08); }}
+    svg {{ width: 100%; height: auto; display: block; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; background: rgba(255, 255, 255, 0.86); }}
+    th, td {{ padding: 0.7rem 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.2); text-align: left; }}
+    th {{ font-size: 0.9rem; color: #475569; }}
+    .caption {{ color: #475569; margin-top: 0.8rem; }}
+  </style>
+</head>
+<body>
+  <h1>Log trend card</h1>
+  <p>This browser-friendly artifact turns time-bucket exports into an easy-to-screenshot release / incident summary without requiring notebooks or spreadsheet chart cleanup.</p>
+  <ul class="meta">{meta_html}</ul>
+  <section class="card-shell">
+    {svg_payload}
+  </section>
+  <section>
+    <h2>Bucket summary table</h2>
+    <p class="caption">Use this table when you want the exact bucket start/end boundaries plus the request/error/latency values beside the visual sparkline card.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Bucket start</th>
+          <th>Bucket end</th>
+          <th>Requests</th>
+          <th>Error rate</th>
+          <th>Avg latency</th>
+          <th>Avg upstream latency</th>
+          <th>Top path</th>
+        </tr>
+      </thead>
+      <tbody>
+        {''.join(table_rows)}
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>
+'''
 
 
 def parse_line(line: str) -> ParsedLogLine | None:
@@ -1290,6 +1761,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--time-bucket-card-svg",
+        help=(
+            "Optional path for a standalone SVG mini trend card rendered from the active "
+            "time buckets (requires --time-bucket)"
+        ),
+    )
+    parser.add_argument(
+        "--time-bucket-card-html",
+        help=(
+            "Optional path for a self-contained HTML mini trend card rendered from the "
+            "active time buckets (requires --time-bucket)"
+        ),
+    )
+    parser.add_argument(
         "--hotspot-status",
         action="append",
         default=[],
@@ -1371,6 +1856,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--time-bucket-csv requires --time-bucket")
     if args.time_bucket_facet_csv and not args.time_bucket:
         parser.error("--time-bucket-facet-csv requires --time-bucket")
+    if args.time_bucket_card_svg and not args.time_bucket:
+        parser.error("--time-bucket-card-svg requires --time-bucket")
+    if args.time_bucket_card_html and not args.time_bucket:
+        parser.error("--time-bucket-card-html requires --time-bucket")
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
@@ -1465,6 +1954,22 @@ def main(argv: list[str] | None = None) -> int:
             normalized_facet_fields,
             result["time_bucketing"],
             result["time_window"],
+        )
+    if args.time_bucket_card_svg:
+        write_text_output(
+            args.time_bucket_card_svg,
+            format_time_bucket_card_svg(
+                result,
+                source_label=Path(args.logfile).name,
+            ),
+        )
+    if args.time_bucket_card_html:
+        write_text_output(
+            args.time_bucket_card_html,
+            format_time_bucket_card_html(
+                result,
+                source_label=Path(args.logfile).name,
+            ),
         )
 
     if args.format == "json":

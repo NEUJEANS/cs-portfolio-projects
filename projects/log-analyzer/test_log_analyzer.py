@@ -12,7 +12,13 @@ PROJECT_DIR = Path(__file__).parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from log_analyzer import analyze_lines, format_text_report, parse_line
+from log_analyzer import (
+    analyze_lines,
+    format_text_report,
+    format_time_bucket_card_html,
+    format_time_bucket_card_svg,
+    parse_line,
+)
 
 
 class LogAnalyzerTests(unittest.TestCase):
@@ -363,6 +369,45 @@ class LogAnalyzerTests(unittest.TestCase):
         )
         self.assertNotIn('Time bucket facet breakdowns:', report)
         self.assertIn('Per-path latency hotspots by facet (ms): (filters: status=500; method=POST) (facets: env, region)', report)
+
+    def test_format_time_bucket_card_svg_renders_metric_panels(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030',
+                '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250',
+                '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350',
+            ],
+            top_n=2,
+            time_bucket_granularity='minute',
+        )
+        svg = format_time_bucket_card_svg(result, source_label='access.log', id_prefix='test-card')
+        self.assertIn('<svg', svg)
+        self.assertIn('Observability trend snapshot', svg)
+        self.assertIn('Requests / bucket', svg)
+        self.assertIn('Error rate / bucket', svg)
+        self.assertIn('Avg latency / bucket', svg)
+        self.assertIn('Coverage: 2026-04-18 09:00 → 09:02 UTC', svg)
+
+    def test_format_time_bucket_card_html_renders_bucket_table_and_facet_meta(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.450 upstream_response_time=0.300 env=prod region=us-east-1',
+                '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.550 upstream_response_time=0.400 env=prod region=us-east-1',
+                '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 request_time=0.250 upstream_response_time=0.100 env=staging',
+            ],
+            top_n=2,
+            time_bucket_granularity='minute',
+            facet_fields=['env', 'region'],
+        )
+        html = format_time_bucket_card_html(result, source_label='release-rollout.log')
+        self.assertIn('<!DOCTYPE html>', html)
+        self.assertIn('Log trend card', html)
+        self.assertIn('Facet fields', html)
+        self.assertIn('env, region', html)
+        self.assertIn('<table>', html)
+        self.assertIn('Bucket end', html)
+        self.assertIn('<code>2026-04-18T09:01:00+00:00</code>', html)
+        self.assertIn('<code>/api/report</code>', html)
 
     def test_cli_json_output_includes_named_timing_summaries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -932,6 +977,69 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Upstream latency summary (ms):', completed.stdout)
             self.assertIn('Per-path latency hotspots (ms):', completed.stdout)
             self.assertIn('Per-path upstream latency hotspots (ms):', completed.stdout)
+
+    def test_cli_time_bucket_card_exports_generate_svg_and_html(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            html_path = Path(tmpdir) / 'exports' / 'trend-card.html'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                    '--time-bucket-card-html',
+                    str(html_path),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            svg_text = svg_path.read_text(encoding='utf-8')
+            html_text = html_path.read_text(encoding='utf-8')
+            self.assertIn('<svg', svg_text)
+            self.assertIn('Observability trend snapshot', svg_text)
+            self.assertIn('<!DOCTYPE html>', html_text)
+            self.assertIn('Bucket summary table', html_text)
+            self.assertIn('<code>/api/report</code>', html_text)
+
+    def test_cli_rejects_time_bucket_card_export_without_granularity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--time-bucket-card-svg requires --time-bucket', completed.stderr)
 
     def test_cli_rejects_invalid_hotspot_status(self):
         with tempfile.TemporaryDirectory() as tmpdir:
