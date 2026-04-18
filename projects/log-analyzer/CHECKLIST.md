@@ -6,7 +6,7 @@
 - [x] add helper + CLI regression coverage for annotation grouping, HTML legends/tables, export success cases, and validation failures
 - [x] generate committed annotated artifact samples for README/portfolio screenshots
 - [x] run targeted tests, smoke checks, and 3 review passes
-- [ ] run secret scan, commit, push, and write the wrap-up
+- [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] parse common and combined access-log formats
