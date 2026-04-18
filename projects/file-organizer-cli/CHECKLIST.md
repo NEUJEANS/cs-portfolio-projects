@@ -28,4 +28,5 @@
 ## Next vertical slices
 - [x] add MIME-aware detection rules for files that share extensions but not content types
 - [x] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
-- [ ] optionally sign or checksum manifests for tamper-evident bulk-operation history
+- [x] optionally sign or checksum manifests for tamper-evident bulk-operation history
+- [ ] add detached-signature support for manifests so teams can verify authorship in addition to integrity

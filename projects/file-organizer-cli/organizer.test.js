@@ -12,6 +12,8 @@ const {
   classifyFile,
   organize,
   writeManifest,
+  manifestChecksumFor,
+  verifyManifestIntegrity,
   undoFromManifest,
   parseArgs,
   formatTextReport,
@@ -749,6 +751,14 @@ test('writeManifest persists organize results and undo restores files plus empty
   const manifest = await writeManifest(organizeResult, manifestPath);
   const undoResult = await undoFromManifest(manifestPath);
 
+  assert.deepEqual(verifyManifestIntegrity(manifest), {
+    present: false,
+    valid: true,
+    algorithm: null,
+    checksum: null,
+    expectedChecksum: null,
+    reason: null,
+  });
   assert.equal(manifest.manifestPath, path.resolve(manifestPath));
   const restored = await fs.readFile(path.join(tmp, 'notes.txt'), 'utf8');
   assert.equal(restored, 'draft');
@@ -756,6 +766,32 @@ test('writeManifest persists organize results and undo restores files plus empty
   await assert.rejects(fs.access(path.join(tmp, 'documents')));
   assert.equal(undoResult.summary.restored, 1);
   assert.equal(undoResult.summary.removedDirectories, 1);
+});
+
+test('writeManifest can embed checksum metadata and undo verifies it before restoring files', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const organizeResult = await organize(tmp);
+  const manifest = await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+  const verification = verifyManifestIntegrity(manifest);
+  const undoResult = await undoFromManifest(manifestPath);
+
+  assert.equal(typeof manifest.integrity.checksum, 'string');
+  assert.equal(manifest.integrity.algorithm, 'sha256');
+  assert.equal(manifest.integrity.checksum, manifestChecksumFor(manifest));
+  assert.deepEqual(verification, {
+    present: true,
+    valid: true,
+    algorithm: 'sha256',
+    checksum: manifest.integrity.checksum,
+    expectedChecksum: manifest.integrity.checksum,
+    reason: null,
+  });
+  assert.equal(undoResult.integrity.present, true);
+  assert.equal(undoResult.integrity.valid, true);
+  assert.equal(await fs.readFile(path.join(tmp, 'notes.txt'), 'utf8'), 'draft');
 });
 
 test('undo dry-run previews restore work without mutating the filesystem', async () => {
@@ -807,15 +843,40 @@ test('undo rejects manifests created from dry-run results', async () => {
   );
 });
 
+test('undo rejects tampered checksum manifests unless verification is skipped', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const manifestPath = path.join(tmp, 'undo-manifest.json');
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const organizeResult = await organize(tmp);
+  const manifest = await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+  const tampered = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  tampered.summary.total = 999;
+  await fs.writeFile(manifestPath, `${JSON.stringify(tampered, null, 2)}\n`);
+
+  await assert.rejects(
+    undoFromManifest(manifestPath),
+    /failed integrity verification: Manifest checksum mismatch/,
+  );
+
+  const undoResult = await undoFromManifest(manifestPath, { verifyIntegrity: false });
+  assert.equal(undoResult.integrity.present, true);
+  assert.equal(undoResult.integrity.valid, false);
+  assert.equal(undoResult.integrity.checksum, manifest.integrity.checksum);
+  assert.equal(await fs.readFile(path.join(tmp, 'notes.txt'), 'utf8'), 'draft');
+});
+
 test('parseArgs supports config, preset, lint, normalized-config, preset-export, and undo flags', () => {
-  const organizeArgs = parseArgs(['~/Downloads', '--dry-run', '--recursive', '--json', '--config', 'buckets.json', '--manifest-out', 'runs/latest.json']);
+  const organizeArgs = parseArgs(['~/Downloads', '--dry-run', '--recursive', '--json', '--config', 'buckets.json', '--manifest-out', 'runs/latest.json', '--manifest-checksum']);
   assert.equal(organizeArgs.targetDir, '~/Downloads');
   assert.deepEqual(organizeArgs.options, {
     dryRun: true,
     recursive: true,
     json: true,
     manifestOut: 'runs/latest.json',
+    manifestChecksum: true,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: 'buckets.json',
     lintConfigPath: null,
     previewConfigPath: null,
@@ -835,7 +896,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     recursive: false,
     json: false,
     manifestOut: 'runs/latest.json',
+    manifestChecksum: false,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: null,
@@ -849,14 +912,16 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     force: false,
   });
 
-  const undoArgs = parseArgs(['--undo', 'runs/latest.json', '--dry-run', '--json']);
+  const undoArgs = parseArgs(['--undo', 'runs/latest.json', '--dry-run', '--json', '--skip-manifest-verification']);
   assert.equal(undoArgs.targetDir, '.');
   assert.deepEqual(undoArgs.options, {
     dryRun: true,
     recursive: false,
     json: true,
     manifestOut: null,
+    manifestChecksum: false,
     undoManifest: 'runs/latest.json',
+    skipManifestVerification: true,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: null,
@@ -880,7 +945,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     recursive: false,
     json: true,
     manifestOut: null,
+    manifestChecksum: false,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: null,
@@ -900,7 +967,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     recursive: false,
     json: true,
     manifestOut: null,
+    manifestChecksum: false,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: 'shared/buckets.json',
     previewConfigPath: null,
@@ -920,7 +989,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     recursive: false,
     json: true,
     manifestOut: null,
+    manifestChecksum: false,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: 'shared/buckets.json',
@@ -940,7 +1011,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     recursive: false,
     json: true,
     manifestOut: null,
+    manifestChecksum: false,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: null,
@@ -960,7 +1033,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     recursive: false,
     json: true,
     manifestOut: null,
+    manifestChecksum: false,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: null,
@@ -985,8 +1060,23 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
   );
 
   assert.throws(
+    () => parseArgs(['--undo', 'runs/latest.json', '--manifest-checksum']),
+    /--manifest-checksum cannot be used with --undo/,
+  );
+
+  assert.throws(
     () => parseArgs(['~/Downloads', '--config', 'buckets.json', '--preset', 'coursework']),
     /--config cannot be combined with --preset/,
+  );
+
+  assert.throws(
+    () => parseArgs(['~/Downloads', '--manifest-checksum']),
+    /--manifest-checksum requires --manifest-out/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--skip-manifest-verification']),
+    /--skip-manifest-verification can only be used with --undo/,
   );
 
   assert.throws(
@@ -1045,6 +1135,7 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
       customBuckets: { datasets: ['.csv'] },
     },
     manifestPath: '/tmp/demo/manifests/latest.json',
+    integrity: { algorithm: 'sha256', checksum: 'abc123' },
     summary: { total: 1, renamed: 1, byBucket: { datasets: 1 } },
     moves: [{
       from: '/tmp/demo/a.csv',
@@ -1061,6 +1152,7 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
     rootDir: '/tmp/demo',
     dryRun: false,
     manifestPath: '/tmp/demo/manifests/latest.json',
+    integrity: { present: true, valid: true, algorithm: 'sha256', checksum: 'abc123' },
     summary: { total: 1, restored: 1, missing: 0, restoreRenamed: 1, removedDirectories: 1, byBucket: { documents: 1 } },
     moves: [{ from: '/tmp/demo/documents/a.txt', to: '/tmp/demo/a (1).txt', requestedRestore: '/tmp/demo/a.txt', restoreRenamed: true, status: 'restored', bucket: 'documents' }],
   });
@@ -1122,10 +1214,13 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
 
   assert.match(organizeReport, /preset: coursework/);
   assert.match(organizeReport, /config: \/tmp\/demo\/buckets\.json/);
+  assert.match(organizeReport, /manifest checksum: sha256:abc123/);
   assert.match(organizeReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
   assert.match(organizeReport, /renamed to avoid collisions: 1/);
   assert.match(organizeReport, /\[renamed; MIME type application\/json; detected application\/json\]/);
   assert.match(undoReport, /action: undo/);
+  assert.match(undoReport, /manifest checksum verified: yes/);
+  assert.match(undoReport, /manifest checksum: sha256:abc123/);
   assert.match(undoReport, /renamed to avoid restore collisions: 1/);
   assert.match(undoReport, /restore-renamed from \/tmp\/demo\/a\.txt/);
   assert.match(listPresetsReport, /action: list-presets/);

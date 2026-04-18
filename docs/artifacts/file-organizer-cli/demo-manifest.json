@@ -1,6 +1,6 @@
 {
   "action": "organize",
-  "createdAt": "2026-04-18T02:41:16.281Z",
+  "createdAt": "2026-04-18T06:13:24.737Z",
   "rootDir": "/demo/file-organizer-cli/downloads",
   "dryRun": false,
   "recursive": false,
@@ -124,5 +124,9 @@
       "documents": 1
     }
   },
-  "manifestPath": "/demo/file-organizer-cli/demo-manifest.json"
+  "manifestPath": "/demo/file-organizer-cli/demo-manifest.json",
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "0d79659c5c6ce5da248e5850f4969f4d62f315ab2854b42b1f4b5d0f1cb45dcc"
+  }
 }

@@ -1,18 +1,18 @@
 # file-organizer-cli
 
 ## Overview
-A Node.js CLI that organizes loose files into extension-based, basename-pattern-aware, and MIME-aware folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, CI-friendly config linting, and manifest-driven undo support.
+A Node.js CLI that organizes loose files into extension-based, basename-pattern-aware, and MIME-aware folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, CI-friendly config linting, checksum-backed manifests, and manifest-driven undo support.
 
 ## Why it is portfolio-worthy
 - demonstrates practical file-system automation with a real CLI workflow
-- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom extension + basename + MIME categorization rules, CI-ready config validation, and safe rollback after a bulk organize pass
-- includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing/linting, MIME sniffing, basename-pattern matching, manifest writing, and undo/restore flows
+- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom extension + basename + MIME categorization rules, CI-ready config validation, checksum-backed audit manifests, and safe rollback after a bulk organize pass
+- includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing/linting, MIME sniffing, basename-pattern matching, checksum-backed manifest writing, and undo/restore flows
 - easy to demo with realistic folders like `Downloads`, class assets, screenshots, or project exports
 - now ships a reproducible demo artifact bundle under [`docs/artifacts/file-organizer-cli/`](../../docs/artifacts/file-organizer-cli/) so reviewers can see config cleanup, dry-run output, before/after trees, and undo proof without running the CLI first
 
 ## Stack
 - Node.js
-- built-in `fs/promises`, `path`, and `node:test`
+- built-in `crypto`, `fs/promises`, `path`, and `node:test`
 
 ## Features
 - groups files into default `images`, `documents`, `audio`, `code`, `archives`, and `other` buckets
@@ -27,7 +27,8 @@ A Node.js CLI that organizes loose files into extension-based, basename-pattern-
 - supports `--recursive` to organize nested folders while skipping already-organized bucket folders
 - falls back from `rename` to copy-and-delete when a cross-device `EXDEV` move occurs
 - optionally writes a JSON manifest with `--manifest-out` so the exact run can be audited or undone later
-- supports `--undo manifest.json` to restore files from a saved non-dry-run organize manifest, including collision-safe restore names and empty bucket cleanup
+- supports `--manifest-checksum` to embed a SHA-256 checksum in the manifest for tamper-evident bulk-operation history
+- supports `--undo manifest.json` to restore files from a saved non-dry-run organize manifest, including collision-safe restore names, empty bucket cleanup, and automatic checksum verification when integrity metadata is present
 - prints either a readable text report or structured JSON output
 
 ## Usage
@@ -39,7 +40,7 @@ node organizer.js --list-presets
 node organizer.js --write-preset data-science ./presets/data-science.json
 node organizer.js --write-preset data-science ./presets/data-science.json --force
 node organizer.js ~/Downloads --config ./buckets.json --recursive
-node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json
+node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json --manifest-checksum
 node organizer.js ~/Downloads --config ./pattern-buckets.json --dry-run
 node organizer.js ~/Downloads --config ./mime-buckets.json --dry-run
 node organizer.js --lint-config ./shared/coursework-buckets.json
@@ -49,6 +50,7 @@ node organizer.js --fix-config ./shared/coursework-buckets.json
 node organizer.js --write-normalized-config ./shared/coursework-buckets.raw.json ./shared/coursework-buckets.json --force
 node organizer.js --undo ./artifacts/downloads-run.json
 node organizer.js --undo ./artifacts/downloads-run.json --dry-run --json
+node organizer.js --undo ./artifacts/downloads-run.json --skip-manifest-verification
 ```
 
 ## Built-in presets
@@ -116,6 +118,8 @@ Notes:
 - `--preset` and `--config` are mutually exclusive; use `--preset` for the bundled quick-start presets or `--write-preset ...` + `--config` when you want a file you can share in Git.
 - `--write-preset` refuses to overwrite existing files unless `--force` is provided.
 - `--config` is only used for organize runs; undo replays the exact manifest paths that were recorded earlier.
+- `--manifest-checksum` only applies when `--manifest-out` is also used; it stores a SHA-256 digest over the manifest payload so later edits show up during undo.
+- `--undo` verifies checksum metadata automatically when present and fails closed on tampered manifests unless you intentionally bypass it with `--skip-manifest-verification`.
 - the active config file is skipped automatically if it lives inside the directory being organized.
 
 > Tip: if you redirect `--json` output to a file, write that file outside the directory being organized. Otherwise the redirected report file can become another candidate input during the same run.
@@ -126,9 +130,10 @@ root: /home/student/Downloads
 action: organize
 mode: apply
 recursive: yes
-config: /home/student/Downloads/buckets.json
 total moves: 3
 renamed to avoid collisions: 1
+manifest checksum: sha256:0f6d2b9d1c6b0f72dff18fd8c80f0b841d8c17ce6bb0d6b6df85f9f2f44e6e74
+config: /home/student/Downloads/buckets.json
 manifest: /home/student/Downloads/artifacts/downloads-run.json
 bucket data-dumps: 1
 bucket datasets: 1
@@ -244,11 +249,27 @@ restored files: 3
 missing current files: 0
 renamed to avoid restore collisions: 0
 removed empty directories: 2
+manifest checksum verified: yes
+manifest checksum: sha256:0f6d2b9d1c6b0f72dff18fd8c80f0b841d8c17ce6bb0d6b6df85f9f2f44e6e74
 bucket datasets: 1
 bucket images: 2
 /home/student/Downloads/datasets/report.csv -> /home/student/Downloads/report.csv
 /home/student/Downloads/images/photo.png -> /home/student/Downloads/photo.png
 /home/student/Downloads/images/photo-copy (1).png -> /home/student/Downloads/photo-copy.png
+```
+
+## Manifest integrity
+Use `--manifest-checksum` when you want the manifest itself to become tamper-evident. The CLI writes a SHA-256 digest into the manifest, and later `--undo` runs automatically verify that digest before moving files back.
+
+```bash
+node organizer.js ~/Downloads --manifest-out ./artifacts/downloads-run.json --manifest-checksum
+node organizer.js --undo ./artifacts/downloads-run.json
+```
+
+If a teammate or script edits the manifest afterward, undo fails with an integrity error instead of silently trusting the modified history. For deliberate recovery from a partially repaired manifest, you can opt out explicitly:
+
+```bash
+node organizer.js --undo ./artifacts/downloads-run.json --skip-manifest-verification
 ```
 
 ## Demo artifact bundle
@@ -268,8 +289,9 @@ Published bundle:
 - [`manifest payload`](../../docs/artifacts/file-organizer-cli/demo-manifest.json)
 - [`after tree`](../../docs/artifacts/file-organizer-cli/demo-after-tree.txt)
 - [`undo report`](../../docs/artifacts/file-organizer-cli/demo-undo-report.txt)
+- [`restored tree`](../../docs/artifacts/file-organizer-cli/demo-restored-tree.txt)
 
-The generator runs the organizer against an isolated temp folder, writes a warning-heavy raw config plus its canonical normalized version, captures dry-run/apply/undo reports, and sanitizes the temp paths into a stable `/demo/file-organizer-cli` prefix for readable Git-tracked artifacts.
+The generator runs the organizer against an isolated temp folder, writes a warning-heavy raw config plus its canonical normalized version, captures dry-run/apply/undo reports with checksum-backed manifests, and sanitizes the temp paths into a stable `/demo/file-organizer-cli` prefix for readable Git-tracked artifacts.
 
 ## Test
 ```bash
@@ -278,4 +300,4 @@ npm run demo:artifacts
 ```
 
 ## Future Improvements
-- optionally sign or checksum manifests for tamper-evident bulk-operation history
+- optionally support detached signatures (for example, team-managed keys) on top of the built-in checksum flow for authenticity as well as tamper evidence

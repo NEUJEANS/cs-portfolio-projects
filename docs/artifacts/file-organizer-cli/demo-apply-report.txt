@@ -4,6 +4,7 @@ mode: apply
 recursive: no
 total moves: 6
 renamed to avoid collisions: 0
+manifest checksum: sha256:0d79659c5c6ce5da248e5850f4969f4d62f315ab2854b42b1f4b5d0f1cb45dcc
 config: /demo/file-organizer-cli/coursework-demo.normalized.json
 manifest: /demo/file-organizer-cli/demo-manifest.json
 bucket assignments: 1

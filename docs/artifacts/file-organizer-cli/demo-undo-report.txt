@@ -7,6 +7,8 @@ restored files: 6
 missing current files: 0
 renamed to avoid restore collisions: 0
 removed empty directories: 5
+manifest checksum verified: yes
+manifest checksum: sha256:0d79659c5c6ce5da248e5850f4969f4d62f315ab2854b42b1f4b5d0f1cb45dcc
 bucket assignments: 1
 bucket datasets: 2
 bucket documents: 1

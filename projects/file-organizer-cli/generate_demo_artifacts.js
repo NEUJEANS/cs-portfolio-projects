@@ -144,7 +144,7 @@ async function generateArtifacts() {
       recursive: false,
       bucketConfig,
     });
-    const manifestResult = await writeManifest(organizeResult, manifestPath);
+    const manifestResult = await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
     const afterTree = await buildTreeSnapshot(downloadsDir, 'downloads/');
     const undoResult = await undoFromManifest(manifestPath);
     const restoredTree = await buildTreeSnapshot(downloadsDir, 'downloads/');
@@ -181,7 +181,7 @@ async function generateArtifacts() {
       '- [`demo-config.normalized.json`](./demo-config.normalized.json) — canonical config used for the run',
       '- [`demo-normalized-write.txt`](./demo-normalized-write.txt) — normalization-write report for the canonical config export',
       '- [`demo-dry-run-report.txt`](./demo-dry-run-report.txt) — preview of the planned moves',
-      '- [`demo-apply-report.txt`](./demo-apply-report.txt) — real organize run with manifest recording',
+      '- [`demo-apply-report.txt`](./demo-apply-report.txt) — real organize run with checksum-backed manifest recording',
       '- [`demo-manifest.json`](./demo-manifest.json) — sanitized manifest/report payload captured from the real run',
       '- [`demo-after-tree.txt`](./demo-after-tree.txt) — folder tree after the organize pass',
       '- [`demo-undo-report.txt`](./demo-undo-report.txt) — manifest-driven rollback proof',
@@ -206,7 +206,8 @@ async function generateArtifacts() {
       '- basename-pattern routing for screenshots and assignments',
       '- MIME-aware routing for misleading `.txt` files that actually contain JSON or SVG',
       '- normalization-preview + canonical shared-config writing before a real organize run',
-      '- dry-run preview, manifest capture, and successful undo back to the original loose tree',
+      '- checksum-backed manifest capture plus automatic verification during undo',
+      '- dry-run preview and successful rollback back to the original loose tree',
       '',
       '## Notes',
       '- committed reports replace the temporary smoke-run root with the stable placeholder `/demo/file-organizer-cli` so the artifacts stay readable in Git',

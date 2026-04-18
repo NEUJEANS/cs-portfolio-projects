@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -53,6 +54,7 @@ const PRESET_LIBRARY = Object.freeze({
 const CONFIG_ALLOWED_KEYS = Object.freeze(['buckets', 'fallbackBucket', 'extendDefaults']);
 const BUCKET_RULE_ALLOWED_KEYS = Object.freeze(['extensions', 'basenamePatterns', 'mimeTypes', 'mimePrefixes']);
 const MIME_SNIFF_BYTE_LIMIT = 4096;
+const MANIFEST_CHECKSUM_ALGORITHM = 'sha256';
 
 function normalizeBucketName(name, label = 'bucket name') {
   if (typeof name !== 'string') {
@@ -1440,6 +1442,101 @@ async function pathExists(targetPath) {
   }
 }
 
+function sortObjectKeysDeep(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => sortObjectKeysDeep(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort((left, right) => left.localeCompare(right))
+        .map(key => [key, sortObjectKeysDeep(value[key])]),
+    );
+  }
+
+  return value;
+}
+
+function manifestPayloadForIntegrity(manifest) {
+  const { integrity, ...manifestWithoutIntegrity } = manifest;
+  return manifestWithoutIntegrity;
+}
+
+function manifestChecksumFor(manifest, algorithm = MANIFEST_CHECKSUM_ALGORITHM) {
+  const hash = crypto.createHash(algorithm);
+  hash.update(JSON.stringify(sortObjectKeysDeep(manifestPayloadForIntegrity(manifest))));
+  return hash.digest('hex');
+}
+
+function buildManifestIntegrity(manifest, algorithm = MANIFEST_CHECKSUM_ALGORITHM) {
+  return {
+    algorithm,
+    checksum: manifestChecksumFor(manifest, algorithm),
+  };
+}
+
+function verifyManifestIntegrity(manifest) {
+  if (!manifest.integrity) {
+    return {
+      present: false,
+      valid: true,
+      algorithm: null,
+      checksum: null,
+      expectedChecksum: null,
+      reason: null,
+    };
+  }
+
+  const { algorithm, checksum } = manifest.integrity;
+  if (typeof algorithm !== 'string' || !algorithm) {
+    return {
+      present: true,
+      valid: false,
+      algorithm: null,
+      checksum: checksum || null,
+      expectedChecksum: null,
+      reason: 'Manifest integrity metadata is missing an algorithm.',
+    };
+  }
+
+  if (typeof checksum !== 'string' || !checksum) {
+    return {
+      present: true,
+      valid: false,
+      algorithm,
+      checksum: checksum || null,
+      expectedChecksum: null,
+      reason: 'Manifest integrity metadata is missing a checksum.',
+    };
+  }
+
+  let expectedChecksum;
+  try {
+    expectedChecksum = manifestChecksumFor(manifest, algorithm);
+  } catch (error) {
+    return {
+      present: true,
+      valid: false,
+      algorithm,
+      checksum,
+      expectedChecksum: null,
+      reason: error.message || String(error),
+    };
+  }
+
+  return {
+    present: true,
+    valid: checksum === expectedChecksum,
+    algorithm,
+    checksum,
+    expectedChecksum,
+    reason: checksum === expectedChecksum
+      ? null
+      : `Manifest checksum mismatch: expected ${expectedChecksum} but found ${checksum}.`,
+  };
+}
+
 async function uniqueDestination(targetPath) {
   if (!(await pathExists(targetPath))) {
     return targetPath;
@@ -1590,12 +1687,20 @@ async function organize(dir, options = {}) {
   };
 }
 
-async function writeManifest(result, manifestPath) {
+async function writeManifest(result, manifestPath, options = {}) {
+  const settings = {
+    includeChecksum: false,
+    ...options,
+  };
   const resolvedPath = path.resolve(manifestPath);
   const manifest = {
     ...result,
     manifestPath: resolvedPath,
   };
+
+  if (settings.includeChecksum) {
+    manifest.integrity = buildManifestIntegrity(manifest);
+  }
 
   await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
   await fs.writeFile(resolvedPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -1628,6 +1733,7 @@ async function removeEmptyDirectories(startDir, stopDir) {
 async function undoFromManifest(manifestPath, options = {}) {
   const settings = {
     dryRun: false,
+    verifyIntegrity: true,
     ...options,
   };
 
@@ -1640,6 +1746,11 @@ async function undoFromManifest(manifestPath, options = {}) {
 
   if (manifest.dryRun) {
     throw new Error('Cannot undo a dry-run manifest because no files were moved.');
+  }
+
+  const integrity = verifyManifestIntegrity(manifest);
+  if (settings.verifyIntegrity && integrity.present && !integrity.valid) {
+    throw new Error(`Undo manifest failed integrity verification: ${integrity.reason}`);
   }
 
   const rootDir = path.resolve(manifest.rootDir || path.dirname(resolvedManifestPath));
@@ -1690,6 +1801,7 @@ async function undoFromManifest(manifestPath, options = {}) {
     rootDir,
     dryRun: settings.dryRun,
     manifestPath: resolvedManifestPath,
+    integrity,
     removedDirectories: [...removedDirectories].sort(),
     moves,
     summary: summarizeUndo(moves, removedDirectories.size),
@@ -1703,7 +1815,9 @@ function parseArgs(argv) {
     recursive: false,
     json: false,
     manifestOut: null,
+    manifestChecksum: false,
     undoManifest: null,
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: null,
@@ -1742,6 +1856,10 @@ function parseArgs(argv) {
       }
       options.undoManifest = nextArg;
       index += 1;
+    } else if (arg === '--manifest-checksum') {
+      options.manifestChecksum = true;
+    } else if (arg === '--skip-manifest-verification') {
+      options.skipManifestVerification = true;
     } else if (arg === '--config') {
       const nextArg = args[index + 1];
       if (!nextArg || nextArg.startsWith('-')) {
@@ -1830,6 +1948,10 @@ function parseArgs(argv) {
     throw new Error('--manifest-out cannot be used with --undo');
   }
 
+  if (options.undoManifest && options.manifestChecksum) {
+    throw new Error('--manifest-checksum cannot be used with --undo');
+  }
+
   if (options.undoManifest && options.configPath) {
     throw new Error('--config cannot be used with --undo');
   }
@@ -1842,11 +1964,19 @@ function parseArgs(argv) {
     throw new Error('--config cannot be combined with --preset');
   }
 
+  if (options.manifestChecksum && !options.manifestOut) {
+    throw new Error('--manifest-checksum requires --manifest-out');
+  }
+
+  if (options.skipManifestVerification && !options.undoManifest) {
+    throw new Error('--skip-manifest-verification can only be used with --undo');
+  }
+
   if (options.lintConfigPath && targetDirExplicit) {
     throw new Error('Target directory cannot be combined with --lint-config');
   }
 
-  if (options.lintConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.lintConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--lint-config cannot be combined with organize, undo, preset, or normalized-config-write flags');
   }
 
@@ -1854,7 +1984,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --preview-normalized-config');
   }
 
-  if (options.previewConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.previewConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--preview-normalized-config cannot be combined with organize, undo, lint, preset, or normalized-config-write flags');
   }
 
@@ -1862,7 +1992,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --fix-config');
   }
 
-  if (options.fixConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.fixConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--fix-config cannot be combined with organize, undo, lint, preset, or normalized-config-export flags');
   }
 
@@ -1870,7 +2000,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --write-normalized-config');
   }
 
-  if (options.writeNormalizedConfigSource && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.presetName || options.listPresets || options.writePresetName)) {
+  if (options.writeNormalizedConfigSource && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.presetName || options.listPresets || options.writePresetName)) {
     throw new Error('--write-normalized-config cannot be combined with organize, undo, lint, or preset flags');
   }
 
@@ -1878,7 +2008,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --list-presets');
   }
 
-  if (options.listPresets && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.writePresetName || options.force)) {
+  if (options.listPresets && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.writePresetName || options.force)) {
     throw new Error('--list-presets only supports optional --json output');
   }
 
@@ -1886,7 +2016,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --write-preset');
   }
 
-  if (options.writePresetName && (options.dryRun || options.undoManifest || options.manifestOut || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets)) {
+  if (options.writePresetName && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets)) {
     throw new Error('--write-preset cannot be combined with organize, lint, normalized-config, or undo flags');
   }
 
@@ -1906,6 +2036,10 @@ function formatOrganizeTextReport(result) {
     `total moves: ${result.summary.total}`,
     `renamed to avoid collisions: ${result.summary.renamed}`,
   ];
+
+  if (result.integrity && result.integrity.checksum) {
+    header.push(`manifest checksum: ${result.integrity.algorithm}:${result.integrity.checksum}`);
+  }
 
   if (result.bucketConfig && result.bucketConfig.presetName) {
     header.push(`preset: ${result.bucketConfig.presetName}`);
@@ -1959,6 +2093,13 @@ function formatUndoTextReport(result) {
     `renamed to avoid restore collisions: ${result.summary.restoreRenamed}`,
     `removed empty directories: ${result.summary.removedDirectories}`,
   ];
+
+  if (result.integrity && result.integrity.present) {
+    header.push(`manifest checksum verified: ${result.integrity.valid ? 'yes' : 'no'}`);
+    if (result.integrity.algorithm && result.integrity.checksum) {
+      header.push(`manifest checksum: ${result.integrity.algorithm}:${result.integrity.checksum}`);
+    }
+  }
 
   const bucketLines = Object.entries(result.summary.byBucket)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -2110,8 +2251,8 @@ async function main(argv = process.argv.slice(2)) {
   const { targetDir, options } = parseArgs(argv);
 
   if (options.help) {
-    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--preset preset-name] [--manifest-out manifest.json]');
-    console.log('       node organizer.js --undo manifest.json [--dry-run] [--json]');
+    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--preset preset-name] [--manifest-out manifest.json] [--manifest-checksum]');
+    console.log('       node organizer.js --undo manifest.json [--dry-run] [--json] [--skip-manifest-verification]');
     console.log('       node organizer.js --list-presets [--json]');
     console.log('       node organizer.js --write-preset preset-name destination.json [--force] [--json]');
     console.log('       node organizer.js --lint-config buckets.json [--json]');
@@ -2144,7 +2285,10 @@ async function main(argv = process.argv.slice(2)) {
   } else if (options.lintConfigPath) {
     result = await lintBucketConfig(options.lintConfigPath);
   } else if (options.undoManifest) {
-    result = await undoFromManifest(options.undoManifest, { dryRun: options.dryRun });
+    result = await undoFromManifest(options.undoManifest, {
+      dryRun: options.dryRun,
+      verifyIntegrity: !options.skipManifestVerification,
+    });
   } else {
     const bucketConfig = options.configPath
       ? await loadBucketConfig(options.configPath)
@@ -2157,7 +2301,9 @@ async function main(argv = process.argv.slice(2)) {
       bucketConfig,
     });
     if (options.manifestOut) {
-      result = await writeManifest(result, options.manifestOut);
+      result = await writeManifest(result, options.manifestOut, {
+        includeChecksum: options.manifestChecksum,
+      });
     }
   }
 
@@ -2213,6 +2359,9 @@ module.exports = {
   moveFile,
   organize,
   writeManifest,
+  manifestChecksumFor,
+  buildManifestIntegrity,
+  verifyManifestIntegrity,
   undoFromManifest,
   parseArgs,
   formatTextReport,
