@@ -17,6 +17,7 @@
 - [x] Add trace-family sweep commands that batch-generate workloads and compare predictors in one run
 - [x] Add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
 - [x] Add perceptron threshold/weight-limit sweep artifacts so neural tuning is visible in the gallery
+- [x] Add budget-normalized sweeps so predictors can compete under similar state-bit budgets
 
 ## Next candidate slices
-- [ ] Add budget-normalized sweeps so predictors can compete under similar state-bit budgets
+- [ ] Add CSV/export-friendly budget sweep output so README charts and slide decks can reuse the same winner matrix without re-parsing Markdown

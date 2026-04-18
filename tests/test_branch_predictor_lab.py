@@ -28,16 +28,22 @@ TournamentPredictor = module.TournamentPredictor
 TwoBitPredictor = module.TwoBitPredictor
 build_predictor = module.build_predictor
 compare_predictors = module.compare_predictors
+estimate_predictor_state_bits = module.estimate_predictor_state_bits
+format_budget_sweep_summary_table = module.format_budget_sweep_summary_table
 format_sweep_summary_table = module.format_sweep_summary_table
 generate_synthetic_trace = module.generate_synthetic_trace
 load_trace = module.load_trace
 parse_trace_line = module.parse_trace_line
+render_budget_sweep_markdown = module.render_budget_sweep_markdown
+render_budget_sweep_svg = module.render_budget_sweep_svg
 render_comparison_markdown = module.render_comparison_markdown
 render_comparison_svg = module.render_comparison_svg
 render_perceptron_tuning_markdown = module.render_perceptron_tuning_markdown
 render_perceptron_tuning_svg = module.render_perceptron_tuning_svg
 render_sweep_markdown = module.render_sweep_markdown
 render_sweep_svg = module.render_sweep_svg
+run_budget_normalized_sweep = module.run_budget_normalized_sweep
+run_budget_workload_sweep = module.run_budget_workload_sweep
 run_perceptron_tuning_sweep = module.run_perceptron_tuning_sweep
 run_workload_sweep = module.run_workload_sweep
 simulate_trace = module.simulate_trace
@@ -625,6 +631,127 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())
             self.assertIn("## Overview", markdown_path.read_text(encoding="utf-8"))
             self.assertIn("Simple vs advanced", svg_path.read_text(encoding="utf-8"))
+
+    def test_estimate_predictor_state_bits_covers_simple_and_advanced_predictors(self) -> None:
+        self.assertEqual(estimate_predictor_state_bits("always-taken"), 0)
+        self.assertEqual(estimate_predictor_state_bits("one-bit", table_size=8), 8)
+        self.assertEqual(estimate_predictor_state_bits("two-bit", table_size=8), 16)
+        self.assertEqual(estimate_predictor_state_bits("local-history", table_size=8, history_bits=2), 24)
+        self.assertEqual(estimate_predictor_state_bits("gshare", table_size=8, history_bits=2), 18)
+        self.assertEqual(estimate_predictor_state_bits("tournament", table_size=8, history_bits=2), 58)
+        self.assertEqual(
+            estimate_predictor_state_bits("perceptron", table_size=8, history_bits=4, weight_limit=31),
+            244,
+        )
+
+    def test_run_budget_normalized_sweep_filters_candidates_by_budget(self) -> None:
+        trace = generate_synthetic_trace("perceptron-majority", branches=64, seed=13)
+        report = run_budget_normalized_sweep(
+            trace,
+            budgets=[16, 64, 256],
+            table_sizes=[2, 4, 8],
+            history_bits_options=[1, 2, 4],
+            weight_limits=[15, 31],
+        )
+
+        self.assertEqual(report["budgets"], [16, 64, 256])
+        self.assertGreater(report["candidate_count"], 0)
+        self.assertEqual(len(report["budget_reports"]), 3)
+        for entry in report["budget_reports"]:
+            self.assertLessEqual(entry["predictor_results"][0]["state_bits"], entry["budget_bits"])
+            self.assertEqual(entry["winner_predictor"], entry["predictor_results"][0]["predictor"])
+            self.assertGreaterEqual(entry["winner_accuracy_percent"], entry["best_simple_accuracy_percent"])
+            self.assertGreaterEqual(entry["winner_accuracy_percent"], entry["best_advanced_accuracy_percent"])
+            self.assertEqual(len({result["predictor"] for result in entry["predictor_results"]}), len(entry["predictor_results"]))
+
+    def test_run_budget_normalized_sweep_handles_tiny_budgets_without_advanced_predictors(self) -> None:
+        trace = generate_synthetic_trace("loop-heavy", branches=16, seed=7)
+        report = run_budget_normalized_sweep(
+            trace,
+            budgets=[1],
+            table_sizes=[2],
+            history_bits_options=[1],
+            weight_limits=[15],
+        )
+
+        self.assertEqual(report["budget_reports"][0]["winner_predictor"], "always-taken")
+        self.assertEqual(report["budget_reports"][0]["runner_up_predictor"], "always-not-taken")
+        self.assertIsNone(report["budget_reports"][0]["best_advanced_predictor"])
+        self.assertIsNone(report["budget_reports"][0]["best_advanced_accuracy_percent"])
+
+    def test_render_budget_sweep_outputs_include_budget_story(self) -> None:
+        scenarios = run_budget_workload_sweep(
+            ["loop-heavy", "perceptron-majority"],
+            budgets=[32, 128],
+            table_sizes=[2, 4, 8],
+            history_bits_options=[1, 2, 4],
+            weight_limits=[15, 31],
+        )
+
+        markdown = render_budget_sweep_markdown(scenarios=scenarios)
+        svg = render_budget_sweep_svg(scenarios=scenarios)
+        summary = format_budget_sweep_summary_table(scenarios)
+
+        self.assertIn("# Branch predictor budget-normalized sweep", markdown)
+        self.assertIn("## Per-workload notes", markdown)
+        self.assertIn("`32 bits`", markdown)
+        self.assertIn("Portfolio usage", markdown)
+        self.assertIn("<svg", svg)
+        self.assertIn("Budget-normalized branch predictor sweep", svg)
+        self.assertIn("loop-heavy", summary)
+        self.assertIn("32b", summary)
+
+    def test_cli_budget_sweep_json_writes_markdown_svg_and_trace_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_dir = Path(tmpdir) / "budget-traces"
+            markdown_path = Path(tmpdir) / "budget-sweep.md"
+            svg_path = Path(tmpdir) / "budget-sweep.svg"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "budget-sweep",
+                    "loop-heavy",
+                    "perceptron-majority",
+                    "--budgets",
+                    "32",
+                    "128",
+                    "--table-sizes",
+                    "2",
+                    "4",
+                    "8",
+                    "--history-bits-options",
+                    "1",
+                    "2",
+                    "4",
+                    "--weight-limits",
+                    "15",
+                    "31",
+                    "--trace-dir",
+                    str(trace_dir),
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["scenario_count"], 2)
+            self.assertEqual(payload["workloads"], ["loop-heavy", "perceptron-majority"])
+            self.assertEqual(payload["trace_dir"], str(trace_dir))
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertTrue((trace_dir / "loop-heavy-seed7.trace").exists())
+            self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())
+            self.assertIn("budget-normalized sweep", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Budget-normalized branch predictor sweep", svg_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

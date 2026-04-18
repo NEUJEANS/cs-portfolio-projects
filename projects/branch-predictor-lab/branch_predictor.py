@@ -60,6 +60,21 @@ WORKLOAD_SWEEP_PROFILES: dict[str, dict[str, Any]] = {
     },
 }
 
+BUDGET_SWEEP_BUDGETS = (64, 128, 256, 512, 1024)
+BUDGET_SWEEP_TABLE_SIZES = (4, 8, 16, 32, 64)
+BUDGET_SWEEP_HISTORY_BITS = (1, 2, 4, 8, 12)
+BUDGET_SWEEP_WEIGHT_LIMITS = (15, 31, 74)
+BUDGET_SWEEP_PREDICTOR_NAMES = (
+    "always-taken",
+    "always-not-taken",
+    "one-bit",
+    "two-bit",
+    "local-history",
+    "gshare",
+    "perceptron",
+    "tournament",
+)
+
 
 @dataclass(frozen=True)
 class BranchRecord:
@@ -1088,6 +1103,317 @@ def format_sweep_summary_table(scenarios: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _signed_bits_for_limit(limit: int) -> int:
+    return max(1, (max(1, limit) * 2).bit_length())
+
+
+def estimate_predictor_state_bits(
+    name: str,
+    *,
+    table_size: int | None = None,
+    history_bits: int | None = None,
+    threshold: int | None = None,
+    weight_limit: int | None = None,
+) -> int:
+    normalized = name.strip().lower()
+    if normalized in {"always-taken", "always-not-taken"}:
+        return 0
+    if normalized == "one-bit":
+        if table_size is None:
+            raise ValueError("table_size is required for one-bit state sizing")
+        return table_size
+    if normalized == "two-bit":
+        if table_size is None:
+            raise ValueError("table_size is required for two-bit state sizing")
+        return table_size * 2
+    if normalized == "local-history":
+        if table_size is None or history_bits is None:
+            raise ValueError("table_size and history_bits are required for local-history state sizing")
+        return (table_size * history_bits) + (2 * (1 << history_bits))
+    if normalized == "gshare":
+        if table_size is None or history_bits is None:
+            raise ValueError("table_size and history_bits are required for gshare state sizing")
+        return (table_size * 2) + history_bits
+    if normalized == "perceptron":
+        if table_size is None or history_bits is None:
+            raise ValueError("table_size and history_bits are required for perceptron state sizing")
+        resolved = PerceptronPredictor(
+            table_size=table_size,
+            history_bits=history_bits,
+            threshold=threshold,
+            weight_limit=weight_limit,
+        )
+        signed_weight_bits = _signed_bits_for_limit(resolved.weight_limit)
+        return (table_size * (history_bits + 1) * signed_weight_bits) + history_bits
+    if normalized == "tournament":
+        if table_size is None or history_bits is None:
+            raise ValueError("table_size and history_bits are required for tournament state sizing")
+        return (table_size * history_bits) + (2 * (1 << history_bits)) + (table_size * 4) + history_bits
+    raise ValueError(f"unsupported predictor for state sizing: {name}")
+
+
+def _budget_candidate_sort_key(candidate: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        -candidate["accuracy"],
+        candidate["mispredictions"],
+        candidate["state_bits"],
+        candidate.get("history_bits") or 0,
+        candidate.get("table_size") or 0,
+        candidate.get("weight_limit") or 0,
+        candidate["predictor"],
+    )
+
+
+def _first_budget_result_from_group(
+    results: list[dict[str, Any]], allowed_names: set[str], *, required: bool = True
+) -> dict[str, Any] | None:
+    match = next((result for result in results if result["predictor"] in allowed_names), None)
+    if match is None and required:
+        raise ValueError(f"missing predictors from group: {sorted(allowed_names)}")
+    return match
+
+
+def _budget_group_label(predictor: str | None, accuracy_percent: float | None) -> str:
+    if predictor is None or accuracy_percent is None:
+        return "n/a"
+    return f"`{predictor}` `{accuracy_percent:.2f}%`"
+
+
+def _format_budget_candidate_label(candidate: dict[str, Any]) -> str:
+    if candidate["predictor"] in {"always-taken", "always-not-taken"}:
+        return f"{candidate['predictor']} · stateless"
+    parts = [candidate["predictor"]]
+    if candidate.get("table_size") is not None:
+        parts.append(f"table={candidate['table_size']}")
+    if candidate.get("history_bits") is not None and candidate["predictor"] not in {"one-bit", "two-bit"}:
+        parts.append(f"history={candidate['history_bits']}")
+    if candidate.get("weight_limit") is not None:
+        parts.append(f"w={candidate['weight_limit']}")
+    parts.append(f"bits={candidate['state_bits']}")
+    return " · ".join(parts)
+
+
+def enumerate_budget_candidates(
+    records: list[BranchRecord],
+    *,
+    table_sizes: list[int] | tuple[int, ...] | None = None,
+    history_bits_options: list[int] | tuple[int, ...] | None = None,
+    weight_limits: list[int] | tuple[int, ...] | None = None,
+) -> list[dict[str, Any]]:
+    table_values = sorted({value for value in (table_sizes or BUDGET_SWEEP_TABLE_SIZES) if value >= 2})
+    history_values = sorted({value for value in (history_bits_options or BUDGET_SWEEP_HISTORY_BITS) if value >= 1})
+    weight_limit_values = sorted({value for value in (weight_limits or BUDGET_SWEEP_WEIGHT_LIMITS) if value >= 1})
+
+    candidates: list[dict[str, Any]] = []
+
+    def add_candidate(
+        predictor: BranchPredictor,
+        *,
+        predictor_name: str,
+        table_size: int | None = None,
+        history_bits: int | None = None,
+        threshold: int | None = None,
+        weight_limit: int | None = None,
+    ) -> None:
+        result = simulate_trace(records, predictor)
+        resolved_threshold = threshold
+        resolved_weight_limit = weight_limit
+        if isinstance(predictor, PerceptronPredictor):
+            resolved_threshold = predictor.threshold
+            resolved_weight_limit = predictor.weight_limit
+        state_bits = estimate_predictor_state_bits(
+            predictor_name,
+            table_size=table_size,
+            history_bits=history_bits,
+            threshold=resolved_threshold,
+            weight_limit=resolved_weight_limit,
+        )
+        candidates.append(
+            {
+                "predictor": predictor_name,
+                "table_size": table_size,
+                "history_bits": history_bits,
+                "threshold": resolved_threshold,
+                "weight_limit": resolved_weight_limit,
+                "state_bits": state_bits,
+                "accuracy": result.accuracy,
+                "accuracy_percent": round(result.accuracy * 100, 3),
+                "mispredictions": result.mispredictions,
+                "mpki": result.mpki,
+                "hardest_branch": result.hardest_branches[0]["address"] if result.hardest_branches else None,
+            }
+        )
+
+    add_candidate(AlwaysTakenPredictor(), predictor_name="always-taken")
+    add_candidate(AlwaysNotTakenPredictor(), predictor_name="always-not-taken")
+
+    for table_size in table_values:
+        add_candidate(OneBitPredictor(table_size=table_size), predictor_name="one-bit", table_size=table_size)
+        add_candidate(TwoBitPredictor(table_size=table_size), predictor_name="two-bit", table_size=table_size)
+        for history_bits in history_values:
+            add_candidate(
+                LocalHistoryPredictor(table_size=table_size, history_bits=history_bits),
+                predictor_name="local-history",
+                table_size=table_size,
+                history_bits=history_bits,
+            )
+            add_candidate(
+                GSharePredictor(table_size=table_size, history_bits=history_bits),
+                predictor_name="gshare",
+                table_size=table_size,
+                history_bits=history_bits,
+            )
+            add_candidate(
+                TournamentPredictor(table_size=table_size, history_bits=history_bits),
+                predictor_name="tournament",
+                table_size=table_size,
+                history_bits=history_bits,
+            )
+            for weight_limit in weight_limit_values:
+                predictor = PerceptronPredictor(
+                    table_size=table_size,
+                    history_bits=history_bits,
+                    weight_limit=weight_limit,
+                )
+                add_candidate(
+                    predictor,
+                    predictor_name="perceptron",
+                    table_size=table_size,
+                    history_bits=history_bits,
+                    threshold=predictor.threshold,
+                    weight_limit=predictor.weight_limit,
+                )
+
+    return sorted(candidates, key=_budget_candidate_sort_key)
+
+
+def run_budget_normalized_sweep(
+    records: list[BranchRecord],
+    *,
+    budgets: list[int] | tuple[int, ...] | None = None,
+    table_sizes: list[int] | tuple[int, ...] | None = None,
+    history_bits_options: list[int] | tuple[int, ...] | None = None,
+    weight_limits: list[int] | tuple[int, ...] | None = None,
+) -> dict[str, Any]:
+    budget_values = sorted({value for value in (budgets or BUDGET_SWEEP_BUDGETS) if value >= 1})
+    if not budget_values:
+        raise ValueError("budgets must contain at least one positive integer")
+    table_values = sorted({value for value in (table_sizes or BUDGET_SWEEP_TABLE_SIZES) if value >= 2})
+    history_values = sorted({value for value in (history_bits_options or BUDGET_SWEEP_HISTORY_BITS) if value >= 1})
+    weight_limit_values = sorted({value for value in (weight_limits or BUDGET_SWEEP_WEIGHT_LIMITS) if value >= 1})
+    candidates = enumerate_budget_candidates(
+        records,
+        table_sizes=table_values,
+        history_bits_options=history_values,
+        weight_limits=weight_limit_values,
+    )
+
+    budget_reports: list[dict[str, Any]] = []
+    for budget_bits in budget_values:
+        best_by_predictor: dict[str, dict[str, Any]] = {}
+        for candidate in candidates:
+            if candidate["state_bits"] > budget_bits:
+                continue
+            current = best_by_predictor.get(candidate["predictor"])
+            if current is None or _budget_candidate_sort_key(candidate) < _budget_candidate_sort_key(current):
+                best_by_predictor[candidate["predictor"]] = candidate
+        if not best_by_predictor:
+            raise ValueError(f"no predictor configs fit budget {budget_bits} bits")
+
+        predictor_results = sorted(best_by_predictor.values(), key=_budget_candidate_sort_key)
+        winner = predictor_results[0]
+        runner_up = predictor_results[1] if len(predictor_results) > 1 else winner
+        best_simple = _first_budget_result_from_group(predictor_results, SIMPLE_PREDICTOR_NAMES, required=False)
+        best_advanced = _first_budget_result_from_group(predictor_results, ADVANCED_PREDICTOR_NAMES, required=False)
+        budget_reports.append(
+            {
+                "budget_bits": budget_bits,
+                "winner_predictor": winner["predictor"],
+                "winner_accuracy_percent": winner["accuracy_percent"],
+                "runner_up_predictor": runner_up["predictor"],
+                "winner_margin_percent": round((winner["accuracy"] - runner_up["accuracy"]) * 100, 3),
+                "best_simple_predictor": best_simple["predictor"] if best_simple is not None else None,
+                "best_simple_accuracy_percent": best_simple["accuracy_percent"] if best_simple is not None else None,
+                "best_advanced_predictor": best_advanced["predictor"] if best_advanced is not None else None,
+                "best_advanced_accuracy_percent": best_advanced["accuracy_percent"] if best_advanced is not None else None,
+                "predictor_results": predictor_results,
+            }
+        )
+
+    return {
+        "trace_summary": summarize_trace(records),
+        "budgets": budget_values,
+        "table_sizes": table_values,
+        "history_bits_options": history_values,
+        "weight_limits": weight_limit_values,
+        "candidate_count": len(candidates),
+        "budget_reports": budget_reports,
+    }
+
+
+def run_budget_workload_sweep(
+    workloads: list[str] | None = None,
+    *,
+    branches_override: int | None = None,
+    seed_override: int | None = None,
+    budgets: list[int] | tuple[int, ...] | None = None,
+    table_sizes: list[int] | tuple[int, ...] | None = None,
+    history_bits_options: list[int] | tuple[int, ...] | None = None,
+    weight_limits: list[int] | tuple[int, ...] | None = None,
+    trace_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    selected = workloads or list(SYNTHETIC_WORKLOADS)
+    scenarios: list[dict[str, Any]] = []
+    if trace_dir is not None:
+        trace_dir.mkdir(parents=True, exist_ok=True)
+
+    for workload in selected:
+        if workload not in WORKLOAD_SWEEP_PROFILES:
+            supported = ", ".join(sorted(WORKLOAD_SWEEP_PROFILES))
+            raise ValueError(f"unsupported budget-sweep workload: {workload}. Expected one of: {supported}")
+        profile = WORKLOAD_SWEEP_PROFILES[workload]
+        branches = branches_override if branches_override is not None else int(profile["branches"])
+        seed = seed_override if seed_override is not None else int(profile["seed"])
+        records = generate_synthetic_trace(workload, branches=branches, seed=seed)
+        trace_output: Path | None = None
+        if trace_dir is not None:
+            trace_output = trace_dir / f"{workload}-seed{seed}.trace"
+            trace_output.write_text(f"{format_trace(records)}\n", encoding="utf-8")
+        report = run_budget_normalized_sweep(
+            records,
+            budgets=budgets,
+            table_sizes=table_sizes,
+            history_bits_options=history_bits_options,
+            weight_limits=weight_limits,
+        )
+        scenarios.append(
+            {
+                "workload": workload,
+                "headline": profile["headline"],
+                "config": {"branches": branches, "seed": seed},
+                "trace_output": str(trace_output) if trace_output is not None else None,
+                **report,
+            }
+        )
+    return scenarios
+
+
+def format_budget_sweep_summary_table(scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        return "no scenarios"
+    budgets = scenarios[0]["budgets"]
+    header = ["workload", *[f"{budget}b" for budget in budgets]]
+    lines = [" | ".join(header), " | ".join(["---"] * len(header))]
+    for scenario in scenarios:
+        cells = [scenario["workload"]]
+        by_budget = {entry["budget_bits"]: entry for entry in scenario["budget_reports"]}
+        for budget in budgets:
+            entry = by_budget[budget]
+            cells.append(f"{entry['winner_predictor']} {entry['winner_accuracy_percent']:.1f}%")
+        lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
 def _default_perceptron_threshold_values(default_threshold: int) -> list[int]:
     return sorted({max(1, default_threshold + offset) for offset in (-18, -9, 0, 9, 18)})
 
@@ -1720,6 +2046,161 @@ def _perceptron_tuning_cell_fill(accuracy_percent: float, minimum: float, maximu
     return palette[index]
 
 
+def _budget_winner_sequence(budget_reports: list[dict[str, Any]]) -> str:
+    steps: list[str] = []
+    previous: str | None = None
+    for entry in budget_reports:
+        label = f"{entry['budget_bits']}b:{entry['winner_predictor']}"
+        if label != previous:
+            steps.append(label)
+        previous = label
+    return " → ".join(steps)
+
+
+def _budget_predictor_fill(predictor: str) -> str:
+    palette = {
+        "always-taken": "#cbd5e1",
+        "always-not-taken": "#94a3b8",
+        "one-bit": "#38bdf8",
+        "two-bit": "#0ea5e9",
+        "local-history": "#8b5cf6",
+        "gshare": "#6366f1",
+        "perceptron": "#f59e0b",
+        "tournament": "#10b981",
+    }
+    return palette.get(predictor, "#e2e8f0")
+
+
+def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    budgets = scenarios[0]["budgets"]
+    table_sizes = scenarios[0]["table_sizes"]
+    history_bits_options = scenarios[0]["history_bits_options"]
+    weight_limits = scenarios[0]["weight_limits"]
+    lines = [
+        "# Branch predictor budget-normalized sweep",
+        "",
+        f"- Generated: `{generated}`",
+        f"- Workloads: `{len(scenarios)}` synthetic families",
+        f"- Compared budgets: `{', '.join(f'{budget} bits' for budget in budgets)}`",
+        f"- Search space: table sizes `{', '.join(str(value) for value in table_sizes)}` · history bits `{', '.join(str(value) for value in history_bits_options)}` · perceptron weight limits `{', '.join(str(value) for value in weight_limits)}`",
+        "- Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.",
+        "",
+        "## Overview",
+        "",
+        "| Workload | " + " | ".join(f"`{budget} bits`" for budget in budgets) + " |",
+        "| --- | " + " | ".join(["---"] * len(budgets)) + " |",
+    ]
+    for scenario in scenarios:
+        row = [f"`{scenario['workload']}`"]
+        for entry in scenario["budget_reports"]:
+            row.append(f"`{entry['winner_predictor']}` {entry['winner_accuracy_percent']:.2f}%")
+        lines.append("| " + " | ".join(row) + " |")
+
+    lines.extend(["", "## Per-workload notes", ""])
+    for scenario in scenarios:
+        lines.extend(
+            [
+                f"### `{scenario['workload']}`",
+                "",
+                f"- Focus: {scenario['headline']}",
+                f"- Trace config: `branches={scenario['config']['branches']}` · `seed={scenario['config']['seed']}`",
+                f"- Winner sequence: {_budget_winner_sequence(scenario['budget_reports'])}",
+                "",
+                "| Budget | Winner | Runner-up | Best simple | Best advanced |",
+                "| ---: | --- | --- | --- | --- |",
+            ]
+        )
+        for entry in scenario["budget_reports"]:
+            lines.append(
+                f"| `{entry['budget_bits']}` | `{entry['winner_predictor']}` `{entry['winner_accuracy_percent']:.2f}%` | `{entry['runner_up_predictor']}` (`{entry['winner_margin_percent']:.2f} pp` gap) | {_budget_group_label(entry['best_simple_predictor'], entry['best_simple_accuracy_percent'])} | {_budget_group_label(entry['best_advanced_predictor'], entry['best_advanced_accuracy_percent'])} |"
+            )
+        lines.append("")
+        lines.append("Representative best-fit configs:")
+        for entry in scenario["budget_reports"]:
+            top_three = "; ".join(
+                f"{candidate['predictor']} {candidate['accuracy_percent']:.2f}% ({_format_budget_candidate_label(candidate)})"
+                for candidate in entry["predictor_results"][:3]
+            )
+            lines.append(f"- `{entry['budget_bits']} bits` → {top_three}")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Portfolio usage",
+            "",
+            "- Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.",
+            "- Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.",
+            "- The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    budgets = scenarios[0]["budgets"]
+    width = 1320
+    cell_w = 180
+    cell_h = 84
+    left_w = 220
+    top_h = 164
+    height = top_h + (cell_h * len(scenarios)) + 82
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Budget-normalized branch predictor sweep</title>',
+        '<desc id="desc">Winner matrix across synthetic workloads and predictor state-bit budgets.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 40, "Budget-normalized branch predictor sweep", size=28, weight="700"),
+        _svg_text(28, 66, "Best-fit predictor per workload after constraining each candidate by approximate state bits.", size=14, fill="#334155"),
+    ]
+    legend_x = 28
+    legend_y = 100
+    legend_seen = {
+        entry["winner_predictor"]
+        for scenario in scenarios
+        for entry in scenario["budget_reports"]
+    }
+    legend_items = [name for name in BUDGET_SWEEP_PREDICTOR_NAMES if name in legend_seen]
+    for index, predictor in enumerate(legend_items):
+        x = legend_x + (index * 140)
+        parts.append(f'<rect x="{x}" y="{legend_y}" width="18" height="18" rx="6" fill="{_budget_predictor_fill(predictor)}" />')
+        parts.append(_svg_text(x + 26, legend_y + 14, predictor, size=12, weight="700", fill="#334155"))
+
+    grid_x = 28
+    grid_y = 138
+    parts.append(f'<rect x="{grid_x}" y="{grid_y}" width="{left_w}" height="42" rx="14" fill="#e2e8f0" />')
+    parts.append(_svg_text(grid_x + 18, grid_y + 27, "Workload", size=13, weight="700", fill="#334155"))
+    for column, budget in enumerate(budgets):
+        x = grid_x + left_w + (column * cell_w)
+        parts.append(f'<rect x="{x}" y="{grid_y}" width="{cell_w - 12}" height="42" rx="14" fill="#e2e8f0" />')
+        parts.append(_svg_text(x + 18, grid_y + 27, f"{budget} bits", size=13, weight="700", fill="#334155"))
+
+    start_y = grid_y + 56
+    for row, scenario in enumerate(scenarios):
+        y = start_y + (row * cell_h)
+        parts.append(f'<rect x="{grid_x}" y="{y}" width="{left_w}" height="{cell_h - 10}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(grid_x + 18, y + 30, scenario["workload"], size=15, weight="700"))
+        _svg_add_wrapped_text(parts, grid_x + 18, y + 50, scenario["headline"], max_chars=26, size=11, fill="#64748b")
+        for column, entry in enumerate(scenario["budget_reports"]):
+            x = grid_x + left_w + (column * cell_w)
+            fill = _budget_predictor_fill(entry["winner_predictor"])
+            parts.append(f'<rect x="{x}" y="{y}" width="{cell_w - 12}" height="{cell_h - 10}" rx="18" fill="{fill}" stroke="#dbe4ee" />')
+            text_fill = "#0f172a" if entry["winner_predictor"] in {"perceptron", "two-bit", "gshare", "tournament", "local-history"} else "#0f172a"
+            parts.append(_svg_text(x + 16, y + 28, entry["winner_predictor"], size=14, weight="700", fill=text_fill))
+            parts.append(_svg_text(x + 16, y + 48, f"{entry['winner_accuracy_percent']:.2f}%", size=18, weight="700", fill=text_fill))
+            parts.append(_svg_text(x + 16, y + 66, _truncate_svg_text(f"runner-up: {entry['runner_up_predictor']} (+{entry['winner_margin_percent']:.2f} pp)", 28), size=10, fill=text_fill))
+
+    footer_y = height - 24
+    parts.append(_svg_text(28, footer_y, "Use this matrix next to the fixed-config sweep to explain how predictor rankings shift once the hardware budget is held roughly constant.", size=12, fill="#475569"))
+    parts.append('</svg>')
+    return ''.join(parts) + '\n'
+
+
 def render_perceptron_tuning_markdown(*, trace_path: Path, report: dict[str, Any]) -> str:
     generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     trace_summary = report["trace_summary"]
@@ -1983,6 +2464,27 @@ def _build_parser() -> argparse.ArgumentParser:
     perceptron_sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown tuning report.")
     perceptron_sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG tuning card.")
     perceptron_sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
+
+    budget_sweep_parser = subparsers.add_parser(
+        "budget-sweep",
+        help="Compare the best predictor configs that fit the same approximate state-bit budgets across synthetic workloads.",
+    )
+    budget_sweep_parser.add_argument(
+        "workloads",
+        nargs="*",
+        choices=list(SYNTHETIC_WORKLOADS),
+        help="Optional subset of workload families to include. Defaults to all built-in synthetic workloads.",
+    )
+    budget_sweep_parser.add_argument("--budgets", type=int, nargs="+", help="Optional state-bit budgets to compare.")
+    budget_sweep_parser.add_argument("--branches", type=int, help="Override the branch count for every selected workload.")
+    budget_sweep_parser.add_argument("--seed", type=int, help="Override the random seed for every selected workload.")
+    budget_sweep_parser.add_argument("--table-sizes", type=int, nargs="+", help="Candidate table sizes to search under each budget.")
+    budget_sweep_parser.add_argument("--history-bits-options", type=int, nargs="+", help="Candidate history-bit values to search under each budget.")
+    budget_sweep_parser.add_argument("--weight-limits", type=int, nargs="+", help="Candidate perceptron weight-clamp limits to search under each budget.")
+    budget_sweep_parser.add_argument("--trace-dir", type=Path, help="Optional directory to write the generated trace files for the budget sweep.")
+    budget_sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown budget report.")
+    budget_sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG budget matrix card.")
+    budget_sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
     return parser
 
 
@@ -2095,6 +2597,42 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"markdown report: {payload['markdown_output']}")
                 if "svg_output" in payload:
                     print(f"svg card: {payload['svg_output']}")
+            return 0
+
+        if args.command == "budget-sweep":
+            scenarios = run_budget_workload_sweep(
+                list(args.workloads),
+                branches_override=args.branches,
+                seed_override=args.seed,
+                budgets=list(args.budgets) if args.budgets else None,
+                table_sizes=list(args.table_sizes) if args.table_sizes else None,
+                history_bits_options=list(args.history_bits_options) if args.history_bits_options else None,
+                weight_limits=list(args.weight_limits) if args.weight_limits else None,
+                trace_dir=args.trace_dir,
+            )
+            payload = {
+                "workloads": [scenario["workload"] for scenario in scenarios],
+                "scenario_count": len(scenarios),
+                "scenarios": scenarios,
+            }
+            if args.trace_dir is not None:
+                payload["trace_dir"] = str(args.trace_dir)
+            if getattr(args, "markdown_out", None):
+                write_markdown_output(args.markdown_out, render_budget_sweep_markdown(scenarios=scenarios))
+                payload["markdown_output"] = str(args.markdown_out)
+            if getattr(args, "svg_out", None):
+                write_svg_output(args.svg_out, render_budget_sweep_svg(scenarios=scenarios))
+                payload["svg_output"] = str(args.svg_out)
+            if args.json:
+                print(json.dumps(payload, indent=2, default=_json_default))
+            else:
+                print(format_budget_sweep_summary_table(scenarios))
+                if "markdown_output" in payload:
+                    print(f"markdown report: {payload['markdown_output']}")
+                if "svg_output" in payload:
+                    print(f"svg card: {payload['svg_output']}")
+                if args.trace_dir is not None:
+                    print(f"trace directory: {args.trace_dir}")
             return 0
 
         records = load_trace(args.trace)
