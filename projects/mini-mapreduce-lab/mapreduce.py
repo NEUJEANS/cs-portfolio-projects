@@ -18,7 +18,7 @@ import statistics
 import tempfile
 import time
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from numbers import Number
 from pathlib import Path
 import fnmatch
@@ -131,6 +131,35 @@ PLUGIN_INSPECTION_DIFF_FIELDS = [
     "benchmark_note_hook_source_commit_url",
     "benchmark_note_hook_source_excerpt",
     "available_dataset_families",
+]
+
+PLUGIN_RELEASE_DIFF_FIELDS = [
+    "plugin",
+    "module_doc_summary",
+    "mapper",
+    "mapper_signature",
+    "mapper_doc_summary",
+    "reducer",
+    "reducer_signature",
+    "reducer_doc_summary",
+    "combiner",
+    "combiner_signature",
+    "combiner_doc_summary",
+    "benchmark_generator",
+    "benchmark_generator_signature",
+    "benchmark_generator_doc_summary",
+    "benchmark_note_hook",
+    "benchmark_note_hook_signature",
+    "benchmark_note_hook_doc_summary",
+    "available_dataset_families",
+]
+
+PLUGIN_RELEASE_HOOK_FIELDS = [
+    ("Mapper", "mapper", "mapper_signature"),
+    ("Reducer", "reducer", "reducer_signature"),
+    ("Combiner", "combiner", "combiner_signature"),
+    ("Benchmark generator", "benchmark_generator", "benchmark_generator_signature"),
+    ("Benchmark note hook", "benchmark_note_hook", "benchmark_note_hook_signature"),
 ]
 
 
@@ -573,6 +602,461 @@ class PluginInspectionBatch:
 </body>
 </html>
 """
+
+
+@dataclass(slots=True)
+class PluginReleaseEntry:
+    name: str
+    plugin: str
+    module_doc_summary: str | None
+    available_dataset_families: list[str] | None
+    plugin_repo_commit: str | None
+
+    @classmethod
+    def from_plugin(cls, plugin: PluginInspection) -> "PluginReleaseEntry":
+        return cls(
+            name=plugin.name,
+            plugin=plugin_display_path(plugin.plugin),
+            module_doc_summary=plugin.module_doc_summary,
+            available_dataset_families=list(plugin.available_dataset_families) if plugin.available_dataset_families else None,
+            plugin_repo_commit=plugin.plugin_repo_commit,
+        )
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "name": self.name,
+            "plugin": self.plugin,
+            "module_doc_summary": self.module_doc_summary,
+            "available_dataset_families": list(self.available_dataset_families) if self.available_dataset_families else None,
+            "plugin_repo_commit": self.plugin_repo_commit,
+        }
+
+
+@dataclass(slots=True)
+class PluginReleaseChange:
+    name: str
+    before: PluginReleaseEntry
+    after: PluginReleaseEntry
+    changed_fields: list[str]
+    changes: dict[str, dict[str, object | None]]
+    added_dataset_families: list[str]
+    removed_dataset_families: list[str]
+    added_hooks: list[str]
+    removed_hooks: list[str]
+    changed_hooks: list[str]
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "name": self.name,
+            "before": self.before.as_dict(),
+            "after": self.after.as_dict(),
+            "changed_fields": list(self.changed_fields),
+            "changes": self.changes,
+            "added_dataset_families": list(self.added_dataset_families),
+            "removed_dataset_families": list(self.removed_dataset_families),
+            "added_hooks": list(self.added_hooks),
+            "removed_hooks": list(self.removed_hooks),
+            "changed_hooks": list(self.changed_hooks),
+        }
+
+
+@dataclass(slots=True)
+class PluginReleaseComparison:
+    before_label: str
+    after_label: str
+    before_plugin_count: int
+    after_plugin_count: int
+    before_commits: list[str]
+    after_commits: list[str]
+    added_plugins: list[PluginReleaseEntry]
+    removed_plugins: list[PluginReleaseEntry]
+    changed_plugins: list[PluginReleaseChange]
+    unchanged_plugins: list[str]
+
+    def as_dict(self) -> dict[str, JSONValue]:
+        return {
+            "before_label": self.before_label,
+            "after_label": self.after_label,
+            "before_plugin_count": self.before_plugin_count,
+            "after_plugin_count": self.after_plugin_count,
+            "before_commits": list(self.before_commits),
+            "after_commits": list(self.after_commits),
+            "added_plugins": [entry.as_dict() for entry in self.added_plugins],
+            "removed_plugins": [entry.as_dict() for entry in self.removed_plugins],
+            "changed_plugins": [change.as_dict() for change in self.changed_plugins],
+            "unchanged_plugins": list(self.unchanged_plugins),
+            "summary": {
+                "added": len(self.added_plugins),
+                "removed": len(self.removed_plugins),
+                "changed": len(self.changed_plugins),
+                "unchanged": len(self.unchanged_plugins),
+            },
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.as_dict(), indent=2, sort_keys=True)
+
+    def to_markdown(self) -> str:
+        lines = [
+            "# Mini MapReduce plugin release comparison",
+            "",
+            f"- Before snapshot: `{self.before_label}` (`{self.before_plugin_count}` plugins; commits: `{', '.join(self.before_commits) if self.before_commits else '-'}`)",
+            f"- After snapshot: `{self.after_label}` (`{self.after_plugin_count}` plugins; commits: `{', '.join(self.after_commits) if self.after_commits else '-'}`)",
+            f"- Summary: `{len(self.added_plugins)}` added · `{len(self.removed_plugins)}` removed · `{len(self.changed_plugins)}` changed · `{len(self.unchanged_plugins)}` unchanged",
+            "",
+        ]
+
+        def render_entries(title: str, entries: list[PluginReleaseEntry], empty_message: str) -> None:
+            lines.extend([f"## {title}", ""])
+            if not entries:
+                lines.append(f"- {empty_message}")
+                lines.append("")
+                return
+            lines.extend([
+                "| Plugin | Summary | Dataset families | Commit |",
+                "| --- | --- | --- | --- |",
+            ])
+            for entry in entries:
+                dataset_families = ", ".join(entry.available_dataset_families) if entry.available_dataset_families else "-"
+                commit = f"`{entry.plugin_repo_commit[:12]}`" if entry.plugin_repo_commit else "-"
+                lines.append(
+                    f"| `{entry.name}`<br><small>`{plugin_display_path(entry.plugin)}`</small> | {entry.module_doc_summary or '-'} | `{dataset_families}` | {commit} |"
+                )
+            lines.append("")
+
+        render_entries("Added plugins", self.added_plugins, "No plugins were added between these snapshots.")
+        render_entries("Removed plugins", self.removed_plugins, "No plugins were removed between these snapshots.")
+
+        lines.extend(["## Changed plugins", ""])
+        if self.changed_plugins:
+            lines.extend([
+                "| Plugin | Hook delta | Dataset-family delta | Changed fields |",
+                "| --- | --- | --- | --- |",
+            ])
+            for change in self.changed_plugins:
+                hook_bits = []
+                if change.added_hooks:
+                    hook_bits.append(f"+ {', '.join(change.added_hooks)}")
+                if change.removed_hooks:
+                    hook_bits.append(f"- {', '.join(change.removed_hooks)}")
+                if change.changed_hooks:
+                    hook_bits.append(f"~ {', '.join(change.changed_hooks)}")
+                dataset_bits = []
+                if change.added_dataset_families:
+                    dataset_bits.append(f"+ {', '.join(change.added_dataset_families)}")
+                if change.removed_dataset_families:
+                    dataset_bits.append(f"- {', '.join(change.removed_dataset_families)}")
+                hook_delta = "<br>".join(hook_bits) if hook_bits else "-"
+                dataset_delta = "<br>".join(dataset_bits) if dataset_bits else "-"
+                lines.append(
+                    f"| `{change.name}` | {hook_delta} | {dataset_delta} | `{', '.join(change.changed_fields)}` |"
+                )
+            lines.append("")
+            for change in self.changed_plugins:
+                lines.append(f"### `{change.name}`")
+                lines.append("")
+                lines.append(f"- Before: `{plugin_display_path(change.before.plugin)}`")
+                lines.append(f"- After: `{plugin_display_path(change.after.plugin)}`")
+                if change.added_hooks:
+                    lines.append(f"- Added hooks: `{', '.join(change.added_hooks)}`")
+                if change.removed_hooks:
+                    lines.append(f"- Removed hooks: `{', '.join(change.removed_hooks)}`")
+                if change.changed_hooks:
+                    lines.append(f"- Changed hooks: `{', '.join(change.changed_hooks)}`")
+                if change.added_dataset_families or change.removed_dataset_families:
+                    lines.append(
+                        f"- Dataset-family delta: `+ {', '.join(change.added_dataset_families) if change.added_dataset_families else '-'}` / `- {', '.join(change.removed_dataset_families) if change.removed_dataset_families else '-'}`"
+                    )
+                lines.extend(["", "| Field | Before | After |", "| --- | --- | --- |"])
+                for field in change.changed_fields:
+                    field_change = change.changes[field]
+                    before_value = field_change["before"]
+                    after_value = field_change["after"]
+                    if field == "plugin":
+                        before_rendered = json.dumps(plugin_display_path(str(before_value)), sort_keys=True) if before_value is not None else "null"
+                        after_rendered = json.dumps(plugin_display_path(str(after_value)), sort_keys=True) if after_value is not None else "null"
+                    else:
+                        before_rendered = json.dumps(before_value, sort_keys=True)
+                        after_rendered = json.dumps(after_value, sort_keys=True)
+                    lines.append(f"| `{field}` | `{before_rendered}` | `{after_rendered}` |")
+                lines.append("")
+        else:
+            lines.append("- No shared plugins changed contract between these snapshots.")
+            lines.append("")
+
+        lines.extend([
+            "## Unchanged plugins",
+            "",
+            f"- `{', '.join(self.unchanged_plugins)}`" if self.unchanged_plugins else "- No unchanged shared plugins between these snapshots.",
+            "",
+        ])
+        return "\n".join(lines).rstrip() + "\n"
+
+    def to_html(self) -> str:
+        def esc(value: object) -> str:
+            return html.escape(str(value), quote=True)
+
+        def entries_table(entries: list[PluginReleaseEntry], empty_message: str) -> str:
+            if not entries:
+                return f"<p>{esc(empty_message)}</p>"
+            rows = []
+            for entry in entries:
+                dataset_families = ", ".join(entry.available_dataset_families) if entry.available_dataset_families else "-"
+                commit = entry.plugin_repo_commit[:12] if entry.plugin_repo_commit else "-"
+                rows.append(
+                    "<tr>"
+                    f"<td><code>{esc(entry.name)}</code><br><small><code>{esc(plugin_display_path(entry.plugin))}</code></small></td>"
+                    f"<td>{esc(entry.module_doc_summary or '-')}</td>"
+                    f"<td><code>{esc(dataset_families)}</code></td>"
+                    f"<td><code>{esc(commit)}</code></td>"
+                    "</tr>"
+                )
+            return "<table><thead><tr><th>Plugin</th><th>Summary</th><th>Dataset families</th><th>Commit</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+
+        changed_rows = []
+        changed_sections = []
+        for change in self.changed_plugins:
+            hook_bits = []
+            if change.added_hooks:
+                hook_bits.append(f"+ {', '.join(change.added_hooks)}")
+            if change.removed_hooks:
+                hook_bits.append(f"- {', '.join(change.removed_hooks)}")
+            if change.changed_hooks:
+                hook_bits.append(f"~ {', '.join(change.changed_hooks)}")
+            dataset_bits = []
+            if change.added_dataset_families:
+                dataset_bits.append(f"+ {', '.join(change.added_dataset_families)}")
+            if change.removed_dataset_families:
+                dataset_bits.append(f"- {', '.join(change.removed_dataset_families)}")
+            changed_rows.append(
+                "<tr>"
+                f"<td><code>{esc(change.name)}</code></td>"
+                f"<td>{esc(' | '.join(hook_bits) if hook_bits else '-')}</td>"
+                f"<td>{esc(' | '.join(dataset_bits) if dataset_bits else '-')}</td>"
+                f"<td><code>{esc(', '.join(change.changed_fields))}</code></td>"
+                "</tr>"
+            )
+            diff_rows = []
+            for field in change.changed_fields:
+                field_change = change.changes[field]
+                before_value = field_change["before"]
+                after_value = field_change["after"]
+                if field == "plugin":
+                    before_value = plugin_display_path(str(before_value)) if before_value is not None else None
+                    after_value = plugin_display_path(str(after_value)) if after_value is not None else None
+                diff_rows.append(
+                    "<tr>"
+                    f"<td><code>{esc(field)}</code></td>"
+                    f"<td><code>{esc(json.dumps(before_value, sort_keys=True))}</code></td>"
+                    f"<td><code>{esc(json.dumps(after_value, sort_keys=True))}</code></td>"
+                    "</tr>"
+                )
+            details = [
+                f"<p><strong>Before:</strong> <code>{esc(plugin_display_path(change.before.plugin))}</code></p>",
+                f"<p><strong>After:</strong> <code>{esc(plugin_display_path(change.after.plugin))}</code></p>",
+            ]
+            if change.added_hooks:
+                details.append(f"<p><strong>Added hooks:</strong> <code>{esc(', '.join(change.added_hooks))}</code></p>")
+            if change.removed_hooks:
+                details.append(f"<p><strong>Removed hooks:</strong> <code>{esc(', '.join(change.removed_hooks))}</code></p>")
+            if change.changed_hooks:
+                details.append(f"<p><strong>Changed hooks:</strong> <code>{esc(', '.join(change.changed_hooks))}</code></p>")
+            if change.added_dataset_families or change.removed_dataset_families:
+                details.append(
+                    f"<p><strong>Dataset-family delta:</strong> + <code>{esc(', '.join(change.added_dataset_families) if change.added_dataset_families else '-')}</code> / - <code>{esc(', '.join(change.removed_dataset_families) if change.removed_dataset_families else '-')}</code></p>"
+                )
+            changed_sections.append(
+                "<section>"
+                f"<h3><code>{esc(change.name)}</code></h3>"
+                f"{''.join(details)}"
+                "<table><thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>"
+                f"<tbody>{''.join(diff_rows)}</tbody></table>"
+                "</section>"
+            )
+
+        unchanged_html = f"<p><code>{esc(', '.join(self.unchanged_plugins))}</code></p>" if self.unchanged_plugins else "<p>No unchanged shared plugins between these snapshots.</p>"
+
+        return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin release comparison</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1180px; padding: 0 1rem 3rem; line-height: 1.5; }}
+    code {{ font-family: 'SFMono-Regular', Consolas, monospace; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }}
+    th, td {{ border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }}
+    thead th {{ background: rgba(148, 163, 184, 0.14); }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; padding: 0; }}
+    .meta li {{ list-style: none; padding: 0.85rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.9rem; }}
+    section {{ margin-top: 2rem; }}
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin release comparison</h1>
+  <ul class="meta">
+    <li><strong>Before snapshot</strong><br><code>{esc(self.before_label)}</code><br><small>{esc(str(self.before_plugin_count))} plugins</small></li>
+    <li><strong>After snapshot</strong><br><code>{esc(self.after_label)}</code><br><small>{esc(str(self.after_plugin_count))} plugins</small></li>
+    <li><strong>Added / removed</strong><br><code>{esc(f"{len(self.added_plugins)} / {len(self.removed_plugins)}")}</code></li>
+    <li><strong>Changed / unchanged</strong><br><code>{esc(f"{len(self.changed_plugins)} / {len(self.unchanged_plugins)}")}</code></li>
+  </ul>
+  <p><strong>Before commits:</strong> <code>{esc(', '.join(self.before_commits) if self.before_commits else '-')}</code><br>
+     <strong>After commits:</strong> <code>{esc(', '.join(self.after_commits) if self.after_commits else '-')}</code></p>
+  <section>
+    <h2>Added plugins</h2>
+    {entries_table(self.added_plugins, 'No plugins were added between these snapshots.')}
+  </section>
+  <section>
+    <h2>Removed plugins</h2>
+    {entries_table(self.removed_plugins, 'No plugins were removed between these snapshots.')}
+  </section>
+  <section>
+    <h2>Changed plugins</h2>
+    {'<table><thead><tr><th>Plugin</th><th>Hook delta</th><th>Dataset-family delta</th><th>Changed fields</th></tr></thead><tbody>' + ''.join(changed_rows) + '</tbody></table>' if changed_rows else '<p>No shared plugins changed contract between these snapshots.</p>'}
+    {''.join(changed_sections)}
+  </section>
+  <section>
+    <h2>Unchanged plugins</h2>
+    {unchanged_html}
+  </section>
+</body>
+</html>'''
+
+
+def plugin_inspection_from_payload(payload: dict[str, object]) -> PluginInspection:
+    if not isinstance(payload, dict):
+        raise ValueError("plugin inspection payload must be an object")
+    values: dict[str, object | None] = {}
+    for field in fields(PluginInspection):
+        value = payload.get(field.name)
+        if field.name == "available_dataset_families" and value is not None:
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                raise ValueError("available_dataset_families must be a list of strings when present")
+            value = list(value)
+        elif field.name.endswith("_source_line") and value is not None:
+            value = int(value)
+        values[field.name] = value
+    for required in ("name", "plugin", "mapper", "reducer"):
+        if not values.get(required):
+            raise ValueError(f"plugin inspection payload missing required field: {required}")
+    return PluginInspection(**values)
+
+
+def load_plugin_inspection_snapshot(path: str | Path) -> PluginInspectionBatch:
+    snapshot_path = Path(path)
+    payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"plugin inspection snapshot must be a JSON object: {snapshot_path}")
+    if "plugins" in payload:
+        plugins_payload = payload.get("plugins")
+        if not isinstance(plugins_payload, list) or not plugins_payload:
+            raise ValueError(f"plugin inspection snapshot must include a non-empty plugins list: {snapshot_path}")
+        plugins = [plugin_inspection_from_payload(item) for item in plugins_payload]
+    else:
+        plugins = [plugin_inspection_from_payload(payload)]
+    return PluginInspectionBatch(plugins=plugins)
+
+
+def _index_plugins_by_name(plugins: list[PluginInspection], label: str) -> dict[str, PluginInspection]:
+    indexed: dict[str, PluginInspection] = {}
+    duplicates: list[str] = []
+    for plugin in plugins:
+        if plugin.name in indexed:
+            duplicates.append(plugin.name)
+            continue
+        indexed[plugin.name] = plugin
+    if duplicates:
+        duplicate_names = ", ".join(sorted(set(duplicates)))
+        raise ValueError(f"duplicate plugin names in {label} snapshot: {duplicate_names}")
+    return indexed
+
+
+def compare_plugin_release_snapshots(
+    before_snapshot: PluginInspectionBatch,
+    after_snapshot: PluginInspectionBatch,
+    *,
+    before_label: str | None = None,
+    after_label: str | None = None,
+) -> PluginReleaseComparison:
+    before_by_name = _index_plugins_by_name(before_snapshot.plugins, before_label or "before")
+    after_by_name = _index_plugins_by_name(after_snapshot.plugins, after_label or "after")
+    before_commits = sorted({plugin.plugin_repo_commit for plugin in before_snapshot.plugins if plugin.plugin_repo_commit})
+    after_commits = sorted({plugin.plugin_repo_commit for plugin in after_snapshot.plugins if plugin.plugin_repo_commit})
+
+    added_plugins: list[PluginReleaseEntry] = []
+    removed_plugins: list[PluginReleaseEntry] = []
+    changed_plugins: list[PluginReleaseChange] = []
+    unchanged_plugins: list[str] = []
+
+    for name in sorted(set(before_by_name) | set(after_by_name)):
+        before = before_by_name.get(name)
+        after = after_by_name.get(name)
+        if before is None and after is not None:
+            added_plugins.append(PluginReleaseEntry.from_plugin(after))
+            continue
+        if after is None and before is not None:
+            removed_plugins.append(PluginReleaseEntry.from_plugin(before))
+            continue
+        assert before is not None and after is not None
+        before_payload = before.as_dict()
+        after_payload = after.as_dict()
+        before_payload["plugin"] = plugin_display_path(str(before_payload["plugin"]))
+        after_payload["plugin"] = plugin_display_path(str(after_payload["plugin"]))
+        changes: dict[str, dict[str, object | None]] = {}
+        for field in PLUGIN_RELEASE_DIFF_FIELDS:
+            if before_payload[field] != after_payload[field]:
+                changes[field] = {
+                    "before": before_payload[field],
+                    "after": after_payload[field],
+                }
+        if not changes:
+            unchanged_plugins.append(name)
+            continue
+        before_families = set(before.available_dataset_families or [])
+        after_families = set(after.available_dataset_families or [])
+        added_hooks: list[str] = []
+        removed_hooks: list[str] = []
+        changed_hooks: list[str] = []
+        for label, name_field, signature_field in PLUGIN_RELEASE_HOOK_FIELDS:
+            before_name = getattr(before, name_field)
+            after_name = getattr(after, name_field)
+            before_signature = getattr(before, signature_field)
+            after_signature = getattr(after, signature_field)
+            if before_name and not after_name:
+                removed_hooks.append(label)
+            elif after_name and not before_name:
+                added_hooks.append(label)
+            elif before_name != after_name or before_signature != after_signature:
+                changed_hooks.append(label)
+        changed_plugins.append(
+            PluginReleaseChange(
+                name=name,
+                before=PluginReleaseEntry.from_plugin(before),
+                after=PluginReleaseEntry.from_plugin(after),
+                changed_fields=sorted(changes),
+                changes=changes,
+                added_dataset_families=sorted(after_families - before_families),
+                removed_dataset_families=sorted(before_families - after_families),
+                added_hooks=added_hooks,
+                removed_hooks=removed_hooks,
+                changed_hooks=changed_hooks,
+            )
+        )
+
+    return PluginReleaseComparison(
+        before_label=before_label or "before",
+        after_label=after_label or "after",
+        before_plugin_count=len(before_snapshot.plugins),
+        after_plugin_count=len(after_snapshot.plugins),
+        before_commits=before_commits,
+        after_commits=after_commits,
+        added_plugins=added_plugins,
+        removed_plugins=removed_plugins,
+        changed_plugins=changed_plugins,
+        unchanged_plugins=unchanged_plugins,
+    )
 
 
 def plugin_anchor_id(plugin: PluginInspection) -> str:
@@ -2173,6 +2657,7 @@ class MiniMapReduceDocsIndex:
     plugin_catalog: DocsArtifactLinks | None
     plugin_pages: list[DocsArtifactEntry]
     inspection_diffs: list[DocsArtifactEntry]
+    release_comparisons: list[DocsArtifactEntry]
     benchmark_reports: list[DocsArtifactEntry]
     annotation_batches: list[DocsAnnotationBatch]
 
@@ -2182,6 +2667,7 @@ class MiniMapReduceDocsIndex:
             "plugin_catalog": self.plugin_catalog.as_dict() if self.plugin_catalog else None,
             "plugin_pages": [entry.as_dict() for entry in self.plugin_pages],
             "inspection_diffs": [entry.as_dict() for entry in self.inspection_diffs],
+            "release_comparisons": [entry.as_dict() for entry in self.release_comparisons],
             "benchmark_reports": [entry.as_dict() for entry in self.benchmark_reports],
             "annotation_batches": [batch.as_dict() for batch in self.annotation_batches],
         }
@@ -2202,6 +2688,7 @@ class MiniMapReduceDocsIndex:
         if self.plugin_catalog and self.plugin_catalog.html_path:
             browser_links.append(("Plugin catalog HTML", self.plugin_catalog.html_path))
         browser_links.extend((f"Inspection diff HTML — {entry.title}", entry.links.html_path) for entry in self.inspection_diffs if entry.links.html_path)
+        browser_links.extend((f"Release comparison HTML — {entry.title}", entry.links.html_path) for entry in self.release_comparisons if entry.links.html_path)
         browser_links.extend((f"Benchmark report HTML — {entry.title}", entry.links.html_path) for entry in self.benchmark_reports if entry.links.html_path)
         browser_links.extend(
             (
@@ -2247,6 +2734,18 @@ class MiniMapReduceDocsIndex:
                 lines.append(f"| {entry.title} | {entry.description} | {links} |")
         else:
             lines.append("- No inspection diff bundles discovered yet.")
+
+        lines.extend(["", "## Release comparisons", ""])
+        if self.release_comparisons:
+            lines.extend([
+                "| Release bundle | Description | Links |",
+                "| --- | --- | --- |",
+            ])
+            for entry in self.release_comparisons:
+                links = " · ".join(f"[{label}]({path})" for label, path in entry.links.labeled_paths()) or "-"
+                lines.append(f"| {entry.title} | {entry.description} | {links} |")
+        else:
+            lines.append("- No release-comparison bundles discovered yet.")
 
         lines.extend(["", "## Benchmark reports", ""])
         if self.benchmark_reports:
@@ -2298,6 +2797,7 @@ class MiniMapReduceDocsIndex:
             "- Lead with the HTML report links when you want a browser-friendly walkthrough instead of raw terminal output.",
             "- Use the plugin catalog first when someone wants to understand the extensibility story before reading the benchmark results.",
             "- Use the inspection diff bundle when you want to compare how two plugins expose different hook contracts or dataset families.",
+            "- Use the release-comparison bundle when you want to show how the plugin suite evolved across commits instead of only comparing two adjacent plugins.",
             "- Use the annotation-batch manifest when you want both the full and portfolio-tight reviewer narratives from one shared benchmark run.",
             "- Link this index from the project README so future slices stay discoverable as more artifact families are added.",
         ])
@@ -2321,6 +2821,11 @@ class MiniMapReduceDocsIndex:
         browser_links.extend(
             f'<li><a href="{esc(entry.links.html_path)}">Inspection diff HTML — {esc(entry.title)}</a></li>'
             for entry in self.inspection_diffs
+            if entry.links.html_path
+        )
+        browser_links.extend(
+            f'<li><a href="{esc(entry.links.html_path)}">Release comparison HTML — {esc(entry.title)}</a></li>'
+            for entry in self.release_comparisons
             if entry.links.html_path
         )
         browser_links.extend(
@@ -2350,6 +2855,14 @@ class MiniMapReduceDocsIndex:
             f"<td>{links_html(entry.links)}</td>"
             "</tr>"
             for entry in self.inspection_diffs
+        )
+        release_comparison_rows = ''.join(
+            "<tr>"
+            f"<td>{esc(entry.title)}</td>"
+            f"<td>{esc(entry.description)}</td>"
+            f"<td>{links_html(entry.links)}</td>"
+            "</tr>"
+            for entry in self.release_comparisons
         )
         report_rows = ''.join(
             "<tr>"
@@ -2422,6 +2935,7 @@ class MiniMapReduceDocsIndex:
   <ul class="meta">
     <li><strong>Plugin pages</strong><br><code>{esc(len(self.plugin_pages))}</code></li>
     <li><strong>Inspection diffs</strong><br><code>{esc(len(self.inspection_diffs))}</code></li>
+    <li><strong>Release comparisons</strong><br><code>{esc(len(self.release_comparisons))}</code></li>
     <li><strong>Benchmark bundles</strong><br><code>{esc(len(self.benchmark_reports))}</code></li>
     <li><strong>Annotation batches</strong><br><code>{esc(len(self.annotation_batches))}</code></li>
   </ul>
@@ -2442,6 +2956,10 @@ class MiniMapReduceDocsIndex:
     {'<table><thead><tr><th>Diff bundle</th><th>Description</th><th>Links</th></tr></thead><tbody>' + inspection_rows + '</tbody></table>' if self.inspection_diffs else '<p>No inspection diff bundles discovered yet.</p>'}
   </section>
   <section>
+    <h2>Release comparisons</h2>
+    {'<table><thead><tr><th>Release bundle</th><th>Description</th><th>Links</th></tr></thead><tbody>' + release_comparison_rows + '</tbody></table>' if self.release_comparisons else '<p>No release-comparison bundles discovered yet.</p>'}
+  </section>
+  <section>
     <h2>Benchmark reports</h2>
     {'<table><thead><tr><th>Report bundle</th><th>Description</th><th>Links</th></tr></thead><tbody>' + report_rows + '</tbody></table>' if self.benchmark_reports else '<p>No benchmark report bundles discovered yet.</p>'}
   </section>
@@ -2455,6 +2973,7 @@ class MiniMapReduceDocsIndex:
       <li>Lead with the HTML report links when you want a browser-friendly walkthrough instead of raw terminal output.</li>
       <li>Use the plugin catalog first when someone wants to understand the extensibility story before reading the benchmark results.</li>
       <li>Use the inspection diff bundle when you want to compare how two plugins expose different hook contracts or dataset families.</li>
+      <li>Use the release-comparison bundle when you want to show how the plugin suite evolved across commits instead of only comparing two adjacent plugins.</li>
       <li>Use the annotation-batch manifest when you want both the full and portfolio-tight reviewer narratives from one shared benchmark run.</li>
       <li>Link this index from the project README so future slices stay discoverable as more artifact families are added.</li>
     </ul>
@@ -2545,6 +3064,28 @@ def discover_mini_mapreduce_docs_index(artifacts_root: Path) -> MiniMapReduceDoc
             )
         )
 
+    release_comparison_prefixes = sorted(
+        {
+            path.stem[:-19]
+            for path in root.iterdir()
+            if path.is_file() and path.suffix in {'.md', '.html', '.json'} and path.stem.endswith('-release-comparison')
+        }
+    )
+    release_comparisons: list[DocsArtifactEntry] = []
+    for prefix in release_comparison_prefixes:
+        release_comparisons.append(
+            DocsArtifactEntry(
+                slug=prefix,
+                title=humanize_docs_slug(prefix),
+                description='Release-to-release plugin snapshot comparison bundle with added/removed/changed summaries.',
+                links=DocsArtifactLinks(
+                    markdown_path=_existing_relpath(root, root / f'{prefix}-release-comparison.md'),
+                    html_path=_existing_relpath(root, root / f'{prefix}-release-comparison.html'),
+                    json_path=_existing_relpath(root, root / f'{prefix}-release-comparison.json'),
+                ),
+            )
+        )
+
     report_prefixes = sorted(
         {path.stem[:-7] for path in root.iterdir() if path.is_file() and path.suffix in {'.md', '.html'} and path.stem.endswith('-report')}
     )
@@ -2606,6 +3147,7 @@ def discover_mini_mapreduce_docs_index(artifacts_root: Path) -> MiniMapReduceDoc
         plugin_catalog=plugin_catalog,
         plugin_pages=plugin_pages,
         inspection_diffs=inspection_diffs,
+        release_comparisons=release_comparisons,
         benchmark_reports=benchmark_reports,
         annotation_batches=annotation_batches,
     )
@@ -3398,6 +3940,18 @@ def build_parser() -> argparse.ArgumentParser:
     docs_index_parser.add_argument("--output", help="optional Markdown docs index output path")
     docs_index_parser.add_argument("--html-output", help="optional HTML docs index output path")
 
+    compare_parser = subparsers.add_parser(
+        "compare-plugin-releases",
+        help="compare two saved plugin inspection/catalog snapshots across releases",
+    )
+    compare_parser.add_argument("--before", required=True, help="earlier inspect-plugin/catalog-plugins JSON snapshot")
+    compare_parser.add_argument("--after", required=True, help="later inspect-plugin/catalog-plugins JSON snapshot")
+    compare_parser.add_argument("--before-label", help="optional human-friendly label for the earlier snapshot")
+    compare_parser.add_argument("--after-label", help="optional human-friendly label for the later snapshot")
+    compare_parser.add_argument("--output", help="optional JSON release-comparison output path")
+    compare_parser.add_argument("--report-output", help="optional Markdown release-comparison output path")
+    compare_parser.add_argument("--html-output", help="optional HTML release-comparison output path")
+
     benchmark_parser = subparsers.add_parser("benchmark", help="run a synthetic MapReduce benchmark")
     benchmark_parser.add_argument("--job", choices=["wordcount", "json-group-count", "plugin"], default="wordcount")
     benchmark_parser.add_argument("--scenario", choices=["balanced", "skewed"], default="skewed")
@@ -3553,6 +4107,29 @@ def main(argv: list[str] | None = None) -> int:
             write_text_output(args.html_output, result.to_html())
         if not args.output and not args.html_output:
             print(rendered)
+        return 0
+
+    if args.command == "compare-plugin-releases":
+        try:
+            before_snapshot = load_plugin_inspection_snapshot(args.before)
+            after_snapshot = load_plugin_inspection_snapshot(args.after)
+            result = compare_plugin_release_snapshots(
+                before_snapshot,
+                after_snapshot,
+                before_label=args.before_label or Path(args.before).name,
+                after_label=args.after_label or Path(args.after).name,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
+        rendered = result.to_json()
+        if args.output:
+            write_text_output(args.output, rendered + "\n")
+        elif not args.report_output and not args.html_output:
+            print(rendered)
+        if args.report_output:
+            write_text_output(args.report_output, result.to_markdown())
+        if args.html_output:
+            write_text_output(args.html_output, result.to_html())
         return 0
 
     if args.command == "benchmark":

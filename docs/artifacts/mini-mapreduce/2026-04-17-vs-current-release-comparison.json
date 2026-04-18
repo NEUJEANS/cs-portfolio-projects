@@ -1,0 +1,81 @@
+{
+  "added_plugins": [
+    {
+      "available_dataset_families": [
+        "default",
+        "checkout-funnel",
+        "incident-correlation"
+      ],
+      "module_doc_summary": "Rolling-window join plugin for multi-stream correlation and pipeline-debug demos.",
+      "name": "plugin-rolling-window-join",
+      "plugin": "projects/mini-mapreduce-lab/plugins_rolling_window_join.py",
+      "plugin_repo_commit": "2332425c37ad2eb7d0399cb11e91a2354e189d22"
+    },
+    {
+      "available_dataset_families": [
+        "default",
+        "incident-spike",
+        "batch-window"
+      ],
+      "module_doc_summary": "Service-latency summary plugin for observability-style benchmark demos.",
+      "name": "plugin-service-latency",
+      "plugin": "projects/mini-mapreduce-lab/plugins_service_latency.py",
+      "plugin_repo_commit": "2332425c37ad2eb7d0399cb11e91a2354e189d22"
+    },
+    {
+      "available_dataset_families": [
+        "default",
+        "exam-revision",
+        "launch-day"
+      ],
+      "module_doc_summary": "Sessionization analytics plugin for product-usage benchmark demos.",
+      "name": "plugin-sessionization",
+      "plugin": "projects/mini-mapreduce-lab/plugins_sessionization.py",
+      "plugin_repo_commit": "2332425c37ad2eb7d0399cb11e91a2354e189d22"
+    },
+    {
+      "available_dataset_families": [
+        "default",
+        "iot-burst",
+        "live-ops"
+      ],
+      "module_doc_summary": "Streaming-window aggregation plugin for telemetry-style benchmark demos.",
+      "name": "plugin-streaming-window",
+      "plugin": "projects/mini-mapreduce-lab/plugins_streaming_window.py",
+      "plugin_repo_commit": "2332425c37ad2eb7d0399cb11e91a2354e189d22"
+    },
+    {
+      "available_dataset_families": [
+        "default",
+        "sensor-backfill",
+        "live-replay"
+      ],
+      "module_doc_summary": "Watermark-aware late-event summary plugin for out-of-order stream-processing demos.",
+      "name": "plugin-watermark-late-summary",
+      "plugin": "projects/mini-mapreduce-lab/plugins_watermark_late_summary.py",
+      "plugin_repo_commit": "2332425c37ad2eb7d0399cb11e91a2354e189d22"
+    }
+  ],
+  "after_commits": [
+    "2332425c37ad2eb7d0399cb11e91a2354e189d22"
+  ],
+  "after_label": "current",
+  "after_plugin_count": 7,
+  "before_commits": [
+    "2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8"
+  ],
+  "before_label": "2026-04-17",
+  "before_plugin_count": 2,
+  "changed_plugins": [],
+  "removed_plugins": [],
+  "summary": {
+    "added": 5,
+    "changed": 0,
+    "removed": 0,
+    "unchanged": 2
+  },
+  "unchanged_plugins": [
+    "plugin-average-score",
+    "plugin-max-score"
+  ]
+}

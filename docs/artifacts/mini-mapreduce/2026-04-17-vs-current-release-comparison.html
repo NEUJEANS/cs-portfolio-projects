@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini MapReduce plugin release comparison</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1180px; padding: 0 1rem 3rem; line-height: 1.5; }
+    code { font-family: 'SFMono-Regular', Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }
+    thead th { background: rgba(148, 163, 184, 0.14); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; padding: 0; }
+    .meta li { list-style: none; padding: 0.85rem 0.95rem; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.9rem; }
+    section { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Mini MapReduce plugin release comparison</h1>
+  <ul class="meta">
+    <li><strong>Before snapshot</strong><br><code>2026-04-17</code><br><small>2 plugins</small></li>
+    <li><strong>After snapshot</strong><br><code>current</code><br><small>7 plugins</small></li>
+    <li><strong>Added / removed</strong><br><code>5 / 0</code></li>
+    <li><strong>Changed / unchanged</strong><br><code>0 / 2</code></li>
+  </ul>
+  <p><strong>Before commits:</strong> <code>2312cf246e3b3cab1fe7b3895bc7b55d7b60c3c8</code><br>
+     <strong>After commits:</strong> <code>2332425c37ad2eb7d0399cb11e91a2354e189d22</code></p>
+  <section>
+    <h2>Added plugins</h2>
+    <table><thead><tr><th>Plugin</th><th>Summary</th><th>Dataset families</th><th>Commit</th></tr></thead><tbody><tr><td><code>plugin-rolling-window-join</code><br><small><code>projects/mini-mapreduce-lab/plugins_rolling_window_join.py</code></small></td><td>Rolling-window join plugin for multi-stream correlation and pipeline-debug demos.</td><td><code>default, checkout-funnel, incident-correlation</code></td><td><code>2332425c37ad</code></td></tr><tr><td><code>plugin-service-latency</code><br><small><code>projects/mini-mapreduce-lab/plugins_service_latency.py</code></small></td><td>Service-latency summary plugin for observability-style benchmark demos.</td><td><code>default, incident-spike, batch-window</code></td><td><code>2332425c37ad</code></td></tr><tr><td><code>plugin-sessionization</code><br><small><code>projects/mini-mapreduce-lab/plugins_sessionization.py</code></small></td><td>Sessionization analytics plugin for product-usage benchmark demos.</td><td><code>default, exam-revision, launch-day</code></td><td><code>2332425c37ad</code></td></tr><tr><td><code>plugin-streaming-window</code><br><small><code>projects/mini-mapreduce-lab/plugins_streaming_window.py</code></small></td><td>Streaming-window aggregation plugin for telemetry-style benchmark demos.</td><td><code>default, iot-burst, live-ops</code></td><td><code>2332425c37ad</code></td></tr><tr><td><code>plugin-watermark-late-summary</code><br><small><code>projects/mini-mapreduce-lab/plugins_watermark_late_summary.py</code></small></td><td>Watermark-aware late-event summary plugin for out-of-order stream-processing demos.</td><td><code>default, sensor-backfill, live-replay</code></td><td><code>2332425c37ad</code></td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Removed plugins</h2>
+    <p>No plugins were removed between these snapshots.</p>
+  </section>
+  <section>
+    <h2>Changed plugins</h2>
+    <p>No shared plugins changed contract between these snapshots.</p>
+    
+  </section>
+  <section>
+    <h2>Unchanged plugins</h2>
+    <p><code>plugin-average-score, plugin-max-score</code></p>
+  </section>
+</body>
+</html>

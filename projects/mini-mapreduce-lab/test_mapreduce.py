@@ -18,6 +18,7 @@ from mapreduce import (
     benchmark_note_items_for,
     build_benchmark_preset_batch,
     build_plugin_page_links,
+    compare_plugin_release_snapshots,
     discover_mini_mapreduce_docs_index,
     diff_plugin_inspections,
     discover_plugin_refs,
@@ -25,6 +26,7 @@ from mapreduce import (
     inspect_plugin,
     inspect_plugins,
     load_plugin,
+    load_plugin_inspection_snapshot,
     plugin_display_path,
     stable_partition,
     write_plugin_doc_pages,
@@ -788,6 +790,113 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertIn('href="../plugin-catalog.html"', plugin_html)
 
 
+    def test_load_plugin_inspection_snapshot_and_compare_release_snapshots(self) -> None:
+        before_average = inspect_plugin(PROJECT_DIR / "plugins_average_score.py").as_dict()
+        removed_top = inspect_plugin(PROJECT_DIR / "plugins_top_score.py").as_dict()
+        after_average = dict(before_average)
+        after_average["available_dataset_families"] = ["default", "exam-cram", "project-week", "capstone"]
+        after_average["benchmark_note_hook"] = None
+        after_average["benchmark_note_hook_signature"] = None
+        after_average["benchmark_note_hook_doc_summary"] = None
+        added_latency = inspect_plugin(PROJECT_DIR / "plugins_service_latency.py").as_dict()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            before_path = Path(tmpdir) / "before.json"
+            after_path = Path(tmpdir) / "after.json"
+            before_path.write_text(json.dumps({"plugins": [before_average, removed_top]}, indent=2), encoding="utf-8")
+            after_path.write_text(json.dumps({"plugins": [after_average, added_latency]}, indent=2), encoding="utf-8")
+
+            before_snapshot = load_plugin_inspection_snapshot(before_path)
+            after_snapshot = load_plugin_inspection_snapshot(after_path)
+            comparison = compare_plugin_release_snapshots(
+                before_snapshot,
+                after_snapshot,
+                before_label="v1 plugin catalog",
+                after_label="v2 plugin catalog",
+            )
+
+        payload = comparison.as_dict()
+        self.assertEqual(payload["summary"], {"added": 1, "removed": 1, "changed": 1, "unchanged": 0})
+        self.assertEqual(payload["added_plugins"][0]["name"], "plugin-service-latency")
+        self.assertEqual(payload["removed_plugins"][0]["name"], "plugin-max-score")
+        self.assertEqual(payload["changed_plugins"][0]["name"], "plugin-average-score")
+        self.assertIn("available_dataset_families", payload["changed_plugins"][0]["changed_fields"])
+        self.assertIn("Benchmark note hook", payload["changed_plugins"][0]["removed_hooks"])
+        self.assertEqual(payload["changed_plugins"][0]["added_dataset_families"], ["capstone"])
+        self.assertIn("v1 plugin catalog", comparison.to_markdown())
+        self.assertIn("plugin-service-latency", comparison.to_html())
+
+    def test_cli_compare_plugin_releases_writes_json_markdown_and_html(self) -> None:
+        before_average = inspect_plugin(PROJECT_DIR / "plugins_average_score.py").as_dict()
+        after_average = dict(before_average)
+        after_average["available_dataset_families"] = ["default", "exam-cram", "project-week", "capstone"]
+        added_latency = inspect_plugin(PROJECT_DIR / "plugins_service_latency.py").as_dict()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            before_path = Path(tmpdir) / "before.json"
+            after_path = Path(tmpdir) / "after.json"
+            json_output = Path(tmpdir) / "release-comparison.json"
+            markdown_output = Path(tmpdir) / "release-comparison.md"
+            html_output = Path(tmpdir) / "release-comparison.html"
+            before_path.write_text(json.dumps({"plugins": [before_average]}, indent=2), encoding="utf-8")
+            after_path.write_text(json.dumps({"plugins": [after_average, added_latency]}, indent=2), encoding="utf-8")
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "compare-plugin-releases",
+                    "--before",
+                    str(before_path),
+                    "--after",
+                    str(after_path),
+                    "--before-label",
+                    "2026-04-17 snapshot",
+                    "--after-label",
+                    "2026-04-18 snapshot",
+                    "--output",
+                    str(json_output),
+                    "--report-output",
+                    str(markdown_output),
+                    "--html-output",
+                    str(html_output),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            payload = json.loads(json_output.read_text(encoding="utf-8"))
+            markdown = markdown_output.read_text(encoding="utf-8")
+            html_payload = html_output.read_text(encoding="utf-8")
+
+        self.assertEqual(payload["summary"], {"added": 1, "removed": 0, "changed": 1, "unchanged": 0})
+        self.assertEqual(payload["added_plugins"][0]["name"], "plugin-service-latency")
+        self.assertEqual(payload["changed_plugins"][0]["added_dataset_families"], ["capstone"])
+        self.assertIn("2026-04-17 snapshot", markdown)
+        self.assertIn("release comparison", html_payload.lower())
+        self.assertIn("plugin-service-latency", html_payload)
+
+    def test_compare_plugin_releases_normalizes_absolute_plugin_paths(self) -> None:
+        before_average = inspect_plugin(PROJECT_DIR / "plugins_average_score.py").as_dict()
+        before_average["plugin"] = str((PROJECT_DIR / "plugins_average_score.py").resolve())
+        after_average = inspect_plugin(PROJECT_DIR / "plugins_average_score.py").as_dict()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            before_path = Path(tmpdir) / "before.json"
+            after_path = Path(tmpdir) / "after.json"
+            before_path.write_text(json.dumps({"plugins": [before_average]}, indent=2), encoding="utf-8")
+            after_path.write_text(json.dumps({"plugins": [after_average]}, indent=2), encoding="utf-8")
+
+            comparison = compare_plugin_release_snapshots(
+                load_plugin_inspection_snapshot(before_path),
+                load_plugin_inspection_snapshot(after_path),
+                before_label="before",
+                after_label="after",
+            )
+
+        self.assertEqual(comparison.as_dict()["summary"], {"added": 0, "removed": 0, "changed": 0, "unchanged": 1})
+        self.assertEqual(comparison.unchanged_plugins, ["plugin-average-score"])
+
     def test_discover_mini_mapreduce_docs_index_links_catalog_reports_and_batches(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             artifacts_root = Path(tmpdir) / "artifacts"
@@ -869,12 +978,49 @@ class MiniMapReduceTests(unittest.TestCase):
                 check=True,
                 cwd=Path(__file__).resolve().parents[2],
             )
+            before_snapshot = artifacts_root / "2026-04-17-plugin-catalog.json"
+            before_snapshot.write_text(
+                json.dumps(
+                    {
+                        "plugins": [
+                            inspect_plugin(PROJECT_DIR / "plugins_average_score.py").as_dict(),
+                            inspect_plugin(PROJECT_DIR / "plugins_top_score.py").as_dict(),
+                        ]
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/mini-mapreduce-lab/mapreduce.py",
+                    "compare-plugin-releases",
+                    "--before",
+                    str(before_snapshot),
+                    "--after",
+                    str(artifacts_root / "plugin-catalog.json"),
+                    "--before-label",
+                    "2026-04-17 plugin snapshot",
+                    "--after-label",
+                    "current plugin catalog",
+                    "--output",
+                    str(artifacts_root / "2026-04-17-vs-current-release-comparison.json"),
+                    "--report-output",
+                    str(artifacts_root / "2026-04-17-vs-current-release-comparison.md"),
+                    "--html-output",
+                    str(artifacts_root / "2026-04-17-vs-current-release-comparison.html"),
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
 
             index = discover_mini_mapreduce_docs_index(artifacts_root)
             payload = index.as_dict()
             self.assertEqual(payload["plugin_catalog"]["html"], "plugin-catalog.html")
             self.assertEqual(payload["plugin_pages"][0]["links"]["html"], "plugin-pages/plugin-average-score.html")
             self.assertEqual(payload["inspection_diffs"][0]["links"]["html"], "plugin-comparison-diff.html")
+            self.assertEqual(payload["release_comparisons"][0]["links"]["html"], "2026-04-17-vs-current-release-comparison.html")
             self.assertEqual(payload["benchmark_reports"][0]["links"]["html"], "project-week-report-report.html")
             self.assertEqual(payload["annotation_batches"][0]["manifest"], "project-week-batch-manifest.json")
             self.assertEqual(payload["annotation_batches"][0]["presets"][0]["links"]["html"], "project-week-batch-full.html")
@@ -884,11 +1030,13 @@ class MiniMapReduceTests(unittest.TestCase):
             self.assertIn("# Mini MapReduce docs index", markdown)
             self.assertIn("plugin-pages/plugin-average-score.html", markdown)
             self.assertIn("plugin-comparison-diff.html", markdown)
+            self.assertIn("2026-04-17-vs-current-release-comparison.html", markdown)
             self.assertIn("project-week-report-report.html", markdown)
             self.assertIn("project-week-batch-portfolio-tight.html", markdown)
             self.assertIn("Mini MapReduce docs index", html_output)
             self.assertIn("plugin-catalog.html", html_output)
             self.assertIn("plugin-comparison-diff.html", html_output)
+            self.assertIn("2026-04-17-vs-current-release-comparison.html", html_output)
             self.assertIn("project-week-batch-full.html", html_output)
 
     def test_cli_catalog_plugins_rejects_empty_matches(self) -> None:

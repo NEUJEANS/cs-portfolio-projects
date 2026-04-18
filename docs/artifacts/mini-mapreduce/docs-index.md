@@ -6,6 +6,7 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 
 - [Plugin catalog HTML](plugin-catalog.html)
 - [Inspection diff HTML — Plugin Comparison](plugin-comparison-diff.html)
+- [Release comparison HTML — 2026-04-17 · Vs Current](2026-04-17-vs-current-release-comparison.html)
 - [Benchmark report HTML — 2026-04-17 · Annotation View](2026-04-17-annotation-view-report.html)
 - [Benchmark report HTML — 2026-04-17 · Checkout Funnel Rolling Window Join](2026-04-17-checkout-funnel-rolling-window-join-report.html)
 - [Benchmark report HTML — 2026-04-17 · Incident Spike Latency](2026-04-17-incident-spike-latency-report.html)
@@ -39,6 +40,12 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 | --- | --- | --- |
 | Plugin Comparison | Adjacent plugin contract comparison bundle with publishable Markdown/HTML plus machine-readable JSON. | [Markdown](plugin-comparison-diff.md) · [HTML](plugin-comparison-diff.html) · [JSON](plugin-comparison-diff.json) |
 
+## Release comparisons
+
+| Release bundle | Description | Links |
+| --- | --- | --- |
+| 2026-04-17 · Vs Current | Release-to-release plugin snapshot comparison bundle with added/removed/changed summaries. | [Markdown](2026-04-17-vs-current-release-comparison.md) · [HTML](2026-04-17-vs-current-release-comparison.html) · [JSON](2026-04-17-vs-current-release-comparison.json) |
+
 ## Benchmark reports
 
 | Report bundle | Description | Links |
@@ -69,5 +76,6 @@ A lightweight landing page for the committed Mini MapReduce artifacts so reviewe
 - Lead with the HTML report links when you want a browser-friendly walkthrough instead of raw terminal output.
 - Use the plugin catalog first when someone wants to understand the extensibility story before reading the benchmark results.
 - Use the inspection diff bundle when you want to compare how two plugins expose different hook contracts or dataset families.
+- Use the release-comparison bundle when you want to show how the plugin suite evolved across commits instead of only comparing two adjacent plugins.
 - Use the annotation-batch manifest when you want both the full and portfolio-tight reviewer narratives from one shared benchmark run.
 - Link this index from the project README so future slices stay discoverable as more artifact families are added.

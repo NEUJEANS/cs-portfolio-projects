@@ -24,12 +24,13 @@
   <ul class="meta">
     <li><strong>Plugin pages</strong><br><code>7</code></li>
     <li><strong>Inspection diffs</strong><br><code>1</code></li>
+    <li><strong>Release comparisons</strong><br><code>1</code></li>
     <li><strong>Benchmark bundles</strong><br><code>8</code></li>
     <li><strong>Annotation batches</strong><br><code>1</code></li>
   </ul>
   <div class="hero">
     <h2>Browser-first links</h2>
-    <ul><li><a href="plugin-catalog.html">Plugin catalog HTML</a></li><li><a href="plugin-comparison-diff.html">Inspection diff HTML — Plugin Comparison</a></li><li><a href="2026-04-17-annotation-view-report.html">Benchmark report HTML — 2026-04-17 · Annotation View</a></li><li><a href="2026-04-17-checkout-funnel-rolling-window-join-report.html">Benchmark report HTML — 2026-04-17 · Checkout Funnel Rolling Window Join</a></li><li><a href="2026-04-17-incident-spike-latency-report.html">Benchmark report HTML — 2026-04-17 · Incident Spike Latency</a></li><li><a href="2026-04-17-iot-burst-streaming-window-report.html">Benchmark report HTML — 2026-04-17 · IoT Burst Streaming Window</a></li><li><a href="2026-04-17-project-week-report.html">Benchmark report HTML — 2026-04-17 · Project Week</a></li><li><a href="2026-04-17-sensor-backfill-watermark-late-summary-report.html">Benchmark report HTML — 2026-04-17 · Sensor Backfill Watermark Late Summary</a></li><li><a href="2026-04-17-structured-annotations-report.html">Benchmark report HTML — 2026-04-17 · Structured Annotations</a></li><li><a href="launch-day-sessionization-report.html">Benchmark report HTML — Launch Day Sessionization</a></li><li><a href="2026-04-17-annotation-batch-full.html">Annotation batch HTML — 2026-04-17 · Annotation Batch / <code>full</code></a></li><li><a href="2026-04-17-annotation-batch-portfolio-tight.html">Annotation batch HTML — 2026-04-17 · Annotation Batch / <code>portfolio-tight</code></a></li></ul>
+    <ul><li><a href="plugin-catalog.html">Plugin catalog HTML</a></li><li><a href="plugin-comparison-diff.html">Inspection diff HTML — Plugin Comparison</a></li><li><a href="2026-04-17-vs-current-release-comparison.html">Release comparison HTML — 2026-04-17 · Vs Current</a></li><li><a href="2026-04-17-annotation-view-report.html">Benchmark report HTML — 2026-04-17 · Annotation View</a></li><li><a href="2026-04-17-checkout-funnel-rolling-window-join-report.html">Benchmark report HTML — 2026-04-17 · Checkout Funnel Rolling Window Join</a></li><li><a href="2026-04-17-incident-spike-latency-report.html">Benchmark report HTML — 2026-04-17 · Incident Spike Latency</a></li><li><a href="2026-04-17-iot-burst-streaming-window-report.html">Benchmark report HTML — 2026-04-17 · IoT Burst Streaming Window</a></li><li><a href="2026-04-17-project-week-report.html">Benchmark report HTML — 2026-04-17 · Project Week</a></li><li><a href="2026-04-17-sensor-backfill-watermark-late-summary-report.html">Benchmark report HTML — 2026-04-17 · Sensor Backfill Watermark Late Summary</a></li><li><a href="2026-04-17-structured-annotations-report.html">Benchmark report HTML — 2026-04-17 · Structured Annotations</a></li><li><a href="launch-day-sessionization-report.html">Benchmark report HTML — Launch Day Sessionization</a></li><li><a href="2026-04-17-annotation-batch-full.html">Annotation batch HTML — 2026-04-17 · Annotation Batch / <code>full</code></a></li><li><a href="2026-04-17-annotation-batch-portfolio-tight.html">Annotation batch HTML — 2026-04-17 · Annotation Batch / <code>portfolio-tight</code></a></li></ul>
   </div>
   <section>
     <h2>Plugin catalog</h2>
@@ -42,6 +43,10 @@
   <section>
     <h2>Inspection diffs</h2>
     <table><thead><tr><th>Diff bundle</th><th>Description</th><th>Links</th></tr></thead><tbody><tr><td>Plugin Comparison</td><td>Adjacent plugin contract comparison bundle with publishable Markdown/HTML plus machine-readable JSON.</td><td><a href="plugin-comparison-diff.md">Markdown</a> · <a href="plugin-comparison-diff.html">HTML</a> · <a href="plugin-comparison-diff.json">JSON</a></td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Release comparisons</h2>
+    <table><thead><tr><th>Release bundle</th><th>Description</th><th>Links</th></tr></thead><tbody><tr><td>2026-04-17 · Vs Current</td><td>Release-to-release plugin snapshot comparison bundle with added/removed/changed summaries.</td><td><a href="2026-04-17-vs-current-release-comparison.md">Markdown</a> · <a href="2026-04-17-vs-current-release-comparison.html">HTML</a> · <a href="2026-04-17-vs-current-release-comparison.json">JSON</a></td></tr></tbody></table>
   </section>
   <section>
     <h2>Benchmark reports</h2>
@@ -57,6 +62,7 @@
       <li>Lead with the HTML report links when you want a browser-friendly walkthrough instead of raw terminal output.</li>
       <li>Use the plugin catalog first when someone wants to understand the extensibility story before reading the benchmark results.</li>
       <li>Use the inspection diff bundle when you want to compare how two plugins expose different hook contracts or dataset families.</li>
+      <li>Use the release-comparison bundle when you want to show how the plugin suite evolved across commits instead of only comparing two adjacent plugins.</li>
       <li>Use the annotation-batch manifest when you want both the full and portfolio-tight reviewer narratives from one shared benchmark run.</li>
       <li>Link this index from the project README so future slices stay discoverable as more artifact families are added.</li>
     </ul>

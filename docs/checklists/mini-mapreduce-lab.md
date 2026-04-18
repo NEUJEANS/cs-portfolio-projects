@@ -8,6 +8,21 @@
 - [x] add automated tests for pipeline behavior and CLI output
 - [x] complete initial 3 review passes and log fixes
 
+## Release comparison slice (2026-04-18 00:34 UTC run)
+- [x] confirm repo sync before editing
+- [x] pick the next unfinished mini-mapreduce slice from the project checklist
+- [x] skip external web research because the release-comparison follow-up is already scoped in the local README/checklist and recent wrap-ups
+- [x] do a short Python snapshot-diff and dataclass-loading refresh/self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add a `compare-plugin-releases` command that compares two saved plugin-inspection/catalog snapshots
+- [x] render Markdown and HTML release-comparison pages with added/removed/changed plugin summaries
+- [x] extend the docs index so release-comparison bundles are discoverable next to catalogs/diffs/reports
+- [x] extend project-level and repo-level tests for snapshot loading, CLI output, and docs-index discovery
+- [x] generate a committed historical release-comparison artifact for the mini-mapreduce docs bundle
+- [x] run tests and 3 review passes
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up
+
 ## Reducer partitioning slice (2026-04-14 20:49 UTC run)
 - [x] confirm repo sync before editing
 - [x] refresh partitioner/reducer-skew concepts from existing notes

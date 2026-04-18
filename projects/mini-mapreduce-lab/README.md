@@ -34,10 +34,11 @@ A compact Python project that demonstrates the map → combine → partition →
 - benchmark CSV summaries now carry plugin inspection metadata so spreadsheet artifacts stay self-describing without a separate JSON lookup
 - optional adjacent plugin metadata diffs for batched inspection runs so contract changes are reviewable without hand-comparing JSON snapshots
 - optional Markdown and HTML inspection reports with hook signatures, file anchors, branch-aware GitHub links, commit-pinned GitHub links, and source excerpts so plugin contract comparisons can be published as portfolio-ready artifacts
+- release-comparison command that diffs two saved inspection/catalog snapshots so the docs bundle can show how the plugin suite evolved across commits
 - plugin catalog command that auto-discovers bundled plugins and emits JSON/Markdown/HTML portfolio index artifacts with quick-link landing cards and review-friendly badge summaries, without repeating `--plugin` flags manually
 - optional dedicated per-plugin Markdown/HTML docs pages from the catalog flow so each bundled plugin can ship as its own review-friendly portfolio page
 - bundled richer plugin examples for score aggregation, observability latency summaries, product-analytics sessionization, streaming-window telemetry rollups, watermark-aware late-event summaries, and rolling-window joins so the portfolio spans multiple systems stories
-- lightweight `docs-index` landing-page export that scans the committed artifact bundle and links plugin catalogs, plugin docs, inspection diffs, benchmark reports, and annotation-batch presets from one place
+- lightweight `docs-index` landing-page export that scans the committed artifact bundle and links plugin catalogs, plugin docs, inspection diffs, release comparisons, benchmark reports, and annotation-batch presets from one place
 - repo-relative plugin references in run/benchmark outputs so committed JSON/CSV/Markdown/HTML artifacts stay portable across machines
 
 ## Usage
@@ -272,6 +273,19 @@ python3 projects/mini-mapreduce-lab/mapreduce.py catalog-plugins \
   --docs-dir docs/plugin-pages
 ```
 
+Compare two saved inspection/catalog snapshots when you want a release-to-release view of added plugins, removed plugins, changed hook contracts, and dataset-family drift:
+
+```bash
+python3 projects/mini-mapreduce-lab/mapreduce.py compare-plugin-releases \
+  --before docs/artifacts/mini-mapreduce/2026-04-17-plugin-catalog.json \
+  --after docs/artifacts/mini-mapreduce/plugin-catalog.json \
+  --before-label 2026-04-17 \
+  --after-label current \
+  --output docs/artifacts/mini-mapreduce/2026-04-17-vs-current-release-comparison.json \
+  --report-output docs/artifacts/mini-mapreduce/2026-04-17-vs-current-release-comparison.md \
+  --html-output docs/artifacts/mini-mapreduce/2026-04-17-vs-current-release-comparison.html
+```
+
 Switch benchmark dataset families to model different workload shapes. For example, the built-in `json-group-count` benchmark now supports `default`, `incidents`, and `deployments` families, the average-score plugin exposes `default`, `exam-cram`, and `project-week`, the rolling-window-join plugin exposes `default`, `checkout-funnel`, and `incident-correlation`, the service-latency plugin exposes `default`, `incident-spike`, and `batch-window`, the sessionization plugin exposes `default`, `exam-revision`, and `launch-day`, the streaming-window plugin exposes `default`, `iot-burst`, and `live-ops`, and the watermark late-summary plugin exposes `default`, `sensor-backfill`, and `live-replay`:
 
 ```bash
@@ -384,6 +398,7 @@ The current committed bundle includes:
 - Markdown index: [`../../docs/artifacts/mini-mapreduce/docs-index.md`](../../docs/artifacts/mini-mapreduce/docs-index.md)
 - HTML index: [`../../docs/artifacts/mini-mapreduce/docs-index.html`](../../docs/artifacts/mini-mapreduce/docs-index.html)
 - plugin catalog + dedicated plugin pages (including the rolling-window-join, service-latency, sessionization, streaming-window, and watermark late-summary examples) under [`../../docs/artifacts/mini-mapreduce/`](../../docs/artifacts/mini-mapreduce/)
+- release-comparison bundle: [`../../docs/artifacts/mini-mapreduce/2026-04-17-vs-current-release-comparison.md`](../../docs/artifacts/mini-mapreduce/2026-04-17-vs-current-release-comparison.md) / [`../../docs/artifacts/mini-mapreduce/2026-04-17-vs-current-release-comparison.html`](../../docs/artifacts/mini-mapreduce/2026-04-17-vs-current-release-comparison.html)
 - checkout-funnel rolling-window join, incident-spike latency, launch-day sessionization, iot-burst streaming-window, sensor-backfill watermark late-summary, and project-week score benchmark reports so reviewers can see six different portfolio stories from the same runner
 
 ## Plugin contract
@@ -477,5 +492,4 @@ python3 -m unittest tests/test_mini_mapreduce.py
 - how rolling-window joins let the same runner tell a correlation story instead of only aggregation stories
 
 ## Future improvements
-- add repository-level inspection summaries or release-to-release comparison pages that compare multiple plugin snapshots across releases, not just adjacent runs
 - add docs-site navigation sidebars or a cross-project portfolio landing page if the artifact surface keeps growing beyond one project bundle
