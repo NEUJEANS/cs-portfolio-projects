@@ -19,7 +19,7 @@
 - browser spot-check: served the repo locally and opened `http://127.0.0.1:8765/docs/artifacts/crdt-orset-lab/comparison-presets.html`, then followed the `Comparison` link for `concurrent-readd` to confirm relative navigation into the detail bundle works in a real browser
 
 ## Commit hash
-- feature commit: `27aa84224f9e633bbd171fe7e1a1e55b40833b83`
+- feature commit: `2d12921e8b993a2a7e59db8dfa27db24d8a31967`
 
 ## Next step
 - add a tiny landing/index page or portable zip export inside each preset detail bundle so a single scenario can be shared as one self-contained packet
