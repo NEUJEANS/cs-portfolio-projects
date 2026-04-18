@@ -5,10 +5,27 @@
   "publicKeyPath": "/demo/file-organizer-cli/demo-manifest-signer.pub.pem",
   "valid": true,
   "keyType": "ed25519",
-  "publicKeyFingerprint": "sha256:fb64cd1100d8715c6a421bad106581965d238a4cb3b8730377666ec310833e7f",
+  "publicKeyFingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
+  "signerLabel": "TA laptop key",
+  "signerRoles": [
+    "organize-approver",
+    "undo-approver"
+  ],
   "signedPayload": {
     "checksumAlgorithm": "sha256",
-    "checksum": "7aaf9e4211efc2bcc82f932052c1748b3b4f03ef337da0522e7a6ab722e9dac5"
+    "checksum": "1a14c4806f26ee5ecca4bd22a7f0b953b935ef1f3875fbbe8f1e6a60de99779d"
+  },
+  "signerPolicy": {
+    "policyPath": "/demo/file-organizer-cli/demo-trusted-signers.json",
+    "trustedSignerCount": 1,
+    "name": "Course staff signing policy",
+    "description": "Trusted signing keys for organizer undo approvals.",
+    "matchedFingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
+    "matchedLabel": "TA laptop key",
+    "matchedRoles": [
+      "organize-approver",
+      "undo-approver"
+    ]
   },
   "reason": null
 }

@@ -36,4 +36,8 @@
   - shipped: sign checksum-backed manifests with a detached sidecar file instead of embedding the signature in the manifest JSON
   - shipped: verify signatures during undo so teams can require both integrity and authorship before restoring files
   - shipped: publish a public-key + signature demo artifact flow in the README bundle without committing any private keys
-- [ ] add signer-policy helpers (for example, trusted fingerprint allowlists or multi-signer approval metadata) for shared team workflows
+- [x] add signer-policy helpers for shared team workflows
+  - shipped: `--signer-policy trusted-signers.json` allowlists trusted signer fingerprints for sign/verify flows
+  - shipped: signer policies can publish reviewer labels, roles, and notes that surface in apply/undo reports
+  - shipped: active signing inputs are auto-skipped when they live inside the target directory being organized so policy-driven sign flows remain resumable
+- [ ] add multi-signer approval metadata or quorum rules for shared team workflows that need more than one trusted signer

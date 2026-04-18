@@ -1,0 +1,15 @@
+{
+  "name": "Course staff signing policy",
+  "description": "Trusted signing keys for organizer undo approvals.",
+  "trustedSigners": [
+    {
+      "fingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
+      "label": "TA laptop key",
+      "roles": [
+        "organize-approver",
+        "undo-approver"
+      ],
+      "notes": "Portfolio demo key"
+    }
+  ]
+}

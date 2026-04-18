@@ -1,11 +1,11 @@
 # file-organizer-cli
 
 ## Overview
-A Node.js CLI that organizes loose files into extension-based, basename-pattern-aware, and MIME-aware folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, CI-friendly config linting, checksum-backed manifests, detached manifest signatures, and manifest-driven undo support.
+A Node.js CLI that organizes loose files into extension-based, basename-pattern-aware, and MIME-aware folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, CI-friendly config linting, checksum-backed manifests, detached manifest signatures, trusted signer policies, and manifest-driven undo support.
 
 ## Why it is portfolio-worthy
 - demonstrates practical file-system automation with a real CLI workflow
-- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom extension + basename + MIME categorization rules, CI-ready config validation, checksum-backed audit manifests, detached signer proof, and safe rollback after a bulk organize pass
+- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom extension + basename + MIME categorization rules, CI-ready config validation, checksum-backed audit manifests, detached signer proof, trusted signer-policy allowlists, and safe rollback after a bulk organize pass
 - includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing/linting, MIME sniffing, basename-pattern matching, checksum-backed + detached-signed manifest writing, and undo/restore flows
 - easy to demo with realistic folders like `Downloads`, class assets, screenshots, or project exports
 - now ships a reproducible demo artifact bundle under [`docs/artifacts/file-organizer-cli/`](../../docs/artifacts/file-organizer-cli/) so reviewers can see config cleanup, dry-run output, before/after trees, and undo proof without running the CLI first
@@ -30,6 +30,7 @@ A Node.js CLI that organizes loose files into extension-based, basename-pattern-
 - supports `--manifest-checksum` to embed a SHA-256 checksum in the manifest for tamper-evident bulk-operation history
 - supports `--undo manifest.json` to restore files from a saved non-dry-run organize manifest, including collision-safe restore names, empty bucket cleanup, automatic checksum verification, and optional detached-signature verification when authorship matters
 - supports `--sign-manifest <private-key.pem>` plus `--verify-manifest-signature <public-key.pem>` for detached signer proof on checksum-backed manifests
+- supports `--signer-policy trusted-signers.json` so shared teams can allowlist trusted signer fingerprints and publish reviewer labels/roles alongside signature proof
 - prints either a readable text report or structured JSON output
 
 ## Usage
@@ -43,6 +44,7 @@ node organizer.js --write-preset data-science ./presets/data-science.json --forc
 node organizer.js ~/Downloads --config ./buckets.json --recursive
 node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json --manifest-checksum
 node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json --manifest-checksum --sign-manifest ./keys/team.pem
+node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json --manifest-checksum --sign-manifest ./keys/team.pem --signer-policy ./keys/trusted-signers.json
 node organizer.js ~/Downloads --config ./pattern-buckets.json --dry-run
 node organizer.js ~/Downloads --config ./mime-buckets.json --dry-run
 node organizer.js --lint-config ./shared/coursework-buckets.json
@@ -54,6 +56,7 @@ node organizer.js --undo ./artifacts/downloads-run.json
 node organizer.js --undo ./artifacts/downloads-run.json --dry-run --json
 node organizer.js --undo ./artifacts/downloads-run.json --verify-manifest-signature ./keys/team.pub.pem
 node organizer.js --undo ./artifacts/downloads-run.json --verify-manifest-signature ./keys/team.pub.pem --signature-path ./artifacts/downloads-run.sig.json
+node organizer.js --undo ./artifacts/downloads-run.json --verify-manifest-signature ./keys/team.pub.pem --signature-path ./artifacts/downloads-run.sig.json --signer-policy ./keys/trusted-signers.json
 node organizer.js --undo ./artifacts/downloads-run.json --skip-manifest-verification
 ```
 
@@ -126,7 +129,8 @@ Notes:
 - `--sign-manifest` requires `--manifest-checksum`; it writes a detached sidecar file next to the manifest by default (for example `downloads-run.json.sig.json`) unless you override it with `--signature-path`.
 - `--undo` verifies checksum metadata automatically when present and fails closed on tampered manifests unless you intentionally bypass it with `--skip-manifest-verification`.
 - `--verify-manifest-signature` adds detached-signature verification on top of the checksum check so teams can require both integrity and authorship before files are restored.
-- the active config file is skipped automatically if it lives inside the directory being organized.
+- `--signer-policy` lets a shared team publish trusted signer fingerprints plus optional reviewer labels, roles, and notes; signing fails closed if the private key is not in the allowlist, and verification fails closed when the presented signer is no longer trusted.
+- the active config file and active signing inputs (manifest path, signature path, private key, signer policy) are skipped automatically if they live inside the directory being organized.
 
 > Tip: if you redirect `--json` output to a file, write that file outside the directory being organized. Otherwise the redirected report file can become another candidate input during the same run.
 
@@ -143,6 +147,9 @@ config: /home/student/Downloads/buckets.json
 manifest: /home/student/Downloads/artifacts/downloads-run.json
 manifest signature: /home/student/Downloads/artifacts/downloads-run.json.sig.json
 manifest signer fingerprint: sha256:3f55b9ec8c54d7d4a3d8a2037d6d00c6a17c8071c212dc8d1a8a6d0cc7f7f2f1
+manifest signer label: TA laptop key
+manifest signer roles: organize-approver, undo-approver
+signer policy: Course staff signing policy
 bucket data-dumps: 1
 bucket datasets: 1
 bucket images: 1
@@ -262,6 +269,9 @@ manifest checksum: sha256:0f6d2b9d1c6b0f72dff18fd8c80f0b841d8c17ce6bb0d6b6df85f9
 manifest signature verified: yes
 manifest signature file: /home/student/Downloads/artifacts/downloads-run.json.sig.json
 manifest signer fingerprint: sha256:3f55b9ec8c54d7d4a3d8a2037d6d00c6a17c8071c212dc8d1a8a6d0cc7f7f2f1
+manifest signer label: TA laptop key
+manifest signer roles: organize-approver, undo-approver
+signer policy: Course staff signing policy
 bucket datasets: 1
 bucket images: 2
 /home/student/Downloads/datasets/report.csv -> /home/student/Downloads/report.csv
@@ -291,7 +301,24 @@ node organizer.js ~/Downloads --manifest-out ./artifacts/downloads-run.json --ma
 node organizer.js --undo ./artifacts/downloads-run.json --verify-manifest-signature ./keys/team.pub.pem
 ```
 
-Use `--signature-path` if the sidecar should live somewhere other than the default `<manifest>.sig.json` location. The published demo bundle commits only the public key plus the detached-signature proof artifacts — never the private key.
+If a class team, lab staff group, or club repo shares several signing keys, add `--signer-policy trusted-signers.json` to either command. The policy file stores an allowlist of trusted signer fingerprints plus optional `label`, `roles`, and `notes` metadata that the CLI echoes back in the apply/undo reports.
+
+```json
+{
+  "name": "Course staff signing policy",
+  "description": "Trusted signing keys for organizer undo approvals.",
+  "trustedSigners": [
+    {
+      "fingerprint": "sha256:3f55b9ec8c54d7d4a3d8a2037d6d00c6a17c8071c212dc8d1a8a6d0cc7f7f2f1",
+      "label": "TA laptop key",
+      "roles": ["organize-approver", "undo-approver"],
+      "notes": "Portfolio demo key"
+    }
+  ]
+}
+```
+
+Use `--signature-path` if the sidecar should live somewhere other than the default `<manifest>.sig.json` location. The published demo bundle commits only the public key, the trusted signer policy, and the detached-signature proof artifacts — never the private key.
 
 ## Demo artifact bundle
 Generate the committed demo walkthrough bundle:
@@ -309,13 +336,14 @@ Published bundle:
 - [`apply report`](../../docs/artifacts/file-organizer-cli/demo-apply-report.txt)
 - [`manifest payload`](../../docs/artifacts/file-organizer-cli/demo-manifest.json)
 - [`detached signature`](../../docs/artifacts/file-organizer-cli/demo-manifest.sig.json)
+- [`trusted signer policy`](../../docs/artifacts/file-organizer-cli/demo-trusted-signers.json)
 - [`signer public key`](../../docs/artifacts/file-organizer-cli/demo-manifest-signer.pub.pem)
 - [`signature verification proof`](../../docs/artifacts/file-organizer-cli/demo-signature-verify.txt)
 - [`after tree`](../../docs/artifacts/file-organizer-cli/demo-after-tree.txt)
 - [`undo report`](../../docs/artifacts/file-organizer-cli/demo-undo-report.txt)
 - [`restored tree`](../../docs/artifacts/file-organizer-cli/demo-restored-tree.txt)
 
-The generator runs the organizer against an isolated temp folder, writes a warning-heavy raw config plus its canonical normalized version, captures dry-run/apply/undo reports with checksum-backed + detached-signed manifests, exports only the public verification key, and sanitizes the temp paths into a stable `/demo/file-organizer-cli` prefix for readable Git-tracked artifacts.
+The generator runs the organizer against an isolated temp folder, writes a warning-heavy raw config plus its canonical normalized version, captures dry-run/apply/undo reports with checksum-backed + detached-signed manifests plus a trusted signer policy, exports only the public verification key, and sanitizes the temp paths into a stable `/demo/file-organizer-cli` prefix for readable Git-tracked artifacts.
 
 ## Test
 ```bash
@@ -324,4 +352,4 @@ npm run demo:artifacts
 ```
 
 ## Future Improvements
-- add signer-policy helpers such as trusted fingerprint allowlists or multi-signer approval metadata for shared team workflows
+- add multi-signer approval metadata or quorum rules for shared team workflows that need more than a single trusted signer allowlist

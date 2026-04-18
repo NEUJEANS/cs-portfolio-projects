@@ -7,6 +7,7 @@ const {
   organize,
   previewNormalizedBucketConfig,
   writeManifest,
+  publicKeyFingerprint,
   writeDetachedManifestSignature,
   verifyDetachedManifestSignature,
   writeNormalizedBucketConfig,
@@ -94,6 +95,26 @@ async function createSigningKeyPair(rootDir) {
   };
 }
 
+async function createTrustedSignerPolicy(rootDir, publicKeyPath) {
+  const publicKey = crypto.createPublicKey(await fs.readFile(publicKeyPath, 'utf8'));
+  const fingerprint = publicKeyFingerprint(publicKey);
+  const policyPath = path.join(rootDir, 'demo-trusted-signers.json');
+  const policy = {
+    name: 'Course staff signing policy',
+    description: 'Trusted signing keys for organizer undo approvals.',
+    trustedSigners: [
+      {
+        fingerprint,
+        label: 'TA laptop key',
+        roles: ['organize-approver', 'undo-approver'],
+        notes: 'Portfolio demo key',
+      },
+    ],
+  };
+  await fs.writeFile(policyPath, `${JSON.stringify(policy, null, 2)}\n`);
+  return { policyPath, policy };
+}
+
 async function createDemoInput(rootDir) {
   const downloadsDir = path.join(rootDir, 'downloads');
   await fs.mkdir(downloadsDir, { recursive: true });
@@ -142,6 +163,7 @@ async function generateArtifacts() {
   try {
     const { downloadsDir, rawConfigPath } = await createDemoInput(tempRoot);
     const { privateKeyPath, publicKeyPath } = await createSigningKeyPair(tempRoot);
+    const { policyPath, policy } = await createTrustedSignerPolicy(tempRoot, publicKeyPath);
     const normalizedConfigPath = path.join(tempRoot, 'coursework-demo.normalized.json');
     const manifestPath = path.join(tempRoot, 'demo-manifest.json');
     const signaturePath = path.join(tempRoot, 'demo-manifest.sig.json');
@@ -162,13 +184,20 @@ async function generateArtifacts() {
       bucketConfig,
     });
     const manifestResult = await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
-    const signatureResult = await writeDetachedManifestSignature(manifestPath, privateKeyPath, { signaturePath });
+    const signatureResult = await writeDetachedManifestSignature(manifestPath, privateKeyPath, {
+      signaturePath,
+      signerPolicyPath: policyPath,
+    });
     manifestResult.detachedSignature = signatureResult;
-    const signatureVerification = await verifyDetachedManifestSignature(manifestPath, publicKeyPath, { signaturePath });
+    const signatureVerification = await verifyDetachedManifestSignature(manifestPath, publicKeyPath, {
+      signaturePath,
+      signerPolicyPath: policyPath,
+    });
     const afterTree = await buildTreeSnapshot(downloadsDir, 'downloads/');
     const undoResult = await undoFromManifest(manifestPath, {
       verifySignatureKeyPath: publicKeyPath,
       signaturePath,
+      signerPolicyPath: policyPath,
     });
     const restoredTree = await buildTreeSnapshot(downloadsDir, 'downloads/');
 
@@ -182,6 +211,7 @@ async function generateArtifacts() {
     const sanitizedRawConfig = sanitizeForArtifact(JSON.parse(await fs.readFile(rawConfigPath, 'utf8')), tempRoot);
     const sanitizedNormalizedConfig = sanitizeForArtifact(JSON.parse(await fs.readFile(normalizedConfigPath, 'utf8')), tempRoot);
     const sanitizedPublicKey = sanitizeForArtifact(await fs.readFile(publicKeyPath, 'utf8'), tempRoot);
+    const sanitizedSignerPolicy = sanitizeForArtifact(policy, tempRoot);
 
     await writeArtifact('demo-source-tree.txt', beforeTree);
     await writeArtifact('demo-after-tree.txt', afterTree);
@@ -194,6 +224,7 @@ async function generateArtifacts() {
     await writeArtifact('demo-apply-report.txt', `${formatTextReport(sanitizedApply)}\n`);
     await writeArtifact('demo-manifest.json', `${JSON.stringify(sanitizedApply, null, 2)}\n`);
     await writeArtifact('demo-manifest.sig.json', `${JSON.stringify(sanitizedSignature, null, 2)}\n`);
+    await writeArtifact('demo-trusted-signers.json', `${JSON.stringify(sanitizedSignerPolicy, null, 2)}\n`);
     await writeArtifact('demo-signature-verify.txt', `${JSON.stringify(sanitizedSignatureVerification, null, 2)}\n`);
     await writeArtifact('demo-manifest-signer.pub.pem', sanitizedPublicKey);
     await writeArtifact('demo-undo-report.txt', `${formatTextReport(sanitizedUndo)}\n`);
@@ -213,6 +244,7 @@ async function generateArtifacts() {
       '- [`demo-apply-report.txt`](./demo-apply-report.txt) — real organize run with checksum-backed manifest recording',
       '- [`demo-manifest.json`](./demo-manifest.json) — sanitized manifest/report payload captured from the real run',
       '- [`demo-manifest.sig.json`](./demo-manifest.sig.json) — detached signature sidecar for the manifest',
+      '- [`demo-trusted-signers.json`](./demo-trusted-signers.json) — trusted signer allowlist with reviewer labels/roles',
       '- [`demo-manifest-signer.pub.pem`](./demo-manifest-signer.pub.pem) — public verification key published with the bundle',
       '- [`demo-signature-verify.txt`](./demo-signature-verify.txt) — detached-signature verification proof before undo',
       '- [`demo-after-tree.txt`](./demo-after-tree.txt) — folder tree after the organize pass',
@@ -239,12 +271,13 @@ async function generateArtifacts() {
       '- MIME-aware routing for misleading `.txt` files that actually contain JSON or SVG',
       '- normalization-preview + canonical shared-config writing before a real organize run',
       '- checksum-backed manifest capture plus detached-signature sidecar generation',
+      '- trusted signer policy allowlists with reviewer labels and roles surfaced in the proof output',
       '- detached-signature verification with a published public key before undo',
       '- dry-run preview and successful rollback back to the original loose tree',
       '',
       '## Notes',
       '- committed reports replace the temporary smoke-run root with the stable placeholder `/demo/file-organizer-cli` so the artifacts stay readable in Git',
-      '- the bundle publishes only the generated public verification key; the temporary private signing key never leaves the isolated smoke-test folder',
+      '- the bundle publishes the generated public verification key plus the trusted signer policy; the temporary private signing key never leaves the isolated smoke-test folder',
       '- the real smoke test still runs against an isolated temporary folder before these sanitized artifacts are written',
       '',
     ].join('\n');
