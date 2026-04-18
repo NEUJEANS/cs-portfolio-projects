@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set replay — script sample_compare_ops.json</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --warn: #92400e;
+        --warn-bg: #ffedd5;
+        --ok: #166534;
+        --ok-bg: #dcfce7;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1420px; margin: 0 auto; padding: 32px 20px 64px; }
+      a { color: var(--accent); }
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .hero p { color: var(--muted); max-width: 980px; }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }
+      .summary-grid li { list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }
+      .summary-grid strong { display: block; font-size: 1.35rem; margin-bottom: 6px; }
+      .layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.9fr); align-items: start; }
+      .panel { padding: 22px; }
+      .panel h2, .panel h3 { margin-top: 0; }
+      .controls { display: grid; gap: 16px; }
+      .step-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; }
+      .status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; font-weight: 700; }
+      .status-pill.ok { background: var(--ok-bg); color: var(--ok); }
+      .status-pill.warn { background: var(--warn-bg); color: var(--warn); }
+      .button-row { display: flex; flex-wrap: wrap; gap: 10px; }
+      .button-row button { border: 1px solid #bfdbfe; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 10px 16px; font-weight: 700; }
+      .button-row button:disabled { opacity: 0.55; cursor: default; }
+      .slider-wrap { display: grid; gap: 8px; }
+      .slider-wrap label { font-weight: 700; }
+      input[type=range] { width: 100%; }
+      .detail-list, .artifact-links, .transfer-list { margin: 0; padding-left: 18px; color: var(--muted); }
+      .detail-list li + li, .artifact-links li + li, .transfer-list li + li { margin-top: 8px; }
+      .replica-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+      .replica-card { border: 1px solid var(--border); border-radius: 20px; padding: 16px; background: #f8fafc; }
+      .replica-card.focus { border-color: #60a5fa; box-shadow: inset 0 0 0 1px #bfdbfe; background: #eff6ff; }
+      .replica-card h3 { margin: 0 0 10px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+      .replica-card dl { margin: 0; display: grid; gap: 10px; }
+      .replica-card dt { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+      .replica-card dd { margin: 3px 0 0; font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+      .anti-grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); align-items: start; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th { font-size: 0.95rem; color: var(--muted); }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+      .note { padding: 14px 16px; border-radius: 18px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }
+      @media (max-width: 1080px) {
+        .layout, .anti-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set replay / animation</h1>
+        <p>This replay page turns the OR-Set timeline into a stepper you can scrub in a browser. It keeps the anti-entropy notes beside the replica states so a reviewer can see both the semantic change and the payload-cost story on the same screen.</p>
+        <p class="note">Observed-remove story: a remove tombstones only the add-tags a replica has already observed, so membership still survives via notebook=c:1 while tombstones retain a:1.</p>
+        <ul class="summary-grid">
+          <li><strong>3</strong> replicas (a, b, c)</li>
+          <li><strong>7</strong> timeline steps</li>
+          <li><strong>2/1/4</strong> add/remove/sync ops</li>
+          <li><strong>7</strong> replayable steps</li>
+          <li><strong>true</strong> final convergence</li>
+          <li><strong>script sample_compare_ops.json</strong> scenario</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel controls">
+          <div class="step-meta">
+            <div>
+              <h2 id="replay-step-heading" style="margin-bottom: 6px;">Initial state</h2>
+              <div id="replay-step-label" class="note">Cluster starts empty.</div>
+            </div>
+            <div id="replay-status" class="status-pill ok">state converged</div>
+          </div>
+          <div class="button-row">
+            <button type="button" id="replay-prev">← Prev</button>
+            <button type="button" id="replay-play" aria-pressed="false">▶ Play</button>
+            <button type="button" id="replay-next">Next →</button>
+          </div>
+          <div class="slider-wrap">
+            <label for="replay-range">Replay step</label>
+            <input type="range" id="replay-range" min="0" max="7" step="1" value="0" />
+            <div id="replay-step-counter" style="color: var(--muted);">Step 0 of 7</div>
+          </div>
+          <div>
+            <h3>What changed on this step?</h3>
+            <ul id="replay-details" class="detail-list"></ul>
+          </div>
+          <div>
+            <h3>Companion artifacts</h3>
+            <ul class="artifact-links"><li><a href="../../../projects/crdt-orset-lab/sample_compare_ops.json">Scenario script</a></li><li><a href="lww-vs-orset-timeline.md">Markdown timeline</a></li><li><a href="lww-vs-orset-timeline.mmd">Mermaid source</a></li><li><a href="lww-vs-orset-timeline.svg">SVG card</a></li><li><a href="lww-vs-orset-orset-snapshot.json">JSON snapshot</a></li><li><a href="lww-vs-orset-anti-entropy.md">Anti-entropy Markdown</a></li><li><a href="lww-vs-orset-anti-entropy.html">Anti-entropy HTML</a></li><li><a href="lww-vs-orset-anti-entropy.json">Anti-entropy JSON</a></li><li><a href="lww-vs-orset-timeline.html">Timeline gallery</a></li><li><a href="lww-vs-orset.html">Comparison HTML</a></li><li><a href="lww-vs-orset.md">Comparison Markdown</a></li><li><a href="lww-vs-orset.json">Comparison JSON</a></li></ul>
+          </div>
+        </article>
+        <aside class="panel">
+          <h2>Replica states after this step</h2>
+          <div id="replica-grid" class="replica-grid"></div>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Anti-entropy transfer view</h2>
+        <div class="anti-grid">
+          <div>
+            <p id="anti-summary" class="note">No anti-entropy transfer yet — this is the pre-script baseline.</p>
+            <ul id="transfer-list" class="transfer-list"></ul>
+          </div>
+          <div>
+            <table>
+              <thead>
+                <tr><th>Transfer</th><th>Digests before</th><th>Full bytes</th><th>Delta bytes</th><th>Saved</th><th>Delta payload</th></tr>
+              </thead>
+              <tbody id="transfer-table-body">
+                <tr><td colspan="6">No sync transfer on this step.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <p id="replay-announce" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    </main>
+    <script>
+      const frames = [{"anti_entropy": {"summary": "No anti-entropy transfer yet \u2014 this is the pre-script baseline.", "transfers": []}, "converged": true, "details": ["No operations have run yet.", "Use the slider or play button to scrub through adds, removes, and sync steps."], "focus_replicas": [], "label": "Cluster starts empty", "op": "initial", "replicas": {"a": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}, "b": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 0}, {"anti_entropy": {"summary": "Local mutation only \u2014 no anti-entropy transfer happens until a sync step.", "transfers": []}, "converged": false, "details": ["new tag: a:1", "elements=notebook | active=notebook=a:1 | tombstones=\u2205"], "focus_replicas": ["a"], "label": "a adds notebook", "op": "add", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 1}, {"anti_entropy": {"summary": "2 directional transfer(s), 105 delta byte(s), saving 0 vs full-state sync.", "transfers": [{"delta_bytes": 64, "delta_payload": "tags notebook=a:1; tombstones \u2205; counters a=1", "digest_pair": "bc0df1bd11ad\u2026 vs 59accd60481d\u2026", "from": "a", "full_bytes": 64, "saved": 0, "to": "b"}, {"delta_bytes": 41, "delta_payload": "tags \u2205; tombstones \u2205; counters \u2205", "digest_pair": "59accd60481d\u2026 vs bc0df1bd11ad\u2026", "from": "b", "full_bytes": 41, "saved": 0, "to": "a"}]}, "converged": false, "details": ["a: elements=notebook | active=notebook=a:1 | tombstones=\u2205", "b: elements=notebook | active=notebook=a:1 | tombstones=\u2205"], "focus_replicas": ["a", "b"], "label": "a \u2194 b sync (both)", "op": "sync", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 2}, {"anti_entropy": {"summary": "Local mutation only \u2014 no anti-entropy transfer happens until a sync step.", "transfers": []}, "converged": false, "details": ["observed tags removed: a:1", "elements=\u2205 | active=\u2205 | tombstones=a:1"], "focus_replicas": ["b"], "label": "b removes notebook", "op": "remove", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {}, "counters": {"a": 1}, "elements": [], "observed_tags": {"notebook": ["a:1"]}, "tombstones": ["a:1"]}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 3}, {"anti_entropy": {"summary": "Local mutation only \u2014 no anti-entropy transfer happens until a sync step.", "transfers": []}, "converged": false, "details": ["new tag: c:1", "elements=notebook | active=notebook=c:1 | tombstones=\u2205"], "focus_replicas": ["c"], "label": "c adds notebook", "op": "add", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {}, "counters": {"a": 1}, "elements": [], "observed_tags": {"notebook": ["a:1"]}, "tombstones": ["a:1"]}, "c": {"active_tags": {"notebook": ["c:1"]}, "counters": {"c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["c:1"]}, "tombstones": []}}, "step": 4}, {"anti_entropy": {"summary": "2 directional transfer(s), 128 delta byte(s), saving 0 vs full-state sync.", "transfers": [{"delta_bytes": 64, "delta_payload": "tags notebook=c:1; tombstones \u2205; counters c=1", "digest_pair": "640eb733189d\u2026 vs bc0df1bd11ad\u2026", "from": "c", "full_bytes": 64, "saved": 0, "to": "a"}, {"delta_bytes": 64, "delta_payload": "tags notebook=a:1; tombstones \u2205; counters a=1", "digest_pair": "bc0df1bd11ad\u2026 vs 640eb733189d\u2026", "from": "a", "full_bytes": 64, "saved": 0, "to": "c"}]}, "converged": false, "details": ["c: elements=notebook | active=notebook=a:1, c:1 | tombstones=\u2205", "a: elements=notebook | active=notebook=a:1, c:1 | tombstones=\u2205"], "focus_replicas": ["c", "a"], "label": "c \u2194 a sync (both)", "op": "sync", "replicas": {"a": {"active_tags": {"notebook": ["a:1", "c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": []}, "b": {"active_tags": {}, "counters": {"a": 1}, "elements": [], "observed_tags": {"notebook": ["a:1"]}, "tombstones": ["a:1"]}, "c": {"active_tags": {"notebook": ["a:1", "c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": []}}, "step": 5}, {"anti_entropy": {"summary": "2 directional transfer(s), 110 delta byte(s), saving 35 vs full-state sync.", "transfers": [{"delta_bytes": 64, "delta_payload": "tags notebook=c:1; tombstones \u2205; counters c=1", "digest_pair": "b579452ba051\u2026 vs 88a4f152f33f\u2026", "from": "a", "full_bytes": 76, "saved": 12, "to": "b"}, {"delta_bytes": 46, "delta_payload": "tags \u2205; tombstones a:1; counters \u2205", "digest_pair": "88a4f152f33f\u2026 vs b579452ba051\u2026", "from": "b", "full_bytes": 69, "saved": 23, "to": "a"}]}, "converged": false, "details": ["a: elements=notebook | active=notebook=c:1 | tombstones=a:1", "b: elements=notebook | active=notebook=c:1 | tombstones=a:1"], "focus_replicas": ["a", "b"], "label": "a \u2194 b sync (both)", "op": "sync", "replicas": {"a": {"active_tags": {"notebook": ["c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": ["a:1"]}, "b": {"active_tags": {"notebook": ["c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": ["a:1"]}, "c": {"active_tags": {"notebook": ["a:1", "c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": []}}, "step": 6}, {"anti_entropy": {"summary": "2 directional transfer(s), 87 delta byte(s), saving 70 vs full-state sync.", "transfers": [{"delta_bytes": 46, "delta_payload": "tags \u2205; tombstones a:1; counters \u2205", "digest_pair": "ce1b93dbe7b4\u2026 vs b579452ba051\u2026", "from": "a", "full_bytes": 81, "saved": 35, "to": "c"}, {"delta_bytes": 41, "delta_payload": "tags \u2205; tombstones \u2205; counters \u2205", "digest_pair": "b579452ba051\u2026 vs ce1b93dbe7b4\u2026", "from": "c", "full_bytes": 76, "saved": 35, "to": "a"}]}, "converged": true, "details": ["a: elements=notebook | active=notebook=c:1 | tombstones=a:1", "c: elements=notebook | active=notebook=c:1 | tombstones=a:1"], "focus_replicas": ["a", "c"], "label": "a \u2194 c sync (both)", "op": "sync", "replicas": {"a": {"active_tags": {"notebook": ["c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": ["a:1"]}, "b": {"active_tags": {"notebook": ["c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": ["a:1"]}, "c": {"active_tags": {"notebook": ["c:1"]}, "counters": {"a": 1, "c": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1", "c:1"]}, "tombstones": ["a:1"]}}, "step": 7}];
+      const stepHeading = document.getElementById('replay-step-heading');
+      const stepLabel = document.getElementById('replay-step-label');
+      const stepCounter = document.getElementById('replay-step-counter');
+      const statusPill = document.getElementById('replay-status');
+      const detailList = document.getElementById('replay-details');
+      const replicaGrid = document.getElementById('replica-grid');
+      const antiSummary = document.getElementById('anti-summary');
+      const transferList = document.getElementById('transfer-list');
+      const transferTableBody = document.getElementById('transfer-table-body');
+      const range = document.getElementById('replay-range');
+      const prevButton = document.getElementById('replay-prev');
+      const playButton = document.getElementById('replay-play');
+      const nextButton = document.getElementById('replay-next');
+      const announce = document.getElementById('replay-announce');
+
+      let frameIndex = 0;
+      let playTimer = null;
+
+      function stopPlayback() {
+        if (playTimer !== null) {
+          window.clearInterval(playTimer);
+          playTimer = null;
+        }
+        playButton.textContent = '▶ Play';
+        playButton.setAttribute('aria-pressed', 'false');
+      }
+
+      function renderReplicaCards(frame) {
+        replicaGrid.innerHTML = Object.entries(frame.replicas).map(([replica, state]) => {
+          const focused = frame.focus_replicas.includes(replica) ? ' focus' : '';
+          const rows = [
+            ['Elements', (state.elements || []).join(', ') || '∅'],
+            ['Active tags', Object.entries(state.active_tags || {}).map(([element, tags]) => `${element}=${tags.join(', ') || '∅'}`).join('; ') || '∅'],
+            ['Observed tags', Object.entries(state.observed_tags || {}).map(([element, tags]) => `${element}=${tags.join(', ') || '∅'}`).join('; ') || '∅'],
+            ['Tombstones', (state.tombstones || []).join(', ') || '∅'],
+            ['Counters', Object.entries(state.counters || {}).map(([name, count]) => `${name}:${count}`).join(', ') || '∅'],
+          ];
+          const body = rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+          return `<section class="replica-card${focused}"><h3><span><code>${replica}</code></span><span>${focused ? 'focus' : 'stable'}</span></h3><dl>${body}</dl></section>`;
+        }).join('');
+      }
+
+      function renderTransfers(frame) {
+        const transfers = (frame.anti_entropy && frame.anti_entropy.transfers) || [];
+        antiSummary.textContent = frame.anti_entropy ? frame.anti_entropy.summary : 'No anti-entropy transfer on this step.';
+        transferList.innerHTML = transfers.length
+          ? transfers.map((transfer) => `<li><strong>${transfer.from} → ${transfer.to}</strong> — ${transfer.delta_bytes} delta bytes, saved ${transfer.saved} byte(s).</li>`).join('')
+          : '<li>No sync transfer on this step.</li>';
+        transferTableBody.innerHTML = transfers.length
+          ? transfers.map((transfer) => `<tr><td><code>${transfer.from} → ${transfer.to}</code></td><td><code>${transfer.digest_pair}</code></td><td>${transfer.full_bytes}</td><td>${transfer.delta_bytes}</td><td>${transfer.saved}</td><td>${transfer.delta_payload}</td></tr>`).join('')
+          : '<tr><td colspan="6">No sync transfer on this step.</td></tr>';
+      }
+
+      function renderFrame(index) {
+        frameIndex = index;
+        const frame = frames[index];
+        range.value = String(index);
+        const heading = index === 0 ? 'Initial state' : `Step ${frame.step}`;
+        stepHeading.textContent = heading;
+        stepLabel.textContent = frame.label;
+        stepCounter.textContent = `Step ${index} of ${frames.length - 1}`;
+        statusPill.textContent = frame.converged ? 'state converged' : 'state diverged';
+        statusPill.className = `status-pill ${frame.converged ? 'ok' : 'warn'}`;
+        detailList.innerHTML = frame.details.map((detail) => `<li>${detail}</li>`).join('');
+        renderReplicaCards(frame);
+        renderTransfers(frame);
+        prevButton.disabled = index === 0;
+        nextButton.disabled = index === frames.length - 1;
+        announce.textContent = `${heading} — ${frame.label}`;
+      }
+
+      prevButton.addEventListener('click', () => {
+        stopPlayback();
+        renderFrame(Math.max(0, frameIndex - 1));
+      });
+      nextButton.addEventListener('click', () => {
+        stopPlayback();
+        renderFrame(Math.min(frames.length - 1, frameIndex + 1));
+      });
+      playButton.addEventListener('click', () => {
+        if (playTimer !== null) {
+          stopPlayback();
+          return;
+        }
+        playButton.textContent = '❚❚ Pause';
+        playButton.setAttribute('aria-pressed', 'true');
+        playTimer = window.setInterval(() => {
+          if (frameIndex >= frames.length - 1) {
+            stopPlayback();
+            return;
+          }
+          renderFrame(frameIndex + 1);
+        }, 1600);
+      });
+      range.addEventListener('input', (event) => {
+        stopPlayback();
+        renderFrame(Number(event.target.value));
+      });
+      renderFrame(0);
+    </script>
+  </body>
+</html>

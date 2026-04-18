@@ -698,6 +698,39 @@ def compact_state_note(state: dict[str, object]) -> str:
     return f"elements={elements} | active={active} | tombstones={tombstones}"
 
 
+def clone_state_view(state: dict[str, object] | None = None) -> dict[str, object]:
+    source = dict(state or {})
+    return {
+        "elements": [str(element) for element in source.get("elements", [])],
+        "active_tags": {
+            str(element): [str(tag) for tag in tags]
+            for element, tags in dict(source.get("active_tags") or {}).items()
+        },
+        "observed_tags": {
+            str(element): [str(tag) for tag in tags]
+            for element, tags in dict(source.get("observed_tags") or {}).items()
+        },
+        "tombstones": [str(tag) for tag in source.get("tombstones", [])],
+        "counters": {
+            str(replica): int(counter)
+            for replica, counter in dict(source.get("counters") or {}).items()
+        },
+    }
+
+
+def state_detail_rows(state: dict[str, object]) -> list[tuple[str, str]]:
+    counters = ", ".join(
+        f"{replica}:{counter}" for replica, counter in sorted(dict(state["counters"]).items())
+    ) or "∅"
+    return [
+        ("Elements", ", ".join(str(element) for element in state["elements"]) or "∅"),
+        ("Active tags", summarize_tag_mapping(dict(state["active_tags"]))),
+        ("Observed tags", summarize_tag_mapping(dict(state["observed_tags"]))),
+        ("Tombstones", ", ".join(str(tag) for tag in state["tombstones"]) or "∅"),
+        ("Counters", counters),
+    ]
+
+
 def sanitize_mermaid_text(text: str) -> str:
     sanitized = " ".join(text.replace("`", "").replace('"', "'").split())
     return sanitized.replace(" end ", " [end] ").replace(" end", " [end]")
@@ -975,6 +1008,7 @@ def build_companion_links(
     anti_entropy_markdown_path: str | Path | None = None,
     anti_entropy_html_path: str | Path | None = None,
     anti_entropy_json_path: str | Path | None = None,
+    replay_html_path: str | Path | None = None,
 ) -> dict[str, str]:
     base_dir = Path(html_path).parent
     output_links: dict[str, str] = {}
@@ -987,6 +1021,7 @@ def build_companion_links(
         ("Anti-entropy Markdown", anti_entropy_markdown_path),
         ("Anti-entropy HTML", anti_entropy_html_path),
         ("Anti-entropy JSON", anti_entropy_json_path),
+        ("Replay HTML", replay_html_path),
     ):
         if target is None:
             continue
@@ -1128,6 +1163,357 @@ def render_timeline_html(
         </table>
       </section>
     </main>
+  </body>
+</html>
+'''
+
+
+def build_replay_frames(snapshot: dict[str, object]) -> list[dict[str, object]]:
+    replicas = sorted(dict(snapshot["replicas"]))
+    current_states = {replica: clone_state_view() for replica in replicas}
+    timeline_rows = build_timeline_rows(snapshot)
+    sync_rows_by_step = {
+        int(row["step"]): row for row in build_anti_entropy_report(snapshot)["sync_rows"]
+    }
+
+    def converged(states: dict[str, dict[str, object]]) -> bool:
+        signatures = {json.dumps(state, sort_keys=True) for state in states.values()}
+        return len(signatures) <= 1
+
+    frames = [
+        {
+            "step": 0,
+            "op": "initial",
+            "label": "Cluster starts empty",
+            "details": [
+                "No operations have run yet.",
+                "Use the slider or play button to scrub through adds, removes, and sync steps.",
+            ],
+            "focus_replicas": [],
+            "replicas": {replica: clone_state_view(state) for replica, state in current_states.items()},
+            "converged": converged(current_states),
+            "anti_entropy": {
+                "summary": "No anti-entropy transfer yet — this is the pre-script baseline.",
+                "transfers": [],
+            },
+        }
+    ]
+
+    for step, event in enumerate(snapshot["timeline"], start=1):
+        op = str(event["op"])
+        focus_replicas: list[str]
+        if op in {"add", "remove"}:
+            replica = str(event["replica"])
+            current_states[replica] = clone_state_view(dict(event["state"]))
+            focus_replicas = [replica]
+            anti_entropy = {
+                "summary": "Local mutation only — no anti-entropy transfer happens until a sync step.",
+                "transfers": [],
+            }
+        else:
+            source = str(event["source"])
+            target = str(event["target"])
+            current_states[source] = clone_state_view(dict(event["source_state"]))
+            current_states[target] = clone_state_view(dict(event["target_state"]))
+            focus_replicas = [source, target]
+            row = sync_rows_by_step.get(step)
+            if row:
+                transfers = [
+                    {
+                        "from": str(transfer["from"]),
+                        "to": str(transfer["to"]),
+                        "digest_pair": f"{str(transfer['from_digest'])[:12]}… vs {str(transfer['to_digest'])[:12]}…",
+                        "full_bytes": int(transfer["full_state"]["payload_bytes"]),
+                        "delta_bytes": int(transfer["delta"]["payload_bytes"]),
+                        "saved": int(transfer["bytes_saved_vs_full"]),
+                        "delta_payload": summarize_delta_payload(dict(transfer["delta_payload"])),
+                    }
+                    for transfer in row["transfers"]
+                ]
+                anti_entropy = {
+                    "summary": (
+                        f"{row['transfer_count']} directional transfer(s), {row['delta_sync_bytes']} delta byte(s), "
+                        f"saving {row['bytes_saved_vs_full']} vs full-state sync."
+                    ),
+                    "transfers": transfers,
+                }
+            else:
+                anti_entropy = {
+                    "summary": "Sync step recorded without anti-entropy metadata.",
+                    "transfers": [],
+                }
+        frame = {
+            "step": step,
+            "op": op,
+            "label": str(timeline_rows[step - 1]["event"]),
+            "details": [str(detail) for detail in timeline_rows[step - 1]["details"]],
+            "focus_replicas": focus_replicas,
+            "replicas": {replica: clone_state_view(state) for replica, state in current_states.items()},
+            "converged": converged(current_states),
+            "anti_entropy": anti_entropy,
+        }
+        frames.append(frame)
+    return frames
+
+
+def render_replay_html(
+    snapshot: dict[str, object],
+    title: str,
+    *,
+    companion_links: dict[str, str] | None = None,
+) -> str:
+    replicas = sorted(dict(snapshot["replicas"]))
+    counts = count_timeline_ops(snapshot)
+    frames = build_replay_frames(snapshot)
+    frame_count = max(len(frames) - 1, 0)
+    final_converged = bool(snapshot["convergence"]["converged"])
+    companion_links_html = "".join(
+        f'<li><a href="{escape_html(path)}">{escape_html(label)}</a></li>'
+        for label, path in (companion_links or {}).items()
+    )
+    if not companion_links_html:
+        companion_links_html = "<li>This replay page is self-contained, but companion file links appear when you export the timeline, anti-entropy, or comparison artifacts alongside it.</li>"
+    frames_json = json.dumps(frames, sort_keys=True).replace("</", "<\\/")
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set replay — {escape_html(title)}</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --warn: #92400e;
+        --warn-bg: #ffedd5;
+        --ok: #166534;
+        --ok-bg: #dcfce7;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1420px; margin: 0 auto; padding: 32px 20px 64px; }}
+      a {{ color: var(--accent); }}
+      button, input {{ font: inherit; }}
+      button {{ cursor: pointer; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p {{ color: var(--muted); max-width: 980px; }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }}
+      .summary-grid strong {{ display: block; font-size: 1.35rem; margin-bottom: 6px; }}
+      .layout {{ display: grid; gap: 24px; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.9fr); align-items: start; }}
+      .panel {{ padding: 22px; }}
+      .panel h2, .panel h3 {{ margin-top: 0; }}
+      .controls {{ display: grid; gap: 16px; }}
+      .step-meta {{ display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; }}
+      .status-pill {{ display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; font-weight: 700; }}
+      .status-pill.ok {{ background: var(--ok-bg); color: var(--ok); }}
+      .status-pill.warn {{ background: var(--warn-bg); color: var(--warn); }}
+      .button-row {{ display: flex; flex-wrap: wrap; gap: 10px; }}
+      .button-row button {{ border: 1px solid #bfdbfe; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 10px 16px; font-weight: 700; }}
+      .button-row button:disabled {{ opacity: 0.55; cursor: default; }}
+      .slider-wrap {{ display: grid; gap: 8px; }}
+      .slider-wrap label {{ font-weight: 700; }}
+      input[type=range] {{ width: 100%; }}
+      .detail-list, .artifact-links, .transfer-list {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      .detail-list li + li, .artifact-links li + li, .transfer-list li + li {{ margin-top: 8px; }}
+      .replica-grid {{ display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }}
+      .replica-card {{ border: 1px solid var(--border); border-radius: 20px; padding: 16px; background: #f8fafc; }}
+      .replica-card.focus {{ border-color: #60a5fa; box-shadow: inset 0 0 0 1px #bfdbfe; background: #eff6ff; }}
+      .replica-card h3 {{ margin: 0 0 10px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
+      .replica-card dl {{ margin: 0; display: grid; gap: 10px; }}
+      .replica-card dt {{ font-size: 0.85rem; font-weight: 700; color: var(--muted); }}
+      .replica-card dd {{ margin: 3px 0 0; font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }}
+      .anti-grid {{ display: grid; gap: 18px; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); align-items: start; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      .sr-only {{ position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }}
+      .note {{ padding: 14px 16px; border-radius: 18px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }}
+      @media (max-width: 1080px) {{
+        .layout, .anti-grid {{ grid-template-columns: 1fr; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set replay / animation</h1>
+        <p>This replay page turns the OR-Set timeline into a stepper you can scrub in a browser. It keeps the anti-entropy notes beside the replica states so a reviewer can see both the semantic change and the payload-cost story on the same screen.</p>
+        <p class="note">{escape_html(timeline_story(snapshot))}</p>
+        <ul class="summary-grid">
+          <li><strong>{len(replicas)}</strong> replicas ({escape_html(', '.join(replicas) or 'none')})</li>
+          <li><strong>{len(snapshot['timeline'])}</strong> timeline steps</li>
+          <li><strong>{counts['add']}/{counts['remove']}/{counts['sync']}</strong> add/remove/sync ops</li>
+          <li><strong>{frame_count}</strong> replayable steps</li>
+          <li><strong>{'true' if final_converged else 'false'}</strong> final convergence</li>
+          <li><strong>{escape_html(title)}</strong> scenario</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel controls">
+          <div class="step-meta">
+            <div>
+              <h2 id="replay-step-heading" style="margin-bottom: 6px;">Initial state</h2>
+              <div id="replay-step-label" class="note">Cluster starts empty.</div>
+            </div>
+            <div id="replay-status" class="status-pill ok">state converged</div>
+          </div>
+          <div class="button-row">
+            <button type="button" id="replay-prev">← Prev</button>
+            <button type="button" id="replay-play" aria-pressed="false">▶ Play</button>
+            <button type="button" id="replay-next">Next →</button>
+          </div>
+          <div class="slider-wrap">
+            <label for="replay-range">Replay step</label>
+            <input type="range" id="replay-range" min="0" max="{frame_count}" step="1" value="0" />
+            <div id="replay-step-counter" style="color: var(--muted);">Step 0 of {frame_count}</div>
+          </div>
+          <div>
+            <h3>What changed on this step?</h3>
+            <ul id="replay-details" class="detail-list"></ul>
+          </div>
+          <div>
+            <h3>Companion artifacts</h3>
+            <ul class="artifact-links">{companion_links_html}</ul>
+          </div>
+        </article>
+        <aside class="panel">
+          <h2>Replica states after this step</h2>
+          <div id="replica-grid" class="replica-grid"></div>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Anti-entropy transfer view</h2>
+        <div class="anti-grid">
+          <div>
+            <p id="anti-summary" class="note">No anti-entropy transfer yet — this is the pre-script baseline.</p>
+            <ul id="transfer-list" class="transfer-list"></ul>
+          </div>
+          <div>
+            <table>
+              <thead>
+                <tr><th>Transfer</th><th>Digests before</th><th>Full bytes</th><th>Delta bytes</th><th>Saved</th><th>Delta payload</th></tr>
+              </thead>
+              <tbody id="transfer-table-body">
+                <tr><td colspan="6">No sync transfer on this step.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <p id="replay-announce" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    </main>
+    <script>
+      const frames = {frames_json};
+      const stepHeading = document.getElementById('replay-step-heading');
+      const stepLabel = document.getElementById('replay-step-label');
+      const stepCounter = document.getElementById('replay-step-counter');
+      const statusPill = document.getElementById('replay-status');
+      const detailList = document.getElementById('replay-details');
+      const replicaGrid = document.getElementById('replica-grid');
+      const antiSummary = document.getElementById('anti-summary');
+      const transferList = document.getElementById('transfer-list');
+      const transferTableBody = document.getElementById('transfer-table-body');
+      const range = document.getElementById('replay-range');
+      const prevButton = document.getElementById('replay-prev');
+      const playButton = document.getElementById('replay-play');
+      const nextButton = document.getElementById('replay-next');
+      const announce = document.getElementById('replay-announce');
+
+      let frameIndex = 0;
+      let playTimer = null;
+
+      function stopPlayback() {{
+        if (playTimer !== null) {{
+          window.clearInterval(playTimer);
+          playTimer = null;
+        }}
+        playButton.textContent = '▶ Play';
+        playButton.setAttribute('aria-pressed', 'false');
+      }}
+
+      function renderReplicaCards(frame) {{
+        replicaGrid.innerHTML = Object.entries(frame.replicas).map(([replica, state]) => {{
+          const focused = frame.focus_replicas.includes(replica) ? ' focus' : '';
+          const rows = [
+            ['Elements', (state.elements || []).join(', ') || '∅'],
+            ['Active tags', Object.entries(state.active_tags || {{}}).map(([element, tags]) => `${{element}}=${{tags.join(', ') || '∅'}}`).join('; ') || '∅'],
+            ['Observed tags', Object.entries(state.observed_tags || {{}}).map(([element, tags]) => `${{element}}=${{tags.join(', ') || '∅'}}`).join('; ') || '∅'],
+            ['Tombstones', (state.tombstones || []).join(', ') || '∅'],
+            ['Counters', Object.entries(state.counters || {{}}).map(([name, count]) => `${{name}}:${{count}}`).join(', ') || '∅'],
+          ];
+          const body = rows.map(([label, value]) => `<div><dt>${{label}}</dt><dd>${{value}}</dd></div>`).join('');
+          return `<section class="replica-card${{focused}}"><h3><span><code>${{replica}}</code></span><span>${{focused ? 'focus' : 'stable'}}</span></h3><dl>${{body}}</dl></section>`;
+        }}).join('');
+      }}
+
+      function renderTransfers(frame) {{
+        const transfers = (frame.anti_entropy && frame.anti_entropy.transfers) || [];
+        antiSummary.textContent = frame.anti_entropy ? frame.anti_entropy.summary : 'No anti-entropy transfer on this step.';
+        transferList.innerHTML = transfers.length
+          ? transfers.map((transfer) => `<li><strong>${{transfer.from}} → ${{transfer.to}}</strong> — ${{transfer.delta_bytes}} delta bytes, saved ${{transfer.saved}} byte(s).</li>`).join('')
+          : '<li>No sync transfer on this step.</li>';
+        transferTableBody.innerHTML = transfers.length
+          ? transfers.map((transfer) => `<tr><td><code>${{transfer.from}} → ${{transfer.to}}</code></td><td><code>${{transfer.digest_pair}}</code></td><td>${{transfer.full_bytes}}</td><td>${{transfer.delta_bytes}}</td><td>${{transfer.saved}}</td><td>${{transfer.delta_payload}}</td></tr>`).join('')
+          : '<tr><td colspan="6">No sync transfer on this step.</td></tr>';
+      }}
+
+      function renderFrame(index) {{
+        frameIndex = index;
+        const frame = frames[index];
+        range.value = String(index);
+        const heading = index === 0 ? 'Initial state' : `Step ${{frame.step}}`;
+        stepHeading.textContent = heading;
+        stepLabel.textContent = frame.label;
+        stepCounter.textContent = `Step ${{index}} of ${{frames.length - 1}}`;
+        statusPill.textContent = frame.converged ? 'state converged' : 'state diverged';
+        statusPill.className = `status-pill ${{frame.converged ? 'ok' : 'warn'}}`;
+        detailList.innerHTML = frame.details.map((detail) => `<li>${{detail}}</li>`).join('');
+        renderReplicaCards(frame);
+        renderTransfers(frame);
+        prevButton.disabled = index === 0;
+        nextButton.disabled = index === frames.length - 1;
+        announce.textContent = `${{heading}} — ${{frame.label}}`;
+      }}
+
+      prevButton.addEventListener('click', () => {{
+        stopPlayback();
+        renderFrame(Math.max(0, frameIndex - 1));
+      }});
+      nextButton.addEventListener('click', () => {{
+        stopPlayback();
+        renderFrame(Math.min(frames.length - 1, frameIndex + 1));
+      }});
+      playButton.addEventListener('click', () => {{
+        if (playTimer !== null) {{
+          stopPlayback();
+          return;
+        }}
+        playButton.textContent = '❚❚ Pause';
+        playButton.setAttribute('aria-pressed', 'true');
+        playTimer = window.setInterval(() => {{
+          if (frameIndex >= frames.length - 1) {{
+            stopPlayback();
+            return;
+          }}
+          renderFrame(frameIndex + 1);
+        }}, 1600);
+      }});
+      range.addEventListener('input', (event) => {{
+        stopPlayback();
+        renderFrame(Number(event.target.value));
+      }});
+      renderFrame(0);
+    </script>
   </body>
 </html>
 '''
@@ -1390,6 +1776,7 @@ def write_anti_entropy_outputs(args: argparse.Namespace, snapshot: dict[str, obj
             ("Timeline Mermaid", args.timeline_mermaid_out),
             ("Timeline SVG", args.timeline_svg_out),
             ("Timeline JSON", args.json_out),
+            ("Replay HTML", args.replay_html_out),
             ("Anti-entropy Markdown", args.anti_entropy_markdown_out),
             ("Anti-entropy JSON", args.anti_entropy_json_out),
         ):
@@ -1805,6 +2192,7 @@ def write_comparison_outputs(args: argparse.Namespace, comparison: dict[str, obj
         for label, target in (
             ("Scenario script", args.script),
             ("OR-Set gallery", args.timeline_html_out),
+            ("OR-Set replay", args.replay_html_out),
             ("OR-Set Markdown timeline", args.timeline_markdown_out),
             ("OR-Set Mermaid source", args.timeline_mermaid_out),
             ("OR-Set SVG card", args.timeline_svg_out),
@@ -1837,6 +2225,7 @@ def add_timeline_output_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeline-mermaid-out")
     parser.add_argument("--timeline-svg-out")
     parser.add_argument("--timeline-html-out")
+    parser.add_argument("--replay-html-out")
     parser.add_argument("--json-out")
     parser.add_argument("--anti-entropy-markdown-out")
     parser.add_argument("--anti-entropy-html-out")
@@ -1853,6 +2242,34 @@ def timeline_title_from_args(args: argparse.Namespace) -> str:
     return f"sync flow {args.source} {args.direction} {args.target}"
 
 
+def write_replay_output(args: argparse.Namespace, snapshot: dict[str, object], title: str) -> None:
+    if not args.replay_html_out:
+        return
+    companion_links = build_companion_links(
+        html_path=args.replay_html_out,
+        markdown_path=args.timeline_markdown_out,
+        mermaid_path=args.timeline_mermaid_out,
+        svg_path=args.timeline_svg_out,
+        json_path=args.json_out,
+        script_path=args.script if getattr(args, "command", None) in {"run-script", "compare-script"} else None,
+        anti_entropy_markdown_path=args.anti_entropy_markdown_out,
+        anti_entropy_html_path=args.anti_entropy_html_out,
+        anti_entropy_json_path=args.anti_entropy_json_out,
+    )
+    base_dir = Path(args.replay_html_out).parent
+    if getattr(args, "timeline_html_out", None):
+        companion_links["Timeline gallery"] = Path(os.path.relpath(Path(args.timeline_html_out), base_dir)).as_posix()
+    if getattr(args, "comparison_html_out", None):
+        for label, target in (
+            ("Comparison HTML", args.comparison_html_out),
+            ("Comparison Markdown", getattr(args, "comparison_markdown_out", None)),
+            ("Comparison JSON", getattr(args, "comparison_json_out", None)),
+        ):
+            if target:
+                companion_links[label] = Path(os.path.relpath(Path(target), base_dir)).as_posix()
+    write_text_output(args.replay_html_out, render_replay_html(snapshot, title, companion_links=companion_links))
+
+
 def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]) -> None:
     if not any(
         [
@@ -1860,6 +2277,7 @@ def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]
             args.timeline_mermaid_out,
             args.timeline_svg_out,
             args.timeline_html_out,
+            args.replay_html_out,
             args.json_out,
             args.anti_entropy_markdown_out,
             args.anti_entropy_html_out,
@@ -1888,12 +2306,14 @@ def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]
             anti_entropy_markdown_path=args.anti_entropy_markdown_out,
             anti_entropy_html_path=args.anti_entropy_html_out,
             anti_entropy_json_path=args.anti_entropy_json_out,
+            replay_html_path=args.replay_html_out,
         )
         write_text_output(
             args.timeline_html_out,
             render_timeline_html(snapshot, title, companion_links=companion_links),
         )
     write_anti_entropy_outputs(args, snapshot)
+    write_replay_output(args, snapshot, title)
 
 
 def build_parser() -> argparse.ArgumentParser:

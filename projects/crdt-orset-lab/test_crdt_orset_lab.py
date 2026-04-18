@@ -11,6 +11,7 @@ from crdt_orset_lab import (
     ReplicaCluster,
     build_anti_entropy_report,
     build_companion_links,
+    build_replay_frames,
     build_semantics_comparison,
     load_script,
     parse_tag,
@@ -18,6 +19,7 @@ from crdt_orset_lab import (
     render_anti_entropy_markdown,
     render_comparison_html,
     render_comparison_markdown,
+    render_replay_html,
     render_timeline_html,
     render_timeline_markdown,
     render_timeline_mermaid,
@@ -260,6 +262,36 @@ class ORSetLabTests(unittest.TestCase):
         self.assertIn("a: elements notes; active notes=a:1; tombstones ∅", html)
         self.assertIn("b: elements ∅; active ∅; tombstones ∅", html)
 
+    def test_build_replay_frames_tracks_replica_state_and_sync_payloads(self) -> None:
+        cluster = ReplicaCluster(["a", "b", "c"])
+        snapshot = cluster.run_script(load_script(SAMPLE_SCRIPT))
+
+        frames = build_replay_frames(snapshot)
+
+        self.assertEqual(frames[0]["label"], "Cluster starts empty")
+        self.assertEqual(frames[1]["replicas"]["a"]["active_tags"]["notebook"], ["a:1"])
+        self.assertEqual(frames[2]["anti_entropy"]["transfers"][0]["from"], "a")
+        self.assertEqual(frames[-1]["replicas"]["b"]["active_tags"]["notebook"], ["c:1"])
+        self.assertTrue(frames[-1]["converged"])
+
+    def test_render_replay_html_includes_scrubber_and_anti_entropy_table(self) -> None:
+        cluster = ReplicaCluster(["a", "b", "c"])
+        snapshot = cluster.run_script(load_script(SAMPLE_SCRIPT))
+
+        html = render_replay_html(
+            snapshot,
+            "sample replay",
+            companion_links={"Timeline HTML": "timeline.html"},
+        )
+
+        self.assertIn("OR-Set replay / animation", html)
+        self.assertIn('id="replay-range"', html)
+        self.assertIn("Anti-entropy transfer view", html)
+        self.assertIn('href="timeline.html"', html)
+        self.assertIn('aria-pressed="false"', html)
+        self.assertIn('aria-live="polite" aria-atomic="true"', html)
+        self.assertIn("const frames =", html)
+
     def test_cli_run_script_writes_timeline_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             artifact_dir = Path(temp_dir) / "artifacts"
@@ -464,6 +496,40 @@ class ORSetLabTests(unittest.TestCase):
             self.assertGreaterEqual(anti_json["totals"]["bytes_saved_vs_full"], 0)
             self.assertEqual(anti_json["sync_count"], 4)
 
+    def test_cli_run_script_writes_replay_html(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir) / "artifacts"
+            timeline_html_path = artifact_dir / "timeline.html"
+            replay_html_path = artifact_dir / "replay.html"
+            anti_html_path = artifact_dir / "anti-entropy.html"
+
+            result = run_cli(
+                "run-script",
+                "--replicas",
+                "a",
+                "b",
+                "c",
+                "--script",
+                str(SAMPLE_SCRIPT),
+                "--timeline-html-out",
+                str(timeline_html_path),
+                "--replay-html-out",
+                str(replay_html_path),
+                "--anti-entropy-html-out",
+                str(anti_html_path),
+            )
+
+            self.assertTrue(result["convergence"]["converged"])
+            replay_html = replay_html_path.read_text()
+            self.assertIn("OR-Set replay / animation", replay_html)
+            self.assertIn('href="timeline.html"', replay_html)
+            self.assertIn('href="anti-entropy.html"', replay_html)
+            self.assertIn('id="replay-play"', replay_html)
+            timeline_html = timeline_html_path.read_text()
+            self.assertIn('href="replay.html"', timeline_html)
+            anti_html = anti_html_path.read_text()
+            self.assertIn('href="replay.html"', anti_html)
+
     def test_anti_entropy_markdown_handles_no_syncs(self) -> None:
         cluster = ReplicaCluster(["a", "b"])
         cluster.add("a", "notes")
@@ -481,6 +547,7 @@ class ORSetLabTests(unittest.TestCase):
             anti_markdown_path = artifact_dir / "anti-entropy.md"
             anti_html_path = artifact_dir / "anti-entropy.html"
             anti_json_path = artifact_dir / "anti-entropy.json"
+            replay_html_path = artifact_dir / "replay.html"
             comparison_html_path = artifact_dir / "comparison.html"
 
             result = run_cli(
@@ -499,6 +566,8 @@ class ORSetLabTests(unittest.TestCase):
                 str(anti_html_path),
                 "--anti-entropy-json-out",
                 str(anti_json_path),
+                "--replay-html-out",
+                str(replay_html_path),
                 "--comparison-html-out",
                 str(comparison_html_path),
             )
@@ -506,9 +575,12 @@ class ORSetLabTests(unittest.TestCase):
             self.assertEqual(result["final_divergence"][0]["element"], "notebook")
             self.assertTrue(anti_html_path.exists())
             self.assertTrue(comparison_html_path.exists())
+            self.assertTrue(replay_html_path.exists())
             self.assertIn('href="anti-entropy.html"', comparison_html_path.read_text())
+            self.assertIn('href="replay.html"', comparison_html_path.read_text())
             self.assertIn('href="anti-entropy.md"', anti_html_path.read_text())
             self.assertIn('href="anti-entropy.json"', anti_html_path.read_text())
+            self.assertIn('href="comparison.html"', replay_html_path.read_text())
 
     def test_duplicate_replicas_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "replica names must be unique"):
