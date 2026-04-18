@@ -1,0 +1,12 @@
+{
+  "scenario": "observed-remove semantics keep a concurrent/new tag alive after an earlier observed tag is removed",
+  "operations": [
+    {"op": "add", "replica": "a", "element": "notebook"},
+    {"op": "sync", "source": "a", "target": "b", "direction": "both"},
+    {"op": "remove", "replica": "b", "element": "notebook"},
+    {"op": "add", "replica": "c", "element": "notebook"},
+    {"op": "sync", "source": "c", "target": "a", "direction": "both"},
+    {"op": "sync", "source": "a", "target": "b", "direction": "both"},
+    {"op": "sync", "source": "a", "target": "c", "direction": "both"}
+  ]
+}
