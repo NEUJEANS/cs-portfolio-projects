@@ -1,6 +1,18 @@
 # crdt-orset-lab checklist
 
-## Current slice (2026-04-18 19:41 UTC run)
+## Current slice (2026-04-18 20:11 UTC run)
+- [x] confirm `main` still matches `origin/main` before editing and preserve the local anti-entropy diff
+- [ ] do only the brief CRDT anti-entropy/delta-state refresh needed for wording and scope
+- [ ] do a short Python/CLI self-test refresh for digest/delta export paths
+- [ ] update/add checklist markdown for the anti-entropy slice
+- [ ] finish the digest + delta-state reporting flow and expose anti-entropy Markdown/HTML/JSON outputs from the CLI
+- [ ] generate and commit anti-entropy artifact bundles for the baseline OR-Set sample and the OR-Set side of the comparison scenario
+- [ ] update README usage, artifact examples, and future follow-up notes
+- [ ] extend regression coverage for anti-entropy summaries and CLI export wiring
+- [ ] run targeted tests, smoke checks, and 3 review passes
+- [ ] run secret scan, commit, push, and write the wrap-up
+
+## Previous slice (2026-04-18 19:41 UTC run)
 - [x] confirm `main` is synced with `origin/main` before editing
 - [x] inspect and preserve the pre-existing local in-progress `crdt_orset_lab.py` comparison diff instead of overwriting it
 - [x] do brief semantics verification only as needed for OR-Set vs LWW comparison wording
@@ -10,18 +22,6 @@
 - [x] add a committed timestamped comparison scenario that makes OR-Set and LWW diverge on final membership
 - [x] regenerate and commit the comparison artifact bundle under `docs/artifacts/crdt-orset-lab/`
 - [x] extend regression coverage for LWW state handling and `compare-script` outputs
-- [x] run targeted tests, smoke checks, and 3 review passes
-- [x] run secret scan, commit, push, and write the wrap-up
-
-## Previous slice (2026-04-18 19:10 UTC run)
-- [x] confirm `main` is synced with `origin/main` before editing
-- [x] do brief research on an accessible way to bundle linked HTML artifact galleries
-- [x] do a short HTML artifact refresh and self-test note if needed
-- [x] update/add checklist markdown for the gallery slice
-- [x] add a small HTML gallery/index export that links the Markdown, Mermaid, SVG, and JSON sample outputs together
-- [x] add snapshot JSON export support so the gallery can link to raw machine-readable state
-- [x] commit the refreshed sample artifact bundle for `sample_ops.json`
-- [x] add regression coverage for the new HTML/JSON export paths
 - [x] run targeted tests, smoke checks, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
 

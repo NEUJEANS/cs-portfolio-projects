@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from dataclasses import dataclass
@@ -162,15 +163,16 @@ class ReplicaCluster:
         self._validate_sync_direction(direction)
         self._state(source)
         self._state(target)
+        source_before = self.states[source].copy()
+        target_before = self.states[target].copy()
+        anti_entropy = build_sync_anti_entropy(source, target, source_before, target_before, direction=direction)
         if direction == "both":
-            source_before = self.states[source].copy()
-            target_before = self.states[target].copy()
             self.states[source] = source_before.merge(target_before)
             self.states[target] = target_before.merge(source_before)
         elif direction == "forward":
-            self.states[target] = self.states[target].merge(self.states[source])
+            self.states[target] = target_before.merge(source_before)
         else:
-            self.states[source] = self.states[source].merge(self.states[target])
+            self.states[source] = source_before.merge(target_before)
 
         event = {
             "op": "sync",
@@ -179,6 +181,7 @@ class ReplicaCluster:
             "direction": direction,
             "source_state": self.states[source].to_dict(),
             "target_state": self.states[target].to_dict(),
+            "anti_entropy": anti_entropy,
         }
         self.timeline.append(event)
         return event
@@ -518,6 +521,160 @@ def load_script(path: str | Path) -> list[dict[str, object]]:
     return operations
 
 
+def canonical_json_text(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def payload_bytes(value: object) -> int:
+    return len(canonical_json_text(value).encode("utf-8"))
+
+
+def transport_payload_from_orset(state: ORSet) -> dict[str, object]:
+    return {
+        "adds": {
+            element: sorted(tags)
+            for element, tags in sorted(state.adds.items())
+            if tags
+        },
+        "tombstones": sorted(state.tombstones),
+        "counters": dict(sorted(state.counters.items())),
+    }
+
+
+def transport_payload_from_state_dict(state: dict[str, object]) -> dict[str, object]:
+    return {
+        "adds": {
+            str(element): [str(tag) for tag in tags]
+            for element, tags in sorted(dict(state["observed_tags"]).items())
+            if tags
+        },
+        "tombstones": [str(tag) for tag in state["tombstones"]],
+        "counters": {str(replica): int(counter) for replica, counter in sorted(dict(state["counters"]).items())},
+    }
+
+
+def payload_summary(
+    payload: dict[str, object],
+    *,
+    active_elements: Sequence[object] | None = None,
+    active_tags: dict[str, Sequence[object]] | None = None,
+) -> dict[str, object]:
+    adds = {str(element): [str(tag) for tag in tags] for element, tags in dict(payload.get("adds", {})).items()}
+    tombstones = [str(tag) for tag in payload.get("tombstones", [])]
+    counters = {str(replica): int(counter) for replica, counter in dict(payload.get("counters", {})).items()}
+    observed_tag_count = sum(len(tags) for tags in adds.values())
+    summary: dict[str, object] = {
+        "digest": hashlib.sha256(canonical_json_text(payload).encode("utf-8")).hexdigest(),
+        "payload_bytes": payload_bytes(payload),
+        "element_count": len(adds),
+        "observed_tag_count": observed_tag_count,
+        "tombstone_count": len(tombstones),
+        "counter_count": len(counters),
+    }
+    if active_elements is not None:
+        summary["active_element_count"] = len(list(active_elements))
+    if active_tags is not None:
+        summary["active_tag_count"] = sum(len(tags) for tags in active_tags.values())
+    return summary
+
+
+def digest_view_from_orset(state: ORSet) -> dict[str, object]:
+    payload = transport_payload_from_orset(state)
+    return payload_summary(
+        payload,
+        active_elements=state.elements(),
+        active_tags={element: sorted(state.active_tags(element)) for element in state.adds if state.active_tags(element)},
+    )
+
+
+def digest_view_from_state_dict(state: dict[str, object]) -> dict[str, object]:
+    payload = transport_payload_from_state_dict(state)
+    return payload_summary(
+        payload,
+        active_elements=[str(element) for element in state["elements"]],
+        active_tags={str(element): [str(tag) for tag in tags] for element, tags in dict(state["active_tags"]).items()},
+    )
+
+
+def delta_payload(source: ORSet, target: ORSet) -> dict[str, object]:
+    missing_adds: dict[str, list[str]] = {}
+    for element, tags in sorted(source.adds.items()):
+        missing = sorted(tags - target.adds.get(element, set()))
+        if missing:
+            missing_adds[element] = missing
+    counter_advancements = {
+        replica: counter
+        for replica, counter in sorted(source.counters.items())
+        if counter > target.counters.get(replica, 0)
+    }
+    return {
+        "adds": missing_adds,
+        "tombstones": sorted(source.tombstones - target.tombstones),
+        "counters": counter_advancements,
+    }
+
+
+def summarize_scalar_mapping(mapping: dict[str, object]) -> str:
+    parts: list[str] = []
+    for key in sorted(mapping):
+        parts.append(f"{key}={mapping[key]}")
+    return "; ".join(parts) if parts else "∅"
+
+
+def summarize_delta_payload(payload: dict[str, object]) -> str:
+    adds = summarize_tag_mapping({str(element): [str(tag) for tag in tags] for element, tags in dict(payload.get("adds", {})).items()})
+    tombstones = ", ".join(str(tag) for tag in payload.get("tombstones", [])) or "∅"
+    counters = summarize_scalar_mapping({str(replica): int(counter) for replica, counter in dict(payload.get("counters", {})).items()})
+    return f"tags {adds}; tombstones {tombstones}; counters {counters}"
+
+
+def build_directional_transfer(source_name: str, target_name: str, source: ORSet, target: ORSet) -> dict[str, object]:
+    source_digest = digest_view_from_orset(source)
+    target_digest = digest_view_from_orset(target)
+    delta = delta_payload(source, target)
+    delta_summary = payload_summary(delta)
+    return {
+        "from": source_name,
+        "to": target_name,
+        "from_digest": source_digest["digest"],
+        "to_digest": target_digest["digest"],
+        "digest_match_before": source_digest["digest"] == target_digest["digest"],
+        "full_state": source_digest,
+        "delta": delta_summary,
+        "delta_payload": delta,
+        "bytes_saved_vs_full": int(source_digest["payload_bytes"]) - int(delta_summary["payload_bytes"]),
+    }
+
+
+def build_sync_anti_entropy(
+    source_name: str,
+    target_name: str,
+    source_before: ORSet,
+    target_before: ORSet,
+    *,
+    direction: str,
+) -> dict[str, object]:
+    source_digest = digest_view_from_orset(source_before)
+    target_digest = digest_view_from_orset(target_before)
+    transfers: list[dict[str, object]] = []
+    if direction in {"both", "forward"}:
+        transfers.append(build_directional_transfer(source_name, target_name, source_before, target_before))
+    if direction in {"both", "reverse"}:
+        transfers.append(build_directional_transfer(target_name, source_name, target_before, source_before))
+    full_sync_bytes = sum(int(transfer["full_state"]["payload_bytes"]) for transfer in transfers)
+    delta_sync_bytes = sum(int(transfer["delta"]["payload_bytes"]) for transfer in transfers)
+    return {
+        "source_before": source_digest,
+        "target_before": target_digest,
+        "digest_match_before": source_digest["digest"] == target_digest["digest"],
+        "transfers": transfers,
+        "transfer_count": len(transfers),
+        "full_sync_bytes": full_sync_bytes,
+        "delta_sync_bytes": delta_sync_bytes,
+        "bytes_saved_vs_full": full_sync_bytes - delta_sync_bytes,
+    }
+
+
 def summarize_tag_mapping(mapping: dict[str, Sequence[str]]) -> str:
     parts: list[str] = []
     for element in sorted(mapping):
@@ -815,6 +972,9 @@ def build_companion_links(
     svg_path: str | Path | None = None,
     json_path: str | Path | None = None,
     script_path: str | Path | None = None,
+    anti_entropy_markdown_path: str | Path | None = None,
+    anti_entropy_html_path: str | Path | None = None,
+    anti_entropy_json_path: str | Path | None = None,
 ) -> dict[str, str]:
     base_dir = Path(html_path).parent
     output_links: dict[str, str] = {}
@@ -824,6 +984,9 @@ def build_companion_links(
         ("Mermaid source", mermaid_path),
         ("SVG card", svg_path),
         ("JSON snapshot", json_path),
+        ("Anti-entropy Markdown", anti_entropy_markdown_path),
+        ("Anti-entropy HTML", anti_entropy_html_path),
+        ("Anti-entropy JSON", anti_entropy_json_path),
     ):
         if target is None:
             continue
@@ -874,7 +1037,7 @@ def render_timeline_html(
         for label, path in (companion_links or {}).items()
     )
     if not companion_links_html:
-        companion_links_html = "<li>This HTML page is self-contained, but companion file links appear when you export Markdown, Mermaid, SVG, or JSON outputs alongside it.</li>"
+        companion_links_html = "<li>This HTML page is self-contained, but companion file links appear when you export Markdown, Mermaid, SVG, JSON, or anti-entropy outputs alongside it.</li>"
 
     return f'''<!doctype html>
 <html lang="en">
@@ -968,6 +1131,276 @@ def render_timeline_html(
   </body>
 </html>
 '''
+
+
+def anti_entropy_story(report: dict[str, object]) -> str:
+    sync_rows = list(report["sync_rows"])
+    if not sync_rows:
+        return (
+            "This run has no anti-entropy exchange yet, so the digest view only shows each replica's current OR-Set payload footprint. "
+            "Add a sync step to compare full-state shipping against delta-state transfer size."
+        )
+    totals = dict(report["totals"])
+    largest = max(sync_rows, key=lambda row: int(row["delta_sync_bytes"]))
+    largest_bytes = int(largest["delta_sync_bytes"])
+    return (
+        f"Across {totals['transfer_count']} directional sync transfer(s), shipping whole OR-Set states would cost {totals['full_sync_bytes']} byte(s), "
+        f"while delta-state transfer needs {totals['delta_sync_bytes']} byte(s), saving {totals['bytes_saved_vs_full']} byte(s). "
+        f"The largest sync delta in this run is step {largest['step']} at {largest_bytes} byte(s)."
+    )
+
+
+def build_anti_entropy_report(snapshot: dict[str, object]) -> dict[str, object]:
+    replica_digests = {
+        replica: digest_view_from_state_dict(dict(state))
+        for replica, state in dict(snapshot["replicas"]).items()
+    }
+    sync_rows: list[dict[str, object]] = []
+    transfer_count = 0
+    total_full_bytes = 0
+    total_delta_bytes = 0
+    for step, event in enumerate(snapshot["timeline"], start=1):
+        if str(event["op"]) != "sync":
+            continue
+        analysis = dict(event.get("anti_entropy") or {})
+        if not analysis:
+            continue
+        direction = str(event["direction"])
+        arrow = {"both": "↔", "forward": "→", "reverse": "←"}[direction]
+        row = {
+            "step": step,
+            "event": f"{event['source']} {arrow} {event['target']} sync ({direction})",
+            **analysis,
+        }
+        sync_rows.append(row)
+        transfer_count += int(analysis.get("transfer_count", 0))
+        total_full_bytes += int(analysis.get("full_sync_bytes", 0))
+        total_delta_bytes += int(analysis.get("delta_sync_bytes", 0))
+    report = {
+        "replicas": sorted(dict(snapshot["replicas"])),
+        "step_count": len(snapshot["timeline"]),
+        "sync_count": len(sync_rows),
+        "final_replica_digests": replica_digests,
+        "sync_rows": sync_rows,
+        "totals": {
+            "transfer_count": transfer_count,
+            "full_sync_bytes": total_full_bytes,
+            "delta_sync_bytes": total_delta_bytes,
+            "bytes_saved_vs_full": total_full_bytes - total_delta_bytes,
+        },
+    }
+    report["story"] = anti_entropy_story(report)
+    return report
+
+
+def render_anti_entropy_markdown(report: dict[str, object], title: str) -> str:
+    lines = [
+        f"# OR-Set anti-entropy report — {title}",
+        "",
+        f"Replicas: {', '.join(report['replicas'])}",
+        "",
+        f"Story: {report['story']}",
+        "",
+        "## Totals",
+        "",
+        f"- sync steps: `{report['sync_count']}`",
+        f"- directional transfers: `{report['totals']['transfer_count']}`",
+        f"- full-state bytes: `{report['totals']['full_sync_bytes']}`",
+        f"- delta-state bytes: `{report['totals']['delta_sync_bytes']}`",
+        f"- bytes saved vs full-state sync: `{report['totals']['bytes_saved_vs_full']}`",
+        "",
+        "## Final replica digests",
+        "",
+    ]
+    for replica, digest in report["final_replica_digests"].items():
+        lines.append(
+            f"- `{replica}` — digest `{digest['digest'][:16]}`…, payload `{digest['payload_bytes']}` bytes, observed tags `{digest['observed_tag_count']}`, tombstones `{digest['tombstone_count']}`, counters `{digest['counter_count']}`"
+        )
+    lines.extend([
+        "",
+        "## Sync transfer details",
+        "",
+        "| Step | Event | Transfer | Digests before | Full bytes | Delta bytes | Saved | Delta payload |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ])
+    if not report["sync_rows"]:
+        lines.append("| n/a | no syncs yet | none | n/a | 0 | 0 | 0 | no transfer |")
+        return "\n".join(lines) + "\n"
+    for row in report["sync_rows"]:
+        transfers = list(row["transfers"])
+        if not transfers:
+            lines.append(f"| {row['step']} | {row['event']} | none | n/a | 0 | 0 | 0 | no transfer |")
+            continue
+        for transfer in transfers:
+            digest_pair = f"{transfer['from_digest'][:12]}… vs {transfer['to_digest'][:12]}…"
+            delta_text = summarize_delta_payload(dict(transfer["delta_payload"]))
+            event_text = str(row["event"]).replace("|", "\\|")
+            delta_text = delta_text.replace("|", "\\|")
+            lines.append(
+                f"| {row['step']} | {event_text} | `{transfer['from']} -> {transfer['to']}` | `{digest_pair}` | {transfer['full_state']['payload_bytes']} | {transfer['delta']['payload_bytes']} | {transfer['bytes_saved_vs_full']} | {delta_text} |"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def render_anti_entropy_html(
+    report: dict[str, object],
+    title: str,
+    *,
+    companion_links: dict[str, str] | None = None,
+) -> str:
+    digest_cards = "".join(
+        f'<li><strong><code>{escape_html(replica)}</code></strong>'
+        f'<span>digest {escape_html(str(digest["digest"])[:16])}…</span>'
+        f'<span>{escape_html(str(digest["payload_bytes"]))} bytes · observed tags {escape_html(str(digest["observed_tag_count"]))} · tombstones {escape_html(str(digest["tombstone_count"]))} · counters {escape_html(str(digest["counter_count"]))}</span></li>'
+        for replica, digest in report["final_replica_digests"].items()
+    )
+    transfer_rows_html = "".join(
+        "<tr>"
+        f"<td>{row['step']}</td>"
+        f"<td>{escape_html(str(row['event']))}</td>"
+        f"<td>{escape_html(f'{transfer['from']} -> {transfer['to']}')}</td>"
+        f"<td><code>{escape_html(str(transfer['from_digest'])[:12])}…</code><br /><code>{escape_html(str(transfer['to_digest'])[:12])}…</code></td>"
+        f"<td>{transfer['full_state']['payload_bytes']}</td>"
+        f"<td>{transfer['delta']['payload_bytes']}</td>"
+        f"<td>{transfer['bytes_saved_vs_full']}</td>"
+        f"<td>{escape_html(summarize_delta_payload(dict(transfer['delta_payload'])))}</td>"
+        "</tr>"
+        for row in report["sync_rows"]
+        for transfer in row["transfers"]
+    )
+    if not transfer_rows_html:
+        transfer_rows_html = '<tr><td colspan="8">No sync steps yet — this report is ready once the scenario includes anti-entropy traffic.</td></tr>'
+    companion_links_html = "".join(
+        f'<li><a href="{escape_html(path)}">{escape_html(label)}</a></li>'
+        for label, path in (companion_links or {}).items()
+    )
+    if not companion_links_html:
+        companion_links_html = "<li>This anti-entropy page is self-contained. Export Markdown/JSON or the timeline gallery alongside it to add companion links.</li>"
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set anti-entropy report — {escape_html(title)}</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .story {{ padding: 14px 16px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; color: #3730a3; }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; padding: 16px 18px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }}
+      .summary-grid strong {{ display: block; font-size: 1.3rem; margin-bottom: 6px; }}
+      .layout {{ display: grid; gap: 24px; grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr); align-items: start; }}
+      .panel {{ padding: 22px; }}
+      .panel h2, .panel h3 {{ margin-top: 0; }}
+      .digest-list, .artifact-links {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      .digest-list li + li, .artifact-links li + li {{ margin-top: 10px; }}
+      .digest-list strong {{ color: var(--text); display: block; margin-bottom: 4px; }}
+      .digest-list span {{ display: block; line-height: 1.5; }}
+      .callout {{ padding: 14px 16px; border-radius: 18px; background: var(--good-bg); color: var(--good); line-height: 1.5; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+      a {{ color: var(--accent); }}
+      @media (max-width: 1080px) {{ .layout {{ grid-template-columns: 1fr; }} }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set anti-entropy report</h1>
+        <p>This view turns the same scripted CRDT run into a merge-cost story: digest summaries show how large each replica state is, while per-sync delta payloads show how much data actually needs to move when replicas reconcile.</p>
+        <p class="story">{escape_html(str(report['story']))}</p>
+        <ul class="summary-grid">
+          <li><strong>{report['sync_count']}</strong> sync steps</li>
+          <li><strong>{report['totals']['transfer_count']}</strong> directional transfers</li>
+          <li><strong>{report['totals']['full_sync_bytes']}</strong> full-state bytes</li>
+          <li><strong>{report['totals']['delta_sync_bytes']}</strong> delta-state bytes</li>
+          <li><strong>{report['totals']['bytes_saved_vs_full']}</strong> bytes saved</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel">
+          <h2>{escape_html(title)}</h2>
+          <div class="callout"><strong>Digest view:</strong> compare replica state fingerprints before a sync. <strong>Delta view:</strong> send only the missing tags, tombstones, and counter advances instead of the whole OR-Set payload.</div>
+          <h3 style="margin-top: 18px;">Final replica digests</h3>
+          <ul class="digest-list">{digest_cards}</ul>
+        </article>
+        <aside class="panel">
+          <h2>Companion artifacts</h2>
+          <ul class="artifact-links">{companion_links_html}</ul>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Sync transfer details</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Event</th><th>Transfer</th><th>Digests before</th><th>Full bytes</th><th>Delta bytes</th><th>Saved</th><th>Delta payload</th></tr>
+          </thead>
+          <tbody>{transfer_rows_html}</tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
+def anti_entropy_title_from_args(args: argparse.Namespace) -> str:
+    return timeline_title_from_args(args)
+
+
+def write_anti_entropy_outputs(args: argparse.Namespace, snapshot: dict[str, object]) -> None:
+    if not any(
+        [
+            args.anti_entropy_markdown_out,
+            args.anti_entropy_html_out,
+            args.anti_entropy_json_out,
+        ]
+    ):
+        return
+    report = build_anti_entropy_report(snapshot)
+    title = anti_entropy_title_from_args(args)
+    if args.anti_entropy_json_out:
+        write_text_output(args.anti_entropy_json_out, json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if args.anti_entropy_markdown_out:
+        write_text_output(args.anti_entropy_markdown_out, render_anti_entropy_markdown(report, title))
+    if args.anti_entropy_html_out:
+        base_dir = Path(args.anti_entropy_html_out).parent
+        companion_links: dict[str, str] = {}
+        for label, target in (
+            ("Scenario script", getattr(args, "script", None) if getattr(args, "command", None) in {"run-script", "compare-script"} else None),
+            ("Timeline gallery", args.timeline_html_out),
+            ("Timeline Markdown", args.timeline_markdown_out),
+            ("Timeline Mermaid", args.timeline_mermaid_out),
+            ("Timeline SVG", args.timeline_svg_out),
+            ("Timeline JSON", args.json_out),
+            ("Anti-entropy Markdown", args.anti_entropy_markdown_out),
+            ("Anti-entropy JSON", args.anti_entropy_json_out),
+        ):
+            if not target:
+                continue
+            relative = os.path.relpath(Path(target), base_dir)
+            companion_links[label] = Path(relative).as_posix()
+        write_text_output(
+            args.anti_entropy_html_out,
+            render_anti_entropy_html(report, title, companion_links=companion_links),
+        )
 
 
 def summarize_timestamp_mapping(mapping: dict[str, object]) -> str:
@@ -1376,6 +1809,9 @@ def write_comparison_outputs(args: argparse.Namespace, comparison: dict[str, obj
             ("OR-Set Mermaid source", args.timeline_mermaid_out),
             ("OR-Set SVG card", args.timeline_svg_out),
             ("OR-Set JSON snapshot", args.json_out),
+            ("OR-Set anti-entropy Markdown", args.anti_entropy_markdown_out),
+            ("OR-Set anti-entropy HTML", args.anti_entropy_html_out),
+            ("OR-Set anti-entropy JSON", args.anti_entropy_json_out),
             ("Comparison Markdown", args.comparison_markdown_out),
             ("Comparison JSON", args.comparison_json_out),
         ):
@@ -1402,6 +1838,9 @@ def add_timeline_output_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeline-svg-out")
     parser.add_argument("--timeline-html-out")
     parser.add_argument("--json-out")
+    parser.add_argument("--anti-entropy-markdown-out")
+    parser.add_argument("--anti-entropy-html-out")
+    parser.add_argument("--anti-entropy-json-out")
 
 
 def timeline_title_from_args(args: argparse.Namespace) -> str:
@@ -1422,6 +1861,9 @@ def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]
             args.timeline_svg_out,
             args.timeline_html_out,
             args.json_out,
+            args.anti_entropy_markdown_out,
+            args.anti_entropy_html_out,
+            args.anti_entropy_json_out,
         ]
     ):
         return
@@ -1443,11 +1885,15 @@ def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]
             svg_path=args.timeline_svg_out,
             json_path=args.json_out,
             script_path=args.script if getattr(args, "command", None) in {"run-script", "compare-script"} else None,
+            anti_entropy_markdown_path=args.anti_entropy_markdown_out,
+            anti_entropy_html_path=args.anti_entropy_html_out,
+            anti_entropy_json_path=args.anti_entropy_json_out,
         )
         write_text_output(
             args.timeline_html_out,
             render_timeline_html(snapshot, title, companion_links=companion_links),
         )
+    write_anti_entropy_outputs(args, snapshot)
 
 
 def build_parser() -> argparse.ArgumentParser:

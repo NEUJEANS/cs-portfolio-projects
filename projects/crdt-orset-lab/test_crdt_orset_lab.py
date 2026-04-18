@@ -9,10 +9,13 @@ from crdt_orset_lab import (
     LWWElementSet,
     ORSet,
     ReplicaCluster,
+    build_anti_entropy_report,
     build_companion_links,
     build_semantics_comparison,
     load_script,
     parse_tag,
+    render_anti_entropy_html,
+    render_anti_entropy_markdown,
     render_comparison_html,
     render_comparison_markdown,
     render_timeline_html,
@@ -388,6 +391,124 @@ class ORSetLabTests(unittest.TestCase):
             self.assertIn("single add a:notes", markdown_path.read_text())
             self.assertIn("add notes [a:1]", mermaid_path.read_text())
             self.assertIn("single add a:notes", svg_path.read_text())
+
+    def test_sync_events_capture_anti_entropy_summary(self) -> None:
+        cluster = ReplicaCluster(["a", "b", "c"])
+        snapshot = cluster.run_script(load_script(SAMPLE_SCRIPT))
+
+        sync_event = next(event for event in snapshot["timeline"] if event["op"] == "sync")
+        analysis = sync_event["anti_entropy"]
+
+        self.assertEqual(analysis["transfer_count"], 2)
+        self.assertGreater(analysis["full_sync_bytes"], 0)
+        self.assertGreaterEqual(analysis["bytes_saved_vs_full"], 0)
+        self.assertEqual(analysis["transfers"][0]["from"], "a")
+        self.assertEqual(analysis["transfers"][0]["to"], "b")
+        self.assertEqual(analysis["transfers"][0]["delta_payload"]["adds"]["notebook"], ["a:1"])
+
+    def test_render_anti_entropy_views_include_delta_story(self) -> None:
+        cluster = ReplicaCluster(["a", "b", "c"])
+        snapshot = cluster.run_script(load_script(SAMPLE_SCRIPT))
+        report = build_anti_entropy_report(snapshot)
+
+        markdown = render_anti_entropy_markdown(report, "sample anti-entropy")
+        html = render_anti_entropy_html(
+            report,
+            "sample anti-entropy",
+            companion_links={"Timeline HTML": "timeline.html"},
+        )
+
+        self.assertIn("OR-Set anti-entropy report", markdown)
+        self.assertIn("bytes saved vs full-state sync", markdown)
+        self.assertIn("`a -> b`", markdown)
+        self.assertIn("tags notebook=a:1", markdown)
+        self.assertIn("OR-Set anti-entropy report", html)
+        self.assertIn("Sync transfer details", html)
+        self.assertIn('href="timeline.html"', html)
+
+    def test_cli_run_script_writes_anti_entropy_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir) / "artifacts"
+            timeline_html_path = artifact_dir / "timeline.html"
+            anti_markdown_path = artifact_dir / "anti-entropy.md"
+            anti_html_path = artifact_dir / "anti-entropy.html"
+            anti_json_path = artifact_dir / "anti-entropy.json"
+
+            result = run_cli(
+                "run-script",
+                "--replicas",
+                "a",
+                "b",
+                "c",
+                "--script",
+                str(SAMPLE_SCRIPT),
+                "--timeline-html-out",
+                str(timeline_html_path),
+                "--anti-entropy-markdown-out",
+                str(anti_markdown_path),
+                "--anti-entropy-html-out",
+                str(anti_html_path),
+                "--anti-entropy-json-out",
+                str(anti_json_path),
+            )
+
+            self.assertTrue(result["convergence"]["converged"])
+            self.assertTrue(anti_markdown_path.exists())
+            self.assertTrue(anti_html_path.exists())
+            self.assertTrue(anti_json_path.exists())
+            self.assertIn("directional transfers", anti_markdown_path.read_text())
+            anti_html = anti_html_path.read_text()
+            self.assertIn('href="timeline.html"', anti_html)
+            self.assertIn('href="anti-entropy.md"', anti_html)
+            anti_json = json.loads(anti_json_path.read_text())
+            self.assertGreaterEqual(anti_json["totals"]["bytes_saved_vs_full"], 0)
+            self.assertEqual(anti_json["sync_count"], 4)
+
+    def test_anti_entropy_markdown_handles_no_syncs(self) -> None:
+        cluster = ReplicaCluster(["a", "b"])
+        cluster.add("a", "notes")
+
+        report = build_anti_entropy_report(cluster.snapshot())
+        markdown = render_anti_entropy_markdown(report, "no sync yet")
+
+        self.assertIn("no anti-entropy exchange yet", report["story"])
+        self.assertIn("| n/a | no syncs yet | none | n/a | 0 | 0 | 0 | no transfer |", markdown)
+
+    def test_cli_compare_script_can_link_anti_entropy_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir) / "artifacts"
+            timeline_html_path = artifact_dir / "timeline.html"
+            anti_markdown_path = artifact_dir / "anti-entropy.md"
+            anti_html_path = artifact_dir / "anti-entropy.html"
+            anti_json_path = artifact_dir / "anti-entropy.json"
+            comparison_html_path = artifact_dir / "comparison.html"
+
+            result = run_cli(
+                "compare-script",
+                "--replicas",
+                "a",
+                "b",
+                "c",
+                "--script",
+                str(SAMPLE_COMPARE_SCRIPT),
+                "--timeline-html-out",
+                str(timeline_html_path),
+                "--anti-entropy-markdown-out",
+                str(anti_markdown_path),
+                "--anti-entropy-html-out",
+                str(anti_html_path),
+                "--anti-entropy-json-out",
+                str(anti_json_path),
+                "--comparison-html-out",
+                str(comparison_html_path),
+            )
+
+            self.assertEqual(result["final_divergence"][0]["element"], "notebook")
+            self.assertTrue(anti_html_path.exists())
+            self.assertTrue(comparison_html_path.exists())
+            self.assertIn('href="anti-entropy.html"', comparison_html_path.read_text())
+            self.assertIn('href="anti-entropy.md"', anti_html_path.read_text())
+            self.assertIn('href="anti-entropy.json"', anti_html_path.read_text())
 
     def test_duplicate_replicas_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "replica names must be unique"):

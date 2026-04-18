@@ -24,9 +24,11 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - merge is associative, commutative, and idempotent for replica state
 - cluster simulator supports scripted `add`, `remove`, and `sync` steps across replicas
 - sync can run `both`, `forward`, or `reverse` to model anti-entropy or one-way propagation
+- every sync event records a digest + delta-style anti-entropy summary so the simulator can explain full-state bytes vs missing-state bytes
 - JSON snapshots expose converged membership plus per-replica `active_tags`, `observed_tags`, and `tombstones`
 - convergence checks require full replica-state equality, not just matching element membership
 - optional timeline exports render the same run as Markdown notes, Mermaid sequence diagrams, static SVG portfolio cards, and a small HTML gallery/index page
+- optional anti-entropy exports render Markdown/HTML/JSON reports that summarize per-sync transfer sizes, missing tags, tombstones, counters, and bytes saved vs full-state sync
 - optional `compare-script` runs the same scenario under OR-Set and timestamped LWW-element-set semantics, then emits Markdown/HTML/JSON comparison artifacts that explain where the models diverge
 - LWW comparison mode supports configurable tie bias (`add` or `remove`) and explicit logical timestamps in the script JSON
 
@@ -47,10 +49,13 @@ python3 crdt_orset_lab.py run-script \
   --timeline-mermaid-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd \
   --timeline-svg-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg \
   --timeline-html-out ../../docs/artifacts/crdt-orset-lab/index.html \
-  --json-out ../../docs/artifacts/crdt-orset-lab/sample-ops-snapshot.json
+  --json-out ../../docs/artifacts/crdt-orset-lab/sample-ops-snapshot.json \
+  --anti-entropy-markdown-out ../../docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.md \
+  --anti-entropy-html-out ../../docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.html \
+  --anti-entropy-json-out ../../docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.json
 ```
 
-Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts. The HTML gallery is meant for browser-friendly navigation, while `--json-out` preserves the exact raw snapshot behind the rendered story.
+Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts. The HTML gallery is meant for browser-friendly navigation, while `--json-out` preserves the exact raw snapshot behind the rendered story. The anti-entropy outputs are useful when you want to explain what a sync had to transfer instead of just showing the final converged state.
 
 ### Compare OR-Set vs LWW-element-set on the same scenario
 ```bash
@@ -62,12 +67,15 @@ python3 crdt_orset_lab.py compare-script \
   --timeline-svg-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-timeline.svg \
   --timeline-html-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-timeline.html \
   --json-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-orset-snapshot.json \
+  --anti-entropy-markdown-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-anti-entropy.md \
+  --anti-entropy-html-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-anti-entropy.html \
+  --anti-entropy-json-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-anti-entropy.json \
   --comparison-markdown-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset.md \
   --comparison-html-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset.html \
   --comparison-json-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset.json
 ```
 
-`sample_compare_ops.json` is intentionally timestamped so the final OR-Set membership keeps `notebook`, while the LWW-element-set drops it because a later remove timestamp beats the concurrent add. That makes the semantic trade-off visible in a single browser-friendly page.
+`sample_compare_ops.json` is intentionally timestamped so the final OR-Set membership keeps `notebook`, while the LWW-element-set drops it because a later remove timestamp beats the concurrent add. The extra anti-entropy report stays focused on the OR-Set side of that scenario and makes the merge-cost story reviewable alongside the semantics comparison page.
 
 ### Script format
 `sample_ops.json` and `sample_compare_ops.json` use this shape, and the CLI also accepts a plain top-level JSON list of operation objects when you do not need wrapper metadata:
@@ -104,7 +112,11 @@ The committed `sample_compare_ops.json` keeps that same causal shape but assigns
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd` — Mermaid sequence diagram source for editable replica timelines
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg` — screenshot-ready timeline card for README/slide use
 - `docs/artifacts/crdt-orset-lab/sample-ops-snapshot.json` — raw replica/timeline/convergence state for tooling or diffs
+- `docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.html` — browser-friendly digest/delta report for the baseline OR-Set sync sequence
+- `docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.md` — Markdown transfer table showing what each sync actually had to ship
+- `docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.json` — machine-readable digest/delta summary for tooling or further analysis
 - `docs/artifacts/crdt-orset-lab/lww-vs-orset.html` — side-by-side comparison page explaining why OR-Set and LWW diverge on the timestamped scenario
+- `docs/artifacts/crdt-orset-lab/lww-vs-orset-anti-entropy.html` — OR-Set anti-entropy report for the timestamped comparison scenario
 - `docs/artifacts/crdt-orset-lab/lww-vs-orset.md` — Markdown comparison table for review notes or class writeups
 - `docs/artifacts/crdt-orset-lab/lww-vs-orset.json` — full machine-readable OR-Set/LWW comparison snapshot
 
@@ -114,6 +126,6 @@ python3 -m unittest discover -s projects/crdt-orset-lab -p "test_*.py"
 ```
 
 ## Future improvements
-- add delta-state payload inspection so merge traffic size can be discussed explicitly
 - add more CRDT variants such as PN-counters or MV-registers for broader trade-off comparisons
 - add canned classroom/demo presets that generate multiple comparison scenarios with one command
+- add a replay/animation view that pairs the existing timeline with the anti-entropy transfer table
