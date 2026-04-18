@@ -12,7 +12,7 @@
 - [x] extend regression coverage for replay-frame sync checkpoint metadata and deep-link rendering
 - [x] run targeted tests, smoke checks, and 3 review passes
 - [x] run secret scan
-- [ ] commit, push, and write the wrap-up
+- [x] commit, push, and write the wrap-up
 
 ## Previous slice (2026-04-18 21:04 UTC run)
 - [x] confirm `main` still matches `origin/main` before editing
