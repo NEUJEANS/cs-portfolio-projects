@@ -58,7 +58,7 @@ const MANIFEST_CHECKSUM_ALGORITHM = 'sha256';
 const MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM = 'sha256';
 const MANIFEST_SIGNATURE_DEFAULT_SUFFIX = '.sig.json';
 const MANIFEST_SIGNATURE_ENCODING = 'base64';
-const SIGNER_POLICY_ALLOWED_KEYS = Object.freeze(['name', 'description', 'trustedSigners']);
+const SIGNER_POLICY_ALLOWED_KEYS = Object.freeze(['name', 'description', 'trustedSigners', 'approvalQuorum']);
 
 function normalizeBucketName(name, label = 'bucket name') {
   if (typeof name !== 'string') {
@@ -1621,6 +1621,14 @@ function normalizeSignerFingerprint(fingerprint, label = 'signer fingerprint') {
   throw new Error(`Expected ${label} to look like "sha256:<hex>".`);
 }
 
+function normalizePositiveInteger(value, label) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`Expected ${label} to be a positive integer.`);
+  }
+
+  return value;
+}
+
 function normalizeOptionalSignerMetadata(value, label) {
   if (value == null) {
     return null;
@@ -1652,6 +1660,37 @@ function normalizeOptionalSignerRoles(rawRoles, label) {
   }
 
   return roles;
+}
+
+function normalizeApprovalQuorum(rawApprovalQuorum, trustedSignerCount) {
+  if (rawApprovalQuorum == null) {
+    return {
+      minimumSigners: 1,
+      requiredRoles: [],
+    };
+  }
+
+  if (!rawApprovalQuorum || typeof rawApprovalQuorum !== 'object' || Array.isArray(rawApprovalQuorum)) {
+    throw new Error('approvalQuorum must be a JSON object when provided.');
+  }
+
+  const allowedKeys = new Set(['minimumSigners', 'requiredRoles']);
+  const unknownKeys = Object.keys(rawApprovalQuorum).filter(key => !allowedKeys.has(key));
+  if (unknownKeys.length > 0) {
+    throw new Error(`approvalQuorum contains unsupported keys: ${unknownKeys.join(', ')}.`);
+  }
+
+  const minimumSigners = rawApprovalQuorum.minimumSigners == null
+    ? 1
+    : normalizePositiveInteger(rawApprovalQuorum.minimumSigners, 'approvalQuorum.minimumSigners');
+  if (minimumSigners > trustedSignerCount) {
+    throw new Error(`approvalQuorum.minimumSigners cannot exceed the ${trustedSignerCount} trusted signer(s) in the policy.`);
+  }
+
+  return {
+    minimumSigners,
+    requiredRoles: normalizeOptionalSignerRoles(rawApprovalQuorum.requiredRoles, 'approvalQuorum.requiredRoles'),
+  };
 }
 
 function normalizeTrustedSignerEntry(rawTrustedSigner, index) {
@@ -1707,6 +1746,7 @@ async function loadSignerPolicy(policyPath) {
     name: normalizeOptionalSignerMetadata(rawPolicy.name, 'signer policy name'),
     description: normalizeOptionalSignerMetadata(rawPolicy.description, 'signer policy description'),
     trustedSigners,
+    approvalQuorum: normalizeApprovalQuorum(rawPolicy.approvalQuorum, trustedSigners.length),
   };
 }
 
@@ -1719,7 +1759,53 @@ function trustedSignerEntryFor(policy, fingerprint) {
   return policy.trustedSigners.find(entry => entry.fingerprint === normalizedFingerprint) || null;
 }
 
-function signerPolicySummary(policy, trustedSigner = null) {
+function buildApprovalQuorumStatus(policy, approvedTrustedSigners = []) {
+  if (!policy) {
+    return null;
+  }
+
+  const matchedTrustedSigners = [];
+  const seenFingerprints = new Set();
+  for (const signer of approvedTrustedSigners) {
+    if (!signer) {
+      continue;
+    }
+    const fingerprint = normalizeSignerFingerprint(signer.fingerprint);
+    if (seenFingerprints.has(fingerprint)) {
+      continue;
+    }
+    seenFingerprints.add(fingerprint);
+    matchedTrustedSigners.push({
+      fingerprint,
+      label: signer.label || null,
+      roles: Array.isArray(signer.roles) ? [...signer.roles] : [],
+    });
+  }
+
+  const matchedRoleSet = new Set();
+  for (const signer of matchedTrustedSigners) {
+    for (const role of signer.roles) {
+      matchedRoleSet.add(role);
+    }
+  }
+
+  const requiredRoles = [...policy.approvalQuorum.requiredRoles];
+  const missingRoles = requiredRoles.filter(role => !matchedRoleSet.has(role));
+  const approvalsPresent = matchedTrustedSigners.length;
+  const missingSigners = Math.max(0, policy.approvalQuorum.minimumSigners - approvalsPresent);
+
+  return {
+    minimumSigners: policy.approvalQuorum.minimumSigners,
+    requiredRoles,
+    approvalsPresent,
+    missingSigners,
+    missingRoles,
+    satisfied: missingSigners === 0 && missingRoles.length === 0,
+    matchedFingerprints: matchedTrustedSigners.map(signer => signer.fingerprint),
+  };
+}
+
+function signerPolicySummary(policy, trustedSigner = null, quorumStatus = null) {
   if (!policy) {
     return null;
   }
@@ -1727,6 +1813,10 @@ function signerPolicySummary(policy, trustedSigner = null) {
   const summary = {
     policyPath: policy.policyPath,
     trustedSignerCount: policy.trustedSigners.length,
+    approvalQuorum: {
+      minimumSigners: policy.approvalQuorum.minimumSigners,
+      requiredRoles: [...policy.approvalQuorum.requiredRoles],
+    },
   };
 
   if (policy.name) {
@@ -1747,7 +1837,211 @@ function signerPolicySummary(policy, trustedSigner = null) {
     }
   }
 
+  if (quorumStatus) {
+    summary.approvalQuorum.approvalsPresent = quorumStatus.approvalsPresent;
+    summary.approvalQuorum.missingSigners = quorumStatus.missingSigners;
+    summary.approvalQuorum.missingRoles = [...quorumStatus.missingRoles];
+    summary.approvalQuorum.satisfied = quorumStatus.satisfied;
+    summary.approvalQuorum.matchedFingerprints = [...quorumStatus.matchedFingerprints];
+  }
+
   return summary;
+}
+
+function manifestSignedPayloadSummary(manifest) {
+  return {
+    kind: 'canonical-manifest-json',
+    checksumAlgorithm: MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM,
+    checksum: manifestSignatureChecksumFor(manifest),
+    includesIntegritySection: Boolean(manifest.integrity),
+  };
+}
+
+function signatureApprovalsFromRecord(signatureRecord) {
+  if (Array.isArray(signatureRecord.approvals) && signatureRecord.approvals.length > 0) {
+    return signatureRecord.approvals.map(approval => ({
+      createdAt: approval.createdAt || signatureRecord.createdAt || null,
+      signer: approval.signer || {},
+      signature: approval.signature || null,
+      signedPayload: approval.signedPayload || signatureRecord.signedPayload || null,
+    }));
+  }
+
+  if (signatureRecord.signer && signatureRecord.signature) {
+    return [{
+      createdAt: signatureRecord.createdAt || null,
+      signer: signatureRecord.signer,
+      signature: signatureRecord.signature,
+      signedPayload: signatureRecord.signedPayload || null,
+    }];
+  }
+
+  return [];
+}
+
+function signatureApprovalFingerprint(approval) {
+  if (!approval || !approval.signer || !approval.signer.publicKeyFingerprint) {
+    return null;
+  }
+
+  return normalizeSignerFingerprint(approval.signer.publicKeyFingerprint, 'signature approval fingerprint');
+}
+
+function formatApprovalQuorumFailure(quorumStatus) {
+  if (!quorumStatus) {
+    return 'Signer policy quorum is unavailable.';
+  }
+
+  const parts = [
+    `Signer policy quorum not met: ${quorumStatus.approvalsPresent}/${quorumStatus.minimumSigners} trusted approval(s) present`,
+  ];
+  if (quorumStatus.missingRoles.length > 0) {
+    parts.push(`missing roles: ${quorumStatus.missingRoles.join(', ')}`);
+  }
+  return `${parts.join('; ')}.`;
+}
+
+function buildSignatureApprovalRecord(manifest, signatureValue, signerFingerprint, signatureAlgorithm, publicKeyPem, trustedSigner) {
+  return {
+    createdAt: new Date().toISOString(),
+    signedPayload: manifestSignedPayloadSummary(manifest),
+    signer: {
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: signerFingerprint,
+      publicKeyPem,
+      label: trustedSigner?.label || null,
+      roles: trustedSigner ? [...trustedSigner.roles] : [],
+      notes: trustedSigner?.notes || null,
+    },
+    signature: {
+      encoding: MANIFEST_SIGNATURE_ENCODING,
+      value: signatureValue,
+    },
+  };
+}
+
+function applyApprovalBundleView(signatureRecord, approvals, signerPolicy, preferredApproval) {
+  const trustedApprovals = signerPolicy
+    ? approvals
+      .map(approval => {
+        const fingerprint = signatureApprovalFingerprint(approval);
+        return fingerprint ? trustedSignerEntryFor(signerPolicy, fingerprint) : null;
+      })
+      .filter(Boolean)
+    : [];
+  const preferredTrustedSigner = signerPolicy && preferredApproval
+    ? trustedSignerEntryFor(signerPolicy, signatureApprovalFingerprint(preferredApproval))
+    : null;
+  const quorumStatus = signerPolicy ? buildApprovalQuorumStatus(signerPolicy, trustedApprovals) : null;
+
+  return {
+    ...signatureRecord,
+    signedPayload: preferredApproval?.signedPayload || signatureRecord.signedPayload || null,
+    signer: preferredApproval?.signer || signatureRecord.signer || null,
+    signature: preferredApproval?.signature || signatureRecord.signature || null,
+    approvals,
+    signerPolicy: signerPolicySummary(signerPolicy, preferredTrustedSigner, quorumStatus),
+  };
+}
+
+function verifyManifestApprovalWithKey(manifest, approval, publicKey) {
+  const signatureAlgorithm = manifestSignatureAlgorithmForKey(publicKey);
+  const computedFingerprint = publicKeyFingerprint(publicKey);
+  const expectedChecksum = manifestSignatureChecksumFor(manifest);
+  const signerLabel = approval.signer?.label || null;
+  const signerRoles = Array.isArray(approval.signer?.roles) ? [...approval.signer.roles] : [];
+
+  if (!approval.signature || typeof approval.signature.value !== 'string' || !approval.signature.value) {
+    return {
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      signerLabel,
+      signerRoles,
+      reason: 'Manifest signature metadata is missing a signature value.',
+    };
+  }
+
+  if (approval.signer?.publicKeyFingerprint && normalizeSignerFingerprint(approval.signer.publicKeyFingerprint) !== computedFingerprint) {
+    return {
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      signerLabel,
+      signerRoles,
+      reason: `Public key fingerprint mismatch: expected ${approval.signer.publicKeyFingerprint} but found ${computedFingerprint}.`,
+    };
+  }
+
+  if (approval.signedPayload?.checksum && approval.signedPayload.checksum !== expectedChecksum) {
+    return {
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      signerLabel,
+      signerRoles,
+      reason: `Manifest payload checksum mismatch: expected ${expectedChecksum} but found ${approval.signedPayload.checksum}.`,
+    };
+  }
+
+  let signatureBuffer;
+  try {
+    signatureBuffer = Buffer.from(approval.signature.value, approval.signature.encoding || MANIFEST_SIGNATURE_ENCODING);
+  } catch (error) {
+    return {
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      signerLabel,
+      signerRoles,
+      reason: error.message || String(error),
+    };
+  }
+
+  const valid = crypto.verify(
+    signatureAlgorithm.digest,
+    manifestSignaturePayload(manifest),
+    publicKey,
+    signatureBuffer,
+  );
+
+  return {
+    valid,
+    keyType: signatureAlgorithm.keyType,
+    publicKeyFingerprint: computedFingerprint,
+    signerLabel,
+    signerRoles,
+    reason: valid ? null : 'Manifest signature verification failed.',
+  };
+}
+
+function verifyEmbeddedManifestApproval(manifest, approval) {
+  if (typeof approval.signer?.publicKeyPem !== 'string' || !approval.signer.publicKeyPem.trim()) {
+    return {
+      valid: false,
+      keyType: approval.signer?.keyType || null,
+      publicKeyFingerprint: approval.signer?.publicKeyFingerprint || null,
+      signerLabel: approval.signer?.label || null,
+      signerRoles: Array.isArray(approval.signer?.roles) ? [...approval.signer.roles] : [],
+      reason: 'Manifest signature approval is missing signer.publicKeyPem.',
+    };
+  }
+
+  let publicKey;
+  try {
+    publicKey = crypto.createPublicKey(approval.signer.publicKeyPem);
+  } catch (error) {
+    return {
+      valid: false,
+      keyType: approval.signer?.keyType || null,
+      publicKeyFingerprint: approval.signer?.publicKeyFingerprint || null,
+      signerLabel: approval.signer?.label || null,
+      signerRoles: Array.isArray(approval.signer?.roles) ? [...approval.signer.roles] : [],
+      reason: error.message || String(error),
+    };
+  }
+
+  return verifyManifestApprovalWithKey(manifest, approval, publicKey);
 }
 
 async function writeDetachedManifestSignature(manifestPath, privateKeyPath, options = {}) {
@@ -1766,6 +2060,7 @@ async function writeDetachedManifestSignature(manifestPath, privateKeyPath, opti
   if (!integrity.valid) {
     throw new Error(`Cannot sign a manifest with invalid integrity metadata: ${integrity.reason}`);
   }
+
   const { keyObject: privateKey } = await loadPrivateKey(privateKeyPath);
   const publicKey = crypto.createPublicKey(privateKey);
   const signatureAlgorithm = manifestSignatureAlgorithmForKey(privateKey);
@@ -1775,39 +2070,66 @@ async function writeDetachedManifestSignature(manifestPath, privateKeyPath, opti
   if (signerPolicy && !trustedSigner) {
     throw new Error(`Signer fingerprint ${signerFingerprint} is not trusted by signer policy ${signerPolicy.policyPath}.`);
   }
+
   const signature = crypto.sign(
     signatureAlgorithm.digest,
     manifestSignaturePayload(manifest),
     privateKey,
   ).toString(MANIFEST_SIGNATURE_ENCODING);
+  const publicKeyPem = publicKey.export({ format: 'pem', type: 'spki' }).toString();
+  const approval = buildSignatureApprovalRecord(manifest, signature, signerFingerprint, signatureAlgorithm, publicKeyPem, trustedSigner);
 
-  const signatureRecord = {
+  let existingSignatureRecord = null;
+  try {
+    existingSignatureRecord = JSON.parse(await fs.readFile(resolvedSignaturePath, 'utf8'));
+  } catch (error) {
+    if (!error || error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  const approvals = existingSignatureRecord ? signatureApprovalsFromRecord(existingSignatureRecord) : [];
+  if (existingSignatureRecord?.manifestPath && path.resolve(existingSignatureRecord.manifestPath) !== resolvedManifestPath) {
+    throw new Error(`Manifest signature file ${resolvedSignaturePath} references ${existingSignatureRecord.manifestPath}, expected ${resolvedManifestPath}.`);
+  }
+
+  const expectedChecksum = approval.signedPayload.checksum;
+  const existingChecksums = new Set(
+    approvals
+      .map(existingApproval => existingApproval.signedPayload?.checksum || null)
+      .filter(Boolean),
+  );
+  const resetExistingApprovals = existingChecksums.size > 0 && (
+    existingChecksums.size > 1
+    || !existingChecksums.has(expectedChecksum)
+  );
+  const baselineApprovals = resetExistingApprovals ? [] : approvals;
+
+  let replaced = false;
+  const mergedApprovals = baselineApprovals.map(existingApproval => {
+    const fingerprint = signatureApprovalFingerprint(existingApproval);
+    if (fingerprint && fingerprint === signerFingerprint) {
+      replaced = true;
+      return approval;
+    }
+    return existingApproval;
+  });
+  if (!replaced) {
+    mergedApprovals.push(approval);
+  }
+  mergedApprovals.sort((left, right) => (signatureApprovalFingerprint(left) || '').localeCompare(signatureApprovalFingerprint(right) || ''));
+
+  const signatureRecord = applyApprovalBundleView({
     action: 'manifest-signature',
-    createdAt: new Date().toISOString(),
+    createdAt: resetExistingApprovals ? approval.createdAt : (existingSignatureRecord?.createdAt || approval.createdAt),
+    updatedAt: approval.createdAt,
     manifestPath: resolvedManifestPath,
     signaturePath: resolvedSignaturePath,
-    signedPayload: {
-      kind: 'canonical-manifest-json',
-      checksumAlgorithm: MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM,
-      checksum: manifestSignatureChecksumFor(manifest),
-      includesIntegritySection: Boolean(manifest.integrity),
-    },
-    signer: {
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: signerFingerprint,
-      label: trustedSigner?.label || null,
-      roles: trustedSigner ? [...trustedSigner.roles] : [],
-      notes: trustedSigner?.notes || null,
-    },
-    signature: {
-      encoding: MANIFEST_SIGNATURE_ENCODING,
-      value: signature,
-    },
-    signerPolicy: signerPolicySummary(signerPolicy, trustedSigner),
-  };
+  }, mergedApprovals, signerPolicy, approval);
 
   await fs.mkdir(path.dirname(resolvedSignaturePath), { recursive: true });
-  await fs.writeFile(resolvedSignaturePath, `${JSON.stringify(signatureRecord, null, 2)}\n`);
+  await fs.writeFile(resolvedSignaturePath, `${JSON.stringify(signatureRecord, null, 2)}
+`);
   return signatureRecord;
 }
 
@@ -1819,7 +2141,7 @@ async function verifyDetachedManifestSignature(manifestPath, publicKeyPath, opti
   };
   const resolvedManifestPath = path.resolve(manifestPath);
   const resolvedSignaturePath = path.resolve(settings.signaturePath || defaultManifestSignaturePath(resolvedManifestPath));
-  const resolvedPublicKeyPath = path.resolve(publicKeyPath);
+  const resolvedPublicKeyPath = publicKeyPath ? path.resolve(publicKeyPath) : null;
 
   let manifest;
   try {
@@ -1859,12 +2181,20 @@ async function verifyDetachedManifestSignature(manifestPath, publicKeyPath, opti
     throw error;
   }
 
-  const { keyObject: publicKey } = await loadPublicKey(resolvedPublicKeyPath);
-  const signatureAlgorithm = manifestSignatureAlgorithmForKey(publicKey);
-  const computedFingerprint = publicKeyFingerprint(publicKey);
-  const expectedChecksum = manifestSignatureChecksumFor(manifest);
   const signerPolicy = settings.signerPolicyPath ? await loadSignerPolicy(settings.signerPolicyPath) : null;
-  const trustedSigner = signerPolicy ? trustedSignerEntryFor(signerPolicy, computedFingerprint) : null;
+  if (signerPolicy && signatureRecord.signerPolicy?.name && signerPolicy.name && signatureRecord.signerPolicy.name !== signerPolicy.name) {
+    return {
+      action: 'verify-manifest-signature',
+      manifestPath: resolvedManifestPath,
+      signaturePath: resolvedSignaturePath,
+      publicKeyPath: resolvedPublicKeyPath,
+      valid: false,
+      keyType: null,
+      publicKeyFingerprint: null,
+      signerPolicy: signerPolicySummary(signerPolicy),
+      reason: `Manifest signature policy mismatch: signature references ${signatureRecord.signerPolicy.name} but signer policy is ${signerPolicy.name}.`,
+    };
+  }
 
   if (signatureRecord.manifestPath && path.resolve(signatureRecord.manifestPath) !== resolvedManifestPath) {
     return {
@@ -1873,120 +2203,166 @@ async function verifyDetachedManifestSignature(manifestPath, publicKeyPath, opti
       signaturePath: resolvedSignaturePath,
       publicKeyPath: resolvedPublicKeyPath,
       valid: false,
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: computedFingerprint,
+      keyType: null,
+      publicKeyFingerprint: null,
       reason: `Manifest signature references ${signatureRecord.manifestPath}, expected ${resolvedManifestPath}.`,
     };
   }
 
-  if (!signatureRecord.signature || typeof signatureRecord.signature.value !== 'string' || !signatureRecord.signature.value) {
+  const approvals = signatureApprovalsFromRecord(signatureRecord);
+  if (approvals.length === 0) {
     return {
       action: 'verify-manifest-signature',
       manifestPath: resolvedManifestPath,
       signaturePath: resolvedSignaturePath,
       publicKeyPath: resolvedPublicKeyPath,
       valid: false,
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: computedFingerprint,
-      reason: 'Manifest signature metadata is missing a signature value.',
-    };
-  }
-
-  if (signatureRecord.signer?.publicKeyFingerprint && signatureRecord.signer.publicKeyFingerprint !== computedFingerprint) {
-    return {
-      action: 'verify-manifest-signature',
-      manifestPath: resolvedManifestPath,
-      signaturePath: resolvedSignaturePath,
-      publicKeyPath: resolvedPublicKeyPath,
-      valid: false,
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: computedFingerprint,
-      reason: `Public key fingerprint mismatch: expected ${signatureRecord.signer.publicKeyFingerprint} but found ${computedFingerprint}.`,
-    };
-  }
-
-  if (signatureRecord.signedPayload?.checksum && signatureRecord.signedPayload.checksum !== expectedChecksum) {
-    return {
-      action: 'verify-manifest-signature',
-      manifestPath: resolvedManifestPath,
-      signaturePath: resolvedSignaturePath,
-      publicKeyPath: resolvedPublicKeyPath,
-      valid: false,
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: computedFingerprint,
-      signerPolicy: signerPolicySummary(signerPolicy, trustedSigner),
-      reason: `Manifest payload checksum mismatch: expected ${expectedChecksum} but found ${signatureRecord.signedPayload.checksum}.`,
-    };
-  }
-
-  if (signerPolicy && !trustedSigner) {
-    return {
-      action: 'verify-manifest-signature',
-      manifestPath: resolvedManifestPath,
-      signaturePath: resolvedSignaturePath,
-      publicKeyPath: resolvedPublicKeyPath,
-      valid: false,
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: computedFingerprint,
+      keyType: null,
+      publicKeyFingerprint: null,
       signerPolicy: signerPolicySummary(signerPolicy),
-      reason: `Signer fingerprint ${computedFingerprint} is not trusted by signer policy ${signerPolicy.policyPath}.`,
+      reason: 'Manifest signature metadata does not contain any approvals.',
     };
   }
 
-  if (signerPolicy && signatureRecord.signerPolicy?.name && signerPolicy.name && signatureRecord.signerPolicy.name !== signerPolicy.name) {
+  const approvalResults = approvals.map(approval => {
+    const verification = verifyEmbeddedManifestApproval(manifest, approval);
+    const trustedSigner = signerPolicy && verification.valid
+      ? trustedSignerEntryFor(signerPolicy, verification.publicKeyFingerprint)
+      : null;
+    return {
+      ...verification,
+      trustedSigner,
+    };
+  });
+
+  const quorumStatus = signerPolicy
+    ? buildApprovalQuorumStatus(signerPolicy, approvalResults.filter(result => result.valid && result.trustedSigner).map(result => result.trustedSigner))
+    : null;
+
+  let matchedResult = null;
+  let matchedApproval = null;
+  let resolvedTrustedSigner = null;
+  if (resolvedPublicKeyPath) {
+    const { keyObject: publicKey } = await loadPublicKey(resolvedPublicKeyPath);
+    const computedFingerprint = publicKeyFingerprint(publicKey);
+    matchedApproval = approvals.find(approval => signatureApprovalFingerprint(approval) === computedFingerprint) || null;
+    if (!matchedApproval) {
+      return {
+        action: 'verify-manifest-signature',
+        manifestPath: resolvedManifestPath,
+        signaturePath: resolvedSignaturePath,
+        publicKeyPath: resolvedPublicKeyPath,
+        valid: false,
+        keyType: manifestSignatureAlgorithmForKey(publicKey).keyType,
+        publicKeyFingerprint: computedFingerprint,
+        signerPolicy: signerPolicySummary(signerPolicy, null, quorumStatus),
+        reason: `Public key fingerprint mismatch: no approval matches ${computedFingerprint}.`,
+        approvalCount: approvals.length,
+        verifiedApprovalCount: approvalResults.filter(result => result.valid).length,
+      };
+    }
+
+    matchedResult = verifyManifestApprovalWithKey(manifest, matchedApproval, publicKey);
+    resolvedTrustedSigner = signerPolicy ? trustedSignerEntryFor(signerPolicy, computedFingerprint) : null;
+    if (signerPolicy && !resolvedTrustedSigner) {
+      return {
+        action: 'verify-manifest-signature',
+        manifestPath: resolvedManifestPath,
+        signaturePath: resolvedSignaturePath,
+        publicKeyPath: resolvedPublicKeyPath,
+        valid: false,
+        keyType: matchedResult.keyType,
+        publicKeyFingerprint: computedFingerprint,
+        signerLabel: matchedResult.signerLabel,
+        signerRoles: matchedResult.signerRoles,
+        signerPolicy: signerPolicySummary(signerPolicy, null, quorumStatus),
+        reason: `Signer fingerprint ${computedFingerprint} is not trusted by signer policy ${signerPolicy.policyPath}.`,
+        approvalCount: approvals.length,
+        verifiedApprovalCount: approvalResults.filter(result => result.valid).length,
+      };
+    }
+  } else if (!signerPolicy) {
+    throw new Error('verifyDetachedManifestSignature requires a public key path or signer policy.');
+  }
+
+  const signerPolicyReport = signerPolicy
+    ? signerPolicySummary(signerPolicy, resolvedTrustedSigner, quorumStatus)
+    : null;
+
+  if (resolvedPublicKeyPath && !matchedResult.valid) {
     return {
       action: 'verify-manifest-signature',
       manifestPath: resolvedManifestPath,
       signaturePath: resolvedSignaturePath,
       publicKeyPath: resolvedPublicKeyPath,
       valid: false,
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: computedFingerprint,
-      signerPolicy: signerPolicySummary(signerPolicy, trustedSigner),
-      reason: `Manifest signature policy mismatch: signature references ${signatureRecord.signerPolicy.name} but signer policy is ${signerPolicy.name}.`,
+      keyType: matchedResult.keyType,
+      publicKeyFingerprint: matchedResult.publicKeyFingerprint,
+      signerLabel: matchedResult.signerLabel,
+      signerRoles: matchedResult.signerRoles,
+      signerPolicy: signerPolicyReport,
+      reason: matchedResult.reason,
+      approvalCount: approvals.length,
+      verifiedApprovalCount: approvalResults.filter(result => result.valid).length,
+      signedPayload: manifestSignedPayloadSummary(manifest),
+      approvalQuorum: quorumStatus,
     };
   }
 
-  let signatureBuffer;
-  try {
-    signatureBuffer = Buffer.from(signatureRecord.signature.value, signatureRecord.signature.encoding || MANIFEST_SIGNATURE_ENCODING);
-  } catch (error) {
+  if (signerPolicy && quorumStatus && !quorumStatus.satisfied) {
     return {
       action: 'verify-manifest-signature',
       manifestPath: resolvedManifestPath,
       signaturePath: resolvedSignaturePath,
       publicKeyPath: resolvedPublicKeyPath,
       valid: false,
-      keyType: signatureAlgorithm.keyType,
-      publicKeyFingerprint: computedFingerprint,
-      signerPolicy: signerPolicySummary(signerPolicy, trustedSigner),
-      reason: error.message || String(error),
+      keyType: matchedResult?.keyType || approvalResults.find(result => result.valid)?.keyType || null,
+      publicKeyFingerprint: matchedResult?.publicKeyFingerprint || null,
+      signerLabel: matchedResult?.signerLabel || null,
+      signerRoles: matchedResult?.signerRoles || [],
+      signerPolicy: signerPolicyReport,
+      reason: formatApprovalQuorumFailure(quorumStatus),
+      approvalCount: approvals.length,
+      verifiedApprovalCount: approvalResults.filter(result => result.valid).length,
+      signedPayload: manifestSignedPayloadSummary(manifest),
+      approvalQuorum: quorumStatus,
     };
   }
 
-  const valid = crypto.verify(
-    signatureAlgorithm.digest,
-    manifestSignaturePayload(manifest),
-    publicKey,
-    signatureBuffer,
-  );
+  if (!resolvedPublicKeyPath && approvalResults.every(result => !result.valid || !result.trustedSigner)) {
+    return {
+      action: 'verify-manifest-signature',
+      manifestPath: resolvedManifestPath,
+      signaturePath: resolvedSignaturePath,
+      publicKeyPath: null,
+      valid: false,
+      keyType: null,
+      publicKeyFingerprint: null,
+      signerPolicy: signerPolicyReport,
+      reason: 'No valid trusted signatures were found in the detached signature bundle.',
+      approvalCount: approvals.length,
+      verifiedApprovalCount: approvalResults.filter(result => result.valid).length,
+      signedPayload: manifestSignedPayloadSummary(manifest),
+      approvalQuorum: quorumStatus,
+    };
+  }
 
   return {
     action: 'verify-manifest-signature',
     manifestPath: resolvedManifestPath,
     signaturePath: resolvedSignaturePath,
     publicKeyPath: resolvedPublicKeyPath,
-    valid,
-    keyType: signatureAlgorithm.keyType,
-    publicKeyFingerprint: computedFingerprint,
-    signerLabel: signatureRecord.signer?.label || null,
-    signerRoles: Array.isArray(signatureRecord.signer?.roles) ? [...signatureRecord.signer.roles] : [],
-    signedPayload: {
-      checksumAlgorithm: MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM,
-      checksum: expectedChecksum,
-    },
-    signerPolicy: signerPolicySummary(signerPolicy, trustedSigner),
-    reason: valid ? null : 'Manifest signature verification failed.',
+    valid: true,
+    keyType: matchedResult?.keyType || approvalResults.find(result => result.valid)?.keyType || null,
+    publicKeyFingerprint: matchedResult?.publicKeyFingerprint || null,
+    signerLabel: matchedResult?.signerLabel || null,
+    signerRoles: matchedResult?.signerRoles || [],
+    signedPayload: manifestSignedPayloadSummary(manifest),
+    signerPolicy: signerPolicyReport,
+    reason: null,
+    approvalCount: approvals.length,
+    verifiedApprovalCount: approvalResults.filter(result => result.valid).length,
+    approvalQuorum: quorumStatus,
   };
 }
 
@@ -2220,7 +2596,7 @@ async function undoFromManifest(manifestPath, options = {}) {
   }
 
   let signatureVerification = null;
-  if (settings.verifySignatureKeyPath) {
+  if (settings.verifySignatureKeyPath || settings.signerPolicyPath) {
     signatureVerification = await verifyDetachedManifestSignature(resolvedManifestPath, settings.verifySignatureKeyPath, {
       signaturePath: settings.signaturePath,
       signerPolicyPath: settings.signerPolicyPath,
@@ -2295,6 +2671,7 @@ function parseArgs(argv) {
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -2446,6 +2823,12 @@ function parseArgs(argv) {
     }
   }
 
+  if (options.signManifestKeyPath && !options.manifestOut && targetDirExplicit) {
+    options.signExistingManifestPath = targetDir;
+    targetDir = '.';
+    targetDirExplicit = false;
+  }
+
   if (options.undoManifest && targetDirExplicit) {
     throw new Error('Target directory cannot be combined with --undo');
   }
@@ -2482,24 +2865,28 @@ function parseArgs(argv) {
     throw new Error('--manifest-checksum requires --manifest-out');
   }
 
-  if (options.signManifestKeyPath && !options.manifestOut) {
-    throw new Error('--sign-manifest requires --manifest-out');
+  if (options.signManifestKeyPath && !options.manifestOut && !options.signExistingManifestPath) {
+    throw new Error('--sign-manifest requires --manifest-out or a manifest path argument');
   }
 
-  if (options.signManifestKeyPath && !options.manifestChecksum) {
+  if (options.signManifestKeyPath && options.manifestOut && !options.manifestChecksum) {
     throw new Error('--sign-manifest requires --manifest-checksum');
+  }
+
+  if (options.signExistingManifestPath && (options.dryRun || options.recursive || options.manifestOut || options.manifestChecksum || options.verifyManifestSignatureKeyPath || options.undoManifest || options.skipManifestVerification || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+    throw new Error('Signing an existing manifest cannot be combined with organize, undo, lint, preset, or normalized-config flags');
   }
 
   if (options.verifyManifestSignatureKeyPath && !options.undoManifest) {
     throw new Error('--verify-manifest-signature can only be used with --undo');
   }
 
-  if (options.signaturePath && !options.signManifestKeyPath && !options.verifyManifestSignatureKeyPath) {
-    throw new Error('--signature-path requires --sign-manifest or --verify-manifest-signature');
+  if (options.signaturePath && !options.signManifestKeyPath && !options.undoManifest) {
+    throw new Error('--signature-path requires --sign-manifest or --undo');
   }
 
-  if (options.signerPolicyPath && !options.signManifestKeyPath && !options.verifyManifestSignatureKeyPath) {
-    throw new Error('--signer-policy requires --sign-manifest or --verify-manifest-signature');
+  if (options.signerPolicyPath && !options.signManifestKeyPath && !options.undoManifest) {
+    throw new Error('--signer-policy requires --sign-manifest or --undo');
   }
 
   if (options.skipManifestVerification && !options.undoManifest) {
@@ -2561,6 +2948,25 @@ function parseArgs(argv) {
   return { targetDir, options };
 }
 
+function formatApprovalQuorumStatusText(quorumStatus) {
+  if (!quorumStatus) {
+    return null;
+  }
+
+  const parts = [`${quorumStatus.approvalsPresent}/${quorumStatus.minimumSigners} trusted approval(s)`];
+  if (quorumStatus.satisfied) {
+    parts.push('satisfied');
+  } else {
+    if (quorumStatus.missingSigners > 0) {
+      parts.push(`missing signers: ${quorumStatus.missingSigners}`);
+    }
+    if (quorumStatus.missingRoles.length > 0) {
+      parts.push(`missing roles: ${quorumStatus.missingRoles.join(', ')}`);
+    }
+  }
+  return parts.join('; ');
+}
+
 function formatOrganizeTextReport(result) {
   const header = [
     `root: ${result.rootDir}`,
@@ -2598,8 +3004,15 @@ function formatOrganizeTextReport(result) {
     if (Array.isArray(result.detachedSignature.signer?.roles) && result.detachedSignature.signer.roles.length > 0) {
       header.push(`manifest signer roles: ${result.detachedSignature.signer.roles.join(', ')}`);
     }
+    if (Array.isArray(result.detachedSignature.approvals)) {
+      header.push(`manifest approvals: ${result.detachedSignature.approvals.length}`);
+    }
     if (result.detachedSignature.signerPolicy) {
       header.push(`signer policy: ${result.detachedSignature.signerPolicy.name || result.detachedSignature.signerPolicy.policyPath}`);
+      const quorumText = formatApprovalQuorumStatusText(result.detachedSignature.signerPolicy.approvalQuorum);
+      if (quorumText) {
+        header.push(`signer quorum: ${quorumText}`);
+      }
     }
   }
 
@@ -2663,8 +3076,15 @@ function formatUndoTextReport(result) {
     if (Array.isArray(result.signatureVerification.signerRoles) && result.signatureVerification.signerRoles.length > 0) {
       header.push(`manifest signer roles: ${result.signatureVerification.signerRoles.join(', ')}`);
     }
+    if (typeof result.signatureVerification.approvalCount === 'number') {
+      header.push(`manifest approvals: ${result.signatureVerification.approvalCount}`);
+    }
     if (result.signatureVerification.signerPolicy) {
       header.push(`signer policy: ${result.signatureVerification.signerPolicy.name || result.signatureVerification.signerPolicy.policyPath}`);
+      const quorumText = formatApprovalQuorumStatusText(result.signatureVerification.approvalQuorum || result.signatureVerification.signerPolicy.approvalQuorum);
+      if (quorumText) {
+        header.push(`signer quorum: ${quorumText}`);
+      }
     }
   }
 
@@ -2792,7 +3212,40 @@ function formatWriteNormalizedConfigTextReport(result) {
   return lines.join('\n');
 }
 
+function formatManifestSignatureTextReport(result) {
+  const lines = [
+    'action: manifest-signature',
+    `manifest: ${result.manifestPath}`,
+    `signature path: ${result.signaturePath}`,
+  ];
+
+  if (result.signer?.publicKeyFingerprint) {
+    lines.push(`manifest signer fingerprint: ${result.signer.publicKeyFingerprint}`);
+  }
+  if (result.signer?.label) {
+    lines.push(`manifest signer label: ${result.signer.label}`);
+  }
+  if (Array.isArray(result.signer?.roles) && result.signer.roles.length > 0) {
+    lines.push(`manifest signer roles: ${result.signer.roles.join(', ')}`);
+  }
+  if (Array.isArray(result.approvals)) {
+    lines.push(`manifest approvals: ${result.approvals.length}`);
+  }
+  if (result.signerPolicy) {
+    lines.push(`signer policy: ${result.signerPolicy.name || result.signerPolicy.policyPath}`);
+    const quorumText = formatApprovalQuorumStatusText(result.signerPolicy.approvalQuorum);
+    if (quorumText) {
+      lines.push(`signer quorum: ${quorumText}`);
+    }
+  }
+  lines.push('Manifest approval bundle updated.');
+  return lines.join('\n');
+}
+
 function formatTextReport(result) {
+  if (result.action === 'manifest-signature') {
+    return formatManifestSignatureTextReport(result);
+  }
   if (result.action === 'undo') {
     return formatUndoTextReport(result);
   }
@@ -2819,6 +3272,7 @@ async function main(argv = process.argv.slice(2)) {
 
   if (options.help) {
     console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--preset preset-name] [--manifest-out manifest.json] [--manifest-checksum] [--sign-manifest private-key.pem] [--signature-path manifest.sig.json] [--signer-policy signer-policy.json]');
+    console.log('       node organizer.js manifest.json --sign-manifest private-key.pem [--signature-path manifest.sig.json] [--signer-policy signer-policy.json] [--json]');
     console.log('       node organizer.js --undo manifest.json [--dry-run] [--json] [--skip-manifest-verification] [--verify-manifest-signature public-key.pem] [--signature-path manifest.sig.json] [--signer-policy signer-policy.json]');
     console.log('       node organizer.js --list-presets [--json]');
     console.log('       node organizer.js --write-preset preset-name destination.json [--force] [--json]');
@@ -2851,6 +3305,11 @@ async function main(argv = process.argv.slice(2)) {
     result = await writeNormalizedBucketConfig(options.fixConfigPath, options.fixConfigPath);
   } else if (options.lintConfigPath) {
     result = await lintBucketConfig(options.lintConfigPath);
+  } else if (options.signExistingManifestPath) {
+    result = await writeDetachedManifestSignature(options.signExistingManifestPath, options.signManifestKeyPath, {
+      signaturePath: options.signaturePath,
+      signerPolicyPath: options.signerPolicyPath,
+    });
   } else if (options.undoManifest) {
     result = await undoFromManifest(options.undoManifest, {
       dryRun: options.dryRun,

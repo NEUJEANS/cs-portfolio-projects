@@ -1,15 +1,29 @@
 {
   "name": "Course staff signing policy",
   "description": "Trusted signing keys for organizer undo approvals.",
+  "approvalQuorum": {
+    "minimumSigners": 2,
+    "requiredRoles": [
+      "organize-approver",
+      "undo-approver"
+    ]
+  },
   "trustedSigners": [
     {
-      "fingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
-      "label": "TA laptop key",
+      "fingerprint": "sha256:8149fa61267c74e034328161999d5b4ceb6dd9d5df989e26993ad34a63eccfc0",
+      "label": "Organizer reviewer",
       "roles": [
-        "organize-approver",
+        "organize-approver"
+      ],
+      "notes": "Approves organize passes."
+    },
+    {
+      "fingerprint": "sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d",
+      "label": "Undo reviewer",
+      "roles": [
         "undo-approver"
       ],
-      "notes": "Portfolio demo key"
+      "notes": "Approves rollback operations."
     }
   ]
 }

@@ -1,37 +1,100 @@
 {
   "action": "manifest-signature",
-  "createdAt": "2026-04-18T07:18:29.909Z",
+  "createdAt": "2026-04-18T08:09:24.288Z",
+  "updatedAt": "2026-04-18T08:09:24.291Z",
   "manifestPath": "/demo/file-organizer-cli/demo-manifest.json",
   "signaturePath": "/demo/file-organizer-cli/demo-manifest.sig.json",
   "signedPayload": {
     "kind": "canonical-manifest-json",
     "checksumAlgorithm": "sha256",
-    "checksum": "1a14c4806f26ee5ecca4bd22a7f0b953b935ef1f3875fbbe8f1e6a60de99779d",
+    "checksum": "39940a672e61b229a5fdf1b2421f794e9e390f0e34072b92711126f2d19d05a2",
     "includesIntegritySection": true
   },
   "signer": {
     "keyType": "ed25519",
-    "publicKeyFingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
-    "label": "TA laptop key",
+    "publicKeyFingerprint": "sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAtfYE+3Llxk9dwPThpzmw/r8zvNCl7qC0H250+ZEqLSE=\n-----END PUBLIC KEY-----\n",
+    "label": "Undo reviewer",
     "roles": [
-      "organize-approver",
       "undo-approver"
     ],
-    "notes": "Portfolio demo key"
+    "notes": "Approves rollback operations."
   },
   "signature": {
     "encoding": "base64",
-    "value": "n0dnadBtlvNrA8m9l+9Y2tYF1gfECrUSdS1rMOvY+0JSqnl7lqX3dl+9oeU8du42YAOXB0nJntupgseYXXtiAg=="
+    "value": "CLNiTfFoty40nWyppraSRL9VdnqY8tQH1np5YQzwWSnJHMGbCQtKe9esFtqwINqPFeHfvqXYswwP/YOTd5nRBg=="
   },
+  "approvals": [
+    {
+      "createdAt": "2026-04-18T08:09:24.291Z",
+      "signedPayload": {
+        "kind": "canonical-manifest-json",
+        "checksumAlgorithm": "sha256",
+        "checksum": "39940a672e61b229a5fdf1b2421f794e9e390f0e34072b92711126f2d19d05a2",
+        "includesIntegritySection": true
+      },
+      "signer": {
+        "keyType": "ed25519",
+        "publicKeyFingerprint": "sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAtfYE+3Llxk9dwPThpzmw/r8zvNCl7qC0H250+ZEqLSE=\n-----END PUBLIC KEY-----\n",
+        "label": "Undo reviewer",
+        "roles": [
+          "undo-approver"
+        ],
+        "notes": "Approves rollback operations."
+      },
+      "signature": {
+        "encoding": "base64",
+        "value": "CLNiTfFoty40nWyppraSRL9VdnqY8tQH1np5YQzwWSnJHMGbCQtKe9esFtqwINqPFeHfvqXYswwP/YOTd5nRBg=="
+      }
+    },
+    {
+      "createdAt": "2026-04-18T08:09:24.288Z",
+      "signer": {
+        "keyType": "ed25519",
+        "publicKeyFingerprint": "sha256:8149fa61267c74e034328161999d5b4ceb6dd9d5df989e26993ad34a63eccfc0",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA2Aa1aQY6g6s5vpqS06az6t9ynM1GCHovjhVmRjMybcM=\n-----END PUBLIC KEY-----\n",
+        "label": "Organizer reviewer",
+        "roles": [
+          "organize-approver"
+        ],
+        "notes": "Approves organize passes."
+      },
+      "signature": {
+        "encoding": "base64",
+        "value": "F0+b84wd6kcULvC8DJTyJPqTTpaIhbk2RGI9vlUF63W+XZz3ySC1NZptl87r14e2oL4xK0IVJR4MRSAvO+NGCQ=="
+      },
+      "signedPayload": {
+        "kind": "canonical-manifest-json",
+        "checksumAlgorithm": "sha256",
+        "checksum": "39940a672e61b229a5fdf1b2421f794e9e390f0e34072b92711126f2d19d05a2",
+        "includesIntegritySection": true
+      }
+    }
+  ],
   "signerPolicy": {
     "policyPath": "/demo/file-organizer-cli/demo-trusted-signers.json",
-    "trustedSignerCount": 1,
+    "trustedSignerCount": 2,
+    "approvalQuorum": {
+      "minimumSigners": 2,
+      "requiredRoles": [
+        "organize-approver",
+        "undo-approver"
+      ],
+      "approvalsPresent": 2,
+      "missingSigners": 0,
+      "missingRoles": [],
+      "satisfied": true,
+      "matchedFingerprints": [
+        "sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d",
+        "sha256:8149fa61267c74e034328161999d5b4ceb6dd9d5df989e26993ad34a63eccfc0"
+      ]
+    },
     "name": "Course staff signing policy",
     "description": "Trusted signing keys for organizer undo approvals.",
-    "matchedFingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
-    "matchedLabel": "TA laptop key",
+    "matchedFingerprint": "sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d",
+    "matchedLabel": "Undo reviewer",
     "matchedRoles": [
-      "organize-approver",
       "undo-approver"
     ]
   }

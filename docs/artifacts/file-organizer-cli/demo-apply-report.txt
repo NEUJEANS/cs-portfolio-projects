@@ -4,14 +4,16 @@ mode: apply
 recursive: no
 total moves: 6
 renamed to avoid collisions: 0
-manifest checksum: sha256:3ab32d05b038060f785902763f570ddf662fe50c78ad0ae9f5beababd32d9b54
+manifest checksum: sha256:55d36a1c862093e1f624dd295ebf6cc6fc4942035b73fa841c9e93842a9da506
 config: /demo/file-organizer-cli/coursework-demo.normalized.json
 manifest: /demo/file-organizer-cli/demo-manifest.json
 manifest signature: /demo/file-organizer-cli/demo-manifest.sig.json
-manifest signer fingerprint: sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638
-manifest signer label: TA laptop key
-manifest signer roles: organize-approver, undo-approver
+manifest signer fingerprint: sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d
+manifest signer label: Undo reviewer
+manifest signer roles: undo-approver
+manifest approvals: 2
 signer policy: Course staff signing policy
+signer quorum: 2/2 trusted approval(s); satisfied
 bucket assignments: 1
 bucket datasets: 2
 bucket documents: 1

@@ -40,4 +40,9 @@
   - shipped: `--signer-policy trusted-signers.json` allowlists trusted signer fingerprints for sign/verify flows
   - shipped: signer policies can publish reviewer labels, roles, and notes that surface in apply/undo reports
   - shipped: active signing inputs are auto-skipped when they live inside the target directory being organized so policy-driven sign flows remain resumable
-- [ ] add multi-signer approval metadata or quorum rules for shared team workflows that need more than one trusted signer
+- [x] add multi-signer approval metadata or quorum rules for shared team workflows that need more than one trusted signer
+  - shipped: detached signature sidecars can accumulate multiple approvals for the same checksum-backed manifest instead of replacing the prior reviewer proof
+  - shipped: signer policies can define `approvalQuorum.minimumSigners` plus required reviewer roles so undo fails closed until enough trusted reviewers have approved the exact manifest payload
+  - shipped: signer-policy-only undo/verification now works without a separate public-key flag because trusted approvals embed the public-key material needed to validate quorum bundles
+  - shipped: the CLI can append another trusted approval to an existing checksum-backed manifest by passing the manifest path positionally with `--sign-manifest`
+- [ ] add approval expiry or freshness windows so stale signer bundles can be rejected after a review deadline

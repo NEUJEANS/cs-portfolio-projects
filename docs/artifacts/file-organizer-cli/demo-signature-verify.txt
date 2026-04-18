@@ -2,30 +2,55 @@
   "action": "verify-manifest-signature",
   "manifestPath": "/demo/file-organizer-cli/demo-manifest.json",
   "signaturePath": "/demo/file-organizer-cli/demo-manifest.sig.json",
-  "publicKeyPath": "/demo/file-organizer-cli/demo-manifest-signer.pub.pem",
+  "publicKeyPath": null,
   "valid": true,
   "keyType": "ed25519",
-  "publicKeyFingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
-  "signerLabel": "TA laptop key",
-  "signerRoles": [
-    "organize-approver",
-    "undo-approver"
-  ],
+  "publicKeyFingerprint": null,
+  "signerLabel": null,
+  "signerRoles": [],
   "signedPayload": {
+    "kind": "canonical-manifest-json",
     "checksumAlgorithm": "sha256",
-    "checksum": "1a14c4806f26ee5ecca4bd22a7f0b953b935ef1f3875fbbe8f1e6a60de99779d"
+    "checksum": "39940a672e61b229a5fdf1b2421f794e9e390f0e34072b92711126f2d19d05a2",
+    "includesIntegritySection": true
   },
   "signerPolicy": {
     "policyPath": "/demo/file-organizer-cli/demo-trusted-signers.json",
-    "trustedSignerCount": 1,
+    "trustedSignerCount": 2,
+    "approvalQuorum": {
+      "minimumSigners": 2,
+      "requiredRoles": [
+        "organize-approver",
+        "undo-approver"
+      ],
+      "approvalsPresent": 2,
+      "missingSigners": 0,
+      "missingRoles": [],
+      "satisfied": true,
+      "matchedFingerprints": [
+        "sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d",
+        "sha256:8149fa61267c74e034328161999d5b4ceb6dd9d5df989e26993ad34a63eccfc0"
+      ]
+    },
     "name": "Course staff signing policy",
-    "description": "Trusted signing keys for organizer undo approvals.",
-    "matchedFingerprint": "sha256:1ed24494ee1a8de3b01d3260756012d67e1a86f9a72f24dd885921130dc1c638",
-    "matchedLabel": "TA laptop key",
-    "matchedRoles": [
+    "description": "Trusted signing keys for organizer undo approvals."
+  },
+  "reason": null,
+  "approvalCount": 2,
+  "verifiedApprovalCount": 2,
+  "approvalQuorum": {
+    "minimumSigners": 2,
+    "requiredRoles": [
       "organize-approver",
       "undo-approver"
+    ],
+    "approvalsPresent": 2,
+    "missingSigners": 0,
+    "missingRoles": [],
+    "satisfied": true,
+    "matchedFingerprints": [
+      "sha256:5020c6edf8e338efc8e4177566baed16a43b2e987d02ecd755d9e41d2795872d",
+      "sha256:8149fa61267c74e034328161999d5b4ceb6dd9d5df989e26993ad34a63eccfc0"
     ]
-  },
-  "reason": null
+  }
 }

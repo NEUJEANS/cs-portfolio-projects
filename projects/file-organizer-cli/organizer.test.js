@@ -1,9 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
+const { execFile: execFileCallback } = require('node:child_process');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
+const { promisify } = require('node:util');
+const execFile = promisify(execFileCallback);
 const {
   buildBucketConfig,
   bucketFor,
@@ -60,6 +63,9 @@ async function writeSignerPolicy(tmpDir, publicKeyPath, overrides = {}) {
       notes: overrides.notes || 'Portfolio demo key',
     }],
   };
+  if (overrides.approvalQuorum) {
+    policy.approvalQuorum = overrides.approvalQuorum;
+  }
   await fs.writeFile(policyPath, `${JSON.stringify(policy, null, 2)}
 `);
   return { policyPath, fingerprint, policy };
@@ -863,12 +869,16 @@ test('writeDetachedManifestSignature signs checksum-backed manifests with a deta
   assert.equal(signatureRecord.signaturePath, path.resolve(signaturePath));
   assert.equal(signatureRecord.signer.keyType, 'ed25519');
   assert.equal(signatureRecord.signedPayload.checksum, manifestSignatureChecksumFor(manifest));
+  assert.equal(Array.isArray(signatureRecord.approvals), true);
+  assert.equal(signatureRecord.approvals.length, 1);
+  assert.match(signatureRecord.approvals[0].signer.publicKeyPem, /BEGIN PUBLIC KEY/);
   assert.equal(verification.valid, true);
   assert.equal(verification.signaturePath, path.resolve(signaturePath));
   assert.equal(verification.signedPayload.checksum, manifestSignatureChecksumFor(manifest));
+  assert.equal(verification.approvalCount, 1);
 });
 
-test('loadSignerPolicy normalizes trusted signer fingerprints and metadata', async () => {
+test('loadSignerPolicy normalizes trusted signer fingerprints, metadata, and quorum rules', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-signer-policy-'));
   const { publicKeyPath } = await writeEd25519KeyPair(tmp);
   const { fingerprint } = await writeSignerPolicy(tmp, publicKeyPath);
@@ -882,6 +892,10 @@ test('loadSignerPolicy normalizes trusted signer fingerprints and metadata', asy
       label: ' Review laptop ',
       roles: ['organize-approver', 'organize-approver', ' undo-approver '],
     }],
+    approvalQuorum: {
+      minimumSigners: 1,
+      requiredRoles: [' undo-approver ', 'undo-approver'],
+    },
   }, null, 2)}
 `);
 
@@ -893,7 +907,197 @@ test('loadSignerPolicy normalizes trusted signer fingerprints and metadata', asy
     roles: ['organize-approver', 'undo-approver'],
     notes: null,
   }]);
+  assert.deepEqual(signerPolicy.approvalQuorum, {
+    minimumSigners: 1,
+    requiredRoles: ['undo-approver'],
+  });
   assert.equal(normalizeSignerFingerprint(bareFingerprint), fingerprint);
+});
+
+test('verifyDetachedManifestSignature can enforce multi-signer quorum rules with signer-policy-only undo', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-signature-quorum-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  const signaturePath = path.join(tmp, 'artifacts', 'organize-manifest.sig.json');
+  const organizerKeyPair = await writeEd25519KeyPair(tmp, 'organize-approver');
+  const undoKeyPair = await writeEd25519KeyPair(tmp, 'undo-approver');
+
+  const organizerFingerprint = publicKeyFingerprint(crypto.createPublicKey(await fs.readFile(organizerKeyPair.publicKeyPath, 'utf8')));
+  const undoFingerprint = publicKeyFingerprint(crypto.createPublicKey(await fs.readFile(undoKeyPair.publicKeyPath, 'utf8')));
+  const { policyPath } = await writeSignerPolicy(tmp, organizerKeyPair.publicKeyPath, {
+    trustedSigners: [
+      {
+        fingerprint: organizerFingerprint,
+        label: 'Organizer reviewer',
+        roles: ['organize-approver'],
+        notes: 'Approves organize passes.',
+      },
+      {
+        fingerprint: undoFingerprint,
+        label: 'Undo reviewer',
+        roles: ['undo-approver'],
+        notes: 'Approves restore operations.',
+      },
+    ],
+    approvalQuorum: {
+      minimumSigners: 2,
+      requiredRoles: ['organize-approver', 'undo-approver'],
+    },
+  });
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const protectedPaths = [
+    manifestPath,
+    signaturePath,
+    policyPath,
+    organizerKeyPair.privateKeyPath,
+    organizerKeyPair.publicKeyPath,
+    undoKeyPair.privateKeyPath,
+    undoKeyPair.publicKeyPath,
+  ];
+  const organizeResult = await organize(tmp, { skipPaths: protectedPaths });
+  await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+
+  const firstSignature = await writeDetachedManifestSignature(manifestPath, organizerKeyPair.privateKeyPath, {
+    signaturePath,
+    signerPolicyPath: policyPath,
+  });
+  assert.equal(firstSignature.approvals.length, 1);
+  assert.equal(firstSignature.signerPolicy.approvalQuorum.satisfied, false);
+  assert.deepEqual(firstSignature.signerPolicy.approvalQuorum.missingRoles, ['undo-approver']);
+
+  const quorumFailure = await verifyDetachedManifestSignature(manifestPath, null, {
+    signaturePath,
+    signerPolicyPath: policyPath,
+  });
+  assert.equal(quorumFailure.valid, false);
+  assert.match(quorumFailure.reason, /Signer policy quorum not met/);
+  assert.equal(quorumFailure.approvalCount, 1);
+  assert.equal(quorumFailure.verifiedApprovalCount, 1);
+  assert.equal(quorumFailure.approvalQuorum.satisfied, false);
+  assert.equal(quorumFailure.approvalQuorum.missingSigners, 1);
+  assert.deepEqual(quorumFailure.approvalQuorum.missingRoles, ['undo-approver']);
+
+  const secondSignature = await writeDetachedManifestSignature(manifestPath, undoKeyPair.privateKeyPath, {
+    signaturePath,
+    signerPolicyPath: policyPath,
+  });
+  assert.equal(secondSignature.approvals.length, 2);
+  assert.equal(secondSignature.signerPolicy.approvalQuorum.satisfied, true);
+  assert.equal(secondSignature.signerPolicy.approvalQuorum.approvalsPresent, 2);
+  assert.deepEqual(secondSignature.signerPolicy.approvalQuorum.missingRoles, []);
+
+  const quorumSuccess = await verifyDetachedManifestSignature(manifestPath, null, {
+    signaturePath,
+    signerPolicyPath: policyPath,
+  });
+  assert.equal(quorumSuccess.valid, true);
+  assert.equal(quorumSuccess.approvalCount, 2);
+  assert.equal(quorumSuccess.verifiedApprovalCount, 2);
+  assert.equal(quorumSuccess.approvalQuorum.satisfied, true);
+  assert.equal(quorumSuccess.approvalQuorum.minimumSigners, 2);
+  assert.deepEqual(quorumSuccess.approvalQuorum.requiredRoles, ['organize-approver', 'undo-approver']);
+  assert.deepEqual(quorumSuccess.approvalQuorum.missingRoles, []);
+  assert.equal(quorumSuccess.publicKeyFingerprint, null);
+
+  const keyedVerification = await verifyDetachedManifestSignature(manifestPath, undoKeyPair.publicKeyPath, {
+    signaturePath,
+    signerPolicyPath: policyPath,
+  });
+  assert.equal(keyedVerification.valid, true);
+  assert.equal(keyedVerification.publicKeyFingerprint, undoFingerprint);
+  assert.equal(keyedVerification.signerLabel, 'Undo reviewer');
+  assert.deepEqual(keyedVerification.signerRoles, ['undo-approver']);
+
+  const undoResult = await undoFromManifest(manifestPath, {
+    signaturePath,
+    signerPolicyPath: policyPath,
+  });
+  assert.equal(undoResult.signatureVerification.valid, true);
+  assert.equal(undoResult.signatureVerification.approvalQuorum.satisfied, true);
+  assert.equal(await fs.readFile(path.join(tmp, 'notes.txt'), 'utf8'), 'draft');
+});
+
+test('CLI can append approvals to an existing manifest with --sign-manifest manifest.json', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-cli-sign-manifest-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  const signaturePath = path.join(tmp, 'artifacts', 'organize-manifest.sig.json');
+  const organizerKeyPair = await writeEd25519KeyPair(tmp, 'cli-organize-approver');
+  const undoKeyPair = await writeEd25519KeyPair(tmp, 'cli-undo-approver');
+
+  const organizerFingerprint = publicKeyFingerprint(crypto.createPublicKey(await fs.readFile(organizerKeyPair.publicKeyPath, 'utf8')));
+  const undoFingerprint = publicKeyFingerprint(crypto.createPublicKey(await fs.readFile(undoKeyPair.publicKeyPath, 'utf8')));
+  const { policyPath } = await writeSignerPolicy(tmp, organizerKeyPair.publicKeyPath, {
+    trustedSigners: [
+      {
+        fingerprint: organizerFingerprint,
+        label: 'Organizer reviewer',
+        roles: ['organize-approver'],
+        notes: 'Approves organize passes.',
+      },
+      {
+        fingerprint: undoFingerprint,
+        label: 'Undo reviewer',
+        roles: ['undo-approver'],
+        notes: 'Approves restore operations.',
+      },
+    ],
+    approvalQuorum: {
+      minimumSigners: 2,
+      requiredRoles: ['organize-approver', 'undo-approver'],
+    },
+  });
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const protectedPaths = [
+    manifestPath,
+    signaturePath,
+    policyPath,
+    organizerKeyPair.privateKeyPath,
+    organizerKeyPair.publicKeyPath,
+    undoKeyPair.privateKeyPath,
+    undoKeyPair.publicKeyPath,
+  ];
+  const organizeResult = await organize(tmp, { skipPaths: protectedPaths });
+  await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+
+  const organizerCli = path.join(__dirname, 'organizer.js');
+  const firstRun = JSON.parse((await execFile(process.execPath, [
+    organizerCli,
+    manifestPath,
+    '--sign-manifest',
+    organizerKeyPair.privateKeyPath,
+    '--signature-path',
+    signaturePath,
+    '--signer-policy',
+    policyPath,
+    '--json',
+  ])).stdout);
+  assert.equal(firstRun.action, 'manifest-signature');
+  assert.equal(firstRun.approvals.length, 1);
+  assert.equal(firstRun.signerPolicy.approvalQuorum.satisfied, false);
+
+  const secondRun = JSON.parse((await execFile(process.execPath, [
+    organizerCli,
+    manifestPath,
+    '--sign-manifest',
+    undoKeyPair.privateKeyPath,
+    '--signature-path',
+    signaturePath,
+    '--signer-policy',
+    policyPath,
+    '--json',
+  ])).stdout);
+  assert.equal(secondRun.action, 'manifest-signature');
+  assert.equal(secondRun.approvals.length, 2);
+  assert.equal(secondRun.signerPolicy.approvalQuorum.satisfied, true);
+
+  const verification = await verifyDetachedManifestSignature(manifestPath, null, {
+    signaturePath,
+    signerPolicyPath: policyPath,
+  });
+  assert.equal(verification.valid, true);
+  assert.equal(verification.approvalCount, 2);
+  assert.equal(verification.approvalQuorum.satisfied, true);
 });
 
 test('writeDetachedManifestSignature can enforce a trusted signer policy and store signer metadata', async () => {
@@ -1022,6 +1226,32 @@ test('undo can require detached signature verification before restoring files', 
   );
 });
 
+test('writeDetachedManifestSignature resets stale approval bundles when the manifest payload changes', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-signature-refresh-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  const signaturePath = path.join(tmp, 'artifacts', 'organize-manifest.sig.json');
+  const { privateKeyPath, publicKeyPath } = await writeEd25519KeyPair(tmp);
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const initialOrganizeResult = await organize(tmp);
+  const initialManifest = await writeManifest(initialOrganizeResult, manifestPath, { includeChecksum: true });
+  const initialSignature = await writeDetachedManifestSignature(manifestPath, privateKeyPath, { signaturePath });
+  assert.equal(initialSignature.approvals.length, 1);
+
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+  const refreshedOrganizeResult = await organize(tmp);
+  const refreshedManifest = await writeManifest(refreshedOrganizeResult, manifestPath, { includeChecksum: true });
+  const refreshedSignature = await writeDetachedManifestSignature(manifestPath, privateKeyPath, { signaturePath });
+  const refreshedVerification = await verifyDetachedManifestSignature(manifestPath, publicKeyPath, { signaturePath });
+
+  assert.notEqual(manifestSignatureChecksumFor(initialManifest), manifestSignatureChecksumFor(refreshedManifest));
+  assert.equal(refreshedSignature.approvals.length, 1);
+  assert.equal(refreshedSignature.approvals[0].signedPayload.checksum, manifestSignatureChecksumFor(refreshedManifest));
+  assert.equal(refreshedVerification.valid, true);
+  assert.equal(refreshedVerification.approvalCount, 1);
+  assert.equal(refreshedVerification.signedPayload.checksum, manifestSignatureChecksumFor(refreshedManifest));
+});
+
 test('undo dry-run previews restore work without mutating the filesystem', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
   const manifestPath = path.join(tmp, 'undo-manifest.json');
@@ -1104,6 +1334,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: 'runs/latest.json',
     manifestChecksum: true,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1130,6 +1361,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: 'runs/latest.json',
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1157,6 +1389,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1183,6 +1416,35 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: 'runs/latest.json',
     manifestChecksum: true,
     signManifestKeyPath: 'keys/team.pem',
+    signExistingManifestPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: 'runs/latest.sig.json',
+    signerPolicyPath: 'keys/trusted-signers.json',
+    undoManifest: null,
+    skipManifestVerification: false,
+    configPath: null,
+    lintConfigPath: null,
+    previewConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
+  });
+
+  const signExistingManifestArgs = parseArgs(['runs/latest.json', '--sign-manifest', 'keys/reviewer.pem', '--signature-path', 'runs/latest.sig.json', '--signer-policy', 'keys/trusted-signers.json']);
+  assert.equal(signExistingManifestArgs.targetDir, '.');
+  assert.deepEqual(signExistingManifestArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: false,
+    manifestOut: null,
+    manifestChecksum: false,
+    signManifestKeyPath: 'keys/reviewer.pem',
+    signExistingManifestPath: 'runs/latest.json',
     verifyManifestSignatureKeyPath: null,
     signaturePath: 'runs/latest.sig.json',
     signerPolicyPath: 'keys/trusted-signers.json',
@@ -1209,8 +1471,36 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: 'keys/team.pub.pem',
     signaturePath: 'runs/latest.sig.json',
+    signerPolicyPath: 'keys/trusted-signers.json',
+    undoManifest: 'runs/latest.json',
+    skipManifestVerification: false,
+    configPath: null,
+    lintConfigPath: null,
+    previewConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
+  });
+
+  const policyOnlyUndoArgs = parseArgs(['--undo', 'runs/latest.json', '--signer-policy', 'keys/trusted-signers.json']);
+  assert.deepEqual(policyOnlyUndoArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: false,
+    manifestOut: null,
+    manifestChecksum: false,
+    signManifestKeyPath: null,
+    signExistingManifestPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     signerPolicyPath: 'keys/trusted-signers.json',
     undoManifest: 'runs/latest.json',
     skipManifestVerification: false,
@@ -1239,6 +1529,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1265,6 +1556,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1291,6 +1583,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1317,6 +1610,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1343,6 +1637,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     manifestOut: null,
     manifestChecksum: false,
     signManifestKeyPath: null,
+    signExistingManifestPath: null,
     verifyManifestSignatureKeyPath: null,
     signaturePath: null,
     signerPolicyPath: null,
@@ -1392,8 +1687,8 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
   );
 
   assert.throws(
-    () => parseArgs(['~/Downloads', '--sign-manifest', 'keys/team.pem']),
-    /--sign-manifest requires --manifest-out/,
+    () => parseArgs(['--sign-manifest', 'keys/team.pem']),
+    /--sign-manifest requires --manifest-out or a manifest path argument/,
   );
 
   assert.throws(
@@ -1403,12 +1698,12 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
 
   assert.throws(
     () => parseArgs(['--signature-path', 'runs/latest.sig.json']),
-    /--signature-path requires --sign-manifest or --verify-manifest-signature/,
+    /--signature-path requires --sign-manifest or --undo/,
   );
 
   assert.throws(
     () => parseArgs(['--signer-policy', 'keys/trusted-signers.json']),
-    /--signer-policy requires --sign-manifest or --verify-manifest-signature/,
+    /--signer-policy requires --sign-manifest or --undo/,
   );
 
   assert.throws(
@@ -1457,7 +1752,7 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
   );
 });
 
-test('formatTextReport includes config, preset, manifest, lint, and normalized-config details for supported actions', () => {
+test('formatTextReport includes config, preset, manifest, signature, lint, and normalized-config details for supported actions', () => {
   const organizeReport = formatTextReport({
     action: 'organize',
     rootDir: '/tmp/demo',
@@ -1494,6 +1789,29 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
       matchedValue: 'application/json',
       detectedMimeType: 'application/json',
     }],
+  });
+
+  const signatureReport = formatTextReport({
+    action: 'manifest-signature',
+    manifestPath: '/tmp/demo/manifests/latest.json',
+    signaturePath: '/tmp/demo/manifests/latest.sig.json',
+    signer: {
+      publicKeyFingerprint: 'sha256:def456',
+      label: 'Undo reviewer',
+      roles: ['undo-approver'],
+    },
+    approvals: [{}, {}],
+    signerPolicy: {
+      name: 'Course staff signing policy',
+      policyPath: '/tmp/demo/trusted-signers.json',
+      approvalQuorum: {
+        minimumSigners: 2,
+        approvalsPresent: 2,
+        missingSigners: 0,
+        missingRoles: [],
+        satisfied: true,
+      },
+    },
   });
 
   const undoReport = formatTextReport({
@@ -1582,6 +1900,12 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
   assert.match(organizeReport, /manifest signer roles: organize-approver, undo-approver/);
   assert.match(organizeReport, /signer policy: Course staff signing policy/);
   assert.match(organizeReport, /renamed to avoid collisions: 1/);
+  assert.match(signatureReport, /action: manifest-signature/);
+  assert.match(signatureReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
+  assert.match(signatureReport, /signature path: \/tmp\/demo\/manifests\/latest\.sig\.json/);
+  assert.match(signatureReport, /manifest signer label: Undo reviewer/);
+  assert.match(signatureReport, /manifest approvals: 2/);
+  assert.match(signatureReport, /signer quorum: 2\/2 trusted approval\(s\); satisfied/);
   assert.match(organizeReport, /\[renamed; MIME type application\/json; detected application\/json\]/);
   assert.match(undoReport, /action: undo/);
   assert.match(undoReport, /manifest checksum verified: yes/);
