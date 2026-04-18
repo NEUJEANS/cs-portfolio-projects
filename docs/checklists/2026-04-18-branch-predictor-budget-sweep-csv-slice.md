@@ -10,4 +10,4 @@
 - [x] review the slice at least 3 times and fix issues found
 - [x] run repo tests plus focused budget-sweep smoke checks, including a tiny-budget edge case
 - [x] run a secret scan before push
-- [ ] commit, push, and append the final wrap-up with commit hash and next step
+- [x] commit, push, and append the final wrap-up with commit hash and next step
