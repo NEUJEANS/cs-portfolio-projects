@@ -8,7 +8,7 @@
 - [x] add README usage/storytelling plus a committed sample scenario
 - [x] add regression coverage for merge properties, convergence, script loading, and CLI flows
 - [x] run targeted tests, smoke checks, and 3 review passes
-- [ ] run secret scan, commit, push, and write the wrap-up
+- [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] initial project scaffold, implementation, documentation, and sample scenario
