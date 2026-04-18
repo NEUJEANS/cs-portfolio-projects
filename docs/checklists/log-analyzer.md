@@ -11,9 +11,23 @@
 - [x] extend tests for parser behavior plus text/JSON/CSV output coverage
 - [x] run targeted tests and smoke checks
 - [x] run at least 3 review passes and fix issues found
-- [ ] run secret scan before push
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [x] consider per-path upstream hotspot exports in a future run
+
+## Upstream hotspot slice (2026-04-18 09:33 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the queued follow-up around per-path upstream latency hotspots
+- [x] do a brief upstream timing semantics refresh and self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add per-path upstream latency hotspot summaries to the analyzer result and text report
+- [x] add machine-friendly upstream hotspot export support for CLI workflows
+- [x] extend parser/output tests for JSON, text, and CSV coverage
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
 - [ ] commit, push, and add wrap-up
-- [ ] consider per-path upstream hotspot exports in a future run
+- [ ] consider a follow-up slice for status-filtered hotspot drill-downs
 
 - [x] inspect current parser and tests
 - [x] choose one meaningful upgrade slice

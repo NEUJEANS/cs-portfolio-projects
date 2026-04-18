@@ -117,6 +117,8 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['upstream_latency_summary']['average_ms'], 100.0)
         self.assertEqual(result['upstream_latency_summary']['max_ms'], 120.0)
         self.assertEqual(result['path_latency_breakdown'][0]['path'], '/api/report')
+        self.assertEqual(result['upstream_path_latency_breakdown'][0]['path'], '/api/report')
+        self.assertEqual(result['upstream_path_latency_breakdown'][0]['average_ms'], 100.0)
 
     def test_analyze_lines_limits_and_sorts_path_latency_breakdown(self):
         lines = [
@@ -131,6 +133,21 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['path_latency_breakdown'][1]['count'], 2)
         self.assertEqual(result['path_latency_breakdown'][1]['p95_ms'], 219.0)
 
+    def test_analyze_lines_limits_and_sorts_upstream_path_latency_breakdown(self):
+        lines = [
+            '10.0.0.1 - - [x] "GET /fast HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.010',
+            '10.0.0.2 - - [x] "GET /retry HTTP/1.1" 200 11 request_time=0.300 upstream_response_time=0.080, 0.070',
+            '10.0.0.3 - - [x] "GET /retry HTTP/1.1" 200 12 request_time=0.320 upstream_response_time=0.090',
+            '10.0.0.4 - - [x] "GET /db HTTP/1.1" 200 13 request_time=0.280 upstream_response_time=0.200',
+        ]
+        result = analyze_lines(lines, top_n=2, latency_top_n=2)
+        self.assertEqual(
+            [row['path'] for row in result['upstream_path_latency_breakdown']],
+            ['/db', '/retry'],
+        )
+        self.assertEqual(result['upstream_path_latency_breakdown'][1]['count'], 2)
+        self.assertEqual(result['upstream_path_latency_breakdown'][1]['average_ms'], 120.0)
+
     def test_format_text_report_handles_empty_results(self):
         report = format_text_report(analyze_lines([], top_n=3))
         self.assertIn('Total requests: 0', report)
@@ -139,6 +156,7 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('Latency summary (ms):', report)
         self.assertIn('Upstream latency summary (ms):', report)
         self.assertIn('Per-path latency hotspots (ms):', report)
+        self.assertIn('Per-path upstream latency hotspots (ms):', report)
         self.assertIn('  (none)', report)
 
     def test_cli_json_output_includes_named_timing_summaries(self):
@@ -167,12 +185,14 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['latency_summary']['max_ms'], 250.0)
             self.assertEqual(payload['upstream_latency_summary']['average_ms'], 100.0)
             self.assertEqual(payload['path_latency_breakdown'][0]['path'], '/login')
+            self.assertEqual(payload['upstream_path_latency_breakdown'][0]['path'], '/login')
 
     def test_cli_csv_exports_include_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
             summary_csv = Path(tmpdir) / 'exports' / 'summary.csv'
             breakdown_csv = Path(tmpdir) / 'exports' / 'path-latency.csv'
+            upstream_breakdown_csv = Path(tmpdir) / 'exports' / 'upstream-path-latency.csv'
             log_path.write_text(
                 textwrap.dedent(
                     '''\
@@ -198,6 +218,8 @@ class LogAnalyzerTests(unittest.TestCase):
                     str(summary_csv),
                     '--path-latency-csv',
                     str(breakdown_csv),
+                    '--upstream-path-latency-csv',
+                    str(upstream_breakdown_csv),
                 ],
                 cwd=Path(__file__).parent,
                 check=True,
@@ -219,6 +241,13 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(latency_rows[0]['count'], '2')
             self.assertEqual(latency_rows[0]['average_ms'], '475.0')
 
+            with upstream_breakdown_csv.open(encoding='utf-8', newline='') as handle:
+                upstream_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(upstream_rows), 1)
+            self.assertEqual(upstream_rows[0]['path'], '/slow')
+            self.assertEqual(upstream_rows[0]['count'], '2')
+            self.assertEqual(upstream_rows[0]['average_ms'], '335.0')
+
     def test_cli_text_output_mentions_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -238,6 +267,7 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Latency summary (ms):', completed.stdout)
             self.assertIn('Upstream latency summary (ms):', completed.stdout)
             self.assertIn('Per-path latency hotspots (ms):', completed.stdout)
+            self.assertIn('Per-path upstream latency hotspots (ms):', completed.stdout)
 
 
 if __name__ == '__main__':

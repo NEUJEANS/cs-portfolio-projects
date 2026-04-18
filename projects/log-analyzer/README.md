@@ -1,7 +1,7 @@
 # log-analyzer
 
 ## Overview
-Analyze common, combined, and latency-augmented web access logs from the command line with per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, and upstream-latency summaries.
+Analyze common, combined, and latency-augmented web access logs from the command line with per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, and per-path upstream hotspot summaries.
 
 ## Why it is portfolio-worthy
 - parses realistic common and combined access-log lines instead of doing loose substring counting
@@ -23,7 +23,8 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - reports top client IPs, paths, referrers, and user agents
 - tracks total bytes, average bytes per request, malformed line count, request latency percentiles, and upstream latency percentiles when present
 - surfaces per-path request-latency hotspots ordered by average latency
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, and `--format text|json`
+- surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--upstream-path-latency-csv`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -31,6 +32,7 @@ python3 log_analyzer.py access.log
 python3 log_analyzer.py access.log --top 5
 python3 log_analyzer.py access.log --format json
 python3 log_analyzer.py access.log --summary-csv summary.csv --path-latency-csv hotspots.csv
+python3 log_analyzer.py access.log --path-latency-csv request-hotspots.csv --upstream-path-latency-csv upstream-hotspots.csv
 ```
 
 The parser accepts:
@@ -63,6 +65,8 @@ Use `--path-latency-csv` to export one row per hotspot path with these columns:
 - `p95_ms`
 - `p99_ms`
 - `max_ms`
+
+Use `--upstream-path-latency-csv` to export the same schema for `upstream_response_time=`-backed hotspots only. This makes it easy to show which endpoints are slow because of downstream services versus app-side processing.
 
 This makes it easy to drop a run into Sheets, Numbers, Excel, or plotting notebooks for portfolio screenshots and follow-up analysis.
 
@@ -105,6 +109,9 @@ Upstream latency summary (ms):
 Per-path latency hotspots (ms):
   /api/export: count=5, avg=91.3, p95=118.1, max=121.0
   /dashboard: count=8, avg=44.8, p95=58.7, max=63.2
+Per-path upstream latency hotspots (ms):
+  /api/export: count=5, avg=73.6, p95=99.0, max=101.4
+  /dashboard: count=6, avg=18.2, p95=27.4, max=29.1
 ```
 
 ## Test
@@ -114,4 +121,4 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 
 ## Future Improvements
 - add time-window or status-filter options for larger operational datasets
-- optionally surface per-path upstream latency hotspots when `upstream_response_time=` data is available
+- optionally add status/method filters to the per-path hotspot exports for deeper incident drill-downs

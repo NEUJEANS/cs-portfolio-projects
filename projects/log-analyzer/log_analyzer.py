@@ -191,6 +191,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
     latencies_ms: list[float] = []
     upstream_latencies_ms: list[float] = []
     path_latencies: dict[str, list[float]] = defaultdict(list)
+    upstream_path_latencies: dict[str, list[float]] = defaultdict(list)
     total_bytes = 0
     total_requests = 0
     invalid_lines = 0
@@ -218,6 +219,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
             path_latencies[parsed.path].append(parsed.latency_ms)
         if parsed.upstream_response_time_ms is not None:
             upstream_latencies_ms.append(parsed.upstream_response_time_ms)
+            upstream_path_latencies[parsed.path].append(parsed.upstream_response_time_ms)
 
     average_bytes = round(total_bytes / total_requests, 2) if total_requests else 0.0
     return {
@@ -234,6 +236,9 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
         "latency_summary": summarize_latencies(latencies_ms),
         "upstream_latency_summary": summarize_latencies(upstream_latencies_ms),
         "path_latency_breakdown": summarize_path_latencies(path_latencies, latency_limit),
+        "upstream_path_latency_breakdown": summarize_path_latencies(
+            upstream_path_latencies, latency_limit
+        ),
     }
 
 
@@ -315,6 +320,17 @@ def format_text_report(result: dict) -> str:
     lines.append("Per-path latency hotspots (ms):")
     if result["path_latency_breakdown"]:
         for row in result["path_latency_breakdown"]:
+            lines.append(
+                "  "
+                f"{row['path']}: count={row['count']}, avg={row['average_ms']}, "
+                f"p95={row['p95_ms']}, max={row['max_ms']}"
+            )
+    else:
+        lines.append("  (none)")
+
+    lines.append("Per-path upstream latency hotspots (ms):")
+    if result["upstream_path_latency_breakdown"]:
+        for row in result["upstream_path_latency_breakdown"]:
             lines.append(
                 "  "
                 f"{row['path']}: count={row['count']}, avg={row['average_ms']}, "
@@ -411,7 +427,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--path-latency-csv",
-        help="Optional path for a per-path latency breakdown CSV export",
+        help="Optional path for a per-path request-latency breakdown CSV export",
+    )
+    parser.add_argument(
+        "--upstream-path-latency-csv",
+        help="Optional path for a per-path upstream-latency breakdown CSV export",
     )
     parser.add_argument(
         "--format",
@@ -440,6 +460,11 @@ def main(argv: list[str] | None = None) -> int:
         write_summary_csv(args.summary_csv, result)
     if args.path_latency_csv:
         write_path_latency_csv(args.path_latency_csv, result["path_latency_breakdown"])
+    if args.upstream_path_latency_csv:
+        write_path_latency_csv(
+            args.upstream_path_latency_csv,
+            result["upstream_path_latency_breakdown"],
+        )
 
     if args.format == "json":
         print(json.dumps(result, indent=2, sort_keys=True))
