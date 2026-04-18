@@ -10,13 +10,14 @@
 - [x] add minute/hour time-bucket summaries and `--time-bucket-csv` exports for chart-ready trend analysis
 - [x] add repeatable `--facet-field` support plus per-facet hotspot/time-bucket breakdowns and dedicated facet CSV exports
 - [x] add standalone `--time-bucket-card-svg` / `--time-bucket-card-html` exports for slide-ready observability trend cards and browser-friendly bucket summary pages
+- [x] add `--facet-compare-field` / `--facet-compare-values` release-review helpers with side-by-side JSON/text summaries and dedicated comparison CSV exports
 
 ## Current quality checks
-- [x] README reflects the shipped facet flags, hotspot/time-bucket workflows, trend-card exports, and export metadata
-- [x] unittest coverage includes named-field parsing, facet breakdowns, trend-card rendering, file exports, and CLI validation errors
+- [x] README reflects the shipped facet flags, side-by-side comparison helpers, hotspot/time-bucket workflows, trend-card exports, and export metadata
+- [x] unittest coverage includes named-field parsing, facet comparison summaries/CSV exports, facet breakdowns, trend-card rendering, file exports, and CLI validation errors
 - [x] project is resumable via review logs and wrap-up notes in `docs/`
 
 ## Next follow-up ideas
-- [ ] add comparison helpers that diff two facet values (for example `prod` vs `staging`) side by side for release reviews
 - [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
 - [ ] add compact annotation/callout controls so trend cards can optionally pin deploy markers or incident labels onto selected buckets
+- [ ] consider dedicated comparison-card SVG/HTML artifacts built from `--facet-compare-*` output for release-review screenshots

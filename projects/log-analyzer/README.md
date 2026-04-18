@@ -1,7 +1,7 @@
 # log-analyzer
 
 ## Overview
-Analyze common, combined, and latency-augmented web access logs from the command line with time-window slicing, minute/hour trend bucketing, per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, deployment/environment facet breakdowns, and incident-style per-path hotspot drill-downs.
+Analyze common, combined, and latency-augmented web access logs from the command line with time-window slicing, minute/hour trend bucketing, per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, deployment/environment facet breakdowns, side-by-side release/deployment comparisons, and incident-style per-path hotspot drill-downs.
 
 ## Why it is portfolio-worthy
 - parses realistic common and combined access-log lines instead of doing loose substring counting
@@ -12,6 +12,7 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - exports minute/hour trend buckets so students can turn raw logs into screenshot-ready latency and error-rate stories
 - renders standalone SVG and HTML mini trend cards directly from active time buckets so GitHub Pages / slides can show release or incident snapshots without spreadsheet cleanup
 - splits hotspot and trend views by named deployment/environment fields such as `env=prod`, `region=us-east-1`, or `release=2026.04` when richer log formats include them
+- compares two facet values side by side (for example `prod` vs `staging`) with request/error/latency deltas plus aligned time-bucket rows for release reviews
 - handles malformed lines, missing byte counts, and optional latency fields safely
 
 ## Stack
@@ -33,7 +34,8 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
 - supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards and browser-friendly artifact pages
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet hotspot and trend breakdowns in text, JSON, and dedicated CSV exports
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--facet-field`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -48,6 +50,7 @@ python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg t
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
 python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
+python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-csv release-compare.csv
 ```
 
 The parser accepts:
@@ -103,6 +106,21 @@ Examples:
 - `--window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour` compares hourly trend buckets inside a bounded incident window
 - `--time-bucket minute --time-bucket-csv minute-trends.csv` exports chart-ready bucket rows for Sheets or notebooks
 - `--time-bucket minute --facet-field env --facet-field region --time-bucket-facet-csv bucket-facets.csv` exports one row per bucket/facet combination so deploy, shard, or region charts can be split without extra spreadsheet wrangling
+
+## Facet comparisons for release reviews
+Use `--facet-compare-field FIELD --facet-compare-values LEFT RIGHT` when you want two deployment, release, or environment values compared side by side without losing the normal global summary. This is useful for portfolio screenshots and release-review notes such as `env=prod` vs `env=staging` or `release=2026.04` vs `release=2026.05`.
+
+Behavior:
+- text output adds a compact comparison section with per-side request/error/latency summaries plus deltas
+- JSON output includes a `facet_comparison` object with per-side summaries and an aligned `time_buckets` array when `--time-bucket` is active
+- `--facet-compare-csv` writes one summary row plus one row per aligned bucket, making it easy to drop the comparison into Sheets or a notebook
+- `--summary-csv` also records the active comparison field/values so downstream exports stay self-describing
+- missing buckets are padded with zero-request rows so `prod` and `staging` stay aligned minute by minute or hour by hour
+
+Examples:
+- `--facet-compare-field env --facet-compare-values prod staging`
+- `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-csv release-compare.csv`
+- combine with `--window-start` / `--window-end` to isolate the deploy window before comparing the two slices
 
 ## Trend card artifacts
 Use `--time-bucket-card-svg` when you want one standalone visual card for slides, README screenshots, or portfolio thumbnails. Use `--time-bucket-card-html` when you also want a browser-friendly artifact page with the same inline SVG plus a bucket summary table.
@@ -184,6 +202,11 @@ Use `--time-bucket-csv` together with `--time-bucket` to export one row per buck
 
 Use `--time-bucket-facet-csv` with both `--time-bucket` and `--facet-field` to export the same trend schema plus `facet_label` and one `facet_<field>` column per selected field.
 
+Use `--facet-compare-csv` with `--facet-compare-field` and `--facet-compare-values` to export:
+- one `summary` row with left/right request, error-rate, latency, upstream-latency, and top-path metrics
+- one `bucket` row per aligned minute/hour bucket when `--time-bucket` is active
+- delta columns such as `request_count_delta`, `p95_latency_ms_delta`, and `max_upstream_latency_ms_delta`
+
 This makes it easy to drop a run into Sheets, Numbers, Excel, or plotting notebooks for portfolio screenshots and follow-up analysis.
 
 ## Sample text output
@@ -206,6 +229,12 @@ Time bucket facet breakdowns: (facets: env, region)
   2026-04-18T09:00:00+00:00 | env=prod, region=us-east-1 -> requests=30, errors=6 (20.0%), top_path=/api/export (6)
     request latency: samples=29, avg=22.4, p95=58.0, max=109.0
     upstream latency: samples=21, avg=16.2, p95=40.1, max=51.0
+Facet comparison (env): prod vs staging (delta: staging minus prod)
+  env=prod -> requests=30, errors=6 (20.0%), avg_latency=22.4 ms, p95_latency=58.0 ms, avg_upstream=16.2 ms, p95_upstream=40.1 ms, top_path=/api/export (6)
+  env=staging -> requests=12, errors=1 (8.333%), avg_latency=11.8 ms, p95_latency=24.5 ms, avg_upstream=7.4 ms, p95_upstream=15.2 ms, top_path=/api/export (3)
+  delta -> requests=-18, errors=-5, error_rate=-11.667 pp, avg_latency=-10.6 ms, p95_latency=-33.5 ms, avg_upstream=-8.8 ms, p95_upstream=-24.9 ms
+Facet comparison buckets (hour):
+  2026-04-18T09:00:00+00:00 -> prod: requests=30, error_rate=20.0%, avg_latency=22.4 ms | staging: requests=12, error_rate=8.333%, avg_latency=11.8 ms | delta requests=-18, error_rate=-11.667 pp, avg_latency=-10.6 ms
 Status counts:
   200: 35
   404: 5
@@ -251,6 +280,6 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 ```
 
 ## Future Improvements
-- add comparison helpers that diff two facet values (for example `prod` vs `staging`) side by side for release reviews
 - optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
 - add compact annotation/callout controls so trend cards can optionally pin deploy markers or incident labels onto selected buckets
+- add dedicated comparison-card SVG/HTML artifacts built from `--facet-compare-*` output for release-review screenshots

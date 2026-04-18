@@ -1,5 +1,19 @@
 # Log Analyzer Checklist
 
+## Facet comparison slice (2026-04-18 15:10 UTC run)
+- [x] confirm repo sync before editing and preserve the existing unfinished local comparison work
+- [x] choose the queued follow-up around side-by-side `prod` vs `staging` release-review comparisons
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--facet-compare-field` and `--facet-compare-values` analysis support without disturbing the existing global/facet outputs
+- [x] expose comparison summaries in text/JSON plus aligned per-bucket deltas when `--time-bucket` is active
+- [x] add `--facet-compare-csv` export support and summary CSV metadata for downstream spreadsheet/report workflows
+- [x] extend tests for analysis behavior, text output, CSV exports, JSON output, and CLI validation
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider a follow-up slice for comparison-card SVG/HTML exports or annotation callouts
+
 ## Hotspot filter slice (2026-04-18 09:45 UTC run)
 - [x] confirm repo sync before editing
 - [x] choose the queued follow-up around status/method-filtered hotspot drill-downs

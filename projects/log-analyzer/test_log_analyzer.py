@@ -281,6 +281,59 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['time_bucket_facet_breakdown'][0]['request_count'], 2)
         self.assertEqual(result['time_bucket_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
 
+    def test_analyze_lines_builds_facet_comparison(self):
+        lines = [
+            '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod',
+            '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod',
+            '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.200 upstream_response_time=0.120 env=staging',
+            '10.0.0.4 - - [18/Apr/2026:09:01:40 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350 env=staging',
+        ]
+        result = analyze_lines(
+            lines,
+            top_n=2,
+            time_bucket_granularity='minute',
+            facet_compare_field='env',
+            facet_compare_values=('prod', 'staging'),
+        )
+        comparison = result['facet_comparison']
+        self.assertIsNotNone(comparison)
+        self.assertEqual(comparison['field'], 'env')
+        self.assertEqual(comparison['left']['value'], 'prod')
+        self.assertEqual(comparison['right']['value'], 'staging')
+        self.assertEqual(comparison['delta_direction'], 'staging minus prod')
+        self.assertEqual(comparison['left']['summary']['request_count'], 2)
+        self.assertEqual(comparison['right']['summary']['request_count'], 2)
+        self.assertEqual(comparison['delta']['average_latency_ms_delta'], 175)
+        self.assertEqual(comparison['delta']['p95_upstream_latency_ms_delta'], 99.5)
+        self.assertEqual(comparison['time_bucketing'], {'granularity': 'minute', 'bucket_count': 2})
+        self.assertEqual(comparison['time_buckets'][0]['bucket_start'], '2026-04-18T09:00:00+00:00')
+        self.assertEqual(comparison['time_buckets'][0]['left_request_count'], 2)
+        self.assertEqual(comparison['time_buckets'][0]['right_request_count'], 0)
+        self.assertEqual(comparison['time_buckets'][0]['error_rate_pct_delta'], -50)
+        self.assertEqual(comparison['time_buckets'][1]['left_request_count'], 0)
+        self.assertEqual(comparison['time_buckets'][1]['right_request_count'], 2)
+        self.assertEqual(comparison['time_buckets'][1]['p95_latency_ms_delta'], None)
+
+    def test_format_text_report_mentions_facet_comparison(self):
+        report = format_text_report(
+            analyze_lines(
+                [
+                    '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod',
+                    '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod',
+                    '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.200 upstream_response_time=0.120 env=staging',
+                    '10.0.0.4 - - [18/Apr/2026:09:01:40 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350 env=staging',
+                ],
+                top_n=2,
+                time_bucket_granularity='minute',
+                facet_compare_field='env',
+                facet_compare_values=('prod', 'staging'),
+            )
+        )
+        self.assertIn('Facet comparison (env): prod vs staging (delta: staging minus prod)', report)
+        self.assertIn('env=prod -> requests=2, errors=1 (50.0%), avg_latency=225 ms, p95_latency=382.5 ms', report)
+        self.assertIn('delta -> requests=0, errors=0, error_rate=0 pp, avg_latency=175 ms, p95_latency=197.5 ms, avg_upstream=95 ms, p95_upstream=99.5 ms', report)
+        self.assertIn('Facet comparison buckets (minute):', report)
+
     def test_format_text_report_handles_empty_results(self):
         report = format_text_report(analyze_lines([], top_n=3))
         self.assertIn('Total requests: 0', report)
@@ -605,6 +658,163 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['path_latency_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
             self.assertEqual(payload['time_bucket_facet_breakdown'][0]['request_count'], 2)
             self.assertEqual(payload['time_bucket_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+
+
+    def test_cli_json_output_supports_facet_comparison(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.200 upstream_response_time=0.120 env=staging
+                    10.0.0.4 - - [18/Apr/2026:09:01:40 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350 env=staging
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--time-bucket',
+                    'minute',
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-values',
+                    'prod',
+                    'staging',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            comparison = payload['facet_comparison']
+            self.assertEqual(comparison['field'], 'env')
+            self.assertEqual(comparison['left']['value'], 'prod')
+            self.assertEqual(comparison['right']['value'], 'staging')
+            self.assertEqual(comparison['delta']['average_latency_ms_delta'], 175)
+            self.assertEqual(comparison['time_buckets'][0]['request_count_delta'], -2)
+            self.assertEqual(comparison['time_buckets'][1]['right_top_path'], '/api/report')
+
+    def test_cli_facet_compare_csv_exports_include_summary_and_bucket_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            summary_csv = Path(tmpdir) / 'exports' / 'summary.csv'
+            comparison_csv = Path(tmpdir) / 'exports' / 'facet-compare.csv'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.200 upstream_response_time=0.120 env=staging
+                    10.0.0.4 - - [18/Apr/2026:09:01:40 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350 env=staging
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--summary-csv',
+                    str(summary_csv),
+                    '--time-bucket',
+                    'minute',
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-values',
+                    'prod',
+                    'staging',
+                    '--facet-compare-csv',
+                    str(comparison_csv),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            with summary_csv.open(encoding='utf-8', newline='') as handle:
+                summary_rows = list(csv.DictReader(handle))
+            self.assertTrue(any(row['metric'] == 'facet_compare_field' and row['value'] == 'env' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'facet_compare_left_value' and row['value'] == 'prod' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'facet_compare_right_value' and row['value'] == 'staging' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'facet_compare_bucket_count' and row['value'] == '2' for row in summary_rows))
+
+            with comparison_csv.open(encoding='utf-8', newline='') as handle:
+                comparison_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(comparison_rows), 3)
+            self.assertEqual(comparison_rows[0]['row_type'], 'summary')
+            self.assertEqual(comparison_rows[0]['comparison_field'], 'env')
+            self.assertEqual(comparison_rows[0]['left_value'], 'prod')
+            self.assertEqual(comparison_rows[0]['right_value'], 'staging')
+            self.assertEqual(comparison_rows[0]['p95_latency_ms_delta'], '197.5')
+            self.assertEqual(comparison_rows[0]['max_upstream_latency_ms_delta'], '100')
+            self.assertEqual(comparison_rows[1]['row_type'], 'bucket')
+            self.assertEqual(comparison_rows[1]['bucket_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(comparison_rows[1]['request_count_delta'], '-2')
+            self.assertEqual(comparison_rows[2]['bucket_start'], '2026-04-18T09:01:00+00:00')
+            self.assertEqual(comparison_rows[2]['right_request_count'], '2')
+
+    def test_cli_rejects_incomplete_facet_compare_flags(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            comparison_csv = Path(tmpdir) / 'exports' / 'facet-compare.csv'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-csv',
+                    str(comparison_csv),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--facet-compare-csv requires --facet-compare-field and --facet-compare-values', completed.stderr)
+
+    def test_cli_rejects_duplicate_facet_compare_values(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-values',
+                    'prod',
+                    'prod',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--facet-compare-values must contain two distinct values', completed.stderr)
 
     def test_cli_time_window_accepts_naive_iso_as_utc(self):
         with tempfile.TemporaryDirectory() as tmpdir:

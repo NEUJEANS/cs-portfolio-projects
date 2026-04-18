@@ -189,6 +189,148 @@ def build_facet_map(facet_fields: list[str], facet_values: tuple[str, ...]) -> d
     return {field_name: value for field_name, value in zip(facet_fields, facet_values, strict=True)}
 
 
+def subtract_optional_metric(right: float | int | None, left: float | int | None) -> float | int | None:
+    if right is None or left is None:
+        return None
+    difference = float(right) - float(left)
+    if difference.is_integer():
+        return int(difference)
+    return round(difference, 3)
+
+
+def build_empty_time_bucket_row(bucket_start: str, granularity: str | None) -> dict[str, object]:
+    bucket_end = ""
+    if granularity is not None:
+        bucket_end = format_datetime_for_output(
+            parse_bucket_datetime(bucket_start) + get_time_bucket_delta(granularity)
+        )
+    return {
+        "bucket_start": bucket_start,
+        "bucket_end": bucket_end,
+        "request_count": 0,
+        "error_count": 0,
+        "error_rate_pct": 0.0,
+        "top_path": None,
+        "top_path_count": 0,
+        "latency_sample_count": 0,
+        "average_latency_ms": None,
+        "p95_latency_ms": None,
+        "max_latency_ms": None,
+        "upstream_latency_sample_count": 0,
+        "average_upstream_latency_ms": None,
+        "p95_upstream_latency_ms": None,
+        "max_upstream_latency_ms": None,
+    }
+
+
+def summarize_release_review_metrics(result: dict) -> dict[str, object]:
+    latency_summary = result["latency_summary"] or {}
+    upstream_latency_summary = result["upstream_latency_summary"] or {}
+    top_path = None
+    top_path_count = 0
+    if result["top_paths"]:
+        top_path, top_path_count = result["top_paths"][0]
+    error_count = sum(
+        count
+        for status, count in result["status_counts"].items()
+        if status.startswith(("4", "5"))
+    )
+    total_requests = result["total_requests"]
+    return {
+        "request_count": total_requests,
+        "error_count": error_count,
+        "error_rate_pct": round((error_count / total_requests) * 100, 3)
+        if total_requests
+        else 0.0,
+        "average_latency_ms": latency_summary.get("average_ms"),
+        "p95_latency_ms": latency_summary.get("p95_ms"),
+        "max_latency_ms": latency_summary.get("max_ms"),
+        "average_upstream_latency_ms": upstream_latency_summary.get("average_ms"),
+        "p95_upstream_latency_ms": upstream_latency_summary.get("p95_ms"),
+        "max_upstream_latency_ms": upstream_latency_summary.get("max_ms"),
+        "top_path": top_path,
+        "top_path_count": top_path_count,
+    }
+
+
+def build_facet_comparison_bucket_rows(
+    left_result: dict,
+    right_result: dict,
+    *,
+    granularity: str | None,
+) -> list[dict[str, object]]:
+    if granularity is None:
+        return []
+
+    left_rows = {row["bucket_start"]: row for row in left_result["time_buckets"]}
+    right_rows = {row["bucket_start"]: row for row in right_result["time_buckets"]}
+    all_bucket_starts = sorted({*left_rows.keys(), *right_rows.keys()})
+    rows: list[dict[str, object]] = []
+    for bucket_start in all_bucket_starts:
+        left_row = left_rows.get(bucket_start) or build_empty_time_bucket_row(bucket_start, granularity)
+        right_row = right_rows.get(bucket_start) or build_empty_time_bucket_row(bucket_start, granularity)
+        bucket_end = left_row["bucket_end"] or right_row["bucket_end"]
+        rows.append(
+            {
+                "bucket_start": bucket_start,
+                "bucket_end": bucket_end,
+                "left_request_count": left_row["request_count"],
+                "right_request_count": right_row["request_count"],
+                "request_count_delta": right_row["request_count"] - left_row["request_count"],
+                "left_error_count": left_row["error_count"],
+                "right_error_count": right_row["error_count"],
+                "error_count_delta": right_row["error_count"] - left_row["error_count"],
+                "left_error_rate_pct": left_row["error_rate_pct"],
+                "right_error_rate_pct": right_row["error_rate_pct"],
+                "error_rate_pct_delta": subtract_optional_metric(
+                    right_row["error_rate_pct"],
+                    left_row["error_rate_pct"],
+                ),
+                "left_average_latency_ms": left_row["average_latency_ms"],
+                "right_average_latency_ms": right_row["average_latency_ms"],
+                "average_latency_ms_delta": subtract_optional_metric(
+                    right_row["average_latency_ms"],
+                    left_row["average_latency_ms"],
+                ),
+                "left_p95_latency_ms": left_row["p95_latency_ms"],
+                "right_p95_latency_ms": right_row["p95_latency_ms"],
+                "p95_latency_ms_delta": subtract_optional_metric(
+                    right_row["p95_latency_ms"],
+                    left_row["p95_latency_ms"],
+                ),
+                "left_max_latency_ms": left_row["max_latency_ms"],
+                "right_max_latency_ms": right_row["max_latency_ms"],
+                "max_latency_ms_delta": subtract_optional_metric(
+                    right_row["max_latency_ms"],
+                    left_row["max_latency_ms"],
+                ),
+                "left_average_upstream_latency_ms": left_row["average_upstream_latency_ms"],
+                "right_average_upstream_latency_ms": right_row["average_upstream_latency_ms"],
+                "average_upstream_latency_ms_delta": subtract_optional_metric(
+                    right_row["average_upstream_latency_ms"],
+                    left_row["average_upstream_latency_ms"],
+                ),
+                "left_p95_upstream_latency_ms": left_row["p95_upstream_latency_ms"],
+                "right_p95_upstream_latency_ms": right_row["p95_upstream_latency_ms"],
+                "p95_upstream_latency_ms_delta": subtract_optional_metric(
+                    right_row["p95_upstream_latency_ms"],
+                    left_row["p95_upstream_latency_ms"],
+                ),
+                "left_max_upstream_latency_ms": left_row["max_upstream_latency_ms"],
+                "right_max_upstream_latency_ms": right_row["max_upstream_latency_ms"],
+                "max_upstream_latency_ms_delta": subtract_optional_metric(
+                    right_row["max_upstream_latency_ms"],
+                    left_row["max_upstream_latency_ms"],
+                ),
+                "left_top_path": left_row["top_path"],
+                "right_top_path": right_row["top_path"],
+                "left_top_path_count": left_row["top_path_count"],
+                "right_top_path_count": right_row["top_path_count"],
+            }
+        )
+    return rows
+
+
 def format_facet_label(facets: dict[str, str]) -> str:
     return ", ".join(f"{field_name}={value}" for field_name, value in facets.items())
 
@@ -989,16 +1131,14 @@ def parse_line(line: str) -> ParsedLogLine | None:
     )
 
 
-def analyze_lines(
-    lines: Iterable[str],
-    top_n: int = 3,
-    latency_top_n: int | None = None,
-    hotspot_statuses: Iterable[str] | None = None,
-    hotspot_methods: Iterable[str] | None = None,
-    window_start: datetime | None = None,
-    window_end: datetime | None = None,
-    time_bucket_granularity: str | None = None,
-    facet_fields: Iterable[str] | None = None,
+def analyze_parsed_lines(
+    parsed_lines: Iterable[ParsedLogLine],
+    *,
+    top_n: int,
+    latency_limit: int,
+    hotspot_filters: dict[str, list[str]] | None,
+    time_bucket_granularity: str | None,
+    normalized_facet_fields: list[str],
 ) -> dict:
     status_counts = Counter()
     ip_counts = Counter()
@@ -1016,22 +1156,8 @@ def analyze_lines(
     time_bucket_facet_rows: dict[tuple[datetime, tuple[str, ...]], dict[str, object]] = {}
     total_bytes = 0
     total_requests = 0
-    invalid_lines = 0
-    excluded_requests = 0
 
-    latency_limit = top_n if latency_top_n is None else latency_top_n
-    hotspot_filters = normalize_hotspot_filters(hotspot_statuses, hotspot_methods)
-    normalized_facet_fields = normalize_facet_fields(facet_fields)
-
-    for line in lines:
-        parsed = parse_line(line)
-        if parsed is None:
-            invalid_lines += 1
-            continue
-        if not matches_time_window(parsed.timestamp, window_start, window_end):
-            excluded_requests += 1
-            continue
-
+    for parsed in parsed_lines:
         facet_values: tuple[str, ...] | None = None
         if normalized_facet_fields:
             facet_values = build_facet_values(parsed.named_fields, normalized_facet_fields)
@@ -1107,7 +1233,6 @@ def analyze_lines(
     faceting = build_faceting_metadata(normalized_facet_fields)
     return {
         "total_requests": total_requests,
-        "invalid_lines": invalid_lines,
         "total_bytes": total_bytes,
         "average_bytes": average_bytes,
         "status_counts": dict(status_counts),
@@ -1120,12 +1245,6 @@ def analyze_lines(
         "upstream_latency_summary": summarize_latencies(upstream_latencies_ms),
         "hotspot_filters": hotspot_filters,
         "faceting": faceting,
-        "time_window": build_time_window_metadata(
-            window_start,
-            window_end,
-            matched_requests=total_requests,
-            excluded_requests=excluded_requests,
-        ),
         "time_bucketing": build_time_bucket_metadata(
             time_bucket_granularity,
             len(time_buckets),
@@ -1143,7 +1262,8 @@ def analyze_lines(
             latency_limit,
         ),
         "upstream_path_latency_breakdown": summarize_path_latencies(
-            upstream_path_latencies, latency_limit
+            upstream_path_latencies,
+            latency_limit,
         ),
         "upstream_path_latency_facet_breakdown": summarize_path_latencies_by_facet(
             upstream_path_latencies_by_facet,
@@ -1151,6 +1271,167 @@ def analyze_lines(
             latency_limit,
         ),
     }
+
+
+def build_facet_comparison(
+    parsed_lines: list[ParsedLogLine],
+    *,
+    comparison_field: str | None,
+    comparison_values: tuple[str, str] | None,
+    top_n: int,
+    latency_limit: int,
+    hotspot_filters: dict[str, list[str]] | None,
+    time_bucket_granularity: str | None,
+) -> dict[str, object] | None:
+    if comparison_field is None or comparison_values is None:
+        return None
+
+    left_value, right_value = comparison_values
+    left_lines = [
+        parsed
+        for parsed in parsed_lines
+        if resolve_named_field_value(parsed.named_fields, comparison_field) == left_value
+    ]
+    right_lines = [
+        parsed
+        for parsed in parsed_lines
+        if resolve_named_field_value(parsed.named_fields, comparison_field) == right_value
+    ]
+
+    left_result = analyze_parsed_lines(
+        left_lines,
+        top_n=top_n,
+        latency_limit=latency_limit,
+        hotspot_filters=hotspot_filters,
+        time_bucket_granularity=time_bucket_granularity,
+        normalized_facet_fields=[],
+    )
+    right_result = analyze_parsed_lines(
+        right_lines,
+        top_n=top_n,
+        latency_limit=latency_limit,
+        hotspot_filters=hotspot_filters,
+        time_bucket_granularity=time_bucket_granularity,
+        normalized_facet_fields=[],
+    )
+
+    left_summary = summarize_release_review_metrics(left_result)
+    right_summary = summarize_release_review_metrics(right_result)
+    time_bucket_rows = build_facet_comparison_bucket_rows(
+        left_result,
+        right_result,
+        granularity=time_bucket_granularity,
+    )
+
+    return {
+        "field": comparison_field,
+        "left": {
+            "value": left_value,
+            "label": f"{comparison_field}={left_value}",
+            "summary": left_summary,
+        },
+        "right": {
+            "value": right_value,
+            "label": f"{comparison_field}={right_value}",
+            "summary": right_summary,
+        },
+        "delta_direction": f"{right_value} minus {left_value}",
+        "delta": {
+            "request_count_delta": right_summary["request_count"] - left_summary["request_count"],
+            "error_count_delta": right_summary["error_count"] - left_summary["error_count"],
+            "error_rate_pct_delta": subtract_optional_metric(
+                right_summary["error_rate_pct"],
+                left_summary["error_rate_pct"],
+            ),
+            "average_latency_ms_delta": subtract_optional_metric(
+                right_summary["average_latency_ms"],
+                left_summary["average_latency_ms"],
+            ),
+            "p95_latency_ms_delta": subtract_optional_metric(
+                right_summary["p95_latency_ms"],
+                left_summary["p95_latency_ms"],
+            ),
+            "max_latency_ms_delta": subtract_optional_metric(
+                right_summary["max_latency_ms"],
+                left_summary["max_latency_ms"],
+            ),
+            "average_upstream_latency_ms_delta": subtract_optional_metric(
+                right_summary["average_upstream_latency_ms"],
+                left_summary["average_upstream_latency_ms"],
+            ),
+            "p95_upstream_latency_ms_delta": subtract_optional_metric(
+                right_summary["p95_upstream_latency_ms"],
+                left_summary["p95_upstream_latency_ms"],
+            ),
+            "max_upstream_latency_ms_delta": subtract_optional_metric(
+                right_summary["max_upstream_latency_ms"],
+                left_summary["max_upstream_latency_ms"],
+            ),
+        },
+        "time_bucketing": build_time_bucket_metadata(
+            time_bucket_granularity,
+            len(time_bucket_rows),
+        ),
+        "time_buckets": time_bucket_rows,
+    }
+
+
+def analyze_lines(
+    lines: Iterable[str],
+    top_n: int = 3,
+    latency_top_n: int | None = None,
+    hotspot_statuses: Iterable[str] | None = None,
+    hotspot_methods: Iterable[str] | None = None,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+    time_bucket_granularity: str | None = None,
+    facet_fields: Iterable[str] | None = None,
+    facet_compare_field: str | None = None,
+    facet_compare_values: tuple[str, str] | None = None,
+) -> dict:
+    invalid_lines = 0
+    excluded_requests = 0
+    parsed_lines: list[ParsedLogLine] = []
+
+    latency_limit = top_n if latency_top_n is None else latency_top_n
+    hotspot_filters = normalize_hotspot_filters(hotspot_statuses, hotspot_methods)
+    normalized_facet_fields = normalize_facet_fields(facet_fields)
+
+    for line in lines:
+        parsed = parse_line(line)
+        if parsed is None:
+            invalid_lines += 1
+            continue
+        if not matches_time_window(parsed.timestamp, window_start, window_end):
+            excluded_requests += 1
+            continue
+        parsed_lines.append(parsed)
+
+    result = analyze_parsed_lines(
+        parsed_lines,
+        top_n=top_n,
+        latency_limit=latency_limit,
+        hotspot_filters=hotspot_filters,
+        time_bucket_granularity=time_bucket_granularity,
+        normalized_facet_fields=normalized_facet_fields,
+    )
+    result["invalid_lines"] = invalid_lines
+    result["time_window"] = build_time_window_metadata(
+        window_start,
+        window_end,
+        matched_requests=result["total_requests"],
+        excluded_requests=excluded_requests,
+    )
+    result["facet_comparison"] = build_facet_comparison(
+        parsed_lines,
+        comparison_field=facet_compare_field,
+        comparison_values=facet_compare_values,
+        top_n=top_n,
+        latency_limit=latency_limit,
+        hotspot_filters=hotspot_filters,
+        time_bucket_granularity=time_bucket_granularity,
+    )
+    return result
 
 
 def format_text_report(result: dict) -> str:
@@ -1249,6 +1530,63 @@ def format_text_report(result: dict) -> str:
                 )
         else:
             lines.append("  (none)")
+
+    facet_comparison = result["facet_comparison"]
+    if facet_comparison:
+        left = facet_comparison["left"]
+        right = facet_comparison["right"]
+        left_summary = left["summary"]
+        right_summary = right["summary"]
+        delta = facet_comparison["delta"]
+        lines.append(
+            f"Facet comparison ({facet_comparison['field']}): {left['value']} vs {right['value']} "
+            f"(delta: {facet_comparison['delta_direction']})"
+        )
+        lines.append(
+            "  "
+            f"{left['label']} -> requests={left_summary['request_count']}, "
+            f"errors={left_summary['error_count']} ({left_summary['error_rate_pct']}%), "
+            f"avg_latency={format_card_metric_value(left_summary['average_latency_ms'], suffix=' ms')}, "
+            f"p95_latency={format_card_metric_value(left_summary['p95_latency_ms'], suffix=' ms')}, "
+            f"avg_upstream={format_card_metric_value(left_summary['average_upstream_latency_ms'], suffix=' ms')}, "
+            f"p95_upstream={format_card_metric_value(left_summary['p95_upstream_latency_ms'], suffix=' ms')}, "
+            f"top_path={left_summary['top_path'] or '(none)'} ({left_summary['top_path_count']})"
+        )
+        lines.append(
+            "  "
+            f"{right['label']} -> requests={right_summary['request_count']}, "
+            f"errors={right_summary['error_count']} ({right_summary['error_rate_pct']}%), "
+            f"avg_latency={format_card_metric_value(right_summary['average_latency_ms'], suffix=' ms')}, "
+            f"p95_latency={format_card_metric_value(right_summary['p95_latency_ms'], suffix=' ms')}, "
+            f"avg_upstream={format_card_metric_value(right_summary['average_upstream_latency_ms'], suffix=' ms')}, "
+            f"p95_upstream={format_card_metric_value(right_summary['p95_upstream_latency_ms'], suffix=' ms')}, "
+            f"top_path={right_summary['top_path'] or '(none)'} ({right_summary['top_path_count']})"
+        )
+        lines.append(
+            "  "
+            f"delta -> requests={delta['request_count_delta']}, "
+            f"errors={delta['error_count_delta']}, "
+            f"error_rate={format_card_metric_value(delta['error_rate_pct_delta'], suffix=' pp')}, "
+            f"avg_latency={format_card_metric_value(delta['average_latency_ms_delta'], suffix=' ms')}, "
+            f"p95_latency={format_card_metric_value(delta['p95_latency_ms_delta'], suffix=' ms')}, "
+            f"avg_upstream={format_card_metric_value(delta['average_upstream_latency_ms_delta'], suffix=' ms')}, "
+            f"p95_upstream={format_card_metric_value(delta['p95_upstream_latency_ms_delta'], suffix=' ms')}"
+        )
+        if facet_comparison["time_bucketing"]:
+            lines.append(
+                f"Facet comparison buckets ({facet_comparison['time_bucketing']['granularity']}):"
+            )
+            if facet_comparison["time_buckets"]:
+                for bucket in facet_comparison["time_buckets"]:
+                    lines.append(
+                        "  "
+                        f"{bucket['bucket_start']} -> "
+                        f"{left['value']}: requests={bucket['left_request_count']}, error_rate={bucket['left_error_rate_pct']}%, avg_latency={format_card_metric_value(bucket['left_average_latency_ms'], suffix=' ms')} | "
+                        f"{right['value']}: requests={bucket['right_request_count']}, error_rate={bucket['right_error_rate_pct']}%, avg_latency={format_card_metric_value(bucket['right_average_latency_ms'], suffix=' ms')} | "
+                        f"delta requests={bucket['request_count_delta']}, error_rate={format_card_metric_value(bucket['error_rate_pct_delta'], suffix=' pp')}, avg_latency={format_card_metric_value(bucket['average_latency_ms_delta'], suffix=' ms')}"
+                    )
+            else:
+                lines.append("  (none)")
 
     lines.append("Status counts:")
 
@@ -1476,6 +1814,37 @@ def write_summary_csv(destination: str | Path, result: dict) -> None:
                 }
             )
 
+    if result["facet_comparison"]:
+        rows.extend(
+            [
+                {
+                    "section": "summary",
+                    "metric": "facet_compare_field",
+                    "value": result["facet_comparison"]["field"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "facet_compare_left_value",
+                    "value": result["facet_comparison"]["left"]["value"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "facet_compare_right_value",
+                    "value": result["facet_comparison"]["right"]["value"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "facet_compare_delta_direction",
+                    "value": result["facet_comparison"]["delta_direction"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "facet_compare_bucket_count",
+                    "value": len(result["facet_comparison"]["time_buckets"]),
+                },
+            ]
+        )
+
     for status, count in sorted(result["status_counts"].items()):
         rows.append({"section": "status_counts", "key": status, "count": count})
     for method, count in sorted(result["method_counts"].items()):
@@ -1698,6 +2067,116 @@ def write_time_bucket_facet_csv(
             )
 
 
+def write_facet_comparison_csv(destination: str | Path, comparison: dict[str, object]) -> None:
+    fieldnames = [
+        "row_type",
+        "comparison_field",
+        "left_value",
+        "right_value",
+        "delta_direction",
+        "granularity",
+        "bucket_start",
+        "bucket_end",
+        "left_request_count",
+        "right_request_count",
+        "request_count_delta",
+        "left_error_count",
+        "right_error_count",
+        "error_count_delta",
+        "left_error_rate_pct",
+        "right_error_rate_pct",
+        "error_rate_pct_delta",
+        "left_average_latency_ms",
+        "right_average_latency_ms",
+        "average_latency_ms_delta",
+        "left_p95_latency_ms",
+        "right_p95_latency_ms",
+        "p95_latency_ms_delta",
+        "left_max_latency_ms",
+        "right_max_latency_ms",
+        "max_latency_ms_delta",
+        "left_average_upstream_latency_ms",
+        "right_average_upstream_latency_ms",
+        "average_upstream_latency_ms_delta",
+        "left_p95_upstream_latency_ms",
+        "right_p95_upstream_latency_ms",
+        "p95_upstream_latency_ms_delta",
+        "left_max_upstream_latency_ms",
+        "right_max_upstream_latency_ms",
+        "max_upstream_latency_ms_delta",
+        "left_top_path",
+        "right_top_path",
+        "left_top_path_count",
+        "right_top_path_count",
+    ]
+    destination_path = ensure_parent_directory(destination)
+    left = comparison["left"]
+    right = comparison["right"]
+    left_summary = left["summary"]
+    right_summary = right["summary"]
+    delta = comparison["delta"]
+    granularity = ""
+    if comparison["time_bucketing"]:
+        granularity = str(comparison["time_bucketing"]["granularity"])
+
+    with destination_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "row_type": "summary",
+                "comparison_field": comparison["field"],
+                "left_value": left["value"],
+                "right_value": right["value"],
+                "delta_direction": comparison["delta_direction"],
+                "granularity": granularity,
+                "left_request_count": left_summary["request_count"],
+                "right_request_count": right_summary["request_count"],
+                "request_count_delta": delta["request_count_delta"],
+                "left_error_count": left_summary["error_count"],
+                "right_error_count": right_summary["error_count"],
+                "error_count_delta": delta["error_count_delta"],
+                "left_error_rate_pct": left_summary["error_rate_pct"],
+                "right_error_rate_pct": right_summary["error_rate_pct"],
+                "error_rate_pct_delta": delta["error_rate_pct_delta"],
+                "left_average_latency_ms": left_summary["average_latency_ms"],
+                "right_average_latency_ms": right_summary["average_latency_ms"],
+                "average_latency_ms_delta": delta["average_latency_ms_delta"],
+                "left_p95_latency_ms": left_summary["p95_latency_ms"],
+                "right_p95_latency_ms": right_summary["p95_latency_ms"],
+                "p95_latency_ms_delta": delta["p95_latency_ms_delta"],
+                "left_max_latency_ms": left_summary["max_latency_ms"],
+                "right_max_latency_ms": right_summary["max_latency_ms"],
+                "max_latency_ms_delta": delta["max_latency_ms_delta"],
+                "left_average_upstream_latency_ms": left_summary["average_upstream_latency_ms"],
+                "right_average_upstream_latency_ms": right_summary["average_upstream_latency_ms"],
+                "average_upstream_latency_ms_delta": delta["average_upstream_latency_ms_delta"],
+                "left_p95_upstream_latency_ms": left_summary["p95_upstream_latency_ms"],
+                "right_p95_upstream_latency_ms": right_summary["p95_upstream_latency_ms"],
+                "p95_upstream_latency_ms_delta": delta["p95_upstream_latency_ms_delta"],
+                "left_max_upstream_latency_ms": left_summary["max_upstream_latency_ms"],
+                "right_max_upstream_latency_ms": right_summary["max_upstream_latency_ms"],
+                "max_upstream_latency_ms_delta": delta["max_upstream_latency_ms_delta"],
+                "left_top_path": left_summary["top_path"],
+                "right_top_path": right_summary["top_path"],
+                "left_top_path_count": left_summary["top_path_count"],
+                "right_top_path_count": right_summary["top_path_count"],
+            }
+        )
+        for row in comparison["time_buckets"]:
+            writer.writerow(
+                {
+                    "row_type": "bucket",
+                    "comparison_field": comparison["field"],
+                    "left_value": left["value"],
+                    "right_value": right["value"],
+                    "delta_direction": comparison["delta_direction"],
+                    "granularity": granularity,
+                    **row,
+                }
+            )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Analyze common, combined, and latency-augmented web access logs"
@@ -1802,6 +2281,28 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--facet-compare-field",
+        help=(
+            "Named log field to compare between two values side by side for release reviews "
+            "(for example env or release)"
+        ),
+    )
+    parser.add_argument(
+        "--facet-compare-values",
+        nargs=2,
+        metavar=("LEFT", "RIGHT"),
+        help=(
+            "Exactly two facet values to compare side by side (for example prod staging)"
+        ),
+    )
+    parser.add_argument(
+        "--facet-compare-csv",
+        help=(
+            "Optional path for a side-by-side facet comparison CSV with summary and aligned "
+            "bucket deltas (requires --facet-compare-field and --facet-compare-values)"
+        ),
+    )
+    parser.add_argument(
         "--window-start",
         help=(
             "Inclusive lower time bound for log entries (ISO-8601 or common-log timestamp; "
@@ -1851,6 +2352,33 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             "--facet-field must look like a named log field "
             f"(letters/numbers/underscore only; received: {', '.join(invalid_facet_fields)})"
+        )
+    normalized_facet_compare_field = None
+    if args.facet_compare_field is not None:
+        normalized_facet_compare_field = args.facet_compare_field.strip()
+        if not normalized_facet_compare_field:
+            parser.error("--facet-compare-field must not be blank")
+        if not FIELD_NAME_RE.match(normalized_facet_compare_field):
+            parser.error(
+                "--facet-compare-field must look like a named log field "
+                f"(letters/numbers/underscore only; received: {args.facet_compare_field})"
+            )
+    normalized_facet_compare_values = None
+    if args.facet_compare_values is not None:
+        normalized_facet_compare_values = tuple(value.strip() for value in args.facet_compare_values)
+        if any(not value for value in normalized_facet_compare_values):
+            parser.error("--facet-compare-values must not contain blank values")
+        if normalized_facet_compare_values[0] == normalized_facet_compare_values[1]:
+            parser.error("--facet-compare-values must contain two distinct values")
+    if args.facet_compare_csv and (
+        normalized_facet_compare_field is None or normalized_facet_compare_values is None
+    ):
+        parser.error(
+            "--facet-compare-csv requires --facet-compare-field and --facet-compare-values"
+        )
+    if (normalized_facet_compare_field is None) != (normalized_facet_compare_values is None):
+        parser.error(
+            "--facet-compare-field and --facet-compare-values must be provided together"
         )
     if args.time_bucket_csv and not args.time_bucket:
         parser.error("--time-bucket-csv requires --time-bucket")
@@ -1906,6 +2434,8 @@ def main(argv: list[str] | None = None) -> int:
             window_end=window_end,
             time_bucket_granularity=args.time_bucket,
             facet_fields=normalized_facet_fields,
+            facet_compare_field=normalized_facet_compare_field,
+            facet_compare_values=normalized_facet_compare_values,
         )
 
     if args.summary_csv:
@@ -1954,6 +2484,11 @@ def main(argv: list[str] | None = None) -> int:
             normalized_facet_fields,
             result["time_bucketing"],
             result["time_window"],
+        )
+    if args.facet_compare_csv and result["facet_comparison"]:
+        write_facet_comparison_csv(
+            args.facet_compare_csv,
+            result["facet_comparison"],
         )
     if args.time_bucket_card_svg:
         write_text_output(
