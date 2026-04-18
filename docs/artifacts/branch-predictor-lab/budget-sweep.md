@@ -1,11 +1,11 @@
 # Branch predictor budget-normalized sweep
 
-- Generated: `2026-04-18T04:58:16Z`
+- Generated: `2026-04-18T05:24:28Z`
 - Workloads: `5` synthetic families
 - Compared budgets: `64 bits, 128 bits, 256 bits, 512 bits, 1024 bits`
 - Search space: table sizes `4, 8, 16, 32, 64` · history bits `1, 2, 4, 8, 12` · perceptron weight limits `15, 31, 74`
 - Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.
-- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, and a winner-margin trend card so near-ties stay visible instead of getting buried under the winner names.
+- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, a winner-margin trend card, and a crossover card that calls out the exact budget steps where the winning predictor flips.
 
 ## Overview
 
@@ -42,6 +42,30 @@
 | `always-taken` | `1` | `0` | `0` | `0` | `0` |
 | `local-history` | `1` | `0` | `0` | `0` | `0` |
 
+## Winner crossover points
+
+- Exact winner flips: `5` across `4` workloads.
+
+### Transition counts
+
+| Budget step | Winner flip | Count | Workloads |
+| --- | --- | ---: | --- |
+| `64→128 bits` | `always-taken → two-bit` | `1` | `random-biased` |
+| `64→128 bits` | `local-history → gshare` | `1` | `alias-thrash` |
+| `128→256 bits` | `perceptron → gshare` | `1` | `perceptron-majority` |
+| `256→512 bits` | `gshare → perceptron` | `1` | `perceptron-majority` |
+| `256→512 bits` | `gshare → tournament` | `1` | `tournament-style` |
+
+### Workload crossover triggers
+
+| Workload | Trigger budget step | Winner flip | Before gap | After gap |
+| --- | --- | --- | ---: | ---: |
+| `alias-thrash` | `64→128 bits` | `local-history → gshare` | `0.00 pp` | `1.56 pp` |
+| `random-biased` | `64→128 bits` | `always-taken → two-bit` | `0.00 pp` | `10.42 pp` |
+| `perceptron-majority` | `128→256 bits` | `perceptron → gshare` | `1.04 pp` | `1.04 pp` |
+| `perceptron-majority` | `256→512 bits` | `gshare → perceptron` | `1.04 pp` | `9.38 pp` |
+| `tournament-style` | `256→512 bits` | `gshare → tournament` | `0.00 pp` | `6.25 pp` |
+
 ## Margin and runner-up story
 
 - Photo finishes (≤0.50 pp): `9` grid cells (`36.00%`).
@@ -76,6 +100,7 @@
 - Focus: loop backedges and exits
 - Trace config: `branches=40` · `seed=7`
 - Winner sequence: 64b:gshare → 128b:gshare → 256b:gshare → 512b:gshare → 1024b:gshare
+- Crossover points: none
 
 | Budget | Winner | Runner-up | Best simple | Best advanced |
 | ---: | --- | --- | --- | --- |
@@ -97,6 +122,7 @@ Representative best-fit configs:
 - Focus: biased hot/cold guard branches
 - Trace config: `branches=96` · `seed=11`
 - Winner sequence: 64b:always-taken → 128b:two-bit → 256b:two-bit → 512b:two-bit → 1024b:two-bit
+- Crossover points: 64→128b always-taken→two-bit
 
 | Budget | Winner | Runner-up | Best simple | Best advanced |
 | ---: | --- | --- | --- | --- |
@@ -118,6 +144,7 @@ Representative best-fit configs:
 - Focus: mixed local/global correlation
 - Trace config: `branches=48` · `seed=5`
 - Winner sequence: 64b:gshare → 128b:gshare → 256b:gshare → 512b:tournament → 1024b:tournament
+- Crossover points: 256→512b gshare→tournament
 
 | Budget | Winner | Runner-up | Best simple | Best advanced |
 | ---: | --- | --- | --- | --- |
@@ -139,6 +166,7 @@ Representative best-fit configs:
 - Focus: small-table alias interference
 - Trace config: `branches=64` · `seed=7`
 - Winner sequence: 64b:local-history → 128b:gshare → 256b:gshare → 512b:gshare → 1024b:gshare
+- Crossover points: 64→128b local-history→gshare
 
 | Budget | Winner | Runner-up | Best simple | Best advanced |
 | ---: | --- | --- | --- | --- |
@@ -160,6 +188,7 @@ Representative best-fit configs:
 - Focus: long-history linearly separable branch
 - Trace config: `branches=96` · `seed=13`
 - Winner sequence: 64b:perceptron → 128b:perceptron → 256b:gshare → 512b:perceptron → 1024b:perceptron
+- Crossover points: 128→256b perceptron→gshare | 256→512b gshare→perceptron
 
 | Budget | Winner | Runner-up | Best simple | Best advanced |
 | ---: | --- | --- | --- | --- |
@@ -181,6 +210,7 @@ Representative best-fit configs:
 - Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.
 - Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.
 - Use the margin-trend section when you want to point out that some budget winners are basically photo finishes while others create real separation from the runner-up.
+- Use the crossover section when you want the exact budget step that triggers an architecture change instead of only a winner-at-each-budget table.
 - Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.
 - The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.
 - Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.

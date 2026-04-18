@@ -40,6 +40,7 @@ render_budget_sweep_csv = module.render_budget_sweep_csv
 render_budget_sweep_svg = module.render_budget_sweep_svg
 summarize_budget_winner_grid = module.summarize_budget_winner_grid
 summarize_budget_margin_story = module.summarize_budget_margin_story
+summarize_budget_crossover_points = module.summarize_budget_crossover_points
 render_table_size_alias_markdown = module.render_table_size_alias_markdown
 render_table_size_alias_csv = module.render_table_size_alias_csv
 render_table_size_alias_svg = module.render_table_size_alias_svg
@@ -698,6 +699,7 @@ class BranchPredictorLabTests(unittest.TestCase):
 
         winner_summary = summarize_budget_winner_grid(scenarios)
         margin_summary = summarize_budget_margin_story(scenarios)
+        crossover_summary = summarize_budget_crossover_points(scenarios)
         markdown = render_budget_sweep_markdown(scenarios=scenarios)
         csv_text = render_budget_sweep_csv(scenarios=scenarios)
         svg = render_budget_sweep_svg(scenarios=scenarios)
@@ -705,17 +707,21 @@ class BranchPredictorLabTests(unittest.TestCase):
 
         self.assertEqual(winner_summary["total_cells"], 4)
         self.assertEqual(margin_summary["total_cells"], 4)
+        self.assertGreaterEqual(crossover_summary["total_crossovers"], 1)
         self.assertEqual([row["threshold"] for row in margin_summary["threshold_rows"]], [0.5, 1.0, 2.0])
         self.assertGreaterEqual(winner_summary["predictor_rows"][0]["wins"], 1)
         self.assertIn("# Branch predictor budget-normalized sweep", markdown)
         self.assertIn("## Whole-grid winner summary", markdown)
         self.assertIn("Budget × predictor win counts", markdown)
+        self.assertIn("## Winner crossover points", markdown)
+        self.assertIn("Transition counts", markdown)
+        self.assertIn("Workload crossover triggers", markdown)
         self.assertIn("## Margin and runner-up story", markdown)
         self.assertIn("Runner-up stability by workload", markdown)
         self.assertIn("## Per-workload notes", markdown)
         self.assertIn("`32 bits`", markdown)
         self.assertIn("Portfolio usage", markdown)
-        self.assertIn("workload,headline,branches,seed,trace_output,winner_sequence", csv_text)
+        self.assertIn("workload,headline,branches,seed,trace_output,winner_sequence,crossover_count,crossover_sequence", csv_text)
         self.assertIn("budget_32_winner_predictor", csv_text)
         self.assertIn("perceptron-majority", csv_text)
         self.assertIn("<svg", svg)
@@ -723,8 +729,30 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("Grid win totals", svg)
         self.assertIn("Budget winner heatmap", svg)
         self.assertIn("Winner-margin trend by budget", svg)
+        self.assertIn("Winner crossover points", svg)
         self.assertIn("loop-heavy", summary)
         self.assertIn("32b", summary)
+
+    def test_summarize_budget_crossover_points_tracks_winner_flips(self) -> None:
+        scenarios = run_budget_workload_sweep(
+            ["loop-heavy", "perceptron-majority"],
+            budgets=[32, 128],
+            table_sizes=[2, 4, 8],
+            history_bits_options=[1, 2, 4],
+            weight_limits=[15, 31],
+        )
+
+        summary = summarize_budget_crossover_points(scenarios)
+
+        self.assertEqual(summary["workloads_with_crossovers"], 1)
+        self.assertEqual(summary["total_crossovers"], 1)
+        self.assertEqual(summary["transition_rows"][0]["from_budget_bits"], 32)
+        self.assertEqual(summary["transition_rows"][0]["to_budget_bits"], 128)
+        self.assertEqual(summary["transition_rows"][0]["count"], 1)
+        workload_rows = {row["workload"]: row for row in summary["workload_rows"]}
+        self.assertEqual(workload_rows["perceptron-majority"]["crossover_sequence"], "none")
+        self.assertEqual(workload_rows["loop-heavy"]["crossover_count"], 1)
+        self.assertIn("32→128b", workload_rows["loop-heavy"]["crossover_sequence"])
 
     def test_cli_budget_sweep_json_writes_markdown_svg_csv_and_trace_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -775,6 +803,8 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertIn("predictor_rows", payload["winner_summary"])
             self.assertEqual(payload["margin_summary"]["total_cells"], 4)
             self.assertIn("budget_rows", payload["margin_summary"])
+            self.assertEqual(payload["crossover_summary"]["total_crossovers"], 1)
+            self.assertEqual(payload["crossover_summary"]["workloads_with_crossovers"], 1)
             self.assertEqual(payload["trace_dir"], str(trace_dir))
             self.assertEqual(payload["markdown_output"], str(markdown_path))
             self.assertEqual(payload["svg_output"], str(svg_path))
@@ -784,9 +814,10 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertTrue(csv_path.exists())
             self.assertTrue((trace_dir / "loop-heavy-seed7.trace").exists())
             self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())
-            self.assertIn("budget-normalized sweep", markdown_path.read_text(encoding="utf-8"))
-            self.assertIn("Budget-normalized branch predictor sweep", svg_path.read_text(encoding="utf-8"))
+            self.assertIn("Winner crossover points", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Winner crossover points", svg_path.read_text(encoding="utf-8"))
             csv_text = csv_path.read_text(encoding="utf-8")
+            self.assertIn("crossover_count", csv_text)
             self.assertIn("budget_32_winner_predictor", csv_text)
             self.assertIn("perceptron-majority", csv_text)
 

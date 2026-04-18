@@ -317,4 +317,5 @@ Run the tests:
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
+- annotate crossover cells directly on the winner matrix or export a crossover-only slide card for even faster portfolio screenshots
 - highlight budget crossover points where the winning predictor flips, so the gallery can call out the exact budgets that trigger architecture changes

@@ -1,5 +1,19 @@
 # branch-predictor-lab checklist
 
+## Budget crossover highlight slice (2026-04-18 05:04 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the queued follow-up around budget crossover points where the winning predictor changes
+- [x] do a short Python adjacent-pair / crossover-summary refresh and self-test before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add workload-level and whole-grid budget crossover summaries so the exact budget transitions that flip winners are explicit
+- [x] surface crossover points in Markdown/SVG/CSV budget-sweep artifacts and the JSON payload
+- [x] extend tests for crossover summaries plus CLI export coverage
+- [x] regenerate the committed budget-sweep artifacts and gallery copy
+- [x] run targeted tests and 3 review passes
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider annotating crossover cells directly on the winner matrix or exporting slide-ready crossover-only cards in a future run
+
 - [x] pick a computer-architecture project that broadens the portfolio beyond algorithms and systems tooling
 - [x] note brief branch-prediction research takeaways before implementation
 - [x] implement always-taken / always-not-taken baselines for comparison

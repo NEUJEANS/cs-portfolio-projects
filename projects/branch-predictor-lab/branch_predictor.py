@@ -2332,6 +2332,100 @@ def summarize_budget_margin_story(scenarios: list[dict[str, Any]]) -> dict[str, 
     }
 
 
+def _format_budget_crossover_label(crossover: dict[str, Any]) -> str:
+    return (
+        f"{crossover['from_budget_bits']}→{crossover['to_budget_bits']}b "
+        f"{crossover['previous_winner_predictor']}→{crossover['next_winner_predictor']}"
+    )
+
+
+def summarize_budget_crossover_points(scenarios: list[dict[str, Any]]) -> dict[str, Any]:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+
+    crossovers: list[dict[str, Any]] = []
+    workload_rows: list[dict[str, Any]] = []
+    transition_counts: dict[tuple[int, int, str, str], dict[str, Any]] = {}
+
+    for scenario in scenarios:
+        scenario_crossovers: list[dict[str, Any]] = []
+        for previous, current in zip(scenario["budget_reports"], scenario["budget_reports"][1:]):
+            if previous["winner_predictor"] == current["winner_predictor"]:
+                continue
+            crossover = {
+                "workload": scenario["workload"],
+                "headline": scenario["headline"],
+                "from_budget_bits": previous["budget_bits"],
+                "to_budget_bits": current["budget_bits"],
+                "previous_winner_predictor": previous["winner_predictor"],
+                "next_winner_predictor": current["winner_predictor"],
+                "previous_winner_accuracy_percent": previous["winner_accuracy_percent"],
+                "next_winner_accuracy_percent": current["winner_accuracy_percent"],
+                "previous_runner_up_predictor": previous["runner_up_predictor"],
+                "next_runner_up_predictor": current["runner_up_predictor"],
+                "previous_margin_percent": previous["winner_margin_percent"],
+                "next_margin_percent": current["winner_margin_percent"],
+            }
+            crossover["label"] = _format_budget_crossover_label(crossover)
+            crossovers.append(crossover)
+            scenario_crossovers.append(crossover)
+            key = (
+                crossover["from_budget_bits"],
+                crossover["to_budget_bits"],
+                crossover["previous_winner_predictor"],
+                crossover["next_winner_predictor"],
+            )
+            entry = transition_counts.setdefault(
+                key,
+                {
+                    "from_budget_bits": crossover["from_budget_bits"],
+                    "to_budget_bits": crossover["to_budget_bits"],
+                    "previous_winner_predictor": crossover["previous_winner_predictor"],
+                    "next_winner_predictor": crossover["next_winner_predictor"],
+                    "count": 0,
+                    "workloads": [],
+                },
+            )
+            entry["count"] += 1
+            entry["workloads"].append(scenario["workload"])
+
+        workload_rows.append(
+            {
+                "workload": scenario["workload"],
+                "headline": scenario["headline"],
+                "crossover_count": len(scenario_crossovers),
+                "crossovers": scenario_crossovers,
+                "crossover_sequence": "none" if not scenario_crossovers else " | ".join(
+                    crossover["label"] for crossover in scenario_crossovers
+                ),
+                "first_crossover_budget_bits": scenario_crossovers[0]["to_budget_bits"] if scenario_crossovers else None,
+                "last_crossover_budget_bits": scenario_crossovers[-1]["to_budget_bits"] if scenario_crossovers else None,
+            }
+        )
+
+    transition_rows = sorted(
+        (
+            {
+                **entry,
+                "workloads": sorted(entry["workloads"]),
+            }
+            for entry in transition_counts.values()
+        ),
+        key=lambda row: (-row["count"], row["from_budget_bits"], row["to_budget_bits"], row["previous_winner_predictor"], row["next_winner_predictor"]),
+    )
+
+    return {
+        "total_crossovers": len(crossovers),
+        "workloads_with_crossovers": sum(1 for row in workload_rows if row["crossover_count"] > 0),
+        "workload_rows": workload_rows,
+        "transition_rows": transition_rows,
+        "crossovers": sorted(
+            crossovers,
+            key=lambda row: (row["from_budget_bits"], row["to_budget_bits"], row["workload"], row["next_winner_predictor"]),
+        ),
+    }
+
+
 def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     if not scenarios:
         raise ValueError("scenarios must not be empty")
@@ -2342,6 +2436,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     weight_limits = scenarios[0]["weight_limits"]
     winner_summary = summarize_budget_winner_grid(scenarios)
     margin_summary = summarize_budget_margin_story(scenarios)
+    crossover_summary = summarize_budget_crossover_points(scenarios)
     lines = [
         "# Branch predictor budget-normalized sweep",
         "",
@@ -2350,7 +2445,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
         f"- Compared budgets: `{', '.join(f'{budget} bits' for budget in budgets)}`",
         f"- Search space: table sizes `{', '.join(str(value) for value in table_sizes)}` · history bits `{', '.join(str(value) for value in history_bits_options)}` · perceptron weight limits `{', '.join(str(value) for value in weight_limits)}`",
         "- Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.",
-        "- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, and a winner-margin trend card so near-ties stay visible instead of getting buried under the winner names.",
+        "- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, a winner-margin trend card, and a crossover card that calls out the exact budget steps where the winning predictor flips.",
         "",
         "## Overview",
         "",
@@ -2402,6 +2497,42 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
 
     lines.extend([
         "",
+        "## Winner crossover points",
+        "",
+        f"- Exact winner flips: `{crossover_summary['total_crossovers']}` across `{crossover_summary['workloads_with_crossovers']}` workloads.",
+    ])
+    if crossover_summary["transition_rows"]:
+        lines.extend(
+            [
+                "",
+                "### Transition counts",
+                "",
+                "| Budget step | Winner flip | Count | Workloads |",
+                "| --- | --- | ---: | --- |",
+            ]
+        )
+        for row in crossover_summary["transition_rows"]:
+            lines.append(
+                f"| `{row['from_budget_bits']}→{row['to_budget_bits']} bits` | `{row['previous_winner_predictor']} → {row['next_winner_predictor']}` | `{row['count']}` | `{', '.join(row['workloads'])}` |"
+            )
+        lines.extend(
+            [
+                "",
+                "### Workload crossover triggers",
+                "",
+                "| Workload | Trigger budget step | Winner flip | Before gap | After gap |",
+                "| --- | --- | --- | ---: | ---: |",
+            ]
+        )
+        for row in crossover_summary["crossovers"]:
+            lines.append(
+                f"| `{row['workload']}` | `{row['from_budget_bits']}→{row['to_budget_bits']} bits` | `{row['previous_winner_predictor']} → {row['next_winner_predictor']}` | `{row['previous_margin_percent']:.2f} pp` | `{row['next_margin_percent']:.2f} pp` |"
+            )
+    else:
+        lines.extend(["", "- No winner changes across adjacent budgets in this sweep."])
+
+    lines.extend([
+        "",
         "## Margin and runner-up story",
         "",
         f"- Photo finishes (≤0.50 pp): `{margin_summary['threshold_rows'][0]['count']}` grid cells (`{margin_summary['threshold_rows'][0]['share_percent']:.2f}%`).",
@@ -2435,6 +2566,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
         )
 
     lines.extend(["", "## Per-workload notes", ""])
+    crossover_rows_by_workload = {row['workload']: row for row in crossover_summary['workload_rows']}
     for scenario in scenarios:
         lines.extend(
             [
@@ -2443,6 +2575,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
                 f"- Focus: {scenario['headline']}",
                 f"- Trace config: `branches={scenario['config']['branches']}` · `seed={scenario['config']['seed']}`",
                 f"- Winner sequence: {_budget_winner_sequence(scenario['budget_reports'])}",
+                f"- Crossover points: {crossover_rows_by_workload[scenario['workload']]['crossover_sequence']}",
                 "",
                 "| Budget | Winner | Runner-up | Best simple | Best advanced |",
                 "| ---: | --- | --- | --- | --- |",
@@ -2469,6 +2602,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
             "- Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.",
             "- Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.",
             "- Use the margin-trend section when you want to point out that some budget winners are basically photo finishes while others create real separation from the runner-up.",
+            "- Use the crossover section when you want the exact budget step that triggers an architecture change instead of only a winner-at-each-budget table.",
             "- Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.",
             "- The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.",
             "- Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.",
@@ -2482,6 +2616,8 @@ def render_budget_sweep_csv(*, scenarios: list[dict[str, Any]]) -> str:
     if not scenarios:
         raise ValueError("scenarios must not be empty")
     budgets = scenarios[0]["budgets"]
+    crossover_summary = summarize_budget_crossover_points(scenarios)
+    crossover_rows_by_workload = {row['workload']: row for row in crossover_summary['workload_rows']}
     fieldnames = [
         "workload",
         "headline",
@@ -2489,6 +2625,8 @@ def render_budget_sweep_csv(*, scenarios: list[dict[str, Any]]) -> str:
         "seed",
         "trace_output",
         "winner_sequence",
+        "crossover_count",
+        "crossover_sequence",
     ]
     for budget in budgets:
         prefix = f"budget_{budget}_"
@@ -2512,6 +2650,7 @@ def render_budget_sweep_csv(*, scenarios: list[dict[str, Any]]) -> str:
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     for scenario in scenarios:
+        workload_crossover = crossover_rows_by_workload[scenario['workload']]
         row: dict[str, Any] = {
             "workload": scenario["workload"],
             "headline": scenario["headline"],
@@ -2519,6 +2658,8 @@ def render_budget_sweep_csv(*, scenarios: list[dict[str, Any]]) -> str:
             "seed": scenario["config"]["seed"],
             "trace_output": scenario.get("trace_output") or "",
             "winner_sequence": _budget_winner_sequence_csv(scenario["budget_reports"]),
+            "crossover_count": workload_crossover["crossover_count"],
+            "crossover_sequence": workload_crossover["crossover_sequence"],
         }
         for entry in scenario["budget_reports"]:
             winner = entry["predictor_results"][0]
@@ -2549,6 +2690,8 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
     budgets = scenarios[0]["budgets"]
     winner_summary = summarize_budget_winner_grid(scenarios)
     margin_summary = summarize_budget_margin_story(scenarios)
+    crossover_summary = summarize_budget_crossover_points(scenarios)
+    display_crossovers = crossover_summary['crossovers'][:6]
     summary_predictors = winner_summary["predictors"]
     width = 1320
     cell_w = 180
@@ -2562,12 +2705,14 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
     heatmap_h = max(156, 66 + (len(summary_predictors) * 28))
     margin_y = summary_y + max(stacked_h, heatmap_h) + 18
     margin_card_h = 190
-    grid_y = margin_y + margin_card_h + 24
+    crossover_card_h = max(130, 84 + (((len(display_crossovers) + (1 if len(display_crossovers) > 3 else 0)) // (2 if len(display_crossovers) > 3 else 1)) * 26))
+    crossover_y = margin_y + margin_card_h + 18
+    grid_y = crossover_y + crossover_card_h + 24
     height = grid_y + 56 + (cell_h * len(scenarios)) + 82
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
         '<title id="title">Budget-normalized branch predictor sweep</title>',
-        '<desc id="desc">Winner matrix plus whole-grid summary across synthetic workloads and predictor state-bit budgets.</desc>',
+        '<desc id="desc">Winner matrix plus whole-grid summary across synthetic workloads and predictor state-bit budgets, including exact crossover points where the winning predictor changes.</desc>',
         f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
         _svg_text(28, 40, "Budget-normalized branch predictor sweep", size=28, weight="700"),
         _svg_text(28, 66, "Best-fit predictor per workload after constraining each candidate by approximate state bits.", size=14, fill="#334155"),
@@ -2665,6 +2810,27 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
         )
         parts.append(f'<path d="{path_data}" fill="none" stroke="#0ea5e9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />')
     parts.append(_svg_text(heatmap_x + 18, margin_y + 176, f"Widest: {margin_summary['widest_cell']['workload']} @ {margin_summary['widest_cell']['budget_bits']}b ({margin_summary['widest_cell']['winner_margin_percent']:.2f} pp)", size=11, fill='#475569'))
+
+    parts.append(f'<rect x="28" y="{crossover_y}" width="{width - 56}" height="{crossover_card_h}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(46, crossover_y + 32, "Winner crossover points", size=20, weight="700"))
+    parts.append(_svg_text(46, crossover_y + 52, "Exact adjacent-budget steps where the winning predictor changes.", size=12, fill="#64748b"))
+    if display_crossovers:
+        column_count = 2 if len(display_crossovers) > 3 else 1
+        per_column = (len(display_crossovers) + column_count - 1) // column_count
+        column_width = (width - 92) / column_count
+        for index, row in enumerate(display_crossovers):
+            column = index // per_column
+            row_index = index % per_column
+            x = 46 + (column * column_width)
+            y = crossover_y + 76 + (row_index * 26)
+            parts.append(f'<rect x="{x}" y="{y - 12}" width="{column_width - 18:.1f}" height="20" rx="10" fill="#eff6ff" stroke="#bfdbfe" />')
+            parts.append(_svg_text(x + 10, y + 2, _truncate_svg_text(f"{row['workload']}: {row['from_budget_bits']}→{row['to_budget_bits']}b {row['previous_winner_predictor']}→{row['next_winner_predictor']}", 54), size=11, weight='700', fill='#1d4ed8'))
+        if crossover_summary['transition_rows']:
+            top_transition = crossover_summary['transition_rows'][0]
+            workloads = ', '.join(top_transition['workloads'])
+            parts.append(_svg_text(46, crossover_y + crossover_card_h - 18, _truncate_svg_text(f"Most repeated transition: {top_transition['from_budget_bits']}→{top_transition['to_budget_bits']}b {top_transition['previous_winner_predictor']}→{top_transition['next_winner_predictor']} across {top_transition['count']} workload(s): {workloads}", 140), size=11, fill='#475569'))
+    else:
+        parts.append(_svg_text(46, crossover_y + 88, "No winner changes across adjacent budgets in this sweep.", size=13, weight='700', fill='#475569'))
 
     grid_x = 28
     parts.append(f'<rect x="{grid_x}" y="{grid_y}" width="{left_w}" height="42" rx="14" fill="#e2e8f0" />')
@@ -3400,6 +3566,7 @@ def main(argv: list[str] | None = None) -> int:
                 "scenario_count": len(scenarios),
                 "winner_summary": summarize_budget_winner_grid(scenarios),
                 "margin_summary": summarize_budget_margin_story(scenarios),
+                "crossover_summary": summarize_budget_crossover_points(scenarios),
                 "scenarios": scenarios,
             }
             if args.trace_dir is not None:
