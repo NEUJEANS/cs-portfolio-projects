@@ -246,13 +246,14 @@ python3 projects/branch-predictor-lab/branch_predictor.py perceptron-sweep \
   --json
 ```
 
-To reproduce the committed budget-normalized sweep artifact, search the committed state-bit grid and write the matching report/card pair:
+To reproduce the committed budget-normalized sweep artifact, search the committed state-bit grid and write the matching report/card trio:
 
 ```bash
 python3 projects/branch-predictor-lab/branch_predictor.py budget-sweep \
   --trace-dir artifacts/branch-predictor-lab/budget-sweep \
   --markdown-out docs/artifacts/branch-predictor-lab/budget-sweep.md \
   --svg-out docs/artifacts/branch-predictor-lab/budget-sweep.svg \
+  --crossover-svg-out docs/artifacts/branch-predictor-lab/budget-sweep-crossover-card.svg \
   --csv-out docs/artifacts/branch-predictor-lab/budget-sweep.csv \
   --json
 ```
@@ -312,11 +313,12 @@ Run the tests:
 - use the perceptron tuning sweep when you want to show that confidence thresholds and hardware-friendly weight clamps still shape the final accuracy story
 - use the trace-family sweep card when you want one overview slide that shows different workloads favor different predictors instead of implying there is one universal winner
 - use the budget-sweep whole-grid summary when you want a fast macro answer for which predictors dominate the overall budget matrix before showing the per-workload cells underneath
+- use the standalone crossover-only SVG card when the full budget matrix is too dense for a single slide and you only need the repeated transition story plus the first per-workload flip
 - use the blue flip chips on the budget-sweep SVG winner matrix when you want the screenshot itself to show exactly which budget cell introduced a new winner
 - use the budget-sweep margin-trend section when you want to show that some budget winners are basically photo finishes while others create clear separation from the runner-up
 - use the alias table-size sweep when you want to explain why larger tables reduce some static collisions while history-aware indexing can still reshuffle dynamic conflicts in non-monotonic ways
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
-- export a standalone crossover-only slide card (or PNG-friendly companion) for even faster portfolio screenshots when the full matrix is too dense
 - add hover/click-friendly HTML artifact variants that can filter the winner matrix down to one workload or one predictor family at a time
+- add a PNG export helper or scripted rasterization path so the SVG crossover card can drop directly into slide decks that dislike raw SVG assets

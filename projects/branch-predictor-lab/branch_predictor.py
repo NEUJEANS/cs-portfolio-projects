@@ -2906,6 +2906,102 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
     return ''.join(parts) + "\n"
 
 
+def render_budget_crossover_slide_svg(*, scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    budgets = scenarios[0]["budgets"]
+    winner_summary = summarize_budget_winner_grid(scenarios)
+    crossover_summary = summarize_budget_crossover_points(scenarios)
+    transition_rows = crossover_summary["transition_rows"][:4]
+    workload_rows = [row for row in crossover_summary["workload_rows"] if row["crossover_count"] > 0][:6]
+    scenario_lookup = {scenario["workload"]: scenario for scenario in scenarios}
+    width = 1280
+    summary_y = 92
+    summary_h = 76
+    card_y = summary_y + summary_h + 18
+    left_x = 28
+    right_x = 644
+    card_w = 608
+    transition_card_h = max(210, 88 + (len(transition_rows) * 58))
+    workload_card_h = max(210, 88 + (len(workload_rows) * 74))
+    card_h = max(transition_card_h, workload_card_h)
+    height = card_y + card_h + 78
+    top_transition = crossover_summary["transition_rows"][0] if crossover_summary["transition_rows"] else None
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Budget crossover trigger card</title>',
+        '<desc id="desc">Standalone branch-predictor budget crossover card summarizing the adjacent state-bit steps where the winning predictor changes.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 40, "Budget crossover trigger card", size=28, weight="700"),
+        _svg_text(28, 66, "Compact slide-friendly summary of the exact budget steps where the branch-predictor winner changes.", size=14, fill="#334155"),
+        f'<rect x="28" y="{summary_y}" width="{width - 56}" height="{summary_h}" rx="20" fill="#ffffff" stroke="#dbe4ee" />',
+    ]
+
+    summary_pills = [
+        ("Budgets", ", ".join(f"{budget}b" for budget in budgets)),
+        ("Exact flips", str(crossover_summary["total_crossovers"])),
+        ("Affected workloads", f"{crossover_summary['workloads_with_crossovers']} / {winner_summary['workload_count']}"),
+    ]
+    if top_transition is not None:
+        summary_pills.append(
+            (
+                "Most repeated",
+                f"{top_transition['from_budget_bits']}→{top_transition['to_budget_bits']}b {top_transition['previous_winner_predictor']}→{top_transition['next_winner_predictor']}",
+            )
+        )
+    pill_w = (width - 88 - ((len(summary_pills) - 1) * 14)) / len(summary_pills)
+    for index, (label, value) in enumerate(summary_pills):
+        x = 42 + (index * (pill_w + 14))
+        parts.append(f'<rect x="{x:.1f}" y="{summary_y + 14}" width="{pill_w:.1f}" height="48" rx="16" fill="#eff6ff" stroke="#bfdbfe" />')
+        parts.append(_svg_text(x + 14, summary_y + 34, label, size=11, weight="700", fill="#1d4ed8"))
+        parts.append(_svg_text(x + 14, summary_y + 54, _truncate_svg_text(value, 32), size=13, weight="700", fill="#0f172a"))
+
+    parts.append(f'<rect x="{left_x}" y="{card_y}" width="{card_w}" height="{card_h}" rx="20" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(left_x + 18, card_y + 32, "Repeated transition summary", size=20, weight="700"))
+    parts.append(_svg_text(left_x + 18, card_y + 52, "Budget steps that repeatedly flip the winner across workload families.", size=12, fill="#64748b"))
+    if transition_rows:
+        for index, row in enumerate(transition_rows):
+            y = card_y + 76 + (index * 58)
+            parts.append(f'<rect x="{left_x + 18}" y="{y}" width="{card_w - 36}" height="46" rx="16" fill="#f8fafc" stroke="#e2e8f0" />')
+            parts.append(f'<rect x="{left_x + 30}" y="{y + 10}" width="84" height="24" rx="12" fill="#dbeafe" stroke="#93c5fd" />')
+            parts.append(_svg_text(left_x + 42, y + 27, f"{row['from_budget_bits']}→{row['to_budget_bits']}b", size=11, weight="700", fill="#1d4ed8"))
+            prev_x = left_x + 134
+            next_x = left_x + 314
+            parts.append(f'<rect x="{prev_x}" y="{y + 10}" width="136" height="22" rx="11" fill="{_budget_predictor_fill(row["previous_winner_predictor"])}" stroke="#cbd5e1" />')
+            parts.append(_svg_text(prev_x + 10, y + 26, _truncate_svg_text(row['previous_winner_predictor'], 18), size=10, weight="700", fill="#0f172a"))
+            parts.append(_svg_text(prev_x + 146, y + 26, "→", size=14, weight="700", fill="#64748b"))
+            parts.append(f'<rect x="{next_x}" y="{y + 10}" width="136" height="22" rx="11" fill="{_budget_predictor_fill(row["next_winner_predictor"])}" stroke="#cbd5e1" />')
+            parts.append(_svg_text(next_x + 10, y + 26, _truncate_svg_text(row['next_winner_predictor'], 18), size=10, weight="700", fill="#0f172a"))
+            parts.append(_svg_text(left_x + 470, y + 26, f"{row['count']} workload(s)", size=10, weight="700", fill="#0f172a"))
+            parts.append(_svg_text(left_x + 30, y + 40, _truncate_svg_text(", ".join(row["workloads"]), 72), size=10, fill="#475569"))
+    else:
+        parts.append(_svg_text(left_x + 18, card_y + 94, "No winner changes across adjacent budgets in this sweep.", size=13, weight="700", fill="#475569"))
+
+    parts.append(f'<rect x="{right_x}" y="{card_y}" width="{card_w}" height="{card_h}" rx="20" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(right_x + 18, card_y + 32, "Workload trigger list", size=20, weight="700"))
+    parts.append(_svg_text(right_x + 18, card_y + 52, "Which workload flips first, and how far apart the winner/runner-up margins are before and after.", size=12, fill="#64748b"))
+    if workload_rows:
+        for index, row in enumerate(workload_rows):
+            scenario = scenario_lookup[row["workload"]]
+            first = row["crossovers"][0]
+            y = card_y + 76 + (index * 74)
+            parts.append(f'<rect x="{right_x + 18}" y="{y}" width="{card_w - 36}" height="62" rx="16" fill="#f8fafc" stroke="#e2e8f0" />')
+            parts.append(_svg_text(right_x + 32, y + 24, row["workload"], size=13, weight="700", fill="#0f172a"))
+            parts.append(_svg_text(right_x + 32, y + 42, _truncate_svg_text(scenario["headline"], 58), size=10, fill="#64748b"))
+            parts.append(f'<rect x="{right_x + 400}" y="{y + 10}" width="92" height="22" rx="11" fill="#dbeafe" stroke="#93c5fd" />')
+            parts.append(_svg_text(right_x + 414, y + 26, f"{first['from_budget_bits']}→{first['to_budget_bits']}b", size=10, weight="700", fill="#1d4ed8"))
+            parts.append(_svg_text(right_x + 32, y + 56, _truncate_svg_text(f"{first['previous_winner_predictor']} → {first['next_winner_predictor']} · gap {first['previous_margin_percent']:.2f}→{first['next_margin_percent']:.2f} pp", 78), size=10, fill="#475569"))
+            if row["crossover_count"] > 1:
+                parts.append(_svg_text(right_x + 506, y + 26, f"+{row['crossover_count'] - 1} more", size=10, weight="700", fill="#1d4ed8"))
+    else:
+        parts.append(_svg_text(right_x + 18, card_y + 94, "Every workload kept the same winner across the selected budgets.", size=13, weight="700", fill="#475569"))
+
+    footer_y = height - 24
+    parts.append(_svg_text(28, footer_y, "Use this card when the full budget matrix is too dense for one slide; pair it with budget-sweep.svg for the full per-workload grid.", size=12, fill="#475569"))
+    parts.append('</svg>')
+    return ''.join(parts) + "\n"
+
+
 def run_table_size_alias_sweep(
     workloads: list[str] | None = None,
     *,
@@ -3459,6 +3555,7 @@ def _build_parser() -> argparse.ArgumentParser:
     budget_sweep_parser.add_argument("--trace-dir", type=Path, help="Optional directory to write the generated trace files for the budget sweep.")
     budget_sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown budget report.")
     budget_sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG budget matrix card.")
+    budget_sweep_parser.add_argument("--crossover-svg-out", type=Path, help="Write a standalone SVG crossover-only slide card.")
     budget_sweep_parser.add_argument("--csv-out", type=Path, help="Write a CSV winner matrix for spreadsheet/chart reuse.")
     budget_sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
 
@@ -3622,6 +3719,9 @@ def main(argv: list[str] | None = None) -> int:
             if getattr(args, "svg_out", None):
                 write_svg_output(args.svg_out, render_budget_sweep_svg(scenarios=scenarios))
                 payload["svg_output"] = str(args.svg_out)
+            if getattr(args, "crossover_svg_out", None):
+                write_svg_output(args.crossover_svg_out, render_budget_crossover_slide_svg(scenarios=scenarios))
+                payload["crossover_svg_output"] = str(args.crossover_svg_out)
             if getattr(args, "csv_out", None):
                 write_csv_output(args.csv_out, render_budget_sweep_csv(scenarios=scenarios))
                 payload["csv_output"] = str(args.csv_out)
@@ -3633,6 +3733,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"markdown report: {payload['markdown_output']}")
                 if "svg_output" in payload:
                     print(f"svg card: {payload['svg_output']}")
+                if "crossover_svg_output" in payload:
+                    print(f"crossover svg card: {payload['crossover_svg_output']}")
                 if "csv_output" in payload:
                     print(f"csv export: {payload['csv_output']}")
                 if args.trace_dir is not None:

@@ -1,6 +1,6 @@
 # Branch predictor budget-normalized sweep
 
-- Generated: `2026-04-18T05:43:53Z`
+- Generated: `2026-04-18T08:45:53Z`
 - Workloads: `5` synthetic families
 - Compared budgets: `64 bits, 128 bits, 256 bits, 512 bits, 1024 bits`
 - Search space: table sizes `4, 8, 16, 32, 64` · history bits `1, 2, 4, 8, 12` · perceptron weight limits `15, 31, 74`

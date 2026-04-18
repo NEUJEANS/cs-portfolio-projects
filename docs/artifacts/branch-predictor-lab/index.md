@@ -95,11 +95,13 @@ Use this when you want to compare static PC aliasing against dynamic gshare coll
 ## Suggested portfolio usage
 
 - Use the sweep overview card when you want one slide that proves different workload families reward different predictors and configs.
-- Use the budget-normalized matrix when you want to explain that hardware budget can change the “best predictor” answer even on the same workload family. Keep the CSV nearby when you need to chart or filter the same winner matrix in a spreadsheet or slide deck, lean on the margin-trend card when you want to prove some of those wins are only photo finishes, use the crossover card when you need the exact budget step that flipped the architecture choice, and point at the blue flip chips when you want the matrix screenshot itself to show where the new winner first appears.
+- Use the budget-normalized matrix when you want to explain that hardware budget can change the “best predictor” answer even on the same workload family. Keep the CSV nearby when you need to chart or filter the same winner matrix in a spreadsheet or slide deck, lean on the margin-trend card when you want to prove some of those wins are only photo finishes, use the crossover card when you need the exact budget step that flipped the architecture choice, reach for the standalone crossover trigger card when the full matrix is too dense for one slide, and point at the blue flip chips when you want the matrix screenshot itself to show where the new winner first appears.
 - Use the alias table-size sweep when you want one artifact that shows static collisions can disappear while dynamic gshare conflicts still move around with history-dependent indexing.
 - Use the sample trace card when you want a clean teaching story for loop exits, alternating phases, and cache-ish branches.
 - Use the `tournament-style` card when you want to show that local/global/hybrid predictors can tie or trade places depending on the trace family and history depth.
 - Use the `alias-thrash` card when you want to explain table interference, conflicting branch biases, dynamic gshare-history collisions, and why increasing table size can improve simple predictors without changing the trace.
 - Use the `perceptron-majority` card when you want to show a neural predictor beating classic local/global tables on a long-history, linearly separable workload.
 - Use the perceptron tuning heatmap when you want to show that neural predictors still need sensible threshold/clamp tuning instead of treating the perceptron as a magic black box.
+- Pair the SVG card with its Markdown report when you need both a screenshot-friendly visual and a text artifact with exact rankings.
+agic black box.
 - Pair the SVG card with its Markdown report when you need both a screenshot-friendly visual and a text artifact with exact rankings.

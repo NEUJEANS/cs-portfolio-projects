@@ -38,6 +38,7 @@ parse_trace_line = module.parse_trace_line
 render_budget_sweep_markdown = module.render_budget_sweep_markdown
 render_budget_sweep_csv = module.render_budget_sweep_csv
 render_budget_sweep_svg = module.render_budget_sweep_svg
+render_budget_crossover_slide_svg = module.render_budget_crossover_slide_svg
 summarize_budget_winner_grid = module.summarize_budget_winner_grid
 summarize_budget_margin_story = module.summarize_budget_margin_story
 summarize_budget_crossover_points = module.summarize_budget_crossover_points
@@ -703,6 +704,7 @@ class BranchPredictorLabTests(unittest.TestCase):
         markdown = render_budget_sweep_markdown(scenarios=scenarios)
         csv_text = render_budget_sweep_csv(scenarios=scenarios)
         svg = render_budget_sweep_svg(scenarios=scenarios)
+        crossover_slide_svg = render_budget_crossover_slide_svg(scenarios=scenarios)
         summary = format_budget_sweep_summary_table(scenarios)
 
         self.assertEqual(winner_summary["total_cells"], 4)
@@ -734,6 +736,12 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("Winner-margin trend by budget", svg)
         self.assertIn("Winner crossover points", svg)
         self.assertIn("Blue flip chips mark the budget cell", svg)
+        self.assertIn("<svg", crossover_slide_svg)
+        self.assertIn("Budget crossover trigger card", crossover_slide_svg)
+        self.assertIn("Repeated transition summary", crossover_slide_svg)
+        self.assertIn("Workload trigger list", crossover_slide_svg)
+        self.assertIn("loop-heavy", crossover_slide_svg)
+        self.assertIn("32→128b", crossover_slide_svg)
         self.assertIn("loop-heavy", summary)
         self.assertIn("32b", summary)
 
@@ -763,6 +771,7 @@ class BranchPredictorLabTests(unittest.TestCase):
             trace_dir = Path(tmpdir) / "budget-traces"
             markdown_path = Path(tmpdir) / "budget-sweep.md"
             svg_path = Path(tmpdir) / "budget-sweep.svg"
+            crossover_svg_path = Path(tmpdir) / "budget-sweep-crossover-card.svg"
             csv_path = Path(tmpdir) / "budget-sweep.csv"
             completed = subprocess.run(
                 [
@@ -791,6 +800,8 @@ class BranchPredictorLabTests(unittest.TestCase):
                     str(markdown_path),
                     "--svg-out",
                     str(svg_path),
+                    "--crossover-svg-out",
+                    str(crossover_svg_path),
                     "--csv-out",
                     str(csv_path),
                     "--json",
@@ -812,9 +823,11 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertEqual(payload["trace_dir"], str(trace_dir))
             self.assertEqual(payload["markdown_output"], str(markdown_path))
             self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertEqual(payload["crossover_svg_output"], str(crossover_svg_path))
             self.assertEqual(payload["csv_output"], str(csv_path))
             self.assertTrue(markdown_path.exists())
             self.assertTrue(svg_path.exists())
+            self.assertTrue(crossover_svg_path.exists())
             self.assertTrue(csv_path.exists())
             self.assertTrue((trace_dir / "loop-heavy-seed7.trace").exists())
             self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())

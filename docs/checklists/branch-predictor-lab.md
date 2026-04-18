@@ -1,5 +1,17 @@
 # branch-predictor-lab checklist
 
+## Budget crossover slide-card slice (2026-04-18 08:41 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the dirty local branch-predictor work instead of overwriting it with a different slice
+- [x] finish the standalone crossover-only SVG card export and wire it through the CLI JSON/output paths
+- [x] regenerate the committed budget-sweep artifact bundle with the new crossover card companion
+- [x] update README/gallery/project checklist copy so the standalone card is documented and reproducible
+- [x] run targeted tests plus a real budget-sweep smoke command with the new `--crossover-svg-out` flag
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider HTML/PNG-friendly artifact companions in a future run
+
 ## Budget matrix crossover annotation slice (2026-04-18 05:35 UTC run)
 - [x] confirm repo sync before editing
 - [x] choose the queued follow-up around annotating crossover cells directly on the winner matrix
@@ -12,7 +24,7 @@
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider exporting a standalone crossover-only slide card in a future run
+- [x] consider exporting a standalone crossover-only slide card in a future run
 
 ## Budget crossover highlight slice (2026-04-18 05:04 UTC run)
 - [x] confirm repo sync before editing
@@ -26,7 +38,7 @@
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider annotating crossover cells directly on the winner matrix or exporting slide-ready crossover-only cards in a future run
+- [x] consider annotating crossover cells directly on the winner matrix or exporting slide-ready crossover-only cards in a future run
 
 - [x] pick a computer-architecture project that broadens the portfolio beyond algorithms and systems tooling
 - [x] note brief branch-prediction research takeaways before implementation
