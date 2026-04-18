@@ -242,6 +242,261 @@ class ReplicaCluster:
             raise ValueError("sync direction must be one of: both, forward, reverse")
 
 
+class LWWElementSet:
+    def __init__(
+        self,
+        add_timestamps: dict[str, int] | None = None,
+        remove_timestamps: dict[str, int] | None = None,
+        *,
+        bias: str = "remove",
+    ) -> None:
+        self._validate_bias(bias)
+        self.bias = bias
+        self.add_timestamps = {
+            element: int(timestamp)
+            for element, timestamp in (add_timestamps or {}).items()
+            if element
+        }
+        self.remove_timestamps = {
+            element: int(timestamp)
+            for element, timestamp in (remove_timestamps or {}).items()
+            if element
+        }
+        self._validate_timestamp_map(self.add_timestamps)
+        self._validate_timestamp_map(self.remove_timestamps)
+
+    def copy(self) -> "LWWElementSet":
+        return LWWElementSet(
+            add_timestamps=dict(self.add_timestamps),
+            remove_timestamps=dict(self.remove_timestamps),
+            bias=self.bias,
+        )
+
+    def add(self, element: str, timestamp: int) -> int:
+        self._validate_element(element)
+        self._validate_timestamp(timestamp)
+        current = self.add_timestamps.get(element)
+        if current is None or timestamp > current:
+            self.add_timestamps[element] = timestamp
+        return self.add_timestamps[element]
+
+    def remove(self, element: str, timestamp: int) -> int:
+        self._validate_element(element)
+        self._validate_timestamp(timestamp)
+        current = self.remove_timestamps.get(element)
+        if current is None or timestamp > current:
+            self.remove_timestamps[element] = timestamp
+        return self.remove_timestamps[element]
+
+    def contains(self, element: str) -> bool:
+        self._validate_element(element)
+        add_timestamp = self.add_timestamps.get(element)
+        remove_timestamp = self.remove_timestamps.get(element)
+        if add_timestamp is None:
+            return False
+        if remove_timestamp is None:
+            return True
+        if add_timestamp == remove_timestamp:
+            return self.bias == "add"
+        return add_timestamp > remove_timestamp
+
+    def elements(self) -> list[str]:
+        return sorted(
+            element
+            for element in set(self.add_timestamps) | set(self.remove_timestamps)
+            if self.contains(element)
+        )
+
+    def merge(self, other: "LWWElementSet") -> "LWWElementSet":
+        if self.bias != other.bias:
+            raise ValueError("cannot merge LWW sets with different tie biases")
+        merged_adds = dict(self.add_timestamps)
+        for element, timestamp in other.add_timestamps.items():
+            merged_adds[element] = max(merged_adds.get(element, timestamp), timestamp)
+        merged_removes = dict(self.remove_timestamps)
+        for element, timestamp in other.remove_timestamps.items():
+            merged_removes[element] = max(merged_removes.get(element, timestamp), timestamp)
+        return LWWElementSet(
+            add_timestamps=merged_adds,
+            remove_timestamps=merged_removes,
+            bias=self.bias,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "bias": self.bias,
+            "elements": self.elements(),
+            "add_timestamps": dict(sorted(self.add_timestamps.items())),
+            "remove_timestamps": dict(sorted(self.remove_timestamps.items())),
+        }
+
+    @staticmethod
+    def _validate_element(element: str) -> None:
+        if not element:
+            raise ValueError("element must be non-empty")
+
+    @staticmethod
+    def _validate_timestamp(timestamp: int) -> None:
+        if timestamp < 0:
+            raise ValueError("timestamps must be non-negative integers")
+
+    @staticmethod
+    def _validate_bias(bias: str) -> None:
+        if bias not in {"add", "remove"}:
+            raise ValueError("LWW tie bias must be 'add' or 'remove'")
+
+    @classmethod
+    def _validate_timestamp_map(cls, mapping: dict[str, int]) -> None:
+        for timestamp in mapping.values():
+            cls._validate_timestamp(int(timestamp))
+
+
+class LWWReplicaCluster:
+    def __init__(self, replicas: Iterable[str], *, bias: str = "remove") -> None:
+        replica_list = list(replicas)
+        if not replica_list or any(not replica for replica in replica_list):
+            raise ValueError("replicas must contain only non-empty names")
+        if len(set(replica_list)) != len(replica_list):
+            raise ValueError("replica names must be unique")
+        self.replicas = tuple(sorted(replica_list))
+        self.bias = bias
+        self.states = {replica: LWWElementSet(bias=bias) for replica in self.replicas}
+        self.timeline: list[dict[str, object]] = []
+
+    def add(self, replica: str, element: str, timestamp: int) -> int:
+        state = self._state(replica)
+        effective_timestamp = state.add(element, timestamp)
+        self.timeline.append(
+            {
+                "op": "add",
+                "replica": replica,
+                "element": element,
+                "timestamp": effective_timestamp,
+                "state": state.to_dict(),
+            }
+        )
+        return effective_timestamp
+
+    def remove(self, replica: str, element: str, timestamp: int) -> int:
+        state = self._state(replica)
+        effective_timestamp = state.remove(element, timestamp)
+        self.timeline.append(
+            {
+                "op": "remove",
+                "replica": replica,
+                "element": element,
+                "timestamp": effective_timestamp,
+                "state": state.to_dict(),
+            }
+        )
+        return effective_timestamp
+
+    def sync(self, source: str, target: str, *, direction: str = "both") -> dict[str, object]:
+        ReplicaCluster._validate_sync_direction(direction)
+        self._state(source)
+        self._state(target)
+        if direction == "both":
+            source_before = self.states[source].copy()
+            target_before = self.states[target].copy()
+            self.states[source] = source_before.merge(target_before)
+            self.states[target] = target_before.merge(source_before)
+        elif direction == "forward":
+            self.states[target] = self.states[target].merge(self.states[source])
+        else:
+            self.states[source] = self.states[source].merge(self.states[target])
+
+        event = {
+            "op": "sync",
+            "source": source,
+            "target": target,
+            "direction": direction,
+            "source_state": self.states[source].to_dict(),
+            "target_state": self.states[target].to_dict(),
+        }
+        self.timeline.append(event)
+        return event
+
+    def convergence_report(self) -> dict[str, object]:
+        membership = {
+            replica: self.states[replica].elements()
+            for replica in self.replicas
+        }
+        state_views = {
+            replica: self.states[replica].to_dict()
+            for replica in self.replicas
+        }
+        baseline_state = next(iter(state_views.values()), {})
+        converged = all(view == baseline_state for view in state_views.values())
+        return {
+            "converged": converged,
+            "membership": membership,
+        }
+
+    def snapshot(self) -> dict[str, object]:
+        return {
+            "bias": self.bias,
+            "replicas": {
+                replica: self.states[replica].to_dict() for replica in self.replicas
+            },
+            "timeline": list(self.timeline),
+            "convergence": self.convergence_report(),
+        }
+
+    def run_script(self, operations: Sequence[dict[str, object]]) -> dict[str, object]:
+        for index, operation in enumerate(operations, start=1):
+            op_name = str(operation.get("op", "")).strip()
+            if op_name == "add":
+                self.add(
+                    str(operation["replica"]),
+                    str(operation["element"]),
+                    logical_timestamp_from_operation(operation, fallback=index),
+                )
+            elif op_name == "remove":
+                self.remove(
+                    str(operation["replica"]),
+                    str(operation["element"]),
+                    logical_timestamp_from_operation(operation, fallback=index),
+                )
+            elif op_name == "sync":
+                self.sync(
+                    str(operation["source"]),
+                    str(operation["target"]),
+                    direction=str(operation.get("direction", "both")),
+                )
+            else:
+                raise ValueError(f"unsupported op at index {index}: {op_name or '<missing>'}")
+        return self.snapshot()
+
+    def _state(self, replica: str) -> LWWElementSet:
+        try:
+            return self.states[replica]
+        except KeyError as exc:
+            raise ValueError(f"unknown replica: {replica}") from exc
+
+
+def logical_timestamp_from_operation(operation: dict[str, object], *, fallback: int) -> int:
+    value = operation.get("time", operation.get("timestamp"))
+    if value is None:
+        return fallback
+    if isinstance(value, bool):
+        raise ValueError("logical timestamps must be integers, not booleans")
+    if isinstance(value, int):
+        timestamp = value
+    elif isinstance(value, float) and value.is_integer():
+        timestamp = int(value)
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or not stripped.lstrip("-").isdigit():
+            raise ValueError(f"invalid logical timestamp: {value}")
+        timestamp = int(stripped)
+    else:
+        raise ValueError(f"invalid logical timestamp: {value}")
+    if timestamp < 0:
+        raise ValueError("logical timestamps must be non-negative")
+    return timestamp
+
+
+
 def parse_tag(tag: str) -> tuple[str, int]:
     replica, separator, counter_text = tag.partition(":")
     if not separator or not replica or not counter_text.isdigit():
@@ -715,6 +970,426 @@ def render_timeline_html(
 '''
 
 
+def summarize_timestamp_mapping(mapping: dict[str, object]) -> str:
+    parts: list[str] = []
+    for element in sorted(mapping):
+        parts.append(f"{element}={mapping[element]}")
+    return "; ".join(parts) if parts else "∅"
+
+
+def summarize_lww_state(state: dict[str, object]) -> str:
+    elements = ", ".join(str(element) for element in state["elements"]) or "∅"
+    adds = summarize_timestamp_mapping(dict(state["add_timestamps"]))
+    removes = summarize_timestamp_mapping(dict(state["remove_timestamps"]))
+    return f"elements {elements}; add_ts {adds}; remove_ts {removes}; bias {state['bias']}"
+
+
+def compact_lww_state_note(state: dict[str, object]) -> str:
+    elements = ", ".join(str(element) for element in state["elements"]) or "∅"
+    adds = summarize_timestamp_mapping(dict(state["add_timestamps"]))
+    removes = summarize_timestamp_mapping(dict(state["remove_timestamps"]))
+    return f"elements={elements} | add_ts={adds} | remove_ts={removes} | bias={state['bias']}"
+
+
+def format_optional_timestamp(value: object) -> str:
+    return "∅" if value is None else str(value)
+
+
+def membership_elements_for_states(orset_state: dict[str, object], lww_state: dict[str, object]) -> list[str]:
+    return sorted(
+        set(orset_state["elements"])
+        | set(dict(orset_state["observed_tags"]))
+        | set(lww_state["elements"])
+        | set(dict(lww_state["add_timestamps"]))
+        | set(dict(lww_state["remove_timestamps"]))
+    )
+
+
+def describe_replica_divergence(replica: str, orset_state: dict[str, object], lww_state: dict[str, object]) -> list[str]:
+    details: list[str] = []
+    active_tags = dict(orset_state["active_tags"])
+    add_timestamps = dict(lww_state["add_timestamps"])
+    remove_timestamps = dict(lww_state["remove_timestamps"])
+    for element in membership_elements_for_states(orset_state, lww_state):
+        orset_present = element in orset_state["elements"]
+        lww_present = element in lww_state["elements"]
+        if orset_present == lww_present:
+            continue
+        tags = ", ".join(str(tag) for tag in active_tags.get(element, [])) or "∅"
+        details.append(
+            f"{replica}:{element} OR-Set={'present' if orset_present else 'absent'} via tags {tags}; "
+            f"LWW={'present' if lww_present else 'absent'} with add={format_optional_timestamp(add_timestamps.get(element))}, "
+            f"remove={format_optional_timestamp(remove_timestamps.get(element))}, bias={lww_state['bias']}"
+        )
+    return details or [f"{replica}: membership matches"]
+
+
+def build_comparison_rows(orset_snapshot: dict[str, object], lww_snapshot: dict[str, object]) -> list[dict[str, object]]:
+    orset_timeline = list(orset_snapshot["timeline"])
+    lww_timeline = list(lww_snapshot["timeline"])
+    if len(orset_timeline) != len(lww_timeline):
+        raise ValueError("OR-Set and LWW timelines must have the same length for comparison")
+    rows: list[dict[str, object]] = []
+    for step, (orset_event, lww_event) in enumerate(zip(orset_timeline, lww_timeline), start=1):
+        op = str(orset_event["op"])
+        if op == "add":
+            replica = str(orset_event["replica"])
+            orset_state = dict(orset_event["state"])
+            lww_state = dict(lww_event["state"])
+            rows.append(
+                {
+                    "step": step,
+                    "event": f"{replica} adds {orset_event['element']} @ t={lww_event['timestamp']}",
+                    "orset": compact_state_note(orset_state),
+                    "lww": compact_lww_state_note(lww_state),
+                    "divergence": describe_replica_divergence(replica, orset_state, lww_state),
+                }
+            )
+        elif op == "remove":
+            replica = str(orset_event["replica"])
+            orset_state = dict(orset_event["state"])
+            lww_state = dict(lww_event["state"])
+            rows.append(
+                {
+                    "step": step,
+                    "event": f"{replica} removes {orset_event['element']} @ t={lww_event['timestamp']}",
+                    "orset": compact_state_note(orset_state),
+                    "lww": compact_lww_state_note(lww_state),
+                    "divergence": describe_replica_divergence(replica, orset_state, lww_state),
+                }
+            )
+        else:
+            source = str(orset_event["source"])
+            target = str(orset_event["target"])
+            direction = str(orset_event["direction"])
+            arrow = {"both": "↔", "forward": "→", "reverse": "←"}[direction]
+            orset_source = dict(orset_event["source_state"])
+            orset_target = dict(orset_event["target_state"])
+            lww_source = dict(lww_event["source_state"])
+            lww_target = dict(lww_event["target_state"])
+            rows.append(
+                {
+                    "step": step,
+                    "event": f"{source} {arrow} {target} sync ({direction})",
+                    "orset": f"{source}: {compact_state_note(orset_source)} || {target}: {compact_state_note(orset_target)}",
+                    "lww": f"{source}: {compact_lww_state_note(lww_source)} || {target}: {compact_lww_state_note(lww_target)}",
+                    "divergence": describe_replica_divergence(source, orset_source, lww_source)
+                    + describe_replica_divergence(target, orset_target, lww_target),
+                }
+            )
+    return rows
+
+
+def build_final_divergence(orset_snapshot: dict[str, object], lww_snapshot: dict[str, object]) -> list[dict[str, object]]:
+    if not orset_snapshot["replicas"] or not lww_snapshot["replicas"]:
+        return []
+    first_replica = next(iter(dict(orset_snapshot["replicas"])))
+    orset_state = dict(dict(orset_snapshot["replicas"])[first_replica])
+    lww_state = dict(dict(lww_snapshot["replicas"])[first_replica])
+    active_tags = dict(orset_state["active_tags"])
+    add_timestamps = dict(lww_state["add_timestamps"])
+    remove_timestamps = dict(lww_state["remove_timestamps"])
+    divergences: list[dict[str, object]] = []
+    for element in membership_elements_for_states(orset_state, lww_state):
+        orset_present = element in orset_state["elements"]
+        lww_present = element in lww_state["elements"]
+        if orset_present == lww_present:
+            continue
+        tags = [str(tag) for tag in active_tags.get(element, [])]
+        add_timestamp = add_timestamps.get(element)
+        remove_timestamp = remove_timestamps.get(element)
+        divergences.append(
+            {
+                "element": element,
+                "orset_present": orset_present,
+                "lww_present": lww_present,
+                "orset_active_tags": tags,
+                "orset_tombstones": list(orset_state["tombstones"]),
+                "lww_add_timestamp": add_timestamp,
+                "lww_remove_timestamp": remove_timestamp,
+                "why": (
+                    f"OR-Set keeps only observed-remove tombstones, so active tags {', '.join(tags) or '∅'} can survive. "
+                    f"LWW compares add={format_optional_timestamp(add_timestamp)} vs remove={format_optional_timestamp(remove_timestamp)} "
+                    f"with {lww_state['bias']}-wins ties."
+                ),
+            }
+        )
+    return divergences
+
+
+def comparison_story(final_divergence: list[dict[str, object]], lww_bias: str) -> str:
+    if not final_divergence:
+        return (
+            "This script converges to the same final membership in both models; the comparison is still useful for showing "
+            "that OR-Set tracks tags while LWW relies on timestamp ordering."
+        )
+    first = final_divergence[0]
+    return (
+        f"The final states diverge on {first['element']}: OR-Set leaves it "
+        f"{'present' if first['orset_present'] else 'absent'} because the remove only tombstoned observed tags, "
+        f"while LWW leaves it {'present' if first['lww_present'] else 'absent'} after comparing add={format_optional_timestamp(first['lww_add_timestamp'])} "
+        f"and remove={format_optional_timestamp(first['lww_remove_timestamp'])} under {lww_bias}-wins ties."
+    )
+
+
+def build_semantics_comparison(
+    replicas: Sequence[str],
+    operations: Sequence[dict[str, object]],
+    *,
+    lww_bias: str = "remove",
+) -> dict[str, object]:
+    orset_cluster = ReplicaCluster(replicas)
+    lww_cluster = LWWReplicaCluster(replicas, bias=lww_bias)
+    orset_snapshot = orset_cluster.run_script(operations)
+    lww_snapshot = lww_cluster.run_script(operations)
+    final_divergence = build_final_divergence(orset_snapshot, lww_snapshot)
+    return {
+        "replicas": list(sorted(replicas)),
+        "step_count": len(operations),
+        "lww_bias": lww_bias,
+        "comparison_rows": build_comparison_rows(orset_snapshot, lww_snapshot),
+        "final_divergence": final_divergence,
+        "story": comparison_story(final_divergence, lww_bias),
+        "orset": orset_snapshot,
+        "lww": lww_snapshot,
+    }
+
+
+def render_comparison_markdown(comparison: dict[str, object], title: str) -> str:
+    lines = [
+        f"# OR-Set vs LWW-element-set comparison — {title}",
+        "",
+        f"Replicas: {', '.join(comparison['replicas'])}",
+        f"LWW tie bias: `{comparison['lww_bias']}`",
+        "",
+        f"Story: {comparison['story']}",
+        "",
+    ]
+    final_divergence = list(comparison["final_divergence"])
+    if final_divergence:
+        lines.append("## Final divergence")
+        lines.append("")
+        for item in final_divergence:
+            lines.append(
+                f"- `{item['element']}` — OR-Set={'present' if item['orset_present'] else 'absent'}, "
+                f"LWW={'present' if item['lww_present'] else 'absent'}; {item['why']}"
+            )
+        lines.append("")
+
+    lines.extend([
+        "## Step-by-step comparison",
+        "",
+        "| Step | Event | OR-Set view | LWW view | Divergence |",
+        "| --- | --- | --- | --- | --- |",
+    ])
+    for row in comparison["comparison_rows"]:
+        divergence_text = "<br>".join(str(detail).replace("|", "\\|") for detail in row["divergence"])
+        event_text = str(row["event"]).replace("|", "\\|")
+        orset_text = str(row["orset"]).replace("|", "\\|")
+        lww_text = str(row["lww"]).replace("|", "\\|")
+        lines.append(f"| {row['step']} | {event_text} | {orset_text} | {lww_text} | {divergence_text} |")
+
+    lines.extend(["", "## Final OR-Set states", ""])
+    for replica, state in dict(comparison["orset"]["replicas"]).items():
+        lines.append(f"- `{replica}` — {summarize_state(dict(state))}")
+
+    lines.extend(["", "## Final LWW states", ""])
+    for replica, state in dict(comparison["lww"]["replicas"]).items():
+        lines.append(f"- `{replica}` — {summarize_lww_state(dict(state))}")
+
+    return "\n".join(lines) + "\n"
+
+
+def render_comparison_html(
+    comparison: dict[str, object],
+    title: str,
+    *,
+    companion_links: dict[str, str] | None = None,
+) -> str:
+    final_divergence = list(comparison["final_divergence"])
+    divergence_html = "".join(
+        f'<li><strong><code>{escape_html(str(item["element"]))}</code></strong><span>{escape_html(str(item["why"]))}</span></li>'
+        for item in final_divergence
+    )
+    if not divergence_html:
+        divergence_html = "<li><strong>No final membership divergence</strong><span>The value-level outcome matches, but the two models still track different metadata.</span></li>"
+    companion_links_html = "".join(
+        f'<li><a href="{escape_html(path)}">{escape_html(label)}</a></li>'
+        for label, path in (companion_links or {}).items()
+    )
+    if not companion_links_html:
+        companion_links_html = "<li>This comparison page is self-contained. Pass comparison/timeline output flags to generate linked companion artifacts.</li>"
+    orset_states_html = "".join(
+        f'<li><strong><code>{escape_html(replica)}</code></strong><span>{escape_html(summarize_state(dict(state)))}</span></li>'
+        for replica, state in dict(comparison["orset"]["replicas"]).items()
+    )
+    lww_states_html = "".join(
+        f'<li><strong><code>{escape_html(replica)}</code></strong><span>{escape_html(summarize_lww_state(dict(state)))}</span></li>'
+        for replica, state in dict(comparison["lww"]["replicas"]).items()
+    )
+    rows_html = "".join(
+        "<tr>"
+        f"<td>{row['step']}</td>"
+        f"<td>{escape_html(str(row['event']))}</td>"
+        f"<td>{escape_html(str(row['orset']))}</td>"
+        f"<td>{escape_html(str(row['lww']))}</td>"
+        f"<td>{''.join(f'<div>{escape_html(str(detail))}</div>' for detail in row['divergence'])}</td>"
+        "</tr>"
+        for row in comparison["comparison_rows"]
+    )
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set vs LWW-element-set — {escape_html(title)}</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+        --warn: #9a3412;
+        --warn-bg: #ffedd5;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .story {{ padding: 14px 16px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #bfdbfe; color: #1e3a8a; }}
+      .summary-grid, .state-grid {{ display: grid; gap: 16px; }}
+      .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 0; margin: 24px 0 0; }}
+      .summary-grid li {{ list-style: none; padding: 16px 18px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }}
+      .summary-grid strong {{ display: block; font-size: 1.3rem; margin-bottom: 6px; }}
+      .layout {{ display: grid; gap: 24px; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); align-items: start; }}
+      .panel {{ padding: 22px; }}
+      .panel h2, .panel h3 {{ margin-top: 0; }}
+      .artifact-links, .replica-list {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      .artifact-links li + li, .replica-list li + li {{ margin-top: 10px; }}
+      .replica-list strong {{ color: var(--text); display: block; margin-bottom: 4px; }}
+      .replica-list span {{ display: block; line-height: 1.5; }}
+      .state-grid {{ grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+      .callout {{ padding: 14px 16px; border-radius: 18px; line-height: 1.5; }}
+      .callout.good {{ background: var(--good-bg); color: var(--good); }}
+      .callout.warn {{ background: var(--warn-bg); color: var(--warn); }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+      a {{ color: var(--accent); }}
+      @media (max-width: 1080px) {{ .layout {{ grid-template-columns: 1fr; }} }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set vs LWW-element-set</h1>
+        <p>This page compares the same scripted history under tag-based observed-remove semantics and timestamp-based last-write-wins semantics. It is meant to make the conflict-resolution trade-off visible without reading raw JSON first.</p>
+        <p class="story">{escape_html(str(comparison['story']))}</p>
+        <ul class="summary-grid">
+          <li><strong>{len(comparison['replicas'])}</strong> replicas ({escape_html(', '.join(comparison['replicas']) or 'none')})</li>
+          <li><strong>{comparison['step_count']}</strong> scripted steps</li>
+          <li><strong>{escape_html(str(comparison['lww_bias']))}</strong> LWW tie bias</li>
+          <li><strong>{len(final_divergence)}</strong> final divergent element(s)</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel">
+          <h2>Why the models diverge</h2>
+          <div class="callout good"><strong>OR-Set:</strong> removes only the add-tags a replica has already observed, so a concurrent/new tag can survive later sync.</div>
+          <div class="callout warn" style="margin-top: 12px;"><strong>LWW-element-set:</strong> resolves add/remove conflicts by timestamp ordering; when timestamps tie, the configured bias decides the winner.</div>
+          <h3 style="margin-top: 18px;">Final divergence notes</h3>
+          <ul class="replica-list">{divergence_html}</ul>
+        </article>
+        <aside class="panel">
+          <h2>Companion artifacts</h2>
+          <ul class="artifact-links">{companion_links_html}</ul>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Final states</h2>
+        <div class="state-grid">
+          <section>
+            <h3>OR-Set replicas</h3>
+            <ul class="replica-list">{orset_states_html}</ul>
+          </section>
+          <section>
+            <h3>LWW replicas</h3>
+            <ul class="replica-list">{lww_states_html}</ul>
+          </section>
+        </div>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Step-by-step comparison</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Event</th><th>OR-Set</th><th>LWW</th><th>Divergence</th></tr>
+          </thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
+def add_comparison_output_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--comparison-markdown-out")
+    parser.add_argument("--comparison-html-out")
+    parser.add_argument("--comparison-json-out")
+
+
+def comparison_title_from_args(args: argparse.Namespace) -> str:
+    return f"script {Path(args.script).name}"
+
+
+def write_comparison_outputs(args: argparse.Namespace, comparison: dict[str, object]) -> None:
+    if not any(
+        [
+            args.comparison_markdown_out,
+            args.comparison_html_out,
+            args.comparison_json_out,
+        ]
+    ):
+        return
+
+    title = comparison_title_from_args(args)
+    if args.comparison_json_out:
+        write_text_output(args.comparison_json_out, json.dumps(comparison, indent=2, sort_keys=True) + "\n")
+    if args.comparison_markdown_out:
+        write_text_output(args.comparison_markdown_out, render_comparison_markdown(comparison, title))
+    if args.comparison_html_out:
+        base_dir = Path(args.comparison_html_out).parent
+        companion_links: dict[str, str] = {}
+        for label, target in (
+            ("Scenario script", args.script),
+            ("OR-Set gallery", args.timeline_html_out),
+            ("OR-Set Markdown timeline", args.timeline_markdown_out),
+            ("OR-Set Mermaid source", args.timeline_mermaid_out),
+            ("OR-Set SVG card", args.timeline_svg_out),
+            ("OR-Set JSON snapshot", args.json_out),
+            ("Comparison Markdown", args.comparison_markdown_out),
+            ("Comparison JSON", args.comparison_json_out),
+        ):
+            if not target:
+                continue
+            relative = os.path.relpath(Path(target), base_dir)
+            companion_links[label] = Path(relative).as_posix()
+        write_text_output(
+            args.comparison_html_out,
+            render_comparison_html(comparison, title, companion_links=companion_links),
+        )
+
+
+
 def write_text_output(path: str | Path, content: str) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -730,7 +1405,7 @@ def add_timeline_output_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def timeline_title_from_args(args: argparse.Namespace) -> str:
-    if args.command == "run-script":
+    if args.command in {"run-script", "compare-script"}:
         return f"script {Path(args.script).name}"
     if args.command == "add":
         return f"single add {args.replica}:{args.element}"
@@ -767,7 +1442,7 @@ def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]
             mermaid_path=args.timeline_mermaid_out,
             svg_path=args.timeline_svg_out,
             json_path=args.json_out,
-            script_path=args.script if getattr(args, "command", None) == "run-script" else None,
+            script_path=args.script if getattr(args, "command", None) in {"run-script", "compare-script"} else None,
         )
         write_text_output(
             args.timeline_html_out,
@@ -783,6 +1458,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_script.add_argument("--replicas", nargs="+", required=True)
     run_script.add_argument("--script", required=True)
     add_timeline_output_arguments(run_script)
+
+    compare_script = subparsers.add_parser(
+        "compare-script",
+        help="compare the same JSON operation script under OR-Set and LWW-element-set semantics",
+    )
+    compare_script.add_argument("--replicas", nargs="+", required=True)
+    compare_script.add_argument("--script", required=True)
+    compare_script.add_argument("--lww-bias", choices=["add", "remove"], default="remove")
+    add_timeline_output_arguments(compare_script)
+    add_comparison_output_arguments(compare_script)
 
     add = subparsers.add_parser("add", help="apply one add on a fresh cluster")
     add.add_argument("--replicas", nargs="+", required=True)
@@ -811,6 +1496,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "compare-script":
+        comparison = build_semantics_comparison(
+            args.replicas,
+            load_script(args.script),
+            lww_bias=args.lww_bias,
+        )
+        write_timeline_outputs(args, dict(comparison["orset"]))
+        write_comparison_outputs(args, comparison)
+        print(json.dumps(comparison, indent=2, sort_keys=True))
+        return 0
+
     cluster = ReplicaCluster(args.replicas)
 
     if args.command == "run-script":

@@ -1,0 +1,669 @@
+{
+  "comparison_rows": [
+    {
+      "divergence": [
+        "a: membership matches"
+      ],
+      "event": "a adds notebook @ t=1",
+      "lww": "elements=notebook | add_ts=notebook=1 | remove_ts=\u2205 | bias=remove",
+      "orset": "elements=notebook | active=notebook=a:1 | tombstones=\u2205",
+      "step": 1
+    },
+    {
+      "divergence": [
+        "a: membership matches",
+        "b: membership matches"
+      ],
+      "event": "a \u2194 b sync (both)",
+      "lww": "a: elements=notebook | add_ts=notebook=1 | remove_ts=\u2205 | bias=remove || b: elements=notebook | add_ts=notebook=1 | remove_ts=\u2205 | bias=remove",
+      "orset": "a: elements=notebook | active=notebook=a:1 | tombstones=\u2205 || b: elements=notebook | active=notebook=a:1 | tombstones=\u2205",
+      "step": 2
+    },
+    {
+      "divergence": [
+        "b: membership matches"
+      ],
+      "event": "b removes notebook @ t=5",
+      "lww": "elements=\u2205 | add_ts=notebook=1 | remove_ts=notebook=5 | bias=remove",
+      "orset": "elements=\u2205 | active=\u2205 | tombstones=a:1",
+      "step": 3
+    },
+    {
+      "divergence": [
+        "c: membership matches"
+      ],
+      "event": "c adds notebook @ t=4",
+      "lww": "elements=notebook | add_ts=notebook=4 | remove_ts=\u2205 | bias=remove",
+      "orset": "elements=notebook | active=notebook=c:1 | tombstones=\u2205",
+      "step": 4
+    },
+    {
+      "divergence": [
+        "c: membership matches",
+        "a: membership matches"
+      ],
+      "event": "c \u2194 a sync (both)",
+      "lww": "c: elements=notebook | add_ts=notebook=4 | remove_ts=\u2205 | bias=remove || a: elements=notebook | add_ts=notebook=4 | remove_ts=\u2205 | bias=remove",
+      "orset": "c: elements=notebook | active=notebook=a:1, c:1 | tombstones=\u2205 || a: elements=notebook | active=notebook=a:1, c:1 | tombstones=\u2205",
+      "step": 5
+    },
+    {
+      "divergence": [
+        "a:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove",
+        "b:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove"
+      ],
+      "event": "a \u2194 b sync (both)",
+      "lww": "a: elements=\u2205 | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove || b: elements=\u2205 | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove",
+      "orset": "a: elements=notebook | active=notebook=c:1 | tombstones=a:1 || b: elements=notebook | active=notebook=c:1 | tombstones=a:1",
+      "step": 6
+    },
+    {
+      "divergence": [
+        "a:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove",
+        "c:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove"
+      ],
+      "event": "a \u2194 c sync (both)",
+      "lww": "a: elements=\u2205 | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove || c: elements=\u2205 | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove",
+      "orset": "a: elements=notebook | active=notebook=c:1 | tombstones=a:1 || c: elements=notebook | active=notebook=c:1 | tombstones=a:1",
+      "step": 7
+    }
+  ],
+  "final_divergence": [
+    {
+      "element": "notebook",
+      "lww_add_timestamp": 4,
+      "lww_present": false,
+      "lww_remove_timestamp": 5,
+      "orset_active_tags": [
+        "c:1"
+      ],
+      "orset_present": true,
+      "orset_tombstones": [
+        "a:1"
+      ],
+      "why": "OR-Set keeps only observed-remove tombstones, so active tags c:1 can survive. LWW compares add=4 vs remove=5 with remove-wins ties."
+    }
+  ],
+  "lww": {
+    "bias": "remove",
+    "convergence": {
+      "converged": true,
+      "membership": {
+        "a": [],
+        "b": [],
+        "c": []
+      }
+    },
+    "replicas": {
+      "a": {
+        "add_timestamps": {
+          "notebook": 4
+        },
+        "bias": "remove",
+        "elements": [],
+        "remove_timestamps": {
+          "notebook": 5
+        }
+      },
+      "b": {
+        "add_timestamps": {
+          "notebook": 4
+        },
+        "bias": "remove",
+        "elements": [],
+        "remove_timestamps": {
+          "notebook": 5
+        }
+      },
+      "c": {
+        "add_timestamps": {
+          "notebook": 4
+        },
+        "bias": "remove",
+        "elements": [],
+        "remove_timestamps": {
+          "notebook": 5
+        }
+      }
+    },
+    "timeline": [
+      {
+        "element": "notebook",
+        "op": "add",
+        "replica": "a",
+        "state": {
+          "add_timestamps": {
+            "notebook": 1
+          },
+          "bias": "remove",
+          "elements": [
+            "notebook"
+          ],
+          "remove_timestamps": {}
+        },
+        "timestamp": 1
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "a",
+        "source_state": {
+          "add_timestamps": {
+            "notebook": 1
+          },
+          "bias": "remove",
+          "elements": [
+            "notebook"
+          ],
+          "remove_timestamps": {}
+        },
+        "target": "b",
+        "target_state": {
+          "add_timestamps": {
+            "notebook": 1
+          },
+          "bias": "remove",
+          "elements": [
+            "notebook"
+          ],
+          "remove_timestamps": {}
+        }
+      },
+      {
+        "element": "notebook",
+        "op": "remove",
+        "replica": "b",
+        "state": {
+          "add_timestamps": {
+            "notebook": 1
+          },
+          "bias": "remove",
+          "elements": [],
+          "remove_timestamps": {
+            "notebook": 5
+          }
+        },
+        "timestamp": 5
+      },
+      {
+        "element": "notebook",
+        "op": "add",
+        "replica": "c",
+        "state": {
+          "add_timestamps": {
+            "notebook": 4
+          },
+          "bias": "remove",
+          "elements": [
+            "notebook"
+          ],
+          "remove_timestamps": {}
+        },
+        "timestamp": 4
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "c",
+        "source_state": {
+          "add_timestamps": {
+            "notebook": 4
+          },
+          "bias": "remove",
+          "elements": [
+            "notebook"
+          ],
+          "remove_timestamps": {}
+        },
+        "target": "a",
+        "target_state": {
+          "add_timestamps": {
+            "notebook": 4
+          },
+          "bias": "remove",
+          "elements": [
+            "notebook"
+          ],
+          "remove_timestamps": {}
+        }
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "a",
+        "source_state": {
+          "add_timestamps": {
+            "notebook": 4
+          },
+          "bias": "remove",
+          "elements": [],
+          "remove_timestamps": {
+            "notebook": 5
+          }
+        },
+        "target": "b",
+        "target_state": {
+          "add_timestamps": {
+            "notebook": 4
+          },
+          "bias": "remove",
+          "elements": [],
+          "remove_timestamps": {
+            "notebook": 5
+          }
+        }
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "a",
+        "source_state": {
+          "add_timestamps": {
+            "notebook": 4
+          },
+          "bias": "remove",
+          "elements": [],
+          "remove_timestamps": {
+            "notebook": 5
+          }
+        },
+        "target": "c",
+        "target_state": {
+          "add_timestamps": {
+            "notebook": 4
+          },
+          "bias": "remove",
+          "elements": [],
+          "remove_timestamps": {
+            "notebook": 5
+          }
+        }
+      }
+    ]
+  },
+  "lww_bias": "remove",
+  "orset": {
+    "convergence": {
+      "active_tags": {
+        "a": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "b": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "c": {
+          "notebook": [
+            "c:1"
+          ]
+        }
+      },
+      "converged": true,
+      "membership": {
+        "a": [
+          "notebook"
+        ],
+        "b": [
+          "notebook"
+        ],
+        "c": [
+          "notebook"
+        ]
+      }
+    },
+    "replicas": {
+      "a": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      },
+      "b": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      },
+      "c": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      }
+    },
+    "timeline": [
+      {
+        "element": "notebook",
+        "op": "add",
+        "replica": "a",
+        "state": {
+          "active_tags": {
+            "notebook": [
+              "a:1"
+            ]
+          },
+          "counters": {
+            "a": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1"
+            ]
+          },
+          "tombstones": []
+        },
+        "tag": "a:1"
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "a",
+        "source_state": {
+          "active_tags": {
+            "notebook": [
+              "a:1"
+            ]
+          },
+          "counters": {
+            "a": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1"
+            ]
+          },
+          "tombstones": []
+        },
+        "target": "b",
+        "target_state": {
+          "active_tags": {
+            "notebook": [
+              "a:1"
+            ]
+          },
+          "counters": {
+            "a": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1"
+            ]
+          },
+          "tombstones": []
+        }
+      },
+      {
+        "element": "notebook",
+        "op": "remove",
+        "removed_tags": [
+          "a:1"
+        ],
+        "replica": "b",
+        "state": {
+          "active_tags": {},
+          "counters": {
+            "a": 1
+          },
+          "elements": [],
+          "observed_tags": {
+            "notebook": [
+              "a:1"
+            ]
+          },
+          "tombstones": [
+            "a:1"
+          ]
+        }
+      },
+      {
+        "element": "notebook",
+        "op": "add",
+        "replica": "c",
+        "state": {
+          "active_tags": {
+            "notebook": [
+              "c:1"
+            ]
+          },
+          "counters": {
+            "c": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "c:1"
+            ]
+          },
+          "tombstones": []
+        },
+        "tag": "c:1"
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "c",
+        "source_state": {
+          "active_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "counters": {
+            "a": 1,
+            "c": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "tombstones": []
+        },
+        "target": "a",
+        "target_state": {
+          "active_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "counters": {
+            "a": 1,
+            "c": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "tombstones": []
+        }
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "a",
+        "source_state": {
+          "active_tags": {
+            "notebook": [
+              "c:1"
+            ]
+          },
+          "counters": {
+            "a": 1,
+            "c": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "tombstones": [
+            "a:1"
+          ]
+        },
+        "target": "b",
+        "target_state": {
+          "active_tags": {
+            "notebook": [
+              "c:1"
+            ]
+          },
+          "counters": {
+            "a": 1,
+            "c": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "tombstones": [
+            "a:1"
+          ]
+        }
+      },
+      {
+        "direction": "both",
+        "op": "sync",
+        "source": "a",
+        "source_state": {
+          "active_tags": {
+            "notebook": [
+              "c:1"
+            ]
+          },
+          "counters": {
+            "a": 1,
+            "c": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "tombstones": [
+            "a:1"
+          ]
+        },
+        "target": "c",
+        "target_state": {
+          "active_tags": {
+            "notebook": [
+              "c:1"
+            ]
+          },
+          "counters": {
+            "a": 1,
+            "c": 1
+          },
+          "elements": [
+            "notebook"
+          ],
+          "observed_tags": {
+            "notebook": [
+              "a:1",
+              "c:1"
+            ]
+          },
+          "tombstones": [
+            "a:1"
+          ]
+        }
+      }
+    ]
+  },
+  "replicas": [
+    "a",
+    "b",
+    "c"
+  ],
+  "step_count": 7,
+  "story": "The final states diverge on notebook: OR-Set leaves it present because the remove only tombstoned observed tags, while LWW leaves it absent after comparing add=4 and remove=5 under remove-wins ties."
+}

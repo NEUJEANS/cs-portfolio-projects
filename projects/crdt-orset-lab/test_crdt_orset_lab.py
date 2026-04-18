@@ -6,11 +6,15 @@ import unittest
 from pathlib import Path
 
 from crdt_orset_lab import (
+    LWWElementSet,
     ORSet,
     ReplicaCluster,
     build_companion_links,
+    build_semantics_comparison,
     load_script,
     parse_tag,
+    render_comparison_html,
+    render_comparison_markdown,
     render_timeline_html,
     render_timeline_markdown,
     render_timeline_mermaid,
@@ -21,6 +25,7 @@ from crdt_orset_lab import (
 PROJECT_DIR = Path(__file__).resolve().parent
 SCRIPT = PROJECT_DIR / "crdt_orset_lab.py"
 SAMPLE_SCRIPT = PROJECT_DIR / "sample_ops.json"
+SAMPLE_COMPARE_SCRIPT = PROJECT_DIR / "sample_compare_ops.json"
 
 
 def run_cli(*args: str) -> dict[str, object]:
@@ -108,6 +113,53 @@ class ORSetLabTests(unittest.TestCase):
         self.assertTrue(result["convergence"]["converged"])
         self.assertEqual(result["convergence"]["membership"]["b"], ["notebook"])
         self.assertEqual(result["replicas"]["c"]["active_tags"]["notebook"], ["c:1"])
+
+    def test_lww_element_set_respects_remove_wins_ordering(self) -> None:
+        state = LWWElementSet(bias="remove")
+        state.add("notebook", 1)
+        state.remove("notebook", 3)
+        state.add("notebook", 2)
+
+        self.assertFalse(state.contains("notebook"))
+        self.assertEqual(state.elements(), [])
+        self.assertEqual(
+            state.to_dict(),
+            {
+                "bias": "remove",
+                "elements": [],
+                "add_timestamps": {"notebook": 2},
+                "remove_timestamps": {"notebook": 3},
+            },
+        )
+
+    def test_build_semantics_comparison_surfaces_membership_divergence(self) -> None:
+        comparison = build_semantics_comparison(
+            ["a", "b", "c"],
+            load_script(SAMPLE_COMPARE_SCRIPT),
+        )
+
+        divergence = comparison["final_divergence"]
+        self.assertEqual(len(divergence), 1)
+        self.assertEqual(divergence[0]["element"], "notebook")
+        self.assertTrue(divergence[0]["orset_present"])
+        self.assertFalse(divergence[0]["lww_present"])
+        self.assertIn("OR-Set keeps only observed-remove tombstones", divergence[0]["why"])
+        self.assertIn("diverge on notebook", comparison["story"])
+
+    def test_render_comparison_views_include_divergence_story(self) -> None:
+        comparison = build_semantics_comparison(
+            ["a", "b", "c"],
+            load_script(SAMPLE_COMPARE_SCRIPT),
+        )
+
+        markdown = render_comparison_markdown(comparison, "sample compare")
+        html = render_comparison_html(comparison, "sample compare")
+
+        self.assertIn("Final divergence", markdown)
+        self.assertIn("OR-Set=present, LWW=absent", markdown)
+        self.assertIn("OR-Set vs LWW-element-set", html)
+        self.assertIn("Final divergence notes", html)
+        self.assertIn("notebook", html)
 
     def test_parse_tag_rejects_invalid_format(self) -> None:
         with self.assertRaisesRegex(ValueError, "invalid OR-Set tag"):
@@ -247,6 +299,63 @@ class ORSetLabTests(unittest.TestCase):
             self.assertIn('href="timeline.json"', html)
             self.assertIn("sample_ops.json", html)
             self.assertEqual(json.loads(json_path.read_text())["convergence"]["converged"], True)
+
+    def test_cli_compare_script_writes_comparison_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir) / "artifacts"
+            timeline_markdown_path = artifact_dir / "timeline.md"
+            timeline_mermaid_path = artifact_dir / "timeline.mmd"
+            timeline_svg_path = artifact_dir / "timeline.svg"
+            timeline_html_path = artifact_dir / "timeline.html"
+            orset_json_path = artifact_dir / "orset.json"
+            comparison_markdown_path = artifact_dir / "comparison.md"
+            comparison_html_path = artifact_dir / "comparison.html"
+            comparison_json_path = artifact_dir / "comparison.json"
+
+            result = run_cli(
+                "compare-script",
+                "--replicas",
+                "a",
+                "b",
+                "c",
+                "--script",
+                str(SAMPLE_COMPARE_SCRIPT),
+                "--timeline-markdown-out",
+                str(timeline_markdown_path),
+                "--timeline-mermaid-out",
+                str(timeline_mermaid_path),
+                "--timeline-svg-out",
+                str(timeline_svg_path),
+                "--timeline-html-out",
+                str(timeline_html_path),
+                "--json-out",
+                str(orset_json_path),
+                "--comparison-markdown-out",
+                str(comparison_markdown_path),
+                "--comparison-html-out",
+                str(comparison_html_path),
+                "--comparison-json-out",
+                str(comparison_json_path),
+            )
+
+            self.assertEqual(result["final_divergence"][0]["element"], "notebook")
+            self.assertTrue(timeline_markdown_path.exists())
+            self.assertTrue(timeline_mermaid_path.exists())
+            self.assertTrue(timeline_svg_path.exists())
+            self.assertTrue(timeline_html_path.exists())
+            self.assertTrue(orset_json_path.exists())
+            self.assertTrue(comparison_markdown_path.exists())
+            self.assertTrue(comparison_html_path.exists())
+            self.assertTrue(comparison_json_path.exists())
+            self.assertIn("OR-Set vs LWW-element-set comparison", comparison_markdown_path.read_text())
+            comparison_html = comparison_html_path.read_text()
+            self.assertIn("OR-Set vs LWW-element-set", comparison_html)
+            self.assertIn('href="timeline.html"', comparison_html)
+            self.assertIn('href="comparison.md"', comparison_html)
+            self.assertIn("sample_compare_ops.json", comparison_html)
+            comparison_json = json.loads(comparison_json_path.read_text())
+            self.assertFalse(comparison_json["lww"]["convergence"]["membership"]["a"])
+            self.assertEqual(comparison_json["orset"]["convergence"]["membership"]["a"], ["notebook"])
 
     def test_cli_add_writes_timeline_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

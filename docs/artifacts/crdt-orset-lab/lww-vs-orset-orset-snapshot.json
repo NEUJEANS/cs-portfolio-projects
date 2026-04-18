@@ -1,0 +1,377 @@
+{
+  "convergence": {
+    "active_tags": {
+      "a": {
+        "notebook": [
+          "c:1"
+        ]
+      },
+      "b": {
+        "notebook": [
+          "c:1"
+        ]
+      },
+      "c": {
+        "notebook": [
+          "c:1"
+        ]
+      }
+    },
+    "converged": true,
+    "membership": {
+      "a": [
+        "notebook"
+      ],
+      "b": [
+        "notebook"
+      ],
+      "c": [
+        "notebook"
+      ]
+    }
+  },
+  "replicas": {
+    "a": {
+      "active_tags": {
+        "notebook": [
+          "c:1"
+        ]
+      },
+      "counters": {
+        "a": 1,
+        "c": 1
+      },
+      "elements": [
+        "notebook"
+      ],
+      "observed_tags": {
+        "notebook": [
+          "a:1",
+          "c:1"
+        ]
+      },
+      "tombstones": [
+        "a:1"
+      ]
+    },
+    "b": {
+      "active_tags": {
+        "notebook": [
+          "c:1"
+        ]
+      },
+      "counters": {
+        "a": 1,
+        "c": 1
+      },
+      "elements": [
+        "notebook"
+      ],
+      "observed_tags": {
+        "notebook": [
+          "a:1",
+          "c:1"
+        ]
+      },
+      "tombstones": [
+        "a:1"
+      ]
+    },
+    "c": {
+      "active_tags": {
+        "notebook": [
+          "c:1"
+        ]
+      },
+      "counters": {
+        "a": 1,
+        "c": 1
+      },
+      "elements": [
+        "notebook"
+      ],
+      "observed_tags": {
+        "notebook": [
+          "a:1",
+          "c:1"
+        ]
+      },
+      "tombstones": [
+        "a:1"
+      ]
+    }
+  },
+  "timeline": [
+    {
+      "element": "notebook",
+      "op": "add",
+      "replica": "a",
+      "state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "tag": "a:1"
+    },
+    {
+      "direction": "both",
+      "op": "sync",
+      "source": "a",
+      "source_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "target": "b",
+      "target_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      }
+    },
+    {
+      "element": "notebook",
+      "op": "remove",
+      "removed_tags": [
+        "a:1"
+      ],
+      "replica": "b",
+      "state": {
+        "active_tags": {},
+        "counters": {
+          "a": 1
+        },
+        "elements": [],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      }
+    },
+    {
+      "element": "notebook",
+      "op": "add",
+      "replica": "c",
+      "state": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "tag": "c:1"
+    },
+    {
+      "direction": "both",
+      "op": "sync",
+      "source": "c",
+      "source_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "target": "a",
+      "target_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": []
+      }
+    },
+    {
+      "direction": "both",
+      "op": "sync",
+      "source": "a",
+      "source_state": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      },
+      "target": "b",
+      "target_state": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      }
+    },
+    {
+      "direction": "both",
+      "op": "sync",
+      "source": "a",
+      "source_state": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      },
+      "target": "c",
+      "target_state": {
+        "active_tags": {
+          "notebook": [
+            "c:1"
+          ]
+        },
+        "counters": {
+          "a": 1,
+          "c": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1",
+            "c:1"
+          ]
+        },
+        "tombstones": [
+          "a:1"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+sequenceDiagram
+    autonumber
+    participant R1 as a
+    participant R2 as b
+    participant R3 as c
+    Note over R1,R3: script sample_compare_ops.json
+    R1->>R1: add notebook [a:1]
+    Note over R1: elements=notebook | active=notebook=a:1 | tombstones=∅
+    R1->>R2: sync both
+    Note over R1,R2: a: elements=notebook | active=notebook=a:1 | tombstones=∅ || b: elements=notebook | active=notebook=a:1 | tombstones=∅
+    R2->>R2: remove notebook
+    Note over R2: removed a:1; elements=∅ | active=∅ | tombstones=a:1
+    R3->>R3: add notebook [c:1]
+    Note over R3: elements=notebook | active=notebook=c:1 | tombstones=∅
+    R3->>R1: sync both
+    Note over R3,R1: c: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅ || a: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅
+    R1->>R2: sync both
+    Note over R1,R2: a: elements=notebook | active=notebook=c:1 | tombstones=a:1 || b: elements=notebook | active=notebook=c:1 | tombstones=a:1
+    R1->>R3: sync both
+    Note over R1,R3: a: elements=notebook | active=notebook=c:1 | tombstones=a:1 || c: elements=notebook | active=notebook=c:1 | tombstones=a:1
+    Note over R1,R3: Observed-remove story: a remove tombstones only the add-tags a replica has already observed, so membership still survives via notebook=c:1 while tombstones retain a:1.

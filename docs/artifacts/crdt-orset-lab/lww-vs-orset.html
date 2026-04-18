@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set vs LWW-element-set — script sample_compare_ops.json</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+        --warn: #9a3412;
+        --warn-bg: #ffedd5;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .story { padding: 14px 16px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #bfdbfe; color: #1e3a8a; }
+      .summary-grid, .state-grid { display: grid; gap: 16px; }
+      .summary-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 0; margin: 24px 0 0; }
+      .summary-grid li { list-style: none; padding: 16px 18px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }
+      .summary-grid strong { display: block; font-size: 1.3rem; margin-bottom: 6px; }
+      .layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); align-items: start; }
+      .panel { padding: 22px; }
+      .panel h2, .panel h3 { margin-top: 0; }
+      .artifact-links, .replica-list { margin: 0; padding-left: 18px; color: var(--muted); }
+      .artifact-links li + li, .replica-list li + li { margin-top: 10px; }
+      .replica-list strong { color: var(--text); display: block; margin-bottom: 4px; }
+      .replica-list span { display: block; line-height: 1.5; }
+      .state-grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+      .callout { padding: 14px 16px; border-radius: 18px; line-height: 1.5; }
+      .callout.good { background: var(--good-bg); color: var(--good); }
+      .callout.warn { background: var(--warn-bg); color: var(--warn); }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th { font-size: 0.95rem; color: var(--muted); }
+      code { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }
+      a { color: var(--accent); }
+      @media (max-width: 1080px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set vs LWW-element-set</h1>
+        <p>This page compares the same scripted history under tag-based observed-remove semantics and timestamp-based last-write-wins semantics. It is meant to make the conflict-resolution trade-off visible without reading raw JSON first.</p>
+        <p class="story">The final states diverge on notebook: OR-Set leaves it present because the remove only tombstoned observed tags, while LWW leaves it absent after comparing add=4 and remove=5 under remove-wins ties.</p>
+        <ul class="summary-grid">
+          <li><strong>3</strong> replicas (a, b, c)</li>
+          <li><strong>7</strong> scripted steps</li>
+          <li><strong>remove</strong> LWW tie bias</li>
+          <li><strong>1</strong> final divergent element(s)</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel">
+          <h2>Why the models diverge</h2>
+          <div class="callout good"><strong>OR-Set:</strong> removes only the add-tags a replica has already observed, so a concurrent/new tag can survive later sync.</div>
+          <div class="callout warn" style="margin-top: 12px;"><strong>LWW-element-set:</strong> resolves add/remove conflicts by timestamp ordering; when timestamps tie, the configured bias decides the winner.</div>
+          <h3 style="margin-top: 18px;">Final divergence notes</h3>
+          <ul class="replica-list"><li><strong><code>notebook</code></strong><span>OR-Set keeps only observed-remove tombstones, so active tags c:1 can survive. LWW compares add=4 vs remove=5 with remove-wins ties.</span></li></ul>
+        </article>
+        <aside class="panel">
+          <h2>Companion artifacts</h2>
+          <ul class="artifact-links"><li><a href="../../../projects/crdt-orset-lab/sample_compare_ops.json">Scenario script</a></li><li><a href="lww-vs-orset-timeline.html">OR-Set gallery</a></li><li><a href="lww-vs-orset-timeline.md">OR-Set Markdown timeline</a></li><li><a href="lww-vs-orset-timeline.mmd">OR-Set Mermaid source</a></li><li><a href="lww-vs-orset-timeline.svg">OR-Set SVG card</a></li><li><a href="lww-vs-orset-orset-snapshot.json">OR-Set JSON snapshot</a></li><li><a href="lww-vs-orset.md">Comparison Markdown</a></li><li><a href="lww-vs-orset.json">Comparison JSON</a></li></ul>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Final states</h2>
+        <div class="state-grid">
+          <section>
+            <h3>OR-Set replicas</h3>
+            <ul class="replica-list"><li><strong><code>a</code></strong><span>elements notebook; active notebook=c:1; tombstones a:1</span></li><li><strong><code>b</code></strong><span>elements notebook; active notebook=c:1; tombstones a:1</span></li><li><strong><code>c</code></strong><span>elements notebook; active notebook=c:1; tombstones a:1</span></li></ul>
+          </section>
+          <section>
+            <h3>LWW replicas</h3>
+            <ul class="replica-list"><li><strong><code>a</code></strong><span>elements ∅; add_ts notebook=4; remove_ts notebook=5; bias remove</span></li><li><strong><code>b</code></strong><span>elements ∅; add_ts notebook=4; remove_ts notebook=5; bias remove</span></li><li><strong><code>c</code></strong><span>elements ∅; add_ts notebook=4; remove_ts notebook=5; bias remove</span></li></ul>
+          </section>
+        </div>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Step-by-step comparison</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Event</th><th>OR-Set</th><th>LWW</th><th>Divergence</th></tr>
+          </thead>
+          <tbody><tr><td>1</td><td>a adds notebook @ t=1</td><td>elements=notebook | active=notebook=a:1 | tombstones=∅</td><td>elements=notebook | add_ts=notebook=1 | remove_ts=∅ | bias=remove</td><td><div>a: membership matches</div></td></tr><tr><td>2</td><td>a ↔ b sync (both)</td><td>a: elements=notebook | active=notebook=a:1 | tombstones=∅ || b: elements=notebook | active=notebook=a:1 | tombstones=∅</td><td>a: elements=notebook | add_ts=notebook=1 | remove_ts=∅ | bias=remove || b: elements=notebook | add_ts=notebook=1 | remove_ts=∅ | bias=remove</td><td><div>a: membership matches</div><div>b: membership matches</div></td></tr><tr><td>3</td><td>b removes notebook @ t=5</td><td>elements=∅ | active=∅ | tombstones=a:1</td><td>elements=∅ | add_ts=notebook=1 | remove_ts=notebook=5 | bias=remove</td><td><div>b: membership matches</div></td></tr><tr><td>4</td><td>c adds notebook @ t=4</td><td>elements=notebook | active=notebook=c:1 | tombstones=∅</td><td>elements=notebook | add_ts=notebook=4 | remove_ts=∅ | bias=remove</td><td><div>c: membership matches</div></td></tr><tr><td>5</td><td>c ↔ a sync (both)</td><td>c: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅ || a: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅</td><td>c: elements=notebook | add_ts=notebook=4 | remove_ts=∅ | bias=remove || a: elements=notebook | add_ts=notebook=4 | remove_ts=∅ | bias=remove</td><td><div>c: membership matches</div><div>a: membership matches</div></td></tr><tr><td>6</td><td>a ↔ b sync (both)</td><td>a: elements=notebook | active=notebook=c:1 | tombstones=a:1 || b: elements=notebook | active=notebook=c:1 | tombstones=a:1</td><td>a: elements=∅ | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove || b: elements=∅ | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove</td><td><div>a:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove</div><div>b:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove</div></td></tr><tr><td>7</td><td>a ↔ c sync (both)</td><td>a: elements=notebook | active=notebook=c:1 | tombstones=a:1 || c: elements=notebook | active=notebook=c:1 | tombstones=a:1</td><td>a: elements=∅ | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove || c: elements=∅ | add_ts=notebook=4 | remove_ts=notebook=5 | bias=remove</td><td><div>a:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove</div><div>c:notebook OR-Set=present via tags c:1; LWW=absent with add=4, remove=5, bias=remove</div></td></tr></tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

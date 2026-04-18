@@ -10,7 +10,8 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - shows replica-local tag generation, tombstones, and merge/convergence rules clearly
 - includes a scriptable cluster simulator so scenarios are resumable and easy to demo
 - produces JSON snapshots that explain active tags, observed tags, and tombstones per replica
-- now exports Markdown, Mermaid, and SVG timeline artifacts so the distributed story is screenshot-friendly instead of buried in raw JSON
+- exports Markdown, Mermaid, SVG, and HTML artifacts so the distributed story is screenshot-friendly instead of buried in raw JSON
+- now compares the same scripted history against an **LWW-element-set** so the repo shows not just one CRDT, but why different conflict rules produce different outcomes
 - covers a distributed-systems topic that pairs well with the repo's Raft, vector-clock, Chord, and snapshot labs
 
 ## Stack
@@ -26,8 +27,8 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - JSON snapshots expose converged membership plus per-replica `active_tags`, `observed_tags`, and `tombstones`
 - convergence checks require full replica-state equality, not just matching element membership
 - optional timeline exports render the same run as Markdown notes, Mermaid sequence diagrams, static SVG portfolio cards, and a small HTML gallery/index page
-- optional JSON snapshot export writes the exact machine-readable replica/timeline state that backs the gallery links
-- includes a committed sample scenario that demonstrates a remove not deleting a concurrent/new add
+- optional `compare-script` runs the same scenario under OR-Set and timestamped LWW-element-set semantics, then emits Markdown/HTML/JSON comparison artifacts that explain where the models diverge
+- LWW comparison mode supports configurable tie bias (`add` or `remove`) and explicit logical timestamps in the script JSON
 
 ## Usage
 ```bash
@@ -37,7 +38,7 @@ python3 crdt_orset_lab.py remove --replicas a b c --seed-script sample_ops.json 
 python3 crdt_orset_lab.py sync --replicas a b c --seed-script sample_ops.json --source a --target b --direction forward
 ```
 
-### Export timeline artifacts for the sample scenario
+### Export timeline artifacts for the sample OR-Set scenario
 ```bash
 python3 crdt_orset_lab.py run-script \
   --replicas a b c \
@@ -51,22 +52,39 @@ python3 crdt_orset_lab.py run-script \
 
 Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts. The HTML gallery is meant for browser-friendly navigation, while `--json-out` preserves the exact raw snapshot behind the rendered story.
 
+### Compare OR-Set vs LWW-element-set on the same scenario
+```bash
+python3 crdt_orset_lab.py compare-script \
+  --replicas a b c \
+  --script sample_compare_ops.json \
+  --timeline-markdown-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-timeline.md \
+  --timeline-mermaid-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-timeline.mmd \
+  --timeline-svg-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-timeline.svg \
+  --timeline-html-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-timeline.html \
+  --json-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset-orset-snapshot.json \
+  --comparison-markdown-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset.md \
+  --comparison-html-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset.html \
+  --comparison-json-out ../../docs/artifacts/crdt-orset-lab/lww-vs-orset.json
+```
+
+`sample_compare_ops.json` is intentionally timestamped so the final OR-Set membership keeps `notebook`, while the LWW-element-set drops it because a later remove timestamp beats the concurrent add. That makes the semantic trade-off visible in a single browser-friendly page.
+
 ### Script format
-`sample_ops.json` uses this shape, and the CLI also accepts a plain top-level JSON list of operation objects when you do not need wrapper metadata:
+`sample_ops.json` and `sample_compare_ops.json` use this shape, and the CLI also accepts a plain top-level JSON list of operation objects when you do not need wrapper metadata:
 
 ```json
 {
   "operations": [
-    {"op": "add", "replica": "a", "element": "notebook"},
+    {"op": "add", "replica": "a", "element": "notebook", "time": 1},
     {"op": "sync", "source": "a", "target": "b", "direction": "both"},
-    {"op": "remove", "replica": "b", "element": "notebook"}
+    {"op": "remove", "replica": "b", "element": "notebook", "time": 5}
   ]
 }
 ```
 
 Supported operations:
-- `add` — requires `replica` and `element`
-- `remove` — requires `replica` and `element`
+- `add` — requires `replica` and `element`, optional `time` / `timestamp` for LWW comparison mode
+- `remove` — requires `replica` and `element`, optional `time` / `timestamp` for LWW comparison mode
 - `sync` — requires `source` and `target`, optional `direction` (`both`, `forward`, `reverse`)
 
 ## Sample scenario story
@@ -78,14 +96,17 @@ The committed `sample_ops.json` walks through this sequence:
 5. later syncs spread both the tombstone and the new tag
 6. all replicas converge on `notebook` still being present because `c:1` was never removed
 
-That makes the OR-Set semantics visible in a way students can explain during a systems interview.
+The committed `sample_compare_ops.json` keeps that same causal shape but assigns explicit timestamps so the LWW-element-set ends up absent while the OR-Set still keeps the concurrent tag. That contrast is exactly the point of the comparison slice.
 
 ## Committed artifact examples
-- `docs/artifacts/crdt-orset-lab/index.html` — browser-friendly gallery/index that links the source scenario script plus the full derived artifact bundle together
+- `docs/artifacts/crdt-orset-lab/index.html` — browser-friendly OR-Set gallery/index for the baseline sample scenario
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.md` — step-by-step Markdown table for code review or notes
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd` — Mermaid sequence diagram source for editable replica timelines
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg` — screenshot-ready timeline card for README/slide use
 - `docs/artifacts/crdt-orset-lab/sample-ops-snapshot.json` — raw replica/timeline/convergence state for tooling or diffs
+- `docs/artifacts/crdt-orset-lab/lww-vs-orset.html` — side-by-side comparison page explaining why OR-Set and LWW diverge on the timestamped scenario
+- `docs/artifacts/crdt-orset-lab/lww-vs-orset.md` — Markdown comparison table for review notes or class writeups
+- `docs/artifacts/crdt-orset-lab/lww-vs-orset.json` — full machine-readable OR-Set/LWW comparison snapshot
 
 ## Test
 ```bash
@@ -94,5 +115,5 @@ python3 -m unittest discover -s projects/crdt-orset-lab -p "test_*.py"
 
 ## Future improvements
 - add delta-state payload inspection so merge traffic size can be discussed explicitly
-- add another CRDT variant such as an LWW-element-set or PN-counter bundle for side-by-side comparison
-- add a comparison page that shows OR-Set vs LWW-element-set behavior on the same scripted scenario
+- add more CRDT variants such as PN-counters or MV-registers for broader trade-off comparisons
+- add canned classroom/demo presets that generate multiple comparison scenarios with one command
