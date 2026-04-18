@@ -10,4 +10,4 @@
 - [x] run compile/tests/smoke checks
 - [x] run at least 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and write wrap-up
+- [x] commit, push, and write wrap-up
