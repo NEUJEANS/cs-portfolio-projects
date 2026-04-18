@@ -5,6 +5,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent
@@ -16,7 +17,7 @@ from log_analyzer import analyze_lines, format_text_report, parse_line
 
 class LogAnalyzerTests(unittest.TestCase):
     def test_parse_line_supports_dash_bytes(self):
-        parsed = parse_line('10.0.0.1 - - [x] "GET / HTTP/1.1" 304 -')
+        parsed = parse_line('10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET / HTTP/1.1" 304 -')
         self.assertIsNotNone(parsed)
         self.assertEqual(parsed.bytes_sent, 0)
         self.assertEqual(parsed.method, 'GET')
@@ -24,9 +25,17 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIsNone(parsed.latency_ms)
         self.assertIsNone(parsed.upstream_response_time_ms)
 
+    def test_parse_line_parses_common_log_timestamp(self):
+        parsed = parse_line('10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET / HTTP/1.1" 200 10')
+        self.assertIsNotNone(parsed)
+        self.assertEqual(
+            parsed.timestamp,
+            datetime(2026, 4, 18, 9, 0, 0, tzinfo=timezone.utc),
+        )
+
     def test_parse_line_supports_combined_logs_with_latency(self):
         parsed = parse_line(
-            '10.0.0.1 - - [x] "GET /docs HTTP/1.1" 200 123 '
+            '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /docs HTTP/1.1" 200 123 '
             '"https://example.com/start" "Mozilla/5.0" 0.245'
         )
         self.assertIsNotNone(parsed)
@@ -37,7 +46,7 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_parse_line_supports_microsecond_latency(self):
         parsed = parse_line(
-            '10.0.0.2 - - [x] "POST /ingest HTTP/1.1" 201 42 '
+            '10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "POST /ingest HTTP/1.1" 201 42 '
             '"-" "curl/8.0" 12345'
         )
         self.assertIsNotNone(parsed)
@@ -47,7 +56,7 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_parse_line_supports_named_nginx_timing_fields(self):
         parsed = parse_line(
-            '10.0.0.3 - - [x] "GET /api/report HTTP/1.1" 200 321 '
+            '10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "GET /api/report HTTP/1.1" 200 321 '
             '"https://example.com" "Mozilla/5.0" '
             'request_time=0.245 upstream_response_time=0.201 upstream_connect_time=0.010'
         )
@@ -58,7 +67,7 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_parse_line_sums_multi_attempt_upstream_response_times(self):
         parsed = parse_line(
-            '10.0.0.4 - - [x] "GET /retry HTTP/1.1" 200 64 '
+            '10.0.0.4 - - [18/Apr/2026:09:03:00 +0000] "GET /retry HTTP/1.1" 200 64 '
             'request_time=0.400 upstream_response_time=0.050, 0.125:0.075'
         )
         self.assertIsNotNone(parsed)
@@ -68,7 +77,7 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_parse_line_ignores_invalid_named_timing_values(self):
         parsed = parse_line(
-            '10.0.0.5 - - [x] "GET /broken HTTP/1.1" 200 32 '
+            '10.0.0.5 - - [18/Apr/2026:09:04:00 +0000] "GET /broken HTTP/1.1" 200 32 '
             'request_time=oops upstream_response_time=0.010'
         )
         self.assertIsNotNone(parsed)
@@ -78,9 +87,9 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_analyze_lines_counts_combined_fields_and_latency(self):
         lines = [
-            '10.0.0.1 - - [x] "GET / HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" 0.100',
-            '10.0.0.2 - - [x] "POST /login HTTP/1.1" 401 5 "https://example.com/start" "curl/8.0" 0.350',
-            '10.0.0.1 - - [x] "GET / HTTP/1.1" 200 15',
+            '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET / HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" 0.100',
+            '10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "POST /login HTTP/1.1" 401 5 "https://example.com/start" "curl/8.0" 0.350',
+            '10.0.0.1 - - [18/Apr/2026:09:02:00 +0000] "GET / HTTP/1.1" 200 15',
             'garbled log line',
         ]
         result = analyze_lines(lines, top_n=2)
@@ -102,12 +111,13 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIsNone(result['upstream_latency_summary'])
         self.assertEqual(result['path_latency_breakdown'][0]['path'], '/login')
         self.assertEqual(result['path_latency_breakdown'][0]['average_ms'], 350.0)
+        self.assertIsNone(result['time_window'])
 
     def test_analyze_lines_reports_upstream_latency_summary_from_named_fields(self):
         lines = [
-            '10.0.0.1 - - [x] "GET /api/report HTTP/1.1" 200 100 "-" "agent-a" request_time=0.120 upstream_response_time=0.080',
-            '10.0.0.2 - - [x] "GET /api/report HTTP/1.1" 200 120 "-" "agent-a" request_time=0.180 upstream_response_time=0.050, 0.070',
-            '10.0.0.3 - - [x] "GET /status HTTP/1.1" 200 90 request_time=0.040 upstream_response_time=-',
+            '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /api/report HTTP/1.1" 200 100 "-" "agent-a" request_time=0.120 upstream_response_time=0.080',
+            '10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "GET /api/report HTTP/1.1" 200 120 "-" "agent-a" request_time=0.180 upstream_response_time=0.050, 0.070',
+            '10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "GET /status HTTP/1.1" 200 90 request_time=0.040 upstream_response_time=-',
         ]
         result = analyze_lines(lines, top_n=2)
         self.assertEqual(result['latency_summary']['count'], 3)
@@ -122,11 +132,11 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_analyze_lines_limits_and_sorts_path_latency_breakdown(self):
         lines = [
-            '10.0.0.1 - - [x] "GET /fast HTTP/1.1" 200 10 "-" "agent-a" 0.010',
-            '10.0.0.2 - - [x] "GET /fast HTTP/1.1" 200 11 "-" "agent-a" 0.015',
-            '10.0.0.3 - - [x] "GET /steady HTTP/1.1" 200 12 "-" "agent-b" 0.200',
-            '10.0.0.4 - - [x] "GET /steady HTTP/1.1" 200 13 "-" "agent-b" 0.220',
-            '10.0.0.5 - - [x] "GET /hot HTTP/1.1" 200 14 "-" "agent-c" 0.450',
+            '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /fast HTTP/1.1" 200 10 "-" "agent-a" 0.010',
+            '10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "GET /fast HTTP/1.1" 200 11 "-" "agent-a" 0.015',
+            '10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "GET /steady HTTP/1.1" 200 12 "-" "agent-b" 0.200',
+            '10.0.0.4 - - [18/Apr/2026:09:03:00 +0000] "GET /steady HTTP/1.1" 200 13 "-" "agent-b" 0.220',
+            '10.0.0.5 - - [18/Apr/2026:09:04:00 +0000] "GET /hot HTTP/1.1" 200 14 "-" "agent-c" 0.450',
         ]
         result = analyze_lines(lines, top_n=2, latency_top_n=2)
         self.assertEqual([row['path'] for row in result['path_latency_breakdown']], ['/hot', '/steady'])
@@ -135,10 +145,10 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_analyze_lines_limits_and_sorts_upstream_path_latency_breakdown(self):
         lines = [
-            '10.0.0.1 - - [x] "GET /fast HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.010',
-            '10.0.0.2 - - [x] "GET /retry HTTP/1.1" 200 11 request_time=0.300 upstream_response_time=0.080, 0.070',
-            '10.0.0.3 - - [x] "GET /retry HTTP/1.1" 200 12 request_time=0.320 upstream_response_time=0.090',
-            '10.0.0.4 - - [x] "GET /db HTTP/1.1" 200 13 request_time=0.280 upstream_response_time=0.200',
+            '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /fast HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.010',
+            '10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "GET /retry HTTP/1.1" 200 11 request_time=0.300 upstream_response_time=0.080, 0.070',
+            '10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "GET /retry HTTP/1.1" 200 12 request_time=0.320 upstream_response_time=0.090',
+            '10.0.0.4 - - [18/Apr/2026:09:03:00 +0000] "GET /db HTTP/1.1" 200 13 request_time=0.280 upstream_response_time=0.200',
         ]
         result = analyze_lines(lines, top_n=2, latency_top_n=2)
         self.assertEqual(
@@ -150,10 +160,10 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_analyze_lines_filters_hotspots_without_changing_global_summaries(self):
         lines = [
-            '10.0.0.1 - - [x] "GET /health HTTP/1.1" 200 10 request_time=0.005 upstream_response_time=0.001',
-            '10.0.0.2 - - [x] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500',
-            '10.0.0.3 - - [x] "POST /api/report HTTP/1.1" 502 13 request_time=0.700 upstream_response_time=0.650',
-            '10.0.0.4 - - [x] "GET /api/report HTTP/1.1" 500 14 request_time=0.450 upstream_response_time=0.300',
+            '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /health HTTP/1.1" 200 10 request_time=0.005 upstream_response_time=0.001',
+            '10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500',
+            '10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "POST /api/report HTTP/1.1" 502 13 request_time=0.700 upstream_response_time=0.650',
+            '10.0.0.4 - - [18/Apr/2026:09:03:00 +0000] "GET /api/report HTTP/1.1" 500 14 request_time=0.450 upstream_response_time=0.300',
         ]
         result = analyze_lines(
             lines,
@@ -172,6 +182,27 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['path_latency_breakdown'][0]['average_ms'], 650.0)
         self.assertEqual(result['upstream_path_latency_breakdown'][0]['average_ms'], 575.0)
 
+    def test_analyze_lines_filters_by_time_window(self):
+        lines = [
+            '10.0.0.1 - - [18/Apr/2026:08:59:00 +0000] "GET /before HTTP/1.1" 200 10 request_time=0.050',
+            '10.0.0.2 - - [18/Apr/2026:09:00:00 +0000] "GET /inside HTTP/1.1" 200 11 request_time=0.120 upstream_response_time=0.070',
+            '10.0.0.3 - - [18/Apr/2026:09:05:00 +0000] "POST /inside HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.300',
+            '10.0.0.4 - - [18/Apr/2026:09:10:00 +0000] "GET /after HTTP/1.1" 200 13 request_time=0.080',
+        ]
+        result = analyze_lines(
+            lines,
+            top_n=2,
+            window_start=datetime(2026, 4, 18, 9, 0, 0, tzinfo=timezone.utc),
+            window_end=datetime(2026, 4, 18, 9, 5, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(result['total_requests'], 2)
+        self.assertEqual(result['top_paths'][0], ('/inside', 2))
+        self.assertEqual(result['latency_summary']['count'], 2)
+        self.assertEqual(result['time_window']['matched_requests'], 2)
+        self.assertEqual(result['time_window']['excluded_requests'], 2)
+        self.assertEqual(result['time_window']['start'], '2026-04-18T09:00:00+00:00')
+        self.assertEqual(result['time_window']['end'], '2026-04-18T09:05:00+00:00')
+
     def test_format_text_report_handles_empty_results(self):
         report = format_text_report(analyze_lines([], top_n=3))
         self.assertIn('Total requests: 0', report)
@@ -187,7 +218,7 @@ class LogAnalyzerTests(unittest.TestCase):
         report = format_text_report(
             analyze_lines(
                 [
-                    '10.0.0.1 - - [x] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500',
+                    '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500',
                 ],
                 top_n=1,
                 hotspot_statuses=['500'],
@@ -197,14 +228,29 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('Per-path latency hotspots (ms): (filters: status=500; method=POST)', report)
         self.assertIn('Per-path upstream latency hotspots (ms): (filters: status=500; method=POST)', report)
 
+    def test_format_text_report_mentions_time_window(self):
+        report = format_text_report(
+            analyze_lines(
+                [
+                    '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /inside HTTP/1.1" 200 10 request_time=0.050',
+                    '10.0.0.2 - - [18/Apr/2026:09:10:00 +0000] "GET /outside HTTP/1.1" 200 10 request_time=0.060',
+                ],
+                top_n=1,
+                window_end=datetime(2026, 4, 18, 9, 5, 0, tzinfo=timezone.utc),
+            )
+        )
+        self.assertIn('Time window:', report)
+        self.assertIn('End: 2026-04-18T09:05:00+00:00', report)
+        self.assertIn('Excluded requests: 1', report)
+
     def test_cli_json_output_includes_named_timing_summaries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
             log_path.write_text(
                 textwrap.dedent(
                     '''\
-                    10.0.0.1 - - [x] "GET / HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" request_time=0.125 upstream_response_time=0.080
-                    10.0.0.2 - - [x] "POST /login HTTP/1.1" 401 5 "-" "curl/8.0" request_time=0.250 upstream_response_time=0.120
+                    10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET / HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" request_time=0.125 upstream_response_time=0.080
+                    10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "POST /login HTTP/1.1" 401 5 "-" "curl/8.0" request_time=0.250 upstream_response_time=0.120
                     '''
                 ),
                 encoding='utf-8',
@@ -225,6 +271,7 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['path_latency_breakdown'][0]['path'], '/login')
             self.assertEqual(payload['upstream_path_latency_breakdown'][0]['path'], '/login')
             self.assertIsNone(payload['hotspot_filters'])
+            self.assertIsNone(payload['time_window'])
 
     def test_cli_json_output_supports_hotspot_filters(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -232,10 +279,10 @@ class LogAnalyzerTests(unittest.TestCase):
             log_path.write_text(
                 textwrap.dedent(
                     '''\
-                    10.0.0.1 - - [x] "GET /health HTTP/1.1" 200 10 request_time=0.005 upstream_response_time=0.001
-                    10.0.0.2 - - [x] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500
-                    10.0.0.3 - - [x] "POST /api/report HTTP/1.1" 502 13 request_time=0.700 upstream_response_time=0.650
-                    10.0.0.4 - - [x] "GET /api/report HTTP/1.1" 500 14 request_time=0.450 upstream_response_time=0.300
+                    10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /health HTTP/1.1" 200 10 request_time=0.005 upstream_response_time=0.001
+                    10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500
+                    10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "POST /api/report HTTP/1.1" 502 13 request_time=0.700 upstream_response_time=0.650
+                    10.0.0.4 - - [18/Apr/2026:09:03:00 +0000] "GET /api/report HTTP/1.1" 500 14 request_time=0.450 upstream_response_time=0.300
                     '''
                 ),
                 encoding='utf-8',
@@ -269,6 +316,78 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['path_latency_breakdown'][0]['count'], 2)
             self.assertEqual(payload['upstream_path_latency_breakdown'][0]['average_ms'], 575.0)
 
+    def test_cli_json_output_supports_time_window_filters(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:08:59:00 +0000] "GET /before HTTP/1.1" 200 10 request_time=0.040
+                    10.0.0.2 - - [18/Apr/2026:09:00:00 +0000] "GET /inside HTTP/1.1" 200 11 request_time=0.080 upstream_response_time=0.050
+                    10.0.0.3 - - [18/Apr/2026:09:04:00 +0000] "POST /inside HTTP/1.1" 500 12 request_time=0.500 upstream_response_time=0.350
+                    10.0.0.4 - - [18/Apr/2026:09:10:00 +0000] "GET /after HTTP/1.1" 200 13 request_time=0.060
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--top',
+                    '2',
+                    '--window-start',
+                    '2026-04-18T09:00:00Z',
+                    '--window-end',
+                    '2026-04-18T09:05:00Z',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload['total_requests'], 2)
+            self.assertEqual(payload['top_paths'][0], ['/inside', 2])
+            self.assertEqual(payload['time_window']['start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(payload['time_window']['end'], '2026-04-18T09:05:00+00:00')
+            self.assertEqual(payload['time_window']['matched_requests'], 2)
+            self.assertEqual(payload['time_window']['excluded_requests'], 2)
+
+    def test_cli_time_window_accepts_naive_iso_as_utc(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:08:59:00 +0000] "GET /before HTTP/1.1" 200 10 request_time=0.040
+                    10.0.0.2 - - [18/Apr/2026:09:00:00 +0000] "GET /inside HTTP/1.1" 200 11 request_time=0.080
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--window-start',
+                    '2026-04-18T09:00:00',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload['total_requests'], 1)
+            self.assertEqual(payload['time_window']['start'], '2026-04-18T09:00:00+00:00')
+
     def test_cli_csv_exports_include_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -278,9 +397,9 @@ class LogAnalyzerTests(unittest.TestCase):
             log_path.write_text(
                 textwrap.dedent(
                     '''\
-                    10.0.0.1 - - [x] "GET /fast HTTP/1.1" 200 10 "-" "Mozilla/5.0" request_time=0.010 upstream_response_time=0.005
-                    10.0.0.2 - - [x] "GET /slow HTTP/1.1" 200 15 "https://example.com" "curl/8.0" request_time=0.450 upstream_response_time=0.300, 0.050
-                    10.0.0.3 - - [x] "GET /slow HTTP/1.1" 200 18 "https://example.com" "curl/8.0" request_time=0.500 upstream_response_time=0.320
+                    10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /fast HTTP/1.1" 200 10 "-" "Mozilla/5.0" request_time=0.010 upstream_response_time=0.005
+                    10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "GET /slow HTTP/1.1" 200 15 "https://example.com" "curl/8.0" request_time=0.450 upstream_response_time=0.300, 0.050
+                    10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "GET /slow HTTP/1.1" 200 18 "https://example.com" "curl/8.0" request_time=0.500 upstream_response_time=0.320
                     '''
                 ),
                 encoding='utf-8',
@@ -324,6 +443,8 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(latency_rows[0]['average_ms'], '475.0')
             self.assertEqual(latency_rows[0]['status_filter'], '')
             self.assertEqual(latency_rows[0]['method_filter'], '')
+            self.assertEqual(latency_rows[0]['window_start'], '')
+            self.assertEqual(latency_rows[0]['window_end'], '')
 
             with upstream_breakdown_csv.open(encoding='utf-8', newline='') as handle:
                 upstream_rows = list(csv.DictReader(handle))
@@ -340,9 +461,9 @@ class LogAnalyzerTests(unittest.TestCase):
             log_path.write_text(
                 textwrap.dedent(
                     '''\
-                    10.0.0.1 - - [x] "POST /api/report HTTP/1.1" 500 15 request_time=0.450 upstream_response_time=0.300
-                    10.0.0.2 - - [x] "POST /api/report HTTP/1.1" 502 18 request_time=0.500 upstream_response_time=0.320
-                    10.0.0.3 - - [x] "GET /health HTTP/1.1" 200 10 request_time=0.010 upstream_response_time=0.005
+                    10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "POST /api/report HTTP/1.1" 500 15 request_time=0.450 upstream_response_time=0.300
+                    10.0.0.2 - - [18/Apr/2026:09:01:00 +0000] "POST /api/report HTTP/1.1" 502 18 request_time=0.500 upstream_response_time=0.320
+                    10.0.0.3 - - [18/Apr/2026:09:02:00 +0000] "GET /health HTTP/1.1" 200 10 request_time=0.010 upstream_response_time=0.005
                     '''
                 ),
                 encoding='utf-8',
@@ -387,11 +508,61 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(upstream_rows[0]['status_filter'], '500|502')
             self.assertEqual(upstream_rows[0]['method_filter'], 'POST')
 
+    def test_cli_csv_exports_record_time_window_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            summary_csv = Path(tmpdir) / 'exports' / 'summary.csv'
+            breakdown_csv = Path(tmpdir) / 'exports' / 'path-latency.csv'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:08:59:00 +0000] "GET /before HTTP/1.1" 200 10 request_time=0.040
+                    10.0.0.2 - - [18/Apr/2026:09:00:00 +0000] "GET /inside HTTP/1.1" 200 11 request_time=0.080
+                    10.0.0.3 - - [18/Apr/2026:09:04:00 +0000] "POST /inside HTTP/1.1" 500 12 request_time=0.500
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--top',
+                    '2',
+                    '--window-start',
+                    '2026-04-18T09:00:00Z',
+                    '--window-end',
+                    '2026-04-18T09:05:00Z',
+                    '--summary-csv',
+                    str(summary_csv),
+                    '--path-latency-csv',
+                    str(breakdown_csv),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            with summary_csv.open(encoding='utf-8', newline='') as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertTrue(any(row['metric'] == 'time_window_start' and row['value'] == '2026-04-18T09:00:00+00:00' for row in rows))
+            self.assertTrue(any(row['metric'] == 'time_window_end' and row['value'] == '2026-04-18T09:05:00+00:00' for row in rows))
+            self.assertTrue(any(row['metric'] == 'time_window_excluded_requests' and row['value'] == '1' for row in rows))
+
+            with breakdown_csv.open(encoding='utf-8', newline='') as handle:
+                latency_rows = list(csv.DictReader(handle))
+            self.assertEqual(latency_rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(latency_rows[0]['window_end'], '2026-04-18T09:05:00+00:00')
+
     def test_cli_text_output_mentions_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
             log_path.write_text(
-                '10.0.0.1 - - [x] "GET /slow HTTP/1.1" 200 10 "https://example.com" "Mozilla/5.0" request_time=0.010 upstream_response_time=0.007\n',
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 "https://example.com" "Mozilla/5.0" request_time=0.010 upstream_response_time=0.007\n',
                 encoding='utf-8',
             )
             completed = subprocess.run(
@@ -412,7 +583,7 @@ class LogAnalyzerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
             log_path.write_text(
-                '10.0.0.1 - - [x] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
                 encoding='utf-8',
             )
             completed = subprocess.run(
@@ -429,6 +600,52 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('--hotspot-status must be a 3-digit status code', completed.stderr)
+
+    def test_cli_rejects_invalid_window_start(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--window-start',
+                    'not-a-time',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--window-start must be ISO-8601 or a common-log timestamp (naive ISO values are treated as UTC)', completed.stderr)
+
+    def test_cli_rejects_inverted_time_window(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--window-start',
+                    '2026-04-18T09:05:00Z',
+                    '--window-end',
+                    '2026-04-18T09:00:00Z',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--window-start must be less than or equal to --window-end', completed.stderr)
 
 
 if __name__ == '__main__':

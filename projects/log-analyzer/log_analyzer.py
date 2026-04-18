@@ -7,6 +7,7 @@ import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -18,6 +19,7 @@ LOG_RE = re.compile(
     r'(?P<extra>(?: .+)?)$'  # optional latency token or named timing fields
 )
 
+COMMON_LOG_TIMESTAMP_FORMAT = "%d/%b/%Y:%H:%M:%S %z"
 NAMED_FIELD_START_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
 NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
 STATUS_CODE_RE = re.compile(r'^\d{3}$')
@@ -26,6 +28,7 @@ STATUS_CODE_RE = re.compile(r'^\d{3}$')
 @dataclass(frozen=True)
 class ParsedLogLine:
     ip: str
+    timestamp: datetime | None
     method: str
     path: str
     status: str
@@ -68,6 +71,53 @@ def normalize_named_timing_ms(raw_timing: str | None) -> float | None:
     if not found_value:
         return None
     return round(total_ms, 3)
+
+
+def parse_log_timestamp(raw_timestamp: str | None) -> datetime | None:
+    if raw_timestamp in (None, ""):
+        return None
+    try:
+        return datetime.strptime(raw_timestamp, COMMON_LOG_TIMESTAMP_FORMAT)
+    except ValueError:
+        return None
+
+
+def parse_cli_datetime(raw_value: str) -> datetime | None:
+    cleaned = raw_value.strip()
+    if not cleaned:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except ValueError:
+        pass
+
+    return parse_log_timestamp(cleaned)
+
+
+def format_datetime_for_output(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    return value.isoformat()
+
+
+def build_time_window_metadata(
+    window_start: datetime | None,
+    window_end: datetime | None,
+    matched_requests: int,
+    excluded_requests: int,
+) -> dict[str, str | int] | None:
+    if window_start is None and window_end is None:
+        return None
+    return {
+        "start": format_datetime_for_output(window_start),
+        "end": format_datetime_for_output(window_end),
+        "matched_requests": matched_requests,
+        "excluded_requests": excluded_requests,
+    }
 
 
 def parse_extra_fields(extra: str | None) -> tuple[str | None, dict[str, str]]:
@@ -183,6 +233,22 @@ def matches_hotspot_filters(
     return True
 
 
+def matches_time_window(
+    parsed_timestamp: datetime | None,
+    window_start: datetime | None,
+    window_end: datetime | None,
+) -> bool:
+    if window_start is None and window_end is None:
+        return True
+    if parsed_timestamp is None:
+        return False
+    if window_start is not None and parsed_timestamp < window_start:
+        return False
+    if window_end is not None and parsed_timestamp > window_end:
+        return False
+    return True
+
+
 def format_hotspot_heading(label: str, hotspot_filters: dict[str, list[str]] | None) -> str:
     if hotspot_filters is None:
         return label
@@ -214,6 +280,7 @@ def parse_line(line: str) -> ParsedLogLine | None:
 
     return ParsedLogLine(
         ip=match.group("ip"),
+        timestamp=parse_log_timestamp(match.group("timestamp")),
         method=match.group("method"),
         path=match.group("path"),
         status=match.group("status"),
@@ -232,6 +299,8 @@ def analyze_lines(
     latency_top_n: int | None = None,
     hotspot_statuses: Iterable[str] | None = None,
     hotspot_methods: Iterable[str] | None = None,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
 ) -> dict:
     status_counts = Counter()
     ip_counts = Counter()
@@ -246,6 +315,7 @@ def analyze_lines(
     total_bytes = 0
     total_requests = 0
     invalid_lines = 0
+    excluded_requests = 0
 
     latency_limit = top_n if latency_top_n is None else latency_top_n
     hotspot_filters = normalize_hotspot_filters(hotspot_statuses, hotspot_methods)
@@ -254,6 +324,9 @@ def analyze_lines(
         parsed = parse_line(line)
         if parsed is None:
             invalid_lines += 1
+            continue
+        if not matches_time_window(parsed.timestamp, window_start, window_end):
+            excluded_requests += 1
             continue
 
         total_requests += 1
@@ -290,6 +363,12 @@ def analyze_lines(
         "latency_summary": summarize_latencies(latencies_ms),
         "upstream_latency_summary": summarize_latencies(upstream_latencies_ms),
         "hotspot_filters": hotspot_filters,
+        "time_window": build_time_window_metadata(
+            window_start,
+            window_end,
+            matched_requests=total_requests,
+            excluded_requests=excluded_requests,
+        ),
         "path_latency_breakdown": summarize_path_latencies(path_latencies, latency_limit),
         "upstream_path_latency_breakdown": summarize_path_latencies(
             upstream_path_latencies, latency_limit
@@ -304,8 +383,21 @@ def format_text_report(result: dict) -> str:
         f"Invalid lines: {result['invalid_lines']}",
         f"Total bytes sent: {result['total_bytes']}",
         f"Average bytes/request: {result['average_bytes']}",
-        "Status counts:",
     ]
+
+    time_window = result["time_window"]
+    if time_window:
+        lines.extend(
+            [
+                "Time window:",
+                f"  Start: {time_window['start'] or '(open)'}",
+                f"  End: {time_window['end'] or '(open)'}",
+                f"  Matched requests: {time_window['matched_requests']}",
+                f"  Excluded requests: {time_window['excluded_requests']}",
+            ]
+        )
+
+    lines.append("Status counts:")
 
     if result["status_counts"]:
         for status, count in sorted(result["status_counts"].items()):
@@ -415,6 +507,32 @@ def write_summary_csv(destination: str | Path, result: dict) -> None:
         {"section": "summary", "metric": "average_bytes", "value": result["average_bytes"]},
     ]
 
+    if result["time_window"]:
+        rows.extend(
+            [
+                {
+                    "section": "summary",
+                    "metric": "time_window_start",
+                    "value": result["time_window"]["start"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "time_window_end",
+                    "value": result["time_window"]["end"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "time_window_matched_requests",
+                    "value": result["time_window"]["matched_requests"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "time_window_excluded_requests",
+                    "value": result["time_window"]["excluded_requests"],
+                },
+            ]
+        )
+
     for status, count in sorted(result["status_counts"].items()):
         rows.append({"section": "status_counts", "key": status, "count": count})
     for method, count in sorted(result["method_counts"].items()):
@@ -457,6 +575,7 @@ def write_path_latency_csv(
     destination: str | Path,
     rows: list[dict],
     hotspot_filters: dict[str, list[str]] | None = None,
+    time_window: dict[str, str | int] | None = None,
 ) -> None:
     fieldnames = [
         "path",
@@ -468,6 +587,8 @@ def write_path_latency_csv(
         "max_ms",
         "status_filter",
         "method_filter",
+        "window_start",
+        "window_end",
     ]
     destination_path = ensure_parent_directory(destination)
     with destination_path.open("w", encoding="utf-8", newline="") as handle:
@@ -483,6 +604,8 @@ def write_path_latency_csv(
                     "method_filter": "|".join(hotspot_filters["methods"])
                     if hotspot_filters
                     else "",
+                    "window_start": str(time_window["start"]) if time_window else "",
+                    "window_end": str(time_window["end"]) if time_window else "",
                 }
             )
 
@@ -535,6 +658,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--window-start",
+        help=(
+            "Inclusive lower time bound for log entries (ISO-8601 or common-log timestamp; "
+            'naive ISO values are treated as UTC, for example 2026-04-18T09:00:00Z, '
+            '2026-04-18T09:00:00, or "18/Apr/2026:09:00:00 +0000")'
+        ),
+    )
+    parser.add_argument(
+        "--window-end",
+        help=(
+            "Inclusive upper time bound for log entries (ISO-8601 or common-log timestamp; "
+            'naive ISO values are treated as UTC, for example 2026-04-18T10:00:00Z, '
+            '2026-04-18T10:00:00, or "18/Apr/2026:10:00:00 +0000")'
+        ),
+    )
+    parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
@@ -560,6 +699,27 @@ def main(argv: list[str] | None = None) -> int:
     if any(not method.strip() for method in args.hotspot_method):
         parser.error("--hotspot-method must not be blank")
 
+    window_start = None
+    if args.window_start:
+        window_start = parse_cli_datetime(args.window_start)
+        if window_start is None:
+            parser.error(
+                "--window-start must be ISO-8601 or a common-log timestamp "
+                "(naive ISO values are treated as UTC)"
+            )
+
+    window_end = None
+    if args.window_end:
+        window_end = parse_cli_datetime(args.window_end)
+        if window_end is None:
+            parser.error(
+                "--window-end must be ISO-8601 or a common-log timestamp "
+                "(naive ISO values are treated as UTC)"
+            )
+
+    if window_start and window_end and window_start > window_end:
+        parser.error("--window-start must be less than or equal to --window-end")
+
     latency_top_n = args.top if args.latency_paths is None else args.latency_paths
 
     with open(args.logfile, encoding="utf-8") as handle:
@@ -569,6 +729,8 @@ def main(argv: list[str] | None = None) -> int:
             latency_top_n=latency_top_n,
             hotspot_statuses=args.hotspot_status,
             hotspot_methods=args.hotspot_method,
+            window_start=window_start,
+            window_end=window_end,
         )
 
     if args.summary_csv:
@@ -578,12 +740,14 @@ def main(argv: list[str] | None = None) -> int:
             args.path_latency_csv,
             result["path_latency_breakdown"],
             result["hotspot_filters"],
+            result["time_window"],
         )
     if args.upstream_path_latency_csv:
         write_path_latency_csv(
             args.upstream_path_latency_csv,
             result["upstream_path_latency_breakdown"],
             result["hotspot_filters"],
+            result["time_window"],
         )
 
     if args.format == "json":

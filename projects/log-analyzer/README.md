@@ -1,14 +1,14 @@
 # log-analyzer
 
 ## Overview
-Analyze common, combined, and latency-augmented web access logs from the command line with per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, and incident-style per-path hotspot drill-downs.
+Analyze common, combined, and latency-augmented web access logs from the command line with time-window slicing, per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, and incident-style per-path hotspot drill-downs.
 
 ## Why it is portfolio-worthy
 - parses realistic common and combined access-log lines instead of doing loose substring counting
 - surfaces operational metrics that resemble real observability and traffic-analysis tasks
 - includes both human-readable and machine-friendly outputs for scripting and spreadsheet workflows
 - highlights slow endpoints directly with per-path request and upstream latency hotspot summaries
-- supports status/method-filtered hotspot drill-downs for incident-response style analysis
+- supports status/method-filtered hotspot drill-downs plus bounded time-window analysis for incident-response style investigations
 - handles malformed lines, missing byte counts, and optional latency fields safely
 
 ## Stack
@@ -23,10 +23,11 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - counts requests by HTTP status code and request method
 - reports top client IPs, paths, referrers, and user agents
 - tracks total bytes, average bytes per request, malformed line count, request latency percentiles, and upstream latency percentiles when present
+- supports inclusive `--window-start` / `--window-end` filters so larger logs can be narrowed to the exact burst, deploy, or outage window under investigation
 - surfaces per-path request-latency hotspots ordered by average latency
 - surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
-- supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--upstream-path-latency-csv`, `--hotspot-status`, `--hotspot-method`, and `--format text|json`
+- supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--upstream-path-latency-csv`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -36,6 +37,7 @@ python3 log_analyzer.py access.log --format json
 python3 log_analyzer.py access.log --summary-csv summary.csv --path-latency-csv hotspots.csv
 python3 log_analyzer.py access.log --path-latency-csv request-hotspots.csv --upstream-path-latency-csv upstream-hotspots.csv
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
+python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --format json
 ```
 
 The parser accepts:
@@ -49,13 +51,33 @@ The parser accepts:
   - `upstream_response_time=0.201` feeds the upstream latency summary
   - multi-attempt upstream values such as `upstream_response_time=0.050, 0.125:0.075` are summed per request so retries stay visible in totals
 
+## Time-window filtering
+Use `--window-start` and/or `--window-end` when you want to isolate a particular incident window, deploy interval, or traffic burst before calculating totals, percentiles, and hotspot tables.
+
+Accepted timestamp formats:
+- ISO-8601 / RFC 3339 style values such as `2026-04-18T09:00:00Z` or `2026-04-18T09:00:00+00:00`
+- naive ISO values such as `2026-04-18T09:00:00` (treated as UTC)
+- common-log timestamps such as `18/Apr/2026:09:00:00 +0000`
+
+Behavior:
+- bounds are inclusive
+- entries outside the active window are excluded from the analyzed dataset
+- text output prints the active window plus matched/excluded request counts
+- JSON output includes a `time_window` object
+- summary CSV exports add `time_window_*` rows and hotspot CSV exports add `window_start` / `window_end` columns so downstream charts stay self-describing
+
+Examples:
+- `--window-start 2026-04-18T09:00:00Z` keeps only entries at or after `09:00 UTC`
+- `--window-end 2026-04-18T10:00:00Z` keeps only entries at or before `10:00 UTC`
+- combine both flags to isolate the exact 5-minute outage window, then layer `--hotspot-status 500 --hotspot-method POST` on top for a narrower drill-down
+
 ## Hotspot drill-downs
-Use `--hotspot-status` and `--hotspot-method` when you want the per-path hotspot sections and CSV exports to focus on a particular incident slice while keeping the top-level totals and percentile summaries global.
+Use `--hotspot-status` and `--hotspot-method` when you want the per-path hotspot sections and CSV exports to focus on a particular incident slice while keeping the top-level totals and percentile summaries global **within the currently selected time window**.
 
 Examples:
 - `--hotspot-status 500 --hotspot-status 502` isolates failing paths in the hotspot tables/exports
 - `--hotspot-method POST` focuses the hotspot tables/exports on mutating requests
-- combine both flags to highlight slow failing write endpoints without losing the overall traffic summary
+- combine both flags to highlight slow failing write endpoints without losing the overall traffic summary for the selected time window
 
 When filters are active:
 - text output annotates the hotspot section headings with the active filters
@@ -83,8 +105,10 @@ Use `--path-latency-csv` to export one row per request-latency hotspot path with
 - `max_ms`
 - `status_filter`
 - `method_filter`
+- `window_start`
+- `window_end`
 
-Use `--upstream-path-latency-csv` to export the same schema for `upstream_response_time=`-backed hotspots only. This makes it easy to show which endpoints are slow because of downstream services versus app-side processing. The filter columns stay blank when no hotspot drill-down flags are active.
+Use `--upstream-path-latency-csv` to export the same schema for `upstream_response_time=`-backed hotspots only. This makes it easy to show which endpoints are slow because of downstream services versus app-side processing. The filter/window columns stay blank when no hotspot or time-window flags are active.
 
 This makes it easy to drop a run into Sheets, Numbers, Excel, or plotting notebooks for portfolio screenshots and follow-up analysis.
 
@@ -95,6 +119,11 @@ Total requests: 42
 Invalid lines: 1
 Total bytes sent: 18024
 Average bytes/request: 429.14
+Time window:
+  Start: 2026-04-18T09:00:00+00:00
+  End: 2026-04-18T10:00:00+00:00
+  Matched requests: 42
+  Excluded requests: 18
 Status counts:
   200: 35
   404: 5
@@ -136,5 +165,5 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 ```
 
 ## Future Improvements
-- add time-window filters for larger operational datasets
 - optionally group hotspot drill-down exports by deployment or environment labels when those appear in richer custom log formats
+- add timestamp bucketing (for example minute-by-minute latency or error-rate exports) on top of the new time-window filter workflow
