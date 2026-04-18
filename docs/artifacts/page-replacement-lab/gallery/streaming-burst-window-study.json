@@ -1,0 +1,255 @@
+{
+  "reference_string": [
+    10,
+    11,
+    12,
+    13,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    10,
+    11,
+    12,
+    13,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    10,
+    11,
+    12,
+    13,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    12,
+    13,
+    14,
+    15,
+    12,
+    13,
+    16,
+    17,
+    12,
+    13,
+    14,
+    15,
+    12,
+    13,
+    16,
+    17,
+    12,
+    13,
+    14,
+    15,
+    12,
+    13,
+    16,
+    17,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    14,
+    15,
+    16,
+    17,
+    14,
+    15,
+    18,
+    19,
+    14,
+    15,
+    16,
+    17,
+    14,
+    15,
+    18,
+    19,
+    14,
+    15,
+    16,
+    17,
+    14,
+    15,
+    18,
+    19
+  ],
+  "frame_results": [
+    {
+      "frame_count": 3,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 96,
+          "hits": 0,
+          "hit_rate": 0.0
+        },
+        "clock": {
+          "page_faults": 96,
+          "hits": 0,
+          "hit_rate": 0.0
+        },
+        "lru": {
+          "page_faults": 96,
+          "hits": 0,
+          "hit_rate": 0.0
+        },
+        "opt": {
+          "page_faults": 59,
+          "hits": 37,
+          "hit_rate": 0.385417
+        }
+      }
+    },
+    {
+      "frame_count": 4,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 72,
+          "hits": 24,
+          "hit_rate": 0.25
+        },
+        "clock": {
+          "page_faults": 72,
+          "hits": 24,
+          "hit_rate": 0.25
+        },
+        "lru": {
+          "page_faults": 64,
+          "hits": 32,
+          "hit_rate": 0.333333
+        },
+        "opt": {
+          "page_faults": 46,
+          "hits": 50,
+          "hit_rate": 0.520833
+        }
+      }
+    },
+    {
+      "frame_count": 5,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 72,
+          "hits": 24,
+          "hit_rate": 0.25
+        },
+        "clock": {
+          "page_faults": 71,
+          "hits": 25,
+          "hit_rate": 0.260417
+        },
+        "lru": {
+          "page_faults": 64,
+          "hits": 32,
+          "hit_rate": 0.333333
+        },
+        "opt": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        }
+      }
+    },
+    {
+      "frame_count": 6,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "clock": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "lru": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "opt": {
+          "page_faults": 28,
+          "hits": 68,
+          "hit_rate": 0.708333
+        }
+      }
+    },
+    {
+      "frame_count": 7,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "clock": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "lru": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "opt": {
+          "page_faults": 28,
+          "hits": 68,
+          "hit_rate": 0.708333
+        }
+      }
+    },
+    {
+      "frame_count": 8,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "clock": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "lru": {
+          "page_faults": 36,
+          "hits": 60,
+          "hit_rate": 0.625
+        },
+        "opt": {
+          "page_faults": 28,
+          "hits": 68,
+          "hit_rate": 0.708333
+        }
+      }
+    }
+  ],
+  "fifo_belady_anomalies": [],
+  "monotonicity_violations": [],
+  "reference_source": "benchmark:streaming-burst-window"
+}

@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="page-replacement-streaming-burst-window-title page-replacement-streaming-burst-window-desc">
+  <title id="page-replacement-streaming-burst-window-title">Page replacement frame study chart</title>
+  <desc id="page-replacement-streaming-burst-window-desc">Page-fault vs frame-count chart for benchmark streaming-burst-window — stream-processing sliding window with cold backfill bursts and shifting hotsets</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="36" y="28" width="1008" height="664" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Page faults vs frame count</text>
+  <text x="84" y="96" font-size="16" fill="#475569">benchmark streaming-burst-window — stream-processing sliding window with cold backfill bursts and shifting hotsets</text>
+<line x1="84" y1="72" x2="112" y2="72" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />
+<text x="122" y="77" font-size="14" fill="#0f172a">FIFO</text>
+<line x1="234" y1="72" x2="262" y2="72" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-dasharray="10 8" />
+<text x="272" y="77" font-size="14" fill="#0f172a">CLOCK</text>
+<line x1="384" y1="72" x2="412" y2="72" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 7" />
+<text x="422" y="77" font-size="14" fill="#0f172a">LRU</text>
+<line x1="534" y1="72" x2="562" y2="72" stroke="#10b981" stroke-width="4" stroke-linecap="round" />
+<text x="572" y="77" font-size="14" fill="#0f172a">OPT</text>
+  <line x1="84" y1="118" x2="84" y2="478" stroke="#0f172a" stroke-width="2" />
+  <line x1="84" y1="478" x2="804" y2="478" stroke="#0f172a" stroke-width="2" />
+<line x1="84" y1="478.00" x2="804" y2="478.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="483.00" font-size="13" text-anchor="end" fill="#475569">0</text>
+<line x1="84" y1="442.00" x2="804" y2="442.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="447.00" font-size="13" text-anchor="end" fill="#475569">10</text>
+<line x1="84" y1="406.00" x2="804" y2="406.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="411.00" font-size="13" text-anchor="end" fill="#475569">20</text>
+<line x1="84" y1="370.00" x2="804" y2="370.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="375.00" font-size="13" text-anchor="end" fill="#475569">30</text>
+<line x1="84" y1="334.00" x2="804" y2="334.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="339.00" font-size="13" text-anchor="end" fill="#475569">40</text>
+<line x1="84" y1="298.00" x2="804" y2="298.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="303.00" font-size="13" text-anchor="end" fill="#475569">50</text>
+<line x1="84" y1="262.00" x2="804" y2="262.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="267.00" font-size="13" text-anchor="end" fill="#475569">60</text>
+<line x1="84" y1="226.00" x2="804" y2="226.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="231.00" font-size="13" text-anchor="end" fill="#475569">70</text>
+<line x1="84" y1="190.00" x2="804" y2="190.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="195.00" font-size="13" text-anchor="end" fill="#475569">80</text>
+<line x1="84" y1="154.00" x2="804" y2="154.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="159.00" font-size="13" text-anchor="end" fill="#475569">90</text>
+<line x1="84" y1="118.00" x2="804" y2="118.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="123.00" font-size="13" text-anchor="end" fill="#475569">100</text>
+<text x="84.00" y="506" font-size="13" text-anchor="middle" fill="#475569">3</text>
+<text x="228.00" y="506" font-size="13" text-anchor="middle" fill="#475569">4</text>
+<text x="372.00" y="506" font-size="13" text-anchor="middle" fill="#475569">5</text>
+<text x="516.00" y="506" font-size="13" text-anchor="middle" fill="#475569">6</text>
+<text x="660.00" y="506" font-size="13" text-anchor="middle" fill="#475569">7</text>
+<text x="804.00" y="506" font-size="13" text-anchor="middle" fill="#475569">8</text>
+  <text x="444.00" y="534" font-size="14" text-anchor="middle" fill="#475569">Frames</text>
+  <text x="28" y="298.00" font-size="14" fill="#475569" transform="rotate(-90 28 298.00)">Page faults</text>
+<polyline fill="none" stroke="#ef4444" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,132.40 228.00,218.80 372.00,218.80 516.00,348.40 660.00,348.40 804.00,348.40" />
+<circle cx="84.00" cy="132.40" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="120.40" font-size="11" text-anchor="middle" fill="#ef4444">96</text>
+<circle cx="228.00" cy="218.80" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="206.80" font-size="11" text-anchor="middle" fill="#ef4444">72</text>
+<circle cx="372.00" cy="218.80" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="206.80" font-size="11" text-anchor="middle" fill="#ef4444">72</text>
+<circle cx="516.00" cy="348.40" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="336.40" font-size="11" text-anchor="middle" fill="#ef4444">36</text>
+<circle cx="660.00" cy="348.40" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="336.40" font-size="11" text-anchor="middle" fill="#ef4444">36</text>
+<circle cx="804.00" cy="348.40" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="336.40" font-size="11" text-anchor="middle" fill="#ef4444">36</text>
+<polyline fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,132.40 228.00,218.80 372.00,222.40 516.00,348.40 660.00,348.40 804.00,348.40" stroke-dasharray="10 8" />
+<circle cx="84.00" cy="132.40" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="120.40" font-size="11" text-anchor="middle" fill="#f59e0b">96</text>
+<circle cx="228.00" cy="218.80" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="206.80" font-size="11" text-anchor="middle" fill="#f59e0b">72</text>
+<circle cx="372.00" cy="222.40" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="210.40" font-size="11" text-anchor="middle" fill="#f59e0b">71</text>
+<circle cx="516.00" cy="348.40" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="336.40" font-size="11" text-anchor="middle" fill="#f59e0b">36</text>
+<circle cx="660.00" cy="348.40" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="336.40" font-size="11" text-anchor="middle" fill="#f59e0b">36</text>
+<circle cx="804.00" cy="348.40" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="336.40" font-size="11" text-anchor="middle" fill="#f59e0b">36</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,132.40 228.00,247.60 372.00,247.60 516.00,348.40 660.00,348.40 804.00,348.40" stroke-dasharray="4 7" />
+<circle cx="84.00" cy="132.40" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="120.40" font-size="11" text-anchor="middle" fill="#2563eb">96</text>
+<circle cx="228.00" cy="247.60" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="235.60" font-size="11" text-anchor="middle" fill="#2563eb">64</text>
+<circle cx="372.00" cy="247.60" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="235.60" font-size="11" text-anchor="middle" fill="#2563eb">64</text>
+<circle cx="516.00" cy="348.40" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="336.40" font-size="11" text-anchor="middle" fill="#2563eb">36</text>
+<circle cx="660.00" cy="348.40" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="336.40" font-size="11" text-anchor="middle" fill="#2563eb">36</text>
+<circle cx="804.00" cy="348.40" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="336.40" font-size="11" text-anchor="middle" fill="#2563eb">36</text>
+<polyline fill="none" stroke="#10b981" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,265.60 228.00,312.40 372.00,348.40 516.00,377.20 660.00,377.20 804.00,377.20" />
+<circle cx="84.00" cy="265.60" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="253.60" font-size="11" text-anchor="middle" fill="#10b981">59</text>
+<circle cx="228.00" cy="312.40" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="300.40" font-size="11" text-anchor="middle" fill="#10b981">46</text>
+<circle cx="372.00" cy="348.40" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="336.40" font-size="11" text-anchor="middle" fill="#10b981">36</text>
+<circle cx="516.00" cy="377.20" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="365.20" font-size="11" text-anchor="middle" fill="#10b981">28</text>
+<circle cx="660.00" cy="377.20" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="365.20" font-size="11" text-anchor="middle" fill="#10b981">28</text>
+<circle cx="804.00" cy="377.20" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="365.20" font-size="11" text-anchor="middle" fill="#10b981">28</text>
+  <rect x="64" y="514" width="952" height="142" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+<text x="84" y="545" font-size="18" fill="#0f172a">workload: benchmark streaming-burst-window — stream-processing sliding window with cold backfill bursts and shifting hotsets</text>
+<text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (37.50)</text>
+<text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
+<text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
+</svg>

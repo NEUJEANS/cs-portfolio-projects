@@ -1,9 +1,9 @@
 # Page Replacement Study Report
 
 - workload: preset classic-belady — classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames
-- frame range: 2 to 6
+- frame range: 3 to 8
 - reference length: 12
-- best average faults: opt (6.40)
+- best average faults: opt (5.50)
 
 ## Reference string
 
@@ -21,11 +21,12 @@
 
 | Frames | FIFO | Clock | LRU | OPT | Winner |
 | ---: | ---: | ---: | ---: | ---: | :--- |
-| 2 | 12 | 12 | 12 | 9 | opt |
 | 3 | 9 | 9 | 10 | 7 | opt |
 | 4 | 10 | 10 | 8 | 6 | opt |
 | 5 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
 | 6 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
+| 7 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
+| 8 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
 
 ## Regression callouts
 

@@ -1,6 +1,7 @@
 frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source
-2,16,16,16,12,opt,preset:mixed-locality-bursts
 3,14,14,12,8,opt,preset:mixed-locality-bursts
 4,12,12,8,7,opt,preset:mixed-locality-bursts
 5,10,10,8,6,opt,preset:mixed-locality-bursts
 6,6,6,6,6,fifo/clock/lru/opt,preset:mixed-locality-bursts
+7,6,6,6,6,fifo/clock/lru/opt,preset:mixed-locality-bursts
+8,6,6,6,6,fifo/clock/lru/opt,preset:mixed-locality-bursts

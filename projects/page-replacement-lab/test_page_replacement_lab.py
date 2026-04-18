@@ -12,6 +12,7 @@ if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
 from page_replacement_lab import (  # noqa: E402
+    TRACE_BENCHMARKS,
     WORKLOAD_PRESETS,
     compare_algorithms,
     parse_reference_args,
@@ -66,6 +67,12 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(parsed.source, "preset:classic-belady")
         self.assertEqual(parsed.reference_string, REFERENCE)
 
+    def test_parse_reference_accepts_benchmarks(self) -> None:
+        parsed = parse_reference_args([], None, None, "compiler-phase-shift")
+        self.assertEqual(parsed.source, "benchmark:compiler-phase-shift")
+        self.assertGreater(len(parsed.reference_string), len(REFERENCE))
+        self.assertEqual(parsed.reference_string[:8], [1, 2, 3, 4, 1, 2, 5, 6])
+
     def test_cli_compare_json_works_with_pages_file(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
             json.dump(REFERENCE, handle)
@@ -112,7 +119,32 @@ class PageReplacementSimulationTests(unittest.TestCase):
         )
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["reference_source"], "preset:classic-belady")
-        self.assertEqual([result["algorithm"] for result in payload["results"]], ["fifo", "clock", "lru", "opt"])
+        self.assertEqual(
+            [result["algorithm"] for result in payload["results"]],
+            ["fifo", "clock", "lru", "opt"],
+        )
+
+    def test_cli_compare_json_works_with_benchmark(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "compare",
+                "--frames",
+                "5",
+                "--benchmark",
+                "db-hotset-scan",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["reference_source"], "benchmark:db-hotset-scan")
+        self.assertGreater(len(payload["reference_string"]), 40)
+        self.assertEqual(payload["results"][0]["algorithm"], "fifo")
+        self.assertEqual(len(payload["results"]), 4)
 
     def test_cli_list_presets_json_includes_known_workloads(self) -> None:
         completed = subprocess.run(
@@ -126,6 +158,20 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertTrue(set(WORKLOAD_PRESETS).issubset(names))
         classic = next(entry for entry in payload if entry["name"] == "classic-belady")
         self.assertEqual(classic["reference_length"], len(REFERENCE))
+
+    def test_cli_list_benchmarks_json_includes_known_workloads(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "list-benchmarks", "--json"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        names = {entry["name"] for entry in payload}
+        self.assertEqual(names, set(TRACE_BENCHMARKS))
+        compiler = next(entry for entry in payload if entry["name"] == "compiler-phase-shift")
+        self.assertEqual(compiler["filename"], "compiler-phase-shift.txt")
+        self.assertGreater(compiler["reference_length"], len(REFERENCE))
 
     def test_cli_study_writes_markdown_svg_and_csv_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -166,10 +212,13 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("<svg", svg)
             self.assertIn("Page faults vs frame count", svg)
             self.assertIn("classic-belady", svg)
-            self.assertIn("frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source", csv_output)
+            self.assertIn(
+                "frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source",
+                csv_output,
+            )
             self.assertIn("3,9,9,10,7,opt,preset:classic-belady", csv_output)
 
-    def test_cli_gallery_writes_html_and_companion_artifacts(self) -> None:
+    def test_cli_gallery_writes_html_and_companion_artifacts_for_presets_and_benchmarks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact_dir = Path(tmpdir) / "gallery"
             html_path = artifact_dir / "index.html"
@@ -179,13 +228,13 @@ class PageReplacementSimulationTests(unittest.TestCase):
                     str(SCRIPT),
                     "gallery",
                     "--min-frames",
-                    "2",
+                    "3",
                     "--max-frames",
-                    "5",
+                    "7",
                     "--preset",
                     "classic-belady",
-                    "--preset",
-                    "scan-then-reuse",
+                    "--benchmark",
+                    "compiler-phase-shift",
                     "--artifact-dir",
                     str(artifact_dir),
                 ],
@@ -197,19 +246,50 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("gallery workloads: 2", completed.stdout)
             html = html_path.read_text(encoding="utf-8")
             classic_json = (artifact_dir / "classic-belady-study.json").read_text(encoding="utf-8")
-            classic_svg = (artifact_dir / "classic-belady-study.svg").read_text(encoding="utf-8")
-            scan_markdown = (artifact_dir / "scan-then-reuse-study.md").read_text(encoding="utf-8")
+            benchmark_json = (artifact_dir / "compiler-phase-shift-study.json").read_text(encoding="utf-8")
+            benchmark_svg = (artifact_dir / "compiler-phase-shift-study.svg").read_text(encoding="utf-8")
+            benchmark_markdown = (artifact_dir / "compiler-phase-shift-study.md").read_text(encoding="utf-8")
 
             self.assertIn("Page Replacement Study Gallery", html)
-            self.assertIn("<figure>", html)
+            self.assertIn("<th>Type</th>", html)
             self.assertIn("href=\"#workload-classic-belady\"", html)
-            self.assertIn("id=\"workload-classic-belady\"", html)
-            self.assertIn("classic-belady-study.svg", html)
-            self.assertIn("scan-then-reuse-study.csv", html)
-            self.assertIn("gallery-classic-belady-title", html)
-            self.assertIn("page-replacement-classic-belady-title", classic_svg)
+            self.assertIn("id=\"workload-compiler-phase-shift\"", html)
+            self.assertIn("compiler-phase-shift-study.svg", html)
+            self.assertIn(">benchmark<", html)
             self.assertIn('"reference_source": "preset:classic-belady"', classic_json)
-            self.assertIn("# Page Replacement Study Report", scan_markdown)
+            self.assertIn('"reference_source": "benchmark:compiler-phase-shift"', benchmark_json)
+            self.assertIn("page-replacement-compiler-phase-shift-title", benchmark_svg)
+            self.assertIn("benchmark compiler-phase-shift", benchmark_markdown)
+
+    def test_cli_gallery_json_reports_workload_type_and_reference_length(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "gallery"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "gallery",
+                    "--min-frames",
+                    "3",
+                    "--max-frames",
+                    "6",
+                    "--benchmark",
+                    "db-hotset-scan",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(len(payload["workloads"]), 1)
+            workload = payload["workloads"][0]
+            self.assertEqual(workload["type"], "benchmark")
+            self.assertEqual(workload["workload"], "db-hotset-scan")
+            self.assertGreater(workload["reference_length"], 40)
+            self.assertEqual(workload["reference_source"], "benchmark:db-hotset-scan")
 
     def test_cli_rejects_missing_reference(self) -> None:
         completed = subprocess.run(
@@ -220,6 +300,7 @@ class PageReplacementSimulationTests(unittest.TestCase):
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("provide at least one --page", completed.stderr)
+        self.assertIn("--benchmark", completed.stderr)
 
     def test_cli_rejects_mixed_preset_and_explicit_pages(self) -> None:
         completed = subprocess.run(
@@ -239,7 +320,27 @@ class PageReplacementSimulationTests(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("use either --preset or explicit", completed.stderr)
+        self.assertIn("use exactly one of --preset, --benchmark, or explicit --page/--pages-file input", completed.stderr)
+
+    def test_cli_rejects_mixed_preset_and_benchmark(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "compare",
+                "--frames",
+                "3",
+                "--preset",
+                "classic-belady",
+                "--benchmark",
+                "compiler-phase-shift",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("use either --preset or --benchmark, not both", completed.stderr)
 
 
 if __name__ == "__main__":

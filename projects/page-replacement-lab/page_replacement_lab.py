@@ -19,6 +19,29 @@ class WorkloadPreset:
     reference_string: tuple[int, ...]
 
 
+BENCHMARKS_DIR = Path(__file__).resolve().parent / "benchmarks"
+
+
+@dataclass(frozen=True, slots=True)
+class TraceBenchmark:
+    name: str
+    description: str
+    filename: str
+
+    @property
+    def path(self) -> Path:
+        return BENCHMARKS_DIR / self.filename
+
+
+@dataclass(frozen=True, slots=True)
+class GalleryWorkload:
+    name: str
+    description: str
+    reference_string: tuple[int, ...]
+    reference_source: str
+    source_kind: str
+
+
 WORKLOAD_PRESETS: dict[str, WorkloadPreset] = {
     "classic-belady": WorkloadPreset(
         name="classic-belady",
@@ -39,6 +62,24 @@ WORKLOAD_PRESETS: dict[str, WorkloadPreset] = {
         name="mixed-locality-bursts",
         description="alternates hot-loop bursts with cold misses to mimic uneven interactive workloads",
         reference_string=(1, 2, 1, 2, 3, 4, 1, 2, 5, 1, 2, 6, 1, 2, 3, 4, 1, 2),
+    ),
+}
+
+TRACE_BENCHMARKS: dict[str, TraceBenchmark] = {
+    "compiler-phase-shift": TraceBenchmark(
+        name="compiler-phase-shift",
+        description="larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts",
+        filename="compiler-phase-shift.txt",
+    ),
+    "db-hotset-scan": TraceBenchmark(
+        name="db-hotset-scan",
+        description="dashboard-style hot pages interrupted by analytics scans and checkpoint bursts",
+        filename="db-hotset-scan.txt",
+    ),
+    "streaming-burst-window": TraceBenchmark(
+        name="streaming-burst-window",
+        description="stream-processing sliding window with cold backfill bursts and shifting hotsets",
+        filename="streaming-burst-window.txt",
     ),
 }
 
@@ -396,6 +437,10 @@ def list_workload_presets() -> list[WorkloadPreset]:
     return list(WORKLOAD_PRESETS.values())
 
 
+def list_trace_benchmarks() -> list[TraceBenchmark]:
+    return list(TRACE_BENCHMARKS.values())
+
+
 def resolve_preset(name: str) -> WorkloadPreset:
     try:
         return WORKLOAD_PRESETS[name]
@@ -404,13 +449,66 @@ def resolve_preset(name: str) -> WorkloadPreset:
         raise InputError(f"unknown preset: {name}. choose from: {available}") from exc
 
 
+def resolve_trace_benchmark(name: str) -> TraceBenchmark:
+    try:
+        return TRACE_BENCHMARKS[name]
+    except KeyError as exc:
+        available = ", ".join(sorted(TRACE_BENCHMARKS))
+        raise InputError(f"unknown benchmark: {name}. choose from: {available}") from exc
+
+
+def parse_reference_text(content: str, *, source_label: str) -> list[int]:
+    stripped_lines = [line.split("#", 1)[0].strip() for line in content.splitlines()]
+    cleaned = "\n".join(line for line in stripped_lines if line).strip()
+    if not cleaned:
+        raise InputError(f"{source_label} is empty")
+    if cleaned.startswith("["):
+        payload = json.loads(cleaned)
+        if not isinstance(payload, list):
+            raise InputError(f"{source_label} must contain a JSON list")
+        return [int(value) for value in payload]
+    return [int(token) for token in cleaned.replace(",", " ").split()]
+
+
+def load_trace_benchmark_reference(benchmark: TraceBenchmark) -> list[int]:
+    return parse_reference_text(
+        benchmark.path.read_text(encoding="utf-8"),
+        source_label=f"benchmark {benchmark.name}",
+    )
+
+
+def workload_from_preset(preset: WorkloadPreset) -> GalleryWorkload:
+    return GalleryWorkload(
+        name=preset.name,
+        description=preset.description,
+        reference_string=preset.reference_string,
+        reference_source=f"preset:{preset.name}",
+        source_kind="preset",
+    )
+
+
+def workload_from_benchmark(benchmark: TraceBenchmark) -> GalleryWorkload:
+    return GalleryWorkload(
+        name=benchmark.name,
+        description=benchmark.description,
+        reference_string=tuple(load_trace_benchmark_reference(benchmark)),
+        reference_source=f"benchmark:{benchmark.name}",
+        source_kind="benchmark",
+    )
+
+
 def parse_reference_args(
     pages: list[str],
     pages_file: str | None,
     preset: str | None,
+    benchmark: str | None = None,
 ) -> ParsedReference:
-    if preset and (pages or pages_file):
-        raise InputError("use either --preset or explicit --page/--pages-file input, not both")
+    if (preset or benchmark) and (pages or pages_file):
+        raise InputError(
+            "use exactly one of --preset, --benchmark, or explicit --page/--pages-file input"
+        )
+    if preset and benchmark:
+        raise InputError("use either --preset or --benchmark, not both")
 
     if preset:
         selected = resolve_preset(preset)
@@ -419,25 +517,27 @@ def parse_reference_args(
             source=f"preset:{selected.name}",
         )
 
-    raw_pages: list[int] = []
-    for token in pages:
-        raw_pages.append(int(token))
+    if benchmark:
+        selected = resolve_trace_benchmark(benchmark)
+        return ParsedReference(
+            reference_string=load_trace_benchmark_reference(selected),
+            source=f"benchmark:{selected.name}",
+        )
+
+    raw_pages = [int(token) for token in pages]
 
     if pages_file:
-        content = Path(pages_file).read_text(encoding="utf-8").strip()
-        if not content:
-            raise InputError("pages file is empty")
-        if content.startswith("["):
-            payload = json.loads(content)
-            if not isinstance(payload, list):
-                raise InputError("JSON pages file must contain a list")
-            raw_pages.extend(int(value) for value in payload)
-        else:
-            for token in content.replace(",", " ").split():
-                raw_pages.append(int(token))
+        raw_pages.extend(
+            parse_reference_text(
+                Path(pages_file).read_text(encoding="utf-8"),
+                source_label="pages file",
+            )
+        )
 
     if not raw_pages:
-        raise InputError("provide at least one --page, a --pages-file, or a --preset")
+        raise InputError(
+            "provide at least one --page, a --pages-file, a --preset, or a --benchmark"
+        )
     return ParsedReference(reference_string=raw_pages, source="custom")
 
 
@@ -448,6 +548,11 @@ def add_reference_arguments(parser: argparse.ArgumentParser) -> None:
         "--preset",
         choices=tuple(WORKLOAD_PRESETS),
         help="use a built-in workload preset instead of explicit pages",
+    )
+    parser.add_argument(
+        "--benchmark",
+        choices=tuple(TRACE_BENCHMARKS),
+        help="use a larger built-in trace benchmark instead of explicit pages",
     )
 
 
@@ -490,7 +595,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     gallery_parser = subparsers.add_parser(
         "gallery",
-        help="generate an HTML gallery plus companion study artifacts for preset workloads",
+        help="generate an HTML gallery plus companion study artifacts for preset workloads or larger built-in trace benchmarks",
     )
     gallery_parser.add_argument("--min-frames", type=int, required=True)
     gallery_parser.add_argument("--max-frames", type=int, required=True)
@@ -499,13 +604,25 @@ def build_parser() -> argparse.ArgumentParser:
         dest="gallery_presets",
         action="append",
         choices=tuple(WORKLOAD_PRESETS),
-        help="repeat to limit the gallery to specific built-in presets (default: all presets)",
+        help="repeat to include specific built-in presets",
+    )
+    gallery_parser.add_argument(
+        "--benchmark",
+        dest="gallery_benchmarks",
+        action="append",
+        choices=tuple(TRACE_BENCHMARKS),
+        help="repeat to include specific larger built-in trace benchmarks",
+    )
+    gallery_parser.add_argument(
+        "--include-benchmarks",
+        action="store_true",
+        help="add all built-in trace benchmarks to the default preset gallery",
     )
     gallery_parser.add_argument(
         "--artifact-dir",
         type=Path,
         required=True,
-        help="directory where per-preset Markdown/SVG/CSV/JSON study artifacts will be written",
+        help="directory where per-workload Markdown/SVG/CSV/JSON study artifacts will be written",
     )
     gallery_parser.add_argument(
         "--html-out",
@@ -520,6 +637,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     preset_parser.add_argument("--json", action="store_true")
 
+    benchmark_parser = subparsers.add_parser(
+        "list-benchmarks",
+        help="list larger built-in trace benchmarks for heavier portfolio demos",
+    )
+    benchmark_parser.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -527,6 +650,9 @@ def format_reference_source(reference_source: str) -> str:
     if reference_source.startswith("preset:"):
         preset = resolve_preset(reference_source.split(":", 1)[1])
         return f"source: preset {preset.name} — {preset.description}"
+    if reference_source.startswith("benchmark:"):
+        benchmark = resolve_trace_benchmark(reference_source.split(":", 1)[1])
+        return f"source: benchmark {benchmark.name} — {benchmark.description}"
     return "source: custom"
 
 
@@ -671,6 +797,9 @@ def describe_reference_label(reference_source: str) -> str:
     if reference_source.startswith("preset:"):
         preset = resolve_preset(reference_source.split(":", 1)[1])
         return f"preset {preset.name} — {preset.description}"
+    if reference_source.startswith("benchmark:"):
+        benchmark = resolve_trace_benchmark(reference_source.split(":", 1)[1])
+        return f"benchmark {benchmark.name} — {benchmark.description}"
     return "custom workload"
 
 
@@ -704,6 +833,7 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
                 "best_algorithms",
                 "reference_source",
             ],
+            lineterminator="\n",
         )
         writer.writeheader()
         for row in rows:
@@ -985,16 +1115,33 @@ def format_study_svg(
     )
 
 
-def resolve_gallery_presets(selected_presets: list[str] | None) -> list[WorkloadPreset]:
-    if not selected_presets:
-        return list_workload_presets()
-    ordered: list[WorkloadPreset] = []
+def resolve_gallery_workloads(
+    selected_presets: list[str] | None,
+    selected_benchmarks: list[str] | None,
+    *,
+    include_benchmarks: bool,
+) -> list[GalleryWorkload]:
+    ordered: list[GalleryWorkload] = []
     seen: set[str] = set()
-    for name in selected_presets:
-        if name in seen:
-            continue
-        ordered.append(resolve_preset(name))
-        seen.add(name)
+
+    def add_workload(workload: GalleryWorkload) -> None:
+        if workload.reference_source in seen:
+            return
+        ordered.append(workload)
+        seen.add(workload.reference_source)
+
+    if selected_presets or selected_benchmarks:
+        for name in selected_presets or []:
+            add_workload(workload_from_preset(resolve_preset(name)))
+        for name in selected_benchmarks or []:
+            add_workload(workload_from_benchmark(resolve_trace_benchmark(name)))
+        return ordered
+
+    for preset in list_workload_presets():
+        add_workload(workload_from_preset(preset))
+    if include_benchmarks:
+        for benchmark in list_trace_benchmarks():
+            add_workload(workload_from_benchmark(benchmark))
     return ordered
 
 
@@ -1003,17 +1150,17 @@ def format_average_fault_summary(averages: dict[str, float]) -> list[str]:
 
 
 def build_gallery_run(
-    preset: WorkloadPreset,
+    workload: GalleryWorkload,
     *,
     min_frames: int,
     max_frames: int,
     artifact_dir: Path,
     html_dir: Path,
 ) -> dict:
-    reference_source = f"preset:{preset.name}"
-    payload = study_frame_counts(preset.reference_string, min_frames, max_frames)
+    reference_source = workload.reference_source
+    payload = study_frame_counts(workload.reference_string, min_frames, max_frames)
     payload["reference_source"] = reference_source
-    stem = f"{preset.name}-study"
+    stem = f"{workload.name}-study"
     markdown_path = artifact_dir / f"{stem}.md"
     svg_path = artifact_dir / f"{stem}.svg"
     csv_path = artifact_dir / f"{stem}.csv"
@@ -1028,7 +1175,7 @@ def build_gallery_run(
         format_study_svg(
             payload,
             reference_source=reference_source,
-            id_prefix=f"page-replacement-{preset.name}",
+            id_prefix=f"page-replacement-{workload.name}",
         ),
     )
     write_study_csv(csv_path, payload, reference_source=reference_source)
@@ -1045,7 +1192,7 @@ def build_gallery_run(
         if violation["algorithm"] != "fifo"
     ]
     return {
-        "preset": preset,
+        "workload": workload,
         "payload": payload,
         "average_faults": averages,
         "best_average_faults": best_average,
@@ -1061,7 +1208,7 @@ def build_gallery_run(
         "inline_svg": format_study_svg(
             payload,
             reference_source=reference_source,
-            id_prefix=f"gallery-{preset.name}",
+            id_prefix=f"gallery-{workload.name}",
         ),
     }
 
@@ -1073,8 +1220,9 @@ def format_gallery_text(gallery_runs: list[dict], *, html_path: Path) -> str:
     ]
     for run in gallery_runs:
         winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
+        workload = run["workload"]
         lines.append(
-            f"- {run['preset'].name}: best average faults {winners} ({run['best_average_faults']:.2f}), "
+            f"- {workload.source_kind} {workload.name}: best average faults {winners} ({run['best_average_faults']:.2f}), "
             f"fifo anomaly={'yes' if run['fifo_has_anomaly'] else 'no'}, "
             f"other regressions={len(run['non_fifo_violations'])}"
         )
@@ -1092,6 +1240,9 @@ def format_gallery_html(
     non_fifo_regression_count = sum(
         1 for run in gallery_runs if run["non_fifo_violations"]
     )
+    benchmark_count = sum(
+        1 for run in gallery_runs if run["workload"].source_kind == "benchmark"
+    )
     winner_counts: dict[str, int] = {algorithm: 0 for algorithm in ALGORITHMS}
     for run in gallery_runs:
         for algorithm in run["best_average_winners"]:
@@ -1102,13 +1253,14 @@ def format_gallery_html(
 
     summary_rows: list[str] = []
     for run in gallery_runs:
-        preset = run["preset"]
-        section_id = f"workload-{make_safe_identifier(preset.name)}"
+        workload = run["workload"]
+        section_id = f"workload-{make_safe_identifier(workload.name)}"
         winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
         summary_rows.append(
             "<tr>"
-            f"<td><a href=\"#{section_id}\"><code>{escape(preset.name)}</code></a></td>"
-            f"<td>{escape(preset.description)}</td>"
+            f"<td>{escape(workload.source_kind)}</td>"
+            f"<td><a href=\"#{section_id}\"><code>{escape(workload.name)}</code></a></td>"
+            f"<td>{escape(workload.description)}</td>"
             f"<td>{run['best_average_faults']:.2f} ({escape(winners)})</td>"
             f"<td>{'yes' if run['fifo_has_anomaly'] else 'no'}</td>"
             f"<td>{len(run['non_fifo_violations'])}</td>"
@@ -1117,8 +1269,8 @@ def format_gallery_html(
 
     sections: list[str] = []
     for run in gallery_runs:
-        preset = run["preset"]
-        section_id = f"workload-{make_safe_identifier(preset.name)}"
+        workload = run["workload"]
+        section_id = f"workload-{make_safe_identifier(workload.name)}"
         averages = format_average_fault_summary(run["average_faults"])
         average_items = "".join(
             f"<li><code>{escape(item)}</code></li>" for item in averages
@@ -1157,10 +1309,11 @@ def format_gallery_html(
         sections.append(
             f"<section class=\"study-card\" id=\"{section_id}\">"
             "<div class=\"study-card__header\">"
-            f"<div><h2><code>{escape(preset.name)}</code></h2><p>{escape(preset.description)}</p></div>"
+            f"<div><h2><code>{escape(workload.name)}</code></h2><p>{escape(workload.description)}</p></div>"
             "<div class=\"study-card__chips\">"
+            f"<span class=\"chip\">{escape(workload.source_kind)}</span>"
             f"<span class=\"chip\">frames {min_frames}–{max_frames}</span>"
-            f"<span class=\"chip\">reference length {len(preset.reference_string)}</span>"
+            f"<span class=\"chip\">reference length {len(workload.reference_string)}</span>"
             f"<span class=\"chip chip--accent\">best average {'/'.join(algorithm.upper() for algorithm in run['best_average_winners'])}</span>"
             f"<span class=\"chip {'chip--warn' if run['fifo_has_anomaly'] else 'chip--ok'}\">FIFO anomaly {'yes' if run['fifo_has_anomaly'] else 'no'}</span>"
             "</div>"
@@ -1174,11 +1327,11 @@ def format_gallery_html(
             "</section>"
         )
 
-    return f"""<!doctype html>
-<html lang=\"en\">
+    return f'''<!doctype html>
+<html lang="en">
   <head>
-    <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Page Replacement Study Gallery</title>
     <style>
       :root {{
@@ -1194,11 +1347,11 @@ def format_gallery_html(
         --warn: #dc2626;
       }}
       * {{ box-sizing: border-box; }}
-      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: var(--bg); color: var(--text); }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
       main {{ max-width: 1480px; margin: 0 auto; padding: 32px 20px 64px; }}
       h1, h2, h3, p {{ margin-top: 0; }}
       a {{ color: var(--accent); }}
-      code {{ font-family: \"SFMono-Regular\", SFMono-Regular, ui-monospace, monospace; }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
       .hero, .study-card, .summary-table {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
       .hero {{ padding: 28px; margin-bottom: 24px; }}
       .hero p {{ color: var(--muted); max-width: 960px; }}
@@ -1214,7 +1367,7 @@ def format_gallery_html(
       .study-card__header {{ display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 14px; }}
       .study-card__header p {{ color: var(--muted); max-width: 70ch; margin-bottom: 0; }}
       .study-card__chips {{ display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }}
-      .chip {{ display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 999px; background: #e2e8f0; color: var(--text); font-size: 0.92rem; }}
+      .chip {{ display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 999px; background: #e2e8f0; color: var(--text); font-size: 0.92rem; text-transform: capitalize; }}
       .chip--accent {{ background: #dbeafe; color: #1d4ed8; }}
       .chip--ok {{ background: #dcfce7; color: #166534; }}
       .chip--warn {{ background: #fee2e2; color: #991b1b; }}
@@ -1234,22 +1387,24 @@ def format_gallery_html(
   </head>
   <body>
     <main>
-      <section class=\"hero\">
+      <section class="hero">
         <h1>Page Replacement Study Gallery</h1>
-        <p>Frame-range study cards for the built-in workloads in <code>page-replacement-lab</code>. Each section keeps the screenshot-ready SVG inline, links the exported Markdown / SVG / CSV / JSON companions, and highlights where FIFO or other policies regress as frame count increases.</p>
-        <ul class=\"summary-grid\">
+        <p>Frame-range study cards for the built-in workloads in <code>page-replacement-lab</code>. The gallery can mix compact presets with larger trace-benchmark bundles, keeps the screenshot-ready SVG inline, links the exported Markdown / SVG / CSV / JSON companions, and highlights where FIFO or other policies regress as frame count increases.</p>
+        <ul class="summary-grid">
           <li><strong>{workload_count}</strong> workloads</li>
+          <li><strong>{benchmark_count}</strong> trace benchmarks</li>
           <li><strong>{min_frames}–{max_frames}</strong> frame range</li>
           <li><strong>{fifo_anomaly_count}</strong> FIFO anomaly workloads</li>
           <li><strong>{non_fifo_regression_count}</strong> workloads with non-FIFO regressions</li>
           <li><strong>Winner tally</strong>{escape(winner_summary)}</li>
         </ul>
       </section>
-      <section class=\"summary-table\">
+      <section class="summary-table">
         <table>
           <thead>
             <tr>
-              <th>Preset</th>
+              <th>Type</th>
+              <th>Workload</th>
               <th>Description</th>
               <th>Best average faults</th>
               <th>FIFO anomaly</th>
@@ -1261,13 +1416,13 @@ def format_gallery_html(
           </tbody>
         </table>
       </section>
-      <div class=\"study-grid\">
+      <div class="study-grid">
         {''.join(sections)}
       </div>
     </main>
   </body>
 </html>
-"""
+'''
 
 
 def format_preset_text() -> str:
@@ -1278,6 +1433,21 @@ def format_preset_text() -> str:
             f"- {preset.name} (length={len(preset.reference_string)}): {preset.description}"
         )
         lines.append(f"  pages: {reference}")
+    return "\n".join(lines)
+
+
+def format_benchmark_text() -> str:
+    lines = ["built-in trace benchmarks:"]
+    for benchmark in list_trace_benchmarks():
+        reference = load_trace_benchmark_reference(benchmark)
+        preview = " ".join(str(page) for page in reference[:18])
+        if len(reference) > 18:
+            preview += " …"
+        lines.append(
+            f"- {benchmark.name} (length={len(reference)}): {benchmark.description}"
+        )
+        lines.append(f"  file: benchmarks/{benchmark.filename}")
+        lines.append(f"  preview: {preview}")
     return "\n".join(lines)
 
 
@@ -1307,18 +1477,43 @@ def main(argv: list[str] | None = None) -> int:
                 print(format_preset_text())
             return 0
 
+        if args.command == "list-benchmarks":
+            benchmarks = list_trace_benchmarks()
+            if args.json:
+                print(
+                    json.dumps(
+                        [
+                            {
+                                "name": benchmark.name,
+                                "description": benchmark.description,
+                                "filename": benchmark.filename,
+                                "reference_length": len(load_trace_benchmark_reference(benchmark)),
+                            }
+                            for benchmark in benchmarks
+                        ],
+                        indent=2,
+                    )
+                )
+            else:
+                print(format_benchmark_text())
+            return 0
+
         if args.command == "gallery":
-            presets = resolve_gallery_presets(args.gallery_presets)
+            workloads = resolve_gallery_workloads(
+                args.gallery_presets,
+                args.gallery_benchmarks,
+                include_benchmarks=args.include_benchmarks,
+            )
             html_path = args.html_out or (args.artifact_dir / "index.html")
             gallery_runs = [
                 build_gallery_run(
-                    preset,
+                    workload,
                     min_frames=args.min_frames,
                     max_frames=args.max_frames,
                     artifact_dir=args.artifact_dir,
                     html_dir=html_path.parent,
                 )
-                for preset in presets
+                for workload in workloads
             ]
             write_text_output(
                 html_path,
@@ -1338,8 +1533,11 @@ def main(argv: list[str] | None = None) -> int:
                             "artifact_dir": str(args.artifact_dir),
                             "workloads": [
                                 {
-                                    "preset": run["preset"].name,
-                                    "description": run["preset"].description,
+                                    "type": run["workload"].source_kind,
+                                    "workload": run["workload"].name,
+                                    "description": run["workload"].description,
+                                    "reference_length": len(run["workload"].reference_string),
+                                    "reference_source": run["workload"].reference_source,
                                     "best_average_faults": round(run["best_average_faults"], 6),
                                     "best_average_winners": run["best_average_winners"],
                                     "fifo_has_anomaly": run["fifo_has_anomaly"],
@@ -1356,7 +1554,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(format_gallery_text(gallery_runs, html_path=html_path))
             return 0
 
-        parsed_reference = parse_reference_args(args.page, args.pages_file, args.preset)
+        parsed_reference = parse_reference_args(
+            args.page,
+            args.pages_file,
+            args.preset,
+            getattr(args, "benchmark", None),
+        )
         reference = parsed_reference.reference_string
         if args.command == "simulate":
             result = simulate(args.algorithm, reference, args.frames)

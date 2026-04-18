@@ -47,3 +47,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-18 trace benchmark slice
+- [x] do brief research on phase shifts, hot sets, and scan-heavy trace behavior
+- [x] do a short refresh on workload locality patterns and benchmark-driven page-replacement evaluation
+- [x] update checklist markdown so the slice stays resumable
+- [x] add larger built-in trace benchmark bundles and benchmark-listing CLI support
+- [x] extend compare/study/gallery flows to accept benchmark inputs alongside presets
+- [x] generate committed mixed gallery artifacts for presets plus the heavier trace bundles
+- [x] refresh README and learning notes for the new benchmark workflows
+- [x] add regression tests for benchmark parsing, listing, and mixed gallery generation
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

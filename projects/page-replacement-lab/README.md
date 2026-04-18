@@ -12,14 +12,15 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 
 ## Features
 - simulate **FIFO**, **Clock / second-chance**, **LRU**, and **OPT** page replacement
-- load a reference string from repeated `--page` flags, a file, or a built-in preset
+- load a reference string from repeated `--page` flags, a file, a built-in preset, or a larger built-in trace benchmark bundle
 - print a step-by-step trace for one algorithm
 - compare all four algorithms on the same workload
 - run a frame-range study to detect FIFO Belady anomalies and other fault regressions
 - list built-in workload presets for repeatable demos and screenshots
+- list larger built-in trace benchmarks that model phase shifts, hot-set scans, and streaming-window bursts
 - export structured JSON for reports, demos, or frontend visualizations later
 - export study results as Markdown, CSV, and self-contained SVG cards for README screenshots and portfolio pages
-- generate a multi-workload HTML gallery that bundles inline SVG study cards with downloadable Markdown / SVG / CSV / JSON companions
+- generate a multi-workload HTML gallery that can mix compact presets with heavier trace benchmarks and downloadable Markdown / SVG / CSV / JSON companions
 
 ## Quick start
 
@@ -34,10 +35,21 @@ python3 projects/page-replacement-lab/page_replacement_lab.py simulate clock --f
   --preset classic-belady --show-steps
 ```
 
+### List the larger built-in trace benchmarks
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py list-benchmarks
+```
+
 ### Compare FIFO / Clock / LRU / OPT
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 3 \
   --preset classic-belady
+```
+
+### Compare on a heavier trace benchmark
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 5 \
+  --benchmark compiler-phase-shift
 ```
 
 ### Study frame counts and flag regressions
@@ -55,10 +67,11 @@ python3 projects/page-replacement-lab/page_replacement_lab.py study --min-frames
   --csv-out docs/artifacts/page-replacement-lab/classic-belady-study.csv
 ```
 
-### Build a browsable gallery across all built-in workloads
+### Build a browsable gallery across presets plus larger benchmark traces
 ```bash
-python3 projects/page-replacement-lab/page_replacement_lab.py gallery --min-frames 2 --max-frames 6 \
-  --artifact-dir docs/artifacts/page-replacement-lab/gallery
+python3 projects/page-replacement-lab/page_replacement_lab.py gallery --min-frames 3 --max-frames 8 \
+  --artifact-dir docs/artifacts/page-replacement-lab/gallery \
+  --include-benchmarks
 ```
 
 ### Load pages from a file instead of a preset
@@ -74,7 +87,14 @@ python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 4
 - `mixed-locality-bursts` — hot-loop bursts interrupted by colder misses
 
 These presets make demos reproducible and help explain how locality changes policy performance.
-Use either `--preset` or explicit `--page` / `--pages-file` input for a given run, not both.
+
+## Built-in trace benchmarks
+- `compiler-phase-shift` — larger compiler-style trace with a warm parser hot set, a code-generation scan, and optimizer bursts
+- `db-hotset-scan` — dashboard-style hot pages interrupted by a longer analytics scan plus checkpoint churn
+- `streaming-burst-window` — stream-processing working-set shifts with cold backfill bursts and rolling-window updates
+
+These benchmark bundles are longer than the compact presets and better for portfolio screenshots that need stronger separation between locality-friendly and scan-heavy workloads.
+Use exactly one of `--preset`, `--benchmark`, or explicit `--page` / `--pages-file` input for a given run.
 
 ## Example output
 ```text
@@ -93,8 +113,10 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/classic-belady-study.md` — narrative study report with the winner table and anomaly callouts
 - `docs/artifacts/page-replacement-lab/classic-belady-study.svg` — screenshot-ready chart card for README or portfolio galleries
 - `docs/artifacts/page-replacement-lab/classic-belady-study.csv` — spreadsheet/chart-friendly export of the same frame sweep
-- `docs/artifacts/page-replacement-lab/gallery/index.html` — browsable multi-workload gallery with inline SVG charts and download links for each preset bundle
-- `docs/artifacts/page-replacement-lab/gallery/*.json` — machine-readable study payloads for each built-in preset
+- `docs/artifacts/page-replacement-lab/gallery/index.html` — browsable multi-workload gallery with inline SVG charts and download links for each preset and benchmark bundle
+- `docs/artifacts/page-replacement-lab/gallery/compiler-phase-shift-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the compiler phase-shift workload
+- `docs/artifacts/page-replacement-lab/gallery/db-hotset-scan-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the dashboard/analytics scan workload
+- `docs/artifacts/page-replacement-lab/gallery/streaming-burst-window-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the streaming-window workload
 
 ## Testing
 ```bash
@@ -110,7 +132,7 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - suggest how this simulator could extend into real trace replay, working-set analysis, or richer report/gallery generation
 
 ## Future improvements
-- import larger trace files for repeatable benchmark suites
 - add working-set or aging-style algorithms for richer policy comparisons
-- add cross-workload aggregate comparison charts that put several presets on the same axes
+- add cross-workload aggregate comparison charts that put several presets and benchmarks on the same axes
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
+- add a trace-summary command that reports reuse-distance / phase-boundary hints for imported workloads

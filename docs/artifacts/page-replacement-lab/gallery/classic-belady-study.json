@@ -15,31 +15,6 @@
   ],
   "frame_results": [
     {
-      "frame_count": 2,
-      "algorithms": {
-        "fifo": {
-          "page_faults": 12,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "clock": {
-          "page_faults": 12,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "lru": {
-          "page_faults": 12,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "opt": {
-          "page_faults": 9,
-          "hits": 3,
-          "hit_rate": 0.25
-        }
-      }
-    },
-    {
       "frame_count": 3,
       "algorithms": {
         "fifo": {
@@ -116,6 +91,56 @@
     },
     {
       "frame_count": 6,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "clock": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "lru": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "opt": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        }
+      }
+    },
+    {
+      "frame_count": 7,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "clock": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "lru": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "opt": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        }
+      }
+    },
+    {
+      "frame_count": 8,
       "algorithms": {
         "fifo": {
           "page_faults": 5,

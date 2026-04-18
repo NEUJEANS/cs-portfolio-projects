@@ -1,9 +1,9 @@
 # Page Replacement Study Report
 
 - workload: preset scan-then-reuse — large sequential scan followed by a tighter reuse window to show cache pollution pressure
-- frame range: 2 to 6
+- frame range: 3 to 8
 - reference length: 15
-- best average faults: opt (8.40)
+- best average faults: opt (7.33)
 
 ## Reference string
 
@@ -21,11 +21,12 @@
 
 | Frames | FIFO | Clock | LRU | OPT | Winner |
 | ---: | ---: | ---: | ---: | ---: | :--- |
-| 2 | 15 | 15 | 15 | 12 | opt |
 | 3 | 13 | 13 | 11 | 9 | opt |
 | 4 | 10 | 10 | 10 | 7 | opt |
 | 5 | 10 | 10 | 10 | 7 | opt |
 | 6 | 10 | 10 | 7 | 7 | lru/opt |
+| 7 | 7 | 7 | 7 | 7 | fifo/clock/lru/opt |
+| 8 | 7 | 7 | 7 | 7 | fifo/clock/lru/opt |
 
 ## Regression callouts
 

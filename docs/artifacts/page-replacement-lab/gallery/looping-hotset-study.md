@@ -1,9 +1,9 @@
 # Page Replacement Study Report
 
 - workload: preset looping-hotset — small hot working set with a short burst page that rewards recency-aware policies
-- frame range: 2 to 6
+- frame range: 3 to 8
 - reference length: 12
-- best average faults: opt (5.40)
+- best average faults: opt (4.33)
 
 ## Reference string
 
@@ -21,11 +21,12 @@
 
 | Frames | FIFO | Clock | LRU | OPT | Winner |
 | ---: | ---: | ---: | ---: | ---: | :--- |
-| 2 | 12 | 12 | 12 | 9 | opt |
 | 3 | 10 | 10 | 8 | 6 | opt |
 | 4 | 4 | 4 | 4 | 4 | fifo/clock/lru/opt |
 | 5 | 4 | 4 | 4 | 4 | fifo/clock/lru/opt |
 | 6 | 4 | 4 | 4 | 4 | fifo/clock/lru/opt |
+| 7 | 4 | 4 | 4 | 4 | fifo/clock/lru/opt |
+| 8 | 4 | 4 | 4 | 4 | fifo/clock/lru/opt |
 
 ## Regression callouts
 

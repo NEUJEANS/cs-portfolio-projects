@@ -1,9 +1,9 @@
 # Page Replacement Study Report
 
 - workload: preset mixed-locality-bursts — alternates hot-loop bursts with cold misses to mimic uneven interactive workloads
-- frame range: 2 to 6
+- frame range: 3 to 8
 - reference length: 18
-- best average faults: opt (7.80)
+- best average faults: opt (6.50)
 
 ## Reference string
 
@@ -21,11 +21,12 @@
 
 | Frames | FIFO | Clock | LRU | OPT | Winner |
 | ---: | ---: | ---: | ---: | ---: | :--- |
-| 2 | 16 | 16 | 16 | 12 | opt |
 | 3 | 14 | 14 | 12 | 8 | opt |
 | 4 | 12 | 12 | 8 | 7 | opt |
 | 5 | 10 | 10 | 8 | 6 | opt |
 | 6 | 6 | 6 | 6 | 6 | fifo/clock/lru/opt |
+| 7 | 6 | 6 | 6 | 6 | fifo/clock/lru/opt |
+| 8 | 6 | 6 | 6 | 6 | fifo/clock/lru/opt |
 
 ## Regression callouts
 

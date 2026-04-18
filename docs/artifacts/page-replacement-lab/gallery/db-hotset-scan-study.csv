@@ -1,0 +1,7 @@
+frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source
+3,72,72,62,48,opt,benchmark:db-hotset-scan
+4,59,54,47,37,opt,benchmark:db-hotset-scan
+5,34,34,34,28,opt,benchmark:db-hotset-scan
+6,34,34,34,27,opt,benchmark:db-hotset-scan
+7,34,34,34,27,opt,benchmark:db-hotset-scan
+8,34,34,31,27,opt,benchmark:db-hotset-scan

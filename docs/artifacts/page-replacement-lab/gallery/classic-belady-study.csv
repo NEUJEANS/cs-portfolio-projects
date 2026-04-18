@@ -1,6 +1,7 @@
 frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source
-2,12,12,12,9,opt,preset:classic-belady
 3,9,9,10,7,opt,preset:classic-belady
 4,10,10,8,6,opt,preset:classic-belady
 5,5,5,5,5,fifo/clock/lru/opt,preset:classic-belady
 6,5,5,5,5,fifo/clock/lru/opt,preset:classic-belady
+7,5,5,5,5,fifo/clock/lru/opt,preset:classic-belady
+8,5,5,5,5,fifo/clock/lru/opt,preset:classic-belady
