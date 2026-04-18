@@ -10,5 +10,5 @@
 - [x] run project tests and smoke checks
 - [x] complete three review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit and push
-- [ ] append wrap-up under `docs/wrapups/`
+- [x] commit and push
+- [x] append wrap-up under `docs/wrapups/`
