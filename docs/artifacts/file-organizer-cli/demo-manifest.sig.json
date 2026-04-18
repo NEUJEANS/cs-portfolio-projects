@@ -1,0 +1,20 @@
+{
+  "action": "manifest-signature",
+  "createdAt": "2026-04-18T06:48:27.024Z",
+  "manifestPath": "/demo/file-organizer-cli/demo-manifest.json",
+  "signaturePath": "/demo/file-organizer-cli/demo-manifest.sig.json",
+  "signedPayload": {
+    "kind": "canonical-manifest-json",
+    "checksumAlgorithm": "sha256",
+    "checksum": "7aaf9e4211efc2bcc82f932052c1748b3b4f03ef337da0522e7a6ab722e9dac5",
+    "includesIntegritySection": true
+  },
+  "signer": {
+    "keyType": "ed25519",
+    "publicKeyFingerprint": "sha256:fb64cd1100d8715c6a421bad106581965d238a4cb3b8730377666ec310833e7f"
+  },
+  "signature": {
+    "encoding": "base64",
+    "value": "VRD/MaltLM8cTHQGVW/B5yEWYeFU2hQaGaw9FiBREO7n4ct7ItrLOrmdjL4ssm4ZWF5BCfsPYxCWOX/H8cVEBQ=="
+  }
+}

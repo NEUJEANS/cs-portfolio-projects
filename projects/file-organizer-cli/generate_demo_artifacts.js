@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
@@ -6,6 +7,8 @@ const {
   organize,
   previewNormalizedBucketConfig,
   writeManifest,
+  writeDetachedManifestSignature,
+  verifyDetachedManifestSignature,
   writeNormalizedBucketConfig,
   undoFromManifest,
   loadBucketConfig,
@@ -79,6 +82,18 @@ async function writeArtifact(filename, content) {
   await fs.writeFile(path.join(ARTIFACT_DIR, filename), content);
 }
 
+async function createSigningKeyPair(rootDir) {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+  const privateKeyPath = path.join(rootDir, 'demo-manifest-signer.pem');
+  const publicKeyPath = path.join(rootDir, 'demo-manifest-signer.pub.pem');
+  await fs.writeFile(privateKeyPath, privateKey.export({ format: 'pem', type: 'pkcs8' }));
+  await fs.writeFile(publicKeyPath, publicKey.export({ format: 'pem', type: 'spki' }));
+  return {
+    privateKeyPath,
+    publicKeyPath,
+  };
+}
+
 async function createDemoInput(rootDir) {
   const downloadsDir = path.join(rootDir, 'downloads');
   await fs.mkdir(downloadsDir, { recursive: true });
@@ -126,8 +141,10 @@ async function generateArtifacts() {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'file-organizer-demo-'));
   try {
     const { downloadsDir, rawConfigPath } = await createDemoInput(tempRoot);
+    const { privateKeyPath, publicKeyPath } = await createSigningKeyPair(tempRoot);
     const normalizedConfigPath = path.join(tempRoot, 'coursework-demo.normalized.json');
     const manifestPath = path.join(tempRoot, 'demo-manifest.json');
+    const signaturePath = path.join(tempRoot, 'demo-manifest.sig.json');
 
     const previewResult = await previewNormalizedBucketConfig(rawConfigPath);
     const normalizedWriteResult = await writeNormalizedBucketConfig(rawConfigPath, normalizedConfigPath, { force: true });
@@ -145,17 +162,26 @@ async function generateArtifacts() {
       bucketConfig,
     });
     const manifestResult = await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+    const signatureResult = await writeDetachedManifestSignature(manifestPath, privateKeyPath, { signaturePath });
+    manifestResult.detachedSignature = signatureResult;
+    const signatureVerification = await verifyDetachedManifestSignature(manifestPath, publicKeyPath, { signaturePath });
     const afterTree = await buildTreeSnapshot(downloadsDir, 'downloads/');
-    const undoResult = await undoFromManifest(manifestPath);
+    const undoResult = await undoFromManifest(manifestPath, {
+      verifySignatureKeyPath: publicKeyPath,
+      signaturePath,
+    });
     const restoredTree = await buildTreeSnapshot(downloadsDir, 'downloads/');
 
     const sanitizedPreview = sanitizeForArtifact(previewResult, tempRoot);
     const sanitizedNormalizedWrite = sanitizeForArtifact(normalizedWriteResult, tempRoot);
     const sanitizedDryRun = sanitizeForArtifact(dryRunResult, tempRoot);
     const sanitizedApply = sanitizeForArtifact(manifestResult, tempRoot);
+    const sanitizedSignature = sanitizeForArtifact(signatureResult, tempRoot);
+    const sanitizedSignatureVerification = sanitizeForArtifact(signatureVerification, tempRoot);
     const sanitizedUndo = sanitizeForArtifact(undoResult, tempRoot);
     const sanitizedRawConfig = sanitizeForArtifact(JSON.parse(await fs.readFile(rawConfigPath, 'utf8')), tempRoot);
     const sanitizedNormalizedConfig = sanitizeForArtifact(JSON.parse(await fs.readFile(normalizedConfigPath, 'utf8')), tempRoot);
+    const sanitizedPublicKey = sanitizeForArtifact(await fs.readFile(publicKeyPath, 'utf8'), tempRoot);
 
     await writeArtifact('demo-source-tree.txt', beforeTree);
     await writeArtifact('demo-after-tree.txt', afterTree);
@@ -167,6 +193,9 @@ async function generateArtifacts() {
     await writeArtifact('demo-dry-run-report.txt', `${formatTextReport(sanitizedDryRun)}\n`);
     await writeArtifact('demo-apply-report.txt', `${formatTextReport(sanitizedApply)}\n`);
     await writeArtifact('demo-manifest.json', `${JSON.stringify(sanitizedApply, null, 2)}\n`);
+    await writeArtifact('demo-manifest.sig.json', `${JSON.stringify(sanitizedSignature, null, 2)}\n`);
+    await writeArtifact('demo-signature-verify.txt', `${JSON.stringify(sanitizedSignatureVerification, null, 2)}\n`);
+    await writeArtifact('demo-manifest-signer.pub.pem', sanitizedPublicKey);
     await writeArtifact('demo-undo-report.txt', `${formatTextReport(sanitizedUndo)}\n`);
 
     const summary = [
@@ -183,6 +212,9 @@ async function generateArtifacts() {
       '- [`demo-dry-run-report.txt`](./demo-dry-run-report.txt) — preview of the planned moves',
       '- [`demo-apply-report.txt`](./demo-apply-report.txt) — real organize run with checksum-backed manifest recording',
       '- [`demo-manifest.json`](./demo-manifest.json) — sanitized manifest/report payload captured from the real run',
+      '- [`demo-manifest.sig.json`](./demo-manifest.sig.json) — detached signature sidecar for the manifest',
+      '- [`demo-manifest-signer.pub.pem`](./demo-manifest-signer.pub.pem) — public verification key published with the bundle',
+      '- [`demo-signature-verify.txt`](./demo-signature-verify.txt) — detached-signature verification proof before undo',
       '- [`demo-after-tree.txt`](./demo-after-tree.txt) — folder tree after the organize pass',
       '- [`demo-undo-report.txt`](./demo-undo-report.txt) — manifest-driven rollback proof',
       '- [`demo-restored-tree.txt`](./demo-restored-tree.txt) — folder tree after undo restores the original layout',
@@ -206,11 +238,13 @@ async function generateArtifacts() {
       '- basename-pattern routing for screenshots and assignments',
       '- MIME-aware routing for misleading `.txt` files that actually contain JSON or SVG',
       '- normalization-preview + canonical shared-config writing before a real organize run',
-      '- checksum-backed manifest capture plus automatic verification during undo',
+      '- checksum-backed manifest capture plus detached-signature sidecar generation',
+      '- detached-signature verification with a published public key before undo',
       '- dry-run preview and successful rollback back to the original loose tree',
       '',
       '## Notes',
       '- committed reports replace the temporary smoke-run root with the stable placeholder `/demo/file-organizer-cli` so the artifacts stay readable in Git',
+      '- the bundle publishes only the generated public verification key; the temporary private signing key never leaves the isolated smoke-test folder',
       '- the real smoke test still runs against an isolated temporary folder before these sanitized artifacts are written',
       '',
     ].join('\n');

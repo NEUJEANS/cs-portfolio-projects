@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
@@ -14,6 +15,9 @@ const {
   writeManifest,
   manifestChecksumFor,
   verifyManifestIntegrity,
+  manifestSignatureChecksumFor,
+  writeDetachedManifestSignature,
+  verifyDetachedManifestSignature,
   undoFromManifest,
   parseArgs,
   formatTextReport,
@@ -26,6 +30,17 @@ const {
   loadPresetBucketConfig,
   writePresetConfig,
 } = require('./organizer');
+
+async function writeEd25519KeyPair(tmpDir, prefix = 'team-organizer-signer') {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+  const keyDir = path.join(tmpDir, 'keys');
+  await fs.mkdir(keyDir, { recursive: true });
+  const privateKeyPath = path.join(keyDir, `${prefix}.pem`);
+  const publicKeyPath = path.join(keyDir, `${prefix}.pub.pem`);
+  await fs.writeFile(privateKeyPath, privateKey.export({ format: 'pem', type: 'pkcs8' }));
+  await fs.writeFile(publicKeyPath, publicKey.export({ format: 'pem', type: 'spki' }));
+  return { privateKeyPath, publicKeyPath };
+}
 
 test('bucketFor categorizes by default extension groups', () => {
   assert.equal(bucketFor('photo.png'), 'images');
@@ -794,6 +809,93 @@ test('writeManifest can embed checksum metadata and undo verifies it before rest
   assert.equal(await fs.readFile(path.join(tmp, 'notes.txt'), 'utf8'), 'draft');
 });
 
+test('writeDetachedManifestSignature requires checksum-backed manifest metadata', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-signature-precondition-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  const { privateKeyPath } = await writeEd25519KeyPair(tmp);
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const organizeResult = await organize(tmp);
+  await writeManifest(organizeResult, manifestPath);
+
+  await assert.rejects(
+    writeDetachedManifestSignature(manifestPath, privateKeyPath),
+    /checksum-backed integrity metadata/,
+  );
+});
+
+test('writeDetachedManifestSignature signs checksum-backed manifests with a detached sidecar', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-signature-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  const signaturePath = path.join(tmp, 'artifacts', 'organize-manifest.sig.json');
+  const { privateKeyPath, publicKeyPath } = await writeEd25519KeyPair(tmp);
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const organizeResult = await organize(tmp);
+  const manifest = await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+  const signatureRecord = await writeDetachedManifestSignature(manifestPath, privateKeyPath, { signaturePath });
+  const verification = await verifyDetachedManifestSignature(manifestPath, publicKeyPath, { signaturePath });
+
+  assert.equal(signatureRecord.manifestPath, path.resolve(manifestPath));
+  assert.equal(signatureRecord.signaturePath, path.resolve(signaturePath));
+  assert.equal(signatureRecord.signer.keyType, 'ed25519');
+  assert.equal(signatureRecord.signedPayload.checksum, manifestSignatureChecksumFor(manifest));
+  assert.equal(verification.valid, true);
+  assert.equal(verification.signaturePath, path.resolve(signaturePath));
+  assert.equal(verification.signedPayload.checksum, manifestSignatureChecksumFor(manifest));
+});
+
+test('verifyDetachedManifestSignature fails for tampered manifests or mismatched public keys', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-signature-invalid-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  const { privateKeyPath, publicKeyPath } = await writeEd25519KeyPair(tmp, 'primary');
+  const { publicKeyPath: wrongPublicKeyPath } = await writeEd25519KeyPair(tmp, 'secondary');
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const organizeResult = await organize(tmp);
+  await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+  await writeDetachedManifestSignature(manifestPath, privateKeyPath);
+
+  const wrongKeyResult = await verifyDetachedManifestSignature(manifestPath, wrongPublicKeyPath);
+  assert.equal(wrongKeyResult.valid, false);
+  assert.match(wrongKeyResult.reason, /Public key fingerprint mismatch/);
+
+  const tamperedManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  tamperedManifest.summary.total = 999;
+  await fs.writeFile(manifestPath, `${JSON.stringify(tamperedManifest, null, 2)}\n`);
+
+  const tamperedResult = await verifyDetachedManifestSignature(manifestPath, publicKeyPath);
+  assert.equal(tamperedResult.valid, false);
+  assert.match(tamperedResult.reason, /Manifest payload checksum mismatch/);
+});
+
+test('undo can require detached signature verification before restoring files', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-signature-undo-'));
+  const manifestPath = path.join(tmp, 'artifacts', 'organize-manifest.json');
+  const { privateKeyPath, publicKeyPath } = await writeEd25519KeyPair(tmp);
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+
+  const organizeResult = await organize(tmp);
+  await writeManifest(organizeResult, manifestPath, { includeChecksum: true });
+  await writeDetachedManifestSignature(manifestPath, privateKeyPath);
+
+  const undoResult = await undoFromManifest(manifestPath, {
+    verifySignatureKeyPath: publicKeyPath,
+  });
+  assert.equal(undoResult.signatureVerification.valid, true);
+  assert.equal(await fs.readFile(path.join(tmp, 'notes.txt'), 'utf8'), 'draft');
+
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'draft');
+  const reorganizeResult = await organize(tmp);
+  await writeManifest(reorganizeResult, manifestPath, { includeChecksum: true });
+  await writeDetachedManifestSignature(manifestPath, privateKeyPath);
+  const { publicKeyPath: wrongPublicKeyPath } = await writeEd25519KeyPair(tmp, 'wrong-team');
+  await assert.rejects(
+    undoFromManifest(manifestPath, { verifySignatureKeyPath: wrongPublicKeyPath }),
+    /failed signature verification: Public key fingerprint mismatch/,
+  );
+});
+
 test('undo dry-run previews restore work without mutating the filesystem', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
   const manifestPath = path.join(tmp, 'undo-manifest.json');
@@ -875,6 +977,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: true,
     manifestOut: 'runs/latest.json',
     manifestChecksum: true,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: 'buckets.json',
@@ -897,6 +1002,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: false,
     manifestOut: 'runs/latest.json',
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: null,
@@ -920,8 +1028,61 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: true,
     manifestOut: null,
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: 'runs/latest.json',
     skipManifestVerification: true,
+    configPath: null,
+    lintConfigPath: null,
+    previewConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
+  });
+
+  const signedOrganizeArgs = parseArgs(['~/Downloads', '--manifest-out', 'runs/latest.json', '--manifest-checksum', '--sign-manifest', 'keys/team.pem', '--signature-path', 'runs/latest.sig.json']);
+  assert.deepEqual(signedOrganizeArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: false,
+    manifestOut: 'runs/latest.json',
+    manifestChecksum: true,
+    signManifestKeyPath: 'keys/team.pem',
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: 'runs/latest.sig.json',
+    undoManifest: null,
+    skipManifestVerification: false,
+    configPath: null,
+    lintConfigPath: null,
+    previewConfigPath: null,
+    fixConfigPath: null,
+    writeNormalizedConfigSource: null,
+    writeNormalizedConfigDestination: null,
+    presetName: null,
+    listPresets: false,
+    writePresetName: null,
+    writePresetDestination: null,
+    force: false,
+  });
+
+  const signedUndoArgs = parseArgs(['--undo', 'runs/latest.json', '--verify-manifest-signature', 'keys/team.pub.pem', '--signature-path', 'runs/latest.sig.json']);
+  assert.deepEqual(signedUndoArgs.options, {
+    dryRun: false,
+    recursive: false,
+    json: false,
+    manifestOut: null,
+    manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: 'keys/team.pub.pem',
+    signaturePath: 'runs/latest.sig.json',
+    undoManifest: 'runs/latest.json',
+    skipManifestVerification: false,
     configPath: null,
     lintConfigPath: null,
     previewConfigPath: null,
@@ -946,6 +1107,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: true,
     manifestOut: null,
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: null,
@@ -968,6 +1132,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: true,
     manifestOut: null,
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: null,
@@ -990,6 +1157,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: true,
     manifestOut: null,
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: null,
@@ -1012,6 +1182,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: true,
     manifestOut: null,
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: null,
@@ -1034,6 +1207,9 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
     json: true,
     manifestOut: null,
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: null,
@@ -1072,6 +1248,26 @@ test('parseArgs supports config, preset, lint, normalized-config, preset-export,
   assert.throws(
     () => parseArgs(['~/Downloads', '--manifest-checksum']),
     /--manifest-checksum requires --manifest-out/,
+  );
+
+  assert.throws(
+    () => parseArgs(['~/Downloads', '--manifest-out', 'runs/latest.json', '--sign-manifest', 'keys/team.pem']),
+    /--sign-manifest requires --manifest-checksum/,
+  );
+
+  assert.throws(
+    () => parseArgs(['~/Downloads', '--sign-manifest', 'keys/team.pem']),
+    /--sign-manifest requires --manifest-out/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--verify-manifest-signature', 'keys/team.pub.pem']),
+    /--verify-manifest-signature can only be used with --undo/,
+  );
+
+  assert.throws(
+    () => parseArgs(['--signature-path', 'runs/latest.sig.json']),
+    /--signature-path requires --sign-manifest or --verify-manifest-signature/,
   );
 
   assert.throws(
@@ -1136,6 +1332,10 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
     },
     manifestPath: '/tmp/demo/manifests/latest.json',
     integrity: { algorithm: 'sha256', checksum: 'abc123' },
+    detachedSignature: {
+      signaturePath: '/tmp/demo/manifests/latest.sig.json',
+      signer: { publicKeyFingerprint: 'sha256:def456' },
+    },
     summary: { total: 1, renamed: 1, byBucket: { datasets: 1 } },
     moves: [{
       from: '/tmp/demo/a.csv',
@@ -1153,6 +1353,11 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
     dryRun: false,
     manifestPath: '/tmp/demo/manifests/latest.json',
     integrity: { present: true, valid: true, algorithm: 'sha256', checksum: 'abc123' },
+    signatureVerification: {
+      valid: true,
+      signaturePath: '/tmp/demo/manifests/latest.sig.json',
+      publicKeyFingerprint: 'sha256:def456',
+    },
     summary: { total: 1, restored: 1, missing: 0, restoreRenamed: 1, removedDirectories: 1, byBucket: { documents: 1 } },
     moves: [{ from: '/tmp/demo/documents/a.txt', to: '/tmp/demo/a (1).txt', requestedRestore: '/tmp/demo/a.txt', restoreRenamed: true, status: 'restored', bucket: 'documents' }],
   });
@@ -1216,11 +1421,16 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
   assert.match(organizeReport, /config: \/tmp\/demo\/buckets\.json/);
   assert.match(organizeReport, /manifest checksum: sha256:abc123/);
   assert.match(organizeReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
+  assert.match(organizeReport, /manifest signature: \/tmp\/demo\/manifests\/latest\.sig\.json/);
+  assert.match(organizeReport, /manifest signer fingerprint: sha256:def456/);
   assert.match(organizeReport, /renamed to avoid collisions: 1/);
   assert.match(organizeReport, /\[renamed; MIME type application\/json; detected application\/json\]/);
   assert.match(undoReport, /action: undo/);
   assert.match(undoReport, /manifest checksum verified: yes/);
   assert.match(undoReport, /manifest checksum: sha256:abc123/);
+  assert.match(undoReport, /manifest signature verified: yes/);
+  assert.match(undoReport, /manifest signature file: \/tmp\/demo\/manifests\/latest\.sig\.json/);
+  assert.match(undoReport, /manifest signer fingerprint: sha256:def456/);
   assert.match(undoReport, /renamed to avoid restore collisions: 1/);
   assert.match(undoReport, /restore-renamed from \/tmp\/demo\/a\.txt/);
   assert.match(listPresetsReport, /action: list-presets/);

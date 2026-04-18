@@ -55,6 +55,9 @@ const CONFIG_ALLOWED_KEYS = Object.freeze(['buckets', 'fallbackBucket', 'extendD
 const BUCKET_RULE_ALLOWED_KEYS = Object.freeze(['extensions', 'basenamePatterns', 'mimeTypes', 'mimePrefixes']);
 const MIME_SNIFF_BYTE_LIMIT = 4096;
 const MANIFEST_CHECKSUM_ALGORITHM = 'sha256';
+const MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM = 'sha256';
+const MANIFEST_SIGNATURE_DEFAULT_SUFFIX = '.sig.json';
+const MANIFEST_SIGNATURE_ENCODING = 'base64';
 
 function normalizeBucketName(name, label = 'bucket name') {
   if (typeof name !== 'string') {
@@ -1458,6 +1461,10 @@ function sortObjectKeysDeep(value) {
   return value;
 }
 
+function canonicalizeJsonPayload(value) {
+  return JSON.stringify(sortObjectKeysDeep(value));
+}
+
 function manifestPayloadForIntegrity(manifest) {
   const { integrity, ...manifestWithoutIntegrity } = manifest;
   return manifestWithoutIntegrity;
@@ -1465,7 +1472,7 @@ function manifestPayloadForIntegrity(manifest) {
 
 function manifestChecksumFor(manifest, algorithm = MANIFEST_CHECKSUM_ALGORITHM) {
   const hash = crypto.createHash(algorithm);
-  hash.update(JSON.stringify(sortObjectKeysDeep(manifestPayloadForIntegrity(manifest))));
+  hash.update(canonicalizeJsonPayload(manifestPayloadForIntegrity(manifest)));
   return hash.digest('hex');
 }
 
@@ -1534,6 +1541,254 @@ function verifyManifestIntegrity(manifest) {
     reason: checksum === expectedChecksum
       ? null
       : `Manifest checksum mismatch: expected ${expectedChecksum} but found ${checksum}.`,
+  };
+}
+
+function manifestSignaturePayload(manifest) {
+  return Buffer.from(canonicalizeJsonPayload(manifest));
+}
+
+function manifestSignatureChecksumFor(manifest, algorithm = MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM) {
+  const hash = crypto.createHash(algorithm);
+  hash.update(manifestSignaturePayload(manifest));
+  return hash.digest('hex');
+}
+
+function defaultManifestSignaturePath(manifestPath) {
+  return `${path.resolve(manifestPath)}${MANIFEST_SIGNATURE_DEFAULT_SUFFIX}`;
+}
+
+async function loadPrivateKey(privateKeyPath) {
+  const resolvedPrivateKeyPath = path.resolve(privateKeyPath);
+  return {
+    keyPath: resolvedPrivateKeyPath,
+    keyObject: crypto.createPrivateKey(await fs.readFile(resolvedPrivateKeyPath, 'utf8')),
+  };
+}
+
+async function loadPublicKey(publicKeyPath) {
+  const resolvedPublicKeyPath = path.resolve(publicKeyPath);
+  return {
+    keyPath: resolvedPublicKeyPath,
+    keyObject: crypto.createPublicKey(await fs.readFile(resolvedPublicKeyPath, 'utf8')),
+  };
+}
+
+function manifestSignatureAlgorithmForKey(keyObject) {
+  const keyType = keyObject.asymmetricKeyType;
+  if (keyType === 'ed25519' || keyType === 'ed448') {
+    return {
+      keyType,
+      digest: null,
+    };
+  }
+
+  if (keyType === 'rsa' || keyType === 'ec') {
+    return {
+      keyType,
+      digest: 'sha256',
+    };
+  }
+
+  throw new Error(`Unsupported manifest signing key type: ${keyType || 'unknown'}. Use an Ed25519, Ed448, RSA, or EC PEM key.`);
+}
+
+function publicKeyFingerprint(keyObject, algorithm = 'sha256') {
+  const digest = crypto.createHash(algorithm);
+  digest.update(keyObject.export({ type: 'spki', format: 'der' }));
+  return `${algorithm}:${digest.digest('hex')}`;
+}
+
+async function writeDetachedManifestSignature(manifestPath, privateKeyPath, options = {}) {
+  const settings = {
+    signaturePath: null,
+    ...options,
+  };
+  const resolvedManifestPath = path.resolve(manifestPath);
+  const resolvedSignaturePath = path.resolve(settings.signaturePath || defaultManifestSignaturePath(resolvedManifestPath));
+  const manifest = JSON.parse(await fs.readFile(resolvedManifestPath, 'utf8'));
+  const integrity = verifyManifestIntegrity(manifest);
+  if (!integrity.present) {
+    throw new Error('Detached manifest signatures require checksum-backed integrity metadata. Write the manifest with includeChecksum or --manifest-checksum first.');
+  }
+  if (!integrity.valid) {
+    throw new Error(`Cannot sign a manifest with invalid integrity metadata: ${integrity.reason}`);
+  }
+  const { keyObject: privateKey } = await loadPrivateKey(privateKeyPath);
+  const publicKey = crypto.createPublicKey(privateKey);
+  const signatureAlgorithm = manifestSignatureAlgorithmForKey(privateKey);
+  const signature = crypto.sign(
+    signatureAlgorithm.digest,
+    manifestSignaturePayload(manifest),
+    privateKey,
+  ).toString(MANIFEST_SIGNATURE_ENCODING);
+
+  const signatureRecord = {
+    action: 'manifest-signature',
+    createdAt: new Date().toISOString(),
+    manifestPath: resolvedManifestPath,
+    signaturePath: resolvedSignaturePath,
+    signedPayload: {
+      kind: 'canonical-manifest-json',
+      checksumAlgorithm: MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM,
+      checksum: manifestSignatureChecksumFor(manifest),
+      includesIntegritySection: Boolean(manifest.integrity),
+    },
+    signer: {
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: publicKeyFingerprint(publicKey),
+    },
+    signature: {
+      encoding: MANIFEST_SIGNATURE_ENCODING,
+      value: signature,
+    },
+  };
+
+  await fs.mkdir(path.dirname(resolvedSignaturePath), { recursive: true });
+  await fs.writeFile(resolvedSignaturePath, `${JSON.stringify(signatureRecord, null, 2)}\n`);
+  return signatureRecord;
+}
+
+async function verifyDetachedManifestSignature(manifestPath, publicKeyPath, options = {}) {
+  const settings = {
+    signaturePath: null,
+    ...options,
+  };
+  const resolvedManifestPath = path.resolve(manifestPath);
+  const resolvedSignaturePath = path.resolve(settings.signaturePath || defaultManifestSignaturePath(resolvedManifestPath));
+  const resolvedPublicKeyPath = path.resolve(publicKeyPath);
+
+  let manifest;
+  try {
+    manifest = JSON.parse(await fs.readFile(resolvedManifestPath, 'utf8'));
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return {
+        action: 'verify-manifest-signature',
+        manifestPath: resolvedManifestPath,
+        signaturePath: resolvedSignaturePath,
+        publicKeyPath: resolvedPublicKeyPath,
+        valid: false,
+        keyType: null,
+        publicKeyFingerprint: null,
+        reason: `Manifest file not found: ${resolvedManifestPath}`,
+      };
+    }
+    throw error;
+  }
+
+  let signatureRecord;
+  try {
+    signatureRecord = JSON.parse(await fs.readFile(resolvedSignaturePath, 'utf8'));
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return {
+        action: 'verify-manifest-signature',
+        manifestPath: resolvedManifestPath,
+        signaturePath: resolvedSignaturePath,
+        publicKeyPath: resolvedPublicKeyPath,
+        valid: false,
+        keyType: null,
+        publicKeyFingerprint: null,
+        reason: `Manifest signature file not found: ${resolvedSignaturePath}`,
+      };
+    }
+    throw error;
+  }
+
+  const { keyObject: publicKey } = await loadPublicKey(resolvedPublicKeyPath);
+  const signatureAlgorithm = manifestSignatureAlgorithmForKey(publicKey);
+  const computedFingerprint = publicKeyFingerprint(publicKey);
+  const expectedChecksum = manifestSignatureChecksumFor(manifest);
+
+  if (signatureRecord.manifestPath && path.resolve(signatureRecord.manifestPath) !== resolvedManifestPath) {
+    return {
+      action: 'verify-manifest-signature',
+      manifestPath: resolvedManifestPath,
+      signaturePath: resolvedSignaturePath,
+      publicKeyPath: resolvedPublicKeyPath,
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      reason: `Manifest signature references ${signatureRecord.manifestPath}, expected ${resolvedManifestPath}.`,
+    };
+  }
+
+  if (!signatureRecord.signature || typeof signatureRecord.signature.value !== 'string' || !signatureRecord.signature.value) {
+    return {
+      action: 'verify-manifest-signature',
+      manifestPath: resolvedManifestPath,
+      signaturePath: resolvedSignaturePath,
+      publicKeyPath: resolvedPublicKeyPath,
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      reason: 'Manifest signature metadata is missing a signature value.',
+    };
+  }
+
+  if (signatureRecord.signer?.publicKeyFingerprint && signatureRecord.signer.publicKeyFingerprint !== computedFingerprint) {
+    return {
+      action: 'verify-manifest-signature',
+      manifestPath: resolvedManifestPath,
+      signaturePath: resolvedSignaturePath,
+      publicKeyPath: resolvedPublicKeyPath,
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      reason: `Public key fingerprint mismatch: expected ${signatureRecord.signer.publicKeyFingerprint} but found ${computedFingerprint}.`,
+    };
+  }
+
+  if (signatureRecord.signedPayload?.checksum && signatureRecord.signedPayload.checksum !== expectedChecksum) {
+    return {
+      action: 'verify-manifest-signature',
+      manifestPath: resolvedManifestPath,
+      signaturePath: resolvedSignaturePath,
+      publicKeyPath: resolvedPublicKeyPath,
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      reason: `Manifest payload checksum mismatch: expected ${expectedChecksum} but found ${signatureRecord.signedPayload.checksum}.`,
+    };
+  }
+
+  let signatureBuffer;
+  try {
+    signatureBuffer = Buffer.from(signatureRecord.signature.value, signatureRecord.signature.encoding || MANIFEST_SIGNATURE_ENCODING);
+  } catch (error) {
+    return {
+      action: 'verify-manifest-signature',
+      manifestPath: resolvedManifestPath,
+      signaturePath: resolvedSignaturePath,
+      publicKeyPath: resolvedPublicKeyPath,
+      valid: false,
+      keyType: signatureAlgorithm.keyType,
+      publicKeyFingerprint: computedFingerprint,
+      reason: error.message || String(error),
+    };
+  }
+
+  const valid = crypto.verify(
+    signatureAlgorithm.digest,
+    manifestSignaturePayload(manifest),
+    publicKey,
+    signatureBuffer,
+  );
+
+  return {
+    action: 'verify-manifest-signature',
+    manifestPath: resolvedManifestPath,
+    signaturePath: resolvedSignaturePath,
+    publicKeyPath: resolvedPublicKeyPath,
+    valid,
+    keyType: signatureAlgorithm.keyType,
+    publicKeyFingerprint: computedFingerprint,
+    signedPayload: {
+      checksumAlgorithm: MANIFEST_SIGNATURE_PAYLOAD_ALGORITHM,
+      checksum: expectedChecksum,
+    },
+    reason: valid ? null : 'Manifest signature verification failed.',
   };
 }
 
@@ -1734,6 +1989,8 @@ async function undoFromManifest(manifestPath, options = {}) {
   const settings = {
     dryRun: false,
     verifyIntegrity: true,
+    verifySignatureKeyPath: null,
+    signaturePath: null,
     ...options,
   };
 
@@ -1751,6 +2008,16 @@ async function undoFromManifest(manifestPath, options = {}) {
   const integrity = verifyManifestIntegrity(manifest);
   if (settings.verifyIntegrity && integrity.present && !integrity.valid) {
     throw new Error(`Undo manifest failed integrity verification: ${integrity.reason}`);
+  }
+
+  let signatureVerification = null;
+  if (settings.verifySignatureKeyPath) {
+    signatureVerification = await verifyDetachedManifestSignature(resolvedManifestPath, settings.verifySignatureKeyPath, {
+      signaturePath: settings.signaturePath,
+    });
+    if (!signatureVerification.valid) {
+      throw new Error(`Undo manifest failed signature verification: ${signatureVerification.reason}`);
+    }
   }
 
   const rootDir = path.resolve(manifest.rootDir || path.dirname(resolvedManifestPath));
@@ -1802,6 +2069,7 @@ async function undoFromManifest(manifestPath, options = {}) {
     dryRun: settings.dryRun,
     manifestPath: resolvedManifestPath,
     integrity,
+    signatureVerification,
     removedDirectories: [...removedDirectories].sort(),
     moves,
     summary: summarizeUndo(moves, removedDirectories.size),
@@ -1816,6 +2084,9 @@ function parseArgs(argv) {
     json: false,
     manifestOut: null,
     manifestChecksum: false,
+    signManifestKeyPath: null,
+    verifyManifestSignatureKeyPath: null,
+    signaturePath: null,
     undoManifest: null,
     skipManifestVerification: false,
     configPath: null,
@@ -1858,6 +2129,27 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === '--manifest-checksum') {
       options.manifestChecksum = true;
+    } else if (arg === '--sign-manifest') {
+      const nextArg = args[index + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Expected a private-key path after --sign-manifest');
+      }
+      options.signManifestKeyPath = nextArg;
+      index += 1;
+    } else if (arg === '--verify-manifest-signature') {
+      const nextArg = args[index + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Expected a public-key path after --verify-manifest-signature');
+      }
+      options.verifyManifestSignatureKeyPath = nextArg;
+      index += 1;
+    } else if (arg === '--signature-path') {
+      const nextArg = args[index + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Expected a path after --signature-path');
+      }
+      options.signaturePath = nextArg;
+      index += 1;
     } else if (arg === '--skip-manifest-verification') {
       options.skipManifestVerification = true;
     } else if (arg === '--config') {
@@ -1952,6 +2244,10 @@ function parseArgs(argv) {
     throw new Error('--manifest-checksum cannot be used with --undo');
   }
 
+  if (options.undoManifest && options.signManifestKeyPath) {
+    throw new Error('--sign-manifest cannot be used with --undo');
+  }
+
   if (options.undoManifest && options.configPath) {
     throw new Error('--config cannot be used with --undo');
   }
@@ -1968,6 +2264,22 @@ function parseArgs(argv) {
     throw new Error('--manifest-checksum requires --manifest-out');
   }
 
+  if (options.signManifestKeyPath && !options.manifestOut) {
+    throw new Error('--sign-manifest requires --manifest-out');
+  }
+
+  if (options.signManifestKeyPath && !options.manifestChecksum) {
+    throw new Error('--sign-manifest requires --manifest-checksum');
+  }
+
+  if (options.verifyManifestSignatureKeyPath && !options.undoManifest) {
+    throw new Error('--verify-manifest-signature can only be used with --undo');
+  }
+
+  if (options.signaturePath && !options.signManifestKeyPath && !options.verifyManifestSignatureKeyPath) {
+    throw new Error('--signature-path requires --sign-manifest or --verify-manifest-signature');
+  }
+
   if (options.skipManifestVerification && !options.undoManifest) {
     throw new Error('--skip-manifest-verification can only be used with --undo');
   }
@@ -1976,7 +2288,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --lint-config');
   }
 
-  if (options.lintConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.lintConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.signManifestKeyPath || options.verifyManifestSignatureKeyPath || options.signaturePath || options.skipManifestVerification || options.recursive || options.configPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--lint-config cannot be combined with organize, undo, preset, or normalized-config-write flags');
   }
 
@@ -1984,7 +2296,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --preview-normalized-config');
   }
 
-  if (options.previewConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.previewConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.signManifestKeyPath || options.verifyManifestSignatureKeyPath || options.signaturePath || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--preview-normalized-config cannot be combined with organize, undo, lint, preset, or normalized-config-write flags');
   }
 
@@ -1992,7 +2304,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --fix-config');
   }
 
-  if (options.fixConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
+  if (options.fixConfigPath && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.signManifestKeyPath || options.verifyManifestSignatureKeyPath || options.signaturePath || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets || options.writePresetName || options.force)) {
     throw new Error('--fix-config cannot be combined with organize, undo, lint, preset, or normalized-config-export flags');
   }
 
@@ -2000,7 +2312,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --write-normalized-config');
   }
 
-  if (options.writeNormalizedConfigSource && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.presetName || options.listPresets || options.writePresetName)) {
+  if (options.writeNormalizedConfigSource && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.signManifestKeyPath || options.verifyManifestSignatureKeyPath || options.signaturePath || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.presetName || options.listPresets || options.writePresetName)) {
     throw new Error('--write-normalized-config cannot be combined with organize, undo, lint, or preset flags');
   }
 
@@ -2008,7 +2320,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --list-presets');
   }
 
-  if (options.listPresets && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.writePresetName || options.force)) {
+  if (options.listPresets && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.signManifestKeyPath || options.verifyManifestSignatureKeyPath || options.signaturePath || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.writePresetName || options.force)) {
     throw new Error('--list-presets only supports optional --json output');
   }
 
@@ -2016,7 +2328,7 @@ function parseArgs(argv) {
     throw new Error('Target directory cannot be combined with --write-preset');
   }
 
-  if (options.writePresetName && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets)) {
+  if (options.writePresetName && (options.dryRun || options.undoManifest || options.manifestOut || options.manifestChecksum || options.signManifestKeyPath || options.verifyManifestSignatureKeyPath || options.signaturePath || options.skipManifestVerification || options.recursive || options.configPath || options.lintConfigPath || options.previewConfigPath || options.fixConfigPath || options.writeNormalizedConfigSource || options.presetName || options.listPresets)) {
     throw new Error('--write-preset cannot be combined with organize, lint, normalized-config, or undo flags');
   }
 
@@ -2051,6 +2363,13 @@ function formatOrganizeTextReport(result) {
 
   if (result.manifestPath) {
     header.push(`manifest: ${result.manifestPath}`);
+  }
+
+  if (result.detachedSignature && result.detachedSignature.signaturePath) {
+    header.push(`manifest signature: ${result.detachedSignature.signaturePath}`);
+    if (result.detachedSignature.signer?.publicKeyFingerprint) {
+      header.push(`manifest signer fingerprint: ${result.detachedSignature.signer.publicKeyFingerprint}`);
+    }
   }
 
   const bucketLines = Object.entries(result.summary.byBucket)
@@ -2098,6 +2417,14 @@ function formatUndoTextReport(result) {
     header.push(`manifest checksum verified: ${result.integrity.valid ? 'yes' : 'no'}`);
     if (result.integrity.algorithm && result.integrity.checksum) {
       header.push(`manifest checksum: ${result.integrity.algorithm}:${result.integrity.checksum}`);
+    }
+  }
+
+  if (result.signatureVerification) {
+    header.push(`manifest signature verified: ${result.signatureVerification.valid ? 'yes' : 'no'}`);
+    header.push(`manifest signature file: ${result.signatureVerification.signaturePath}`);
+    if (result.signatureVerification.publicKeyFingerprint) {
+      header.push(`manifest signer fingerprint: ${result.signatureVerification.publicKeyFingerprint}`);
     }
   }
 
@@ -2251,8 +2578,8 @@ async function main(argv = process.argv.slice(2)) {
   const { targetDir, options } = parseArgs(argv);
 
   if (options.help) {
-    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--preset preset-name] [--manifest-out manifest.json] [--manifest-checksum]');
-    console.log('       node organizer.js --undo manifest.json [--dry-run] [--json] [--skip-manifest-verification]');
+    console.log('Usage: node organizer.js [directory] [--dry-run] [--recursive] [--json] [--config buckets.json] [--preset preset-name] [--manifest-out manifest.json] [--manifest-checksum] [--sign-manifest private-key.pem] [--signature-path manifest.sig.json]');
+    console.log('       node organizer.js --undo manifest.json [--dry-run] [--json] [--skip-manifest-verification] [--verify-manifest-signature public-key.pem] [--signature-path manifest.sig.json]');
     console.log('       node organizer.js --list-presets [--json]');
     console.log('       node organizer.js --write-preset preset-name destination.json [--force] [--json]');
     console.log('       node organizer.js --lint-config buckets.json [--json]');
@@ -2288,6 +2615,8 @@ async function main(argv = process.argv.slice(2)) {
     result = await undoFromManifest(options.undoManifest, {
       dryRun: options.dryRun,
       verifyIntegrity: !options.skipManifestVerification,
+      verifySignatureKeyPath: options.verifyManifestSignatureKeyPath,
+      signaturePath: options.signaturePath,
     });
   } else {
     const bucketConfig = options.configPath
@@ -2304,6 +2633,11 @@ async function main(argv = process.argv.slice(2)) {
       result = await writeManifest(result, options.manifestOut, {
         includeChecksum: options.manifestChecksum,
       });
+      if (options.signManifestKeyPath) {
+        result.detachedSignature = await writeDetachedManifestSignature(result.manifestPath, options.signManifestKeyPath, {
+          signaturePath: options.signaturePath,
+        });
+      }
     }
   }
 
@@ -2362,6 +2696,9 @@ module.exports = {
   manifestChecksumFor,
   buildManifestIntegrity,
   verifyManifestIntegrity,
+  manifestSignatureChecksumFor,
+  writeDetachedManifestSignature,
+  verifyDetachedManifestSignature,
   undoFromManifest,
   parseArgs,
   formatTextReport,

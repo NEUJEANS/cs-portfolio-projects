@@ -11,6 +11,7 @@
 - [x] expand tests for edge cases
 - [x] improve README with stronger portfolio framing
 - [x] add a reproducible demo-artifact generator with before/after trees and config preview output
+- [x] add checksum-backed and detached-signature manifest proof for safer team undo flows
 - [x] run tests
 - [x] complete 3 review passes and fix issues found
 - [x] run secret scan before push
@@ -21,4 +22,5 @@
 - [x] add import/export helpers for sharing team-wide bucket presets
 - [x] add file-type detection beyond extensions for better categorization
 - [x] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
-- [ ] optionally sign or checksum manifests for tamper-evident history
+- [x] optionally sign or checksum manifests for tamper-evident history
+- [ ] add signer-policy helpers such as trusted fingerprint allowlists or multi-signer approval metadata

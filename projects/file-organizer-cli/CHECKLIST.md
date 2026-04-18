@@ -22,11 +22,18 @@
 - [x] auto-fix or export a canonical normalized config for teammates
 - [x] run organize with extension + basename-pattern shared rules
 - [x] run organize with MIME-aware shared rules for misleading filenames
-- [x] regenerate a publishable demo bundle with before/after trees, config preview output, and undo proof
+- [x] write a checksum-backed manifest for tamper-evident organize history
+- [x] sign the manifest with a detached sidecar file and keep only the public key in published demo artifacts
+- [x] verify both checksum integrity and signer identity before undo restores files
+- [x] regenerate a publishable demo bundle with before/after trees, config preview output, signature proof, and undo proof
 - [x] undo the run from the saved manifest
 
 ## Next vertical slices
 - [x] add MIME-aware detection rules for files that share extensions but not content types
 - [x] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
 - [x] optionally sign or checksum manifests for tamper-evident bulk-operation history
-- [ ] add detached-signature support for manifests so teams can verify authorship in addition to integrity
+- [x] add detached-signature support for manifests so teams can verify authorship in addition to integrity
+  - shipped: sign checksum-backed manifests with a detached sidecar file instead of embedding the signature in the manifest JSON
+  - shipped: verify signatures during undo so teams can require both integrity and authorship before restoring files
+  - shipped: publish a public-key + signature demo artifact flow in the README bundle without committing any private keys
+- [ ] add signer-policy helpers (for example, trusted fingerprint allowlists or multi-signer approval metadata) for shared team workflows
