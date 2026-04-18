@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1040" viewBox="0 0 1360 1040" role="img" aria-labelledby="trace-summary-benchmark-compiler-phase-shift-title trace-summary-benchmark-compiler-phase-shift-desc">
+  <title id="trace-summary-benchmark-compiler-phase-shift-title">Page replacement trace-summary card</title>
+  <desc id="trace-summary-benchmark-compiler-phase-shift-desc">Trace summary charts for benchmark compiler-phase-shift — larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts, including reuse-distance buckets, working-set window sizes, hot pages, and phase-boundary hints.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="28" y="24" width="1304" height="992" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="84" y="58" font-size="32" font-weight="700" fill="#0f172a">Trace summary card</text>
+<text x="84" y="90" font-size="18" fill="#0f172a">workload: benchmark compiler-phase-shift — larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts</text>
+<text x="84" y="116" font-size="18" fill="#0f172a">reference length 72 · unique pages 30 · window size 12</text>
+<text x="84" y="142" font-size="18" fill="#0f172a">first touches 30 · reuses 42 · phase hints 2</text>
+<text x="84" y="168" font-size="18" fill="#0f172a">working-set window stats: min 1 · max 12 · avg 7.72 · final 8</text>
+<text x="84" y="194" font-size="18" fill="#0f172a">reuse distance stats: min 3 · median 5.0 · p90 5.0 · max 7 · avg 4.14</text>
+  <rect x="64" y="252" width="540" height="338" rx="24" fill="#faf5ff" stroke="#ddd6fe" stroke-width="1.5" />
+  <text x="84" y="286" font-size="22" font-weight="700" fill="#5b21b6">Reuse-distance buckets</text>
+  <text x="84" y="574" font-size="13" fill="#475569">Cold touches dominate first-use pages; tighter buckets indicate stronger locality.</text>
+  <line x1="84" y1="302" x2="84" y2="550" stroke="#0f172a" stroke-width="2" />
+  <line x1="84" y1="550" x2="564" y2="550" stroke="#0f172a" stroke-width="2" />
+<line x1="84" y1="550.00" x2="564" y2="550.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="555.00" font-size="12" text-anchor="end" fill="#475569">0</text>
+<line x1="84" y1="519.00" x2="564" y2="519.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="524.00" font-size="12" text-anchor="end" fill="#475569">5</text>
+<line x1="84" y1="488.00" x2="564" y2="488.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="493.00" font-size="12" text-anchor="end" fill="#475569">10</text>
+<line x1="84" y1="457.00" x2="564" y2="457.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="462.00" font-size="12" text-anchor="end" fill="#475569">15</text>
+<line x1="84" y1="426.00" x2="564" y2="426.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="431.00" font-size="12" text-anchor="end" fill="#475569">20</text>
+<line x1="84" y1="395.00" x2="564" y2="395.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="400.00" font-size="12" text-anchor="end" fill="#475569">25</text>
+<line x1="84" y1="364.00" x2="564" y2="364.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="369.00" font-size="12" text-anchor="end" fill="#475569">30</text>
+<line x1="84" y1="333.00" x2="564" y2="333.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="338.00" font-size="12" text-anchor="end" fill="#475569">35</text>
+<line x1="84" y1="302.00" x2="564" y2="302.00" stroke="#d7dde8" stroke-width="1" />
+<text x="72" y="307.00" font-size="12" text-anchor="end" fill="#475569">40</text>
+<rect x="105.12" y="364.00" width="53.76" height="186.00" rx="14" fill="#8b5cf6" />
+<text x="132.00" y="354.00" font-size="12" text-anchor="middle" fill="#6d28d9">30</text>
+<text x="132.00" y="576" font-size="12" text-anchor="middle" fill="#475569">cold</text>
+<rect x="201.12" y="550.00" width="53.76" height="0.00" rx="14" fill="#8b5cf6" />
+<text x="228.00" y="540.00" font-size="12" text-anchor="middle" fill="#6d28d9">0</text>
+<text x="228.00" y="576" font-size="12" text-anchor="middle" fill="#475569">1-2</text>
+<rect x="297.12" y="302.00" width="53.76" height="248.00" rx="14" fill="#8b5cf6" />
+<text x="324.00" y="292.00" font-size="12" text-anchor="middle" fill="#6d28d9">40</text>
+<text x="324.00" y="576" font-size="12" text-anchor="middle" fill="#475569">3-5</text>
+<rect x="393.12" y="537.60" width="53.76" height="12.40" rx="14" fill="#8b5cf6" />
+<text x="420.00" y="527.60" font-size="12" text-anchor="middle" fill="#6d28d9">2</text>
+<text x="420.00" y="576" font-size="12" text-anchor="middle" fill="#475569">6-9</text>
+<rect x="489.12" y="550.00" width="53.76" height="0.00" rx="14" fill="#8b5cf6" />
+<text x="516.00" y="540.00" font-size="12" text-anchor="middle" fill="#6d28d9">0</text>
+<text x="516.00" y="576" font-size="12" text-anchor="middle" fill="#475569">10+</text>
+  <rect x="716" y="252" width="580" height="338" rx="24" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" />
+  <text x="736" y="286" font-size="22" font-weight="700" fill="#1d4ed8">Per-window unique-page pressure</text>
+  <text x="736" y="574" font-size="13" fill="#475569">Red points mark windows immediately after a flagged phase-boundary hint.</text>
+  <line x1="736" y1="302" x2="736" y2="550" stroke="#0f172a" stroke-width="2" />
+  <line x1="736" y1="550" x2="1276" y2="550" stroke="#0f172a" stroke-width="2" />
+<line x1="736" y1="550.00" x2="1276" y2="550.00" stroke="#d7dde8" stroke-width="1" />
+<text x="724" y="555.00" font-size="12" text-anchor="end" fill="#475569">0</text>
+<line x1="736" y1="508.67" x2="1276" y2="508.67" stroke="#d7dde8" stroke-width="1" />
+<text x="724" y="513.67" font-size="12" text-anchor="end" fill="#475569">2</text>
+<line x1="736" y1="467.33" x2="1276" y2="467.33" stroke="#d7dde8" stroke-width="1" />
+<text x="724" y="472.33" font-size="12" text-anchor="end" fill="#475569">4</text>
+<line x1="736" y1="426.00" x2="1276" y2="426.00" stroke="#d7dde8" stroke-width="1" />
+<text x="724" y="431.00" font-size="12" text-anchor="end" fill="#475569">6</text>
+<line x1="736" y1="384.67" x2="1276" y2="384.67" stroke="#d7dde8" stroke-width="1" />
+<text x="724" y="389.67" font-size="12" text-anchor="end" fill="#475569">8</text>
+<line x1="736" y1="343.33" x2="1276" y2="343.33" stroke="#d7dde8" stroke-width="1" />
+<text x="724" y="348.33" font-size="12" text-anchor="end" fill="#475569">10</text>
+<line x1="736" y1="302.00" x2="1276" y2="302.00" stroke="#d7dde8" stroke-width="1" />
+<text x="724" y="307.00" font-size="12" text-anchor="end" fill="#475569">12</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="736.00,426.00 844.00,426.00 952.00,302.00 1060.00,343.33 1168.00,426.00 1276.00,384.67" />
+<circle cx="736.00" cy="426.00" r="6" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="736.00" y="576" font-size="12" text-anchor="middle" fill="#475569">W1</text>
+<text x="736.00" y="414.00" font-size="11" text-anchor="middle" fill="#1d4ed8">6</text>
+<circle cx="844.00" cy="426.00" r="6" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="844.00" y="576" font-size="12" text-anchor="middle" fill="#475569">W2</text>
+<text x="844.00" y="414.00" font-size="11" text-anchor="middle" fill="#1d4ed8">6</text>
+<circle cx="952.00" cy="302.00" r="7" fill="#dc2626" stroke="#ffffff" stroke-width="2" />
+<text x="952.00" y="288.00" font-size="11" text-anchor="middle" fill="#991b1b">phase 2→3</text>
+<text x="952.00" y="576" font-size="12" text-anchor="middle" fill="#475569">W3</text>
+<text x="952.00" y="290.00" font-size="11" text-anchor="middle" fill="#1d4ed8">12</text>
+<circle cx="1060.00" cy="343.33" r="7" fill="#dc2626" stroke="#ffffff" stroke-width="2" />
+<text x="1060.00" y="329.33" font-size="11" text-anchor="middle" fill="#991b1b">phase 3→4</text>
+<text x="1060.00" y="576" font-size="12" text-anchor="middle" fill="#475569">W4</text>
+<text x="1060.00" y="331.33" font-size="11" text-anchor="middle" fill="#1d4ed8">10</text>
+<circle cx="1168.00" cy="426.00" r="6" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="1168.00" y="576" font-size="12" text-anchor="middle" fill="#475569">W5</text>
+<text x="1168.00" y="414.00" font-size="11" text-anchor="middle" fill="#1d4ed8">6</text>
+<circle cx="1276.00" cy="384.67" r="6" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="1276.00" y="576" font-size="12" text-anchor="middle" fill="#475569">W6</text>
+<text x="1276.00" y="372.67" font-size="11" text-anchor="middle" fill="#1d4ed8">8</text>
+  <rect x="64" y="610" width="580" height="176" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />
+  <text x="84" y="646" font-size="22" font-weight="700" fill="#0f172a">Top hot pages</text>
+<text x="84" y="684" font-size="17" fill="#0f172a">7×7</text>
+<text x="84" y="708" font-size="17" fill="#0f172a">8×7</text>
+<text x="84" y="732" font-size="17" fill="#0f172a">1×6</text>
+<text x="84" y="756" font-size="17" fill="#0f172a">2×6</text>
+<text x="84" y="780" font-size="17" fill="#0f172a">9×4</text>
+  <rect x="716" y="610" width="580" height="176" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />
+  <text x="736" y="646" font-size="22" font-weight="700" fill="#0f172a">Phase-boundary hints</text>
+<text x="736" y="684" font-size="17" fill="#0f172a">after ref 24: W2→W3 overlap 0.00</text>
+<text x="736" y="708" font-size="17" fill="#0f172a">after ref 36: W3→W4 overlap 0.00</text>
+  <rect x="64" y="816" width="1232" height="152" rx="24" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+  <text x="84" y="850" font-size="22" font-weight="700" fill="#1e3a8a">Reference preview</text>
+  <text x="84" y="888" font-size="16" fill="#0f172a">1 2 3 4 1 2 5 6 1 2 3 4 1 2 5 6 1 2 3 4 1 2 5 6 20 21 22 23 24 25 26 27 …</text>
+  <text x="84" y="920" font-size="15" fill="#475569">source: benchmark:compiler-phase-shift · exported window size 12 · phase threshold 0.45</text>
+  <text x="84" y="948" font-size="15" fill="#475569">Use the Markdown / JSON companions for the full reference string, bucket tables, and all phase-hint details.</text>
+</svg>

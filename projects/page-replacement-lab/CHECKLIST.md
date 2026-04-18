@@ -12,6 +12,7 @@
 - [x] regression coverage for study artifact export paths and generated report content
 - [x] regression coverage for gallery bundle generation and unique inline-SVG accessibility IDs
 - [x] larger trace-file benchmark bundles beyond the small built-in presets, including benchmark listing, benchmark-aware compare/study flows, and mixed gallery exports
+- [x] trace-summary SVG / HTML card exports for slide-ready locality summaries
 
 ## Current demo-ready flow
 - [x] list built-in workloads and larger trace benchmarks for an interview or portfolio walkthrough
@@ -21,10 +22,12 @@
 - [x] export JSON for downstream charts or frontend demos
 - [x] export Markdown / SVG / CSV study artifacts for screenshots and portfolio cards
 - [x] generate a browsable gallery that bundles built-in presets plus larger benchmark traces into one static HTML artifact page
+- [x] export trace-summary Markdown / SVG / HTML artifacts for a benchmark or imported workload
 
 ## Next vertical slices
 - [x] add aging-style page replacement for stronger systems realism
 - [ ] add working-set style policies for stronger systems realism
 - [x] add cross-workload aggregate comparison charts for slide-ready summaries
 - [x] add a trace-summary or reuse-distance helper for imported workloads
-- [ ] add SVG/HTML trace-summary cards or side-by-side imported-trace comparisons
+- [x] add SVG/HTML trace-summary cards for portfolio slides
+- [ ] add side-by-side imported-trace comparisons

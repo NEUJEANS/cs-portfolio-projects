@@ -313,9 +313,11 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertGreater(workload["reference_length"], 40)
             self.assertEqual(workload["reference_source"], "benchmark:db-hotset-scan")
 
-    def test_cli_trace_summary_json_writes_markdown_report(self) -> None:
+    def test_cli_trace_summary_json_writes_markdown_svg_and_html_reports(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             markdown_path = Path(tmpdir) / "trace-summary.md"
+            svg_path = Path(tmpdir) / "trace-summary.svg"
+            html_path = Path(tmpdir) / "trace-summary.html"
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -327,6 +329,10 @@ class PageReplacementSimulationTests(unittest.TestCase):
                     "12",
                     "--markdown-out",
                     str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--html-out",
+                    str(html_path),
                     "--json",
                 ],
                 capture_output=True,
@@ -335,6 +341,8 @@ class PageReplacementSimulationTests(unittest.TestCase):
             )
             payload = json.loads(completed.stdout)
             markdown = markdown_path.read_text(encoding="utf-8")
+            svg = svg_path.read_text(encoding="utf-8")
+            html = html_path.read_text(encoding="utf-8")
 
             self.assertEqual(payload["reference_source"], "benchmark:compiler-phase-shift")
             self.assertEqual(payload["window_size"], 12)
@@ -343,6 +351,14 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("# Page Replacement Trace Summary", markdown)
             self.assertIn("## Phase-boundary hints", markdown)
             self.assertIn("benchmark compiler-phase-shift", markdown)
+            self.assertIn("<svg", svg)
+            self.assertIn("Trace summary card", svg)
+            self.assertIn("Reuse-distance buckets", svg)
+            self.assertIn("phase 2→3", svg)
+            self.assertIn("Page Replacement Trace Summary", html)
+            self.assertIn("Downloads: <a href=\"trace-summary.md\">Markdown</a>", html)
+            self.assertIn("trace-summary.svg", html)
+            self.assertIn("compiler-phase-shift", html)
 
     def test_cli_aggregate_writes_dashboard_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

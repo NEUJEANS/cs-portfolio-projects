@@ -772,6 +772,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="flag a phase-boundary hint when consecutive windows overlap at or below this Jaccard similarity",
     )
     trace_summary_parser.add_argument("--markdown-out", type=Path, help="write a Markdown trace-summary report")
+    trace_summary_parser.add_argument("--svg-out", type=Path, help="write a slide-ready SVG trace-summary card")
+    trace_summary_parser.add_argument("--html-out", type=Path, help="write a browsable HTML trace-summary card")
     trace_summary_parser.add_argument("--json", action="store_true")
 
     return parser
@@ -2301,6 +2303,350 @@ def format_trace_summary_markdown(payload: dict, *, reference_source: str = 'cus
     return '\n'.join(lines).rstrip() + '\n'
 
 
+def format_trace_summary_svg(
+    payload: dict,
+    *,
+    reference_source: str = 'custom',
+    id_prefix: str = 'page-replacement-trace-summary',
+) -> str:
+    width = 1360
+    height = 1040
+    identifier = make_safe_identifier(id_prefix)
+    title_id = f"{identifier}-title"
+    desc_id = f"{identifier}-desc"
+    bucket_chart_left = 84
+    bucket_chart_top = 302
+    bucket_chart_width = 480
+    bucket_chart_height = 248
+    bucket_chart_bottom = bucket_chart_top + bucket_chart_height
+    window_chart_left = 736
+    window_chart_top = 302
+    window_chart_width = 540
+    window_chart_height = 248
+    window_chart_bottom = window_chart_top + window_chart_height
+
+    bucket_entries = payload['reuse_distance_buckets']
+    max_bucket_count = max((entry['count'] for entry in bucket_entries), default=1) or 1
+    bucket_slot_width = bucket_chart_width / max(len(bucket_entries), 1)
+    bar_width = min(62.0, bucket_slot_width * 0.56)
+    bucket_parts: list[str] = []
+    bucket_tick_step = choose_tick_step(max_bucket_count)
+    bucket_tick_max = max(bucket_tick_step, ((max_bucket_count + bucket_tick_step - 1) // bucket_tick_step) * bucket_tick_step)
+    for tick in range(0, bucket_tick_max + 1, bucket_tick_step):
+        y = bucket_chart_bottom - (tick / bucket_tick_max) * bucket_chart_height
+        bucket_parts.append(
+            f'<line x1="{bucket_chart_left}" y1="{y:.2f}" x2="{bucket_chart_left + bucket_chart_width}" y2="{y:.2f}" stroke="#d7dde8" stroke-width="1" />'
+        )
+        bucket_parts.append(
+            f'<text x="{bucket_chart_left - 12}" y="{y + 5:.2f}" font-size="12" text-anchor="end" fill="#475569">{tick}</text>'
+        )
+    for index, entry in enumerate(bucket_entries):
+        center_x = bucket_chart_left + (index + 0.5) * bucket_slot_width
+        bar_height = (entry['count'] / bucket_tick_max) * bucket_chart_height if bucket_tick_max else 0
+        x = center_x - bar_width / 2
+        y = bucket_chart_bottom - bar_height
+        bucket_parts.append(
+            f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{max(bar_height, 0):.2f}" rx="14" fill="#8b5cf6" />'
+        )
+        bucket_parts.append(
+            f'<text x="{center_x:.2f}" y="{y - 10:.2f}" font-size="12" text-anchor="middle" fill="#6d28d9">{entry["count"]}</text>'
+        )
+        bucket_parts.append(
+            f'<text x="{center_x:.2f}" y="{bucket_chart_bottom + 26}" font-size="12" text-anchor="middle" fill="#475569">{escape(entry["bucket"])}</text>'
+        )
+
+    window_entries = payload['windows']
+    window_counts = [window['unique_pages'] for window in window_entries]
+    max_unique_pages = max(window_counts, default=1) or 1
+    window_tick_step = choose_tick_step(max_unique_pages)
+    window_tick_max = max(window_tick_step, ((max_unique_pages + window_tick_step - 1) // window_tick_step) * window_tick_step)
+
+    def window_x(index: int) -> float:
+        if len(window_entries) == 1:
+            return window_chart_left + window_chart_width / 2
+        return window_chart_left + (index / (len(window_entries) - 1)) * window_chart_width
+
+    def window_y(value: int) -> float:
+        return window_chart_bottom - (value / window_tick_max) * window_chart_height
+
+    window_parts: list[str] = []
+    for tick in range(0, window_tick_max + 1, window_tick_step):
+        y = window_y(tick)
+        window_parts.append(
+            f'<line x1="{window_chart_left}" y1="{y:.2f}" x2="{window_chart_left + window_chart_width}" y2="{y:.2f}" stroke="#d7dde8" stroke-width="1" />'
+        )
+        window_parts.append(
+            f'<text x="{window_chart_left - 12}" y="{y + 5:.2f}" font-size="12" text-anchor="end" fill="#475569">{tick}</text>'
+        )
+
+    if window_entries:
+        point_string = ' '.join(
+            f"{window_x(index):.2f},{window_y(window['unique_pages']):.2f}"
+            for index, window in enumerate(window_entries)
+        )
+        window_parts.append(
+            f'<polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="{point_string}" />'
+        )
+        phase_lookup = {boundary['after_window']: boundary for boundary in payload['phase_boundaries']}
+        for index, window in enumerate(window_entries):
+            x = window_x(index)
+            y = window_y(window['unique_pages'])
+            if window['window_index'] in phase_lookup:
+                window_parts.append(
+                    f'<circle cx="{x:.2f}" cy="{y:.2f}" r="7" fill="#dc2626" stroke="#ffffff" stroke-width="2" />'
+                )
+                boundary = phase_lookup[window['window_index']]
+                window_parts.append(
+                    f'<text x="{x:.2f}" y="{y - 14:.2f}" font-size="11" text-anchor="middle" fill="#991b1b">phase {boundary["before_window"]}→{boundary["after_window"]}</text>'
+                )
+            else:
+                window_parts.append(
+                    f'<circle cx="{x:.2f}" cy="{y:.2f}" r="6" fill="#2563eb" stroke="#ffffff" stroke-width="2" />'
+                )
+            window_parts.append(
+                f'<text x="{x:.2f}" y="{window_chart_bottom + 26}" font-size="12" text-anchor="middle" fill="#475569">W{window["window_index"]}</text>'
+            )
+            window_parts.append(
+                f'<text x="{x:.2f}" y="{y - 12:.2f}" font-size="11" text-anchor="middle" fill="#1d4ed8">{window["unique_pages"]}</text>'
+            )
+
+    hot_page_lines = [
+        f"{entry['page']}×{entry['count']}"
+        for entry in payload['top_pages']
+    ] or ['none']
+    if payload['phase_boundaries']:
+        phase_lines = [
+            f"after ref {boundary['after_reference']}: W{boundary['before_window']}→W{boundary['after_window']} overlap {boundary['jaccard_similarity']:.2f}"
+            for boundary in payload['phase_boundaries'][:3]
+        ]
+    else:
+        phase_lines = ['no phase-boundary hints at this window size']
+
+    reuse_stats = payload['reuse_distance_stats']
+    reuse_summary = (
+        f"min {reuse_stats['min']} · median {reuse_stats['median']:.1f} · p90 {reuse_stats['p90']:.1f} · max {reuse_stats['max']} · avg {reuse_stats['average']:.2f}"
+        if reuse_stats['count']
+        else 'no repeated pages in this workload'
+    )
+    working_set = payload['working_set_stats']
+    overview_lines = [
+        f"workload: {describe_reference_label(reference_source)}",
+        f"reference length {payload['reference_length']} · unique pages {payload['unique_pages']} · window size {payload['window_size']}",
+        f"first touches {payload['first_touches']} · reuses {payload['reuses']} · phase hints {len(payload['phase_boundaries'])}",
+        f"working-set window stats: min {working_set['min']} · max {working_set['max']} · avg {working_set['average']:.2f} · final {working_set['final']}",
+        f"reuse distance stats: {reuse_summary}",
+    ]
+    overview_text = [
+        f'<text x="84" y="{90 + index * 26}" font-size="18" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(overview_lines)
+    ]
+
+    hot_page_text = [
+        f'<text x="84" y="{684 + index * 24}" font-size="17" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(hot_page_lines[:5])
+    ]
+    phase_text = [
+        f'<text x="736" y="{684 + index * 24}" font-size="17" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(phase_lines[:4])
+    ]
+
+    reference_preview = ' '.join(str(page) for page in payload['reference_string'][:32])
+    if payload['reference_length'] > 32:
+        reference_preview += ' …'
+
+    return '\n'.join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'  <title id="{title_id}">Page replacement trace-summary card</title>',
+            f'  <desc id="{desc_id}">Trace summary charts for {escape(describe_reference_label(reference_source))}, including reuse-distance buckets, working-set window sizes, hot pages, and phase-boundary hints.</desc>',
+            '  <rect width="100%" height="100%" fill="#f8fafc" />',
+            '  <rect x="28" y="24" width="1304" height="992" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />',
+            '  <text x="84" y="58" font-size="32" font-weight="700" fill="#0f172a">Trace summary card</text>',
+            *overview_text,
+            '  <rect x="64" y="252" width="540" height="338" rx="24" fill="#faf5ff" stroke="#ddd6fe" stroke-width="1.5" />',
+            '  <text x="84" y="286" font-size="22" font-weight="700" fill="#5b21b6">Reuse-distance buckets</text>',
+            '  <text x="84" y="574" font-size="13" fill="#475569">Cold touches dominate first-use pages; tighter buckets indicate stronger locality.</text>',
+            '  <line x1="84" y1="302" x2="84" y2="550" stroke="#0f172a" stroke-width="2" />',
+            '  <line x1="84" y1="550" x2="564" y2="550" stroke="#0f172a" stroke-width="2" />',
+            *bucket_parts,
+            '  <rect x="716" y="252" width="580" height="338" rx="24" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" />',
+            '  <text x="736" y="286" font-size="22" font-weight="700" fill="#1d4ed8">Per-window unique-page pressure</text>',
+            '  <text x="736" y="574" font-size="13" fill="#475569">Red points mark windows immediately after a flagged phase-boundary hint.</text>',
+            '  <line x1="736" y1="302" x2="736" y2="550" stroke="#0f172a" stroke-width="2" />',
+            '  <line x1="736" y1="550" x2="1276" y2="550" stroke="#0f172a" stroke-width="2" />',
+            *window_parts,
+            '  <rect x="64" y="610" width="580" height="176" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />',
+            '  <text x="84" y="646" font-size="22" font-weight="700" fill="#0f172a">Top hot pages</text>',
+            *hot_page_text,
+            '  <rect x="716" y="610" width="580" height="176" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />',
+            '  <text x="736" y="646" font-size="22" font-weight="700" fill="#0f172a">Phase-boundary hints</text>',
+            *phase_text,
+            '  <rect x="64" y="816" width="1232" height="152" rx="24" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />',
+            '  <text x="84" y="850" font-size="22" font-weight="700" fill="#1e3a8a">Reference preview</text>',
+            f'  <text x="84" y="888" font-size="16" fill="#0f172a">{escape(reference_preview)}</text>',
+            f'  <text x="84" y="920" font-size="15" fill="#475569">source: {escape(reference_source)} · exported window size {payload["window_size"]} · phase threshold {payload["phase_threshold"]:.2f}</text>',
+            '  <text x="84" y="948" font-size="15" fill="#475569">Use the Markdown / JSON companions for the full reference string, bucket tables, and all phase-hint details.</text>',
+            '</svg>',
+        ]
+    )
+
+
+def format_trace_summary_html(
+    payload: dict,
+    *,
+    reference_source: str = 'custom',
+    inline_svg: str,
+    downloads: list[tuple[str, str]] | None = None,
+) -> str:
+    downloads = downloads or []
+    download_links = ' · '.join(
+        f'<a href="{escape(path)}">{escape(label)}</a>' for label, path in downloads
+    ) or 'inline card only'
+    hot_page_rows = ''.join(
+        f"<tr><td><code>{entry['page']}</code></td><td>{entry['count']}</td></tr>"
+        for entry in payload['top_pages']
+    )
+    bucket_rows = ''.join(
+        f"<tr><td><code>{escape(entry['bucket'])}</code></td><td>{entry['count']}</td></tr>"
+        for entry in payload['reuse_distance_buckets']
+    )
+    window_rows = ''.join(
+        '<tr>'
+        f"<td>{window['window_index']}</td>"
+        f"<td>{window['start_reference']}..{window['end_reference']}</td>"
+        f"<td>{window['unique_pages']}</td>"
+        f"<td>{escape(', '.join(f"{entry['page']}×{entry['count']}" for entry in window['top_pages']) or 'none')}</td>"
+        '</tr>'
+        for window in payload['windows']
+    )
+    if payload['phase_boundaries']:
+        phase_items = ''.join(
+            '<li>'
+            f"after reference {boundary['after_reference']}: windows {boundary['before_window']} → {boundary['after_window']} have Jaccard overlap {boundary['jaccard_similarity']:.2f}; {escape(boundary['reason'])}."
+            '</li>'
+            for boundary in payload['phase_boundaries']
+        )
+    else:
+        phase_items = '<li>none detected for this window size.</li>'
+
+    working_set = payload['working_set_stats']
+    reuse_stats = payload['reuse_distance_stats']
+    reuse_line = (
+        f"min {reuse_stats['min']}, median {reuse_stats['median']:.1f}, p90 {reuse_stats['p90']:.1f}, max {reuse_stats['max']}, avg {reuse_stats['average']:.2f}"
+        if reuse_stats['count']
+        else 'no repeated pages in this workload'
+    )
+    reference_string = ' '.join(str(page) for page in payload['reference_string'])
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page Replacement Trace Summary</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      a {{ color: var(--accent); }}
+      code, pre {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p, .muted {{ color: var(--muted); }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }}
+      .summary-grid strong {{ display: block; font-size: 1.35rem; margin-bottom: 6px; }}
+      .panel {{ padding: 20px; margin-bottom: 24px; overflow: auto; }}
+      .chart svg {{ width: 100%; height: auto; min-width: 960px; display: block; }}
+      .meta-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      ul {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      li + li {{ margin-top: 8px; }}
+      pre {{ background: #0f172a; color: #e2e8f0; padding: 18px; border-radius: 18px; overflow-x: auto; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>Page Replacement Trace Summary</h1>
+        <p>Portfolio-ready trace diagnostics for <code>{escape(describe_reference_label(reference_source))}</code>. The inline card summarizes locality, working-set pressure, and phase-shift hints, while the tables keep the underlying metrics easy to inspect or reuse later.</p>
+        <ul class="summary-grid">
+          <li><strong>{payload['reference_length']}</strong> references</li>
+          <li><strong>{payload['unique_pages']}</strong> unique pages</li>
+          <li><strong>{payload['window_size']}</strong> window size</li>
+          <li><strong>{payload['first_touches']}</strong> first touches</li>
+          <li><strong>{payload['reuses']}</strong> reuses</li>
+          <li><strong>{len(payload['phase_boundaries'])}</strong> phase hints</li>
+        </ul>
+        <p class="muted">Downloads: {download_links}</p>
+      </section>
+      <section class="panel chart">
+        <h2>Trace summary card</h2>
+        {inline_svg}
+      </section>
+      <section class="panel">
+        <h2>Summary metrics</h2>
+        <div class="meta-grid">
+          <div>
+            <h3>Reuse distance</h3>
+            <p class="muted">{escape(reuse_line)}</p>
+          </div>
+          <div>
+            <h3>Working-set window</h3>
+            <p class="muted">min {working_set['min']}, max {working_set['max']}, avg {working_set['average']:.2f}, final {working_set['final']}</p>
+          </div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Hot pages and reuse buckets</h2>
+        <div class="meta-grid">
+          <div>
+            <table>
+              <thead><tr><th>Page</th><th>Touches</th></tr></thead>
+              <tbody>{hot_page_rows}</tbody>
+            </table>
+          </div>
+          <div>
+            <table>
+              <thead><tr><th>Bucket</th><th>Count</th></tr></thead>
+              <tbody>{bucket_rows}</tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Window summaries</h2>
+        <table>
+          <thead><tr><th>Window</th><th>References</th><th>Unique pages</th><th>Hottest pages</th></tr></thead>
+          <tbody>{window_rows}</tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Phase-boundary hints</h2>
+        <ul>{phase_items}</ul>
+      </section>
+      <section class="panel">
+        <h2>Reference string</h2>
+        <pre>{escape(reference_string)}</pre>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
 
 def format_preset_text() -> str:
     lines = ["built-in workload presets:"]
@@ -2504,6 +2850,36 @@ def main(argv: list[str] | None = None) -> int:
                     format_trace_summary_markdown(
                         payload,
                         reference_source=parsed_reference.source,
+                    ),
+                )
+            svg_markup: str | None = None
+            if args.svg_out or args.html_out:
+                svg_markup = format_trace_summary_svg(
+                    payload,
+                    reference_source=parsed_reference.source,
+                    id_prefix=f"trace-summary-{parsed_reference.source.replace(':', '-')}",
+                )
+            if args.svg_out and svg_markup is not None:
+                write_text_output(args.svg_out, svg_markup)
+            if args.html_out:
+                html_downloads: list[tuple[str, str]] = []
+                if args.markdown_out:
+                    html_downloads.append(("Markdown", os.path.relpath(args.markdown_out, args.html_out.parent)))
+                if args.svg_out:
+                    html_downloads.append(("SVG", os.path.relpath(args.svg_out, args.html_out.parent)))
+                if svg_markup is None:
+                    svg_markup = format_trace_summary_svg(
+                        payload,
+                        reference_source=parsed_reference.source,
+                        id_prefix=f"trace-summary-{parsed_reference.source.replace(':', '-')}",
+                    )
+                write_text_output(
+                    args.html_out,
+                    format_trace_summary_html(
+                        payload,
+                        reference_source=parsed_reference.source,
+                        inline_svg=svg_markup,
+                        downloads=html_downloads,
                     ),
                 )
             if args.json:
