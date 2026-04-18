@@ -12,4 +12,6 @@
 - [x] run 3 review passes and fix issues found
 - [x] add support for combined logs with referrer/user-agent capture
 - [x] add optional latency summaries when logs include response-time fields
-- [ ] future slice: export CSV summaries or per-path latency breakdowns for spreadsheet/chart workflows
+- [x] export CSV summaries for spreadsheet/chart workflows
+- [x] add per-path latency breakdowns so slow endpoints stand out directly in the report
+- [ ] future slice: parse named timing fields such as `request_time=` and `upstream_response_time=` from richer Nginx-style access logs

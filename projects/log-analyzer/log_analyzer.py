@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 LOG_RE = re.compile(
     r'^(?P<ip>\S+) \S+ \S+ \[(?P<timestamp>[^\]]+)\] '
     r'"(?P<method>[A-Z]+) (?P<path>[^ ]+) (?P<protocol>[^"]+)" '
-    r'(?P<status>\d{3}) (?P<bytes>\d+|-)'
-    r'(?: "(?P<referrer>[^"]*)" "(?P<user_agent>[^"]*)")?'
-    r'(?: (?P<latency>\d+(?:\.\d+)?|-))?$'
+    r'(?P<status>\d{3}) (?P<bytes>\d+|-)'  # common log tail
+    r'(?: "(?P<referrer>[^"]*)" "(?P<user_agent>[^"]*)")?'  # combined log tail
+    r'(?: (?P<latency>\d+(?:\.\d+)?|-))?$'  # optional response time
 )
 
 
@@ -88,7 +90,19 @@ def summarize_latencies(latencies: list[float]) -> dict | None:
     }
 
 
-def analyze_lines(lines: Iterable[str], top_n: int = 3) -> dict:
+def summarize_path_latencies(path_latencies: dict[str, list[float]], limit: int) -> list[dict]:
+    rows = []
+    for path, latencies in path_latencies.items():
+        summary = summarize_latencies(latencies)
+        if summary is None:
+            continue
+        rows.append({"path": path, **summary})
+
+    rows.sort(key=lambda row: (-row["average_ms"], -row["count"], row["path"]))
+    return rows[:limit]
+
+
+def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | None = None) -> dict:
     status_counts = Counter()
     ip_counts = Counter()
     path_counts = Counter()
@@ -96,9 +110,12 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3) -> dict:
     referrer_counts = Counter()
     user_agent_counts = Counter()
     latencies_ms: list[float] = []
+    path_latencies: dict[str, list[float]] = defaultdict(list)
     total_bytes = 0
     total_requests = 0
     invalid_lines = 0
+
+    latency_limit = top_n if latency_top_n is None else latency_top_n
 
     for line in lines:
         parsed = parse_line(line)
@@ -118,6 +135,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3) -> dict:
             user_agent_counts[parsed.user_agent] += 1
         if parsed.latency_ms is not None:
             latencies_ms.append(parsed.latency_ms)
+            path_latencies[parsed.path].append(parsed.latency_ms)
 
     average_bytes = round(total_bytes / total_requests, 2) if total_requests else 0.0
     return {
@@ -132,6 +150,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3) -> dict:
         "top_referrers": referrer_counts.most_common(top_n),
         "top_user_agents": user_agent_counts.most_common(top_n),
         "latency_summary": summarize_latencies(latencies_ms),
+        "path_latency_breakdown": summarize_path_latencies(path_latencies, latency_limit),
     }
 
 
@@ -198,7 +217,77 @@ def format_text_report(result: dict) -> str:
     else:
         lines.append("  (none)")
 
+    lines.append("Per-path latency hotspots (ms):")
+    if result["path_latency_breakdown"]:
+        for row in result["path_latency_breakdown"]:
+            lines.append(
+                "  "
+                f"{row['path']}: count={row['count']}, avg={row['average_ms']}, "
+                f"p95={row['p95_ms']}, max={row['max_ms']}"
+            )
+    else:
+        lines.append("  (none)")
+
     return "\n".join(lines)
+
+
+def ensure_parent_directory(destination: str | Path) -> Path:
+    path = Path(destination)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def write_summary_csv(destination: str | Path, result: dict) -> None:
+    rows: list[dict[str, str | int | float]] = [
+        {"section": "summary", "metric": "total_requests", "value": result["total_requests"]},
+        {"section": "summary", "metric": "invalid_lines", "value": result["invalid_lines"]},
+        {"section": "summary", "metric": "total_bytes", "value": result["total_bytes"]},
+        {"section": "summary", "metric": "average_bytes", "value": result["average_bytes"]},
+    ]
+
+    for status, count in sorted(result["status_counts"].items()):
+        rows.append({"section": "status_counts", "key": status, "count": count})
+    for method, count in sorted(result["method_counts"].items()):
+        rows.append({"section": "method_counts", "key": method, "count": count})
+
+    for section_name, entries in (
+        ("top_ips", result["top_ips"]),
+        ("top_paths", result["top_paths"]),
+        ("top_referrers", result["top_referrers"]),
+        ("top_user_agents", result["top_user_agents"]),
+    ):
+        for rank, (key, count) in enumerate(entries, start=1):
+            rows.append(
+                {
+                    "section": section_name,
+                    "rank": rank,
+                    "key": key,
+                    "count": count,
+                }
+            )
+
+    latency_summary = result["latency_summary"]
+    if latency_summary:
+        for metric, value in latency_summary.items():
+            rows.append({"section": "latency_summary", "metric": metric, "value": value})
+
+    fieldnames = ["section", "metric", "key", "rank", "count", "value"]
+    destination_path = ensure_parent_directory(destination)
+    with destination_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in fieldnames})
+
+
+def write_path_latency_csv(destination: str | Path, rows: list[dict]) -> None:
+    fieldnames = ["path", "count", "average_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"]
+    destination_path = ensure_parent_directory(destination)
+    with destination_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -211,6 +300,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         help="Number of top entries to show per ranked category",
+    )
+    parser.add_argument(
+        "--latency-paths",
+        type=int,
+        default=None,
+        help="Number of per-path latency rows to include (defaults to --top)",
+    )
+    parser.add_argument(
+        "--summary-csv",
+        help="Optional path for a spreadsheet-friendly summary CSV export",
+    )
+    parser.add_argument(
+        "--path-latency-csv",
+        help="Optional path for a per-path latency breakdown CSV export",
     )
     parser.add_argument(
         "--format",
@@ -227,9 +330,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.top <= 0:
         parser.error("--top must be greater than 0")
+    if args.latency_paths is not None and args.latency_paths <= 0:
+        parser.error("--latency-paths must be greater than 0")
+
+    latency_top_n = args.top if args.latency_paths is None else args.latency_paths
 
     with open(args.logfile, encoding="utf-8") as handle:
-        result = analyze_lines(handle, top_n=args.top)
+        result = analyze_lines(handle, top_n=args.top, latency_top_n=latency_top_n)
+
+    if args.summary_csv:
+        write_summary_csv(args.summary_csv, result)
+    if args.path_latency_csv:
+        write_path_latency_csv(args.path_latency_csv, result["path_latency_breakdown"])
 
     if args.format == "json":
         print(json.dumps(result, indent=2, sort_keys=True))
