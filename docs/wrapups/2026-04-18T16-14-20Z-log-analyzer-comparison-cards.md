@@ -2,7 +2,7 @@
 
 - Timestamp (UTC): 2026-04-18T16:14:20Z
 - Project: `projects/log-analyzer`
-- Feature commit: `2c9b7c51f10ae15b8a2a55de0d4a97b0c8fbce2a`
+- Feature commit: `920aaaf7982b68fac022f19007c5b3a3a55c5b42`
 
 ## What changed
 - Added standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports built directly from the existing facet-comparison pipeline.
