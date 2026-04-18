@@ -1,0 +1,18 @@
+action: write-normalized-config
+config: /demo/file-organizer-cli/coursework-demo.raw.json
+destination: /demo/file-organizer-cli/coursework-demo.normalized.json
+mode: copy
+resolved warnings: 9
+fallback bucket: coursework-misc
+extends defaults: yes
+custom buckets: assignments, datasets, screenshots, visuals
+resolved warning 1: Unknown top-level key "owner" will be ignored by the organizer.
+resolved warning 2: Fallback bucket " coursework-misc " will normalize to "coursework-misc".
+resolved warning 3: Bucket name " screenshots " will normalize to "screenshots".
+resolved warning 4: Bucket screenshots basename pattern " Screenshot * " will normalize to "screenshot *".
+resolved warning 5: Bucket datasets extension "CSV" will normalize to ".csv".
+resolved warning 6: Bucket datasets MIME type " Application/JSON " will normalize to "application/json".
+resolved warning 7: Bucket assignments extension "TXT" will normalize to ".txt".
+resolved warning 8: Bucket assignments basename pattern " assignment-* " will normalize to "assignment-*".
+resolved warning 9: Bucket visuals MIME prefix " image/* " will normalize to "image/".
+Normalized config written.

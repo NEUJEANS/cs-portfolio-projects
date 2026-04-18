@@ -1,0 +1,32 @@
+{
+  "buckets": {
+    " screenshots ": {
+      "basenamePatterns": [
+        " Screenshot * "
+      ]
+    },
+    "datasets": {
+      "extensions": [
+        "CSV"
+      ],
+      "mimeTypes": [
+        " Application/JSON "
+      ]
+    },
+    "assignments": {
+      "extensions": [
+        "TXT"
+      ],
+      "basenamePatterns": [
+        " assignment-* "
+      ]
+    },
+    "visuals": {
+      "mimePrefixes": [
+        " image/* "
+      ]
+    }
+  },
+  "fallbackBucket": " coursework-misc ",
+  "owner": "portfolio-demo"
+}

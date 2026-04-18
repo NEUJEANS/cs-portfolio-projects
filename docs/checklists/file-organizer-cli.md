@@ -10,6 +10,7 @@
 - [x] add undo-manifest export and rollback workflow
 - [x] expand tests for edge cases
 - [x] improve README with stronger portfolio framing
+- [x] add a reproducible demo-artifact generator with before/after trees and config preview output
 - [x] run tests
 - [x] complete 3 review passes and fix issues found
 - [x] run secret scan before push
@@ -19,5 +20,5 @@
 - [x] add config-driven custom buckets instead of hard-coded extension lists
 - [x] add import/export helpers for sharing team-wide bucket presets
 - [x] add file-type detection beyond extensions for better categorization
-- [ ] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
+- [x] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
 - [ ] optionally sign or checksum manifests for tamper-evident history

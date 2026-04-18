@@ -1,0 +1,20 @@
+root: /demo/file-organizer-cli/downloads
+action: undo
+mode: apply
+manifest: /demo/file-organizer-cli/demo-manifest.json
+total manifest entries: 6
+restored files: 6
+missing current files: 0
+renamed to avoid restore collisions: 0
+removed empty directories: 5
+bucket assignments: 1
+bucket datasets: 2
+bucket documents: 1
+bucket screenshots: 1
+bucket visuals: 1
+/demo/file-organizer-cli/downloads/datasets/report.txt -> /demo/file-organizer-cli/downloads/report.txt
+/demo/file-organizer-cli/downloads/documents/notes.md -> /demo/file-organizer-cli/downloads/notes.md
+/demo/file-organizer-cli/downloads/visuals/diagram.txt -> /demo/file-organizer-cli/downloads/diagram.txt
+/demo/file-organizer-cli/downloads/datasets/course-data.csv -> /demo/file-organizer-cli/downloads/course-data.csv
+/demo/file-organizer-cli/downloads/assignments/assignment-2.txt -> /demo/file-organizer-cli/downloads/assignment-2.txt
+/demo/file-organizer-cli/downloads/screenshots/Screenshot 2026-04-18.png -> /demo/file-organizer-cli/downloads/Screenshot 2026-04-18.png

@@ -1,0 +1,32 @@
+{
+  "buckets": {
+    "assignments": {
+      "extensions": [
+        ".txt"
+      ],
+      "basenamePatterns": [
+        "assignment-*"
+      ]
+    },
+    "datasets": {
+      "extensions": [
+        ".csv"
+      ],
+      "mimeTypes": [
+        "application/json"
+      ]
+    },
+    "screenshots": {
+      "basenamePatterns": [
+        "screenshot *"
+      ]
+    },
+    "visuals": {
+      "mimePrefixes": [
+        "image/"
+      ]
+    }
+  },
+  "fallbackBucket": "coursework-misc",
+  "extendDefaults": true
+}

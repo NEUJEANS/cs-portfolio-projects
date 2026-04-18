@@ -1,0 +1,12 @@
+downloads/
+├── assignments/
+│   └── assignment-2.txt
+├── datasets/
+│   ├── course-data.csv
+│   └── report.txt
+├── documents/
+│   └── notes.md
+├── screenshots/
+│   └── Screenshot 2026-04-18.png
+└── visuals/
+    └── diagram.txt

@@ -1,0 +1,18 @@
+root: /demo/file-organizer-cli/downloads
+action: organize
+mode: dry-run
+recursive: no
+total moves: 6
+renamed to avoid collisions: 0
+config: /demo/file-organizer-cli/coursework-demo.normalized.json
+bucket assignments: 1
+bucket datasets: 2
+bucket documents: 1
+bucket screenshots: 1
+bucket visuals: 1
+/demo/file-organizer-cli/downloads/Screenshot 2026-04-18.png -> /demo/file-organizer-cli/downloads/screenshots/Screenshot 2026-04-18.png [basename pattern screenshot *]
+/demo/file-organizer-cli/downloads/assignment-2.txt -> /demo/file-organizer-cli/downloads/assignments/assignment-2.txt [basename pattern assignment-*]
+/demo/file-organizer-cli/downloads/course-data.csv -> /demo/file-organizer-cli/downloads/datasets/course-data.csv
+/demo/file-organizer-cli/downloads/diagram.txt -> /demo/file-organizer-cli/downloads/visuals/diagram.txt [MIME prefix image/; detected image/svg+xml]
+/demo/file-organizer-cli/downloads/notes.md -> /demo/file-organizer-cli/downloads/documents/notes.md
+/demo/file-organizer-cli/downloads/report.txt -> /demo/file-organizer-cli/downloads/datasets/report.txt [MIME type application/json; detected application/json]

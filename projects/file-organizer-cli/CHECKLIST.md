@@ -21,9 +21,11 @@
 - [x] preview normalization changes before editing a shared config
 - [x] auto-fix or export a canonical normalized config for teammates
 - [x] run organize with extension + basename-pattern shared rules
+- [x] run organize with MIME-aware shared rules for misleading filenames
+- [x] regenerate a publishable demo bundle with before/after trees, config preview output, and undo proof
 - [x] undo the run from the saved manifest
 
 ## Next vertical slices
 - [x] add MIME-aware detection rules for files that share extensions but not content types
-- [ ] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
+- [x] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
 - [ ] optionally sign or checksum manifests for tamper-evident bulk-operation history

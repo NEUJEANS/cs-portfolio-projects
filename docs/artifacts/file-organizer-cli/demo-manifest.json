@@ -1,0 +1,128 @@
+{
+  "action": "organize",
+  "createdAt": "2026-04-18T02:41:16.281Z",
+  "rootDir": "/demo/file-organizer-cli/downloads",
+  "dryRun": false,
+  "recursive": false,
+  "bucketConfig": {
+    "configPath": "/demo/file-organizer-cli/coursework-demo.normalized.json",
+    "presetName": null,
+    "presetDescription": null,
+    "extendDefaults": true,
+    "fallbackBucket": "coursework-misc",
+    "bucketNames": [
+      "assignments",
+      "datasets",
+      "screenshots",
+      "visuals",
+      "images",
+      "documents",
+      "audio",
+      "code",
+      "archives",
+      "coursework-misc"
+    ],
+    "customBuckets": {
+      "assignments": {
+        "extensions": [
+          ".txt"
+        ],
+        "basenamePatterns": [
+          "assignment-*"
+        ]
+      },
+      "datasets": {
+        "extensions": [
+          ".csv"
+        ],
+        "mimeTypes": [
+          "application/json"
+        ]
+      },
+      "screenshots": {
+        "basenamePatterns": [
+          "screenshot *"
+        ]
+      },
+      "visuals": {
+        "mimePrefixes": [
+          "image/"
+        ]
+      }
+    }
+  },
+  "moves": [
+    {
+      "from": "/demo/file-organizer-cli/downloads/Screenshot 2026-04-18.png",
+      "to": "/demo/file-organizer-cli/downloads/screenshots/Screenshot 2026-04-18.png",
+      "bucket": "screenshots",
+      "renamed": false,
+      "dryRun": false,
+      "matchedBy": "basenamePattern",
+      "matchedValue": "screenshot *",
+      "detectedMimeType": null
+    },
+    {
+      "from": "/demo/file-organizer-cli/downloads/assignment-2.txt",
+      "to": "/demo/file-organizer-cli/downloads/assignments/assignment-2.txt",
+      "bucket": "assignments",
+      "renamed": false,
+      "dryRun": false,
+      "matchedBy": "basenamePattern",
+      "matchedValue": "assignment-*",
+      "detectedMimeType": null
+    },
+    {
+      "from": "/demo/file-organizer-cli/downloads/course-data.csv",
+      "to": "/demo/file-organizer-cli/downloads/datasets/course-data.csv",
+      "bucket": "datasets",
+      "renamed": false,
+      "dryRun": false,
+      "matchedBy": "extension",
+      "matchedValue": ".csv",
+      "detectedMimeType": "text/plain"
+    },
+    {
+      "from": "/demo/file-organizer-cli/downloads/diagram.txt",
+      "to": "/demo/file-organizer-cli/downloads/visuals/diagram.txt",
+      "bucket": "visuals",
+      "renamed": false,
+      "dryRun": false,
+      "matchedBy": "mimePrefix",
+      "matchedValue": "image/",
+      "detectedMimeType": "image/svg+xml"
+    },
+    {
+      "from": "/demo/file-organizer-cli/downloads/notes.md",
+      "to": "/demo/file-organizer-cli/downloads/documents/notes.md",
+      "bucket": "documents",
+      "renamed": false,
+      "dryRun": false,
+      "matchedBy": "extension",
+      "matchedValue": ".md",
+      "detectedMimeType": "text/plain"
+    },
+    {
+      "from": "/demo/file-organizer-cli/downloads/report.txt",
+      "to": "/demo/file-organizer-cli/downloads/datasets/report.txt",
+      "bucket": "datasets",
+      "renamed": false,
+      "dryRun": false,
+      "matchedBy": "mimeType",
+      "matchedValue": "application/json",
+      "detectedMimeType": "application/json"
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "renamed": 0,
+    "byBucket": {
+      "screenshots": 1,
+      "assignments": 1,
+      "datasets": 2,
+      "visuals": 1,
+      "documents": 1
+    }
+  },
+  "manifestPath": "/demo/file-organizer-cli/demo-manifest.json"
+}

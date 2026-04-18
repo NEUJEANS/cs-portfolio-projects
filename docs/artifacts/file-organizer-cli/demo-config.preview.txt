@@ -1,0 +1,31 @@
+action: preview-normalized-config
+config: /demo/file-organizer-cli/coursework-demo.raw.json
+status: valid
+rewrite needed: yes
+changes: 11
+warnings: 9
+errors: 0
+normalized fallback bucket: coursework-misc
+extends defaults: yes
+custom buckets: assignments, datasets, screenshots, visuals
+change 1: Remove unknown top-level key "owner".
+change 2: Normalize fallback bucket " coursework-misc " -> "coursework-misc".
+change 3: Add default extendDefaults=true.
+change 4: Normalize bucket name " screenshots " -> "screenshots".
+change 5: Normalize basename pattern for bucket screenshots: " Screenshot * " -> "screenshot *".
+change 6: Normalize extension for bucket datasets: "CSV" -> ".csv".
+change 7: Normalize MIME type for bucket datasets: " Application/JSON " -> "application/json".
+change 8: Normalize extension for bucket assignments: "TXT" -> ".txt".
+change 9: Normalize basename pattern for bucket assignments: " assignment-* " -> "assignment-*".
+change 10: Normalize MIME prefix for bucket visuals: " image/* " -> "image/".
+change 11: Sort custom bucket names into canonical order.
+warning 1: Unknown top-level key "owner" will be ignored by the organizer.
+warning 2: Fallback bucket " coursework-misc " will normalize to "coursework-misc".
+warning 3: Bucket name " screenshots " will normalize to "screenshots".
+warning 4: Bucket screenshots basename pattern " Screenshot * " will normalize to "screenshot *".
+warning 5: Bucket datasets extension "CSV" will normalize to ".csv".
+warning 6: Bucket datasets MIME type " Application/JSON " will normalize to "application/json".
+warning 7: Bucket assignments extension "TXT" will normalize to ".txt".
+warning 8: Bucket assignments basename pattern " assignment-* " will normalize to "assignment-*".
+warning 9: Bucket visuals MIME prefix " image/* " will normalize to "image/".
+Preview only. Use --fix-config or --write-normalized-config to apply these changes.

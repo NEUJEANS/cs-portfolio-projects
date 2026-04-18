@@ -1,0 +1,7 @@
+downloads/
+├── assignment-2.txt
+├── course-data.csv
+├── diagram.txt
+├── notes.md
+├── report.txt
+└── Screenshot 2026-04-18.png

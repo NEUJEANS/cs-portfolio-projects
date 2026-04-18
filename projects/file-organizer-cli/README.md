@@ -8,6 +8,7 @@ A Node.js CLI that organizes loose files into extension-based, basename-pattern-
 - handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom extension + basename + MIME categorization rules, CI-ready config validation, and safe rollback after a bulk organize pass
 - includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing/linting, MIME sniffing, basename-pattern matching, manifest writing, and undo/restore flows
 - easy to demo with realistic folders like `Downloads`, class assets, screenshots, or project exports
+- now ships a reproducible demo artifact bundle under [`docs/artifacts/file-organizer-cli/`](../../docs/artifacts/file-organizer-cli/) so reviewers can see config cleanup, dry-run output, before/after trees, and undo proof without running the CLI first
 
 ## Stack
 - Node.js
@@ -250,11 +251,31 @@ bucket images: 2
 /home/student/Downloads/images/photo-copy (1).png -> /home/student/Downloads/photo-copy.png
 ```
 
+## Demo artifact bundle
+Generate the committed demo walkthrough bundle:
+
+```bash
+npm run demo:artifacts
+```
+
+Published bundle:
+- [`demo summary`](../../docs/artifacts/file-organizer-cli/demo-summary.md)
+- [`before tree`](../../docs/artifacts/file-organizer-cli/demo-source-tree.txt)
+- [`config preview`](../../docs/artifacts/file-organizer-cli/demo-config.preview.txt)
+- [`normalized config`](../../docs/artifacts/file-organizer-cli/demo-config.normalized.json)
+- [`dry-run report`](../../docs/artifacts/file-organizer-cli/demo-dry-run-report.txt)
+- [`apply report`](../../docs/artifacts/file-organizer-cli/demo-apply-report.txt)
+- [`manifest payload`](../../docs/artifacts/file-organizer-cli/demo-manifest.json)
+- [`after tree`](../../docs/artifacts/file-organizer-cli/demo-after-tree.txt)
+- [`undo report`](../../docs/artifacts/file-organizer-cli/demo-undo-report.txt)
+
+The generator runs the organizer against an isolated temp folder, writes a warning-heavy raw config plus its canonical normalized version, captures dry-run/apply/undo reports, and sanitizes the temp paths into a stable `/demo/file-organizer-cli` prefix for readable Git-tracked artifacts.
+
 ## Test
 ```bash
 npm test
+npm run demo:artifacts
 ```
 
 ## Future Improvements
-- add small publishable demo artifacts that show config preview output beside before/after folder trees
 - optionally sign or checksum manifests for tamper-evident bulk-operation history
