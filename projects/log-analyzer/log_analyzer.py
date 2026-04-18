@@ -15,8 +15,11 @@ LOG_RE = re.compile(
     r'"(?P<method>[A-Z]+) (?P<path>[^ ]+) (?P<protocol>[^"]+)" '
     r'(?P<status>\d{3}) (?P<bytes>\d+|-)'  # common log tail
     r'(?: "(?P<referrer>[^"]*)" "(?P<user_agent>[^"]*)")?'  # combined log tail
-    r'(?: (?P<latency>\d+(?:\.\d+)?|-))?$'  # optional response time
+    r'(?P<extra>(?: .+)?)$'  # optional latency token or named timing fields
 )
+
+NAMED_FIELD_START_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
+NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,8 @@ class ParsedLogLine:
     referrer: str | None = None
     user_agent: str | None = None
     latency_ms: float | None = None
+    request_time_ms: float | None = None
+    upstream_response_time_ms: float | None = None
 
 
 def normalize_latency_ms(raw_latency: str | None) -> float | None:
@@ -39,24 +44,67 @@ def normalize_latency_ms(raw_latency: str | None) -> float | None:
     return round(int(raw_latency) / 1000, 3)
 
 
-def parse_line(line: str) -> ParsedLogLine | None:
-    match = LOG_RE.match(line.strip())
-    if not match:
+def normalize_named_timing_ms(raw_timing: str | None) -> float | None:
+    if raw_timing is None:
         return None
 
-    bytes_raw = match.group("bytes")
-    referrer = match.group("referrer")
-    user_agent = match.group("user_agent")
-    return ParsedLogLine(
-        ip=match.group("ip"),
-        method=match.group("method"),
-        path=match.group("path"),
-        status=match.group("status"),
-        bytes_sent=0 if bytes_raw == "-" else int(bytes_raw),
-        referrer=None if referrer in (None, "-") else referrer,
-        user_agent=None if user_agent in (None, "-") else user_agent,
-        latency_ms=normalize_latency_ms(match.group("latency")),
-    )
+    cleaned = raw_timing.strip().strip('"').strip("'")
+    if cleaned in ("", "-"):
+        return None
+
+    total_ms = 0.0
+    found_value = False
+    for part in NAMED_TIMING_SPLIT_RE.split(cleaned):
+        item = part.strip()
+        if item in ("", "-"):
+            continue
+        try:
+            total_ms += float(item) * 1000
+        except ValueError:
+            return None
+        found_value = True
+
+    if not found_value:
+        return None
+    return round(total_ms, 3)
+
+
+def parse_extra_fields(extra: str | None) -> tuple[str | None, dict[str, str]]:
+    if extra is None:
+        return None, {}
+
+    tokens = extra.strip().split()
+    if not tokens:
+        return None, {}
+
+    unnamed_tokens: list[str] = []
+    named_fields: dict[str, str] = {}
+    current_key: str | None = None
+    current_parts: list[str] = []
+
+    def flush_current() -> None:
+        nonlocal current_key, current_parts
+        if current_key is None:
+            return
+        named_fields[current_key] = " ".join(current_parts).strip()
+        current_key = None
+        current_parts = []
+
+    for token in tokens:
+        if NAMED_FIELD_START_RE.match(token):
+            flush_current()
+            current_key, value = token.split("=", 1)
+            current_parts = [value]
+            continue
+
+        if current_key is not None:
+            current_parts.append(token)
+        else:
+            unnamed_tokens.append(token)
+
+    flush_current()
+    unnamed_latency = unnamed_tokens[0] if len(unnamed_tokens) == 1 else None
+    return unnamed_latency, named_fields
 
 
 def percentile(values: list[float], ratio: float) -> float:
@@ -102,6 +150,37 @@ def summarize_path_latencies(path_latencies: dict[str, list[float]], limit: int)
     return rows[:limit]
 
 
+def parse_line(line: str) -> ParsedLogLine | None:
+    match = LOG_RE.match(line.strip())
+    if not match:
+        return None
+
+    bytes_raw = match.group("bytes")
+    referrer = match.group("referrer")
+    user_agent = match.group("user_agent")
+    unnamed_latency, named_fields = parse_extra_fields(match.group("extra"))
+    request_time_ms = normalize_named_timing_ms(named_fields.get("request_time"))
+    upstream_response_time_ms = normalize_named_timing_ms(
+        named_fields.get("upstream_response_time")
+    )
+    primary_latency_ms = request_time_ms
+    if primary_latency_ms is None:
+        primary_latency_ms = normalize_latency_ms(unnamed_latency)
+
+    return ParsedLogLine(
+        ip=match.group("ip"),
+        method=match.group("method"),
+        path=match.group("path"),
+        status=match.group("status"),
+        bytes_sent=0 if bytes_raw == "-" else int(bytes_raw),
+        referrer=None if referrer in (None, "-") else referrer,
+        user_agent=None if user_agent in (None, "-") else user_agent,
+        latency_ms=primary_latency_ms,
+        request_time_ms=request_time_ms,
+        upstream_response_time_ms=upstream_response_time_ms,
+    )
+
+
 def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | None = None) -> dict:
     status_counts = Counter()
     ip_counts = Counter()
@@ -110,6 +189,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
     referrer_counts = Counter()
     user_agent_counts = Counter()
     latencies_ms: list[float] = []
+    upstream_latencies_ms: list[float] = []
     path_latencies: dict[str, list[float]] = defaultdict(list)
     total_bytes = 0
     total_requests = 0
@@ -136,6 +216,8 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
         if parsed.latency_ms is not None:
             latencies_ms.append(parsed.latency_ms)
             path_latencies[parsed.path].append(parsed.latency_ms)
+        if parsed.upstream_response_time_ms is not None:
+            upstream_latencies_ms.append(parsed.upstream_response_time_ms)
 
     average_bytes = round(total_bytes / total_requests, 2) if total_requests else 0.0
     return {
@@ -150,6 +232,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
         "top_referrers": referrer_counts.most_common(top_n),
         "top_user_agents": user_agent_counts.most_common(top_n),
         "latency_summary": summarize_latencies(latencies_ms),
+        "upstream_latency_summary": summarize_latencies(upstream_latencies_ms),
         "path_latency_breakdown": summarize_path_latencies(path_latencies, latency_limit),
     }
 
@@ -217,6 +300,18 @@ def format_text_report(result: dict) -> str:
     else:
         lines.append("  (none)")
 
+    lines.append("Upstream latency summary (ms):")
+    upstream_latency_summary = result["upstream_latency_summary"]
+    if upstream_latency_summary:
+        lines.append(f"  Count: {upstream_latency_summary['count']}")
+        lines.append(f"  Average: {upstream_latency_summary['average_ms']}")
+        lines.append(f"  p50: {upstream_latency_summary['p50_ms']}")
+        lines.append(f"  p95: {upstream_latency_summary['p95_ms']}")
+        lines.append(f"  p99: {upstream_latency_summary['p99_ms']}")
+        lines.append(f"  Max: {upstream_latency_summary['max_ms']}")
+    else:
+        lines.append("  (none)")
+
     lines.append("Per-path latency hotspots (ms):")
     if result["path_latency_breakdown"]:
         for row in result["path_latency_breakdown"]:
@@ -266,10 +361,13 @@ def write_summary_csv(destination: str | Path, result: dict) -> None:
                 }
             )
 
-    latency_summary = result["latency_summary"]
-    if latency_summary:
-        for metric, value in latency_summary.items():
-            rows.append({"section": "latency_summary", "metric": metric, "value": value})
+    for section_name, summary in (
+        ("latency_summary", result["latency_summary"]),
+        ("upstream_latency_summary", result["upstream_latency_summary"]),
+    ):
+        if summary:
+            for metric, value in summary.items():
+                rows.append({"section": section_name, "metric": metric, "value": value})
 
     fieldnames = ["section", "metric", "key", "rank", "count", "value"]
     destination_path = ensure_parent_directory(destination)
