@@ -344,6 +344,84 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("## Phase-boundary hints", markdown)
             self.assertIn("benchmark compiler-phase-shift", markdown)
 
+    def test_cli_aggregate_writes_dashboard_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "aggregate"
+            html_path = artifact_dir / "index.html"
+            svg_path = artifact_dir / "aggregate-average-fault-rate.svg"
+            csv_path = artifact_dir / "aggregate-workload-comparison.csv"
+            json_path = artifact_dir / "aggregate-summary.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "aggregate",
+                    "--min-frames",
+                    "3",
+                    "--max-frames",
+                    "7",
+                    "--preset",
+                    "classic-belady",
+                    "--benchmark",
+                    "compiler-phase-shift",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            html = html_path.read_text(encoding="utf-8")
+            svg = svg_path.read_text(encoding="utf-8")
+            csv_output = csv_path.read_text(encoding="utf-8")
+
+            self.assertIn("aggregate workloads: 2", completed.stdout)
+            self.assertEqual(payload["summary"]["workload_count"], 2)
+            self.assertEqual(payload["summary"]["benchmark_count"], 1)
+            self.assertIn("Page Replacement Aggregate Dashboard", html)
+            self.assertIn("aggregate-average-fault-rate.svg", html)
+            self.assertIn("aggregate-summary.json", html)
+            self.assertIn("Normalized average page-fault rate by workload", svg)
+            self.assertIn("compiler-phase-shift", svg)
+            self.assertIn(
+                "type,workload,reference_length,best_average_fault_algorithms,best_average_fault_rate_algorithms,fifo_has_anomaly,non_fifo_regression_count,fifo_avg_faults,clock_avg_faults,aging_avg_faults,lru_avg_faults,opt_avg_faults,fifo_avg_fault_rate,clock_avg_fault_rate,aging_avg_fault_rate,lru_avg_fault_rate,opt_avg_fault_rate",
+                csv_output,
+            )
+            self.assertEqual({entry["workload"] for entry in payload["workloads"]}, {"classic-belady", "compiler-phase-shift"})
+            self.assertIn("overall_average_fault_rates", payload["summary"])
+
+    def test_cli_aggregate_json_reports_normalized_rates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "aggregate"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "aggregate",
+                    "--min-frames",
+                    "3",
+                    "--max-frames",
+                    "6",
+                    "--benchmark",
+                    "db-hotset-scan",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["summary"]["workload_count"], 1)
+            self.assertEqual(payload["summary"]["benchmark_count"], 1)
+            self.assertEqual(payload["workloads"][0]["workload"], "db-hotset-scan")
+            self.assertEqual(payload["workloads"][0]["reference_source"], "benchmark:db-hotset-scan")
+            self.assertGreater(payload["workloads"][0]["average_fault_rates"]["fifo"], 0)
+            self.assertIn("overall_best_rate_winners", payload["summary"])
+
     def test_cli_rejects_missing_reference(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(SCRIPT), "simulate", "fifo", "--frames", "3"],

@@ -704,6 +704,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gallery_parser.add_argument("--json", action="store_true")
 
+    aggregate_parser = subparsers.add_parser(
+        "aggregate",
+        help="build a cross-workload aggregate dashboard with normalized comparison charts",
+    )
+    aggregate_parser.add_argument("--min-frames", type=int, required=True)
+    aggregate_parser.add_argument("--max-frames", type=int, required=True)
+    aggregate_parser.add_argument(
+        "--preset",
+        dest="aggregate_presets",
+        action="append",
+        choices=tuple(WORKLOAD_PRESETS),
+        help="repeat to include specific built-in presets",
+    )
+    aggregate_parser.add_argument(
+        "--benchmark",
+        dest="aggregate_benchmarks",
+        action="append",
+        choices=tuple(TRACE_BENCHMARKS),
+        help="repeat to include specific larger built-in trace benchmarks",
+    )
+    aggregate_parser.add_argument(
+        "--include-benchmarks",
+        action="store_true",
+        help="add all built-in trace benchmarks to the default preset aggregate run",
+    )
+    aggregate_parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        required=True,
+        help="directory where aggregate CSV / SVG / JSON / HTML artifacts will be written",
+    )
+    aggregate_parser.add_argument(
+        "--html-out",
+        type=Path,
+        help="optional explicit HTML path (default: <artifact-dir>/index.html)",
+    )
+    aggregate_parser.add_argument("--json", action="store_true")
+
     preset_parser = subparsers.add_parser(
         "list-presets",
         help="list built-in workload presets for repeatable demos",
@@ -1520,6 +1558,467 @@ def format_gallery_html(
 '''
 
 
+def select_lowest_keys(values: dict[str, float], *, tolerance: float = 1e-12) -> list[str]:
+    best_value = min(values.values())
+    return [
+        key for key, value in values.items() if abs(value - best_value) <= tolerance
+    ]
+
+
+def format_percentage(value: float) -> str:
+    return f"{value * 100:.2f}%"
+
+
+def build_aggregate_run(
+    workload: GalleryWorkload,
+    *,
+    min_frames: int,
+    max_frames: int,
+) -> dict:
+    payload = study_frame_counts(workload.reference_string, min_frames, max_frames)
+    payload["reference_source"] = workload.reference_source
+    average_faults = summarize_fault_averages(payload)
+    reference_length = len(workload.reference_string)
+    average_fault_rates = {
+        algorithm: average_faults[algorithm] / reference_length
+        for algorithm in ALGORITHMS
+    }
+    best_average_faults = min(average_faults.values())
+    best_average_winners = select_lowest_keys(average_faults)
+    best_average_fault_rate = min(average_fault_rates.values())
+    best_rate_winners = select_lowest_keys(average_fault_rates)
+    non_fifo_violations = [
+        violation
+        for violation in payload["monotonicity_violations"]
+        if violation["algorithm"] != "fifo"
+    ]
+    return {
+        "workload": workload,
+        "payload": payload,
+        "reference_length": reference_length,
+        "average_faults": average_faults,
+        "average_fault_rates": average_fault_rates,
+        "best_average_faults": best_average_faults,
+        "best_average_winners": best_average_winners,
+        "best_average_fault_rate": best_average_fault_rate,
+        "best_rate_winners": best_rate_winners,
+        "fifo_has_anomaly": bool(payload["fifo_belady_anomalies"]),
+        "non_fifo_violations": non_fifo_violations,
+    }
+
+
+def summarize_aggregate_runs(aggregate_runs: list[dict]) -> dict:
+    if not aggregate_runs:
+        raise InputError("aggregate dashboard needs at least one workload")
+
+    winner_counts = {algorithm: 0 for algorithm in ALGORITHMS}
+    for run in aggregate_runs:
+        for algorithm in run["best_rate_winners"]:
+            winner_counts[algorithm] += 1
+
+    overall_average_fault_rates = {
+        algorithm: sum(run["average_fault_rates"][algorithm] for run in aggregate_runs)
+        / len(aggregate_runs)
+        for algorithm in ALGORITHMS
+    }
+    overall_average_faults = {
+        algorithm: sum(run["average_faults"][algorithm] for run in aggregate_runs)
+        / len(aggregate_runs)
+        for algorithm in ALGORITHMS
+    }
+    benchmark_count = sum(
+        1 for run in aggregate_runs if run["workload"].source_kind == "benchmark"
+    )
+    fifo_anomaly_count = sum(1 for run in aggregate_runs if run["fifo_has_anomaly"])
+    non_fifo_regression_count = sum(
+        1 for run in aggregate_runs if run["non_fifo_violations"]
+    )
+    return {
+        "workload_count": len(aggregate_runs),
+        "benchmark_count": benchmark_count,
+        "fifo_anomaly_count": fifo_anomaly_count,
+        "non_fifo_regression_count": non_fifo_regression_count,
+        "winner_counts": winner_counts,
+        "overall_average_fault_rates": overall_average_fault_rates,
+        "overall_average_faults": overall_average_faults,
+        "overall_best_rate_winners": select_lowest_keys(overall_average_fault_rates),
+    }
+
+
+def write_aggregate_csv(path: Path, aggregate_runs: list[dict]) -> None:
+    ensure_output_parent(path)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        fieldnames = [
+            "type",
+            "workload",
+            "reference_length",
+            "best_average_fault_algorithms",
+            "best_average_fault_rate_algorithms",
+            "fifo_has_anomaly",
+            "non_fifo_regression_count",
+            *[f"{algorithm}_avg_faults" for algorithm in ALGORITHMS],
+            *[f"{algorithm}_avg_fault_rate" for algorithm in ALGORITHMS],
+        ]
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for run in aggregate_runs:
+            row = {
+                "type": run["workload"].source_kind,
+                "workload": run["workload"].name,
+                "reference_length": run["reference_length"],
+                "best_average_fault_algorithms": "/".join(run["best_average_winners"]),
+                "best_average_fault_rate_algorithms": "/".join(run["best_rate_winners"]),
+                "fifo_has_anomaly": "yes" if run["fifo_has_anomaly"] else "no",
+                "non_fifo_regression_count": len(run["non_fifo_violations"]),
+            }
+            for algorithm in ALGORITHMS:
+                row[f"{algorithm}_avg_faults"] = f"{run['average_faults'][algorithm]:.6f}"
+                row[f"{algorithm}_avg_fault_rate"] = f"{run['average_fault_rates'][algorithm]:.6f}"
+            writer.writerow(row)
+
+
+def build_aggregate_payload(
+    aggregate_runs: list[dict],
+    *,
+    min_frames: int,
+    max_frames: int,
+    html_path: Path,
+    artifact_dir: Path,
+) -> dict:
+    summary = summarize_aggregate_runs(aggregate_runs)
+    return {
+        "min_frames": min_frames,
+        "max_frames": max_frames,
+        "artifact_dir": str(artifact_dir),
+        "html_path": str(html_path),
+        "summary": {
+            **summary,
+            "overall_average_fault_rates": {
+                algorithm: round(value, 6)
+                for algorithm, value in summary["overall_average_fault_rates"].items()
+            },
+            "overall_average_faults": {
+                algorithm: round(value, 6)
+                for algorithm, value in summary["overall_average_faults"].items()
+            },
+        },
+        "workloads": [
+            {
+                "type": run["workload"].source_kind,
+                "workload": run["workload"].name,
+                "description": run["workload"].description,
+                "reference_length": run["reference_length"],
+                "reference_source": run["workload"].reference_source,
+                "best_average_faults": round(run["best_average_faults"], 6),
+                "best_average_fault_rate": round(run["best_average_fault_rate"], 6),
+                "best_average_winners": run["best_average_winners"],
+                "best_rate_winners": run["best_rate_winners"],
+                "fifo_has_anomaly": run["fifo_has_anomaly"],
+                "non_fifo_regression_count": len(run["non_fifo_violations"]),
+                "average_faults": {
+                    algorithm: round(value, 6)
+                    for algorithm, value in run["average_faults"].items()
+                },
+                "average_fault_rates": {
+                    algorithm: round(value, 6)
+                    for algorithm, value in run["average_fault_rates"].items()
+                },
+            }
+            for run in aggregate_runs
+        ],
+    }
+
+
+def choose_rate_tick_step(max_rate: float) -> float:
+    if max_rate <= 0.1:
+        return 0.02
+    if max_rate <= 0.2:
+        return 0.05
+    if max_rate <= 0.4:
+        return 0.1
+    return 0.2
+
+
+def format_aggregate_svg(
+    aggregate_runs: list[dict],
+    *,
+    min_frames: int,
+    max_frames: int,
+    id_prefix: str = "page-replacement-aggregate",
+) -> str:
+    summary = summarize_aggregate_runs(aggregate_runs)
+    width = 1480
+    header_height = 156
+    group_height = 118
+    chart_top = header_height
+    chart_left = 340
+    chart_right = width - 88
+    chart_width = chart_right - chart_left
+    bar_height = 11
+    bar_gap = 8
+    chart_height = len(aggregate_runs) * group_height
+    chart_bottom = chart_top + chart_height
+    footer_height = 150
+    height = chart_bottom + footer_height
+    max_rate = max(
+        run["average_fault_rates"][algorithm]
+        for run in aggregate_runs
+        for algorithm in ALGORITHMS
+    )
+    tick_step = choose_rate_tick_step(max_rate)
+    tick_count = max(1, int(max_rate / tick_step) + 1)
+    x_max = max(tick_step, tick_count * tick_step)
+    ticks = [round(index * tick_step, 10) for index in range(tick_count + 1)]
+    identifier = make_safe_identifier(id_prefix)
+    title_id = f"{identifier}-title"
+    desc_id = f"{identifier}-desc"
+
+    def x_position(rate: float) -> float:
+        return chart_left + (rate / x_max) * chart_width
+
+    grid_lines: list[str] = []
+    for tick in ticks:
+        x = x_position(tick)
+        grid_lines.append(
+            f'<line x1="{x:.2f}" y1="{chart_top}" x2="{x:.2f}" y2="{chart_bottom}" stroke="#d7dde8" stroke-width="1" />'
+        )
+        grid_lines.append(
+            f'<text x="{x:.2f}" y="{chart_bottom + 30}" font-size="13" text-anchor="middle" fill="#475569">{escape(format_percentage(tick))}</text>'
+        )
+
+    legend_items: list[str] = []
+    for index, algorithm in enumerate(ALGORITHMS):
+        x = 340 + index * 170
+        legend_items.append(
+            f'<rect x="{x}" y="74" width="26" height="12" rx="6" fill="{SVG_COLORS[algorithm]}" />'
+        )
+        legend_items.append(
+            f'<text x="{x + 36}" y="84" font-size="14" fill="#0f172a">{algorithm.upper()}</text>'
+        )
+
+    group_parts: list[str] = []
+    for run_index, run in enumerate(aggregate_runs):
+        workload = run["workload"]
+        group_y = chart_top + run_index * group_height
+        label_y = group_y + 18
+        group_parts.append(
+            f'<text x="36" y="{label_y}" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">{escape(workload.name)}</tspan></text>'
+        )
+        meta = f"{workload.source_kind} · len {run['reference_length']} · winner {'/'.join(algorithm.upper() for algorithm in run['best_rate_winners'])}"
+        group_parts.append(
+            f'<text x="36" y="{label_y + 22}" font-size="13" fill="#475569">{escape(meta)}</text>'
+        )
+        group_parts.append(
+            f'<line x1="36" y1="{group_y + group_height - 12}" x2="{width - 36}" y2="{group_y + group_height - 12}" stroke="#e2e8f0" stroke-width="1" />'
+        )
+        for algorithm_index, algorithm in enumerate(ALGORITHMS):
+            y = group_y + 44 + algorithm_index * (bar_height + bar_gap)
+            rate = run["average_fault_rates"][algorithm]
+            x = x_position(rate)
+            label_x = min(x + 10, width - 60)
+            group_parts.append(
+                f'<text x="250" y="{y + 9}" font-size="13" text-anchor="end" fill="#475569">{algorithm.upper()}</text>'
+            )
+            group_parts.append(
+                f'<rect x="{chart_left}" y="{y}" width="{max(x - chart_left, 0):.2f}" height="{bar_height}" rx="5.5" fill="{SVG_COLORS[algorithm]}" />'
+            )
+            group_parts.append(
+                f'<text x="{label_x:.2f}" y="{y + 9}" font-size="12" fill="{SVG_COLORS[algorithm]}">{escape(format_percentage(rate))}</text>'
+            )
+
+    overall_winners = "/".join(algorithm.upper() for algorithm in summary["overall_best_rate_winners"])
+    winner_tally = "; ".join(
+        f"{algorithm.upper()} × {summary['winner_counts'][algorithm]}"
+        for algorithm in ALGORITHMS
+    )
+    summary_lines = [
+        f"frame range: {min_frames} to {max_frames} frames across {summary['workload_count']} workloads ({summary['benchmark_count']} benchmarks)",
+        f"overall best normalized average fault rate: {overall_winners}",
+        f"winner tally: {winner_tally}",
+        f"FIFO anomalies in {summary['fifo_anomaly_count']} workloads; non-FIFO regressions in {summary['non_fifo_regression_count']} workloads",
+    ]
+    summary_text = [
+        f'<text x="84" y="{chart_bottom + 48 + index * 24}" font-size="18" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(summary_lines)
+    ]
+
+    return "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'  <title id="{title_id}">Page replacement aggregate workload comparison</title>',
+            f'  <desc id="{desc_id}">Normalized average page-fault rate by workload and algorithm across a shared frame range.</desc>',
+            '  <rect width="100%" height="100%" fill="#f8fafc" />',
+            f'  <rect x="28" y="24" width="{width - 56}" height="{height - 48}" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />',
+            '  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Normalized average page-fault rate by workload</text>',
+            '  <text x="84" y="96" font-size="16" fill="#475569">Cross-workload aggregate dashboard for page-replacement-lab with one grouped bar set per workload.</text>',
+            *legend_items,
+            f'  <line x1="{chart_left}" y1="{chart_top}" x2="{chart_left}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="2" />',
+            f'  <line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_right}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="2" />',
+            *grid_lines,
+            f'  <text x="{chart_left + chart_width / 2:.2f}" y="{chart_bottom + 58}" font-size="14" text-anchor="middle" fill="#475569">Average page-fault rate across frame counts</text>',
+            *group_parts,
+            f'  <rect x="64" y="{chart_bottom + 18}" width="1352" height="112" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />',
+            *summary_text,
+            '</svg>',
+        ]
+    )
+
+
+def format_aggregate_text(aggregate_runs: list[dict], *, html_path: Path, svg_path: Path) -> str:
+    summary = summarize_aggregate_runs(aggregate_runs)
+    overall_winners = "/".join(algorithm.upper() for algorithm in summary["overall_best_rate_winners"])
+    lines = [
+        f"aggregate workloads: {summary['workload_count']}",
+        f"html report: {html_path}",
+        f"svg chart: {svg_path}",
+        f"overall best normalized average fault rate: {overall_winners}",
+    ]
+    for run in aggregate_runs:
+        workload = run["workload"]
+        winners = "/".join(algorithm.upper() for algorithm in run["best_rate_winners"])
+        lines.append(
+            f"- {workload.source_kind} {workload.name}: best normalized average rate {winners} ({format_percentage(run['best_average_fault_rate'])}), fifo anomaly={'yes' if run['fifo_has_anomaly'] else 'no'}, other regressions={len(run['non_fifo_violations'])}"
+        )
+    return "\n".join(lines)
+
+
+def format_aggregate_html(
+    aggregate_runs: list[dict],
+    *,
+    min_frames: int,
+    max_frames: int,
+    svg_filename: str,
+    csv_filename: str,
+    json_filename: str,
+) -> str:
+    summary = summarize_aggregate_runs(aggregate_runs)
+    winner_summary = ", ".join(
+        f"{algorithm.upper()} × {summary['winner_counts'][algorithm]}" for algorithm in ALGORITHMS
+    )
+    overall_rows = "".join(
+        "<tr>"
+        f"<td><code>{escape(algorithm.upper())}</code></td>"
+        f"<td>{escape(format_percentage(summary['overall_average_fault_rates'][algorithm]))}</td>"
+        f"<td>{summary['overall_average_faults'][algorithm]:.2f}</td>"
+        "</tr>"
+        for algorithm in ALGORITHMS
+    )
+    workload_rows: list[str] = []
+    for run in aggregate_runs:
+        workload = run["workload"]
+        rate_cells = "<br />".join(
+            f"<code>{escape(algorithm.upper())}</code> {escape(format_percentage(run['average_fault_rates'][algorithm]))}"
+            for algorithm in ALGORITHMS
+        )
+        workload_rows.append(
+            "<tr>"
+            f"<td>{escape(workload.source_kind)}</td>"
+            f"<td><code>{escape(workload.name)}</code><div class=\"muted\">len {run['reference_length']}</div></td>"
+            f"<td>{escape(workload.description)}</td>"
+            f"<td>{escape('/'.join(algorithm.upper() for algorithm in run['best_rate_winners']))}<div class=\"muted\">{escape(format_percentage(run['best_average_fault_rate']))}</div></td>"
+            f"<td>{'yes' if run['fifo_has_anomaly'] else 'no'}</td>"
+            f"<td>{len(run['non_fifo_violations'])}</td>"
+            f"<td>{rate_cells}</td>"
+            "</tr>"
+        )
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page Replacement Aggregate Dashboard</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1480px; margin: 0 auto; padding: 32px 20px 64px; }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      a {{ color: var(--accent); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p {{ color: var(--muted); max-width: 960px; }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }}
+      .summary-grid strong {{ display: block; font-size: 1.35rem; margin-bottom: 6px; }}
+      .downloads {{ color: var(--muted); }}
+      .panel {{ padding: 20px; margin-bottom: 24px; overflow: auto; }}
+      .chart img {{ width: 100%; height: auto; min-width: 900px; display: block; border-radius: 18px; border: 1px solid var(--border); background: #fff; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      .muted {{ color: var(--muted); margin-top: 4px; font-size: 0.92rem; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>Page Replacement Aggregate Dashboard</h1>
+        <p>Cross-workload summary for <code>page-replacement-lab</code>. This dashboard normalizes page faults by reference length so the compact presets and heavier benchmark traces can share the same slide-ready comparison chart.</p>
+        <ul class="summary-grid">
+          <li><strong>{summary['workload_count']}</strong> workloads</li>
+          <li><strong>{summary['benchmark_count']}</strong> trace benchmarks</li>
+          <li><strong>{min_frames}–{max_frames}</strong> frame range</li>
+          <li><strong>{'/'.join(algorithm.upper() for algorithm in summary['overall_best_rate_winners'])}</strong> overall normalized winner</li>
+          <li><strong>{summary['fifo_anomaly_count']}</strong> FIFO anomaly workloads</li>
+          <li><strong>Winner tally</strong>{escape(winner_summary)}</li>
+        </ul>
+        <p class="downloads">Downloads: <a href="{escape(svg_filename)}">SVG chart</a> · <a href="{escape(csv_filename)}">CSV table</a> · <a href="{escape(json_filename)}">JSON payload</a></p>
+      </section>
+      <section class="panel chart">
+        <h2>Normalized average page-fault rate chart</h2>
+        <img src="{escape(svg_filename)}" alt="Normalized average page-fault rate by workload and algorithm" />
+      </section>
+      <section class="panel">
+        <h2>Overall algorithm summary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Algorithm</th>
+              <th>Mean normalized fault rate</th>
+              <th>Mean average faults</th>
+            </tr>
+          </thead>
+          <tbody>
+            {overall_rows}
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Workload breakdown</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Workload</th>
+              <th>Description</th>
+              <th>Best normalized winner</th>
+              <th>FIFO anomaly</th>
+              <th>Other regressions</th>
+              <th>Average fault rates</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(workload_rows)}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
 def compute_reuse_distances(reference_string: list[int]) -> list[int | None]:
     last_seen: dict[int, int] = {}
     reuse_distances: list[int | None] = []
@@ -1930,6 +2429,58 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 print(format_gallery_text(gallery_runs, html_path=html_path))
+            return 0
+
+        if args.command == "aggregate":
+            workloads = resolve_gallery_workloads(
+                args.aggregate_presets,
+                args.aggregate_benchmarks,
+                include_benchmarks=args.include_benchmarks,
+            )
+            html_path = args.html_out or (args.artifact_dir / "index.html")
+            svg_path = args.artifact_dir / "aggregate-average-fault-rate.svg"
+            csv_path = args.artifact_dir / "aggregate-workload-comparison.csv"
+            json_path = args.artifact_dir / "aggregate-summary.json"
+            aggregate_runs = [
+                build_aggregate_run(
+                    workload,
+                    min_frames=args.min_frames,
+                    max_frames=args.max_frames,
+                )
+                for workload in workloads
+            ]
+            write_text_output(
+                svg_path,
+                format_aggregate_svg(
+                    aggregate_runs,
+                    min_frames=args.min_frames,
+                    max_frames=args.max_frames,
+                ),
+            )
+            write_aggregate_csv(csv_path, aggregate_runs)
+            aggregate_payload = build_aggregate_payload(
+                aggregate_runs,
+                min_frames=args.min_frames,
+                max_frames=args.max_frames,
+                html_path=html_path,
+                artifact_dir=args.artifact_dir,
+            )
+            write_text_output(json_path, json.dumps(aggregate_payload, indent=2) + "\n")
+            write_text_output(
+                html_path,
+                format_aggregate_html(
+                    aggregate_runs,
+                    min_frames=args.min_frames,
+                    max_frames=args.max_frames,
+                    svg_filename=os.path.relpath(svg_path, html_path.parent),
+                    csv_filename=os.path.relpath(csv_path, html_path.parent),
+                    json_filename=os.path.relpath(json_path, html_path.parent),
+                ),
+            )
+            if args.json:
+                print(json.dumps(aggregate_payload, indent=2))
+            else:
+                print(format_aggregate_text(aggregate_runs, html_path=html_path, svg_path=svg_path))
             return 0
 
         parsed_reference = parse_reference_args(

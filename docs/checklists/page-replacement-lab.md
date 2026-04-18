@@ -94,3 +94,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-18 aggregate-dashboard slice
+- [x] verify git sync state before editing
+- [x] decide that extra web research is not needed for this reporting-focused slice
+- [x] write a short normalization / aggregate-dashboard refresh note
+- [x] update resumable project checklist state
+- [x] implement an `aggregate` command for cross-workload comparison dashboards
+- [x] export committed aggregate CSV / SVG / JSON / HTML artifacts
+- [x] refresh README, checklist notes, and artifact references
+- [x] add regression tests for aggregate dashboard output paths and JSON summaries
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

@@ -9,7 +9,8 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - makes page-fault tradeoffs visible with deterministic step traces, reusable presets, and frame-range studies
 - gives strong interview material around locality, stack algorithms, and Belady's anomaly
 - includes a `trace-summary` workflow that surfaces reuse-distance buckets, sliding working-set sizes, and phase-boundary hints for imported workloads
-- leaves room for future extensions like working-set replacement policies or cross-workload chart exports
+- includes an `aggregate` dashboard workflow that normalizes page-fault rates across presets and larger benchmark traces for one slide-ready comparison view
+- leaves room for future extensions like working-set replacement policies or richer trace-summary cards
 
 ## Features
 - simulate **FIFO**, **Clock / second-chance**, **Aging**, **LRU**, and **OPT** page replacement
@@ -23,6 +24,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - export study results as Markdown, CSV, and self-contained SVG cards for README screenshots and portfolio pages
 - generate a multi-workload HTML gallery that can mix compact presets with heavier trace benchmarks and downloadable Markdown / SVG / CSV / JSON companions
 - summarize imported traces with reuse-distance buckets, sliding working-set sizes, and phase-boundary hints that explain why a workload changes policy behavior
+- build a cross-workload aggregate dashboard with normalized average page-fault-rate charts plus CSV / SVG / JSON / HTML artifacts
 
 ## Quick start
 
@@ -84,6 +86,13 @@ python3 projects/page-replacement-lab/page_replacement_lab.py trace-summary \
   --markdown-out docs/artifacts/page-replacement-lab/compiler-phase-shift-trace-summary.md
 ```
 
+### Build an aggregate dashboard across presets plus larger trace benchmarks
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py aggregate --min-frames 3 --max-frames 8 \
+  --artifact-dir docs/artifacts/page-replacement-lab/aggregate \
+  --include-benchmarks
+```
+
 ### Load pages from a file instead of a preset
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 4 \
@@ -129,6 +138,10 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/gallery/db-hotset-scan-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the dashboard/analytics scan workload
 - `docs/artifacts/page-replacement-lab/gallery/streaming-burst-window-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the streaming-window workload
 - `docs/artifacts/page-replacement-lab/compiler-phase-shift-trace-summary.{md,json}` — committed reuse-distance and phase-hint report for the compiler-style benchmark trace
+- `docs/artifacts/page-replacement-lab/aggregate/index.html` — static aggregate dashboard that compares presets and benchmark traces on one normalized page-fault-rate chart
+- `docs/artifacts/page-replacement-lab/aggregate/aggregate-average-fault-rate.svg` — slide-ready grouped bar chart for the aggregate dashboard
+- `docs/artifacts/page-replacement-lab/aggregate/aggregate-workload-comparison.csv` — spreadsheet-friendly summary of per-workload average faults and normalized rates
+- `docs/artifacts/page-replacement-lab/aggregate/aggregate-summary.json` — machine-readable aggregate payload for future frontend or notebook reuse
 
 ## Testing
 ```bash
@@ -147,6 +160,6 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 
 ## Future improvements
 - add working-set or WSClock-style algorithms for richer policy comparisons
-- add cross-workload aggregate comparison charts that put several presets and benchmarks on the same axes
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
 - add SVG/HTML trace-summary cards or side-by-side imported-trace comparisons for portfolio slides
+- allow custom imported traces to join the aggregate dashboard without editing source code

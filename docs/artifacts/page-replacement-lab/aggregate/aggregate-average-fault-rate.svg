@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1132" viewBox="0 0 1480 1132" role="img" aria-labelledby="page-replacement-aggregate-title page-replacement-aggregate-desc">
+  <title id="page-replacement-aggregate-title">Page replacement aggregate workload comparison</title>
+  <desc id="page-replacement-aggregate-desc">Normalized average page-fault rate by workload and algorithm across a shared frame range.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="28" y="24" width="1424" height="1084" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Normalized average page-fault rate by workload</text>
+  <text x="84" y="96" font-size="16" fill="#475569">Cross-workload aggregate dashboard for page-replacement-lab with one grouped bar set per workload.</text>
+<rect x="340" y="74" width="26" height="12" rx="6" fill="#ef4444" />
+<text x="376" y="84" font-size="14" fill="#0f172a">FIFO</text>
+<rect x="510" y="74" width="26" height="12" rx="6" fill="#f59e0b" />
+<text x="546" y="84" font-size="14" fill="#0f172a">CLOCK</text>
+<rect x="680" y="74" width="26" height="12" rx="6" fill="#8b5cf6" />
+<text x="716" y="84" font-size="14" fill="#0f172a">AGING</text>
+<rect x="850" y="74" width="26" height="12" rx="6" fill="#2563eb" />
+<text x="886" y="84" font-size="14" fill="#0f172a">LRU</text>
+<rect x="1020" y="74" width="26" height="12" rx="6" fill="#10b981" />
+<text x="1056" y="84" font-size="14" fill="#0f172a">OPT</text>
+  <line x1="340" y1="156" x2="340" y2="982" stroke="#0f172a" stroke-width="2" />
+  <line x1="340" y1="982" x2="1392" y2="982" stroke="#0f172a" stroke-width="2" />
+<line x1="340.00" y1="156" x2="340.00" y2="982" stroke="#d7dde8" stroke-width="1" />
+<text x="340.00" y="1012" font-size="13" text-anchor="middle" fill="#475569">0.00%</text>
+<line x1="603.00" y1="156" x2="603.00" y2="982" stroke="#d7dde8" stroke-width="1" />
+<text x="603.00" y="1012" font-size="13" text-anchor="middle" fill="#475569">20.00%</text>
+<line x1="866.00" y1="156" x2="866.00" y2="982" stroke="#d7dde8" stroke-width="1" />
+<text x="866.00" y="1012" font-size="13" text-anchor="middle" fill="#475569">40.00%</text>
+<line x1="1129.00" y1="156" x2="1129.00" y2="982" stroke="#d7dde8" stroke-width="1" />
+<text x="1129.00" y="1012" font-size="13" text-anchor="middle" fill="#475569">60.00%</text>
+<line x1="1392.00" y1="156" x2="1392.00" y2="982" stroke="#d7dde8" stroke-width="1" />
+<text x="1392.00" y="1012" font-size="13" text-anchor="middle" fill="#475569">80.00%</text>
+  <text x="866.00" y="1040" font-size="14" text-anchor="middle" fill="#475569">Average page-fault rate across frame counts</text>
+<text x="36" y="174" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">classic-belady</tspan></text>
+<text x="36" y="196" font-size="13" fill="#475569">preset · len 12 · winner OPT</text>
+<line x1="36" y1="262" x2="1444" y2="262" stroke="#e2e8f0" stroke-width="1" />
+<text x="250" y="209" font-size="13" text-anchor="end" fill="#475569">FIFO</text>
+<rect x="340" y="200" width="712.29" height="11" rx="5.5" fill="#ef4444" />
+<text x="1062.29" y="209" font-size="12" fill="#ef4444">54.17%</text>
+<text x="250" y="228" font-size="13" text-anchor="end" fill="#475569">CLOCK</text>
+<rect x="340" y="219" width="712.29" height="11" rx="5.5" fill="#f59e0b" />
+<text x="1062.29" y="228" font-size="12" fill="#f59e0b">54.17%</text>
+<text x="250" y="247" font-size="13" text-anchor="end" fill="#475569">AGING</text>
+<rect x="340" y="238" width="694.03" height="11" rx="5.5" fill="#8b5cf6" />
+<text x="1044.03" y="247" font-size="12" fill="#8b5cf6">52.78%</text>
+<text x="250" y="266" font-size="13" text-anchor="end" fill="#475569">LRU</text>
+<rect x="340" y="257" width="694.03" height="11" rx="5.5" fill="#2563eb" />
+<text x="1044.03" y="266" font-size="12" fill="#2563eb">52.78%</text>
+<text x="250" y="285" font-size="13" text-anchor="end" fill="#475569">OPT</text>
+<rect x="340" y="276" width="602.71" height="11" rx="5.5" fill="#10b981" />
+<text x="952.71" y="285" font-size="12" fill="#10b981">45.83%</text>
+<text x="36" y="292" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">looping-hotset</tspan></text>
+<text x="36" y="314" font-size="13" fill="#475569">preset · len 12 · winner OPT</text>
+<line x1="36" y1="380" x2="1444" y2="380" stroke="#e2e8f0" stroke-width="1" />
+<text x="250" y="327" font-size="13" text-anchor="end" fill="#475569">FIFO</text>
+<rect x="340" y="318" width="547.92" height="11" rx="5.5" fill="#ef4444" />
+<text x="897.92" y="327" font-size="12" fill="#ef4444">41.67%</text>
+<text x="250" y="346" font-size="13" text-anchor="end" fill="#475569">CLOCK</text>
+<rect x="340" y="337" width="547.92" height="11" rx="5.5" fill="#f59e0b" />
+<text x="897.92" y="346" font-size="12" fill="#f59e0b">41.67%</text>
+<text x="250" y="365" font-size="13" text-anchor="end" fill="#475569">AGING</text>
+<rect x="340" y="356" width="511.39" height="11" rx="5.5" fill="#8b5cf6" />
+<text x="861.39" y="365" font-size="12" fill="#8b5cf6">38.89%</text>
+<text x="250" y="384" font-size="13" text-anchor="end" fill="#475569">LRU</text>
+<rect x="340" y="375" width="511.39" height="11" rx="5.5" fill="#2563eb" />
+<text x="861.39" y="384" font-size="12" fill="#2563eb">38.89%</text>
+<text x="250" y="403" font-size="13" text-anchor="end" fill="#475569">OPT</text>
+<rect x="340" y="394" width="474.86" height="11" rx="5.5" fill="#10b981" />
+<text x="824.86" y="403" font-size="12" fill="#10b981">36.11%</text>
+<text x="36" y="410" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">scan-then-reuse</tspan></text>
+<text x="36" y="432" font-size="13" fill="#475569">preset · len 15 · winner OPT</text>
+<line x1="36" y1="498" x2="1444" y2="498" stroke="#e2e8f0" stroke-width="1" />
+<text x="250" y="445" font-size="13" text-anchor="end" fill="#475569">FIFO</text>
+<rect x="340" y="436" width="832.83" height="11" rx="5.5" fill="#ef4444" />
+<text x="1182.83" y="445" font-size="12" fill="#ef4444">63.33%</text>
+<text x="250" y="464" font-size="13" text-anchor="end" fill="#475569">CLOCK</text>
+<rect x="340" y="455" width="832.83" height="11" rx="5.5" fill="#f59e0b" />
+<text x="1182.83" y="464" font-size="12" fill="#f59e0b">63.33%</text>
+<text x="250" y="483" font-size="13" text-anchor="end" fill="#475569">AGING</text>
+<rect x="340" y="474" width="759.78" height="11" rx="5.5" fill="#8b5cf6" />
+<text x="1109.78" y="483" font-size="12" fill="#8b5cf6">57.78%</text>
+<text x="250" y="502" font-size="13" text-anchor="end" fill="#475569">LRU</text>
+<rect x="340" y="493" width="759.78" height="11" rx="5.5" fill="#2563eb" />
+<text x="1109.78" y="502" font-size="12" fill="#2563eb">57.78%</text>
+<text x="250" y="521" font-size="13" text-anchor="end" fill="#475569">OPT</text>
+<rect x="340" y="512" width="642.89" height="11" rx="5.5" fill="#10b981" />
+<text x="992.89" y="521" font-size="12" fill="#10b981">48.89%</text>
+<text x="36" y="528" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">mixed-locality-bursts</tspan></text>
+<text x="36" y="550" font-size="13" fill="#475569">preset · len 18 · winner OPT</text>
+<line x1="36" y1="616" x2="1444" y2="616" stroke="#e2e8f0" stroke-width="1" />
+<text x="250" y="563" font-size="13" text-anchor="end" fill="#475569">FIFO</text>
+<rect x="340" y="554" width="657.50" height="11" rx="5.5" fill="#ef4444" />
+<text x="1007.50" y="563" font-size="12" fill="#ef4444">50.00%</text>
+<text x="250" y="582" font-size="13" text-anchor="end" fill="#475569">CLOCK</text>
+<rect x="340" y="573" width="657.50" height="11" rx="5.5" fill="#f59e0b" />
+<text x="1007.50" y="582" font-size="12" fill="#f59e0b">50.00%</text>
+<text x="250" y="601" font-size="13" text-anchor="end" fill="#475569">AGING</text>
+<rect x="340" y="592" width="560.09" height="11" rx="5.5" fill="#8b5cf6" />
+<text x="910.09" y="601" font-size="12" fill="#8b5cf6">42.59%</text>
+<text x="250" y="620" font-size="13" text-anchor="end" fill="#475569">LRU</text>
+<rect x="340" y="611" width="560.09" height="11" rx="5.5" fill="#2563eb" />
+<text x="910.09" y="620" font-size="12" fill="#2563eb">42.59%</text>
+<text x="250" y="639" font-size="13" text-anchor="end" fill="#475569">OPT</text>
+<rect x="340" y="630" width="474.86" height="11" rx="5.5" fill="#10b981" />
+<text x="824.86" y="639" font-size="12" fill="#10b981">36.11%</text>
+<text x="36" y="646" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">compiler-phase-shift</tspan></text>
+<text x="36" y="668" font-size="13" fill="#475569">benchmark · len 72 · winner OPT</text>
+<line x1="36" y1="734" x2="1444" y2="734" stroke="#e2e8f0" stroke-width="1" />
+<text x="250" y="681" font-size="13" text-anchor="end" fill="#475569">FIFO</text>
+<rect x="340" y="672" width="882.75" height="11" rx="5.5" fill="#ef4444" />
+<text x="1232.75" y="681" font-size="12" fill="#ef4444">67.13%</text>
+<text x="250" y="700" font-size="13" text-anchor="end" fill="#475569">CLOCK</text>
+<rect x="340" y="691" width="876.67" height="11" rx="5.5" fill="#f59e0b" />
+<text x="1226.67" y="700" font-size="12" fill="#f59e0b">66.67%</text>
+<text x="250" y="719" font-size="13" text-anchor="end" fill="#475569">AGING</text>
+<rect x="340" y="710" width="821.88" height="11" rx="5.5" fill="#8b5cf6" />
+<text x="1171.88" y="719" font-size="12" fill="#8b5cf6">62.50%</text>
+<text x="250" y="738" font-size="13" text-anchor="end" fill="#475569">LRU</text>
+<rect x="340" y="729" width="821.88" height="11" rx="5.5" fill="#2563eb" />
+<text x="1171.88" y="738" font-size="12" fill="#2563eb">62.50%</text>
+<text x="250" y="757" font-size="13" text-anchor="end" fill="#475569">OPT</text>
+<rect x="340" y="748" width="657.50" height="11" rx="5.5" fill="#10b981" />
+<text x="1007.50" y="757" font-size="12" fill="#10b981">50.00%</text>
+<text x="36" y="764" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">db-hotset-scan</tspan></text>
+<text x="36" y="786" font-size="13" fill="#475569">benchmark · len 84 · winner OPT</text>
+<line x1="36" y1="852" x2="1444" y2="852" stroke="#e2e8f0" stroke-width="1" />
+<text x="250" y="799" font-size="13" text-anchor="end" fill="#475569">FIFO</text>
+<rect x="340" y="790" width="696.64" height="11" rx="5.5" fill="#ef4444" />
+<text x="1046.64" y="799" font-size="12" fill="#ef4444">52.98%</text>
+<text x="250" y="818" font-size="13" text-anchor="end" fill="#475569">CLOCK</text>
+<rect x="340" y="809" width="683.59" height="11" rx="5.5" fill="#f59e0b" />
+<text x="1033.59" y="818" font-size="12" fill="#f59e0b">51.98%</text>
+<text x="250" y="837" font-size="13" text-anchor="end" fill="#475569">AGING</text>
+<rect x="340" y="828" width="631.41" height="11" rx="5.5" fill="#8b5cf6" />
+<text x="981.41" y="837" font-size="12" fill="#8b5cf6">48.02%</text>
+<text x="250" y="856" font-size="13" text-anchor="end" fill="#475569">LRU</text>
+<rect x="340" y="847" width="631.41" height="11" rx="5.5" fill="#2563eb" />
+<text x="981.41" y="856" font-size="12" fill="#2563eb">48.02%</text>
+<text x="250" y="875" font-size="13" text-anchor="end" fill="#475569">OPT</text>
+<rect x="340" y="866" width="506.17" height="11" rx="5.5" fill="#10b981" />
+<text x="856.17" y="875" font-size="12" fill="#10b981">38.49%</text>
+<text x="36" y="882" font-size="18" font-weight="700" fill="#0f172a"><tspan font-family="SFMono-Regular, ui-monospace, monospace">streaming-burst-window</tspan></text>
+<text x="36" y="904" font-size="13" fill="#475569">benchmark · len 96 · winner OPT</text>
+<line x1="36" y1="970" x2="1444" y2="970" stroke="#e2e8f0" stroke-width="1" />
+<text x="250" y="917" font-size="13" text-anchor="end" fill="#475569">FIFO</text>
+<rect x="340" y="908" width="794.48" height="11" rx="5.5" fill="#ef4444" />
+<text x="1144.48" y="917" font-size="12" fill="#ef4444">60.42%</text>
+<text x="250" y="936" font-size="13" text-anchor="end" fill="#475569">CLOCK</text>
+<rect x="340" y="927" width="792.20" height="11" rx="5.5" fill="#f59e0b" />
+<text x="1142.20" y="936" font-size="12" fill="#f59e0b">60.24%</text>
+<text x="250" y="955" font-size="13" text-anchor="end" fill="#475569">AGING</text>
+<rect x="340" y="946" width="757.95" height="11" rx="5.5" fill="#8b5cf6" />
+<text x="1107.95" y="955" font-size="12" fill="#8b5cf6">57.64%</text>
+<text x="250" y="974" font-size="13" text-anchor="end" fill="#475569">LRU</text>
+<rect x="340" y="965" width="757.95" height="11" rx="5.5" fill="#2563eb" />
+<text x="1107.95" y="974" font-size="12" fill="#2563eb">57.64%</text>
+<text x="250" y="993" font-size="13" text-anchor="end" fill="#475569">OPT</text>
+<rect x="340" y="984" width="513.67" height="11" rx="5.5" fill="#10b981" />
+<text x="863.67" y="993" font-size="12" fill="#10b981">39.06%</text>
+  <rect x="64" y="1000" width="1352" height="112" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+<text x="84" y="1030" font-size="18" fill="#0f172a">frame range: 3 to 8 frames across 7 workloads (3 benchmarks)</text>
+<text x="84" y="1054" font-size="18" fill="#0f172a">overall best normalized average fault rate: OPT</text>
+<text x="84" y="1078" font-size="18" fill="#0f172a">winner tally: FIFO × 0; CLOCK × 0; AGING × 0; LRU × 0; OPT × 7</text>
+<text x="84" y="1102" font-size="18" fill="#0f172a">FIFO anomalies in 1 workloads; non-FIFO regressions in 1 workloads</text>
+</svg>
