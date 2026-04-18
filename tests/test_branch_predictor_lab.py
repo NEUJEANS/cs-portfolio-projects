@@ -39,6 +39,7 @@ render_sweep_svg = module.render_sweep_svg
 run_workload_sweep = module.run_workload_sweep
 simulate_trace = module.simulate_trace
 summarize_table_aliasing = module.summarize_table_aliasing
+summarize_gshare_aliasing = module.summarize_gshare_aliasing
 summarize_trace = module.summarize_trace
 
 
@@ -187,6 +188,21 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertGreater(large_by_name["two-bit"].accuracy, small_by_name["two-bit"].accuracy)
         self.assertGreater(large_by_name["one-bit"].accuracy, small_by_name["one-bit"].accuracy)
 
+    def test_gshare_alias_summary_captures_dynamic_history_collisions(self) -> None:
+        trace = generate_synthetic_trace("alias-thrash", branches=48, seed=7)
+
+        summary = summarize_gshare_aliasing(trace, table_size=16, history_bits=4)
+
+        self.assertEqual(summary["table_size"], 16)
+        self.assertEqual(summary["history_bits"], 4)
+        self.assertGreaterEqual(summary["colliding_indices"], 1)
+        self.assertGreaterEqual(summary["history_spread_colliding_indices"], 1)
+        self.assertGreaterEqual(summary["cross_address_colliding_indices"], 1)
+        top_group = summary["collision_groups"][0]
+        self.assertIn("contexts", top_group)
+        self.assertGreaterEqual(top_group["context_count"], 2)
+        self.assertTrue(all("history_before" in context for context in top_group["contexts"]))
+
     def test_generate_perceptron_majority_trace_is_seed_reproducible(self) -> None:
         left = generate_synthetic_trace("perceptron-majority", branches=24, seed=13)
         right = generate_synthetic_trace("perceptron-majority", branches=24, seed=13)
@@ -271,6 +287,8 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertEqual(payload["total_branches"], 24)
         self.assertIn("alias_summary", payload)
         self.assertEqual(payload["alias_summary"]["table_size"], 16)
+        self.assertIn("gshare_alias_summary", payload)
+        self.assertEqual(payload["gshare_alias_summary"]["history_bits"], 2)
 
     def test_cli_simulate_local_history_json_includes_snapshot(self) -> None:
         completed = subprocess.run(
@@ -331,12 +349,14 @@ class BranchPredictorLabTests(unittest.TestCase):
         records = load_trace(TRACE_PATH)
         trace_summary = summarize_trace(records)
         alias_summary = summarize_table_aliasing(records, table_size=16)
+        gshare_alias_summary = summarize_gshare_aliasing(records, table_size=16, history_bits=2)
         results = compare_predictors(records, table_size=16, history_bits=2)
 
         rendered = render_comparison_markdown(
             trace_path=TRACE_PATH,
             trace_summary=trace_summary,
             alias_summary=alias_summary,
+            gshare_alias_summary=gshare_alias_summary,
             results=results,
             table_size=16,
             history_bits=2,
@@ -348,17 +368,20 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("## Portfolio talking points", rendered)
         self.assertIn("Two-bit vs one-bit", rendered)
         self.assertIn("## Table aliasing", rendered)
+        self.assertIn("## Dynamic gshare aliasing", rendered)
 
     def test_render_comparison_svg_includes_expected_labels(self) -> None:
         records = load_trace(TRACE_PATH)
         trace_summary = summarize_trace(records)
         alias_summary = summarize_table_aliasing(records, table_size=16)
+        gshare_alias_summary = summarize_gshare_aliasing(records, table_size=16, history_bits=2)
         results = compare_predictors(records, table_size=16, history_bits=2)
 
         rendered = render_comparison_svg(
             trace_path=TRACE_PATH,
             trace_summary=trace_summary,
             alias_summary=alias_summary,
+            gshare_alias_summary=gshare_alias_summary,
             results=results,
             table_size=16,
             history_bits=2,
@@ -444,6 +467,8 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertEqual([scenario["workload"] for scenario in scenarios], ["loop-heavy", "alias-thrash", "perceptron-majority"])
             self.assertEqual(scenarios[0]["config"]["table_size"], 8)
             self.assertEqual(scenarios[1]["alias_summary"]["conflicting_indices"], 2)
+            self.assertIn("gshare_alias_summary", scenarios[1])
+            self.assertGreaterEqual(scenarios[1]["gshare_alias_summary"]["history_spread_colliding_indices"], 1)
             self.assertEqual(scenarios[2]["best_predictor"], "perceptron")
             self.assertTrue((trace_dir / "loop-heavy-seed7.trace").exists())
             self.assertTrue((trace_dir / "alias-thrash-seed7.trace").exists())
@@ -459,6 +484,7 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("# Branch predictor trace-family sweep", markdown)
         self.assertIn("## Per-workload notes", markdown)
         self.assertIn("`alias-thrash`", markdown)
+        self.assertIn("Dynamic gshare aliasing", markdown)
         self.assertIn("perceptron-majority", markdown)
         self.assertIn("<svg", svg)
         self.assertIn("Branch predictor trace-family sweep", svg)

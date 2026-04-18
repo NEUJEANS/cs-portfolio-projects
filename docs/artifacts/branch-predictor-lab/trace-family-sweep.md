@@ -1,6 +1,6 @@
 # Branch predictor trace-family sweep
 
-- Generated: `2026-04-17T17:19:34Z`
+- Generated: `2026-04-18T03:03:11Z`
 - Workloads: `5` synthetic families run in one batch command
 - Goal: show how the recommended trace/config pairs shift the best predictor across loop, bias, aliasing, mixed-history, and perceptron-friendly cases.
 
@@ -24,6 +24,7 @@
 - Best simple baseline: `always-taken` at `80.00%`.
 - Best advanced predictor: `local-history` at `82.50%`.
 - Static aliasing: `1` colliding buckets, `0` with conflicting dominant biases.
+- Dynamic gshare aliasing: `4` live collisions, `1` with conflicting dominant biases, `2` spanning multiple history states.
 
 Top three predictors:
 - `local-history` · `82.50%` accuracy · `7` mispredictions
@@ -38,6 +39,7 @@ Top three predictors:
 - Best simple baseline: `always-taken` at `52.08%`.
 - Best advanced predictor: `perceptron` at `46.88%`.
 - Static aliasing: `1` colliding buckets, `1` with conflicting dominant biases.
+- Dynamic gshare aliasing: `4` live collisions, `4` with conflicting dominant biases, `0` spanning multiple history states.
 
 Top three predictors:
 - `always-taken` · `52.08%` accuracy · `46` mispredictions
@@ -52,6 +54,7 @@ Top three predictors:
 - Best simple baseline: `one-bit` at `68.75%`.
 - Best advanced predictor: `perceptron` at `77.08%`.
 - Static aliasing: `1` colliding buckets, `1` with conflicting dominant biases.
+- Dynamic gshare aliasing: `8` live collisions, `4` with conflicting dominant biases, `0` spanning multiple history states.
 
 Top three predictors:
 - `perceptron` · `77.08%` accuracy · `11` mispredictions
@@ -66,6 +69,7 @@ Top three predictors:
 - Best simple baseline: `always-taken` at `54.69%`.
 - Best advanced predictor: `perceptron` at `79.69%`.
 - Static aliasing: `2` colliding buckets, `2` with conflicting dominant biases.
+- Dynamic gshare aliasing: `10` live collisions, `3` with conflicting dominant biases, `8` spanning multiple history states.
 
 Top three predictors:
 - `perceptron` · `79.69%` accuracy · `13` mispredictions
@@ -80,6 +84,7 @@ Top three predictors:
 - Best simple baseline: `always-not-taken` at `75.00%`.
 - Best advanced predictor: `perceptron` at `92.71%`.
 - Static aliasing: `0` colliding buckets, `0` with conflicting dominant biases.
+- Dynamic gshare aliasing: `5` live collisions, `2` with conflicting dominant biases, `5` spanning multiple history states.
 
 Top three predictors:
 - `perceptron` · `92.71%` accuracy · `7` mispredictions

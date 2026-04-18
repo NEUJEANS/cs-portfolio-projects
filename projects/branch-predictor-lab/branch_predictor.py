@@ -719,6 +719,14 @@ def summarize_trace(records: list[BranchRecord]) -> dict[str, Any]:
     }
 
 
+def _dominant_outcome(*, taken: int, not_taken: int) -> str:
+    if taken > not_taken:
+        return "taken"
+    if not_taken > taken:
+        return "not-taken"
+    return "mixed"
+
+
 def summarize_table_aliasing(records: list[BranchRecord], table_size: int) -> dict[str, Any]:
     if not records:
         raise ValueError("records must not be empty")
@@ -756,11 +764,7 @@ def summarize_table_aliasing(records: list[BranchRecord], table_size: int) -> di
         branch_events = 0
         for address, stats in sorted(addresses.items()):
             taken_percent = round((stats["taken"] / stats["total"]) * 100, 3)
-            dominant_outcome = "mixed"
-            if stats["taken"] > stats["not_taken"]:
-                dominant_outcome = "taken"
-            elif stats["not_taken"] > stats["taken"]:
-                dominant_outcome = "not-taken"
+            dominant_outcome = _dominant_outcome(taken=stats["taken"], not_taken=stats["not_taken"])
             dominant_outcomes.add(dominant_outcome)
             branch_events += stats["total"]
             sorted_addresses.append(
@@ -792,6 +796,110 @@ def summarize_table_aliasing(records: list[BranchRecord], table_size: int) -> di
         "unique_indices": len(groups),
         "colliding_indices": len(collision_groups),
         "conflicting_indices": len(conflict_groups),
+        "branch_events_in_collisions": total_collision_events,
+        "collision_groups": sorted(
+            collision_groups,
+            key=lambda group: (-group["conflicting_biases"], -group["branch_events"], group["index"]),
+        )[:5],
+    }
+
+
+def summarize_gshare_aliasing(records: list[BranchRecord], table_size: int, history_bits: int) -> dict[str, Any]:
+    if not records:
+        raise ValueError("records must not be empty")
+    _validate_power_of_two(table_size, "table_size")
+    if history_bits < 1:
+        raise ValueError("history_bits must be at least 1")
+
+    mask = table_size - 1
+    history_mask = (1 << history_bits) - 1
+    history = 0
+    groups: dict[int, dict[str, Any]] = {}
+
+    for offset, record in enumerate(records, start=1):
+        index = ((record.address >> 2) ^ history) & mask
+        history_string = format(history, f"0{history_bits}b")
+        group = groups.setdefault(index, {"index": index, "contexts": {}})
+        context_entry = group["contexts"].setdefault(
+            (record.address, history),
+            {
+                "address": record.address,
+                "history": history,
+                "history_before": history_string,
+                "total": 0,
+                "taken": 0,
+                "not_taken": 0,
+                "labels": set(),
+                "first_event": offset,
+            },
+        )
+        context_entry["total"] += 1
+        if record.taken:
+            context_entry["taken"] += 1
+        else:
+            context_entry["not_taken"] += 1
+        if record.label:
+            context_entry["labels"].add(record.label)
+        history = ((history << 1) | int(record.taken)) & history_mask
+
+    collision_groups: list[dict[str, Any]] = []
+    total_collision_events = 0
+    cross_address_collisions = 0
+    history_spread_collisions = 0
+    for index, group in sorted(groups.items()):
+        contexts = group["contexts"]
+        if len(contexts) < 2:
+            continue
+        sorted_contexts: list[dict[str, Any]] = []
+        dominant_outcomes: set[str] = set()
+        branch_events = 0
+        addresses = {address for address, _history in contexts}
+        histories = {history_value for _address, history_value in contexts}
+        for (_address, _history), stats in sorted(contexts.items(), key=lambda item: (item[0][0], item[0][1])):
+            taken_percent = round((stats["taken"] / stats["total"]) * 100, 3)
+            dominant_outcome = _dominant_outcome(taken=stats["taken"], not_taken=stats["not_taken"])
+            dominant_outcomes.add(dominant_outcome)
+            branch_events += stats["total"]
+            sorted_contexts.append(
+                {
+                    "address": hex(stats["address"]),
+                    "history_before": stats["history_before"],
+                    "total": stats["total"],
+                    "taken": stats["taken"],
+                    "not_taken": stats["not_taken"],
+                    "taken_percent": taken_percent,
+                    "dominant_outcome": dominant_outcome,
+                    "labels": sorted(stats["labels"]),
+                    "first_event": stats["first_event"],
+                }
+            )
+        if len(addresses) > 1:
+            cross_address_collisions += 1
+        if len(histories) > 1:
+            history_spread_collisions += 1
+        total_collision_events += branch_events
+        collision_groups.append(
+            {
+                "index": index,
+                "index_hex": hex(index),
+                "context_count": len(sorted_contexts),
+                "address_count": len(addresses),
+                "history_count": len(histories),
+                "branch_events": branch_events,
+                "conflicting_biases": len(dominant_outcomes) > 1,
+                "contexts": sorted_contexts,
+            }
+        )
+
+    conflict_groups = [group for group in collision_groups if group["conflicting_biases"]]
+    return {
+        "table_size": table_size,
+        "history_bits": history_bits,
+        "unique_indices": len(groups),
+        "colliding_indices": len(collision_groups),
+        "conflicting_indices": len(conflict_groups),
+        "cross_address_colliding_indices": cross_address_collisions,
+        "history_spread_colliding_indices": history_spread_collisions,
         "branch_events_in_collisions": total_collision_events,
         "collision_groups": sorted(
             collision_groups,
@@ -931,6 +1039,7 @@ def run_workload_sweep(
 
         trace_summary = summarize_trace(records)
         alias_summary = summarize_table_aliasing(records, table_size=table_size)
+        gshare_alias_summary = summarize_gshare_aliasing(records, table_size=table_size, history_bits=history_bits)
         results = compare_predictors(records, table_size=table_size, history_bits=history_bits)
         best = results[0]
         runner_up = results[1]
@@ -949,6 +1058,7 @@ def run_workload_sweep(
                 "trace_output": str(trace_output) if trace_output is not None else None,
                 "trace_summary": trace_summary,
                 "alias_summary": alias_summary,
+                "gshare_alias_summary": gshare_alias_summary,
                 "best_predictor": best.predictor,
                 "runner_up_predictor": runner_up.predictor,
                 "winner_margin_percent": round((best.accuracy - runner_up.accuracy) * 100, 3),
@@ -1016,6 +1126,7 @@ def _build_comparison_talking_points(
     results: list[SimulationResult],
     trace_summary: dict[str, Any],
     alias_summary: dict[str, Any],
+    gshare_alias_summary: dict[str, Any],
 ) -> list[str]:
     by_name = {result.predictor: result for result in results}
     best = results[0]
@@ -1056,18 +1167,28 @@ def _build_comparison_talking_points(
             f"vs best simple baseline {simple_best.predictor} at {simple_best.accuracy * 100:.2f}%."
         )
 
-    hardest = best.hardest_branches[0] if best.hardest_branches else None
-    if hardest is not None:
-        points.append(
-            f"Hardest branch for the winning predictor is {hardest['address']} with "
-            f"{hardest['mispredictions']} misses across {hardest['total']} executions."
-        )
-
     if alias_summary["colliding_indices"]:
         points.append(
             f"Static table aliasing: {alias_summary['colliding_indices']} colliding indices at table size {alias_summary['table_size']} "
             f"({alias_summary['conflicting_indices']} with conflicting taken/not-taken biases)."
         )
+
+    if gshare_alias_summary["colliding_indices"]:
+        points.append(
+            f"Dynamic gshare aliasing: {gshare_alias_summary['colliding_indices']} live index collisions at table size {gshare_alias_summary['table_size']} "
+            f"with history={gshare_alias_summary['history_bits']} ({gshare_alias_summary['conflicting_indices']} conflicting bias groups)."
+        )
+        top_collision = next(
+            (group for group in gshare_alias_summary["collision_groups"] if group["conflicting_biases"]),
+            gshare_alias_summary["collision_groups"][0],
+        )
+        contexts = ", ".join(
+            f"{item['address']}@{item['history_before']}" for item in top_collision["contexts"][:3]
+        )
+        points.append(
+            f"Worst gshare bucket: index {top_collision['index_hex']} mixes {contexts} across {top_collision['branch_events']} branch events."
+        )
+    elif alias_summary["colliding_indices"]:
         top_collision = next(
             (group for group in alias_summary["collision_groups"] if group["conflicting_biases"]),
             alias_summary["collision_groups"][0],
@@ -1075,6 +1196,13 @@ def _build_comparison_talking_points(
         addresses = ", ".join(item["address"] for item in top_collision["addresses"])
         points.append(
             f"Worst alias bucket: index {top_collision['index_hex']} merges {addresses} across {top_collision['branch_events']} branch events."
+        )
+
+    hardest = best.hardest_branches[0] if best.hardest_branches else None
+    if hardest is not None:
+        points.append(
+            f"Hardest branch for the winning predictor is {hardest['address']} with "
+            f"{hardest['mispredictions']} misses across {hardest['total']} executions."
         )
 
     label_counts = trace_summary.get("label_counts", {})
@@ -1092,6 +1220,7 @@ def render_comparison_markdown(
     trace_path: Path,
     trace_summary: dict[str, Any],
     alias_summary: dict[str, Any],
+    gshare_alias_summary: dict[str, Any],
     results: list[SimulationResult],
     table_size: int,
     history_bits: int,
@@ -1099,7 +1228,7 @@ def render_comparison_markdown(
     generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     best = results[0]
     worst = results[-1]
-    talking_points = _build_comparison_talking_points(results, trace_summary, alias_summary)
+    talking_points = _build_comparison_talking_points(results, trace_summary, alias_summary, gshare_alias_summary)
     address_counts = list(trace_summary["address_counts"].items())[:5]
     label_counts = list(trace_summary["label_counts"].items())[:5]
 
@@ -1161,6 +1290,30 @@ def render_comparison_markdown(
             )
     else:
         lines.append("- No static PC aliasing for this table size.")
+
+    lines.extend(["", "## Dynamic gshare aliasing", ""])
+    lines.append(
+        f"- `{gshare_alias_summary['colliding_indices']}` live gshare index groups collide at table size `{gshare_alias_summary['table_size']}` with history bits `{gshare_alias_summary['history_bits']}`; "
+        f"`{gshare_alias_summary['conflicting_indices']}` groups mix opposite dominant biases."
+    )
+    lines.append(
+        f"- `{gshare_alias_summary['cross_address_colliding_indices']}` groups merge different PCs; "
+        f"`{gshare_alias_summary['history_spread_colliding_indices']}` groups merge multiple global-history states."
+    )
+    lines.append(
+        f"- `{gshare_alias_summary['branch_events_in_collisions']}` branch events land in dynamic gshare collisions on this trace."
+    )
+    if gshare_alias_summary["collision_groups"]:
+        for group in gshare_alias_summary["collision_groups"]:
+            members = ", ".join(
+                f"`{item['address']}@{item['history_before']}` ({item['taken_percent']:.1f}% taken)" for item in group["contexts"]
+            )
+            suffix = "conflicting biases" if group["conflicting_biases"] else "similar biases"
+            lines.append(
+                f"- Index `{group['index_hex']}`: {members} · `{group['branch_events']}` events · {suffix}."
+            )
+    else:
+        lines.append("- No dynamic gshare collisions for this table/history configuration.")
 
     if best.hardest_branches:
         lines.extend(["", "## Hardest branches for the winning predictor", ""])
@@ -1231,6 +1384,7 @@ def render_comparison_svg(
     trace_path: Path,
     trace_summary: dict[str, Any],
     alias_summary: dict[str, Any],
+    gshare_alias_summary: dict[str, Any],
     results: list[SimulationResult],
     table_size: int,
     history_bits: int,
@@ -1239,7 +1393,7 @@ def render_comparison_svg(
     height = 640
     best = results[0]
     runner_up = results[1]
-    talking_points = _build_comparison_talking_points(results, trace_summary, alias_summary)[:3]
+    talking_points = _build_comparison_talking_points(results, trace_summary, alias_summary, gshare_alias_summary)[:3]
     hardest_branches = best.hardest_branches[:3]
     gap_text = (
         f"Tie at {best.accuracy * 100:.2f}%"
@@ -1348,6 +1502,7 @@ def render_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     for scenario in scenarios:
         best = scenario["results"][0]
         alias_summary = scenario["alias_summary"]
+        gshare_alias_summary = scenario["gshare_alias_summary"]
         lines.extend(
             [
                 f"### `{scenario['workload']}`",
@@ -1358,6 +1513,7 @@ def render_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
                 f"- Best simple baseline: `{scenario['best_simple_predictor']}` at `{scenario['best_simple_accuracy_percent']:.2f}%`.",
                 f"- Best advanced predictor: `{scenario['best_advanced_predictor']}` at `{scenario['best_advanced_accuracy_percent']:.2f}%`.",
                 f"- Static aliasing: `{alias_summary['colliding_indices']}` colliding buckets, `{alias_summary['conflicting_indices']}` with conflicting dominant biases.",
+                f"- Dynamic gshare aliasing: `{gshare_alias_summary['colliding_indices']}` live collisions, `{gshare_alias_summary['conflicting_indices']}` with conflicting dominant biases, `{gshare_alias_summary['history_spread_colliding_indices']}` spanning multiple history states.",
                 "",
                 "Top three predictors:",
             ]
@@ -1571,6 +1727,7 @@ def main(argv: list[str] | None = None) -> int:
             trace_path = Path(args.trace)
             trace_summary = summarize_trace(records)
             alias_summary = summarize_table_aliasing(records, table_size=args.table_size)
+            gshare_alias_summary = summarize_gshare_aliasing(records, table_size=args.table_size, history_bits=args.history_bits)
             results = compare_predictors(records, table_size=args.table_size, history_bits=args.history_bits)
             payload = {
                 "trace": str(trace_path),
@@ -1578,6 +1735,7 @@ def main(argv: list[str] | None = None) -> int:
                 "history_bits": args.history_bits,
                 "trace_summary": trace_summary,
                 "alias_summary": alias_summary,
+                "gshare_alias_summary": gshare_alias_summary,
                 "total_branches": len(records),
                 "results": [result.to_dict() for result in results],
                 "best_predictor": results[0].predictor,
@@ -1589,6 +1747,7 @@ def main(argv: list[str] | None = None) -> int:
                         trace_path=trace_path,
                         trace_summary=trace_summary,
                         alias_summary=alias_summary,
+                        gshare_alias_summary=gshare_alias_summary,
                         results=results,
                         table_size=args.table_size,
                         history_bits=args.history_bits,
@@ -1602,6 +1761,7 @@ def main(argv: list[str] | None = None) -> int:
                         trace_path=trace_path,
                         trace_summary=trace_summary,
                         alias_summary=alias_summary,
+                        gshare_alias_summary=gshare_alias_summary,
                         results=results,
                         table_size=args.table_size,
                         history_bits=args.history_bits,
@@ -1617,6 +1777,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     f"static aliasing: {alias_summary['colliding_indices']} colliding indices at table size {alias_summary['table_size']} "
                     f"({alias_summary['conflicting_indices']} conflicting bias groups)"
+                )
+                print(
+                    f"dynamic gshare aliasing: {gshare_alias_summary['colliding_indices']} live collisions at table size {gshare_alias_summary['table_size']} "
+                    f"with history={gshare_alias_summary['history_bits']} ({gshare_alias_summary['conflicting_indices']} conflicting bias groups)"
                 )
                 if "markdown_output" in payload:
                     print(f"markdown card: {payload['markdown_output']}")

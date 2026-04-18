@@ -226,7 +226,7 @@ Run the tests:
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
 - the perceptron predictor keeps a signed weight vector per static branch bucket and trains it with the classic update rule when the prediction is wrong or not confident, which makes long-history correlations explainable instead of purely table-lookup based
 - the tournament predictor tracks when local-history vs gshare is doing better for a given PC and exposes chooser-state snapshots so the hybrid behavior is inspectable in JSON output
-- compare output includes a static aliasing summary for the PC-indexed predictor tables so you can point at exact colliding buckets when discussing table-size trade-offs
+- compare output includes both a static PC-index aliasing summary and a dynamic gshare-index aliasing summary, so you can point at exact colliding buckets and history-conditioned conflicts when discussing table-size trade-offs
 - the `alias-thrash` generator intentionally maps opposite-bias branches into the same low-order index bits, which makes interference easy to show without external trace corpora
 - the synthetic generator is intentionally lightweight and reproducible so you can build demos, tests, and benchmark sweeps without needing a large external trace corpus
 - the `sweep` command uses per-workload recommended table/history settings so one overview artifact can stay fair to loop, bias, aliasing, hybrid, and perceptron-friendly traces instead of flattening everything into one generic config
@@ -234,13 +234,13 @@ Run the tests:
 ## Portfolio talking points
 - explain why one-bit predictors mispredict both loop exit and loop re-entry while two-bit predictors usually miss only on the exit
 - use the `tournament-style` workload to show why some branches want local-history tracking while others benefit from recent-history correlation
-- use the `alias-thrash` workload plus the compare JSON/Markdown alias summary to explain predictor-table interference and why larger tables can recover accuracy
+- use the `alias-thrash` workload plus the compare JSON/Markdown static + dynamic alias summaries to explain predictor-table interference, gshare history-conditioned collisions, and why larger tables can recover accuracy
 - compare `local-history`, `gshare`, `perceptron`, and `tournament` on the same trace to talk through local/global/neural/hybrid trade-offs instead of stopping at bimodal counters
 - use the `perceptron-majority` workload to explain linearly separable branch behavior and why perceptrons can use longer histories without exploding the table size
 - use the trace-family sweep card when you want one overview slide that shows different workloads favor different predictors instead of implying there is one universal winner
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
-- add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
 - add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
 - add budget-normalized sweeps so predictors can be compared under similar total state-bit limits instead of only by table/history knobs
+- add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family

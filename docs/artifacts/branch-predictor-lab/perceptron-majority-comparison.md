@@ -1,6 +1,6 @@
 # Branch predictor comparison card: `perceptron-majority-seed13`
 
-- Generated: `2026-04-17T16:43:51Z`
+- Generated: `2026-04-18T03:03:10Z`
 - Trace: `artifacts/branch-predictor-lab/perceptron-majority-seed13.trace`
 - Branches: `96` across `1` static PCs
 - Taken rate: `25.000%` (`24` taken / `72` not taken)
@@ -29,8 +29,8 @@
 - perceptron wins this trace at 92.71% accuracy, beating local-history by 4.17 percentage points.
 - Two-bit vs one-bit: 73.96% vs 50.00% accuracy (23.96 pp in favor of two-bit).
 - Best advanced predictor: perceptron at 92.71% vs best simple baseline always-not-taken at 75.00%.
-- Hardest branch for the winning predictor is 0x480 with 7 misses across 96 executions.
-- Top labeled branch motifs: perceptron-majority-target (96).
+- Dynamic gshare aliasing: 5 live index collisions at table size 32 with history=12 (2 conflicting bias groups).
+- Worst gshare bucket: index 0x0 mixes 0x480@000000000000, 0x480@001010100000, 0x480@010101000000 across 24 branch events.
 
 ## Trace mix
 
@@ -42,6 +42,17 @@
 - `0` colliding index groups at table size `32`; `0` groups mix opposite dominant biases.
 - `0` branch events land in colliding buckets on this trace.
 - No static PC aliasing for this table size.
+
+## Dynamic gshare aliasing
+
+- `5` live gshare index groups collide at table size `32` with history bits `12`; `2` groups mix opposite dominant biases.
+- `0` groups merge different PCs; `5` groups merge multiple global-history states.
+- `64` branch events land in dynamic gshare collisions on this trace.
+- Index `0x0`: `0x480@000000000000` (100.0% taken), `0x480@001010100000` (0.0% taken), `0x480@010101000000` (0.0% taken), `0x480@101010000000` (100.0% taken) · `24` events · conflicting biases.
+- Index `0xa`: `0x480@000000001010` (100.0% taken), `0x480@000000101010` (0.0% taken), `0x480@100000001010` (100.0% taken) · `16` events · conflicting biases.
+- Index `0x1`: `0x480@000000000001` (0.0% taken), `0x480@010100000001` (0.0% taken) · `8` events · similar biases.
+- Index `0x2`: `0x480@000000000010` (100.0% taken), `0x480@101000000010` (100.0% taken) · `8` events · similar biases.
+- Index `0x5`: `0x480@000000000101` (0.0% taken), `0x480@010000000101` (0.0% taken) · `8` events · similar biases.
 
 ## Hardest branches for the winning predictor
 

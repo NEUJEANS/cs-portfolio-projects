@@ -59,6 +59,6 @@ Use this when you want one artifact that summarizes how the best predictor chang
 - Use the sweep overview card when you want one slide that proves different workload families reward different predictors and configs.
 - Use the sample trace card when you want a clean teaching story for loop exits, alternating phases, and cache-ish branches.
 - Use the `tournament-style` card when you want to show that local/global/hybrid predictors can tie or trade places depending on the trace family and history depth.
-- Use the `alias-thrash` card when you want to explain table interference, conflicting branch biases, and why increasing table size can improve simple predictors without changing the trace.
+- Use the `alias-thrash` card when you want to explain table interference, conflicting branch biases, dynamic gshare-history collisions, and why increasing table size can improve simple predictors without changing the trace.
 - Use the `perceptron-majority` card when you want to show a neural predictor beating classic local/global tables on a long-history, linearly separable workload.
 - Pair the SVG card with its Markdown report when you need both a screenshot-friendly visual and a text artifact with exact rankings.
