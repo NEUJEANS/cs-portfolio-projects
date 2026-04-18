@@ -31,7 +31,7 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - optional anti-entropy exports render Markdown/HTML/JSON reports that summarize per-sync transfer sizes, missing tags, tombstones, counters, and bytes saved vs full-state sync
 - replay exports keep the replica-state timeline and anti-entropy transfer table on one browser-friendly page for demos, screenshots, and narrated walk-throughs, now with jump-to-sync shortcuts, playback-speed presets, hash-based deep links such as `#step-3` or `#sync-2`, plus built-in copy-link and checkpoint-SVG export actions
 - optional `compare-script` runs the same scenario under OR-Set and timestamped LWW-element-set semantics, then emits Markdown/HTML/JSON comparison artifacts that explain where the models diverge
-- built-in comparison presets cover both divergence-heavy and control-case scenarios, and `compare-presets` turns them into a single portfolio-friendly summary gallery
+- built-in comparison presets cover both divergence-heavy and control-case scenarios, and `compare-presets` turns them into a single portfolio-friendly summary gallery with optional per-preset detail bundles
 - LWW comparison mode supports configurable tie bias (`add` or `remove`) and explicit logical timestamps in the script JSON
 
 ## Usage
@@ -87,7 +87,8 @@ python3 crdt_orset_lab.py list-presets --json
 python3 crdt_orset_lab.py compare-presets \
   --suite-markdown-out ../../docs/artifacts/crdt-orset-lab/comparison-presets.md \
   --suite-html-out ../../docs/artifacts/crdt-orset-lab/comparison-presets.html \
-  --suite-json-out ../../docs/artifacts/crdt-orset-lab/comparison-presets.json
+  --suite-json-out ../../docs/artifacts/crdt-orset-lab/comparison-presets.json \
+  --detail-output-dir ../../docs/artifacts/crdt-orset-lab/comparison-presets
 ```
 
 The built-in preset suite currently includes:
@@ -95,7 +96,7 @@ The built-in preset suite currently includes:
 - `unobserved-remove` — a remove that happens before the remover has seen the original add
 - `observed-remove-sync` — a control case where both models converge on the same final absence
 
-This summary command is useful when you want one browser-friendly artifact that demonstrates both **where OR-Set beats naive timestamp ordering** and **where both approaches agree**.
+This summary command is useful when you want one browser-friendly artifact that demonstrates both **where OR-Set beats naive timestamp ordering** and **where both approaches agree**. When `--detail-output-dir` is present, each preset card also links directly to its own comparison page, OR-Set timeline, replay walkthrough, anti-entropy report, and raw snapshot bundle.
 
 ### Script format
 `sample_ops.json` and `sample_compare_ops.json` use this shape, and the CLI also accepts a plain top-level JSON list of operation objects when you do not need wrapper metadata:
@@ -146,6 +147,9 @@ The built-in preset scripts extend that story with two more resumable cases: `pr
 - `docs/artifacts/crdt-orset-lab/comparison-presets.html` — browser-friendly summary gallery for the built-in divergence/control-case preset suite
 - `docs/artifacts/crdt-orset-lab/comparison-presets.md` — Markdown version of the preset suite for notes or code review
 - `docs/artifacts/crdt-orset-lab/comparison-presets.json` — machine-readable preset-suite summary for tooling or future batch export steps
+- `docs/artifacts/crdt-orset-lab/comparison-presets/concurrent-readd/comparison.html` — per-preset detail page for the divergence case, linked directly from the suite gallery
+- `docs/artifacts/crdt-orset-lab/comparison-presets/concurrent-readd/replay.html` — per-preset OR-Set replay page for the divergence case
+- `docs/artifacts/crdt-orset-lab/comparison-presets/observed-remove-sync/anti-entropy.html` — control-case anti-entropy page that shows a scenario where both models agree on the final membership
 
 ## Test
 ```bash
@@ -153,7 +157,7 @@ python3 -m unittest discover -s projects/crdt-orset-lab -p "test_*.py"
 ```
 
 ## Future improvements
+- add a tiny landing/index page or zip export inside each preset detail bundle so one preset can be shared as a self-contained packet
 - add more CRDT variants such as PN-counters or MV-registers for broader trade-off comparisons
-- add per-preset detail export bundles so the preset suite can link directly to timeline/replay/anti-entropy pages for each scenario
-- add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
+- add a cross-preset matrix page that groups divergence causes such as unobserved removes, observed removes, and concurrent re-adds
 - add PNG/export bundling on top of the replay checkpoint SVG downloads for slide decks that need bitmap assets

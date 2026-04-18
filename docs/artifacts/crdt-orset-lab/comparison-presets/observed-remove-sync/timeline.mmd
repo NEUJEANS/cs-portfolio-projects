@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    participant R1 as a
+    participant R2 as b
+    participant R3 as c
+    Note over R1,R3: preset observed-remove-sync — Observed remove yields the same final answer
+    R1->>R1: add notebook [a:1]
+    Note over R1: elements=notebook | active=notebook=a:1 | tombstones=∅
+    R1->>R2: sync both
+    Note over R1,R2: a: elements=notebook | active=notebook=a:1 | tombstones=∅ || b: elements=notebook | active=notebook=a:1 | tombstones=∅
+    R2->>R2: remove notebook
+    Note over R2: removed a:1; elements=∅ | active=∅ | tombstones=a:1
+    R2->>R3: sync both
+    Note over R2,R3: b: elements=∅ | active=∅ | tombstones=a:1 || c: elements=∅ | active=∅ | tombstones=a:1
+    R1->>R2: sync both
+    Note over R1,R2: a: elements=∅ | active=∅ | tombstones=a:1 || b: elements=∅ | active=∅ | tombstones=a:1
+    R1->>R3: sync both
+    Note over R1,R3: a: elements=∅ | active=∅ | tombstones=a:1 || c: elements=∅ | active=∅ | tombstones=a:1
+    Note over R1,R3: Final membership ∅; active tags ∅; tombstones a:1.

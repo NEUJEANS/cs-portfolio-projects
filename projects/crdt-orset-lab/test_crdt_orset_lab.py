@@ -199,6 +199,21 @@ class ORSetLabTests(unittest.TestCase):
 
     def test_render_comparison_preset_suite_views_include_suite_story(self) -> None:
         suite = build_comparison_preset_suite(["concurrent-readd", "observed-remove-sync"])
+        suite["presets"][0]["detail_bundle"] = {
+            "directory": "comparison-presets/concurrent-readd",
+            "comparison_html": "comparison-presets/concurrent-readd/comparison.html",
+            "timeline_html": "comparison-presets/concurrent-readd/timeline.html",
+            "replay_html": "comparison-presets/concurrent-readd/replay.html",
+            "anti_entropy_html": "comparison-presets/concurrent-readd/anti-entropy.html",
+            "snapshot_json": "comparison-presets/concurrent-readd/orset-snapshot.json",
+            "timeline_markdown": "comparison-presets/concurrent-readd/timeline.md",
+            "timeline_mermaid": "comparison-presets/concurrent-readd/timeline.mmd",
+            "timeline_svg": "comparison-presets/concurrent-readd/timeline.svg",
+            "comparison_markdown": "comparison-presets/concurrent-readd/comparison.md",
+            "comparison_json": "comparison-presets/concurrent-readd/comparison.json",
+            "anti_entropy_markdown": "comparison-presets/concurrent-readd/anti-entropy.md",
+            "anti_entropy_json": "comparison-presets/concurrent-readd/anti-entropy.json",
+        }
 
         markdown = render_comparison_preset_suite_markdown(suite)
         html = render_comparison_preset_suite_html(suite)
@@ -207,9 +222,12 @@ class ORSetLabTests(unittest.TestCase):
         self.assertIn("concurrent-readd", markdown)
         self.assertIn("observed-remove-sync", markdown)
         self.assertIn("both models converge to the same final membership", markdown)
+        self.assertIn("[comparison](comparison-presets/concurrent-readd/comparison.html)", markdown)
         self.assertIn("OR-Set comparison preset suite", html)
         self.assertIn("Concurrent re-add survives in OR-Set", html)
         self.assertIn("Both models reach the same final membership", html)
+        self.assertIn('href="comparison-presets/concurrent-readd/timeline.html"', html)
+        self.assertIn("Snapshot JSON", html)
 
     def test_parse_tag_rejects_invalid_format(self) -> None:
         with self.assertRaisesRegex(ValueError, "invalid OR-Set tag"):
@@ -504,6 +522,7 @@ class ORSetLabTests(unittest.TestCase):
             markdown_path = artifact_dir / "comparison-presets.md"
             html_path = artifact_dir / "comparison-presets.html"
             json_path = artifact_dir / "comparison-presets.json"
+            detail_dir = artifact_dir / "comparison-presets"
 
             result = run_cli(
                 "compare-presets",
@@ -513,6 +532,8 @@ class ORSetLabTests(unittest.TestCase):
                 str(html_path),
                 "--suite-json-out",
                 str(json_path),
+                "--detail-output-dir",
+                str(detail_dir),
             )
 
             self.assertEqual(result["preset_count"], 3)
@@ -524,8 +545,16 @@ class ORSetLabTests(unittest.TestCase):
             html = html_path.read_text()
             self.assertIn("Concurrent re-add survives in OR-Set", html)
             self.assertIn("Observed remove yields the same final answer", html)
+            self.assertIn('href="comparison-presets/concurrent-readd/comparison.html"', html)
+            self.assertIn('href="comparison-presets/concurrent-readd/replay.html"', html)
             payload = json.loads(json_path.read_text())
             self.assertEqual(payload["aligned_count"], 1)
+            detail_bundle = next(preset for preset in payload["presets"] if preset["name"] == "concurrent-readd")["detail_bundle"]
+            self.assertEqual(detail_bundle["comparison_html"], "comparison-presets/concurrent-readd/comparison.html")
+            self.assertTrue((detail_dir / "concurrent-readd" / "comparison.html").exists())
+            self.assertTrue((detail_dir / "concurrent-readd" / "timeline.html").exists())
+            self.assertTrue((detail_dir / "concurrent-readd" / "replay.html").exists())
+            self.assertTrue((detail_dir / "concurrent-readd" / "anti-entropy.html").exists())
 
     def test_cli_compare_presets_unknown_name_returns_parser_error(self) -> None:
         completed = subprocess.run(

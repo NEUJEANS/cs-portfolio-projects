@@ -1,5 +1,18 @@
 # crdt-orset-lab checklist
 
+## Current slice (2026-04-18 23:02 UTC run)
+- [x] confirm `main` still matches `origin/main` before editing and preserve the local in-progress preset-detail diff
+- [x] do only the brief preset-bundle / relative-link refresh needed to keep the generated static artifacts portable
+- [x] do a short Python/path self-test refresh for bundle-relative link rendering
+- [x] update/add checklist markdown for the preset-detail bundle slice
+- [x] add per-preset detail bundle generation for `compare-presets` and surface those links in the suite outputs
+- [x] generate and commit per-preset detail artifacts under `docs/artifacts/crdt-orset-lab/comparison-presets/`
+- [x] update README usage, committed artifact examples, and future follow-up notes
+- [x] extend regression coverage for detail-bundle link rendering and CLI artifact writing
+- [x] run targeted tests, smoke checks, and 3 review passes
+- [x] run secret scan
+- [x] commit, push, and write the wrap-up
+
 ## Current slice (2026-04-18 22:15 UTC run)
 - [x] confirm `main` still matches `origin/main` before editing
 - [x] do only the brief preset-pattern/tooling refresh needed to mirror the repo's existing built-in-preset style
@@ -100,14 +113,14 @@
 - [x] replay/animation HTML exports that pair the state timeline with anti-entropy transfer details
 - [x] replay controls that jump directly between sync checkpoints and adjust playback speed for demos
 - [x] built-in OR-Set vs LWW comparison presets plus a summary-suite command/artifact bundle
+- [x] per-preset detail export bundles linked from the preset-suite gallery
 
 ## Current quality checks
 - [x] README explains why observed-remove semantics matter and how to run the simulator
-- [x] README documents Markdown / Mermaid / SVG / HTML / JSON export flags, the anti-entropy report outputs, the replay page, the `compare-script` workflow, and the new preset-suite commands
-- [x] tests cover add/remove/merge behavior, convergence, script loading, CLI flows, timeline exports, replay exports, anti-entropy exports, comparison exports, preset listing, and the preset-suite summaries
+- [x] README documents Markdown / Mermaid / SVG / HTML / JSON export flags, the anti-entropy report outputs, the replay page, the `compare-script` workflow, and the preset-suite commands including `--detail-output-dir`
+- [x] tests cover add/remove/merge behavior, convergence, script loading, CLI flows, timeline exports, replay exports, anti-entropy exports, comparison exports, preset listing, preset detail-bundle links, and the preset-suite summaries
 - [x] project is resumable through the sample scripts, checklist, research/learning notes, and review/wrap-up docs
 
 ## Next follow-up ideas
-- [ ] add per-preset detail export bundles so the preset suite can link directly to timeline/replay/anti-entropy pages for each scenario
 - [ ] add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
 - [ ] add PNG/export bundling on top of the replay checkpoint SVG downloads for slide decks that need bitmap assets

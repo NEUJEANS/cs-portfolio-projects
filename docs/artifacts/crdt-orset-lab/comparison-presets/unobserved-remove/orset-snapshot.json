@@ -1,0 +1,549 @@
+{
+  "convergence": {
+    "active_tags": {
+      "a": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "b": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "c": {
+        "notebook": [
+          "a:1"
+        ]
+      }
+    },
+    "converged": true,
+    "membership": {
+      "a": [
+        "notebook"
+      ],
+      "b": [
+        "notebook"
+      ],
+      "c": [
+        "notebook"
+      ]
+    }
+  },
+  "replicas": {
+    "a": {
+      "active_tags": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "counters": {
+        "a": 1
+      },
+      "elements": [
+        "notebook"
+      ],
+      "observed_tags": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "tombstones": []
+    },
+    "b": {
+      "active_tags": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "counters": {
+        "a": 1
+      },
+      "elements": [
+        "notebook"
+      ],
+      "observed_tags": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "tombstones": []
+    },
+    "c": {
+      "active_tags": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "counters": {
+        "a": 1
+      },
+      "elements": [
+        "notebook"
+      ],
+      "observed_tags": {
+        "notebook": [
+          "a:1"
+        ]
+      },
+      "tombstones": []
+    }
+  },
+  "timeline": [
+    {
+      "element": "notebook",
+      "op": "add",
+      "replica": "a",
+      "state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "tag": "a:1"
+    },
+    {
+      "element": "notebook",
+      "op": "remove",
+      "removed_tags": [],
+      "replica": "c",
+      "state": {
+        "active_tags": {},
+        "counters": {},
+        "elements": [],
+        "observed_tags": {},
+        "tombstones": []
+      }
+    },
+    {
+      "anti_entropy": {
+        "bytes_saved_vs_full": 0,
+        "delta_sync_bytes": 105,
+        "digest_match_before": false,
+        "full_sync_bytes": 105,
+        "source_before": {
+          "active_element_count": 1,
+          "active_tag_count": 1,
+          "counter_count": 1,
+          "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "element_count": 1,
+          "observed_tag_count": 1,
+          "payload_bytes": 64,
+          "tombstone_count": 0
+        },
+        "target_before": {
+          "active_element_count": 0,
+          "active_tag_count": 0,
+          "counter_count": 0,
+          "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+          "element_count": 0,
+          "observed_tag_count": 0,
+          "payload_bytes": 41,
+          "tombstone_count": 0
+        },
+        "transfer_count": 2,
+        "transfers": [
+          {
+            "bytes_saved_vs_full": 0,
+            "delta": {
+              "counter_count": 1,
+              "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+              "element_count": 1,
+              "observed_tag_count": 1,
+              "payload_bytes": 64,
+              "tombstone_count": 0
+            },
+            "delta_payload": {
+              "adds": {
+                "notebook": [
+                  "a:1"
+                ]
+              },
+              "counters": {
+                "a": 1
+              },
+              "tombstones": []
+            },
+            "digest_match_before": false,
+            "from": "a",
+            "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "full_state": {
+              "active_element_count": 1,
+              "active_tag_count": 1,
+              "counter_count": 1,
+              "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+              "element_count": 1,
+              "observed_tag_count": 1,
+              "payload_bytes": 64,
+              "tombstone_count": 0
+            },
+            "to": "b",
+            "to_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e"
+          },
+          {
+            "bytes_saved_vs_full": 0,
+            "delta": {
+              "counter_count": 0,
+              "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+              "element_count": 0,
+              "observed_tag_count": 0,
+              "payload_bytes": 41,
+              "tombstone_count": 0
+            },
+            "delta_payload": {
+              "adds": {},
+              "counters": {},
+              "tombstones": []
+            },
+            "digest_match_before": false,
+            "from": "b",
+            "from_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "full_state": {
+              "active_element_count": 0,
+              "active_tag_count": 0,
+              "counter_count": 0,
+              "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+              "element_count": 0,
+              "observed_tag_count": 0,
+              "payload_bytes": 41,
+              "tombstone_count": 0
+            },
+            "to": "a",
+            "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+          }
+        ]
+      },
+      "direction": "both",
+      "op": "sync",
+      "source": "a",
+      "source_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "target": "b",
+      "target_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      }
+    },
+    {
+      "anti_entropy": {
+        "bytes_saved_vs_full": 0,
+        "delta_sync_bytes": 105,
+        "digest_match_before": false,
+        "full_sync_bytes": 105,
+        "source_before": {
+          "active_element_count": 1,
+          "active_tag_count": 1,
+          "counter_count": 1,
+          "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "element_count": 1,
+          "observed_tag_count": 1,
+          "payload_bytes": 64,
+          "tombstone_count": 0
+        },
+        "target_before": {
+          "active_element_count": 0,
+          "active_tag_count": 0,
+          "counter_count": 0,
+          "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+          "element_count": 0,
+          "observed_tag_count": 0,
+          "payload_bytes": 41,
+          "tombstone_count": 0
+        },
+        "transfer_count": 2,
+        "transfers": [
+          {
+            "bytes_saved_vs_full": 0,
+            "delta": {
+              "counter_count": 1,
+              "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+              "element_count": 1,
+              "observed_tag_count": 1,
+              "payload_bytes": 64,
+              "tombstone_count": 0
+            },
+            "delta_payload": {
+              "adds": {
+                "notebook": [
+                  "a:1"
+                ]
+              },
+              "counters": {
+                "a": 1
+              },
+              "tombstones": []
+            },
+            "digest_match_before": false,
+            "from": "b",
+            "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "full_state": {
+              "active_element_count": 1,
+              "active_tag_count": 1,
+              "counter_count": 1,
+              "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+              "element_count": 1,
+              "observed_tag_count": 1,
+              "payload_bytes": 64,
+              "tombstone_count": 0
+            },
+            "to": "c",
+            "to_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e"
+          },
+          {
+            "bytes_saved_vs_full": 0,
+            "delta": {
+              "counter_count": 0,
+              "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+              "element_count": 0,
+              "observed_tag_count": 0,
+              "payload_bytes": 41,
+              "tombstone_count": 0
+            },
+            "delta_payload": {
+              "adds": {},
+              "counters": {},
+              "tombstones": []
+            },
+            "digest_match_before": false,
+            "from": "c",
+            "from_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "full_state": {
+              "active_element_count": 0,
+              "active_tag_count": 0,
+              "counter_count": 0,
+              "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+              "element_count": 0,
+              "observed_tag_count": 0,
+              "payload_bytes": 41,
+              "tombstone_count": 0
+            },
+            "to": "b",
+            "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+          }
+        ]
+      },
+      "direction": "both",
+      "op": "sync",
+      "source": "b",
+      "source_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "target": "c",
+      "target_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      }
+    },
+    {
+      "anti_entropy": {
+        "bytes_saved_vs_full": 46,
+        "delta_sync_bytes": 82,
+        "digest_match_before": true,
+        "full_sync_bytes": 128,
+        "source_before": {
+          "active_element_count": 1,
+          "active_tag_count": 1,
+          "counter_count": 1,
+          "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "element_count": 1,
+          "observed_tag_count": 1,
+          "payload_bytes": 64,
+          "tombstone_count": 0
+        },
+        "target_before": {
+          "active_element_count": 1,
+          "active_tag_count": 1,
+          "counter_count": 1,
+          "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "element_count": 1,
+          "observed_tag_count": 1,
+          "payload_bytes": 64,
+          "tombstone_count": 0
+        },
+        "transfer_count": 2,
+        "transfers": [
+          {
+            "bytes_saved_vs_full": 23,
+            "delta": {
+              "counter_count": 0,
+              "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+              "element_count": 0,
+              "observed_tag_count": 0,
+              "payload_bytes": 41,
+              "tombstone_count": 0
+            },
+            "delta_payload": {
+              "adds": {},
+              "counters": {},
+              "tombstones": []
+            },
+            "digest_match_before": true,
+            "from": "a",
+            "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "full_state": {
+              "active_element_count": 1,
+              "active_tag_count": 1,
+              "counter_count": 1,
+              "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+              "element_count": 1,
+              "observed_tag_count": 1,
+              "payload_bytes": 64,
+              "tombstone_count": 0
+            },
+            "to": "c",
+            "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+          },
+          {
+            "bytes_saved_vs_full": 23,
+            "delta": {
+              "counter_count": 0,
+              "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+              "element_count": 0,
+              "observed_tag_count": 0,
+              "payload_bytes": 41,
+              "tombstone_count": 0
+            },
+            "delta_payload": {
+              "adds": {},
+              "counters": {},
+              "tombstones": []
+            },
+            "digest_match_before": true,
+            "from": "c",
+            "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "full_state": {
+              "active_element_count": 1,
+              "active_tag_count": 1,
+              "counter_count": 1,
+              "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+              "element_count": 1,
+              "observed_tag_count": 1,
+              "payload_bytes": 64,
+              "tombstone_count": 0
+            },
+            "to": "a",
+            "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+          }
+        ]
+      },
+      "direction": "both",
+      "op": "sync",
+      "source": "a",
+      "source_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      },
+      "target": "c",
+      "target_state": {
+        "active_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "counters": {
+          "a": 1
+        },
+        "elements": [
+          "notebook"
+        ],
+        "observed_tags": {
+          "notebook": [
+            "a:1"
+          ]
+        },
+        "tombstones": []
+      }
+    }
+  ]
+}

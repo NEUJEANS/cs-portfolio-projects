@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1112" viewBox="0 0 1080 1112" role="img" aria-labelledby="title desc">
+  <defs>
+    <linearGradient id="timelineBg" x1="0%" x2="0%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+  </defs>
+  <title id="title">preset concurrent-readd — Concurrent re-add survives in OR-Set</title>
+  <desc id="desc">Observed-remove story: a remove tombstones only the add-tags a replica has already observed, so membership still survives via notebook=c:1 while tombstones retain a:1.</desc>
+  <rect x="0" y="0" width="1080" height="1112" fill="url(#timelineBg)" rx="24" />
+  <text x="32" y="52" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">preset concurrent-readd — Concurrent re-add survives in OR-Set</text>
+  <text x="32" y="82" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="16">Observed-remove set timeline export</text>
+  <rect x="32" y="108" width="1016" height="96" rx="18" fill="#d1fae5" fill-opacity="0.95" stroke="#10b981" stroke-width="2" />
+  <circle cx="60" cy="136" r="18" fill="#10b981" />
+  <text x="60" y="142" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">1</text>
+  <text x="94" y="138" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a adds notebook</text>
+  <text x="94" y="166" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">new tag: a:1</text>
+  <text x="94" y="186" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">elements=notebook | active=notebook=a:1 | tombstones=∅</text>
+  <rect x="32" y="222" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="250" r="18" fill="#3b82f6" />
+  <text x="60" y="256" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">2</text>
+  <text x="94" y="252" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a ↔ b sync (both)</text>
+  <text x="94" y="280" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=a:1 | tombstones=∅</text>
+  <text x="94" y="300" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">b: elements=notebook | active=notebook=a:1 | tombstones=∅</text>
+  <rect x="32" y="336" width="1016" height="96" rx="18" fill="#fee2e2" fill-opacity="0.95" stroke="#ef4444" stroke-width="2" />
+  <circle cx="60" cy="364" r="18" fill="#ef4444" />
+  <text x="60" y="370" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">3</text>
+  <text x="94" y="366" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">b removes notebook</text>
+  <text x="94" y="394" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">observed tags removed: a:1</text>
+  <text x="94" y="414" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">elements=∅ | active=∅ | tombstones=a:1</text>
+  <rect x="32" y="450" width="1016" height="96" rx="18" fill="#d1fae5" fill-opacity="0.95" stroke="#10b981" stroke-width="2" />
+  <circle cx="60" cy="478" r="18" fill="#10b981" />
+  <text x="60" y="484" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">4</text>
+  <text x="94" y="480" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">c adds notebook</text>
+  <text x="94" y="508" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">new tag: c:1</text>
+  <text x="94" y="528" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">elements=notebook | active=notebook=c:1 | tombstones=∅</text>
+  <rect x="32" y="564" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="592" r="18" fill="#3b82f6" />
+  <text x="60" y="598" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">5</text>
+  <text x="94" y="594" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">c ↔ a sync (both)</text>
+  <text x="94" y="622" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">c: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅</text>
+  <text x="94" y="642" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅</text>
+  <rect x="32" y="678" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="706" r="18" fill="#3b82f6" />
+  <text x="60" y="712" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">6</text>
+  <text x="94" y="708" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a ↔ b sync (both)</text>
+  <text x="94" y="736" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <text x="94" y="756" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">b: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <rect x="32" y="792" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="820" r="18" fill="#3b82f6" />
+  <text x="60" y="826" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">7</text>
+  <text x="94" y="822" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a ↔ c sync (both)</text>
+  <text x="94" y="850" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <text x="94" y="870" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">c: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <rect x="32" y="906" width="1016" height="170" rx="18" fill="#ede9fe" fill-opacity="0.98" stroke="#8b5cf6" stroke-width="2" />
+  <text x="56" y="938" fill="#4c1d95" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">Final convergence</text>
+  <text x="1024" y="938" text-anchor="end" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">converged=true</text>
+  <text x="56" y="970" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">Observed-remove story: a remove tombstones only the add-tags a replica has already</text>
+  <text x="56" y="990" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">observed, so membership still survives via notebook=c:1 while tombstones retain a:1.</text>
+  <text x="56" y="1010" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements notebook; active notebook=c:1; tombstones a:1</text>
+  <text x="56" y="1030" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">b: elements notebook; active notebook=c:1; tombstones a:1</text>
+  <text x="56" y="1050" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">c: elements notebook; active notebook=c:1; tombstones a:1</text>
+</svg>

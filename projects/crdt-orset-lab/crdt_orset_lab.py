@@ -2812,22 +2812,234 @@ def write_comparison_outputs(args: argparse.Namespace, comparison: dict[str, obj
         )
 
 
+def relative_output_path(target: str | Path, base_dir: str | Path) -> str:
+    return Path(os.path.relpath(Path(target), Path(base_dir))).as_posix()
+
+
+def comparison_preset_detail_title(preset: ComparisonPreset) -> str:
+    return f"preset {preset.name} — {preset.title}"
+
+
+def build_comparison_preset_detail_paths(
+    preset: ComparisonPreset,
+    detail_output_dir: str | Path,
+) -> dict[str, Path]:
+    bundle_dir = Path(detail_output_dir) / preset.name
+    return {
+        "bundle_dir": bundle_dir,
+        "script": preset.script_path,
+        "timeline_markdown": bundle_dir / "timeline.md",
+        "timeline_mermaid": bundle_dir / "timeline.mmd",
+        "timeline_svg": bundle_dir / "timeline.svg",
+        "timeline_html": bundle_dir / "timeline.html",
+        "replay_html": bundle_dir / "replay.html",
+        "snapshot_json": bundle_dir / "orset-snapshot.json",
+        "anti_entropy_markdown": bundle_dir / "anti-entropy.md",
+        "anti_entropy_html": bundle_dir / "anti-entropy.html",
+        "anti_entropy_json": bundle_dir / "anti-entropy.json",
+        "comparison_markdown": bundle_dir / "comparison.md",
+        "comparison_html": bundle_dir / "comparison.html",
+        "comparison_json": bundle_dir / "comparison.json",
+    }
+
+
+def detail_bundle_relative_paths(
+    paths: dict[str, Path],
+    *,
+    base_dir: str | Path,
+) -> dict[str, str]:
+    return {
+        "directory": relative_output_path(paths["bundle_dir"], base_dir),
+        "script": relative_output_path(paths["script"], base_dir),
+        "timeline_markdown": relative_output_path(paths["timeline_markdown"], base_dir),
+        "timeline_mermaid": relative_output_path(paths["timeline_mermaid"], base_dir),
+        "timeline_svg": relative_output_path(paths["timeline_svg"], base_dir),
+        "timeline_html": relative_output_path(paths["timeline_html"], base_dir),
+        "replay_html": relative_output_path(paths["replay_html"], base_dir),
+        "snapshot_json": relative_output_path(paths["snapshot_json"], base_dir),
+        "anti_entropy_markdown": relative_output_path(paths["anti_entropy_markdown"], base_dir),
+        "anti_entropy_html": relative_output_path(paths["anti_entropy_html"], base_dir),
+        "anti_entropy_json": relative_output_path(paths["anti_entropy_json"], base_dir),
+        "comparison_markdown": relative_output_path(paths["comparison_markdown"], base_dir),
+        "comparison_html": relative_output_path(paths["comparison_html"], base_dir),
+        "comparison_json": relative_output_path(paths["comparison_json"], base_dir),
+    }
+
+
+def enrich_suite_with_detail_bundles(
+    suite: dict[str, object],
+    detail_paths_by_name: dict[str, dict[str, Path]] | None,
+    *,
+    base_dir: str | Path,
+) -> dict[str, object]:
+    if not detail_paths_by_name:
+        return suite
+    enriched = json.loads(json.dumps(suite))
+    for preset in enriched["presets"]:
+        paths = detail_paths_by_name.get(str(preset["name"]))
+        if not paths:
+            continue
+        preset["detail_bundle"] = detail_bundle_relative_paths(paths, base_dir=base_dir)
+    return enriched
+
+
+def detail_bundle_markdown_links(detail_bundle: dict[str, object] | None) -> str:
+    if not detail_bundle:
+        return "—"
+    link_specs = (
+        ("comparison", "comparison_html"),
+        ("timeline", "timeline_html"),
+        ("replay", "replay_html"),
+        ("anti-entropy", "anti_entropy_html"),
+        ("snapshot", "snapshot_json"),
+    )
+    links = [
+        f"[{label}]({detail_bundle[key]})"
+        for label, key in link_specs
+        if detail_bundle.get(key)
+    ]
+    return " · ".join(links) if links else "—"
+
+
+def detail_bundle_html_links(detail_bundle: dict[str, object] | None) -> str:
+    if not detail_bundle:
+        return ""
+    link_specs = (
+        ("Comparison", "comparison_html"),
+        ("Timeline", "timeline_html"),
+        ("Replay", "replay_html"),
+        ("Anti-entropy", "anti_entropy_html"),
+        ("Snapshot JSON", "snapshot_json"),
+    )
+    return "".join(
+        f'<a class="detail-link" href="{escape_html(str(detail_bundle[key]))}">{escape_html(label)}</a>'
+        for label, key in link_specs
+        if detail_bundle.get(key)
+    )
+
+
+def write_comparison_preset_detail_outputs(
+    preset: ComparisonPreset,
+    comparison: dict[str, object],
+    *,
+    detail_output_dir: str | Path,
+) -> dict[str, Path]:
+    paths = build_comparison_preset_detail_paths(preset, detail_output_dir)
+    snapshot = dict(comparison["orset"])
+    title = comparison_preset_detail_title(preset)
+    anti_entropy_report = build_anti_entropy_report(snapshot)
+
+    write_text_output(paths["snapshot_json"], json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+    write_text_output(paths["timeline_markdown"], render_timeline_markdown(snapshot, title))
+    write_text_output(paths["timeline_mermaid"], render_timeline_mermaid(snapshot, title))
+    write_text_output(paths["timeline_svg"], render_timeline_svg(snapshot, title))
+    write_text_output(paths["anti_entropy_markdown"], render_anti_entropy_markdown(anti_entropy_report, title))
+    write_text_output(paths["anti_entropy_json"], json.dumps(anti_entropy_report, indent=2, sort_keys=True) + "\n")
+    write_text_output(paths["comparison_markdown"], render_comparison_markdown(comparison, title))
+    write_text_output(paths["comparison_json"], json.dumps(comparison, indent=2, sort_keys=True) + "\n")
+
+    timeline_links = build_companion_links(
+        html_path=paths["timeline_html"],
+        markdown_path=paths["timeline_markdown"],
+        mermaid_path=paths["timeline_mermaid"],
+        svg_path=paths["timeline_svg"],
+        json_path=paths["snapshot_json"],
+        script_path=paths["script"],
+        anti_entropy_markdown_path=paths["anti_entropy_markdown"],
+        anti_entropy_html_path=paths["anti_entropy_html"],
+        anti_entropy_json_path=paths["anti_entropy_json"],
+        replay_html_path=paths["replay_html"],
+    )
+    for label, target in (
+        ("Comparison HTML", paths["comparison_html"]),
+        ("Comparison Markdown", paths["comparison_markdown"]),
+        ("Comparison JSON", paths["comparison_json"]),
+    ):
+        timeline_links[label] = relative_output_path(target, paths["timeline_html"].parent)
+    write_text_output(paths["timeline_html"], render_timeline_html(snapshot, title, companion_links=timeline_links))
+
+    anti_entropy_links: dict[str, str] = {}
+    for label, target in (
+        ("Scenario script", paths["script"]),
+        ("Timeline gallery", paths["timeline_html"]),
+        ("Timeline Markdown", paths["timeline_markdown"]),
+        ("Timeline Mermaid", paths["timeline_mermaid"]),
+        ("Timeline SVG", paths["timeline_svg"]),
+        ("Timeline JSON", paths["snapshot_json"]),
+        ("Replay HTML", paths["replay_html"]),
+        ("Anti-entropy Markdown", paths["anti_entropy_markdown"]),
+        ("Anti-entropy JSON", paths["anti_entropy_json"]),
+        ("Comparison HTML", paths["comparison_html"]),
+        ("Comparison Markdown", paths["comparison_markdown"]),
+        ("Comparison JSON", paths["comparison_json"]),
+    ):
+        anti_entropy_links[label] = relative_output_path(target, paths["anti_entropy_html"].parent)
+    write_text_output(
+        paths["anti_entropy_html"],
+        render_anti_entropy_html(anti_entropy_report, title, companion_links=anti_entropy_links),
+    )
+
+    replay_links = build_companion_links(
+        html_path=paths["replay_html"],
+        markdown_path=paths["timeline_markdown"],
+        mermaid_path=paths["timeline_mermaid"],
+        svg_path=paths["timeline_svg"],
+        json_path=paths["snapshot_json"],
+        script_path=paths["script"],
+        anti_entropy_markdown_path=paths["anti_entropy_markdown"],
+        anti_entropy_html_path=paths["anti_entropy_html"],
+        anti_entropy_json_path=paths["anti_entropy_json"],
+    )
+    replay_links["Timeline gallery"] = relative_output_path(paths["timeline_html"], paths["replay_html"].parent)
+    for label, target in (
+        ("Comparison HTML", paths["comparison_html"]),
+        ("Comparison Markdown", paths["comparison_markdown"]),
+        ("Comparison JSON", paths["comparison_json"]),
+    ):
+        replay_links[label] = relative_output_path(target, paths["replay_html"].parent)
+    write_text_output(paths["replay_html"], render_replay_html(snapshot, title, companion_links=replay_links))
+
+    comparison_links: dict[str, str] = {}
+    for label, target in (
+        ("Scenario script", paths["script"]),
+        ("OR-Set gallery", paths["timeline_html"]),
+        ("OR-Set replay", paths["replay_html"]),
+        ("OR-Set Markdown timeline", paths["timeline_markdown"]),
+        ("OR-Set Mermaid source", paths["timeline_mermaid"]),
+        ("OR-Set SVG card", paths["timeline_svg"]),
+        ("OR-Set JSON snapshot", paths["snapshot_json"]),
+        ("OR-Set anti-entropy Markdown", paths["anti_entropy_markdown"]),
+        ("OR-Set anti-entropy HTML", paths["anti_entropy_html"]),
+        ("OR-Set anti-entropy JSON", paths["anti_entropy_json"]),
+        ("Comparison Markdown", paths["comparison_markdown"]),
+        ("Comparison JSON", paths["comparison_json"]),
+    ):
+        comparison_links[label] = relative_output_path(target, paths["comparison_html"].parent)
+    write_text_output(
+        paths["comparison_html"],
+        render_comparison_html(comparison, title, companion_links=comparison_links),
+    )
+    return paths
+
+
 def render_comparison_preset_suite_markdown(suite: dict[str, object]) -> str:
     lines = [
         "# OR-Set comparison preset suite",
         "",
         str(suite["story"]),
         "",
-        "| Preset | Outcome | OR-Set final membership | LWW final membership | Notes |",
-        "| --- | --- | --- | --- | --- |",
+        "| Preset | Outcome | OR-Set final membership | LWW final membership | Notes | Artifacts |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for preset in suite["presets"]:
+        detail_bundle = dict(preset.get("detail_bundle") or {})
         lines.append(
             f"| `{preset['name']}` | {preset['outcome']} | {format_membership_map(dict(preset['orset_membership']))} | "
-            f"{format_membership_map(dict(preset['lww_membership']))} | {str(preset['story']).replace('|', '\\|')} |"
+            f"{format_membership_map(dict(preset['lww_membership']))} | {str(preset['story']).replace('|', '\\|')} | {detail_bundle_markdown_links(detail_bundle).replace('|', '\\|')} |"
         )
     lines.extend(["", "## Scenario notes", ""])
     for preset in suite["presets"]:
+        detail_bundle = dict(preset.get("detail_bundle") or {})
         lines.append(f"### {preset['title']} (`{preset['name']}`)")
         lines.append("")
         lines.append(f"- script: `{preset['script']}`")
@@ -2836,6 +3048,19 @@ def render_comparison_preset_suite_markdown(suite: dict[str, object]) -> str:
         lines.append(f"- story: {preset['story']}")
         lines.append(f"- OR-Set final membership: {format_membership_map(dict(preset['orset_membership']))}")
         lines.append(f"- LWW final membership: {format_membership_map(dict(preset['lww_membership']))}")
+        if detail_bundle:
+            lines.append(f"- detail bundle directory: `{detail_bundle['directory']}`")
+            lines.append(f"- direct artifacts: {detail_bundle_markdown_links(detail_bundle)}")
+            lines.append(
+                "- companion files: "
+                f"[timeline.md]({detail_bundle['timeline_markdown']}) · "
+                f"[timeline.mmd]({detail_bundle['timeline_mermaid']}) · "
+                f"[timeline.svg]({detail_bundle['timeline_svg']}) · "
+                f"[comparison.md]({detail_bundle['comparison_markdown']}) · "
+                f"[comparison.json]({detail_bundle['comparison_json']}) · "
+                f"[anti-entropy.md]({detail_bundle['anti_entropy_markdown']}) · "
+                f"[anti-entropy.json]({detail_bundle['anti_entropy_json']})"
+            )
         final_divergence = list(preset["final_divergence"])
         if final_divergence:
             lines.append("- divergence notes:")
@@ -2858,6 +3083,11 @@ def render_comparison_preset_suite_html(suite: dict[str, object]) -> str:
         f"<p>{escape_html(str(preset['description']))}</p>"
         f"<p class=\"story\">{escape_html(str(preset['story']))}</p>"
         f"<ul class=\"meta\"><li><strong>script</strong><span><code>{escape_html(str(preset['script']))}</code></span></li><li><strong>LWW tie bias</strong><span><code>{escape_html(str(preset['lww_bias']))}</code></span></li><li><strong>OR-Set</strong><span>{escape_html(format_membership_map(dict(preset['orset_membership'])))}</span></li><li><strong>LWW</strong><span>{escape_html(format_membership_map(dict(preset['lww_membership'])))}</span></li></ul>"
+        + (
+            f"<div class=\"detail-links\">{detail_bundle_html_links(dict(preset.get('detail_bundle') or {}))}</div>"
+            if preset.get('detail_bundle')
+            else ""
+        )
         + (
             "<ul class=\"divergence\">"
             + "".join(
@@ -2908,6 +3138,8 @@ def render_comparison_preset_suite_html(suite: dict[str, object]) -> str:
       .meta li, .divergence li {{ display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); }}
       .meta strong, .divergence strong {{ color: var(--text); }}
       .meta span, .divergence span {{ color: var(--muted); line-height: 1.5; }}
+      .detail-links {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }}
+      .detail-link {{ display: inline-flex; align-items: center; padding: 9px 14px; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--accent); font-weight: 700; text-decoration: none; }}
       .aligned {{ margin: 16px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--good-bg); color: var(--good); }}
       code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
     </style>
@@ -2933,13 +3165,35 @@ def render_comparison_preset_suite_html(suite: dict[str, object]) -> str:
 '''
 
 
-def write_comparison_preset_suite_outputs(args: argparse.Namespace, suite: dict[str, object]) -> None:
+def write_comparison_preset_suite_outputs(
+    args: argparse.Namespace,
+    suite: dict[str, object],
+    *,
+    detail_paths_by_name: dict[str, dict[str, Path]] | None = None,
+) -> dict[str, object]:
+    stdout_suite = enrich_suite_with_detail_bundles(suite, detail_paths_by_name, base_dir=Path.cwd())
     if getattr(args, "suite_json_out", None):
-        write_text_output(args.suite_json_out, json.dumps(suite, indent=2, sort_keys=True) + "\n")
+        suite_for_json = enrich_suite_with_detail_bundles(
+            suite,
+            detail_paths_by_name,
+            base_dir=Path(args.suite_json_out).parent,
+        )
+        write_text_output(args.suite_json_out, json.dumps(suite_for_json, indent=2, sort_keys=True) + "\n")
     if getattr(args, "suite_markdown_out", None):
-        write_text_output(args.suite_markdown_out, render_comparison_preset_suite_markdown(suite))
+        suite_for_markdown = enrich_suite_with_detail_bundles(
+            suite,
+            detail_paths_by_name,
+            base_dir=Path(args.suite_markdown_out).parent,
+        )
+        write_text_output(args.suite_markdown_out, render_comparison_preset_suite_markdown(suite_for_markdown))
     if getattr(args, "suite_html_out", None):
-        write_text_output(args.suite_html_out, render_comparison_preset_suite_html(suite))
+        suite_for_html = enrich_suite_with_detail_bundles(
+            suite,
+            detail_paths_by_name,
+            base_dir=Path(args.suite_html_out).parent,
+        )
+        write_text_output(args.suite_html_out, render_comparison_preset_suite_html(suite_for_html))
+    return stdout_suite
 
 
 def write_text_output(path: str | Path, content: str) -> None:
@@ -3082,6 +3336,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare_presets.add_argument("--suite-markdown-out")
     compare_presets.add_argument("--suite-html-out")
     compare_presets.add_argument("--suite-json-out")
+    compare_presets.add_argument("--detail-output-dir")
 
     add = subparsers.add_parser("add", help="apply one add on a fresh cluster")
     add.add_argument("--replicas", nargs="+", required=True)
@@ -3121,11 +3376,30 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "compare-presets":
         try:
-            suite = build_comparison_preset_suite(args.presets)
+            selected_presets = select_comparison_presets(args.presets)
+            suite = build_comparison_preset_suite([preset.name for preset in selected_presets])
         except ValueError as exc:
             parser.error(str(exc))
-        write_comparison_preset_suite_outputs(args, suite)
-        print(json.dumps(suite, indent=2, sort_keys=True))
+        detail_paths_by_name: dict[str, dict[str, Path]] | None = None
+        if args.detail_output_dir:
+            detail_paths_by_name = {}
+            for preset in selected_presets:
+                comparison = build_semantics_comparison(
+                    preset.replicas,
+                    load_script(preset.script_path),
+                    lww_bias=preset.lww_bias,
+                )
+                detail_paths_by_name[preset.name] = write_comparison_preset_detail_outputs(
+                    preset,
+                    comparison,
+                    detail_output_dir=args.detail_output_dir,
+                )
+        stdout_suite = write_comparison_preset_suite_outputs(
+            args,
+            suite,
+            detail_paths_by_name=detail_paths_by_name,
+        )
+        print(json.dumps(stdout_suite, indent=2, sort_keys=True))
         return 0
 
     if args.command == "compare-script":

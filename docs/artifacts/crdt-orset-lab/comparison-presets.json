@@ -5,6 +5,22 @@
   "presets": [
     {
       "description": "Replica b removes only the tag it observed, while replica c later adds the same element with a fresh tag. OR-Set keeps the new tag after sync, but remove-wins LWW drops the element because the later remove timestamp still dominates.",
+      "detail_bundle": {
+        "anti_entropy_html": "comparison-presets/concurrent-readd/anti-entropy.html",
+        "anti_entropy_json": "comparison-presets/concurrent-readd/anti-entropy.json",
+        "anti_entropy_markdown": "comparison-presets/concurrent-readd/anti-entropy.md",
+        "comparison_html": "comparison-presets/concurrent-readd/comparison.html",
+        "comparison_json": "comparison-presets/concurrent-readd/comparison.json",
+        "comparison_markdown": "comparison-presets/concurrent-readd/comparison.md",
+        "directory": "comparison-presets/concurrent-readd",
+        "replay_html": "comparison-presets/concurrent-readd/replay.html",
+        "script": "../../../projects/crdt-orset-lab/sample_compare_ops.json",
+        "snapshot_json": "comparison-presets/concurrent-readd/orset-snapshot.json",
+        "timeline_html": "comparison-presets/concurrent-readd/timeline.html",
+        "timeline_markdown": "comparison-presets/concurrent-readd/timeline.md",
+        "timeline_mermaid": "comparison-presets/concurrent-readd/timeline.mmd",
+        "timeline_svg": "comparison-presets/concurrent-readd/timeline.svg"
+      },
       "final_divergence": [
         {
           "element": "notebook",
@@ -53,6 +69,22 @@
     },
     {
       "description": "Replica c issues a remove before it has ever observed a's add. The OR-Set remove is effectively empty, but LWW still records a later remove timestamp that suppresses the earlier add once replicas merge.",
+      "detail_bundle": {
+        "anti_entropy_html": "comparison-presets/unobserved-remove/anti-entropy.html",
+        "anti_entropy_json": "comparison-presets/unobserved-remove/anti-entropy.json",
+        "anti_entropy_markdown": "comparison-presets/unobserved-remove/anti-entropy.md",
+        "comparison_html": "comparison-presets/unobserved-remove/comparison.html",
+        "comparison_json": "comparison-presets/unobserved-remove/comparison.json",
+        "comparison_markdown": "comparison-presets/unobserved-remove/comparison.md",
+        "directory": "comparison-presets/unobserved-remove",
+        "replay_html": "comparison-presets/unobserved-remove/replay.html",
+        "script": "../../../projects/crdt-orset-lab/presets/unobserved-remove.json",
+        "snapshot_json": "comparison-presets/unobserved-remove/orset-snapshot.json",
+        "timeline_html": "comparison-presets/unobserved-remove/timeline.html",
+        "timeline_markdown": "comparison-presets/unobserved-remove/timeline.md",
+        "timeline_mermaid": "comparison-presets/unobserved-remove/timeline.mmd",
+        "timeline_svg": "comparison-presets/unobserved-remove/timeline.svg"
+      },
       "final_divergence": [
         {
           "element": "notebook",
@@ -99,6 +131,22 @@
     },
     {
       "description": "Replica b first syncs the add and then removes the element, so both models agree on the final absence. This preset is a useful control case beside the divergence-heavy scenarios.",
+      "detail_bundle": {
+        "anti_entropy_html": "comparison-presets/observed-remove-sync/anti-entropy.html",
+        "anti_entropy_json": "comparison-presets/observed-remove-sync/anti-entropy.json",
+        "anti_entropy_markdown": "comparison-presets/observed-remove-sync/anti-entropy.md",
+        "comparison_html": "comparison-presets/observed-remove-sync/comparison.html",
+        "comparison_json": "comparison-presets/observed-remove-sync/comparison.json",
+        "comparison_markdown": "comparison-presets/observed-remove-sync/comparison.md",
+        "directory": "comparison-presets/observed-remove-sync",
+        "replay_html": "comparison-presets/observed-remove-sync/replay.html",
+        "script": "../../../projects/crdt-orset-lab/presets/observed-remove-sync.json",
+        "snapshot_json": "comparison-presets/observed-remove-sync/orset-snapshot.json",
+        "timeline_html": "comparison-presets/observed-remove-sync/timeline.html",
+        "timeline_markdown": "comparison-presets/observed-remove-sync/timeline.md",
+        "timeline_mermaid": "comparison-presets/observed-remove-sync/timeline.mmd",
+        "timeline_svg": "comparison-presets/observed-remove-sync/timeline.svg"
+      },
       "final_divergence": [],
       "final_divergence_count": 0,
       "lww_bias": "remove",

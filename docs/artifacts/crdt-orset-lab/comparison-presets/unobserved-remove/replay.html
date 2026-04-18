@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set replay — preset unobserved-remove — Unobserved remove cannot tombstone unseen tags</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --warn: #92400e;
+        --warn-bg: #ffedd5;
+        --ok: #166534;
+        --ok-bg: #dcfce7;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1420px; margin: 0 auto; padding: 32px 20px 64px; }
+      a { color: var(--accent); }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .hero p { color: var(--muted); max-width: 980px; }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }
+      .summary-grid li { list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }
+      .summary-grid strong { display: block; font-size: 1.35rem; margin-bottom: 6px; }
+      .layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.9fr); align-items: start; }
+      .panel { padding: 22px; }
+      .panel h2, .panel h3 { margin-top: 0; }
+      .controls { display: grid; gap: 16px; }
+      .step-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; }
+      .status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; font-weight: 700; }
+      .status-pill.ok { background: var(--ok-bg); color: var(--ok); }
+      .status-pill.warn { background: var(--warn-bg); color: var(--warn); }
+      .button-row { display: flex; flex-wrap: wrap; gap: 10px; }
+      .button-row button { border: 1px solid #bfdbfe; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 10px 16px; font-weight: 700; }
+      .button-row button:disabled { opacity: 0.55; cursor: default; }
+      .slider-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); align-items: end; }
+      .slider-wrap { display: grid; gap: 8px; }
+      .slider-wrap label, .inline-control label { font-weight: 700; }
+      .inline-control { display: grid; gap: 8px; }
+      .inline-control select { border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; background: var(--panel); color: var(--text); }
+      .sync-jump-note { margin-top: 8px; color: var(--muted); }
+      .link-list-note { margin: 0 0 12px; color: var(--muted); }
+      .action-note { margin: 12px 0 0; color: var(--muted); }
+      .action-note.ok { color: var(--ok); }
+      .action-note.warn { color: var(--warn); }
+      input[type=range] { width: 100%; }
+      .detail-list, .artifact-links, .transfer-list, .checkpoint-list { margin: 0; padding-left: 18px; color: var(--muted); }
+      .detail-list li + li, .artifact-links li + li, .transfer-list li + li, .checkpoint-list li + li { margin-top: 8px; }
+      .replica-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+      .replica-card { border: 1px solid var(--border); border-radius: 20px; padding: 16px; background: #f8fafc; }
+      .replica-card.focus { border-color: #60a5fa; box-shadow: inset 0 0 0 1px #bfdbfe; background: #eff6ff; }
+      .replica-card h3 { margin: 0 0 10px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+      .replica-card dl { margin: 0; display: grid; gap: 10px; }
+      .replica-card dt { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+      .replica-card dd { margin: 3px 0 0; font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+      .anti-grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); align-items: start; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th { font-size: 0.95rem; color: var(--muted); }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+      .note { padding: 14px 16px; border-radius: 18px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }
+      @media (max-width: 1080px) {
+        .layout, .anti-grid, .slider-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set replay / animation</h1>
+        <p>This replay page turns the OR-Set timeline into a stepper you can scrub in a browser. It keeps the anti-entropy notes beside the replica states so a reviewer can see both the semantic change and the payload-cost story on the same screen, now with sync-jump shortcuts, adjustable playback speed, and hash-based deep links that can open directly on a chosen replay or sync checkpoint.</p>
+        <p class="note">Final membership notebook; active tags notebook=a:1; tombstones ∅.</p>
+        <ul class="summary-grid">
+          <li><strong>3</strong> replicas (a, b, c)</li>
+          <li><strong>5</strong> timeline steps</li>
+          <li><strong>1/1/3</strong> add/remove/sync ops</li>
+          <li><strong>5</strong> replayable steps</li>
+          <li><strong>true</strong> final convergence</li>
+          <li><strong>preset unobserved-remove — Unobserved remove cannot tombstone unseen tags</strong> scenario</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel controls">
+          <div class="step-meta">
+            <div>
+              <h2 id="replay-step-heading" style="margin-bottom: 6px;">Initial state</h2>
+              <div id="replay-step-label" class="note">Cluster starts empty.</div>
+            </div>
+            <div id="replay-status" class="status-pill ok">state converged</div>
+          </div>
+          <div class="button-row">
+            <button type="button" id="replay-prev">← Prev</button>
+            <button type="button" id="replay-prev-sync">↺ Prev sync</button>
+            <button type="button" id="replay-play" aria-pressed="false">▶ Play</button>
+            <button type="button" id="replay-next-sync">Next sync ↻</button>
+            <button type="button" id="replay-next">Next →</button>
+          </div>
+          <div class="slider-grid">
+            <div class="slider-wrap">
+              <label for="replay-range">Replay step</label>
+              <input type="range" id="replay-range" min="0" max="5" step="1" value="0" />
+              <div id="replay-step-counter" style="color: var(--muted);">Step 0 of 5</div>
+              <div id="replay-sync-note" class="sync-jump-note">Jump-to-sync buttons stay disabled until the script reaches a sync step.</div>
+            </div>
+            <div class="inline-control">
+              <label for="replay-speed">Playback speed</label>
+              <select id="replay-speed">
+                <option value="2200">Slow walkthrough · 0.75×</option>
+                <option value="1600" selected>Normal classroom pace · 1×</option>
+                <option value="950">Fast recap · 1.7×</option>
+                <option value="550">Sprint to next sync · 2.9×</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <h3>What changed on this step?</h3>
+            <ul id="replay-details" class="detail-list"></ul>
+          </div>
+          <div>
+            <h3>Deep links</h3>
+            <p id="replay-link-note" class="link-list-note">Open this artifact with a hash such as <code>#step-3</code> or <code>#sync-2</code> to jump directly to a chosen checkpoint.</p>
+            <ul id="replay-link-list" class="artifact-links"></ul>
+          </div>
+          <div>
+            <h3>Checkpoint actions</h3>
+            <div class="button-row">
+              <button type="button" id="replay-copy-exact-link">Copy exact link</button>
+              <button type="button" id="replay-copy-sync-link">Copy sync link</button>
+              <button type="button" id="replay-download-svg">Download SVG card</button>
+            </div>
+            <p id="replay-action-note" class="action-note">Copy the exact frame link on any step, use the stable sync link on sync checkpoints, or download the current checkpoint as a standalone SVG card.</p>
+          </div>
+          <div>
+            <h3>Sync checkpoint links</h3>
+            <ul id="replay-sync-links" class="checkpoint-list"></ul>
+          </div>
+          <div>
+            <h3>Companion artifacts</h3>
+            <ul class="artifact-links"><li><a href="../../../../../projects/crdt-orset-lab/presets/unobserved-remove.json">Scenario script</a></li><li><a href="timeline.md">Markdown timeline</a></li><li><a href="timeline.mmd">Mermaid source</a></li><li><a href="timeline.svg">SVG card</a></li><li><a href="orset-snapshot.json">JSON snapshot</a></li><li><a href="anti-entropy.md">Anti-entropy Markdown</a></li><li><a href="anti-entropy.html">Anti-entropy HTML</a></li><li><a href="anti-entropy.json">Anti-entropy JSON</a></li><li><a href="timeline.html">Timeline gallery</a></li><li><a href="comparison.html">Comparison HTML</a></li><li><a href="comparison.md">Comparison Markdown</a></li><li><a href="comparison.json">Comparison JSON</a></li></ul>
+          </div>
+        </article>
+        <aside class="panel">
+          <h2>Replica states after this step</h2>
+          <div id="replica-grid" class="replica-grid"></div>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Anti-entropy transfer view</h2>
+        <div class="anti-grid">
+          <div>
+            <p id="anti-summary" class="note">No anti-entropy transfer yet — this is the pre-script baseline.</p>
+            <ul id="transfer-list" class="transfer-list"></ul>
+          </div>
+          <div>
+            <table>
+              <thead>
+                <tr><th>Transfer</th><th>Digests before</th><th>Full bytes</th><th>Delta bytes</th><th>Saved</th><th>Delta payload</th></tr>
+              </thead>
+              <tbody id="transfer-table-body">
+                <tr><td colspan="6">No sync transfer on this step.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <p id="replay-announce" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    </main>
+    <script>
+      const frames = [{"anti_entropy": {"summary": "No anti-entropy transfer yet \u2014 this is the pre-script baseline.", "transfers": []}, "converged": true, "details": ["No operations have run yet.", "Use the slider, sync-jump buttons, or play button to scrub through adds, removes, and sync steps."], "focus_replicas": [], "label": "Cluster starts empty", "op": "initial", "replicas": {"a": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}, "b": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 0, "sync_checkpoint": null}, {"anti_entropy": {"summary": "Local mutation only \u2014 no anti-entropy transfer happens until a sync step.", "transfers": []}, "converged": false, "details": ["new tag: a:1", "elements=notebook | active=notebook=a:1 | tombstones=\u2205"], "focus_replicas": ["a"], "label": "a adds notebook", "op": "add", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 1, "sync_checkpoint": null}, {"anti_entropy": {"summary": "Local mutation only \u2014 no anti-entropy transfer happens until a sync step.", "transfers": []}, "converged": false, "details": ["observed tags removed: \u2205", "elements=\u2205 | active=\u2205 | tombstones=\u2205"], "focus_replicas": ["c"], "label": "c removes notebook", "op": "remove", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 2, "sync_checkpoint": null}, {"anti_entropy": {"summary": "2 directional transfer(s), 105 delta byte(s), saving 0 vs full-state sync.", "transfers": [{"delta_bytes": 64, "delta_payload": "tags notebook=a:1; tombstones \u2205; counters a=1", "digest_pair": "bc0df1bd11ad\u2026 vs 59accd60481d\u2026", "from": "a", "full_bytes": 64, "saved": 0, "to": "b"}, {"delta_bytes": 41, "delta_payload": "tags \u2205; tombstones \u2205; counters \u2205", "digest_pair": "59accd60481d\u2026 vs bc0df1bd11ad\u2026", "from": "b", "full_bytes": 41, "saved": 0, "to": "a"}]}, "converged": false, "details": ["a: elements=notebook | active=notebook=a:1 | tombstones=\u2205", "b: elements=notebook | active=notebook=a:1 | tombstones=\u2205"], "focus_replicas": ["a", "b"], "label": "a \u2194 b sync (both)", "op": "sync", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "c": {"active_tags": {}, "counters": {}, "elements": [], "observed_tags": {}, "tombstones": []}}, "step": 3, "sync_checkpoint": 1}, {"anti_entropy": {"summary": "2 directional transfer(s), 105 delta byte(s), saving 0 vs full-state sync.", "transfers": [{"delta_bytes": 64, "delta_payload": "tags notebook=a:1; tombstones \u2205; counters a=1", "digest_pair": "bc0df1bd11ad\u2026 vs 59accd60481d\u2026", "from": "b", "full_bytes": 64, "saved": 0, "to": "c"}, {"delta_bytes": 41, "delta_payload": "tags \u2205; tombstones \u2205; counters \u2205", "digest_pair": "59accd60481d\u2026 vs bc0df1bd11ad\u2026", "from": "c", "full_bytes": 41, "saved": 0, "to": "b"}]}, "converged": true, "details": ["b: elements=notebook | active=notebook=a:1 | tombstones=\u2205", "c: elements=notebook | active=notebook=a:1 | tombstones=\u2205"], "focus_replicas": ["b", "c"], "label": "b \u2194 c sync (both)", "op": "sync", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "c": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}}, "step": 4, "sync_checkpoint": 2}, {"anti_entropy": {"summary": "2 directional transfer(s), 82 delta byte(s), saving 46 vs full-state sync.", "transfers": [{"delta_bytes": 41, "delta_payload": "tags \u2205; tombstones \u2205; counters \u2205", "digest_pair": "bc0df1bd11ad\u2026 vs bc0df1bd11ad\u2026", "from": "a", "full_bytes": 64, "saved": 23, "to": "c"}, {"delta_bytes": 41, "delta_payload": "tags \u2205; tombstones \u2205; counters \u2205", "digest_pair": "bc0df1bd11ad\u2026 vs bc0df1bd11ad\u2026", "from": "c", "full_bytes": 64, "saved": 23, "to": "a"}]}, "converged": true, "details": ["a: elements=notebook | active=notebook=a:1 | tombstones=\u2205", "c: elements=notebook | active=notebook=a:1 | tombstones=\u2205"], "focus_replicas": ["a", "c"], "label": "a \u2194 c sync (both)", "op": "sync", "replicas": {"a": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "b": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}, "c": {"active_tags": {"notebook": ["a:1"]}, "counters": {"a": 1}, "elements": ["notebook"], "observed_tags": {"notebook": ["a:1"]}, "tombstones": []}}, "step": 5, "sync_checkpoint": 3}];
+      const scenarioTitle = "preset unobserved-remove \u2014 Unobserved remove cannot tombstone unseen tags";
+      const scenarioStory = "Final membership notebook; active tags notebook=a:1; tombstones \u2205.";
+      const stepHeading = document.getElementById('replay-step-heading');
+      const stepLabel = document.getElementById('replay-step-label');
+      const stepCounter = document.getElementById('replay-step-counter');
+      const statusPill = document.getElementById('replay-status');
+      const detailList = document.getElementById('replay-details');
+      const linkNote = document.getElementById('replay-link-note');
+      const linkList = document.getElementById('replay-link-list');
+      const syncLinkList = document.getElementById('replay-sync-links');
+      const replicaGrid = document.getElementById('replica-grid');
+      const antiSummary = document.getElementById('anti-summary');
+      const transferList = document.getElementById('transfer-list');
+      const transferTableBody = document.getElementById('transfer-table-body');
+      const range = document.getElementById('replay-range');
+      const prevButton = document.getElementById('replay-prev');
+      const prevSyncButton = document.getElementById('replay-prev-sync');
+      const playButton = document.getElementById('replay-play');
+      const nextSyncButton = document.getElementById('replay-next-sync');
+      const nextButton = document.getElementById('replay-next');
+      const copyExactButton = document.getElementById('replay-copy-exact-link');
+      const copySyncButton = document.getElementById('replay-copy-sync-link');
+      const downloadSvgButton = document.getElementById('replay-download-svg');
+      const speedSelect = document.getElementById('replay-speed');
+      const syncNote = document.getElementById('replay-sync-note');
+      const actionNote = document.getElementById('replay-action-note');
+      const announce = document.getElementById('replay-announce');
+      const syncFrames = frames.filter((frame) => frame.sync_checkpoint !== null);
+      const syncFrameIndexes = syncFrames.map((frame) => frame.step);
+
+      let frameIndex = 0;
+      let playTimer = null;
+
+      function stopPlayback() {
+        if (playTimer !== null) {
+          window.clearTimeout(playTimer);
+          playTimer = null;
+        }
+        playButton.textContent = '▶ Play';
+        playButton.setAttribute('aria-pressed', 'false');
+      }
+
+      function playbackDelayMs() {
+        return Number(speedSelect.value || 1600);
+      }
+
+      function schedulePlaybackTick() {
+        if (frameIndex >= frames.length - 1) {
+          stopPlayback();
+          return;
+        }
+        playTimer = window.setTimeout(() => {
+          renderFrame(frameIndex + 1);
+          schedulePlaybackTick();
+        }, playbackDelayMs());
+      }
+
+      function startPlayback() {
+        stopPlayback();
+        if (frameIndex >= frames.length - 1) {
+          renderFrame(0);
+        }
+        playButton.textContent = '❚❚ Pause';
+        playButton.setAttribute('aria-pressed', 'true');
+        schedulePlaybackTick();
+      }
+
+      function findNextSyncIndex(fromIndex) {
+        return syncFrameIndexes.find((syncIndex) => syncIndex > fromIndex) ?? null;
+      }
+
+      function findPreviousSyncIndex(fromIndex) {
+        for (let index = syncFrameIndexes.length - 1; index >= 0; index -= 1) {
+          if (syncFrameIndexes[index] < fromIndex) {
+            return syncFrameIndexes[index];
+          }
+        }
+        return null;
+      }
+
+      function hashForFrame(frame) {
+        if (frame.sync_checkpoint !== null) {
+          return `sync-${frame.sync_checkpoint}`;
+        }
+        return `step-${frame.step}`;
+      }
+
+      function absoluteUrlForHash(hash) {
+        const url = new URL(window.location.href);
+        url.hash = hash;
+        return url.toString();
+      }
+
+      function indexFromHash(hash) {
+        const value = String(hash || '').replace(/^#/, '').trim().toLowerCase();
+        if (!value) {
+          return 0;
+        }
+        if (/^step-\d+$/.test(value)) {
+          const step = Number(value.slice(5));
+          return Number.isFinite(step) ? Math.max(0, Math.min(frames.length - 1, step)) : 0;
+        }
+        if (/^sync-\d+$/.test(value)) {
+          const checkpoint = Number(value.slice(5));
+          const match = syncFrames.find((frame) => frame.sync_checkpoint === checkpoint);
+          return match ? match.step : 0;
+        }
+        return 0;
+      }
+
+      function updateUrlHash(frame) {
+        const hash = `#${hashForFrame(frame)}`;
+        if (window.location.hash === hash) {
+          return;
+        }
+        if (window.history && typeof window.history.replaceState === 'function') {
+          const url = new URL(window.location.href);
+          url.hash = hash;
+          window.history.replaceState(null, '', url);
+          return;
+        }
+        window.location.hash = hash;
+      }
+
+      function renderDeepLinks(frame) {
+        const currentHash = hashForFrame(frame);
+        const exactStepHash = `step-${frame.step}`;
+        const items = [
+          `<li><strong>Exact frame:</strong> <a href="#${exactStepHash}"><code>${absoluteUrlForHash(exactStepHash)}</code></a></li>`,
+        ];
+        if (frame.sync_checkpoint !== null) {
+          const syncHash = `sync-${frame.sync_checkpoint}`;
+          items.push(`<li><strong>Stable sync checkpoint:</strong> <a href="#${syncHash}"><code>${absoluteUrlForHash(syncHash)}</code></a></li>`);
+        } else if (syncFrames.length) {
+          const nextSync = findNextSyncIndex(frame.step);
+          if (nextSync !== null) {
+            const nextFrame = frames[nextSync];
+            items.push(`<li><strong>Nearest forward sync:</strong> <a href="#sync-${nextFrame.sync_checkpoint}"><code>${absoluteUrlForHash(`sync-${nextFrame.sync_checkpoint}`)}</code></a></li>`);
+          }
+        }
+        linkList.innerHTML = items.join('');
+        linkNote.innerHTML = `Open this artifact with <code>#step-N</code> or <code>#sync-N</code>. The current canonical hash is <code>#${currentHash}</code>.`;
+        syncLinkList.innerHTML = syncFrames.length
+          ? syncFrames.map((syncFrame) => {
+              const active = syncFrame.step === frame.step ? ' <strong>(current)</strong>' : '';
+              return `<li><a href="#sync-${syncFrame.sync_checkpoint}">Sync ${syncFrame.sync_checkpoint} · step ${syncFrame.step}</a> — ${syncFrame.label}${active}</li>`;
+            }).join('')
+          : '<li>No sync checkpoints available in this scenario.</li>';
+      }
+
+      function renderReplicaCards(frame) {
+        replicaGrid.innerHTML = Object.entries(frame.replicas).map(([replica, state]) => {
+          const focused = frame.focus_replicas.includes(replica) ? ' focus' : '';
+          const rows = [
+            ['Elements', (state.elements || []).join(', ') || '∅'],
+            ['Active tags', Object.entries(state.active_tags || {}).map(([element, tags]) => `${element}=${tags.join(', ') || '∅'}`).join('; ') || '∅'],
+            ['Observed tags', Object.entries(state.observed_tags || {}).map(([element, tags]) => `${element}=${tags.join(', ') || '∅'}`).join('; ') || '∅'],
+            ['Tombstones', (state.tombstones || []).join(', ') || '∅'],
+            ['Counters', Object.entries(state.counters || {}).map(([name, count]) => `${name}:${count}`).join(', ') || '∅'],
+          ];
+          const body = rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+          return `<section class="replica-card${focused}"><h3><span><code>${replica}</code></span><span>${focused ? 'focus' : 'stable'}</span></h3><dl>${body}</dl></section>`;
+        }).join('');
+      }
+
+      function escapeSvgText(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function wrapSvgText(text, width = 88) {
+        const words = String(text ?? '').split(/\s+/).filter(Boolean);
+        if (!words.length) {
+          return [''];
+        }
+        const lines = [];
+        let current = words[0];
+        for (const word of words.slice(1)) {
+          if (`${current} ${word}`.length <= width) {
+            current = `${current} ${word}`;
+          } else {
+            lines.push(current);
+            current = word;
+          }
+        }
+        lines.push(current);
+        return lines;
+      }
+
+      function summarizeTagMap(mapping) {
+        const entries = Object.entries(mapping || {});
+        return entries.length
+          ? entries.map(([element, tags]) => `${element}=${(tags || []).join(', ') || '∅'}`).join('; ')
+          : '∅';
+      }
+
+      function summarizeCounters(counters) {
+        const entries = Object.entries(counters || {});
+        return entries.length ? entries.map(([replica, counter]) => `${replica}:${counter}`).join(', ') : '∅';
+      }
+
+      function summarizeReplicaState(replica, state) {
+        return `${replica}: elements=${(state.elements || []).join(', ') || '∅'} | active=${summarizeTagMap(state.active_tags)} | observed=${summarizeTagMap(state.observed_tags)} | tombstones=${(state.tombstones || []).join(', ') || '∅'} | counters=${summarizeCounters(state.counters)}`;
+      }
+
+      function pushWrappedLines(lines, text, width = 88) {
+        for (const line of wrapSvgText(text, width)) {
+          lines.push(line);
+        }
+      }
+
+      function slugifyFilePart(value) {
+        return String(value || 'crdt-orset-checkpoint')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'crdt-orset-checkpoint';
+      }
+
+      function fileNameForFrame(frame) {
+        const suffix = frame.sync_checkpoint !== null ? `sync-${frame.sync_checkpoint}` : `step-${frame.step}`;
+        return `${slugifyFilePart(scenarioTitle)}-${suffix}.svg`;
+      }
+
+      function setActionNote(message, kind = '') {
+        actionNote.textContent = message;
+        actionNote.className = `action-note${kind ? ` ${kind}` : ''}`;
+      }
+
+      async function copyText(text) {
+        if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.setAttribute('readonly', 'readonly');
+        textArea.style.position = 'fixed';
+        textArea.style.top = '-1000px';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const succeeded = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        if (!succeeded) {
+          throw new Error('Copy command was rejected by the browser.');
+        }
+      }
+
+      function downloadTextFile(text, fileName, mimeType) {
+        const blob = new Blob([text], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      function buildCheckpointSvg(frame) {
+        const width = 1280;
+        const padding = 40;
+        const contentWidth = width - (padding * 2);
+        const lineHeight = 24;
+        const sections = [];
+
+        const eventLines = [];
+        pushWrappedLines(eventLines, frame.label, 92);
+        for (const detail of frame.details || []) {
+          pushWrappedLines(eventLines, `• ${detail}`, 92);
+        }
+
+        const replicaLines = Object.entries(frame.replicas || {}).flatMap(([replica, state]) => wrapSvgText(summarizeReplicaState(replica, state), 92));
+        const transferLines = [];
+        pushWrappedLines(transferLines, (frame.anti_entropy && frame.anti_entropy.summary) || 'No anti-entropy transfer on this step.', 92);
+        for (const transfer of (frame.anti_entropy && frame.anti_entropy.transfers) || []) {
+          pushWrappedLines(transferLines, `${transfer.from} → ${transfer.to} · delta ${transfer.delta_bytes} byte(s) · saved ${transfer.saved} · ${transfer.delta_payload}`, 92);
+        }
+        const linkLines = [
+          `Exact link: ${absoluteUrlForHash(`step-${frame.step}`)}`,
+          frame.sync_checkpoint !== null
+            ? `Stable sync link: ${absoluteUrlForHash(`sync-${frame.sync_checkpoint}`)}`
+            : 'Stable sync link: unavailable on non-sync frames (use the exact frame URL).',
+        ];
+
+        sections.push({
+          title: `Step ${frame.step} summary`,
+          fill: '#dbeafe',
+          border: '#3b82f6',
+          titleColor: '#1d4ed8',
+          textColor: '#0f172a',
+          lines: eventLines,
+        });
+        sections.push({
+          title: 'Replica states',
+          fill: '#ecfeff',
+          border: '#0891b2',
+          titleColor: '#0f766e',
+          textColor: '#0f172a',
+          lines: replicaLines.length ? replicaLines : ['No replica state captured.'],
+        });
+        sections.push({
+          title: 'Anti-entropy view',
+          fill: '#ede9fe',
+          border: '#7c3aed',
+          titleColor: '#5b21b6',
+          textColor: '#312e81',
+          lines: transferLines,
+        });
+        sections.push({
+          title: 'Deep links',
+          fill: '#dcfce7',
+          border: '#16a34a',
+          titleColor: '#166534',
+          textColor: '#14532d',
+          lines: linkLines.flatMap((line) => wrapSvgText(line, 92)),
+        });
+
+        let y = 176;
+        const sectionGap = 20;
+        const sectionBoxes = sections.map((section) => {
+          const height = 58 + (section.lines.length * lineHeight);
+          const box = { ...section, y, height };
+          y += height + sectionGap;
+          return box;
+        });
+        const totalHeight = y + 36;
+        const currentHash = frame.sync_checkpoint !== null ? `sync-${frame.sync_checkpoint}` : `step-${frame.step}`;
+        const focusSummary = (frame.focus_replicas || []).length ? `focus replicas: ${frame.focus_replicas.join(', ')}` : 'focus replicas: none';
+        const checkpointBadge = frame.sync_checkpoint !== null
+          ? `sync checkpoint #${frame.sync_checkpoint}`
+          : 'exact frame checkpoint';
+        const svg = [
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${totalHeight}" viewBox="0 0 ${width} ${totalHeight}" role="img" aria-labelledby="title desc">`,
+          '<defs>',
+          '<linearGradient id="checkpointBg" x1="0%" x2="0%" y1="0%" y2="100%">',
+          '<stop offset="0%" stop-color="#0f172a" />',
+          '<stop offset="100%" stop-color="#111827" />',
+          '</linearGradient>',
+          '</defs>',
+          `<title id="title">${escapeSvgText(`OR-Set replay checkpoint — ${scenarioTitle} — step ${frame.step}`)}</title>`,
+          `<desc id="desc">${escapeSvgText(`${scenarioStory} Current checkpoint hash: #${currentHash}.`)}</desc>`,
+          `<rect x="0" y="0" width="${width}" height="${totalHeight}" rx="28" fill="url(#checkpointBg)" />`,
+          `<text x="${padding}" y="58" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">${escapeSvgText('OR-Set replay checkpoint export')}</text>`,
+          `<text x="${padding}" y="92" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="20">${escapeSvgText(scenarioTitle)}</text>`,
+          `<text x="${padding}" y="122" fill="#bfdbfe" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">${escapeSvgText(`Step ${frame.step} · ${checkpointBadge} · ${frame.converged ? 'converged' : 'diverged'}`)}</text>`,
+          `<text x="${padding}" y="148" fill="#94a3b8" font-family="Arial, Helvetica, sans-serif" font-size="16">${escapeSvgText(`${focusSummary} · hash #${currentHash}`)}</text>`,
+        ];
+
+        for (const section of sectionBoxes) {
+          svg.push(`<rect x="${padding}" y="${section.y}" width="${contentWidth}" height="${section.height}" rx="22" fill="${section.fill}" fill-opacity="0.97" stroke="${section.border}" stroke-width="2" />`);
+          svg.push(`<text x="${padding + 24}" y="${section.y + 34}" fill="${section.titleColor}" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">${escapeSvgText(section.title)}</text>`);
+          section.lines.forEach((line, index) => {
+            svg.push(`<text x="${padding + 24}" y="${section.y + 68 + (index * lineHeight)}" fill="${section.textColor}" font-family="Arial, Helvetica, sans-serif" font-size="18">${escapeSvgText(line)}</text>`);
+          });
+        }
+        svg.push('</svg>');
+        return svg.join('\n') + '\n';
+      }
+
+      function renderTransfers(frame) {
+        const transfers = (frame.anti_entropy && frame.anti_entropy.transfers) || [];
+        antiSummary.textContent = frame.anti_entropy ? frame.anti_entropy.summary : 'No anti-entropy transfer on this step.';
+        transferList.innerHTML = transfers.length
+          ? transfers.map((transfer) => `<li><strong>${transfer.from} → ${transfer.to}</strong> — ${transfer.delta_bytes} delta bytes, saved ${transfer.saved} byte(s).</li>`).join('')
+          : '<li>No sync transfer on this step.</li>';
+        transferTableBody.innerHTML = transfers.length
+          ? transfers.map((transfer) => `<tr><td><code>${transfer.from} → ${transfer.to}</code></td><td><code>${transfer.digest_pair}</code></td><td>${transfer.full_bytes}</td><td>${transfer.delta_bytes}</td><td>${transfer.saved}</td><td>${transfer.delta_payload}</td></tr>`).join('')
+          : '<tr><td colspan="6">No sync transfer on this step.</td></tr>';
+      }
+
+      function renderFrame(index, options = {}) {
+        frameIndex = index;
+        const frame = frames[index];
+        const updateHash = options.updateHash !== false;
+        range.value = String(index);
+        const heading = index === 0 ? 'Initial state' : `Step ${frame.step}`;
+        const previousSync = findPreviousSyncIndex(index);
+        const nextSync = findNextSyncIndex(index);
+        const syncPosition = syncFrameIndexes.indexOf(index);
+        stepHeading.textContent = heading;
+        stepLabel.textContent = frame.label;
+        stepCounter.textContent = `Step ${index} of ${frames.length - 1}`;
+        statusPill.textContent = frame.converged ? 'state converged' : 'state diverged';
+        statusPill.className = `status-pill ${frame.converged ? 'ok' : 'warn'}`;
+        detailList.innerHTML = frame.details.map((detail) => `<li>${detail}</li>`).join('');
+        renderDeepLinks(frame);
+        renderReplicaCards(frame);
+        renderTransfers(frame);
+        prevButton.disabled = index === 0;
+        nextButton.disabled = index === frames.length - 1;
+        prevSyncButton.disabled = previousSync === null;
+        nextSyncButton.disabled = nextSync === null;
+        copySyncButton.disabled = frame.sync_checkpoint === null;
+        copySyncButton.textContent = frame.sync_checkpoint === null ? 'Copy sync link' : `Copy sync #${frame.sync_checkpoint} link`;
+        setActionNote(
+          frame.sync_checkpoint === null
+            ? 'Copy the exact frame link on any step, or download this checkpoint as an SVG card. Stable sync links activate only on sync steps.'
+            : `Copy the exact frame link, share stable sync #${frame.sync_checkpoint}, or download this checkpoint as an SVG card.`,
+        );
+        if (!syncFrameIndexes.length) {
+          syncNote.textContent = 'This scenario has no sync steps yet, so jump-to-sync stays disabled.';
+        } else if (frame.op === 'sync' && syncPosition >= 0) {
+          syncNote.textContent = `On sync step ${index} (checkpoint #${frame.sync_checkpoint}, ${syncPosition + 1} of ${syncFrameIndexes.length} sync checkpoints).`;
+        } else if (nextSync !== null) {
+          const nextFrame = frames[nextSync];
+          syncNote.textContent = `Next sync checkpoint: step ${nextSync} (#${nextFrame.sync_checkpoint}). Previous sync: ${previousSync === null ? 'none yet' : `step ${previousSync}`}.`;
+        } else {
+          syncNote.textContent = previousSync === null
+            ? 'No sync checkpoints appear in this scenario yet.'
+            : `No later sync steps remain. Last sync checkpoint: step ${previousSync}.`;
+        }
+        announce.textContent = `${heading} — ${frame.label}`;
+        if (updateHash) {
+          updateUrlHash(frame);
+        }
+      }
+
+      prevButton.addEventListener('click', () => {
+        stopPlayback();
+        renderFrame(Math.max(0, frameIndex - 1));
+      });
+      prevSyncButton.addEventListener('click', () => {
+        stopPlayback();
+        const previousSync = findPreviousSyncIndex(frameIndex);
+        if (previousSync !== null) {
+          renderFrame(previousSync);
+        }
+      });
+      nextButton.addEventListener('click', () => {
+        stopPlayback();
+        renderFrame(Math.min(frames.length - 1, frameIndex + 1));
+      });
+      nextSyncButton.addEventListener('click', () => {
+        stopPlayback();
+        const nextSync = findNextSyncIndex(frameIndex);
+        if (nextSync !== null) {
+          renderFrame(nextSync);
+        }
+      });
+      copyExactButton.addEventListener('click', async () => {
+        const frame = frames[frameIndex];
+        try {
+          await copyText(absoluteUrlForHash(`step-${frame.step}`));
+          setActionNote(`Copied exact frame link for step ${frame.step}.`, 'ok');
+        } catch (error) {
+          setActionNote(`Could not copy the exact frame link automatically: ${error.message}`, 'warn');
+        }
+      });
+      copySyncButton.addEventListener('click', async () => {
+        const frame = frames[frameIndex];
+        if (frame.sync_checkpoint === null) {
+          setActionNote('Stable sync links are only available on sync checkpoints. Copy the exact frame link instead.', 'warn');
+          return;
+        }
+        try {
+          await copyText(absoluteUrlForHash(`sync-${frame.sync_checkpoint}`));
+          setActionNote(`Copied stable sync link #${frame.sync_checkpoint}.`, 'ok');
+        } catch (error) {
+          setActionNote(`Could not copy the stable sync link automatically: ${error.message}`, 'warn');
+        }
+      });
+      downloadSvgButton.addEventListener('click', () => {
+        const frame = frames[frameIndex];
+        downloadTextFile(buildCheckpointSvg(frame), fileNameForFrame(frame), 'image/svg+xml;charset=utf-8');
+        setActionNote(`Downloaded ${fileNameForFrame(frame)} for the current checkpoint.`, 'ok');
+      });
+      playButton.addEventListener('click', () => {
+        if (playTimer !== null) {
+          stopPlayback();
+          return;
+        }
+        startPlayback();
+      });
+      speedSelect.addEventListener('change', () => {
+        if (playTimer !== null) {
+          startPlayback();
+        }
+      });
+      range.addEventListener('input', (event) => {
+        stopPlayback();
+        renderFrame(Number(event.target.value));
+      });
+      window.addEventListener('hashchange', () => {
+        stopPlayback();
+        renderFrame(indexFromHash(window.location.hash), { updateHash: false });
+      });
+      renderFrame(indexFromHash(window.location.hash), { updateHash: false });
+    </script>
+  </body>
+</html>

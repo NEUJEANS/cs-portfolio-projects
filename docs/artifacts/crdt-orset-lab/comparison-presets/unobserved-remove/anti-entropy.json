@@ -1,0 +1,341 @@
+{
+  "final_replica_digests": {
+    "a": {
+      "active_element_count": 1,
+      "active_tag_count": 1,
+      "counter_count": 1,
+      "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+      "element_count": 1,
+      "observed_tag_count": 1,
+      "payload_bytes": 64,
+      "tombstone_count": 0
+    },
+    "b": {
+      "active_element_count": 1,
+      "active_tag_count": 1,
+      "counter_count": 1,
+      "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+      "element_count": 1,
+      "observed_tag_count": 1,
+      "payload_bytes": 64,
+      "tombstone_count": 0
+    },
+    "c": {
+      "active_element_count": 1,
+      "active_tag_count": 1,
+      "counter_count": 1,
+      "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+      "element_count": 1,
+      "observed_tag_count": 1,
+      "payload_bytes": 64,
+      "tombstone_count": 0
+    }
+  },
+  "replicas": [
+    "a",
+    "b",
+    "c"
+  ],
+  "step_count": 5,
+  "story": "Across 6 directional sync transfer(s), shipping whole OR-Set states would cost 338 byte(s), while delta-state transfer needs 292 byte(s), saving 46 byte(s). The largest sync delta in this run is step 3 at 105 byte(s).",
+  "sync_count": 3,
+  "sync_rows": [
+    {
+      "bytes_saved_vs_full": 0,
+      "delta_sync_bytes": 105,
+      "digest_match_before": false,
+      "event": "a \u2194 b sync (both)",
+      "full_sync_bytes": 105,
+      "source_before": {
+        "active_element_count": 1,
+        "active_tag_count": 1,
+        "counter_count": 1,
+        "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+        "element_count": 1,
+        "observed_tag_count": 1,
+        "payload_bytes": 64,
+        "tombstone_count": 0
+      },
+      "step": 3,
+      "target_before": {
+        "active_element_count": 0,
+        "active_tag_count": 0,
+        "counter_count": 0,
+        "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+        "element_count": 0,
+        "observed_tag_count": 0,
+        "payload_bytes": 41,
+        "tombstone_count": 0
+      },
+      "transfer_count": 2,
+      "transfers": [
+        {
+          "bytes_saved_vs_full": 0,
+          "delta": {
+            "counter_count": 1,
+            "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "element_count": 1,
+            "observed_tag_count": 1,
+            "payload_bytes": 64,
+            "tombstone_count": 0
+          },
+          "delta_payload": {
+            "adds": {
+              "notebook": [
+                "a:1"
+              ]
+            },
+            "counters": {
+              "a": 1
+            },
+            "tombstones": []
+          },
+          "digest_match_before": false,
+          "from": "a",
+          "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "full_state": {
+            "active_element_count": 1,
+            "active_tag_count": 1,
+            "counter_count": 1,
+            "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "element_count": 1,
+            "observed_tag_count": 1,
+            "payload_bytes": 64,
+            "tombstone_count": 0
+          },
+          "to": "b",
+          "to_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e"
+        },
+        {
+          "bytes_saved_vs_full": 0,
+          "delta": {
+            "counter_count": 0,
+            "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "element_count": 0,
+            "observed_tag_count": 0,
+            "payload_bytes": 41,
+            "tombstone_count": 0
+          },
+          "delta_payload": {
+            "adds": {},
+            "counters": {},
+            "tombstones": []
+          },
+          "digest_match_before": false,
+          "from": "b",
+          "from_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+          "full_state": {
+            "active_element_count": 0,
+            "active_tag_count": 0,
+            "counter_count": 0,
+            "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "element_count": 0,
+            "observed_tag_count": 0,
+            "payload_bytes": 41,
+            "tombstone_count": 0
+          },
+          "to": "a",
+          "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+        }
+      ]
+    },
+    {
+      "bytes_saved_vs_full": 0,
+      "delta_sync_bytes": 105,
+      "digest_match_before": false,
+      "event": "b \u2194 c sync (both)",
+      "full_sync_bytes": 105,
+      "source_before": {
+        "active_element_count": 1,
+        "active_tag_count": 1,
+        "counter_count": 1,
+        "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+        "element_count": 1,
+        "observed_tag_count": 1,
+        "payload_bytes": 64,
+        "tombstone_count": 0
+      },
+      "step": 4,
+      "target_before": {
+        "active_element_count": 0,
+        "active_tag_count": 0,
+        "counter_count": 0,
+        "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+        "element_count": 0,
+        "observed_tag_count": 0,
+        "payload_bytes": 41,
+        "tombstone_count": 0
+      },
+      "transfer_count": 2,
+      "transfers": [
+        {
+          "bytes_saved_vs_full": 0,
+          "delta": {
+            "counter_count": 1,
+            "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "element_count": 1,
+            "observed_tag_count": 1,
+            "payload_bytes": 64,
+            "tombstone_count": 0
+          },
+          "delta_payload": {
+            "adds": {
+              "notebook": [
+                "a:1"
+              ]
+            },
+            "counters": {
+              "a": 1
+            },
+            "tombstones": []
+          },
+          "digest_match_before": false,
+          "from": "b",
+          "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "full_state": {
+            "active_element_count": 1,
+            "active_tag_count": 1,
+            "counter_count": 1,
+            "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "element_count": 1,
+            "observed_tag_count": 1,
+            "payload_bytes": 64,
+            "tombstone_count": 0
+          },
+          "to": "c",
+          "to_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e"
+        },
+        {
+          "bytes_saved_vs_full": 0,
+          "delta": {
+            "counter_count": 0,
+            "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "element_count": 0,
+            "observed_tag_count": 0,
+            "payload_bytes": 41,
+            "tombstone_count": 0
+          },
+          "delta_payload": {
+            "adds": {},
+            "counters": {},
+            "tombstones": []
+          },
+          "digest_match_before": false,
+          "from": "c",
+          "from_digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+          "full_state": {
+            "active_element_count": 0,
+            "active_tag_count": 0,
+            "counter_count": 0,
+            "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "element_count": 0,
+            "observed_tag_count": 0,
+            "payload_bytes": 41,
+            "tombstone_count": 0
+          },
+          "to": "b",
+          "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+        }
+      ]
+    },
+    {
+      "bytes_saved_vs_full": 46,
+      "delta_sync_bytes": 82,
+      "digest_match_before": true,
+      "event": "a \u2194 c sync (both)",
+      "full_sync_bytes": 128,
+      "source_before": {
+        "active_element_count": 1,
+        "active_tag_count": 1,
+        "counter_count": 1,
+        "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+        "element_count": 1,
+        "observed_tag_count": 1,
+        "payload_bytes": 64,
+        "tombstone_count": 0
+      },
+      "step": 5,
+      "target_before": {
+        "active_element_count": 1,
+        "active_tag_count": 1,
+        "counter_count": 1,
+        "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+        "element_count": 1,
+        "observed_tag_count": 1,
+        "payload_bytes": 64,
+        "tombstone_count": 0
+      },
+      "transfer_count": 2,
+      "transfers": [
+        {
+          "bytes_saved_vs_full": 23,
+          "delta": {
+            "counter_count": 0,
+            "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "element_count": 0,
+            "observed_tag_count": 0,
+            "payload_bytes": 41,
+            "tombstone_count": 0
+          },
+          "delta_payload": {
+            "adds": {},
+            "counters": {},
+            "tombstones": []
+          },
+          "digest_match_before": true,
+          "from": "a",
+          "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "full_state": {
+            "active_element_count": 1,
+            "active_tag_count": 1,
+            "counter_count": 1,
+            "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "element_count": 1,
+            "observed_tag_count": 1,
+            "payload_bytes": 64,
+            "tombstone_count": 0
+          },
+          "to": "c",
+          "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+        },
+        {
+          "bytes_saved_vs_full": 23,
+          "delta": {
+            "counter_count": 0,
+            "digest": "59accd60481d24f1ffb160080920af0c95053256d11ec21958e112069d29c27e",
+            "element_count": 0,
+            "observed_tag_count": 0,
+            "payload_bytes": 41,
+            "tombstone_count": 0
+          },
+          "delta_payload": {
+            "adds": {},
+            "counters": {},
+            "tombstones": []
+          },
+          "digest_match_before": true,
+          "from": "c",
+          "from_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+          "full_state": {
+            "active_element_count": 1,
+            "active_tag_count": 1,
+            "counter_count": 1,
+            "digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717",
+            "element_count": 1,
+            "observed_tag_count": 1,
+            "payload_bytes": 64,
+            "tombstone_count": 0
+          },
+          "to": "a",
+          "to_digest": "bc0df1bd11ad6d7306e878ee9e5d73f91d7aae7b8db2288a92378b04ccd5c717"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "bytes_saved_vs_full": 46,
+    "delta_sync_bytes": 292,
+    "full_sync_bytes": 338,
+    "transfer_count": 6
+  }
+}

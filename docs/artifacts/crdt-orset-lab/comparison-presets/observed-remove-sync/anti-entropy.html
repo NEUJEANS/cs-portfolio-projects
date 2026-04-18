@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set anti-entropy report — preset observed-remove-sync — Observed remove yields the same final answer</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .story { padding: 14px 16px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; color: #3730a3; }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }
+      .summary-grid li { list-style: none; padding: 16px 18px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }
+      .summary-grid strong { display: block; font-size: 1.3rem; margin-bottom: 6px; }
+      .layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr); align-items: start; }
+      .panel { padding: 22px; }
+      .panel h2, .panel h3 { margin-top: 0; }
+      .digest-list, .artifact-links { margin: 0; padding-left: 18px; color: var(--muted); }
+      .digest-list li + li, .artifact-links li + li { margin-top: 10px; }
+      .digest-list strong { color: var(--text); display: block; margin-bottom: 4px; }
+      .digest-list span { display: block; line-height: 1.5; }
+      .callout { padding: 14px 16px; border-radius: 18px; background: var(--good-bg); color: var(--good); line-height: 1.5; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th { font-size: 0.95rem; color: var(--muted); }
+      code { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }
+      a { color: var(--accent); }
+      @media (max-width: 1080px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set anti-entropy report</h1>
+        <p>This view turns the same scripted CRDT run into a merge-cost story: digest summaries show how large each replica state is, while per-sync delta payloads show how much data actually needs to move when replicas reconcile.</p>
+        <p class="story">Across 8 directional sync transfer(s), shipping whole OR-Set states would cost 486 byte(s), while delta-state transfer needs 384 byte(s), saving 102 byte(s). The largest sync delta in this run is step 4 at 110 byte(s).</p>
+        <ul class="summary-grid">
+          <li><strong>4</strong> sync steps</li>
+          <li><strong>8</strong> directional transfers</li>
+          <li><strong>486</strong> full-state bytes</li>
+          <li><strong>384</strong> delta-state bytes</li>
+          <li><strong>102</strong> bytes saved</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel">
+          <h2>preset observed-remove-sync — Observed remove yields the same final answer</h2>
+          <div class="callout"><strong>Digest view:</strong> compare replica state fingerprints before a sync. <strong>Delta view:</strong> send only the missing tags, tombstones, and counter advances instead of the whole OR-Set payload.</div>
+          <h3 style="margin-top: 18px;">Final replica digests</h3>
+          <ul class="digest-list"><li><strong><code>a</code></strong><span>digest 88a4f152f33fd9c8…</span><span>69 bytes · observed tags 1 · tombstones 1 · counters 1</span></li><li><strong><code>b</code></strong><span>digest 88a4f152f33fd9c8…</span><span>69 bytes · observed tags 1 · tombstones 1 · counters 1</span></li><li><strong><code>c</code></strong><span>digest 88a4f152f33fd9c8…</span><span>69 bytes · observed tags 1 · tombstones 1 · counters 1</span></li></ul>
+        </article>
+        <aside class="panel">
+          <h2>Companion artifacts</h2>
+          <ul class="artifact-links"><li><a href="../../../../../projects/crdt-orset-lab/presets/observed-remove-sync.json">Scenario script</a></li><li><a href="timeline.html">Timeline gallery</a></li><li><a href="timeline.md">Timeline Markdown</a></li><li><a href="timeline.mmd">Timeline Mermaid</a></li><li><a href="timeline.svg">Timeline SVG</a></li><li><a href="orset-snapshot.json">Timeline JSON</a></li><li><a href="replay.html">Replay HTML</a></li><li><a href="anti-entropy.md">Anti-entropy Markdown</a></li><li><a href="anti-entropy.json">Anti-entropy JSON</a></li><li><a href="comparison.html">Comparison HTML</a></li><li><a href="comparison.md">Comparison Markdown</a></li><li><a href="comparison.json">Comparison JSON</a></li></ul>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Sync transfer details</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Event</th><th>Transfer</th><th>Digests before</th><th>Full bytes</th><th>Delta bytes</th><th>Saved</th><th>Delta payload</th></tr>
+          </thead>
+          <tbody><tr><td>2</td><td>a ↔ b sync (both)</td><td>a -&gt; b</td><td><code>bc0df1bd11ad…</code><br /><code>59accd60481d…</code></td><td>64</td><td>64</td><td>0</td><td>tags notebook=a:1; tombstones ∅; counters a=1</td></tr><tr><td>2</td><td>a ↔ b sync (both)</td><td>b -&gt; a</td><td><code>59accd60481d…</code><br /><code>bc0df1bd11ad…</code></td><td>41</td><td>41</td><td>0</td><td>tags ∅; tombstones ∅; counters ∅</td></tr><tr><td>4</td><td>b ↔ c sync (both)</td><td>b -&gt; c</td><td><code>88a4f152f33f…</code><br /><code>59accd60481d…</code></td><td>69</td><td>69</td><td>0</td><td>tags notebook=a:1; tombstones a:1; counters a=1</td></tr><tr><td>4</td><td>b ↔ c sync (both)</td><td>c -&gt; b</td><td><code>59accd60481d…</code><br /><code>88a4f152f33f…</code></td><td>41</td><td>41</td><td>0</td><td>tags ∅; tombstones ∅; counters ∅</td></tr><tr><td>5</td><td>a ↔ b sync (both)</td><td>a -&gt; b</td><td><code>bc0df1bd11ad…</code><br /><code>88a4f152f33f…</code></td><td>64</td><td>41</td><td>23</td><td>tags ∅; tombstones ∅; counters ∅</td></tr><tr><td>5</td><td>a ↔ b sync (both)</td><td>b -&gt; a</td><td><code>88a4f152f33f…</code><br /><code>bc0df1bd11ad…</code></td><td>69</td><td>46</td><td>23</td><td>tags ∅; tombstones a:1; counters ∅</td></tr><tr><td>6</td><td>a ↔ c sync (both)</td><td>a -&gt; c</td><td><code>88a4f152f33f…</code><br /><code>88a4f152f33f…</code></td><td>69</td><td>41</td><td>28</td><td>tags ∅; tombstones ∅; counters ∅</td></tr><tr><td>6</td><td>a ↔ c sync (both)</td><td>c -&gt; a</td><td><code>88a4f152f33f…</code><br /><code>88a4f152f33f…</code></td><td>69</td><td>41</td><td>28</td><td>tags ∅; tombstones ∅; counters ∅</td></tr></tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

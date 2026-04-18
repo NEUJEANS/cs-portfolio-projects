@@ -1,0 +1,17 @@
+sequenceDiagram
+    autonumber
+    participant R1 as a
+    participant R2 as b
+    participant R3 as c
+    Note over R1,R3: preset unobserved-remove — Unobserved remove cannot tombstone unseen tags
+    R1->>R1: add notebook [a:1]
+    Note over R1: elements=notebook | active=notebook=a:1 | tombstones=∅
+    R3->>R3: remove notebook
+    Note over R3: removed ∅; elements=∅ | active=∅ | tombstones=∅
+    R1->>R2: sync both
+    Note over R1,R2: a: elements=notebook | active=notebook=a:1 | tombstones=∅ || b: elements=notebook | active=notebook=a:1 | tombstones=∅
+    R2->>R3: sync both
+    Note over R2,R3: b: elements=notebook | active=notebook=a:1 | tombstones=∅ || c: elements=notebook | active=notebook=a:1 | tombstones=∅
+    R1->>R3: sync both
+    Note over R1,R3: a: elements=notebook | active=notebook=a:1 | tombstones=∅ || c: elements=notebook | active=notebook=a:1 | tombstones=∅
+    Note over R1,R3: Final membership notebook; active tags notebook=a:1; tombstones ∅.

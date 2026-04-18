@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set artifact gallery — preset concurrent-readd — Concurrent re-add survives in OR-Set</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --ok-bg: #dcfce7;
+        --ok-text: #166534;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1380px; margin: 0 auto; padding: 32px 20px 64px; }
+      a { color: var(--accent); }
+      code { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .hero p { color: var(--muted); max-width: 980px; }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }
+      .summary-grid li { list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }
+      .summary-grid strong { display: block; font-size: 1.35rem; margin-bottom: 6px; }
+      .layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr); align-items: start; }
+      .panel { padding: 22px; }
+      .panel h2, .panel h3 { margin-top: 0; }
+      .artifact-links { margin: 0; padding-left: 18px; color: var(--muted); }
+      .artifact-links li + li, .replica-list li + li { margin-top: 10px; }
+      .preview { margin: 0; overflow-x: auto; }
+      .preview svg { width: 100%; height: auto; min-width: 720px; display: block; border-radius: 20px; }
+      .replica-list { margin: 0; padding-left: 18px; color: var(--muted); }
+      .replica-list strong { color: var(--text); display: block; margin-bottom: 4px; }
+      .replica-list span { display: block; line-height: 1.5; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th { font-size: 0.95rem; color: var(--muted); }
+      .story { padding: 14px 16px; border-radius: 18px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }
+      .status-ok { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: var(--ok-bg); color: var(--ok-text); font-weight: 700; }
+      @media (max-width: 1020px) {
+        .layout { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set artifact gallery</h1>
+        <p>This page packages the screenshot-ready OR-Set timeline card with the exact companion files that explain the same run in Markdown, Mermaid, SVG, and JSON. It is meant to make the observed-remove story quick to inspect in a browser while still leaving the raw machine-readable state one click away.</p>
+        <p class="story">Observed-remove story: a remove tombstones only the add-tags a replica has already observed, so membership still survives via notebook=c:1 while tombstones retain a:1.</p>
+        <ul class="summary-grid">
+          <li><strong>3</strong> replicas (a, b, c)</li>
+          <li><strong>7</strong> timeline steps</li>
+          <li><strong>2/1/4</strong> add/remove/sync ops</li>
+          <li><strong>notebook</strong> final membership</li>
+          <li><strong>a:1</strong> final tombstones</li>
+          <li><strong><span class="status-ok">converged = true</span></strong> full replica-state equality</li>
+        </ul>
+      </section>
+      <section class="layout">
+        <article class="panel">
+          <h2>preset concurrent-readd — Concurrent re-add survives in OR-Set</h2>
+          <figure class="preview">
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1112" viewBox="0 0 1080 1112" role="img" aria-labelledby="title desc">
+  <defs>
+    <linearGradient id="timelineBg" x1="0%" x2="0%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+  </defs>
+  <title id="title">preset concurrent-readd — Concurrent re-add survives in OR-Set</title>
+  <desc id="desc">Observed-remove story: a remove tombstones only the add-tags a replica has already observed, so membership still survives via notebook=c:1 while tombstones retain a:1.</desc>
+  <rect x="0" y="0" width="1080" height="1112" fill="url(#timelineBg)" rx="24" />
+  <text x="32" y="52" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">preset concurrent-readd — Concurrent re-add survives in OR-Set</text>
+  <text x="32" y="82" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="16">Observed-remove set timeline export</text>
+  <rect x="32" y="108" width="1016" height="96" rx="18" fill="#d1fae5" fill-opacity="0.95" stroke="#10b981" stroke-width="2" />
+  <circle cx="60" cy="136" r="18" fill="#10b981" />
+  <text x="60" y="142" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">1</text>
+  <text x="94" y="138" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a adds notebook</text>
+  <text x="94" y="166" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">new tag: a:1</text>
+  <text x="94" y="186" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">elements=notebook | active=notebook=a:1 | tombstones=∅</text>
+  <rect x="32" y="222" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="250" r="18" fill="#3b82f6" />
+  <text x="60" y="256" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">2</text>
+  <text x="94" y="252" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a ↔ b sync (both)</text>
+  <text x="94" y="280" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=a:1 | tombstones=∅</text>
+  <text x="94" y="300" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">b: elements=notebook | active=notebook=a:1 | tombstones=∅</text>
+  <rect x="32" y="336" width="1016" height="96" rx="18" fill="#fee2e2" fill-opacity="0.95" stroke="#ef4444" stroke-width="2" />
+  <circle cx="60" cy="364" r="18" fill="#ef4444" />
+  <text x="60" y="370" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">3</text>
+  <text x="94" y="366" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">b removes notebook</text>
+  <text x="94" y="394" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">observed tags removed: a:1</text>
+  <text x="94" y="414" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">elements=∅ | active=∅ | tombstones=a:1</text>
+  <rect x="32" y="450" width="1016" height="96" rx="18" fill="#d1fae5" fill-opacity="0.95" stroke="#10b981" stroke-width="2" />
+  <circle cx="60" cy="478" r="18" fill="#10b981" />
+  <text x="60" y="484" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">4</text>
+  <text x="94" y="480" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">c adds notebook</text>
+  <text x="94" y="508" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">new tag: c:1</text>
+  <text x="94" y="528" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">elements=notebook | active=notebook=c:1 | tombstones=∅</text>
+  <rect x="32" y="564" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="592" r="18" fill="#3b82f6" />
+  <text x="60" y="598" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">5</text>
+  <text x="94" y="594" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">c ↔ a sync (both)</text>
+  <text x="94" y="622" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">c: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅</text>
+  <text x="94" y="642" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅</text>
+  <rect x="32" y="678" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="706" r="18" fill="#3b82f6" />
+  <text x="60" y="712" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">6</text>
+  <text x="94" y="708" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a ↔ b sync (both)</text>
+  <text x="94" y="736" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <text x="94" y="756" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">b: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <rect x="32" y="792" width="1016" height="96" rx="18" fill="#dbeafe" fill-opacity="0.95" stroke="#3b82f6" stroke-width="2" />
+  <circle cx="60" cy="820" r="18" fill="#3b82f6" />
+  <text x="60" y="826" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">7</text>
+  <text x="94" y="822" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">a ↔ c sync (both)</text>
+  <text x="94" y="850" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <text x="94" y="870" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">c: elements=notebook | active=notebook=c:1 | tombstones=a:1</text>
+  <rect x="32" y="906" width="1016" height="170" rx="18" fill="#ede9fe" fill-opacity="0.98" stroke="#8b5cf6" stroke-width="2" />
+  <text x="56" y="938" fill="#4c1d95" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">Final convergence</text>
+  <text x="1024" y="938" text-anchor="end" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">converged=true</text>
+  <text x="56" y="970" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">Observed-remove story: a remove tombstones only the add-tags a replica has already</text>
+  <text x="56" y="990" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">observed, so membership still survives via notebook=c:1 while tombstones retain a:1.</text>
+  <text x="56" y="1010" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">a: elements notebook; active notebook=c:1; tombstones a:1</text>
+  <text x="56" y="1030" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">b: elements notebook; active notebook=c:1; tombstones a:1</text>
+  <text x="56" y="1050" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">c: elements notebook; active notebook=c:1; tombstones a:1</text>
+</svg>
+
+          </figure>
+        </article>
+        <aside class="panel">
+          <h2>Companion artifacts</h2>
+          <ul class="artifact-links"><li><a href="../../../../../projects/crdt-orset-lab/sample_compare_ops.json">Scenario script</a></li><li><a href="timeline.md">Markdown timeline</a></li><li><a href="timeline.mmd">Mermaid source</a></li><li><a href="timeline.svg">SVG card</a></li><li><a href="orset-snapshot.json">JSON snapshot</a></li><li><a href="anti-entropy.md">Anti-entropy Markdown</a></li><li><a href="anti-entropy.html">Anti-entropy HTML</a></li><li><a href="anti-entropy.json">Anti-entropy JSON</a></li><li><a href="replay.html">Replay HTML</a></li><li><a href="comparison.html">Comparison HTML</a></li><li><a href="comparison.md">Comparison Markdown</a></li><li><a href="comparison.json">Comparison JSON</a></li></ul>
+          <h3>Final replica states</h3>
+          <ul class="replica-list"><li><strong><code>a</code></strong><span>elements notebook; active notebook=c:1; tombstones a:1</span></li><li><strong><code>b</code></strong><span>elements notebook; active notebook=c:1; tombstones a:1</span></li><li><strong><code>c</code></strong><span>elements notebook; active notebook=c:1; tombstones a:1</span></li></ul>
+        </aside>
+      </section>
+      <section class="panel" style="margin-top: 24px;">
+        <h2>Timeline steps</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Event</th><th>Details</th></tr>
+          </thead>
+          <tbody><tr><td>1</td><td>a adds notebook</td><td><div>new tag: a:1</div><div>elements=notebook | active=notebook=a:1 | tombstones=∅</div></td></tr><tr><td>2</td><td>a ↔ b sync (both)</td><td><div>a: elements=notebook | active=notebook=a:1 | tombstones=∅</div><div>b: elements=notebook | active=notebook=a:1 | tombstones=∅</div></td></tr><tr><td>3</td><td>b removes notebook</td><td><div>observed tags removed: a:1</div><div>elements=∅ | active=∅ | tombstones=a:1</div></td></tr><tr><td>4</td><td>c adds notebook</td><td><div>new tag: c:1</div><div>elements=notebook | active=notebook=c:1 | tombstones=∅</div></td></tr><tr><td>5</td><td>c ↔ a sync (both)</td><td><div>c: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅</div><div>a: elements=notebook | active=notebook=a:1, c:1 | tombstones=∅</div></td></tr><tr><td>6</td><td>a ↔ b sync (both)</td><td><div>a: elements=notebook | active=notebook=c:1 | tombstones=a:1</div><div>b: elements=notebook | active=notebook=c:1 | tombstones=a:1</div></td></tr><tr><td>7</td><td>a ↔ c sync (both)</td><td><div>a: elements=notebook | active=notebook=c:1 | tombstones=a:1</div><div>c: elements=notebook | active=notebook=c:1 | tombstones=a:1</div></td></tr></tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
