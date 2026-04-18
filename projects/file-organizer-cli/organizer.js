@@ -51,7 +51,8 @@ const PRESET_LIBRARY = Object.freeze({
   }),
 });
 const CONFIG_ALLOWED_KEYS = Object.freeze(['buckets', 'fallbackBucket', 'extendDefaults']);
-const BUCKET_RULE_ALLOWED_KEYS = Object.freeze(['extensions', 'basenamePatterns']);
+const BUCKET_RULE_ALLOWED_KEYS = Object.freeze(['extensions', 'basenamePatterns', 'mimeTypes', 'mimePrefixes']);
+const MIME_SNIFF_BYTE_LIMIT = 4096;
 
 function normalizeBucketName(name, label = 'bucket name') {
   if (typeof name !== 'string') {
@@ -140,16 +141,100 @@ function normalizeBasenamePatternList(rawPatterns, bucketName, { allowEmpty = fa
   return patterns;
 }
 
+function normalizeMimeType(mimeType, bucketName) {
+  if (typeof mimeType !== 'string') {
+    throw new Error(`Expected every MIME type in bucket ${bucketName} to be a string.`);
+  }
+
+  const trimmed = mimeType.trim().toLowerCase();
+  if (!trimmed) {
+    throw new Error(`MIME types in bucket ${bucketName} must be non-empty.`);
+  }
+
+  if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(trimmed)) {
+    throw new Error(`MIME types in bucket ${bucketName} must look like "type/subtype".`);
+  }
+
+  return trimmed;
+}
+
+function normalizeMimePrefix(mimePrefix, bucketName) {
+  if (typeof mimePrefix !== 'string') {
+    throw new Error(`Expected every MIME prefix in bucket ${bucketName} to be a string.`);
+  }
+
+  let normalized = mimePrefix.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error(`MIME prefixes in bucket ${bucketName} must be non-empty.`);
+  }
+
+  if (normalized.endsWith('*')) {
+    normalized = normalized.slice(0, -1);
+  }
+
+  if (!normalized.endsWith('/')) {
+    throw new Error(`MIME prefixes in bucket ${bucketName} must end with "/" or "/*".`);
+  }
+
+  if (!/^[a-z0-9.+-]+\/$/.test(normalized)) {
+    throw new Error(`MIME prefixes in bucket ${bucketName} must look like "type/" or "type/*".`);
+  }
+
+  return normalized;
+}
+
+function normalizeMimeTypeList(rawMimeTypes, bucketName, { allowEmpty = false } = {}) {
+  if (!Array.isArray(rawMimeTypes)) {
+    throw new Error(`Bucket ${bucketName} field "mimeTypes" must be an array when provided.`);
+  }
+
+  if (!allowEmpty && rawMimeTypes.length === 0) {
+    throw new Error(`Bucket ${bucketName} must list at least one MIME type.`);
+  }
+
+  const mimeTypes = [];
+  for (const rawMimeType of rawMimeTypes) {
+    const mimeType = normalizeMimeType(rawMimeType, bucketName);
+    if (!mimeTypes.includes(mimeType)) {
+      mimeTypes.push(mimeType);
+    }
+  }
+
+  return mimeTypes;
+}
+
+function normalizeMimePrefixList(rawMimePrefixes, bucketName, { allowEmpty = false } = {}) {
+  if (!Array.isArray(rawMimePrefixes)) {
+    throw new Error(`Bucket ${bucketName} field "mimePrefixes" must be an array when provided.`);
+  }
+
+  if (!allowEmpty && rawMimePrefixes.length === 0) {
+    throw new Error(`Bucket ${bucketName} must list at least one MIME prefix.`);
+  }
+
+  const mimePrefixes = [];
+  for (const rawMimePrefix of rawMimePrefixes) {
+    const mimePrefix = normalizeMimePrefix(rawMimePrefix, bucketName);
+    if (!mimePrefixes.includes(mimePrefix)) {
+      mimePrefixes.push(mimePrefix);
+    }
+  }
+
+  return mimePrefixes;
+}
+
 function normalizeCustomBucketRule(rawRuleDefinition, bucketName) {
   if (Array.isArray(rawRuleDefinition)) {
     return {
       extensions: normalizeExtensionList(rawRuleDefinition, bucketName),
       basenamePatterns: [],
+      mimeTypes: [],
+      mimePrefixes: [],
     };
   }
 
   if (rawRuleDefinition == null || typeof rawRuleDefinition !== 'object') {
-    throw new Error(`Bucket ${bucketName} must be an extension array or an object with "extensions" and/or "basenamePatterns".`);
+    throw new Error(`Bucket ${bucketName} must be an extension array or an object with "extensions", "basenamePatterns", "mimeTypes", and/or "mimePrefixes".`);
   }
 
   const extensions = rawRuleDefinition.extensions == null
@@ -158,22 +243,32 @@ function normalizeCustomBucketRule(rawRuleDefinition, bucketName) {
   const basenamePatterns = rawRuleDefinition.basenamePatterns == null
     ? []
     : normalizeBasenamePatternList(rawRuleDefinition.basenamePatterns, bucketName, { allowEmpty: true });
+  const mimeTypes = rawRuleDefinition.mimeTypes == null
+    ? []
+    : normalizeMimeTypeList(rawRuleDefinition.mimeTypes, bucketName, { allowEmpty: true });
+  const mimePrefixes = rawRuleDefinition.mimePrefixes == null
+    ? []
+    : normalizeMimePrefixList(rawRuleDefinition.mimePrefixes, bucketName, { allowEmpty: true });
 
-  if (extensions.length === 0 && basenamePatterns.length === 0) {
-    throw new Error(`Bucket ${bucketName} must define at least one extension or basename pattern.`);
+  if (extensions.length === 0 && basenamePatterns.length === 0 && mimeTypes.length === 0 && mimePrefixes.length === 0) {
+    throw new Error(`Bucket ${bucketName} must define at least one extension, basename pattern, MIME type, or MIME prefix.`);
   }
 
   return {
     extensions,
     basenamePatterns,
+    mimeTypes,
+    mimePrefixes,
   };
 }
 
 function serializeCustomBucketRule(ruleDefinition) {
   const extensions = [...ruleDefinition.extensions];
   const basenamePatterns = [...ruleDefinition.basenamePatterns];
+  const mimeTypes = [...(ruleDefinition.mimeTypes || [])];
+  const mimePrefixes = [...(ruleDefinition.mimePrefixes || [])];
 
-  if (basenamePatterns.length === 0) {
+  if (basenamePatterns.length === 0 && mimeTypes.length === 0 && mimePrefixes.length === 0) {
     return extensions;
   }
 
@@ -183,6 +278,12 @@ function serializeCustomBucketRule(ruleDefinition) {
   }
   if (basenamePatterns.length > 0) {
     serializedRule.basenamePatterns = basenamePatterns;
+  }
+  if (mimeTypes.length > 0) {
+    serializedRule.mimeTypes = mimeTypes;
+  }
+  if (mimePrefixes.length > 0) {
+    serializedRule.mimePrefixes = mimePrefixes;
   }
   return serializedRule;
 }
@@ -219,7 +320,45 @@ function normalizeCustomBuckets(buckets) {
   const normalized = {};
   const extensionOwners = new Map();
   const basenamePatternOwners = new Map();
+  const mimeTypeOwners = new Map();
+  const mimePrefixOwners = new Map();
   const bucketNameOwners = new Map();
+
+  const registerMimeType = (mimeType, bucketName) => {
+    const owner = mimeTypeOwners.get(mimeType);
+    if (owner && owner !== bucketName) {
+      throw new Error(`MIME type ${mimeType} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+    }
+
+    for (const [prefix, prefixOwner] of mimePrefixOwners.entries()) {
+      if (prefixOwner !== bucketName && mimeType.startsWith(prefix)) {
+        throw new Error(`MIME type ${mimeType} overlaps MIME prefix ${prefix} from another custom bucket (${prefixOwner}, ${bucketName}).`);
+      }
+    }
+
+    mimeTypeOwners.set(mimeType, bucketName);
+  };
+
+  const registerMimePrefix = (mimePrefix, bucketName) => {
+    const owner = mimePrefixOwners.get(mimePrefix);
+    if (owner && owner !== bucketName) {
+      throw new Error(`MIME prefix ${mimePrefix} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+    }
+
+    for (const [existingMimeType, typeOwner] of mimeTypeOwners.entries()) {
+      if (typeOwner !== bucketName && existingMimeType.startsWith(mimePrefix)) {
+        throw new Error(`MIME prefix ${mimePrefix} overlaps MIME type ${existingMimeType} from another custom bucket (${typeOwner}, ${bucketName}).`);
+      }
+    }
+
+    for (const [existingPrefix, prefixOwner] of mimePrefixOwners.entries()) {
+      if (prefixOwner !== bucketName && (existingPrefix.startsWith(mimePrefix) || mimePrefix.startsWith(existingPrefix))) {
+        throw new Error(`MIME prefix ${mimePrefix} overlaps MIME prefix ${existingPrefix} from another custom bucket (${prefixOwner}, ${bucketName}).`);
+      }
+    }
+
+    mimePrefixOwners.set(mimePrefix, bucketName);
+  };
 
   for (const [rawBucketName, rawRuleDefinition] of Object.entries(buckets)) {
     const bucketName = normalizeBucketName(rawBucketName, 'bucket name');
@@ -247,6 +386,14 @@ function normalizeCustomBuckets(buckets) {
       basenamePatternOwners.set(pattern, bucketName);
     }
 
+    for (const mimeType of ruleDefinition.mimeTypes) {
+      registerMimeType(mimeType, bucketName);
+    }
+
+    for (const mimePrefix of ruleDefinition.mimePrefixes) {
+      registerMimePrefix(mimePrefix, bucketName);
+    }
+
     normalized[bucketName] = ruleDefinition;
   }
 
@@ -266,9 +413,11 @@ function buildBucketConfig(config = {}) {
   const customBuckets = normalizeCustomBuckets(config.buckets);
   const extensionToBucket = new Map();
   const basenamePatternRules = [];
+  const mimeTypeToBucket = new Map();
+  const mimePrefixRules = [];
   const bucketNames = [];
 
-  const registerBucketRules = (rules, { includeBasenamePatterns = false } = {}) => {
+  const registerBucketRules = (rules, { includeBasenamePatterns = false, includeMimeRules = false } = {}) => {
     for (const [bucketName, ruleDefinition] of Object.entries(rules)) {
       if (!bucketNames.includes(bucketName)) {
         bucketNames.push(bucketName);
@@ -283,21 +432,36 @@ function buildBucketConfig(config = {}) {
         }
       }
 
-      if (!includeBasenamePatterns || Array.isArray(ruleDefinition)) {
-        continue;
-      }
+      if (!Array.isArray(ruleDefinition)) {
+        if (includeBasenamePatterns) {
+          for (const pattern of ruleDefinition.basenamePatterns) {
+            basenamePatternRules.push({
+              bucketName,
+              pattern,
+              regex: basenamePatternToRegex(pattern),
+            });
+          }
+        }
 
-      for (const pattern of ruleDefinition.basenamePatterns) {
-        basenamePatternRules.push({
-          bucketName,
-          pattern,
-          regex: basenamePatternToRegex(pattern),
-        });
+        if (includeMimeRules) {
+          for (const mimeType of ruleDefinition.mimeTypes) {
+            if (!mimeTypeToBucket.has(mimeType)) {
+              mimeTypeToBucket.set(mimeType, bucketName);
+            }
+          }
+
+          for (const mimePrefix of ruleDefinition.mimePrefixes) {
+            mimePrefixRules.push({
+              bucketName,
+              prefix: mimePrefix,
+            });
+          }
+        }
       }
     }
   };
 
-  registerBucketRules(customBuckets, { includeBasenamePatterns: true });
+  registerBucketRules(customBuckets, { includeBasenamePatterns: true, includeMimeRules: true });
   if (extendDefaults) {
     registerBucketRules(DEFAULT_BUCKET_RULES);
   }
@@ -313,6 +477,9 @@ function buildBucketConfig(config = {}) {
     bucketNames,
     extensionToBucket,
     basenamePatternRules,
+    mimeTypeToBucket,
+    mimePrefixRules,
+    requiresMimeDetection: mimeTypeToBucket.size > 0 || mimePrefixRules.length > 0,
   };
 }
 
@@ -334,6 +501,12 @@ function cloneBucketRuleDefinition(ruleDefinition) {
   }
   if (ruleDefinition.basenamePatterns != null) {
     clone.basenamePatterns = [...ruleDefinition.basenamePatterns];
+  }
+  if (ruleDefinition.mimeTypes != null) {
+    clone.mimeTypes = [...ruleDefinition.mimeTypes];
+  }
+  if (ruleDefinition.mimePrefixes != null) {
+    clone.mimePrefixes = [...ruleDefinition.mimePrefixes];
   }
   return clone;
 }
@@ -361,6 +534,8 @@ function buildNormalizedConfigPayload(config = {}) {
         const normalizedRule = {
           extensions: sortValues(ruleDefinition.extensions),
           basenamePatterns: sortValues(ruleDefinition.basenamePatterns),
+          mimeTypes: sortValues(ruleDefinition.mimeTypes || []),
+          mimePrefixes: sortValues(ruleDefinition.mimePrefixes || []),
         };
         return [bucketName, serializeCustomBucketRule(normalizedRule)];
       }),
@@ -531,7 +706,50 @@ async function lintBucketConfig(configPath) {
       } else {
         const extensionOwners = new Map();
         const basenamePatternOwners = new Map();
+        const mimeTypeOwners = new Map();
+        const mimePrefixOwners = new Map();
         const normalizedBucketNames = new Map();
+
+        const registerMimeType = (mimeType, bucketName) => {
+          const owner = mimeTypeOwners.get(mimeType);
+          if (owner && owner !== bucketName) {
+            errors.push(`MIME type ${mimeType} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+            return;
+          }
+
+          for (const [prefix, prefixOwner] of mimePrefixOwners.entries()) {
+            if (prefixOwner !== bucketName && mimeType.startsWith(prefix)) {
+              errors.push(`MIME type ${mimeType} overlaps MIME prefix ${prefix} from another custom bucket (${prefixOwner}, ${bucketName}).`);
+              return;
+            }
+          }
+
+          mimeTypeOwners.set(mimeType, bucketName);
+        };
+
+        const registerMimePrefix = (mimePrefix, bucketName) => {
+          const owner = mimePrefixOwners.get(mimePrefix);
+          if (owner && owner !== bucketName) {
+            errors.push(`MIME prefix ${mimePrefix} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+            return;
+          }
+
+          for (const [existingMimeType, typeOwner] of mimeTypeOwners.entries()) {
+            if (typeOwner !== bucketName && existingMimeType.startsWith(mimePrefix)) {
+              errors.push(`MIME prefix ${mimePrefix} overlaps MIME type ${existingMimeType} from another custom bucket (${typeOwner}, ${bucketName}).`);
+              return;
+            }
+          }
+
+          for (const [existingPrefix, prefixOwner] of mimePrefixOwners.entries()) {
+            if (prefixOwner !== bucketName && (existingPrefix.startsWith(mimePrefix) || mimePrefix.startsWith(existingPrefix))) {
+              errors.push(`MIME prefix ${mimePrefix} overlaps MIME prefix ${existingPrefix} from another custom bucket (${prefixOwner}, ${bucketName}).`);
+              return;
+            }
+          }
+
+          mimePrefixOwners.set(mimePrefix, bucketName);
+        };
 
         for (const [rawBucketName, rawRuleDefinition] of Object.entries(parsed.buckets)) {
           let bucketName;
@@ -554,11 +772,13 @@ async function lintBucketConfig(configPath) {
 
           let rawExtensions = null;
           let rawBasenamePatterns = null;
+          let rawMimeTypes = null;
+          let rawMimePrefixes = null;
 
           if (Array.isArray(rawRuleDefinition)) {
             rawExtensions = rawRuleDefinition;
           } else if (rawRuleDefinition == null || typeof rawRuleDefinition !== 'object') {
-            errors.push(`Bucket ${bucketName} must be an extension array or an object with "extensions" and/or "basenamePatterns".`);
+            errors.push(`Bucket ${bucketName} must be an extension array or an object with "extensions", "basenamePatterns", "mimeTypes", and/or "mimePrefixes".`);
             continue;
           } else {
             for (const key of Object.keys(rawRuleDefinition)) {
@@ -568,10 +788,14 @@ async function lintBucketConfig(configPath) {
             }
             rawExtensions = rawRuleDefinition.extensions == null ? null : rawRuleDefinition.extensions;
             rawBasenamePatterns = rawRuleDefinition.basenamePatterns == null ? null : rawRuleDefinition.basenamePatterns;
+            rawMimeTypes = rawRuleDefinition.mimeTypes == null ? null : rawRuleDefinition.mimeTypes;
+            rawMimePrefixes = rawRuleDefinition.mimePrefixes == null ? null : rawRuleDefinition.mimePrefixes;
           }
 
           let extensionCount = 0;
           let basenamePatternCount = 0;
+          let mimeTypeCount = 0;
+          let mimePrefixCount = 0;
 
           if (rawExtensions != null) {
             if (!Array.isArray(rawExtensions)) {
@@ -641,8 +865,64 @@ async function lintBucketConfig(configPath) {
             }
           }
 
-          if (extensionCount === 0 && basenamePatternCount === 0) {
-            errors.push(`Bucket ${bucketName} must define at least one extension or basename pattern.`);
+          if (rawMimeTypes != null) {
+            if (!Array.isArray(rawMimeTypes)) {
+              errors.push(`Bucket ${bucketName} field "mimeTypes" must be an array when provided.`);
+            } else {
+              const bucketMimeTypes = new Set();
+              for (const rawMimeType of rawMimeTypes) {
+                let normalizedMimeType;
+                try {
+                  normalizedMimeType = normalizeMimeType(rawMimeType, bucketName);
+                  if (typeof rawMimeType === 'string' && rawMimeType !== normalizedMimeType) {
+                    warnings.push(`Bucket ${bucketName} MIME type "${rawMimeType}" will normalize to "${normalizedMimeType}".`);
+                  }
+                } catch (error) {
+                  errors.push(error.message);
+                  continue;
+                }
+
+                if (bucketMimeTypes.has(normalizedMimeType)) {
+                  warnings.push(`Bucket ${bucketName} repeats MIME type "${normalizedMimeType}"; duplicate entries are ignored.`);
+                  continue;
+                }
+                bucketMimeTypes.add(normalizedMimeType);
+                mimeTypeCount += 1;
+                registerMimeType(normalizedMimeType, bucketName);
+              }
+            }
+          }
+
+          if (rawMimePrefixes != null) {
+            if (!Array.isArray(rawMimePrefixes)) {
+              errors.push(`Bucket ${bucketName} field "mimePrefixes" must be an array when provided.`);
+            } else {
+              const bucketMimePrefixes = new Set();
+              for (const rawMimePrefix of rawMimePrefixes) {
+                let normalizedMimePrefix;
+                try {
+                  normalizedMimePrefix = normalizeMimePrefix(rawMimePrefix, bucketName);
+                  if (typeof rawMimePrefix === 'string' && rawMimePrefix !== normalizedMimePrefix) {
+                    warnings.push(`Bucket ${bucketName} MIME prefix "${rawMimePrefix}" will normalize to "${normalizedMimePrefix}".`);
+                  }
+                } catch (error) {
+                  errors.push(error.message);
+                  continue;
+                }
+
+                if (bucketMimePrefixes.has(normalizedMimePrefix)) {
+                  warnings.push(`Bucket ${bucketName} repeats MIME prefix "${normalizedMimePrefix}"; duplicate entries are ignored.`);
+                  continue;
+                }
+                bucketMimePrefixes.add(normalizedMimePrefix);
+                mimePrefixCount += 1;
+                registerMimePrefix(normalizedMimePrefix, bucketName);
+              }
+            }
+          }
+
+          if (extensionCount === 0 && basenamePatternCount === 0 && mimeTypeCount === 0 && mimePrefixCount === 0) {
+            errors.push(`Bucket ${bucketName} must define at least one extension, basename pattern, MIME type, or MIME prefix.`);
           }
         }
       }
@@ -714,6 +994,12 @@ function buildNormalizationPreviewChanges(parsed, normalizedConfig) {
       const canonicalBasenamePatterns = Array.isArray(canonicalRule)
         ? []
         : (canonicalRule?.basenamePatterns || []);
+      const canonicalMimeTypes = Array.isArray(canonicalRule)
+        ? []
+        : (canonicalRule?.mimeTypes || []);
+      const canonicalMimePrefixes = Array.isArray(canonicalRule)
+        ? []
+        : (canonicalRule?.mimePrefixes || []);
 
       if (Array.isArray(rawRuleDefinition)) {
         const encounteredExtensions = [];
@@ -747,46 +1033,62 @@ function buildNormalizationPreviewChanges(parsed, normalizedConfig) {
         }
       }
 
-      const encounteredExtensions = [];
-      if (Array.isArray(rawRuleDefinition.extensions)) {
-        const seenExtensions = new Set();
-        for (const rawExtension of rawRuleDefinition.extensions) {
-          const normalizedExtension = normalizeExtension(rawExtension, bucketName);
-          if (rawExtension !== normalizedExtension) {
-            pushUniqueChange(changes, `Normalize extension for bucket ${bucketName}: "${rawExtension}" -> "${normalizedExtension}".`);
+      const collectNormalized = ({ rawValues, normalizeValue, normalizeMessage, duplicateLabel, canonicalValues, sortMessage }) => {
+        const encounteredValues = [];
+        if (Array.isArray(rawValues)) {
+          const seenValues = new Set();
+          for (const rawValue of rawValues) {
+            const normalizedValue = normalizeValue(rawValue, bucketName);
+            if (rawValue !== normalizedValue) {
+              pushUniqueChange(changes, `${normalizeMessage} for bucket ${bucketName}: "${rawValue}" -> "${normalizedValue}".`);
+            }
+            if (seenValues.has(normalizedValue)) {
+              pushUniqueChange(changes, `Remove duplicate ${duplicateLabel} "${normalizedValue}" from bucket ${bucketName}.`);
+              continue;
+            }
+            seenValues.add(normalizedValue);
+            encounteredValues.push(normalizedValue);
           }
-          if (seenExtensions.has(normalizedExtension)) {
-            pushUniqueChange(changes, `Remove duplicate extension "${normalizedExtension}" from bucket ${bucketName}.`);
-            continue;
-          }
-          seenExtensions.add(normalizedExtension);
-          encounteredExtensions.push(normalizedExtension);
         }
-      }
 
-      const encounteredPatterns = [];
-      if (Array.isArray(rawRuleDefinition.basenamePatterns)) {
-        const seenPatterns = new Set();
-        for (const rawPattern of rawRuleDefinition.basenamePatterns) {
-          const normalizedPattern = normalizeBasenamePattern(rawPattern, bucketName);
-          if (rawPattern !== normalizedPattern) {
-            pushUniqueChange(changes, `Normalize basename pattern for bucket ${bucketName}: "${rawPattern}" -> "${normalizedPattern}".`);
-          }
-          if (seenPatterns.has(normalizedPattern)) {
-            pushUniqueChange(changes, `Remove duplicate basename pattern "${normalizedPattern}" from bucket ${bucketName}.`);
-            continue;
-          }
-          seenPatterns.add(normalizedPattern);
-          encounteredPatterns.push(normalizedPattern);
+        if (JSON.stringify(encounteredValues) !== JSON.stringify(canonicalValues)) {
+          pushUniqueChange(changes, sortMessage);
         }
-      }
+      };
 
-      if (JSON.stringify(encounteredExtensions) !== JSON.stringify(canonicalExtensions)) {
-        pushUniqueChange(changes, `Sort extensions for bucket ${bucketName} into canonical order.`);
-      }
-      if (JSON.stringify(encounteredPatterns) !== JSON.stringify(canonicalBasenamePatterns)) {
-        pushUniqueChange(changes, `Sort basename patterns for bucket ${bucketName} into canonical order.`);
-      }
+      collectNormalized({
+        rawValues: rawRuleDefinition.extensions,
+        normalizeValue: normalizeExtension,
+        normalizeMessage: 'Normalize extension',
+        duplicateLabel: 'extension',
+        canonicalValues: canonicalExtensions,
+        sortMessage: `Sort extensions for bucket ${bucketName} into canonical order.`,
+      });
+      collectNormalized({
+        rawValues: rawRuleDefinition.basenamePatterns,
+        normalizeValue: normalizeBasenamePattern,
+        normalizeMessage: 'Normalize basename pattern',
+        duplicateLabel: 'basename pattern',
+        canonicalValues: canonicalBasenamePatterns,
+        sortMessage: `Sort basename patterns for bucket ${bucketName} into canonical order.`,
+      });
+      collectNormalized({
+        rawValues: rawRuleDefinition.mimeTypes,
+        normalizeValue: normalizeMimeType,
+        normalizeMessage: 'Normalize MIME type',
+        duplicateLabel: 'MIME type',
+        canonicalValues: canonicalMimeTypes,
+        sortMessage: `Sort MIME types for bucket ${bucketName} into canonical order.`,
+      });
+      collectNormalized({
+        rawValues: rawRuleDefinition.mimePrefixes,
+        normalizeValue: normalizeMimePrefix,
+        normalizeMessage: 'Normalize MIME prefix',
+        duplicateLabel: 'MIME prefix',
+        canonicalValues: canonicalMimePrefixes,
+        sortMessage: `Sort MIME prefixes for bucket ${bucketName} into canonical order.`,
+      });
+
       if (Array.isArray(canonicalRule)) {
         pushUniqueChange(changes, `Rewrite bucket ${bucketName} into extension-array shorthand.`);
       }
@@ -926,6 +1228,209 @@ function bucketFor(filename, bucketConfig = DEFAULT_BUCKET_CONFIG) {
   return bucketConfig.extensionToBucket.get(ext) || bucketConfig.fallbackBucket;
 }
 
+function mimeMatchFor(mimeType, bucketConfig = DEFAULT_BUCKET_CONFIG) {
+  if (!mimeType) {
+    return null;
+  }
+
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  const exactBucket = bucketConfig.mimeTypeToBucket.get(normalizedMimeType);
+  if (exactBucket) {
+    return {
+      bucket: exactBucket,
+      matchedBy: 'mimeType',
+      matchedValue: normalizedMimeType,
+    };
+  }
+
+  const prefixMatch = bucketConfig.mimePrefixRules.find(ruleDefinition => normalizedMimeType.startsWith(ruleDefinition.prefix));
+  if (prefixMatch) {
+    return {
+      bucket: prefixMatch.bucketName,
+      matchedBy: 'mimePrefix',
+      matchedValue: prefixMatch.prefix,
+    };
+  }
+
+  return null;
+}
+
+function detectMimeTypeFromText(text) {
+  const trimmed = text.trimStart();
+  if (!trimmed) {
+    return 'text/plain';
+  }
+
+  if (/^<!doctype html[\s>]/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
+    return 'text/html';
+  }
+
+  if (/^<svg[\s>]/i.test(trimmed) || (/^<\?xml[\s\S]*$/i.test(trimmed) && /<svg[\s>]/i.test(trimmed))) {
+    return 'image/svg+xml';
+  }
+
+  if (/^<\?xml[\s>]/i.test(trimmed) || /^<[a-z_:][\w:.-]*(\s|>)/i.test(trimmed)) {
+    return 'application/xml';
+  }
+
+  const firstCharacter = trimmed[0];
+  if (firstCharacter === '{' || firstCharacter === '[') {
+    try {
+      JSON.parse(trimmed);
+      return 'application/json';
+    } catch {
+      // fall through to plain text
+    }
+  }
+
+  return 'text/plain';
+}
+
+function detectMimeTypeFromBuffer(buffer, extension = '') {
+  if (!buffer || buffer.length === 0) {
+    return null;
+  }
+
+  if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47 && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a) {
+    return 'image/png';
+  }
+
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+
+  if (buffer.length >= 6) {
+    const signature6 = buffer.subarray(0, 6).toString('ascii');
+    if (signature6 === 'GIF87a' || signature6 === 'GIF89a') {
+      return 'image/gif';
+    }
+  }
+
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') == 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+    return 'image/webp';
+  }
+
+  if (buffer.length >= 5 && buffer.subarray(0, 5).toString('ascii') === '%PDF-') {
+    return 'application/pdf';
+  }
+
+  if (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04) {
+    if (extension === '.docx') {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    if (extension === '.pptx') {
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    }
+    if (extension === '.xlsx') {
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+    return 'application/zip';
+  }
+
+  if (buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+    return 'application/gzip';
+  }
+
+  if (buffer.length >= 6 && buffer.subarray(0, 6).toString('hex') === '377abcaf271c') {
+    return 'application/x-7z-compressed';
+  }
+
+  if (buffer.length >= 7 && buffer.subarray(0, 7).toString('ascii') === 'Rar!') {
+    return 'application/vnd.rar';
+  }
+
+  if (buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === 'fLaC') {
+    return 'audio/flac';
+  }
+
+  if (buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === 'OggS') {
+    return 'audio/ogg';
+  }
+
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WAVE') {
+    return 'audio/wav';
+  }
+
+  if ((buffer.length >= 3 && buffer.subarray(0, 3).toString('ascii') === 'ID3') || (buffer.length >= 2 && buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0)) {
+    return 'audio/mpeg';
+  }
+
+  if (buffer.length >= 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buffer.subarray(8, 12).toString('ascii');
+    if (brand === 'M4A ' || brand === 'M4B ' || brand === 'isom' || brand === 'mp42' || brand === 'mp41') {
+      return 'audio/mp4';
+    }
+  }
+
+  if (buffer.includes(0x00)) {
+    return 'application/octet-stream';
+  }
+
+  try {
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    return detectMimeTypeFromText(decoded);
+  } catch {
+    return 'application/octet-stream';
+  }
+}
+
+async function detectMimeType(filePath) {
+  const handle = await fs.open(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(MIME_SNIFF_BYTE_LIMIT);
+    const { bytesRead } = await handle.read(buffer, 0, MIME_SNIFF_BYTE_LIMIT, 0);
+    return detectMimeTypeFromBuffer(buffer.subarray(0, bytesRead), path.extname(filePath).toLowerCase());
+  } finally {
+    await handle.close();
+  }
+}
+
+async function classifyFile(filePath, bucketConfig = DEFAULT_BUCKET_CONFIG) {
+  const filename = path.basename(filePath);
+  const basename = path.basename(filename, path.extname(filename)).toLowerCase();
+  const patternMatch = bucketConfig.basenamePatternRules.find(ruleDefinition => ruleDefinition.regex.test(basename));
+  if (patternMatch) {
+    return {
+      bucket: patternMatch.bucketName,
+      matchedBy: 'basenamePattern',
+      matchedValue: patternMatch.pattern,
+      detectedMimeType: null,
+    };
+  }
+
+  let detectedMimeType = null;
+  if (bucketConfig.requiresMimeDetection) {
+    detectedMimeType = await detectMimeType(filePath);
+    const mimeMatch = mimeMatchFor(detectedMimeType, bucketConfig);
+    if (mimeMatch) {
+      return {
+        bucket: mimeMatch.bucket,
+        matchedBy: mimeMatch.matchedBy,
+        matchedValue: mimeMatch.matchedValue,
+        detectedMimeType,
+      };
+    }
+  }
+
+  const ext = path.extname(filename).toLowerCase();
+  const extensionBucket = bucketConfig.extensionToBucket.get(ext);
+  if (extensionBucket) {
+    return {
+      bucket: extensionBucket,
+      matchedBy: 'extension',
+      matchedValue: ext,
+      detectedMimeType,
+    };
+  }
+
+  return {
+    bucket: bucketConfig.fallbackBucket,
+    matchedBy: 'fallback',
+    matchedValue: bucketConfig.fallbackBucket,
+    detectedMimeType,
+  };
+}
+
 async function pathExists(targetPath) {
   try {
     await fs.access(targetPath);
@@ -1050,8 +1555,8 @@ async function organize(dir, options = {}) {
   for (const sourcePath of files) {
     const filename = path.basename(sourcePath);
     const sourceDirectory = path.dirname(sourcePath);
-    const bucket = bucketFor(filename, settings.bucketConfig);
-    const targetDir = path.join(sourceDirectory, bucket);
+    const classification = await classifyFile(sourcePath, settings.bucketConfig);
+    const targetDir = path.join(sourceDirectory, classification.bucket);
     const requestedDestination = path.join(targetDir, filename);
     const destinationPath = await uniqueDestination(requestedDestination);
     const renamed = destinationPath !== requestedDestination;
@@ -1064,9 +1569,12 @@ async function organize(dir, options = {}) {
     moves.push({
       from: sourcePath,
       to: destinationPath,
-      bucket,
+      bucket: classification.bucket,
       renamed,
       dryRun: settings.dryRun,
+      matchedBy: classification.matchedBy,
+      matchedValue: classification.matchedValue,
+      detectedMimeType: classification.detectedMimeType,
     });
   }
 
@@ -1416,7 +1924,23 @@ function formatOrganizeTextReport(result) {
     .map(([bucket, count]) => `bucket ${bucket}: ${count}`);
 
   const moveLines = result.moves.map(move => {
-    const suffix = move.renamed ? ' [renamed]' : '';
+    const annotations = [];
+    if (move.renamed) {
+      annotations.push('renamed');
+    }
+    if (move.matchedBy === 'basenamePattern') {
+      annotations.push(`basename pattern ${move.matchedValue}`);
+    }
+    if (move.matchedBy === 'mimeType') {
+      annotations.push(`MIME type ${move.matchedValue}`);
+    }
+    if (move.matchedBy === 'mimePrefix') {
+      annotations.push(`MIME prefix ${move.matchedValue}`);
+    }
+    if ((move.matchedBy === 'mimeType' || move.matchedBy === 'mimePrefix') && move.detectedMimeType) {
+      annotations.push(`detected ${move.detectedMimeType}`);
+    }
+    const suffix = annotations.length > 0 ? ` [${annotations.join('; ')}]` : '';
     return `${move.from} -> ${move.to}${suffix}`;
   });
 
@@ -1679,6 +2203,11 @@ module.exports = {
   writeNormalizedBucketConfig,
   describeBucketConfig,
   bucketFor,
+  mimeMatchFor,
+  detectMimeTypeFromText,
+  detectMimeTypeFromBuffer,
+  detectMimeType,
+  classifyFile,
   pathExists,
   uniqueDestination,
   moveFile,

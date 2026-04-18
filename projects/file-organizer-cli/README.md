@@ -1,12 +1,12 @@
 # file-organizer-cli
 
 ## Overview
-A Node.js CLI that organizes loose files into extension-based and basename-pattern-aware folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, CI-friendly config linting, and manifest-driven undo support.
+A Node.js CLI that organizes loose files into extension-based, basename-pattern-aware, and MIME-aware folders with collision-safe moves, dry-run previews, optional recursive processing, built-in/exportable bucket presets, config-driven custom buckets, CI-friendly config linting, and manifest-driven undo support.
 
 ## Why it is portfolio-worthy
 - demonstrates practical file-system automation with a real CLI workflow
-- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom extension + basename categorization rules, CI-ready config validation, and safe rollback after a bulk organize pass
-- includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing/linting, basename-pattern matching, manifest writing, and undo/restore flows
+- handles common edge cases such as name collisions, cross-device moves, reusable preset/config workflows, custom extension + basename + MIME categorization rules, CI-ready config validation, and safe rollback after a bulk organize pass
+- includes tests for dry-run behavior, recursive traversal, preset export/import flows, config parsing/linting, MIME sniffing, basename-pattern matching, manifest writing, and undo/restore flows
 - easy to demo with realistic folders like `Downloads`, class assets, screenshots, or project exports
 
 ## Stack
@@ -17,10 +17,10 @@ A Node.js CLI that organizes loose files into extension-based and basename-patte
 - groups files into default `images`, `documents`, `audio`, `code`, `archives`, and `other` buckets
 - supports `--preset <name>` for built-in portfolio-ready bucket presets such as `coursework`, `data-science`, and `frontend-assets`
 - supports `--list-presets` and `--write-preset <name> <path>` so teams can export and share reusable bucket JSON files
-- supports `--config buckets.json` for custom buckets, extension overrides, basename-pattern rules, and custom fallback bucket names
-- lets shared configs promote filename patterns like `Screenshot *` or `assignment-*` before extension fallback rules run
+- supports `--config buckets.json` for custom buckets, extension overrides, basename-pattern rules, MIME-aware rules, and custom fallback bucket names
+- lets shared configs promote filename patterns like `Screenshot *` or `assignment-*` before MIME and extension fallback rules run
 - supports `--lint-config buckets.json` so shared bucket JSON can be validated in CI before teammates run a real organize pass
-- supports `--preview-normalized-config`, `--fix-config`, and `--write-normalized-config` so teams can review and then apply canonical shared-config cleanup
+- supports `--preview-normalized-config`, `--fix-config`, and `--write-normalized-config` so teams can review and then apply canonical shared-config cleanup across extension, basename, and MIME rule lists
 - preserves existing files by renaming collisions like `notes (1).txt`
 - supports `--dry-run` to preview work without changing the file system
 - supports `--recursive` to organize nested folders while skipping already-organized bucket folders
@@ -40,6 +40,7 @@ node organizer.js --write-preset data-science ./presets/data-science.json --forc
 node organizer.js ~/Downloads --config ./buckets.json --recursive
 node organizer.js ~/Downloads --config ./buckets.json --recursive --manifest-out ./artifacts/downloads-run.json
 node organizer.js ~/Downloads --config ./pattern-buckets.json --dry-run
+node organizer.js ~/Downloads --config ./mime-buckets.json --dry-run
 node organizer.js --lint-config ./shared/coursework-buckets.json
 node organizer.js --lint-config ./shared/coursework-buckets.json --json
 node organizer.js --preview-normalized-config ./shared/coursework-buckets.json
@@ -90,6 +91,12 @@ Example `buckets.json`:
       "extensions": [".txt", ".md"],
       "basenamePatterns": ["assignment-*", "quiz-2026-04-1?"]
     },
+    "data-dumps": {
+      "mimeTypes": ["application/json"]
+    },
+    "vectorish": {
+      "mimePrefixes": ["image/"]
+    },
     "design": ["fig", ".sketch"]
   },
   "fallbackBucket": "misc",
@@ -101,8 +108,10 @@ Notes:
 - `extendDefaults: true` keeps the built-in buckets active after checking custom rules first.
 - custom buckets can override default extension mappings, so `.json` can move into `datasets` instead of `other` or another default bucket.
 - basename patterns match the filename without its extension, are case-insensitive, and support `*` (any run of characters) plus `?` (single character).
-- basename pattern matches run before extension fallback, so `Screenshot 2026-04-18.png` can land in `screenshots` even though `.png` normally maps to `images`.
-- bucket names must be simple folder names, and each custom extension or basename pattern can belong to only one custom bucket.
+- MIME rules sniff up to the first 4096 bytes and recognize common signatures plus UTF-8 text shapes such as JSON, HTML, XML, and SVG.
+- basename pattern matches run before MIME and extension fallback, so `Screenshot 2026-04-18.png` can land in `screenshots` even though `.png` normally maps to `images`.
+- MIME type and MIME prefix matches run before extension fallback, so a misleading `report.txt` that actually contains JSON can land in `data-dumps` instead of `documents`.
+- bucket names must be simple folder names, and each custom extension, basename pattern, MIME type, or MIME prefix can belong to only one custom bucket.
 - `--preset` and `--config` are mutually exclusive; use `--preset` for the bundled quick-start presets or `--write-preset ...` + `--config` when you want a file you can share in Git.
 - `--write-preset` refuses to overwrite existing files unless `--force` is provided.
 - `--config` is only used for organize runs; undo replays the exact manifest paths that were recorded earlier.
@@ -120,10 +129,11 @@ config: /home/student/Downloads/buckets.json
 total moves: 3
 renamed to avoid collisions: 1
 manifest: /home/student/Downloads/artifacts/downloads-run.json
+bucket data-dumps: 1
 bucket datasets: 1
-bucket images: 2
+bucket images: 1
 /home/student/Downloads/report.csv -> /home/student/Downloads/datasets/report.csv
-/home/student/Downloads/photo.png -> /home/student/Downloads/images/photo.png
+/home/student/Downloads/report.txt -> /home/student/Downloads/data-dumps/report.txt [MIME type application/json; detected application/json]
 /home/student/Downloads/photo-copy.png -> /home/student/Downloads/images/photo-copy (1).png [renamed]
 ```
 
@@ -137,8 +147,8 @@ node organizer.js --lint-config ./shared/coursework-buckets.json --json
 
 The lint report:
 - exits cleanly for valid configs and returns exit code `1` for invalid configs
-- reports normalization warnings for bucket names, fallback buckets, extension spellings like `CSV` -> `.csv`, and basename patterns like ` Screenshot * ` -> `screenshot *`
-- flags duplicate custom extensions, duplicate basename patterns, or invalid `extendDefaults` values before the config is used in a live organize run
+- reports normalization warnings for bucket names, fallback buckets, extension spellings like `CSV` -> `.csv`, basename patterns like ` Screenshot * ` -> `screenshot *`, and MIME rules like ` Application/JSON ` -> `application/json` or ` image/* ` -> `image/`
+- flags duplicate custom extensions, duplicate basename patterns, overlapping MIME rules, or invalid `extendDefaults` values before the config is used in a live organize run
 - warns about unknown top-level keys or ignored per-bucket fields so teams notice stray metadata that the organizer will ignore
 
 Example lint output:
@@ -200,7 +210,7 @@ node organizer.js --write-normalized-config ./shared/coursework-buckets.raw.json
 The normalized writer:
 - trims bucket and fallback names into canonical folder-safe values
 - lowercases and dot-prefixes extensions while removing duplicates
-- lowercases/sorts basename patterns, removes duplicates, and rewrites mixed rule objects into stable canonical JSON
+- lowercases/sorts basename patterns and MIME rule lists, removes duplicates, and rewrites mixed rule objects into stable canonical JSON
 - strips unknown top-level keys so the saved JSON matches what the organizer actually reads
 - writes stable key ordering for cleaner code review diffs across teammates
 - refuses to normalize invalid configs until the real errors are fixed
@@ -246,6 +256,5 @@ npm test
 ```
 
 ## Future Improvements
-- add MIME-aware detection so shared configs can distinguish files that share extensions but not content types
 - add small publishable demo artifacts that show config preview output beside before/after folder trees
 - optionally sign or checksum manifests for tamper-evident bulk-operation history

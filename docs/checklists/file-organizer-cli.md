@@ -18,6 +18,6 @@
 ## Next candidate improvements
 - [x] add config-driven custom buckets instead of hard-coded extension lists
 - [x] add import/export helpers for sharing team-wide bucket presets
-- [ ] add file-type detection beyond extensions for better categorization
+- [x] add file-type detection beyond extensions for better categorization
+- [ ] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
 - [ ] optionally sign or checksum manifests for tamper-evident history
-- [ ] add preset validation/lint helpers so shared JSON bucket configs can be checked in CI before use

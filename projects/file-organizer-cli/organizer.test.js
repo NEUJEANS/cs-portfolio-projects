@@ -6,6 +6,10 @@ const path = require('path');
 const {
   buildBucketConfig,
   bucketFor,
+  detectMimeTypeFromBuffer,
+  detectMimeTypeFromText,
+  detectMimeType,
+  classifyFile,
   organize,
   writeManifest,
   undoFromManifest,
@@ -44,6 +48,8 @@ test('buildBucketConfig merges custom buckets before defaults and normalizes ext
   assert.deepEqual(bucketConfig.customBuckets.datasets, {
     extensions: ['.csv', '.json'],
     basenamePatterns: [],
+    mimeTypes: [],
+    mimePrefixes: [],
   });
 });
 
@@ -66,6 +72,8 @@ test('buildBucketConfig supports basename pattern rules before extension fallbac
   assert.deepEqual(bucketConfig.customBuckets.screenshots, {
     extensions: [],
     basenamePatterns: ['screenshot *', 'screen shot *'],
+    mimeTypes: [],
+    mimePrefixes: [],
   });
 });
 
@@ -83,6 +91,107 @@ test('bucketFor supports single-character basename wildcards alongside extension
   assert.equal(bucketFor('quiz-2026-04-19.md', bucketConfig), 'quizzes');
   assert.equal(bucketFor('quiz-2026-04-180.md', bucketConfig), 'documents');
   assert.equal(bucketFor('notes.md', bucketConfig), 'documents');
+});
+
+
+
+test('buildBucketConfig supports MIME-aware custom bucket rules', () => {
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      data: {
+        mimeTypes: [' Application/JSON '],
+      },
+      visuals: {
+        mimePrefixes: [' image/* '],
+      },
+    },
+  });
+
+  assert.equal(bucketConfig.requiresMimeDetection, true);
+  assert.deepEqual(bucketConfig.customBuckets.data, {
+    extensions: [],
+    basenamePatterns: [],
+    mimeTypes: ['application/json'],
+    mimePrefixes: [],
+  });
+  assert.deepEqual(bucketConfig.customBuckets.visuals, {
+    extensions: [],
+    basenamePatterns: [],
+    mimeTypes: [],
+    mimePrefixes: ['image/'],
+  });
+});
+
+test('buildBucketConfig rejects overlapping MIME rules across buckets', () => {
+  assert.throws(
+    () => buildBucketConfig({
+      buckets: {
+        data: {
+          mimeTypes: ['application/json'],
+        },
+        textish: {
+          mimePrefixes: ['application/*'],
+        },
+      },
+    }),
+    /overlaps MIME/,
+  );
+});
+
+test('detectMimeType helpers classify common text and binary payloads', async () => {
+  assert.equal(detectMimeTypeFromText('{\n  "ok": true\n}'), 'application/json');
+  assert.equal(detectMimeTypeFromText('<svg viewBox="0 0 10 10"></svg>'), 'image/svg+xml');
+  assert.equal(detectMimeTypeFromText('<html><body>hi</body></html>'), 'text/html');
+  assert.equal(detectMimeTypeFromText('plain notes go here'), 'text/plain');
+
+  assert.equal(detectMimeTypeFromBuffer(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'image/png');
+  assert.equal(detectMimeTypeFromBuffer(Buffer.from('%PDF-1.7')), 'application/pdf');
+  assert.equal(detectMimeTypeFromBuffer(Buffer.from('{"demo":true}\n')), 'application/json');
+
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-mime-'));
+  const jsonNotesPath = path.join(tmp, 'report.txt');
+  await fs.writeFile(jsonNotesPath, '{"records": 3}\n');
+  assert.equal(await detectMimeType(jsonNotesPath), 'application/json');
+});
+
+test('classifyFile prefers MIME rules before extension fallback when organizing', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-classify-'));
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      datasets: {
+        mimeTypes: ['application/json'],
+      },
+      visuals: {
+        mimePrefixes: ['image/'],
+      },
+    },
+  });
+
+  const misleadingJsonPath = path.join(tmp, 'report.txt');
+  const svgPath = path.join(tmp, 'diagram.txt');
+  const plainNotesPath = path.join(tmp, 'notes.txt');
+  await fs.writeFile(misleadingJsonPath, '{"scores": [1, 2, 3]}\n');
+  await fs.writeFile(svgPath, '<svg viewBox="0 0 10 10"></svg>\n');
+  await fs.writeFile(plainNotesPath, 'ordinary note\n');
+
+  assert.deepEqual(await classifyFile(misleadingJsonPath, bucketConfig), {
+    bucket: 'datasets',
+    matchedBy: 'mimeType',
+    matchedValue: 'application/json',
+    detectedMimeType: 'application/json',
+  });
+  assert.deepEqual(await classifyFile(svgPath, bucketConfig), {
+    bucket: 'visuals',
+    matchedBy: 'mimePrefix',
+    matchedValue: 'image/',
+    detectedMimeType: 'image/svg+xml',
+  });
+  assert.deepEqual(await classifyFile(plainNotesPath, bucketConfig), {
+    bucket: 'documents',
+    matchedBy: 'extension',
+    matchedValue: '.txt',
+    detectedMimeType: 'text/plain',
+  });
 });
 
 test('buildBucketConfig rejects duplicate custom extensions across buckets', () => {
@@ -203,6 +312,40 @@ test('lintBucketConfig returns CI-friendly invalid results for broken shared con
   assert.equal(result.normalizedConfig, null);
   assert.match(result.errors[0], /Field "extendDefaults" must be true or false when provided\./);
   assert.match(result.errors[1], /Extension \.csv is assigned to multiple custom buckets/);
+});
+
+
+
+test('lintBucketConfig normalizes MIME-aware bucket rules and reports duplicates', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-mime-lint-'));
+  const configPath = path.join(tmp, 'mime-buckets.json');
+  await fs.writeFile(configPath, JSON.stringify({
+    buckets: {
+      datasets: {
+        mimeTypes: [' Application/JSON ', 'application/json'],
+      },
+      visuals: {
+        mimePrefixes: [' image/* ', 'image/*'],
+      },
+    },
+  }, null, 2));
+
+  const result = await lintBucketConfig(configPath);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.errors.length, 0);
+  assert.match(result.warnings.join('\n'), /Bucket datasets MIME type " Application\/JSON " will normalize to "application\/json"\./);
+  assert.match(result.warnings.join('\n'), /Bucket datasets repeats MIME type "application\/json"/);
+  assert.match(result.warnings.join('\n'), /Bucket visuals MIME prefix " image\/\* " will normalize to "image\/"\./);
+  assert.match(result.warnings.join('\n'), /Bucket visuals repeats MIME prefix "image\/"/);
+  assert.deepEqual(result.normalizedConfig.buckets, {
+    datasets: {
+      mimeTypes: ['application/json'],
+    },
+    visuals: {
+      mimePrefixes: ['image/'],
+    },
+  });
 });
 
 test('lintBucketConfig normalizes basename-pattern rule objects and ignored bucket fields', async () => {
@@ -491,6 +634,42 @@ test('organize prefers basename pattern matches over extension buckets during re
   assert.equal(await fs.readFile(path.join(tmp, 'screenshots', 'Screenshot 2026-04-18.png'), 'utf8'), 'capture');
   assert.equal(await fs.readFile(path.join(tmp, 'quizzes', 'quiz-2026-04-18.md'), 'utf8'), 'quiz');
   assert.equal(await fs.readFile(path.join(tmp, 'quizzes', 'notes.txt'), 'utf8'), 'notes');
+});
+
+
+
+test('organize records MIME-aware matches for misleading extensions during real moves', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      datasets: {
+        mimeTypes: ['application/json'],
+      },
+      visuals: {
+        mimePrefixes: ['image/'],
+      },
+    },
+  });
+  const jsonNotesPath = path.join(tmp, 'report.txt');
+  const svgNotesPath = path.join(tmp, 'diagram.txt');
+  const plainNotesPath = path.join(tmp, 'notes.txt');
+  await fs.writeFile(jsonNotesPath, '{"records": 2}\n');
+  await fs.writeFile(svgNotesPath, '<svg viewBox="0 0 10 10"></svg>\n');
+  await fs.writeFile(plainNotesPath, 'plain note\n');
+
+  const result = await organize(tmp, { bucketConfig });
+
+  assert.equal(result.summary.byBucket.datasets, 1);
+  assert.equal(result.summary.byBucket.visuals, 1);
+  assert.equal(result.summary.byBucket.documents, 1);
+  assert.deepEqual(result.moves.map(move => ({ bucket: move.bucket, matchedBy: move.matchedBy, detectedMimeType: move.detectedMimeType })).sort((left, right) => left.bucket.localeCompare(right.bucket)), [
+    { bucket: 'datasets', matchedBy: 'mimeType', detectedMimeType: 'application/json' },
+    { bucket: 'documents', matchedBy: 'extension', detectedMimeType: 'text/plain' },
+    { bucket: 'visuals', matchedBy: 'mimePrefix', detectedMimeType: 'image/svg+xml' },
+  ]);
+  assert.equal(await fs.readFile(path.join(tmp, 'datasets', 'report.txt'), 'utf8'), '{"records": 2}\n');
+  assert.equal(await fs.readFile(path.join(tmp, 'visuals', 'diagram.txt'), 'utf8'), '<svg viewBox="0 0 10 10"></svg>\n');
+  assert.equal(await fs.readFile(path.join(tmp, 'documents', 'notes.txt'), 'utf8'), 'plain note\n');
 });
 
 test('organize can use a named preset directly without a config file on disk', async () => {
@@ -867,7 +1046,14 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
     },
     manifestPath: '/tmp/demo/manifests/latest.json',
     summary: { total: 1, renamed: 1, byBucket: { datasets: 1 } },
-    moves: [{ from: '/tmp/demo/a.csv', to: '/tmp/demo/datasets/a (1).csv', renamed: true }],
+    moves: [{
+      from: '/tmp/demo/a.csv',
+      to: '/tmp/demo/datasets/a (1).csv',
+      renamed: true,
+      matchedBy: 'mimeType',
+      matchedValue: 'application/json',
+      detectedMimeType: 'application/json',
+    }],
   });
 
   const undoReport = formatTextReport({
@@ -938,6 +1124,7 @@ test('formatTextReport includes config, preset, manifest, lint, and normalized-c
   assert.match(organizeReport, /config: \/tmp\/demo\/buckets\.json/);
   assert.match(organizeReport, /manifest: \/tmp\/demo\/manifests\/latest\.json/);
   assert.match(organizeReport, /renamed to avoid collisions: 1/);
+  assert.match(organizeReport, /\[renamed; MIME type application\/json; detected application\/json\]/);
   assert.match(undoReport, /action: undo/);
   assert.match(undoReport, /renamed to avoid restore collisions: 1/);
   assert.match(undoReport, /restore-renamed from \/tmp\/demo\/a\.txt/);

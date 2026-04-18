@@ -24,5 +24,6 @@
 - [x] undo the run from the saved manifest
 
 ## Next vertical slices
-- [ ] add MIME-aware detection rules for files that share extensions but not content types
+- [x] add MIME-aware detection rules for files that share extensions but not content types
 - [ ] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots
+- [ ] optionally sign or checksum manifests for tamper-evident bulk-operation history
