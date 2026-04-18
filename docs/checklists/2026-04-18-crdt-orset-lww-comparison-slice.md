@@ -10,5 +10,5 @@
 - [x] generate and commit comparison Markdown / HTML / JSON artifacts plus the OR-Set timeline bundle
 - [x] update README usage and artifact examples
 - [x] run targeted tests, smoke checks, and 3 review passes
-- [ ] run secret scan before push
-- [ ] commit, push, and write a wrap-up note
+- [x] run secret scan before push
+- [x] commit, push, and write a wrap-up note
