@@ -13,6 +13,17 @@ Use this when you want one artifact that summarizes how the best predictor chang
   <a href="./trace-family-sweep.md">Markdown report</a>
 </p>
 
+## Perceptron tuning sweep
+
+Use this when you want a dedicated neural-predictor artifact that shows how threshold and signed-weight clamp choices affect the same long-history trace.
+
+<p>
+  <strong>Perceptron tuning heatmap</strong><br />
+  <img src="./perceptron-tuning-sweep.svg" alt="Perceptron threshold and weight-limit tuning sweep card" />
+  <br />
+  <a href="./perceptron-tuning-sweep.md">Markdown report</a>
+</p>
+
 ## Comparison cards
 
 <table>
@@ -53,6 +64,7 @@ Use this when you want one artifact that summarizes how the best predictor chang
 - Synthetic trace: `artifacts/branch-predictor-lab/tournament-style-seed5.trace` generated with `generate tournament-style --branches 48 --seed 5`, then compared with `--table-size 16 --history-bits 4`
 - Alias trace: `artifacts/branch-predictor-lab/alias-thrash-seed7.trace` generated with `generate alias-thrash --branches 48 --seed 7`, then compared with `--table-size 16 --history-bits 4`
 - Perceptron trace: `artifacts/branch-predictor-lab/perceptron-majority-seed13.trace` generated with `generate perceptron-majority --branches 96 --seed 13`, then compared with `--table-size 32 --history-bits 12`
+- Perceptron tuning sweep: `python3 projects/branch-predictor-lab/branch_predictor.py perceptron-sweep artifacts/branch-predictor-lab/perceptron-majority-seed13.trace --table-size 32 --history-bits 12 --thresholds 19 28 37 46 55 --weight-limits 18 37 74 148 --markdown-out docs/artifacts/branch-predictor-lab/perceptron-tuning-sweep.md --svg-out docs/artifacts/branch-predictor-lab/perceptron-tuning-sweep.svg`
 
 ## Suggested portfolio usage
 
@@ -61,4 +73,5 @@ Use this when you want one artifact that summarizes how the best predictor chang
 - Use the `tournament-style` card when you want to show that local/global/hybrid predictors can tie or trade places depending on the trace family and history depth.
 - Use the `alias-thrash` card when you want to explain table interference, conflicting branch biases, dynamic gshare-history collisions, and why increasing table size can improve simple predictors without changing the trace.
 - Use the `perceptron-majority` card when you want to show a neural predictor beating classic local/global tables on a long-history, linearly separable workload.
+- Use the perceptron tuning heatmap when you want to show that neural predictors still need sensible threshold/clamp tuning instead of treating the perceptron as a magic black box.
 - Pair the SVG card with its Markdown report when you need both a screenshot-friendly visual and a text artifact with exact rankings.

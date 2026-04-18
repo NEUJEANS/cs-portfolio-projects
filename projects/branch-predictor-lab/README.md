@@ -114,6 +114,19 @@ python3 projects/branch-predictor-lab/branch_predictor.py simulate \
   --json
 ```
 
+Inspect a tuned perceptron run with explicit confidence/clamp settings:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py simulate \
+  artifacts/branch-predictor-lab/perceptron-majority-seed13.trace \
+  --predictor perceptron \
+  --table-size 32 \
+  --history-bits 12 \
+  --threshold 19 \
+  --weight-limit 74 \
+  --json
+```
+
 Create a reproducible random-bias trace and compare it right away:
 
 ```bash
@@ -199,6 +212,20 @@ python3 projects/branch-predictor-lab/branch_predictor.py sweep \
   --json
 ```
 
+To reproduce the committed perceptron tuning artifact, sweep the seeded long-history trace with the committed threshold/weight grid:
+
+```bash
+python3 projects/branch-predictor-lab/branch_predictor.py perceptron-sweep \
+  artifacts/branch-predictor-lab/perceptron-majority-seed13.trace \
+  --table-size 32 \
+  --history-bits 12 \
+  --thresholds 19 28 37 46 55 \
+  --weight-limits 18 37 74 148 \
+  --markdown-out docs/artifacts/branch-predictor-lab/perceptron-tuning-sweep.md \
+  --svg-out docs/artifacts/branch-predictor-lab/perceptron-tuning-sweep.svg \
+  --json
+```
+
 Export recruiter-friendly Markdown and SVG comparison cards from the same compare command:
 
 ```bash
@@ -225,6 +252,7 @@ Run the tests:
 - the local-history predictor keeps a short per-PC history register and uses that pattern to pick a saturating counter, which makes repeated branch-local motifs easy to demonstrate
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
 - the perceptron predictor keeps a signed weight vector per static branch bucket and trains it with the classic update rule when the prediction is wrong or not confident, which makes long-history correlations explainable instead of purely table-lookup based
+- the `perceptron-sweep` command turns threshold and weight-clamp tuning into a committed Markdown/SVG artifact, so the neural predictor story includes practical parameter sensitivity instead of only one lucky run
 - the tournament predictor tracks when local-history vs gshare is doing better for a given PC and exposes chooser-state snapshots so the hybrid behavior is inspectable in JSON output
 - compare output includes both a static PC-index aliasing summary and a dynamic gshare-index aliasing summary, so you can point at exact colliding buckets and history-conditioned conflicts when discussing table-size trade-offs
 - the `alias-thrash` generator intentionally maps opposite-bias branches into the same low-order index bits, which makes interference easy to show without external trace corpora
@@ -237,10 +265,10 @@ Run the tests:
 - use the `alias-thrash` workload plus the compare JSON/Markdown static + dynamic alias summaries to explain predictor-table interference, gshare history-conditioned collisions, and why larger tables can recover accuracy
 - compare `local-history`, `gshare`, `perceptron`, and `tournament` on the same trace to talk through local/global/neural/hybrid trade-offs instead of stopping at bimodal counters
 - use the `perceptron-majority` workload to explain linearly separable branch behavior and why perceptrons can use longer histories without exploding the table size
+- use the perceptron tuning sweep when you want to show that confidence thresholds and hardware-friendly weight clamps still shape the final accuracy story
 - use the trace-family sweep card when you want one overview slide that shows different workloads favor different predictors instead of implying there is one universal winner
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
-- add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
 - add budget-normalized sweeps so predictors can be compared under similar total state-bit limits instead of only by table/history knobs
 - add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family

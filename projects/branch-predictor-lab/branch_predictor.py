@@ -1088,7 +1088,125 @@ def format_sweep_summary_table(scenarios: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_predictor(name: str, table_size: int, history_bits: int) -> BranchPredictor:
+def _default_perceptron_threshold_values(default_threshold: int) -> list[int]:
+    return sorted({max(1, default_threshold + offset) for offset in (-18, -9, 0, 9, 18)})
+
+
+def _default_perceptron_weight_limits(default_weight_limit: int) -> list[int]:
+    return sorted(
+        {
+            max(8, default_weight_limit // 4),
+            max(8, default_weight_limit // 2),
+            default_weight_limit,
+            default_weight_limit * 2,
+        }
+    )
+
+
+def run_perceptron_tuning_sweep(
+    records: list[BranchRecord],
+    *,
+    table_size: int = 32,
+    history_bits: int = 12,
+    thresholds: list[int] | None = None,
+    weight_limits: list[int] | None = None,
+) -> dict[str, Any]:
+    baseline = PerceptronPredictor(table_size=table_size, history_bits=history_bits)
+    default_threshold = baseline.threshold
+    default_weight_limit = baseline.weight_limit
+    threshold_values = sorted({max(1, value) for value in (thresholds or _default_perceptron_threshold_values(default_threshold))})
+    weight_limit_values = sorted({max(1, value) for value in (weight_limits or _default_perceptron_weight_limits(default_weight_limit))})
+
+    configs: list[dict[str, Any]] = []
+    for threshold in threshold_values:
+        for weight_limit in weight_limit_values:
+            result = simulate_trace(
+                records,
+                PerceptronPredictor(
+                    table_size=table_size,
+                    history_bits=history_bits,
+                    threshold=threshold,
+                    weight_limit=weight_limit,
+                ),
+            )
+            max_abs_weight = int(result.final_state["max_abs_weight"])
+            configs.append(
+                {
+                    "threshold": threshold,
+                    "weight_limit": weight_limit,
+                    "accuracy_percent": round(result.accuracy * 100, 3),
+                    "accuracy": result.accuracy,
+                    "mispredictions": result.mispredictions,
+                    "mpki": result.mpki,
+                    "trained_perceptrons": int(result.final_state["trained_perceptrons"]),
+                    "non_zero_weights": int(result.final_state["non_zero_weights"]),
+                    "max_abs_weight": max_abs_weight,
+                    "saturated_max_weight": max_abs_weight >= weight_limit,
+                    "is_default_config": threshold == default_threshold and weight_limit == default_weight_limit,
+                }
+            )
+
+    configs.sort(
+        key=lambda config: (
+            -config["accuracy"],
+            config["mispredictions"],
+            abs(config["threshold"] - default_threshold),
+            abs(config["weight_limit"] - default_weight_limit),
+            config["threshold"],
+            config["weight_limit"],
+        )
+    )
+
+    best_config = configs[0]
+    default_config = next((config for config in configs if config["is_default_config"]), None)
+    saturated_config_count = sum(1 for config in configs if config["saturated_max_weight"])
+    accuracy_values = [config["accuracy_percent"] for config in configs]
+    return {
+        "trace_summary": summarize_trace(records),
+        "table_size": table_size,
+        "history_bits": history_bits,
+        "default_threshold": default_threshold,
+        "default_weight_limit": default_weight_limit,
+        "thresholds": threshold_values,
+        "weight_limits": weight_limit_values,
+        "config_count": len(configs),
+        "saturated_config_count": saturated_config_count,
+        "best_config": best_config,
+        "default_config": default_config,
+        "min_accuracy_percent": min(accuracy_values),
+        "max_accuracy_percent": max(accuracy_values),
+        "configs": configs,
+    }
+
+
+def format_perceptron_tuning_summary_table(report: dict[str, Any]) -> str:
+    lines = [
+        "threshold   weight limit   accuracy   mispreds   mpki    max|w|   notes",
+        "----------  -------------  ---------  ---------  ------  -------  ------------------------------",
+    ]
+    for config in report["configs"]:
+        notes: list[str] = []
+        if config is report["best_config"]:
+            notes.append("best")
+        if config["is_default_config"]:
+            notes.append("default")
+        if config["saturated_max_weight"]:
+            notes.append("saturated")
+        lines.append(
+            f"{config['threshold']:>10}  {config['weight_limit']:>13}  {config['accuracy_percent']:>7.2f}%  "
+            f"{config['mispredictions']:>9}  {config['mpki']:>6.1f}  {config['max_abs_weight']:>7}  {', '.join(notes) or '-'}"
+        )
+    return "\n".join(lines)
+
+
+def build_predictor(
+    name: str,
+    table_size: int,
+    history_bits: int,
+    *,
+    threshold: int | None = None,
+    weight_limit: int | None = None,
+) -> BranchPredictor:
     normalized = name.strip().lower()
     if normalized == "always-taken":
         return AlwaysTakenPredictor()
@@ -1103,7 +1221,12 @@ def build_predictor(name: str, table_size: int, history_bits: int) -> BranchPred
     if normalized == "gshare":
         return GSharePredictor(table_size=table_size, history_bits=history_bits)
     if normalized == "perceptron":
-        return PerceptronPredictor(table_size=table_size, history_bits=history_bits)
+        return PerceptronPredictor(
+            table_size=table_size,
+            history_bits=history_bits,
+            threshold=threshold,
+            weight_limit=weight_limit,
+        )
     if normalized == "tournament":
         return TournamentPredictor(table_size=table_size, history_bits=history_bits)
     raise ValueError(f"unsupported predictor: {name}")
@@ -1588,6 +1711,199 @@ def write_svg_output(path: Path, contents: str) -> None:
     path.write_text(contents, encoding="utf-8")
 
 
+def _perceptron_tuning_cell_fill(accuracy_percent: float, minimum: float, maximum: float) -> str:
+    palette = ["#e2e8f0", "#bfdbfe", "#93c5fd", "#60a5fa", "#3b82f6", "#1d4ed8"]
+    if maximum <= minimum:
+        return palette[-1]
+    ratio = (accuracy_percent - minimum) / (maximum - minimum)
+    index = min(len(palette) - 1, max(0, round(ratio * (len(palette) - 1))))
+    return palette[index]
+
+
+def render_perceptron_tuning_markdown(*, trace_path: Path, report: dict[str, Any]) -> str:
+    generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    trace_summary = report["trace_summary"]
+    best = report["best_config"]
+    default = report["default_config"]
+    lines = [
+        "# Branch predictor perceptron tuning sweep",
+        "",
+        f"- Generated: `{generated}`",
+        f"- Trace: `{trace_path}`",
+        f"- Branches: `{trace_summary['total_branches']}` across `{trace_summary['unique_addresses']}` unique PCs",
+        f"- Predictor config: `table={report['table_size']}` · `history={report['history_bits']}`",
+        f"- Swept thresholds: `{', '.join(str(value) for value in report['thresholds'])}`",
+        f"- Swept weight limits: `{', '.join(str(value) for value in report['weight_limits'])}`",
+        f"- Default heuristic: `threshold={report['default_threshold']}` · `weight_limit={report['default_weight_limit']}`",
+        "",
+        "## Headlines",
+        "",
+        f"- Best config: `threshold={best['threshold']}` · `weight_limit={best['weight_limit']}` → `{best['accuracy_percent']:.2f}%` accuracy with `{best['mispredictions']}` mispredictions.",
+    ]
+    if default is not None:
+        delta = best["accuracy_percent"] - default["accuracy_percent"]
+        lines.append(
+            f"- Default heuristic: `{default['accuracy_percent']:.2f}%` accuracy with `{default['mispredictions']}` mispredictions ({delta:+.2f} pp vs best)."
+        )
+    lines.extend(
+        [
+            f"- Saturation visible in `{report['saturated_config_count']}` / `{report['config_count']}` swept configs (`max|w|` hit the clamp limit).",
+            "",
+            "## Accuracy matrix",
+            "",
+        ]
+    )
+    header = ["Threshold ↓ / Weight limit →", *[f"`{value}`" for value in report["weight_limits"]]]
+    lines.append("| " + " | ".join(header) + " |")
+    lines.append("| " + " | ".join(["---", *(["---:"] * len(report["weight_limits"]))]) + " |")
+    by_key = {(config["threshold"], config["weight_limit"]): config for config in report["configs"]}
+    for threshold in report["thresholds"]:
+        row = [f"`{threshold}`"]
+        for weight_limit in report["weight_limits"]:
+            config = by_key[(threshold, weight_limit)]
+            badges: list[str] = []
+            if config is best:
+                badges.append("best")
+            if config["is_default_config"]:
+                badges.append("default")
+            if config["saturated_max_weight"]:
+                badges.append("sat")
+            cell = f"{config['accuracy_percent']:.2f}%"
+            if badges:
+                cell += f" ({', '.join(badges)})"
+            row.append(cell)
+        lines.append("| " + " | ".join(row) + " |")
+
+    lines.extend(
+        [
+            "",
+            "## Top configs",
+            "",
+            "| Rank | Threshold | Weight limit | Accuracy | Mispredictions | Max abs(w) | Notes |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for index, config in enumerate(report["configs"][: min(8, len(report["configs"]))], start=1):
+        notes: list[str] = []
+        if config is best:
+            notes.append("best")
+        if config["is_default_config"]:
+            notes.append("default")
+        if config["saturated_max_weight"]:
+            notes.append("saturated")
+        lines.append(
+            f"| {index} | `{config['threshold']}` | `{config['weight_limit']}` | `{config['accuracy_percent']:.2f}%` | `{config['mispredictions']}` | `{config['max_abs_weight']}` | {', '.join(notes) or '-'} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Portfolio usage",
+            "",
+            "- Use this report to show that neural branch predictors still need practical tuning; longer history alone is not the whole story.",
+            "- Pair it with the perceptron-majority comparison card when you want both a single-trace win story and a parameter-sensitivity artifact.",
+            "- Call out saturated low-clamp runs when explaining why hardware-friendly limits can trade off training headroom against stability.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_perceptron_tuning_svg(*, trace_path: Path, report: dict[str, Any]) -> str:
+    thresholds = report["thresholds"]
+    weight_limits = report["weight_limits"]
+    best = report["best_config"]
+    default = report["default_config"]
+    width = 1080
+    grid_x = 36
+    grid_y = 214
+    cell_w = 132
+    cell_h = 54
+    grid_w = cell_w * len(weight_limits)
+    grid_h = cell_h * len(thresholds)
+    top_rows = min(6, len(report["configs"]))
+    height = max(620, grid_y + grid_h + 120, grid_y + (108 + (top_rows * 62)) + 60)
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Perceptron tuning sweep</title>',
+        f'<desc id="desc">Threshold and weight-limit sweep for {trace_path.stem}.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(36, 40, "Perceptron tuning sweep", size=28, weight="700"),
+        _svg_text(36, 66, f"Trace: {trace_path.stem} · branches={report['trace_summary']['total_branches']} · table={report['table_size']} · history={report['history_bits']}", size=14, fill="#334155"),
+    ]
+
+    cards = [
+        (36, "Best config", f"t={best['threshold']} · w={best['weight_limit']}", f"{best['accuracy_percent']:.2f}% accuracy"),
+        (292, "Default heuristic", f"t={report['default_threshold']} · w={report['default_weight_limit']}", f"{default['accuracy_percent']:.2f}% accuracy" if default is not None else "not included in sweep"),
+        (548, "Sweep size", f"{report['config_count']} configs", f"{len(thresholds)} thresholds × {len(weight_limits)} limits"),
+        (804, "Saturated configs", str(report['saturated_config_count']), "configs hit the clamp ceiling"),
+    ]
+    for x, label, value, subtitle in cards:
+        parts.append(f'<rect x="{x}" y="92" width="240" height="92" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(x + 18, 120, label, size=13, weight="700", fill="#475569"))
+        parts.append(_svg_text(x + 18, 150, value, size=22, weight="700"))
+        parts.append(_svg_text(x + 18, 170, _truncate_svg_text(subtitle, 32), size=11, fill="#64748b"))
+
+    parts.append(_svg_text(grid_x, grid_y - 16, "Accuracy heatmap (threshold rows, weight-limit columns)", size=18, weight="700"))
+    by_key = {(config["threshold"], config["weight_limit"]): config for config in report["configs"]}
+    for column, weight_limit in enumerate(weight_limits):
+        x = grid_x + 120 + column * cell_w
+        parts.append(_svg_text(x + 24, grid_y - 16, f"w={weight_limit}", size=12, weight="700", fill="#475569"))
+    for row, threshold in enumerate(thresholds):
+        y = grid_y + row * cell_h
+        parts.append(_svg_text(grid_x, y + 32, f"t={threshold}", size=12, weight="700", fill="#475569"))
+        for column, weight_limit in enumerate(weight_limits):
+            x = grid_x + 120 + column * cell_w
+            config = by_key[(threshold, weight_limit)]
+            fill = _perceptron_tuning_cell_fill(
+                config["accuracy_percent"],
+                report["min_accuracy_percent"],
+                report["max_accuracy_percent"],
+            )
+            stroke = "#f59e0b" if config is best else ("#7c3aed" if config["is_default_config"] else "#dbe4ee")
+            stroke_width = 3 if config is best else (2 if config["is_default_config"] else 1)
+            parts.append(f'<rect x="{x}" y="{y}" width="{cell_w - 10}" height="{cell_h - 10}" rx="14" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" />')
+            parts.append(_svg_text(x + 14, y + 24, f"{config['accuracy_percent']:.2f}%", size=14, weight="700", fill="#0f172a"))
+            parts.append(_svg_text(x + 14, y + 40, _truncate_svg_text(f"miss={config['mispredictions']} · max|w|={config['max_abs_weight']}", 22), size=10, fill="#0f172a"))
+            tags: list[str] = []
+            if config is best:
+                tags.append("best")
+            if config["is_default_config"]:
+                tags.append("default")
+            if config["saturated_max_weight"]:
+                tags.append("sat")
+            if tags:
+                parts.append(_svg_text(x + 14, y + 54, ", ".join(tags), size=10, weight="700", fill="#0f172a"))
+
+    right_x = grid_x + 120 + grid_w + 28
+    panel_w = width - right_x - 36
+    panel_h = 108 + (top_rows * 62)
+    parts.append(f'<rect x="{right_x}" y="{grid_y}" width="{panel_w}" height="{panel_h}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(right_x + 18, grid_y + 30, "Top tuning configs", size=20, weight="700"))
+    current_y = grid_y + 60
+    for index, config in enumerate(report["configs"][:top_rows], start=1):
+        notes: list[str] = []
+        if config is best:
+            notes.append("best")
+        if config["is_default_config"]:
+            notes.append("default")
+        if config["saturated_max_weight"]:
+            notes.append("saturated")
+        summary = (
+            f"#{index} · t={config['threshold']} · w={config['weight_limit']} · {config['accuracy_percent']:.2f}% · "
+            f"miss={config['mispredictions']}"
+        )
+        current_y = _svg_add_wrapped_text(parts, right_x + 18, current_y, summary, max_chars=28, size=13, fill="#334155") + 16
+        if notes:
+            parts.append(_svg_text(right_x + 18, current_y - 4, ", ".join(notes), size=11, weight="700", fill="#64748b"))
+            current_y += 8
+
+    footer_y = max(grid_y + grid_h + 46, grid_y + panel_h + 24)
+    parts.append(_svg_text(36, footer_y, "Use this card beside the perceptron-majority comparison report to show tuning sensitivity, not just the headline win.", size=12, fill="#475569"))
+    parts.append("</svg>")
+    return "".join(parts) + "\n"
+
+
 def _json_default(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
@@ -1622,6 +1938,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     simulate_parser.add_argument("--table-size", **common_help["table_size"])
     simulate_parser.add_argument("--history-bits", **common_help["history_bits"])
+    simulate_parser.add_argument("--threshold", type=int, help="Perceptron confidence threshold override (perceptron only).")
+    simulate_parser.add_argument("--weight-limit", type=int, help="Perceptron signed weight clamp limit (perceptron only).")
     simulate_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary.")
 
     generate_parser = subparsers.add_parser(
@@ -1652,6 +1970,19 @@ def _build_parser() -> argparse.ArgumentParser:
     sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown sweep report.")
     sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG sweep summary card.")
     sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
+
+    perceptron_sweep_parser = subparsers.add_parser(
+        "perceptron-sweep",
+        help="Sweep perceptron threshold and weight-limit tuning on one trace.",
+    )
+    perceptron_sweep_parser.add_argument("trace", **common_help["trace"])
+    perceptron_sweep_parser.add_argument("--table-size", **common_help["table_size"])
+    perceptron_sweep_parser.add_argument("--history-bits", **common_help["history_bits"])
+    perceptron_sweep_parser.add_argument("--thresholds", type=int, nargs="+", help="Optional threshold values to sweep.")
+    perceptron_sweep_parser.add_argument("--weight-limits", type=int, nargs="+", help="Optional signed weight clamp limits to sweep.")
+    perceptron_sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown tuning report.")
+    perceptron_sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG tuning card.")
+    perceptron_sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
     return parser
 
 
@@ -1722,6 +2053,50 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"trace directory: {args.trace_dir}")
             return 0
 
+        if args.command == "perceptron-sweep":
+            trace_path = Path(args.trace)
+            records = load_trace(trace_path)
+            report = run_perceptron_tuning_sweep(
+                records,
+                table_size=args.table_size,
+                history_bits=args.history_bits,
+                thresholds=list(args.thresholds) if args.thresholds else None,
+                weight_limits=list(args.weight_limits) if args.weight_limits else None,
+            )
+            payload = {
+                "trace": str(trace_path),
+                **report,
+            }
+            if getattr(args, "markdown_out", None):
+                write_markdown_output(args.markdown_out, render_perceptron_tuning_markdown(trace_path=trace_path, report=report))
+                payload["markdown_output"] = str(args.markdown_out)
+            if getattr(args, "svg_out", None):
+                write_svg_output(args.svg_out, render_perceptron_tuning_svg(trace_path=trace_path, report=report))
+                payload["svg_output"] = str(args.svg_out)
+            if args.json:
+                print(json.dumps(payload, indent=2, default=_json_default))
+            else:
+                print(format_perceptron_tuning_summary_table(report))
+                print()
+                print(
+                    f"best config: threshold={report['best_config']['threshold']} weight_limit={report['best_config']['weight_limit']} "
+                    f"({report['best_config']['accuracy_percent']:.2f}% accuracy)"
+                )
+                if report["default_config"] is not None:
+                    print(
+                        f"default heuristic: threshold={report['default_threshold']} weight_limit={report['default_weight_limit']} "
+                        f"({report['default_config']['accuracy_percent']:.2f}% accuracy)"
+                    )
+                print(
+                    f"saturated configs: {report['saturated_config_count']} / {report['config_count']} "
+                    f"(max|w| reached the clamp limit)"
+                )
+                if "markdown_output" in payload:
+                    print(f"markdown report: {payload['markdown_output']}")
+                if "svg_output" in payload:
+                    print(f"svg card: {payload['svg_output']}")
+            return 0
+
         records = load_trace(args.trace)
         if args.command == "compare":
             trace_path = Path(args.trace)
@@ -1788,7 +2163,13 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"svg card: {payload['svg_output']}")
             return 0
 
-        predictor = build_predictor(args.predictor, table_size=args.table_size, history_bits=args.history_bits)
+        predictor = build_predictor(
+            args.predictor,
+            table_size=args.table_size,
+            history_bits=args.history_bits,
+            threshold=getattr(args, "threshold", None),
+            weight_limit=getattr(args, "weight_limit", None),
+        )
         result = simulate_trace(records, predictor)
         if args.json:
             payload = {"trace": str(Path(args.trace)), **result.to_dict()}

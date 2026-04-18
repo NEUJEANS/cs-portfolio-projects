@@ -34,8 +34,11 @@ load_trace = module.load_trace
 parse_trace_line = module.parse_trace_line
 render_comparison_markdown = module.render_comparison_markdown
 render_comparison_svg = module.render_comparison_svg
+render_perceptron_tuning_markdown = module.render_perceptron_tuning_markdown
+render_perceptron_tuning_svg = module.render_perceptron_tuning_svg
 render_sweep_markdown = module.render_sweep_markdown
 render_sweep_svg = module.render_sweep_svg
+run_perceptron_tuning_sweep = module.run_perceptron_tuning_sweep
 run_workload_sweep = module.run_workload_sweep
 simulate_trace = module.simulate_trace
 summarize_table_aliasing = module.summarize_table_aliasing
@@ -491,6 +494,99 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("Simple vs advanced", svg)
         self.assertIn("loop-heavy", summary)
         self.assertIn("perceptron", summary)
+
+    def test_perceptron_tuning_sweep_reports_default_and_saturation_state(self) -> None:
+        trace = generate_synthetic_trace("perceptron-majority", branches=96, seed=13)
+        report = run_perceptron_tuning_sweep(
+            trace,
+            table_size=32,
+            history_bits=12,
+            thresholds=[19, 37],
+            weight_limits=[8, 74],
+        )
+
+        self.assertEqual(report["default_threshold"], 37)
+        self.assertEqual(report["default_weight_limit"], 74)
+        self.assertEqual(report["config_count"], 4)
+        self.assertEqual(report["best_config"], report["configs"][0])
+        default_config = report["default_config"]
+        assert default_config is not None
+        self.assertTrue(default_config["is_default_config"])
+        by_key = {(config["threshold"], config["weight_limit"]): config for config in report["configs"]}
+        self.assertTrue(by_key[(19, 8)]["saturated_max_weight"])
+        self.assertLessEqual(by_key[(19, 8)]["max_abs_weight"], 8)
+        self.assertGreaterEqual(report["best_config"]["accuracy_percent"], default_config["accuracy_percent"])
+
+    def test_render_perceptron_tuning_outputs_include_heatmap_story(self) -> None:
+        trace_path = PROJECT_ROOT / "artifacts" / "branch-predictor-lab" / "perceptron-majority-seed13.trace"
+        report = run_perceptron_tuning_sweep(
+            generate_synthetic_trace("perceptron-majority", branches=96, seed=13),
+            table_size=32,
+            history_bits=12,
+            thresholds=[19, 37, 55],
+            weight_limits=[18, 74],
+        )
+
+        markdown = render_perceptron_tuning_markdown(trace_path=trace_path, report=report)
+        svg = render_perceptron_tuning_svg(trace_path=trace_path, report=report)
+
+        self.assertIn("# Branch predictor perceptron tuning sweep", markdown)
+        self.assertIn("## Accuracy matrix", markdown)
+        self.assertIn("default", markdown)
+        self.assertIn("<svg", svg)
+        self.assertIn("Perceptron tuning sweep", svg)
+        self.assertIn("Top tuning configs", svg)
+
+    def test_cli_perceptron_sweep_json_writes_markdown_and_svg(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_path = Path(tmpdir) / "perceptron-majority.trace"
+            trace_path.write_text(
+                "\n".join(
+                    "0x480 T 0x4b0 perceptron-majority-target" if record.taken else "0x480 N 0x484 perceptron-majority-target"
+                    for record in generate_synthetic_trace("perceptron-majority", branches=48, seed=13)
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            markdown_path = Path(tmpdir) / "perceptron-tuning-sweep.md"
+            svg_path = Path(tmpdir) / "perceptron-tuning-sweep.svg"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "perceptron-sweep",
+                    str(trace_path),
+                    "--table-size",
+                    "32",
+                    "--history-bits",
+                    "12",
+                    "--thresholds",
+                    "19",
+                    "37",
+                    "55",
+                    "--weight-limits",
+                    "18",
+                    "74",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["trace"], str(trace_path))
+            self.assertEqual(payload["config_count"], 6)
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertIn("## Top configs", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Top tuning configs", svg_path.read_text(encoding="utf-8"))
 
     def test_cli_sweep_json_writes_markdown_svg_and_trace_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

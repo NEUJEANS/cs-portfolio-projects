@@ -16,7 +16,7 @@
 - [x] Add a perceptron-majority synthetic workload and perceptron predictor follow-up for advanced architecture coverage
 - [x] Add trace-family sweep commands that batch-generate workloads and compare predictors in one run
 - [x] Add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
+- [x] Add perceptron threshold/weight-limit sweep artifacts so neural tuning is visible in the gallery
 
 ## Next candidate slices
-- [ ] Add perceptron threshold/weight-limit sweep artifacts so neural tuning is visible in the gallery
 - [ ] Add budget-normalized sweeps so predictors can compete under similar state-bit budgets
