@@ -15,3 +15,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-18 clock + presets slice
+- [x] do brief research on Clock / second-chance and locality-friendly preset workloads
+- [x] do a short refresh on Clock reference-bit behavior and stack-algorithm expectations
+- [x] add project-local checklist markdown for resumable follow-up work
+- [x] implement Clock / second-chance replacement
+- [x] add built-in workload presets plus preset-listing CLI support
+- [x] extend frame-range study output to surface non-FIFO regressions too
+- [x] refresh README usage examples and interview notes
+- [x] add regression tests for Clock + preset flows
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [ ] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up
