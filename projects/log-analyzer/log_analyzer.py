@@ -647,6 +647,18 @@ def format_card_metric_value(
     return f"{numeric:.{decimals}f}{suffix}"
 
 
+def format_signed_card_metric_value(
+    value: float | int | None,
+    *,
+    suffix: str = "",
+    decimals: int = 1,
+) -> str:
+    if value is None:
+        return "n/a"
+    prefix = "+" if float(value) > 0 else ""
+    return prefix + format_card_metric_value(value, suffix=suffix, decimals=decimals)
+
+
 def parse_bucket_datetime(raw_value: str) -> datetime:
     return datetime.fromisoformat(raw_value).astimezone(timezone.utc)
 
@@ -825,6 +837,117 @@ def render_time_bucket_chart_panel(
             parts.append(
                 f'<circle cx="{x_position:.2f}" cy="{y_position:.2f}" r="4.5" fill="{accent_color}" stroke="#ffffff" stroke-width="1.5" />'
             )
+
+    parts.extend(
+        [
+            f'<text x="{chart_left}" y="{chart_bottom + 24}" font-size="12" fill="#64748b">{escape(bucket_labels[0] if bucket_labels else "")}</text>',
+            f'<text x="{chart_left + chart_width}" y="{chart_bottom + 24}" font-size="12" text-anchor="end" fill="#64748b">{escape(bucket_labels[-1] if bucket_labels else "")}</text>',
+            f'<text x="{chart_left}" y="{chart_top - 10}" font-size="12" fill="#64748b">max {escape(format_card_metric_value(actual_max_value, suffix=metric_suffix))}</text>',
+            f'<text x="{chart_left}" y="{chart_bottom + 42}" font-size="12" fill="#64748b">0{escape(metric_suffix)}</text>',
+        ]
+    )
+    return parts
+
+
+def render_comparison_chart_panel(
+    *,
+    title: str,
+    left_values: list[float | None],
+    right_values: list[float | None],
+    bucket_labels: list[str],
+    panel_left: float,
+    panel_top: float,
+    panel_width: float,
+    panel_height: float,
+    left_label: str,
+    right_label: str,
+    left_stroke_color: str,
+    right_stroke_color: str,
+    left_accent_color: str,
+    right_accent_color: str,
+    summary_text: str,
+    metric_suffix: str,
+) -> list[str]:
+    parts = [
+        f'<rect x="{panel_left}" y="{panel_top}" width="{panel_width}" height="{panel_height}" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+        f'<text x="{panel_left + 20}" y="{panel_top + 34}" font-size="18" font-weight="700" fill="#0f172a">{escape(title)}</text>',
+        f'<text x="{panel_left + 20}" y="{panel_top + 58}" font-size="14" fill="#475569">{escape(summary_text)}</text>',
+    ]
+
+    legend_y = panel_top + 80
+    legend_items = [
+        (left_label, left_stroke_color, left_accent_color),
+        (right_label, right_stroke_color, right_accent_color),
+    ]
+    for index, (label, stroke_color, accent_color) in enumerate(legend_items):
+        legend_x = panel_left + 20 + (index * 128)
+        parts.extend(
+            [
+                f'<line x1="{legend_x}" y1="{legend_y}" x2="{legend_x + 18}" y2="{legend_y}" stroke="{stroke_color}" stroke-width="3" stroke-linecap="round" />',
+                f'<circle cx="{legend_x + 9}" cy="{legend_y}" r="4" fill="{accent_color}" stroke="#ffffff" stroke-width="1.2" />',
+                f'<text x="{legend_x + 28}" y="{legend_y + 4}" font-size="12" fill="#64748b">{escape(label)}</text>',
+            ]
+        )
+
+    chart_left = panel_left + 20
+    chart_top = panel_top + 104
+    chart_width = panel_width - 40
+    chart_height = panel_height - 150
+    chart_bottom = chart_top + chart_height
+    actual_max_value = max(
+        [value for value in left_values if value is not None]
+        + [value for value in right_values if value is not None],
+        default=0.0,
+    )
+    display_max_value = actual_max_value * 1.15 if actual_max_value > 0 else 1.0
+    has_points = any(value is not None for value in left_values + right_values)
+
+    if not has_points:
+        parts.extend(
+            [
+                f'<rect x="{chart_left}" y="{chart_top}" width="{chart_width}" height="{chart_height}" rx="18" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.2" stroke-dasharray="6 8" />',
+                f'<text x="{chart_left + (chart_width / 2):.2f}" y="{chart_top + (chart_height / 2) - 8:.2f}" font-size="15" font-weight="600" text-anchor="middle" fill="#9a3412">No aligned bucket rows</text>',
+                f'<text x="{chart_left + (chart_width / 2):.2f}" y="{chart_top + (chart_height / 2) + 16:.2f}" font-size="12" text-anchor="middle" fill="#9a3412">Re-run with --time-bucket minute or --time-bucket hour</text>',
+                f'<text x="{chart_left}" y="{chart_bottom + 24}" font-size="12" fill="#64748b">summary-only export</text>',
+                f'<text x="{chart_left + chart_width}" y="{chart_bottom + 24}" font-size="12" text-anchor="end" fill="#64748b">bucket charts unavailable</text>',
+            ]
+        )
+        return parts
+
+    for row in range(4):
+        y_position = chart_top + (chart_height * row / 3)
+        parts.append(
+            f'<line x1="{chart_left}" y1="{y_position:.2f}" x2="{chart_left + chart_width}" y2="{y_position:.2f}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />'
+        )
+
+    parts.append(
+        f'<line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_left + chart_width}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="1.5" />'
+    )
+
+    series = [
+        (left_values, left_stroke_color, left_accent_color),
+        (right_values, right_stroke_color, right_accent_color),
+    ]
+    for values, stroke_color, accent_color in series:
+        segments = build_svg_chart_points(
+            values,
+            left=chart_left,
+            top=chart_top,
+            width=chart_width,
+            height=chart_height,
+            max_scale_value=display_max_value,
+        )
+        for segment in segments:
+            if len(segment) >= 2:
+                parts.append(
+                    '<polyline fill="none" '
+                    f'stroke="{stroke_color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" '
+                    f'points="{" ".join(f"{x:.2f},{y:.2f}" for x, y in segment)}" />'
+                )
+            for x_position, y_position in segment:
+                parts.append(
+                    f'<circle cx="{x_position:.2f}" cy="{y_position:.2f}" r="4.2" fill="{accent_color}" stroke="#ffffff" stroke-width="1.4" />'
+                )
 
     parts.extend(
         [
@@ -1090,6 +1213,446 @@ def format_time_bucket_card_html(result: dict, *, source_label: str) -> str:
       </thead>
       <tbody>
         {''.join(table_rows)}
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>
+'''
+
+
+def build_facet_comparison_card_summary(comparison: dict[str, object]) -> dict[str, object]:
+    left = comparison["left"]
+    right = comparison["right"]
+    delta = comparison["delta"]
+    time_buckets = comparison["time_buckets"]
+    time_bucketing = comparison["time_bucketing"]
+    granularity = "summary"
+    if time_bucketing:
+        granularity = str(time_bucketing["granularity"])
+    coverage_label = "Summary-only comparison"
+    if time_buckets:
+        coverage_label = format_bucket_range_label(
+            time_buckets[0]["bucket_start"],
+            time_buckets[-1]["bucket_end"],
+        )
+
+    request_gap_bucket = max(
+        time_buckets,
+        key=lambda bucket: (
+            abs(bucket["request_count_delta"]),
+            -parse_bucket_datetime(bucket["bucket_start"]).timestamp(),
+        ),
+        default=None,
+    )
+    error_gap_bucket = max(
+        time_buckets,
+        key=lambda bucket: (
+            abs(bucket["error_rate_pct_delta"] or 0),
+            abs(bucket["error_count_delta"]),
+            -parse_bucket_datetime(bucket["bucket_start"]).timestamp(),
+        ),
+        default=None,
+    )
+    latency_gap_bucket = max(
+        (bucket for bucket in time_buckets if bucket["average_latency_ms_delta"] is not None),
+        key=lambda bucket: (
+            abs(bucket["average_latency_ms_delta"]),
+            -parse_bucket_datetime(bucket["bucket_start"]).timestamp(),
+        ),
+        default=None,
+    )
+
+    return {
+        "granularity": granularity,
+        "coverage_label": coverage_label,
+        "aligned_bucket_count": len(time_buckets),
+        "left": left,
+        "right": right,
+        "delta": delta,
+        "request_gap_bucket": request_gap_bucket,
+        "error_gap_bucket": error_gap_bucket,
+        "latency_gap_bucket": latency_gap_bucket,
+    }
+
+
+def format_facet_comparison_card_svg(
+    comparison: dict[str, object],
+    *,
+    source_label: str,
+    time_window: dict[str, str | int] | None = None,
+    id_prefix: str = "log-comparison-card",
+) -> str:
+    summary = build_facet_comparison_card_summary(comparison)
+    left = summary["left"]
+    right = summary["right"]
+    delta = summary["delta"]
+    left_summary = left["summary"]
+    right_summary = right["summary"]
+    time_buckets = comparison["time_buckets"]
+    bucket_labels = [format_bucket_axis_label(bucket["bucket_start"]) for bucket in time_buckets]
+    width = 1080
+    height = 700
+    title_id = f"{id_prefix}-title"
+    desc_id = f"{id_prefix}-desc"
+    coverage_label = summary["coverage_label"]
+    granularity = summary["granularity"]
+
+    requests_summary = f'{left["value"]}: {format_card_metric_value(left_summary["request_count"])} vs {right["value"]}: {format_card_metric_value(right_summary["request_count"])}'
+    if summary["request_gap_bucket"]:
+        requests_summary = (
+            f'Largest gap {format_signed_card_metric_value(summary["request_gap_bucket"]["request_count_delta"])} at '
+            f'{format_bucket_axis_label(summary["request_gap_bucket"]["bucket_start"])}'
+        )
+
+    errors_summary = f'Overall Δ {format_signed_card_metric_value(delta["error_rate_pct_delta"], suffix=" pp")}'
+    if summary["error_gap_bucket"]:
+        errors_summary = (
+            f'Largest gap {format_signed_card_metric_value(summary["error_gap_bucket"]["error_rate_pct_delta"], suffix=" pp")} at '
+            f'{format_bucket_axis_label(summary["error_gap_bucket"]["bucket_start"])}'
+        )
+
+    latency_summary = (
+        f'{comparison["delta_direction"]}: '
+        f'{format_signed_card_metric_value(delta["average_latency_ms_delta"], suffix=" ms")} avg latency'
+    )
+    if summary["latency_gap_bucket"]:
+        latency_summary = (
+            f'Largest gap {format_signed_card_metric_value(summary["latency_gap_bucket"]["average_latency_ms_delta"], suffix=" ms")} at '
+            f'{format_bucket_axis_label(summary["latency_gap_bucket"]["bucket_start"])}'
+        )
+
+    metric_cards = [
+        (
+            left["label"],
+            format_card_metric_value(left_summary["request_count"]),
+            f'{format_card_metric_value(left_summary["error_rate_pct"], suffix="%")}'
+            f' errors · top {left_summary["top_path"] or "(none)"}',
+        ),
+        (
+            right["label"],
+            format_card_metric_value(right_summary["request_count"]),
+            f'{format_card_metric_value(right_summary["error_rate_pct"], suffix="%")}'
+            f' errors · top {right_summary["top_path"] or "(none)"}',
+        ),
+        (
+            "Error-rate delta",
+            format_signed_card_metric_value(delta["error_rate_pct_delta"], suffix=" pp"),
+            comparison["delta_direction"],
+        ),
+        (
+            "P95 latency delta",
+            format_signed_card_metric_value(delta["p95_latency_ms_delta"], suffix=" ms"),
+            f'avg Δ {format_signed_card_metric_value(delta["average_latency_ms_delta"], suffix=" ms")}',
+        ),
+    ]
+
+    card_parts: list[str] = []
+    for index, (label, value, note) in enumerate(metric_cards):
+        card_left = 54 + (index * 244)
+        card_parts.extend(
+            [
+                f'<rect x="{card_left}" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+                f'<text x="{card_left + 18}" y="142" font-size="14" fill="#64748b">{escape(label)}</text>',
+                f'<text x="{card_left + 18}" y="174" font-size="28" font-weight="700" fill="#0f172a">{escape(value)}</text>',
+                f'<text x="{card_left + 18}" y="194" font-size="12" fill="#64748b">{escape(note)}</text>',
+            ]
+        )
+
+    chart_specs = [
+        {
+            "title": "Requests / bucket",
+            "left_values": [float(bucket["left_request_count"]) for bucket in time_buckets],
+            "right_values": [float(bucket["right_request_count"]) for bucket in time_buckets],
+            "summary_text": requests_summary,
+            "metric_suffix": "",
+        },
+        {
+            "title": "Error rate / bucket",
+            "left_values": [float(bucket["left_error_rate_pct"]) for bucket in time_buckets],
+            "right_values": [float(bucket["right_error_rate_pct"]) for bucket in time_buckets],
+            "summary_text": errors_summary,
+            "metric_suffix": "%",
+        },
+        {
+            "title": "Avg latency / bucket",
+            "left_values": [bucket["left_average_latency_ms"] for bucket in time_buckets],
+            "right_values": [bucket["right_average_latency_ms"] for bucket in time_buckets],
+            "summary_text": latency_summary,
+            "metric_suffix": " ms",
+        },
+    ]
+
+    chart_parts: list[str] = []
+    for index, chart_spec in enumerate(chart_specs):
+        panel_left = 54 + (index * 324)
+        chart_parts.extend(
+            render_comparison_chart_panel(
+                title=chart_spec["title"],
+                left_values=chart_spec["left_values"],
+                right_values=chart_spec["right_values"],
+                bucket_labels=bucket_labels,
+                panel_left=panel_left,
+                panel_top=234,
+                panel_width=296,
+                panel_height=294,
+                left_label=left["value"],
+                right_label=right["value"],
+                left_stroke_color="#2563eb",
+                right_stroke_color="#f97316",
+                left_accent_color="#1d4ed8",
+                right_accent_color="#ea580c",
+                summary_text=chart_spec["summary_text"],
+                metric_suffix=chart_spec["metric_suffix"],
+            )
+        )
+
+    footer_lines = [
+        f'Comparison: {left["label"]} vs {right["label"]} ({comparison["delta_direction"]})',
+        f'Coverage: {coverage_label}',
+    ]
+    if time_window:
+        footer_lines.append(
+            f'Window filter: {time_window["start"] or "(open)"} → {time_window["end"] or "(open)"}'
+        )
+    else:
+        footer_lines.append("Window filter: full log span")
+    if comparison["time_bucketing"]:
+        footer_lines.append(
+            f'Aligned buckets: {summary["aligned_bucket_count"]} ({granularity})'
+        )
+    else:
+        footer_lines.append("Aligned buckets: none (summary-only comparison)")
+
+    return "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'  <title id="{title_id}">Facet comparison card for {escape(source_label)}</title>',
+            f'  <desc id="{desc_id}">Comparison card showing {escape(left["label"])} versus {escape(right["label"])} over {escape(coverage_label)}</desc>',
+            '  <rect width="100%" height="100%" fill="#fff7ed" />',
+            '  <rect x="24" y="20" width="1032" height="660" rx="30" fill="#fff1e6" stroke="#fdba74" stroke-width="2" />',
+            '  <text x="54" y="64" font-size="32" font-weight="700" fill="#0f172a">Release comparison snapshot</text>',
+            f'  <text x="54" y="92" font-size="16" fill="#475569">{escape(source_label)} · {escape(left["label"])} vs {escape(right["label"])} · {escape(str(summary["aligned_bucket_count"]))} aligned bucket(s)</text>',
+            *card_parts,
+            *chart_parts,
+            '  <rect x="54" y="554" width="972" height="94" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />',
+            *[
+                f'<text x="78" y="{588 + (index * 22)}" font-size="14" fill="#334155">{escape(line)}</text>'
+                for index, line in enumerate(footer_lines)
+            ],
+            '  <text x="78" y="636" font-size="12" fill="#64748b">Use the HTML companion for a browser-friendly release-review table with exact deltas and per-bucket rows.</text>',
+            '</svg>',
+        ]
+    )
+
+
+def format_facet_comparison_card_html(
+    comparison: dict[str, object],
+    *,
+    source_label: str,
+    time_window: dict[str, str | int] | None = None,
+) -> str:
+    summary = build_facet_comparison_card_summary(comparison)
+    left = summary["left"]
+    right = summary["right"]
+    delta = summary["delta"]
+    left_summary = left["summary"]
+    right_summary = right["summary"]
+
+    meta_items = [
+        ("Source", source_label),
+        ("Comparison", f'{left["label"]} vs {right["label"]}'),
+        ("Delta direction", comparison["delta_direction"]),
+        ("Coverage", str(summary["coverage_label"])),
+        ("Aligned buckets", format_card_metric_value(summary["aligned_bucket_count"])),
+    ]
+    if comparison["time_bucketing"]:
+        meta_items.append(("Granularity", str(comparison["time_bucketing"]["granularity"])))
+    if time_window:
+        meta_items.append(
+            (
+                "Window filter",
+                f'{time_window["start"] or "(open)"} → {time_window["end"] or "(open)"}',
+            )
+        )
+
+    meta_html = "".join(
+        f'<li><strong>{escape(label)}</strong><br><span>{escape(value)}</span></li>'
+        for label, value in meta_items
+    )
+
+    summary_rows = [
+        (
+            "Requests",
+            format_card_metric_value(left_summary["request_count"]),
+            format_card_metric_value(right_summary["request_count"]),
+            format_signed_card_metric_value(delta["request_count_delta"]),
+        ),
+        (
+            "Errors",
+            format_card_metric_value(left_summary["error_count"]),
+            format_card_metric_value(right_summary["error_count"]),
+            format_signed_card_metric_value(delta["error_count_delta"]),
+        ),
+        (
+            "Error rate",
+            format_card_metric_value(left_summary["error_rate_pct"], suffix="%"),
+            format_card_metric_value(right_summary["error_rate_pct"], suffix="%"),
+            format_signed_card_metric_value(delta["error_rate_pct_delta"], suffix=" pp"),
+        ),
+        (
+            "Avg latency",
+            format_card_metric_value(left_summary["average_latency_ms"], suffix=" ms"),
+            format_card_metric_value(right_summary["average_latency_ms"], suffix=" ms"),
+            format_signed_card_metric_value(delta["average_latency_ms_delta"], suffix=" ms"),
+        ),
+        (
+            "P95 latency",
+            format_card_metric_value(left_summary["p95_latency_ms"], suffix=" ms"),
+            format_card_metric_value(right_summary["p95_latency_ms"], suffix=" ms"),
+            format_signed_card_metric_value(delta["p95_latency_ms_delta"], suffix=" ms"),
+        ),
+        (
+            "Max latency",
+            format_card_metric_value(left_summary["max_latency_ms"], suffix=" ms"),
+            format_card_metric_value(right_summary["max_latency_ms"], suffix=" ms"),
+            format_signed_card_metric_value(delta["max_latency_ms_delta"], suffix=" ms"),
+        ),
+        (
+            "Avg upstream latency",
+            format_card_metric_value(left_summary["average_upstream_latency_ms"], suffix=" ms"),
+            format_card_metric_value(right_summary["average_upstream_latency_ms"], suffix=" ms"),
+            format_signed_card_metric_value(delta["average_upstream_latency_ms_delta"], suffix=" ms"),
+        ),
+        (
+            "P95 upstream latency",
+            format_card_metric_value(left_summary["p95_upstream_latency_ms"], suffix=" ms"),
+            format_card_metric_value(right_summary["p95_upstream_latency_ms"], suffix=" ms"),
+            format_signed_card_metric_value(delta["p95_upstream_latency_ms_delta"], suffix=" ms"),
+        ),
+        (
+            "Top path",
+            f'{left_summary["top_path"] or "(none)"} ({left_summary["top_path_count"]})',
+            f'{right_summary["top_path"] or "(none)"} ({right_summary["top_path_count"]})',
+            "—",
+        ),
+    ]
+    summary_table_rows = "".join(
+        "".join(
+            [
+                "<tr>",
+                f"<td>{escape(metric)}</td>",
+                f"<td>{escape(left_value)}</td>",
+                f"<td>{escape(right_value)}</td>",
+                f"<td>{escape(delta_value)}</td>",
+                "</tr>",
+            ]
+        )
+        for metric, left_value, right_value, delta_value in summary_rows
+    )
+
+    bucket_table_rows = []
+    for bucket in comparison["time_buckets"]:
+        bucket_table_rows.append(
+            "".join(
+                [
+                    "<tr>",
+                    f'<td><code>{escape(bucket["bucket_start"])}</code></td>',
+                    f'<td><code>{escape(bucket["bucket_end"])}</code></td>',
+                    f'<td>{bucket["left_request_count"]}</td>',
+                    f'<td>{bucket["right_request_count"]}</td>',
+                    f'<td>{escape(format_signed_card_metric_value(bucket["request_count_delta"]))}</td>',
+                    f'<td>{escape(format_card_metric_value(bucket["left_error_rate_pct"], suffix="%"))}</td>',
+                    f'<td>{escape(format_card_metric_value(bucket["right_error_rate_pct"], suffix="%"))}</td>',
+                    f'<td>{escape(format_signed_card_metric_value(bucket["error_rate_pct_delta"], suffix=" pp"))}</td>',
+                    f'<td>{escape(format_card_metric_value(bucket["left_average_latency_ms"], suffix=" ms"))}</td>',
+                    f'<td>{escape(format_card_metric_value(bucket["right_average_latency_ms"], suffix=" ms"))}</td>',
+                    f'<td>{escape(format_signed_card_metric_value(bucket["average_latency_ms_delta"], suffix=" ms"))}</td>',
+                    f'<td><code>{escape(bucket["left_top_path"] or "(none)")}</code></td>',
+                    f'<td><code>{escape(bucket["right_top_path"] or "(none)")}</code></td>',
+                    "</tr>",
+                ]
+            )
+        )
+    if not bucket_table_rows:
+        bucket_table_rows.append(
+            '<tr><td colspan="13">No aligned bucket rows were produced for this run. Re-run with --time-bucket minute or --time-bucket hour for side-by-side charts and bucket tables.</td></tr>'
+        )
+
+    svg_payload = format_facet_comparison_card_svg(
+        comparison,
+        source_label=source_label,
+        time_window=time_window,
+        id_prefix="log-comparison-card-html",
+    )
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release comparison card ({escape(source_label)})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 2rem auto; max-width: 1320px; padding: 0 1rem 3rem; line-height: 1.5; background: #fff7ed; color: #0f172a; }}
+    h1, h2 {{ line-height: 1.15; }}
+    code {{ font-family: "SFMono-Regular", Consolas, monospace; }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem; padding: 0; margin: 1rem 0 1.5rem; }}
+    .meta li {{ list-style: none; border: 1px solid rgba(148, 163, 184, 0.32); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }}
+    .card-shell {{ border: 1px solid rgba(251, 146, 60, 0.28); border-radius: 1.2rem; padding: 1rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08); }}
+    svg {{ width: 100%; height: auto; display: block; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; background: rgba(255, 255, 255, 0.88); }}
+    th, td {{ padding: 0.7rem 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.2); text-align: left; vertical-align: top; }}
+    th {{ font-size: 0.9rem; color: #475569; }}
+    .caption {{ color: #475569; margin-top: 0.8rem; }}
+  </style>
+</head>
+<body>
+  <h1>Release comparison card</h1>
+  <p>This browser-friendly artifact turns facet comparisons into a slide-ready release review card with exact summary deltas and aligned per-bucket rows for screenshots, demos, and portfolio case studies.</p>
+  <ul class="meta">{meta_html}</ul>
+  <section class="card-shell">
+    {svg_payload}
+  </section>
+  <section>
+    <h2>Summary delta table</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>{escape(left["label"])}</th>
+          <th>{escape(right["label"])}</th>
+          <th>Delta</th>
+        </tr>
+      </thead>
+      <tbody>
+        {summary_table_rows}
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Aligned bucket rows</h2>
+    <p class="caption">Use these rows when you want exact per-bucket request, error-rate, and latency deltas beside the higher-level comparison card.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Bucket start</th>
+          <th>Bucket end</th>
+          <th>{escape(left["value"])} requests</th>
+          <th>{escape(right["value"])} requests</th>
+          <th>Δ requests</th>
+          <th>{escape(left["value"])} error rate</th>
+          <th>{escape(right["value"])} error rate</th>
+          <th>Δ error rate</th>
+          <th>{escape(left["value"])} avg latency</th>
+          <th>{escape(right["value"])} avg latency</th>
+          <th>Δ avg latency</th>
+          <th>{escape(left["value"])} top path</th>
+          <th>{escape(right["value"])} top path</th>
+        </tr>
+      </thead>
+      <tbody>
+        {''.join(bucket_table_rows)}
       </tbody>
     </table>
   </section>
@@ -2303,6 +2866,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--facet-compare-card-svg",
+        help=(
+            "Optional path for a standalone SVG comparison card rendered from "
+            "--facet-compare-* output (requires --facet-compare-field and "
+            "--facet-compare-values)"
+        ),
+    )
+    parser.add_argument(
+        "--facet-compare-card-html",
+        help=(
+            "Optional path for a self-contained HTML comparison card rendered from "
+            "--facet-compare-* output (requires --facet-compare-field and "
+            "--facet-compare-values)"
+        ),
+    )
+    parser.add_argument(
         "--window-start",
         help=(
             "Inclusive lower time bound for log entries (ISO-8601 or common-log timestamp; "
@@ -2375,6 +2954,12 @@ def main(argv: list[str] | None = None) -> int:
     ):
         parser.error(
             "--facet-compare-csv requires --facet-compare-field and --facet-compare-values"
+        )
+    if (args.facet_compare_card_svg or args.facet_compare_card_html) and (
+        normalized_facet_compare_field is None or normalized_facet_compare_values is None
+    ):
+        parser.error(
+            "comparison-card export flags require --facet-compare-field and --facet-compare-values"
         )
     if (normalized_facet_compare_field is None) != (normalized_facet_compare_values is None):
         parser.error(
@@ -2489,6 +3074,24 @@ def main(argv: list[str] | None = None) -> int:
         write_facet_comparison_csv(
             args.facet_compare_csv,
             result["facet_comparison"],
+        )
+    if args.facet_compare_card_svg and result["facet_comparison"]:
+        write_text_output(
+            args.facet_compare_card_svg,
+            format_facet_comparison_card_svg(
+                result["facet_comparison"],
+                source_label=Path(args.logfile).name,
+                time_window=result["time_window"],
+            ),
+        )
+    if args.facet_compare_card_html and result["facet_comparison"]:
+        write_text_output(
+            args.facet_compare_card_html,
+            format_facet_comparison_card_html(
+                result["facet_comparison"],
+                source_label=Path(args.logfile).name,
+                time_window=result["time_window"],
+            ),
         )
     if args.time_bucket_card_svg:
         write_text_output(

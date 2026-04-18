@@ -14,6 +14,8 @@ if str(PROJECT_DIR) not in sys.path:
 
 from log_analyzer import (
     analyze_lines,
+    format_facet_comparison_card_html,
+    format_facet_comparison_card_svg,
     format_text_report,
     format_time_bucket_card_html,
     format_time_bucket_card_svg,
@@ -461,6 +463,80 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('Bucket end', html)
         self.assertIn('<code>2026-04-18T09:01:00+00:00</code>', html)
         self.assertIn('<code>/api/report</code>', html)
+
+    def test_format_facet_comparison_card_svg_renders_release_panels(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod',
+                '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod',
+                '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.120 upstream_response_time=0.090 env=staging',
+                '10.0.0.4 - - [18/Apr/2026:09:01:45 +0000] "POST /api/report HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.450 env=staging',
+            ],
+            top_n=2,
+            time_bucket_granularity='minute',
+            facet_compare_field='env',
+            facet_compare_values=('prod', 'staging'),
+        )
+        svg = format_facet_comparison_card_svg(
+            result['facet_comparison'],
+            source_label='release-rollout.log',
+            time_window=result['time_window'],
+            id_prefix='compare-card',
+        )
+        self.assertIn('<svg', svg)
+        self.assertIn('Release comparison snapshot', svg)
+        self.assertIn('env=prod vs env=staging', svg)
+        self.assertIn('Requests / bucket', svg)
+        self.assertIn('Error-rate delta', svg)
+        self.assertIn('Coverage: 2026-04-18 09:00 → 09:02 UTC', svg)
+
+    def test_format_facet_comparison_card_html_renders_summary_and_bucket_tables(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod',
+                '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod',
+                '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.120 upstream_response_time=0.090 env=staging',
+                '10.0.0.4 - - [18/Apr/2026:09:01:45 +0000] "POST /api/report HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.450 env=staging',
+            ],
+            top_n=2,
+            time_bucket_granularity='minute',
+            facet_compare_field='env',
+            facet_compare_values=('prod', 'staging'),
+        )
+        html = format_facet_comparison_card_html(
+            result['facet_comparison'],
+            source_label='release-rollout.log',
+            time_window=result['time_window'],
+        )
+        self.assertIn('<!DOCTYPE html>', html)
+        self.assertIn('Release comparison card', html)
+        self.assertIn('Summary delta table', html)
+        self.assertIn('Aligned bucket rows', html)
+        self.assertIn('env=prod', html)
+        self.assertIn('env=staging', html)
+        self.assertIn('<code>2026-04-18T09:01:00+00:00</code>', html)
+        self.assertIn('staging minus prod', html)
+
+    def test_format_facet_comparison_card_html_handles_summary_only_exports(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod',
+                '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod',
+                '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.120 upstream_response_time=0.090 env=staging',
+            ],
+            top_n=2,
+            facet_compare_field='env',
+            facet_compare_values=('prod', 'staging'),
+        )
+        html = format_facet_comparison_card_html(
+            result['facet_comparison'],
+            source_label='release-rollout.log',
+            time_window=result['time_window'],
+        )
+        self.assertIn('Summary-only comparison', html)
+        self.assertIn('No aligned bucket rows were produced for this run.', html)
+        self.assertIn('Re-run with --time-bucket minute or --time-bucket hour', html)
+        self.assertIn('Aligned buckets', html)
 
     def test_cli_json_output_includes_named_timing_summaries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1250,6 +1326,75 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('--time-bucket-card-svg requires --time-bucket', completed.stderr)
+
+    def test_cli_facet_comparison_card_exports_generate_svg_and_html(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'compare-card.svg'
+            html_path = Path(tmpdir) / 'exports' / 'compare-card.html'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030 env=prod
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250 env=prod
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 200 13 request_time=0.120 upstream_response_time=0.090 env=staging
+                    10.0.0.4 - - [18/Apr/2026:09:01:45 +0000] "POST /api/report HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.450 env=staging
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--facet-compare-field',
+                    'env',
+                    '--facet-compare-values',
+                    'prod',
+                    'staging',
+                    '--facet-compare-card-svg',
+                    str(svg_path),
+                    '--facet-compare-card-html',
+                    str(html_path),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            svg_text = svg_path.read_text(encoding='utf-8')
+            html_text = html_path.read_text(encoding='utf-8')
+            self.assertIn('<svg', svg_text)
+            self.assertIn('Release comparison snapshot', svg_text)
+            self.assertIn('<!DOCTYPE html>', html_text)
+            self.assertIn('Summary delta table', html_text)
+            self.assertIn('Aligned bucket rows', html_text)
+
+    def test_cli_rejects_facet_comparison_card_exports_without_compare_args(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'compare-card.svg'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-compare-card-svg',
+                    str(svg_path),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('comparison-card export flags require --facet-compare-field and --facet-compare-values', completed.stderr)
 
     def test_cli_rejects_invalid_hotspot_status(self):
         with tempfile.TemporaryDirectory() as tmpdir:

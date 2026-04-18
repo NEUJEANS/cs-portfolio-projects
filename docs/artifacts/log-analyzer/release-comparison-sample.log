@@ -1,0 +1,11 @@
+10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 request_time=0.060 upstream_response_time=0.035 env=prod release=2026.04
+10.0.0.2 - - [18/Apr/2026:09:00:22 +0000] "POST /api/export HTTP/1.1" 500 98 request_time=0.420 upstream_response_time=0.310 env=prod release=2026.04
+10.0.0.3 - - [18/Apr/2026:09:00:41 +0000] "GET /api/report HTTP/1.1" 200 118 request_time=0.110 upstream_response_time=0.070 env=staging release=2026.05
+10.0.0.4 - - [18/Apr/2026:09:00:55 +0000] "POST /api/export HTTP/1.1" 200 101 request_time=0.160 upstream_response_time=0.120 env=staging release=2026.05
+10.0.0.5 - - [18/Apr/2026:09:01:08 +0000] "GET /api/report HTTP/1.1" 200 124 request_time=0.070 upstream_response_time=0.040 env=prod release=2026.04
+10.0.0.6 - - [18/Apr/2026:09:01:33 +0000] "POST /api/export HTTP/1.1" 200 104 request_time=0.180 upstream_response_time=0.140 env=prod release=2026.04
+10.0.0.7 - - [18/Apr/2026:09:01:44 +0000] "GET /api/report HTTP/1.1" 200 119 request_time=0.140 upstream_response_time=0.090 env=staging release=2026.05
+10.0.0.8 - - [18/Apr/2026:09:01:58 +0000] "POST /api/export HTTP/1.1" 502 99 request_time=0.410 upstream_response_time=0.330 env=staging release=2026.05
+10.0.0.9 - - [18/Apr/2026:09:02:09 +0000] "GET /health HTTP/1.1" 200 24 request_time=0.020 upstream_response_time=0.008 env=prod release=2026.04
+10.0.0.10 - - [18/Apr/2026:09:02:24 +0000] "GET /health HTTP/1.1" 200 24 request_time=0.025 upstream_response_time=0.010 env=staging release=2026.05
+10.0.0.11 - - [18/Apr/2026:09:02:39 +0000] "POST /api/export HTTP/1.1" 200 106 request_time=0.210 upstream_response_time=0.150 env=staging release=2026.05

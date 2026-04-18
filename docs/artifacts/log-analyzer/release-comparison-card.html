@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release comparison card (release-comparison-sample.log)</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 2rem auto; max-width: 1320px; padding: 0 1rem 3rem; line-height: 1.5; background: #fff7ed; color: #0f172a; }
+    h1, h2 { line-height: 1.15; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem; padding: 0; margin: 1rem 0 1.5rem; }
+    .meta li { list-style: none; border: 1px solid rgba(148, 163, 184, 0.32); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }
+    .card-shell { border: 1px solid rgba(251, 146, 60, 0.28); border-radius: 1.2rem; padding: 1rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08); }
+    svg { width: 100%; height: auto; display: block; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: rgba(255, 255, 255, 0.88); }
+    th, td { padding: 0.7rem 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.2); text-align: left; vertical-align: top; }
+    th { font-size: 0.9rem; color: #475569; }
+    .caption { color: #475569; margin-top: 0.8rem; }
+  </style>
+</head>
+<body>
+  <h1>Release comparison card</h1>
+  <p>This browser-friendly artifact turns facet comparisons into a slide-ready release review card with exact summary deltas and aligned per-bucket rows for screenshots, demos, and portfolio case studies.</p>
+  <ul class="meta"><li><strong>Source</strong><br><span>release-comparison-sample.log</span></li><li><strong>Comparison</strong><br><span>env=prod vs env=staging</span></li><li><strong>Delta direction</strong><br><span>staging minus prod</span></li><li><strong>Coverage</strong><br><span>2026-04-18 09:00 → 09:03 UTC</span></li><li><strong>Aligned buckets</strong><br><span>3</span></li><li><strong>Granularity</strong><br><span>minute</span></li></ul>
+  <section class="card-shell">
+    <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="700" viewBox="0 0 1080 700" role="img" aria-labelledby="log-comparison-card-html-title log-comparison-card-html-desc">
+  <title id="log-comparison-card-html-title">Facet comparison card for release-comparison-sample.log</title>
+  <desc id="log-comparison-card-html-desc">Comparison card showing env=prod versus env=staging over 2026-04-18 09:00 → 09:03 UTC</desc>
+  <rect width="100%" height="100%" fill="#fff7ed" />
+  <rect x="24" y="20" width="1032" height="660" rx="30" fill="#fff1e6" stroke="#fdba74" stroke-width="2" />
+  <text x="54" y="64" font-size="32" font-weight="700" fill="#0f172a">Release comparison snapshot</text>
+  <text x="54" y="92" font-size="16" fill="#475569">release-comparison-sample.log · env=prod vs env=staging · 3 aligned bucket(s)</text>
+<rect x="54" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="72" y="142" font-size="14" fill="#64748b">env=prod</text>
+<text x="72" y="174" font-size="28" font-weight="700" fill="#0f172a">5</text>
+<text x="72" y="194" font-size="12" fill="#64748b">20% errors · top /api/report</text>
+<rect x="298" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="316" y="142" font-size="14" fill="#64748b">env=staging</text>
+<text x="316" y="174" font-size="28" font-weight="700" fill="#0f172a">6</text>
+<text x="316" y="194" font-size="12" fill="#64748b">16.7% errors · top /api/export</text>
+<rect x="542" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="560" y="142" font-size="14" fill="#64748b">Error-rate delta</text>
+<text x="560" y="174" font-size="28" font-weight="700" fill="#0f172a">-3.3 pp</text>
+<text x="560" y="194" font-size="12" fill="#64748b">staging minus prod</text>
+<rect x="786" y="110" width="220" height="94" rx="20" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="804" y="142" font-size="14" fill="#64748b">P95 latency delta</text>
+<text x="804" y="174" font-size="28" font-weight="700" fill="#0f172a">-12 ms</text>
+<text x="804" y="194" font-size="12" fill="#64748b">avg Δ +25.8 ms</text>
+<rect x="54" y="234" width="296" height="294" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="74" y="268" font-size="18" font-weight="700" fill="#0f172a">Requests / bucket</text>
+<text x="74" y="292" font-size="14" fill="#475569">Largest gap +1 at 09:02</text>
+<line x1="74" y1="314" x2="92" y2="314" stroke="#2563eb" stroke-width="3" stroke-linecap="round" />
+<circle cx="83" cy="314" r="4" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.2" />
+<text x="102" y="318" font-size="12" fill="#64748b">prod</text>
+<line x1="202" y1="314" x2="220" y2="314" stroke="#f97316" stroke-width="3" stroke-linecap="round" />
+<circle cx="211" cy="314" r="4" fill="#ea580c" stroke="#ffffff" stroke-width="1.2" />
+<text x="230" y="318" font-size="12" fill="#64748b">staging</text>
+<line x1="74" y1="338.00" x2="330" y2="338.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="386.00" x2="330" y2="386.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="434.00" x2="330" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="482.00" x2="330" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="74" y1="482" x2="330" y2="482" stroke="#0f172a" stroke-width="1.5" />
+<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="74.00,356.78 202.00,356.78 330.00,419.39" />
+<circle cx="74.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="202.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="330.00" cy="419.39" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<polyline fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="74.00,356.78 202.00,356.78 330.00,356.78" />
+<circle cx="74.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="202.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="330.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<text x="74" y="506" font-size="12" fill="#64748b">09:00</text>
+<text x="330" y="506" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="74" y="328" font-size="12" fill="#64748b">max 2</text>
+<text x="74" y="524" font-size="12" fill="#64748b">0</text>
+<rect x="378" y="234" width="296" height="294" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="398" y="268" font-size="18" font-weight="700" fill="#0f172a">Error rate / bucket</text>
+<text x="398" y="292" font-size="14" fill="#475569">Largest gap -50 pp at 09:00</text>
+<line x1="398" y1="314" x2="416" y2="314" stroke="#2563eb" stroke-width="3" stroke-linecap="round" />
+<circle cx="407" cy="314" r="4" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.2" />
+<text x="426" y="318" font-size="12" fill="#64748b">prod</text>
+<line x1="526" y1="314" x2="544" y2="314" stroke="#f97316" stroke-width="3" stroke-linecap="round" />
+<circle cx="535" cy="314" r="4" fill="#ea580c" stroke="#ffffff" stroke-width="1.2" />
+<text x="554" y="318" font-size="12" fill="#64748b">staging</text>
+<line x1="398" y1="338.00" x2="654" y2="338.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="386.00" x2="654" y2="386.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="434.00" x2="654" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="482.00" x2="654" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="398" y1="482" x2="654" y2="482" stroke="#0f172a" stroke-width="1.5" />
+<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="398.00,356.78 526.00,482.00 654.00,482.00" />
+<circle cx="398.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="526.00" cy="482.00" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="654.00" cy="482.00" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<polyline fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="398.00,482.00 526.00,356.78 654.00,482.00" />
+<circle cx="398.00" cy="482.00" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="526.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="654.00" cy="482.00" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<text x="398" y="506" font-size="12" fill="#64748b">09:00</text>
+<text x="654" y="506" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="398" y="328" font-size="12" fill="#64748b">max 50%</text>
+<text x="398" y="524" font-size="12" fill="#64748b">0%</text>
+<rect x="702" y="234" width="296" height="294" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="722" y="268" font-size="18" font-weight="700" fill="#0f172a">Avg latency / bucket</text>
+<text x="722" y="292" font-size="14" fill="#475569">Largest gap +150 ms at 09:01</text>
+<line x1="722" y1="314" x2="740" y2="314" stroke="#2563eb" stroke-width="3" stroke-linecap="round" />
+<circle cx="731" cy="314" r="4" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.2" />
+<text x="750" y="318" font-size="12" fill="#64748b">prod</text>
+<line x1="850" y1="314" x2="868" y2="314" stroke="#f97316" stroke-width="3" stroke-linecap="round" />
+<circle cx="859" cy="314" r="4" fill="#ea580c" stroke="#ffffff" stroke-width="1.2" />
+<text x="878" y="318" font-size="12" fill="#64748b">staging</text>
+<line x1="722" y1="338.00" x2="978" y2="338.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="386.00" x2="978" y2="386.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="434.00" x2="978" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="482.00" x2="978" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
+<line x1="722" y1="482" x2="978" y2="482" stroke="#0f172a" stroke-width="1.5" />
+<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="722.00,372.72 850.00,425.08 978.00,472.89" />
+<circle cx="722.00" cy="372.72" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="850.00" cy="425.08" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="978.00" cy="472.89" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
+<polyline fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="722.00,420.53 850.00,356.78 978.00,428.50" />
+<circle cx="722.00" cy="420.53" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="850.00" cy="356.78" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<circle cx="978.00" cy="428.50" r="4.2" fill="#ea580c" stroke="#ffffff" stroke-width="1.4" />
+<text x="722" y="506" font-size="12" fill="#64748b">09:00</text>
+<text x="978" y="506" font-size="12" text-anchor="end" fill="#64748b">09:02</text>
+<text x="722" y="328" font-size="12" fill="#64748b">max 275 ms</text>
+<text x="722" y="524" font-size="12" fill="#64748b">0 ms</text>
+  <rect x="54" y="554" width="972" height="94" rx="22" fill="#ffffff" stroke="#d7dde8" stroke-width="1.5" />
+<text x="78" y="588" font-size="14" fill="#334155">Comparison: env=prod vs env=staging (staging minus prod)</text>
+<text x="78" y="610" font-size="14" fill="#334155">Coverage: 2026-04-18 09:00 → 09:03 UTC</text>
+<text x="78" y="632" font-size="14" fill="#334155">Window filter: full log span</text>
+<text x="78" y="654" font-size="14" fill="#334155">Aligned buckets: 3 (minute)</text>
+  <text x="78" y="636" font-size="12" fill="#64748b">Use the HTML companion for a browser-friendly release-review table with exact deltas and per-bucket rows.</text>
+</svg>
+  </section>
+  <section>
+    <h2>Summary delta table</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>env=prod</th>
+          <th>env=staging</th>
+          <th>Delta</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Requests</td><td>5</td><td>6</td><td>+1</td></tr><tr><td>Errors</td><td>1</td><td>1</td><td>0</td></tr><tr><td>Error rate</td><td>20%</td><td>16.7%</td><td>-3.3 pp</td></tr><tr><td>Avg latency</td><td>150 ms</td><td>175.8 ms</td><td>+25.8 ms</td></tr><tr><td>P95 latency</td><td>372 ms</td><td>360 ms</td><td>-12 ms</td></tr><tr><td>Max latency</td><td>420 ms</td><td>410 ms</td><td>-10 ms</td></tr><tr><td>Avg upstream latency</td><td>106.6 ms</td><td>128.3 ms</td><td>+21.7 ms</td></tr><tr><td>P95 upstream latency</td><td>276 ms</td><td>285 ms</td><td>+9 ms</td></tr><tr><td>Top path</td><td>/api/report (2)</td><td>/api/export (3)</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Aligned bucket rows</h2>
+    <p class="caption">Use these rows when you want exact per-bucket request, error-rate, and latency deltas beside the higher-level comparison card.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Bucket start</th>
+          <th>Bucket end</th>
+          <th>prod requests</th>
+          <th>staging requests</th>
+          <th>Δ requests</th>
+          <th>prod error rate</th>
+          <th>staging error rate</th>
+          <th>Δ error rate</th>
+          <th>prod avg latency</th>
+          <th>staging avg latency</th>
+          <th>Δ avg latency</th>
+          <th>prod top path</th>
+          <th>staging top path</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>2026-04-18T09:00:00+00:00</code></td><td><code>2026-04-18T09:01:00+00:00</code></td><td>2</td><td>2</td><td>0</td><td>50%</td><td>0%</td><td>-50 pp</td><td>240 ms</td><td>135 ms</td><td>-105 ms</td><td><code>/api/report</code></td><td><code>/api/report</code></td></tr><tr><td><code>2026-04-18T09:01:00+00:00</code></td><td><code>2026-04-18T09:02:00+00:00</code></td><td>2</td><td>2</td><td>0</td><td>0%</td><td>50%</td><td>+50 pp</td><td>125 ms</td><td>275 ms</td><td>+150 ms</td><td><code>/api/report</code></td><td><code>/api/report</code></td></tr><tr><td><code>2026-04-18T09:02:00+00:00</code></td><td><code>2026-04-18T09:03:00+00:00</code></td><td>1</td><td>2</td><td>+1</td><td>0%</td><td>0%</td><td>0 pp</td><td>20 ms</td><td>117.5 ms</td><td>+97.5 ms</td><td><code>/health</code></td><td><code>/health</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>

@@ -1,5 +1,18 @@
 # Log Analyzer Checklist
 
+## Facet comparison card slice (2026-04-18 15:55 UTC run)
+- [x] confirm repo sync before editing and preserve the existing unfinished local comparison-card work
+- [x] choose the queued follow-up around dedicated comparison-card SVG/HTML artifacts instead of starting a different project
+- [ ] add/update checklist + docs notes so the slice stays resumable
+- [ ] finish the comparison-card SVG/HTML rendering path and CLI export flags
+- [ ] add automated coverage for comparison-card helpers and CLI export validation
+- [ ] generate a committed sample release-review artifact bundle for README/portfolio screenshots
+- [ ] run targeted tests and smoke checks
+- [ ] run at least 3 review passes and fix issues found
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider a follow-up slice for trend-card annotations/callouts
+
 ## Facet comparison slice (2026-04-18 15:10 UTC run)
 - [x] confirm repo sync before editing and preserve the existing unfinished local comparison work
 - [x] choose the queued follow-up around side-by-side `prod` vs `staging` release-review comparisons
