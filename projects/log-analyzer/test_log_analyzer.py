@@ -85,6 +85,16 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIsNone(parsed.latency_ms)
         self.assertEqual(parsed.upstream_response_time_ms, 10.0)
 
+    def test_parse_line_preserves_named_fields_for_facets(self):
+        parsed = parse_line(
+            '10.0.0.6 - - [18/Apr/2026:09:05:00 +0000] "GET /api/report HTTP/1.1" 200 64 '
+            'request_time=0.120 env=prod region=us-east-1 release=2026.04'
+        )
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.named_fields['env'], 'prod')
+        self.assertEqual(parsed.named_fields['region'], 'us-east-1')
+        self.assertEqual(parsed.named_fields['release'], '2026.04')
+
     def test_analyze_lines_counts_combined_fields_and_latency(self):
         lines = [
             '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET / HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" 0.100',
@@ -237,6 +247,34 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['time_buckets'][0]['bucket_start'], '2026-04-18T09:00:00+00:00')
         self.assertEqual(result['time_buckets'][0]['bucket_end'], '2026-04-18T10:00:00+00:00')
 
+    def test_analyze_lines_builds_facet_breakdowns(self):
+        lines = [
+            '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.400 upstream_response_time=0.250 env=prod region=us-east-1',
+            '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.500 upstream_response_time=0.300 env=prod region=us-east-1',
+            '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 request_time=0.200 upstream_response_time=0.120 env=staging region=us-west-2',
+        ]
+        result = analyze_lines(
+            lines,
+            top_n=2,
+            latency_top_n=3,
+            hotspot_statuses=['500', '502'],
+            hotspot_methods=['POST'],
+            time_bucket_granularity='minute',
+            facet_fields=['env', 'region'],
+        )
+        self.assertEqual(
+            result['faceting'],
+            {'fields': ['env', 'region'], 'missing_value': '(missing)'},
+        )
+        self.assertEqual(result['path_latency_facet_breakdown'][0]['path'], '/api/report')
+        self.assertEqual(result['path_latency_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+        self.assertEqual(result['path_latency_facet_breakdown'][0]['average_ms'], 450.0)
+        self.assertEqual(result['upstream_path_latency_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
+        self.assertEqual(result['time_bucket_facet_breakdown'][0]['bucket_start'], '2026-04-18T09:00:00+00:00')
+        self.assertEqual(result['time_bucket_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+        self.assertEqual(result['time_bucket_facet_breakdown'][0]['request_count'], 2)
+        self.assertEqual(result['time_bucket_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
+
     def test_format_text_report_handles_empty_results(self):
         report = format_text_report(analyze_lines([], top_n=3))
         self.assertIn('Total requests: 0', report)
@@ -291,6 +329,40 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('Time bucket trends (minute):', report)
         self.assertIn('2026-04-18T09:00:00+00:00 -> requests=2, errors=1 (50.0%), top_path=/api/report (2)', report)
         self.assertIn('request latency: samples=2, avg=225.0, p95=382.5, max=400.0', report)
+
+    def test_format_text_report_mentions_facet_breakdowns(self):
+        report = format_text_report(
+            analyze_lines(
+                [
+                    '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.450 upstream_response_time=0.300 env=prod region=us-east-1',
+                    '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.500 upstream_response_time=0.320 env=prod region=us-east-1',
+                ],
+                top_n=1,
+                hotspot_statuses=['500', '502'],
+                hotspot_methods=['POST'],
+                time_bucket_granularity='minute',
+                facet_fields=['env', 'region'],
+            )
+        )
+        self.assertIn('Time bucket facet breakdowns: (facets: env, region)', report)
+        self.assertIn('2026-04-18T09:00:00+00:00 | env=prod, region=us-east-1 -> requests=2, errors=2 (100.0%), top_path=/api/report (2)', report)
+        self.assertIn('Per-path latency hotspots by facet (ms): (filters: status=500,502; method=POST) (facets: env, region)', report)
+        self.assertIn('/api/report | env=prod, region=us-east-1: count=2, avg=475.0, p95=497.5, max=500.0', report)
+
+    def test_format_text_report_omits_time_bucket_facet_section_without_bucketing(self):
+        report = format_text_report(
+            analyze_lines(
+                [
+                    '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.450 upstream_response_time=0.300 env=prod region=us-east-1',
+                ],
+                top_n=1,
+                hotspot_statuses=['500'],
+                hotspot_methods=['POST'],
+                facet_fields=['env', 'region'],
+            )
+        )
+        self.assertNotIn('Time bucket facet breakdowns:', report)
+        self.assertIn('Per-path latency hotspots by facet (ms): (filters: status=500; method=POST) (facets: env, region)', report)
 
     def test_cli_json_output_includes_named_timing_summaries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -443,6 +515,51 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['time_buckets'][0]['error_rate_pct'], 50.0)
             self.assertEqual(payload['time_buckets'][1]['bucket_start'], '2026-04-18T09:01:00+00:00')
             self.assertEqual(payload['time_buckets'][1]['error_count'], 1)
+
+    def test_cli_json_output_supports_facet_breakdowns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.400 upstream_response_time=0.250 env=prod region=us-east-1
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.500 upstream_response_time=0.300 env=prod region=us-east-1
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 request_time=0.200 upstream_response_time=0.120 env=staging region=us-west-2
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--time-bucket',
+                    'minute',
+                    '--hotspot-status',
+                    '500',
+                    '--hotspot-status',
+                    '502',
+                    '--hotspot-method',
+                    'POST',
+                    '--facet-field',
+                    'env',
+                    '--facet-field',
+                    'region',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload['faceting'], {'fields': ['env', 'region'], 'missing_value': '(missing)'})
+            self.assertEqual(payload['path_latency_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+            self.assertEqual(payload['path_latency_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
+            self.assertEqual(payload['time_bucket_facet_breakdown'][0]['request_count'], 2)
+            self.assertEqual(payload['time_bucket_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
 
     def test_cli_time_window_accepts_naive_iso_as_utc(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -707,6 +824,94 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(bucket_rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
             self.assertEqual(bucket_rows[0]['window_end'], '2026-04-18T09:00:59+00:00')
 
+    def test_cli_facet_csv_exports_include_named_field_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            summary_csv = Path(tmpdir) / 'exports' / 'summary.csv'
+            path_facet_csv = Path(tmpdir) / 'exports' / 'path-latency-facets.csv'
+            upstream_facet_csv = Path(tmpdir) / 'exports' / 'upstream-path-latency-facets.csv'
+            bucket_facet_csv = Path(tmpdir) / 'exports' / 'time-bucket-facets.csv'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.450 upstream_response_time=0.300 env=prod region=us-east-1
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.550 upstream_response_time=0.400 env=prod region=us-east-1
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 request_time=0.250 upstream_response_time=0.100 env=staging
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--summary-csv',
+                    str(summary_csv),
+                    '--path-latency-facet-csv',
+                    str(path_facet_csv),
+                    '--upstream-path-latency-facet-csv',
+                    str(upstream_facet_csv),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-facet-csv',
+                    str(bucket_facet_csv),
+                    '--hotspot-status',
+                    '500',
+                    '--hotspot-status',
+                    '502',
+                    '--hotspot-method',
+                    'POST',
+                    '--facet-field',
+                    'env',
+                    '--facet-field',
+                    'region',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            with summary_csv.open(encoding='utf-8', newline='') as handle:
+                summary_rows = list(csv.DictReader(handle))
+            self.assertTrue(any(row['metric'] == 'facet_fields' and row['value'] == 'env|region' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'missing_facet_value' and row['value'] == '(missing)' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'path_latency_facet_row_count' and row['value'] == '2' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'time_bucket_facet_row_count' and row['value'] == '2' for row in summary_rows))
+
+            with path_facet_csv.open(encoding='utf-8', newline='') as handle:
+                path_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(path_rows), 2)
+            self.assertEqual(path_rows[0]['path'], '/api/report')
+            self.assertEqual(path_rows[0]['facet_label'], 'env=prod, region=us-east-1')
+            self.assertEqual(path_rows[0]['facet_env'], 'prod')
+            self.assertEqual(path_rows[0]['facet_region'], 'us-east-1')
+            self.assertEqual(path_rows[0]['average_ms'], '500.0')
+            self.assertEqual(path_rows[1]['facet_region'], '(missing)')
+            self.assertEqual(path_rows[1]['status_filter'], '500|502')
+            self.assertEqual(path_rows[1]['method_filter'], 'POST')
+
+            with upstream_facet_csv.open(encoding='utf-8', newline='') as handle:
+                upstream_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(upstream_rows), 2)
+            self.assertEqual(upstream_rows[0]['facet_env'], 'prod')
+            self.assertEqual(upstream_rows[0]['average_ms'], '350.0')
+            self.assertEqual(upstream_rows[1]['facet_region'], '(missing)')
+
+            with bucket_facet_csv.open(encoding='utf-8', newline='') as handle:
+                bucket_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(bucket_rows), 2)
+            self.assertEqual(bucket_rows[0]['granularity'], 'minute')
+            self.assertEqual(bucket_rows[0]['bucket_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(bucket_rows[0]['facet_env'], 'prod')
+            self.assertEqual(bucket_rows[0]['facet_region'], 'us-east-1')
+            self.assertEqual(bucket_rows[0]['request_count'], '2')
+            self.assertEqual(bucket_rows[1]['facet_env'], 'staging')
+            self.assertEqual(bucket_rows[1]['facet_region'], '(missing)')
+
     def test_cli_text_output_mentions_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -795,6 +1000,76 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('--window-start must be less than or equal to --window-end', completed.stderr)
+
+    def test_cli_rejects_invalid_facet_field_name(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-field',
+                    'env-name',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--facet-field must look like a named log field', completed.stderr)
+
+    def test_cli_rejects_facet_csv_without_facet_field(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            facet_csv = Path(tmpdir) / 'exports' / 'path-facets.csv'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--path-latency-facet-csv',
+                    str(facet_csv),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('facet-specific export flags require at least one --facet-field', completed.stderr)
+
+    def test_cli_rejects_time_bucket_facet_csv_without_granularity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            bucket_csv = Path(tmpdir) / 'exports' / 'time-bucket-facets.csv'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--time-bucket-facet-csv',
+                    str(bucket_csv),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--time-bucket-facet-csv requires --time-bucket', completed.stderr)
 
     def test_cli_rejects_time_bucket_csv_without_granularity(self):
         with tempfile.TemporaryDirectory() as tmpdir:

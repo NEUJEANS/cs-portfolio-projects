@@ -6,7 +6,7 @@ import json
 import math
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
@@ -21,9 +21,11 @@ LOG_RE = re.compile(
 
 COMMON_LOG_TIMESTAMP_FORMAT = "%d/%b/%Y:%H:%M:%S %z"
 NAMED_FIELD_START_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
+FIELD_NAME_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
 STATUS_CODE_RE = re.compile(r'^\d{3}$')
 TIME_BUCKET_GRANULARITIES = ("minute", "hour")
+MISSING_FACET_VALUE = "(missing)"
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,7 @@ class ParsedLogLine:
     latency_ms: float | None = None
     request_time_ms: float | None = None
     upstream_response_time_ms: float | None = None
+    named_fields: dict[str, str] = field(default_factory=dict)
 
 
 def normalize_latency_ms(raw_latency: str | None) -> float | None:
@@ -146,6 +149,49 @@ def build_time_bucket_metadata(
     }
 
 
+def normalize_facet_fields(facet_fields: Iterable[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_name in facet_fields or []:
+        cleaned = raw_name.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        normalized.append(cleaned)
+        seen.add(cleaned)
+    return normalized
+
+
+def build_faceting_metadata(facet_fields: list[str]) -> dict[str, object] | None:
+    if not facet_fields:
+        return None
+    return {
+        "fields": facet_fields,
+        "missing_value": MISSING_FACET_VALUE,
+    }
+
+
+def resolve_named_field_value(named_fields: dict[str, str], field_name: str) -> str:
+    raw_value = named_fields.get(field_name)
+    if raw_value is None:
+        return MISSING_FACET_VALUE
+    cleaned = raw_value.strip()
+    if not cleaned:
+        return MISSING_FACET_VALUE
+    return cleaned
+
+
+def build_facet_values(named_fields: dict[str, str], facet_fields: list[str]) -> tuple[str, ...]:
+    return tuple(resolve_named_field_value(named_fields, field_name) for field_name in facet_fields)
+
+
+def build_facet_map(facet_fields: list[str], facet_values: tuple[str, ...]) -> dict[str, str]:
+    return {field_name: value for field_name, value in zip(facet_fields, facet_values, strict=True)}
+
+
+def format_facet_label(facets: dict[str, str]) -> str:
+    return ", ".join(f"{field_name}={value}" for field_name, value in facets.items())
+
+
 def summarize_time_buckets(
     bucket_rows: dict[datetime, dict[str, object]],
     granularity: str | None,
@@ -171,6 +217,58 @@ def summarize_time_buckets(
             {
                 "bucket_start": format_datetime_for_output(bucket_start),
                 "bucket_end": format_datetime_for_output(bucket_start + bucket_delta),
+                "request_count": request_count,
+                "error_count": error_count,
+                "error_rate_pct": round((error_count / request_count) * 100, 3)
+                if request_count
+                else 0.0,
+                "top_path": top_path,
+                "top_path_count": top_path_count,
+                "latency_sample_count": request_summary["count"] if request_summary else 0,
+                "average_latency_ms": request_summary["average_ms"] if request_summary else None,
+                "p95_latency_ms": request_summary["p95_ms"] if request_summary else None,
+                "max_latency_ms": request_summary["max_ms"] if request_summary else None,
+                "upstream_latency_sample_count": upstream_summary["count"]
+                if upstream_summary
+                else 0,
+                "average_upstream_latency_ms": upstream_summary["average_ms"]
+                if upstream_summary
+                else None,
+                "p95_upstream_latency_ms": upstream_summary["p95_ms"] if upstream_summary else None,
+                "max_upstream_latency_ms": upstream_summary["max_ms"] if upstream_summary else None,
+            }
+        )
+    return rows
+
+
+def summarize_time_bucket_facets(
+    bucket_rows: dict[tuple[datetime, tuple[str, ...]], dict[str, object]],
+    granularity: str | None,
+    facet_fields: list[str],
+) -> list[dict]:
+    if granularity is None or not facet_fields:
+        return []
+
+    rows: list[dict] = []
+    bucket_delta = get_time_bucket_delta(granularity)
+    for bucket_start, facet_values in sorted(bucket_rows, key=lambda item: (item[0], item[1])):
+        bucket = bucket_rows[(bucket_start, facet_values)]
+        request_count = int(bucket["request_count"])
+        error_count = int(bucket["error_count"])
+        path_counts = bucket["path_counts"]
+        request_summary = summarize_latencies(bucket["latencies_ms"])
+        upstream_summary = summarize_latencies(bucket["upstream_latencies_ms"])
+        top_path = None
+        top_path_count = 0
+        if path_counts:
+            top_path, top_path_count = path_counts.most_common(1)[0]
+        facets = build_facet_map(facet_fields, facet_values)
+        rows.append(
+            {
+                "bucket_start": format_datetime_for_output(bucket_start),
+                "bucket_end": format_datetime_for_output(bucket_start + bucket_delta),
+                "facets": facets,
+                "facet_label": format_facet_label(facets),
                 "request_count": request_count,
                 "error_count": error_count,
                 "error_rate_pct": round((error_count / request_count) * 100, 3)
@@ -276,6 +374,37 @@ def summarize_path_latencies(path_latencies: dict[str, list[float]], limit: int)
     return rows[:limit]
 
 
+def summarize_path_latencies_by_facet(
+    path_latencies: dict[tuple[str, tuple[str, ...]], list[float]],
+    facet_fields: list[str],
+    limit: int,
+) -> list[dict]:
+    rows = []
+    for (path, facet_values), latencies in path_latencies.items():
+        summary = summarize_latencies(latencies)
+        if summary is None:
+            continue
+        facets = build_facet_map(facet_fields, facet_values)
+        rows.append(
+            {
+                "path": path,
+                "facets": facets,
+                "facet_label": format_facet_label(facets),
+                **summary,
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            -row["average_ms"],
+            -row["count"],
+            row["path"],
+            row["facet_label"],
+        )
+    )
+    return rows[:limit]
+
+
 def normalize_hotspot_filters(
     statuses: Iterable[str] | None = None,
     methods: Iterable[str] | None = None,
@@ -336,6 +465,13 @@ def format_hotspot_heading(label: str, hotspot_filters: dict[str, list[str]] | N
     return f"{label} (filters: {'; '.join(parts)})"
 
 
+def format_faceting_heading(label: str, faceting: dict[str, object] | None) -> str:
+    if faceting is None:
+        return label
+    fields = faceting["fields"]
+    return f"{label} (facets: {', '.join(fields)})"
+
+
 def format_bucket_latency_summary(
     sample_count: int,
     average_ms: float | None,
@@ -378,6 +514,7 @@ def parse_line(line: str) -> ParsedLogLine | None:
         latency_ms=primary_latency_ms,
         request_time_ms=request_time_ms,
         upstream_response_time_ms=upstream_response_time_ms,
+        named_fields=named_fields,
     )
 
 
@@ -390,6 +527,7 @@ def analyze_lines(
     window_start: datetime | None = None,
     window_end: datetime | None = None,
     time_bucket_granularity: str | None = None,
+    facet_fields: Iterable[str] | None = None,
 ) -> dict:
     status_counts = Counter()
     ip_counts = Counter()
@@ -401,7 +539,10 @@ def analyze_lines(
     upstream_latencies_ms: list[float] = []
     path_latencies: dict[str, list[float]] = defaultdict(list)
     upstream_path_latencies: dict[str, list[float]] = defaultdict(list)
+    path_latencies_by_facet: dict[tuple[str, tuple[str, ...]], list[float]] = defaultdict(list)
+    upstream_path_latencies_by_facet: dict[tuple[str, tuple[str, ...]], list[float]] = defaultdict(list)
     time_bucket_rows: dict[datetime, dict[str, object]] = {}
+    time_bucket_facet_rows: dict[tuple[datetime, tuple[str, ...]], dict[str, object]] = {}
     total_bytes = 0
     total_requests = 0
     invalid_lines = 0
@@ -409,6 +550,7 @@ def analyze_lines(
 
     latency_limit = top_n if latency_top_n is None else latency_top_n
     hotspot_filters = normalize_hotspot_filters(hotspot_statuses, hotspot_methods)
+    normalized_facet_fields = normalize_facet_fields(facet_fields)
 
     for line in lines:
         parsed = parse_line(line)
@@ -418,6 +560,10 @@ def analyze_lines(
         if not matches_time_window(parsed.timestamp, window_start, window_end):
             excluded_requests += 1
             continue
+
+        facet_values: tuple[str, ...] | None = None
+        if normalized_facet_fields:
+            facet_values = build_facet_values(parsed.named_fields, normalized_facet_fields)
 
         total_requests += 1
         total_bytes += parsed.bytes_sent
@@ -433,10 +579,16 @@ def analyze_lines(
             latencies_ms.append(parsed.latency_ms)
             if matches_hotspot_filters(parsed, hotspot_filters):
                 path_latencies[parsed.path].append(parsed.latency_ms)
+                if facet_values is not None:
+                    path_latencies_by_facet[(parsed.path, facet_values)].append(parsed.latency_ms)
         if parsed.upstream_response_time_ms is not None:
             upstream_latencies_ms.append(parsed.upstream_response_time_ms)
             if matches_hotspot_filters(parsed, hotspot_filters):
                 upstream_path_latencies[parsed.path].append(parsed.upstream_response_time_ms)
+                if facet_values is not None:
+                    upstream_path_latencies_by_facet[(parsed.path, facet_values)].append(
+                        parsed.upstream_response_time_ms
+                    )
 
         if time_bucket_granularity and parsed.timestamp is not None:
             bucket_start = bucket_timestamp(parsed.timestamp, time_bucket_granularity)
@@ -459,8 +611,29 @@ def analyze_lines(
             if parsed.upstream_response_time_ms is not None:
                 bucket["upstream_latencies_ms"].append(parsed.upstream_response_time_ms)
 
+            if facet_values is not None:
+                facet_bucket = time_bucket_facet_rows.setdefault(
+                    (bucket_start, facet_values),
+                    {
+                        "request_count": 0,
+                        "error_count": 0,
+                        "path_counts": Counter(),
+                        "latencies_ms": [],
+                        "upstream_latencies_ms": [],
+                    },
+                )
+                facet_bucket["request_count"] += 1
+                if parsed.status.startswith(("4", "5")):
+                    facet_bucket["error_count"] += 1
+                facet_bucket["path_counts"][parsed.path] += 1
+                if parsed.latency_ms is not None:
+                    facet_bucket["latencies_ms"].append(parsed.latency_ms)
+                if parsed.upstream_response_time_ms is not None:
+                    facet_bucket["upstream_latencies_ms"].append(parsed.upstream_response_time_ms)
+
     average_bytes = round(total_bytes / total_requests, 2) if total_requests else 0.0
     time_buckets = summarize_time_buckets(time_bucket_rows, time_bucket_granularity)
+    faceting = build_faceting_metadata(normalized_facet_fields)
     return {
         "total_requests": total_requests,
         "invalid_lines": invalid_lines,
@@ -475,6 +648,7 @@ def analyze_lines(
         "latency_summary": summarize_latencies(latencies_ms),
         "upstream_latency_summary": summarize_latencies(upstream_latencies_ms),
         "hotspot_filters": hotspot_filters,
+        "faceting": faceting,
         "time_window": build_time_window_metadata(
             window_start,
             window_end,
@@ -486,9 +660,24 @@ def analyze_lines(
             len(time_buckets),
         ),
         "time_buckets": time_buckets,
+        "time_bucket_facet_breakdown": summarize_time_bucket_facets(
+            time_bucket_facet_rows,
+            time_bucket_granularity,
+            normalized_facet_fields,
+        ),
         "path_latency_breakdown": summarize_path_latencies(path_latencies, latency_limit),
+        "path_latency_facet_breakdown": summarize_path_latencies_by_facet(
+            path_latencies_by_facet,
+            normalized_facet_fields,
+            latency_limit,
+        ),
         "upstream_path_latency_breakdown": summarize_path_latencies(
             upstream_path_latencies, latency_limit
+        ),
+        "upstream_path_latency_facet_breakdown": summarize_path_latencies_by_facet(
+            upstream_path_latencies_by_facet,
+            normalized_facet_fields,
+            latency_limit,
         ),
     }
 
@@ -528,6 +717,44 @@ def format_text_report(result: dict) -> str:
                 lines.append(
                     "  "
                     f"{bucket['bucket_start']} -> requests={bucket['request_count']}, "
+                    f"errors={bucket['error_count']} ({bucket['error_rate_pct']}%)"
+                    f"{top_path_fragment}"
+                )
+                lines.append(
+                    "    request latency: "
+                    + format_bucket_latency_summary(
+                        bucket["latency_sample_count"],
+                        bucket["average_latency_ms"],
+                        bucket["p95_latency_ms"],
+                        bucket["max_latency_ms"],
+                    )
+                )
+                lines.append(
+                    "    upstream latency: "
+                    + format_bucket_latency_summary(
+                        bucket["upstream_latency_sample_count"],
+                        bucket["average_upstream_latency_ms"],
+                        bucket["p95_upstream_latency_ms"],
+                        bucket["max_upstream_latency_ms"],
+                    )
+                )
+        else:
+            lines.append("  (none)")
+
+    if result["faceting"] and result["time_bucketing"]:
+        lines.append(format_faceting_heading("Time bucket facet breakdowns:", result["faceting"]))
+        if result["time_bucket_facet_breakdown"]:
+            for bucket in result["time_bucket_facet_breakdown"]:
+                top_path = bucket["top_path"]
+                top_path_fragment = (
+                    f", top_path={top_path} ({bucket['top_path_count']})"
+                    if top_path
+                    else ""
+                )
+                lines.append(
+                    "  "
+                    f"{bucket['bucket_start']} | {bucket['facet_label']} -> "
+                    f"requests={bucket['request_count']}, "
                     f"errors={bucket['error_count']} ({bucket['error_rate_pct']}%)"
                     f"{top_path_fragment}"
                 )
@@ -630,6 +857,26 @@ def format_text_report(result: dict) -> str:
     else:
         lines.append("  (none)")
 
+    if result["faceting"]:
+        lines.append(
+            format_faceting_heading(
+                format_hotspot_heading(
+                    "Per-path latency hotspots by facet (ms):",
+                    result["hotspot_filters"],
+                ),
+                result["faceting"],
+            )
+        )
+        if result["path_latency_facet_breakdown"]:
+            for row in result["path_latency_facet_breakdown"]:
+                lines.append(
+                    "  "
+                    f"{row['path']} | {row['facet_label']}: count={row['count']}, "
+                    f"avg={row['average_ms']}, p95={row['p95_ms']}, max={row['max_ms']}"
+                )
+        else:
+            lines.append("  (none)")
+
     lines.append(
         format_hotspot_heading(
             "Per-path upstream latency hotspots (ms):", result["hotspot_filters"]
@@ -644,6 +891,26 @@ def format_text_report(result: dict) -> str:
             )
     else:
         lines.append("  (none)")
+
+    if result["faceting"]:
+        lines.append(
+            format_faceting_heading(
+                format_hotspot_heading(
+                    "Per-path upstream latency hotspots by facet (ms):",
+                    result["hotspot_filters"],
+                ),
+                result["faceting"],
+            )
+        )
+        if result["upstream_path_latency_facet_breakdown"]:
+            for row in result["upstream_path_latency_facet_breakdown"]:
+                lines.append(
+                    "  "
+                    f"{row['path']} | {row['facet_label']}: count={row['count']}, "
+                    f"avg={row['average_ms']}, p95={row['p95_ms']}, max={row['max_ms']}"
+                )
+        else:
+            lines.append("  (none)")
 
     return "\n".join(lines)
 
@@ -703,6 +970,40 @@ def write_summary_csv(destination: str | Path, result: dict) -> None:
                 },
             ]
         )
+
+    if result["faceting"]:
+        rows.extend(
+            [
+                {
+                    "section": "summary",
+                    "metric": "facet_fields",
+                    "value": "|".join(result["faceting"]["fields"]),
+                },
+                {
+                    "section": "summary",
+                    "metric": "missing_facet_value",
+                    "value": result["faceting"]["missing_value"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "path_latency_facet_row_count",
+                    "value": len(result["path_latency_facet_breakdown"]),
+                },
+                {
+                    "section": "summary",
+                    "metric": "upstream_path_latency_facet_row_count",
+                    "value": len(result["upstream_path_latency_facet_breakdown"]),
+                },
+            ]
+        )
+        if result["time_bucketing"]:
+            rows.append(
+                {
+                    "section": "summary",
+                    "metric": "time_bucket_facet_row_count",
+                    "value": len(result["time_bucket_facet_breakdown"]),
+                }
+            )
 
     for status, count in sorted(result["status_counts"].items()):
         rows.append({"section": "status_counts", "key": status, "count": count})
@@ -781,6 +1082,55 @@ def write_path_latency_csv(
             )
 
 
+def write_path_latency_facet_csv(
+    destination: str | Path,
+    rows: list[dict],
+    facet_fields: list[str],
+    hotspot_filters: dict[str, list[str]] | None = None,
+    time_window: dict[str, str | int] | None = None,
+) -> None:
+    facet_fieldnames = [f"facet_{field_name}" for field_name in facet_fields]
+    fieldnames = [
+        "path",
+        "facet_label",
+        *facet_fieldnames,
+        "count",
+        "average_ms",
+        "p50_ms",
+        "p95_ms",
+        "p99_ms",
+        "max_ms",
+        "status_filter",
+        "method_filter",
+        "window_start",
+        "window_end",
+    ]
+    destination_path = ensure_parent_directory(destination)
+    with destination_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            combined_row = {
+                **row,
+                "status_filter": "|".join(hotspot_filters["statuses"])
+                if hotspot_filters
+                else "",
+                "method_filter": "|".join(hotspot_filters["methods"])
+                if hotspot_filters
+                else "",
+                "window_start": str(time_window["start"]) if time_window else "",
+                "window_end": str(time_window["end"]) if time_window else "",
+            }
+            for field_name in facet_fields:
+                combined_row[f"facet_{field_name}"] = row["facets"].get(field_name, "")
+            writer.writerow(
+                {
+                    field: "" if combined_row.get(field) is None else combined_row.get(field, "")
+                    for field in fieldnames
+                }
+            )
+
+
 def write_time_bucket_csv(
     destination: str | Path,
     rows: list[dict],
@@ -826,6 +1176,57 @@ def write_time_bucket_csv(
             )
 
 
+def write_time_bucket_facet_csv(
+    destination: str | Path,
+    rows: list[dict],
+    facet_fields: list[str],
+    time_bucketing: dict[str, str | int] | None = None,
+    time_window: dict[str, str | int] | None = None,
+) -> None:
+    facet_fieldnames = [f"facet_{field_name}" for field_name in facet_fields]
+    fieldnames = [
+        "granularity",
+        "bucket_start",
+        "bucket_end",
+        "facet_label",
+        *facet_fieldnames,
+        "request_count",
+        "error_count",
+        "error_rate_pct",
+        "top_path",
+        "top_path_count",
+        "latency_sample_count",
+        "average_latency_ms",
+        "p95_latency_ms",
+        "max_latency_ms",
+        "upstream_latency_sample_count",
+        "average_upstream_latency_ms",
+        "p95_upstream_latency_ms",
+        "max_upstream_latency_ms",
+        "window_start",
+        "window_end",
+    ]
+    destination_path = ensure_parent_directory(destination)
+    with destination_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            combined_row = {
+                "granularity": time_bucketing["granularity"] if time_bucketing else "",
+                "window_start": str(time_window["start"]) if time_window else "",
+                "window_end": str(time_window["end"]) if time_window else "",
+                **row,
+            }
+            for field_name in facet_fields:
+                combined_row[f"facet_{field_name}"] = row["facets"].get(field_name, "")
+            writer.writerow(
+                {
+                    field: "" if combined_row.get(field) is None else combined_row.get(field, "")
+                    for field in fieldnames
+                }
+            )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Analyze common, combined, and latency-augmented web access logs"
@@ -852,8 +1253,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path for a per-path request-latency breakdown CSV export",
     )
     parser.add_argument(
+        "--path-latency-facet-csv",
+        help=(
+            "Optional path for a per-path request-latency breakdown split by selected "
+            "--facet-field values"
+        ),
+    )
+    parser.add_argument(
         "--upstream-path-latency-csv",
         help="Optional path for a per-path upstream-latency breakdown CSV export",
+    )
+    parser.add_argument(
+        "--upstream-path-latency-facet-csv",
+        help=(
+            "Optional path for a per-path upstream-latency breakdown split by selected "
+            "--facet-field values"
+        ),
     )
     parser.add_argument(
         "--time-bucket",
@@ -866,6 +1281,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--time-bucket-csv",
         help="Optional path for a time-bucket trend CSV export (requires --time-bucket)",
+    )
+    parser.add_argument(
+        "--time-bucket-facet-csv",
+        help=(
+            "Optional path for a time-bucket trend CSV split by selected --facet-field "
+            "values (requires --time-bucket)"
+        ),
     )
     parser.add_argument(
         "--hotspot-status",
@@ -883,6 +1305,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Restrict per-path hotspot breakdowns/CSV exports to matching HTTP methods "
             "(repeatable, e.g. --hotspot-method POST)"
+        ),
+    )
+    parser.add_argument(
+        "--facet-field",
+        action="append",
+        default=[],
+        help=(
+            "Named log field to surface as a deployment/environment facet in dedicated "
+            "breakdowns and exports (repeatable, e.g. --facet-field env --facet-field region)"
         ),
     )
     parser.add_argument(
@@ -926,8 +1357,31 @@ def main(argv: list[str] | None = None) -> int:
         )
     if any(not method.strip() for method in args.hotspot_method):
         parser.error("--hotspot-method must not be blank")
+    if any(not field_name.strip() for field_name in args.facet_field):
+        parser.error("--facet-field must not be blank")
+    invalid_facet_fields = [
+        field_name for field_name in args.facet_field if not FIELD_NAME_RE.match(field_name.strip())
+    ]
+    if invalid_facet_fields:
+        parser.error(
+            "--facet-field must look like a named log field "
+            f"(letters/numbers/underscore only; received: {', '.join(invalid_facet_fields)})"
+        )
     if args.time_bucket_csv and not args.time_bucket:
         parser.error("--time-bucket-csv requires --time-bucket")
+    if args.time_bucket_facet_csv and not args.time_bucket:
+        parser.error("--time-bucket-facet-csv requires --time-bucket")
+
+    normalized_facet_fields = normalize_facet_fields(args.facet_field)
+    facet_export_flags = [
+        args.path_latency_facet_csv,
+        args.upstream_path_latency_facet_csv,
+        args.time_bucket_facet_csv,
+    ]
+    if any(facet_export_flags) and not normalized_facet_fields:
+        parser.error(
+            "facet-specific export flags require at least one --facet-field"
+        )
 
     window_start = None
     if args.window_start:
@@ -962,6 +1416,7 @@ def main(argv: list[str] | None = None) -> int:
             window_start=window_start,
             window_end=window_end,
             time_bucket_granularity=args.time_bucket,
+            facet_fields=normalized_facet_fields,
         )
 
     if args.summary_csv:
@@ -973,6 +1428,14 @@ def main(argv: list[str] | None = None) -> int:
             result["hotspot_filters"],
             result["time_window"],
         )
+    if args.path_latency_facet_csv:
+        write_path_latency_facet_csv(
+            args.path_latency_facet_csv,
+            result["path_latency_facet_breakdown"],
+            normalized_facet_fields,
+            result["hotspot_filters"],
+            result["time_window"],
+        )
     if args.upstream_path_latency_csv:
         write_path_latency_csv(
             args.upstream_path_latency_csv,
@@ -980,10 +1443,26 @@ def main(argv: list[str] | None = None) -> int:
             result["hotspot_filters"],
             result["time_window"],
         )
+    if args.upstream_path_latency_facet_csv:
+        write_path_latency_facet_csv(
+            args.upstream_path_latency_facet_csv,
+            result["upstream_path_latency_facet_breakdown"],
+            normalized_facet_fields,
+            result["hotspot_filters"],
+            result["time_window"],
+        )
     if args.time_bucket_csv:
         write_time_bucket_csv(
             args.time_bucket_csv,
             result["time_buckets"],
+            result["time_bucketing"],
+            result["time_window"],
+        )
+    if args.time_bucket_facet_csv:
+        write_time_bucket_facet_csv(
+            args.time_bucket_facet_csv,
+            result["time_bucket_facet_breakdown"],
+            normalized_facet_fields,
             result["time_bucketing"],
             result["time_window"],
         )

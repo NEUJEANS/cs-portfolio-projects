@@ -8,13 +8,14 @@
 - [x] add hotspot status/method drill-down filters with self-describing JSON/CSV metadata
 - [x] add inclusive `--window-start` / `--window-end` filtering with matched/excluded counts and export metadata
 - [x] add minute/hour time-bucket summaries and `--time-bucket-csv` exports for chart-ready trend analysis
+- [x] add repeatable `--facet-field` support plus per-facet hotspot/time-bucket breakdowns and dedicated facet CSV exports
 
 ## Current quality checks
-- [x] README reflects the shipped CLI flags, time-bucket workflow, and export metadata
-- [x] unittest coverage includes timestamp parsing, time-window filtering, time-bucket summaries, CSV metadata, and CLI validation errors
+- [x] README reflects the shipped facet flags, hotspot/time-bucket workflows, and export metadata
+- [x] unittest coverage includes named-field parsing, facet breakdowns, facet CSV metadata, and CLI validation errors
 - [x] project is resumable via review logs and wrap-up notes in `docs/`
 
 ## Next follow-up ideas
-- [ ] optionally group hotspot exports by deployment/environment labels from richer custom log formats
-- [ ] add deployment/environment facets to time-bucket exports so charts can be split by shard, release, or region
 - [ ] generate ready-to-embed SVG/HTML mini trend cards directly from exported bucket data
+- [ ] add comparison helpers that diff two facet values (for example `prod` vs `staging`) side by side for release reviews
+- [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
