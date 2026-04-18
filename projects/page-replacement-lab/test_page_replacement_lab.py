@@ -12,6 +12,7 @@ if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
 from page_replacement_lab import (  # noqa: E402
+    ALGORITHMS,
     TRACE_BENCHMARKS,
     WORKLOAD_PRESETS,
     compare_algorithms,
@@ -26,16 +27,21 @@ SCRIPT = PROJECT_DIR / "page_replacement_lab.py"
 
 
 class PageReplacementSimulationTests(unittest.TestCase):
-    def test_classic_reference_fault_counts_include_clock(self) -> None:
+    def test_classic_reference_fault_counts_include_aging(self) -> None:
         self.assertEqual(simulate("fifo", REFERENCE, 3).page_faults, 9)
         self.assertEqual(simulate("clock", REFERENCE, 3).page_faults, 9)
+        self.assertEqual(simulate("aging", REFERENCE, 3).page_faults, 10)
         self.assertEqual(simulate("lru", REFERENCE, 3).page_faults, 10)
         self.assertEqual(simulate("opt", REFERENCE, 3).page_faults, 7)
 
+    def test_aging_matches_lru_on_classic_reference_at_four_frames(self) -> None:
+        self.assertEqual(simulate("aging", REFERENCE, 4).page_faults, 8)
+        self.assertEqual(simulate("aging", REFERENCE, 4).page_faults, simulate("lru", REFERENCE, 4).page_faults)
+
     def test_compare_algorithms_orders_all_strategies(self) -> None:
         results = compare_algorithms(REFERENCE, 4)
-        self.assertEqual([result.algorithm for result in results], ["fifo", "clock", "lru", "opt"])
-        self.assertEqual([result.page_faults for result in results], [10, 10, 8, 6])
+        self.assertEqual([result.algorithm for result in results], list(ALGORITHMS))
+        self.assertEqual([result.page_faults for result in results], [10, 10, 8, 8, 6])
 
     def test_study_detects_fifo_and_clock_regressions(self) -> None:
         study = study_frame_counts(REFERENCE, 2, 5)
@@ -98,8 +104,8 @@ class PageReplacementSimulationTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["frame_count"], 3)
         self.assertEqual(payload["reference_string"], REFERENCE)
-        self.assertEqual(payload["results"][1]["algorithm"], "clock")
-        self.assertEqual(payload["results"][3]["page_faults"], 7)
+        self.assertEqual([result["algorithm"] for result in payload["results"]], list(ALGORITHMS))
+        self.assertEqual(payload["results"][-1]["page_faults"], 7)
 
     def test_cli_compare_json_works_with_preset(self) -> None:
         completed = subprocess.run(
@@ -121,7 +127,7 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(payload["reference_source"], "preset:classic-belady")
         self.assertEqual(
             [result["algorithm"] for result in payload["results"]],
-            ["fifo", "clock", "lru", "opt"],
+            list(ALGORITHMS),
         )
 
     def test_cli_compare_json_works_with_benchmark(self) -> None:
@@ -144,7 +150,8 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(payload["reference_source"], "benchmark:db-hotset-scan")
         self.assertGreater(len(payload["reference_string"]), 40)
         self.assertEqual(payload["results"][0]["algorithm"], "fifo")
-        self.assertEqual(len(payload["results"]), 4)
+        self.assertEqual(payload["results"][2]["algorithm"], "aging")
+        self.assertEqual(len(payload["results"]), len(ALGORITHMS))
 
     def test_cli_list_presets_json_includes_known_workloads(self) -> None:
         completed = subprocess.run(
@@ -207,16 +214,17 @@ class PageReplacementSimulationTests(unittest.TestCase):
             csv_output = csv_path.read_text(encoding="utf-8")
 
             self.assertIn("# Page Replacement Study Report", markdown)
-            self.assertIn("| Frames | FIFO | Clock | LRU | OPT | Winner |", markdown)
+            self.assertIn("| Frames | FIFO | CLOCK | AGING | LRU | OPT | Winner |", markdown)
             self.assertIn("frames 3 -> 4", markdown)
             self.assertIn("<svg", svg)
             self.assertIn("Page faults vs frame count", svg)
             self.assertIn("classic-belady", svg)
+            self.assertIn("AGING", svg)
             self.assertIn(
-                "frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source",
+                "frames,fifo_faults,clock_faults,aging_faults,lru_faults,opt_faults,best_algorithms,reference_source",
                 csv_output,
             )
-            self.assertIn("3,9,9,10,7,opt,preset:classic-belady", csv_output)
+            self.assertIn("3,9,9,10,10,7,opt,preset:classic-belady", csv_output)
 
     def test_cli_gallery_writes_html_and_companion_artifacts_for_presets_and_benchmarks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -256,8 +264,10 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("id=\"workload-compiler-phase-shift\"", html)
             self.assertIn("compiler-phase-shift-study.svg", html)
             self.assertIn(">benchmark<", html)
+            self.assertIn("AGING", html)
             self.assertIn('"reference_source": "preset:classic-belady"', classic_json)
             self.assertIn('"reference_source": "benchmark:compiler-phase-shift"', benchmark_json)
+            self.assertIn('"aging": {', benchmark_json)
             self.assertIn("page-replacement-compiler-phase-shift-title", benchmark_svg)
             self.assertIn("benchmark compiler-phase-shift", benchmark_markdown)
 

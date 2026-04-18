@@ -19,14 +19,14 @@
 
 ## Faults by frame count
 
-| Frames | FIFO | Clock | LRU | OPT | Winner |
-| ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 9 | 9 | 10 | 7 | opt |
-| 4 | 10 | 10 | 8 | 6 | opt |
-| 5 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
-| 6 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
-| 7 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
-| 8 | 5 | 5 | 5 | 5 | fifo/clock/lru/opt |
+| Frames | FIFO | CLOCK | AGING | LRU | OPT | Winner |
+| ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| 3 | 9 | 9 | 10 | 10 | 7 | opt |
+| 4 | 10 | 10 | 8 | 8 | 6 | opt |
+| 5 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/lru/opt |
+| 6 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/lru/opt |
+| 7 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/lru/opt |
+| 8 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/lru/opt |
 
 ## Regression callouts
 

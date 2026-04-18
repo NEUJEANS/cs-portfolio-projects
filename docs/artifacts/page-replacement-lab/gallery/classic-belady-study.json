@@ -27,6 +27,11 @@
           "hits": 3,
           "hit_rate": 0.25
         },
+        "aging": {
+          "page_faults": 10,
+          "hits": 2,
+          "hit_rate": 0.166667
+        },
         "lru": {
           "page_faults": 10,
           "hits": 2,
@@ -52,6 +57,11 @@
           "hits": 2,
           "hit_rate": 0.166667
         },
+        "aging": {
+          "page_faults": 8,
+          "hits": 4,
+          "hit_rate": 0.333333
+        },
         "lru": {
           "page_faults": 8,
           "hits": 4,
@@ -73,6 +83,11 @@
           "hit_rate": 0.583333
         },
         "clock": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "aging": {
           "page_faults": 5,
           "hits": 7,
           "hit_rate": 0.583333
@@ -102,6 +117,11 @@
           "hits": 7,
           "hit_rate": 0.583333
         },
+        "aging": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
         "lru": {
           "page_faults": 5,
           "hits": 7,
@@ -127,6 +147,11 @@
           "hits": 7,
           "hit_rate": 0.583333
         },
+        "aging": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
         "lru": {
           "page_faults": 5,
           "hits": 7,
@@ -148,6 +173,11 @@
           "hit_rate": 0.583333
         },
         "clock": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "aging": {
           "page_faults": 5,
           "hits": 7,
           "hit_rate": 0.583333

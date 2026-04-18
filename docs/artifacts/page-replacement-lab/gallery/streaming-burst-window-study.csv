@@ -1,7 +1,7 @@
-frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source
-3,96,96,96,59,opt,benchmark:streaming-burst-window
-4,72,72,64,46,opt,benchmark:streaming-burst-window
-5,72,71,64,36,opt,benchmark:streaming-burst-window
-6,36,36,36,28,opt,benchmark:streaming-burst-window
-7,36,36,36,28,opt,benchmark:streaming-burst-window
-8,36,36,36,28,opt,benchmark:streaming-burst-window
+frames,fifo_faults,clock_faults,aging_faults,lru_faults,opt_faults,best_algorithms,reference_source
+3,96,96,96,96,59,opt,benchmark:streaming-burst-window
+4,72,72,64,64,46,opt,benchmark:streaming-burst-window
+5,72,71,64,64,36,opt,benchmark:streaming-burst-window
+6,36,36,36,36,28,opt,benchmark:streaming-burst-window
+7,36,36,36,36,28,opt,benchmark:streaming-burst-window
+8,36,36,36,36,28,opt,benchmark:streaming-burst-window

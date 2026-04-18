@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="title desc">
-  <title id="title">Page replacement frame study chart</title>
-  <desc id="desc">Page-fault vs frame-count chart for preset classic-belady — classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="page-replacement-study-title page-replacement-study-desc">
+  <title id="page-replacement-study-title">Page replacement frame study chart</title>
+  <desc id="page-replacement-study-desc">Page-fault vs frame-count chart for preset classic-belady — classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames</desc>
   <rect width="100%" height="100%" fill="#f8fafc" />
   <rect x="36" y="28" width="1008" height="664" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
   <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Page faults vs frame count</text>
@@ -9,10 +9,12 @@
 <text x="122" y="77" font-size="14" fill="#0f172a">FIFO</text>
 <line x1="234" y1="72" x2="262" y2="72" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-dasharray="10 8" />
 <text x="272" y="77" font-size="14" fill="#0f172a">CLOCK</text>
-<line x1="384" y1="72" x2="412" y2="72" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 7" />
-<text x="422" y="77" font-size="14" fill="#0f172a">LRU</text>
-<line x1="534" y1="72" x2="562" y2="72" stroke="#10b981" stroke-width="4" stroke-linecap="round" />
-<text x="572" y="77" font-size="14" fill="#0f172a">OPT</text>
+<line x1="384" y1="72" x2="412" y2="72" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 6" />
+<text x="422" y="77" font-size="14" fill="#0f172a">AGING</text>
+<line x1="534" y1="72" x2="562" y2="72" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 7" />
+<text x="572" y="77" font-size="14" fill="#0f172a">LRU</text>
+<line x1="684" y1="72" x2="712" y2="72" stroke="#10b981" stroke-width="4" stroke-linecap="round" />
+<text x="722" y="77" font-size="14" fill="#0f172a">OPT</text>
   <line x1="84" y1="118" x2="84" y2="478" stroke="#0f172a" stroke-width="2" />
   <line x1="84" y1="478" x2="804" y2="478" stroke="#0f172a" stroke-width="2" />
 <line x1="84" y1="478.00" x2="804" y2="478.00" stroke="#d7dde8" stroke-width="1" />
@@ -58,6 +60,17 @@
 <text x="624.00" y="316.00" font-size="11" text-anchor="middle" fill="#f59e0b">5</text>
 <circle cx="804.00" cy="328.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
 <text x="804.00" y="316.00" font-size="11" text-anchor="middle" fill="#f59e0b">5</text>
+<polyline fill="none" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,118.00 264.00,178.00 444.00,238.00 624.00,328.00 804.00,328.00" stroke-dasharray="2 6" />
+<circle cx="84.00" cy="118.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="106.00" font-size="11" text-anchor="middle" fill="#8b5cf6">12</text>
+<circle cx="264.00" cy="178.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="264.00" y="166.00" font-size="11" text-anchor="middle" fill="#8b5cf6">10</text>
+<circle cx="444.00" cy="238.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="444.00" y="226.00" font-size="11" text-anchor="middle" fill="#8b5cf6">8</text>
+<circle cx="624.00" cy="328.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="624.00" y="316.00" font-size="11" text-anchor="middle" fill="#8b5cf6">5</text>
+<circle cx="804.00" cy="328.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="316.00" font-size="11" text-anchor="middle" fill="#8b5cf6">5</text>
 <polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,118.00 264.00,178.00 444.00,238.00 624.00,328.00 804.00,328.00" stroke-dasharray="4 7" />
 <circle cx="84.00" cy="118.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
 <text x="84.00" y="106.00" font-size="11" text-anchor="middle" fill="#2563eb">12</text>

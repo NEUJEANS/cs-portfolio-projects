@@ -13,8 +13,8 @@
 - [x] complete review pass 2
 - [x] complete review pass 3
 - [x] run secret scan
-- [x] commit and push
-- [x] append wrap-up
+- [ ] commit and push
+- [ ] append wrap-up
 
 ## 2026-04-18 clock + presets slice
 - [x] do brief research on Clock / second-chance and locality-friendly preset workloads
@@ -29,8 +29,8 @@
 - [x] complete review pass 2
 - [x] complete review pass 3
 - [x] run secret scan
-- [x] commit and push
-- [x] append wrap-up
+- [ ] commit and push
+- [ ] append wrap-up
 
 ## 2026-04-18 gallery slice
 - [x] do brief research on semantic figure/caption markup and inline SVG accessibility IDs
@@ -45,8 +45,8 @@
 - [x] complete review pass 2
 - [x] complete review pass 3
 - [x] run secret scan
-- [x] commit and push
-- [x] append wrap-up
+- [ ] commit and push
+- [ ] append wrap-up
 
 ## 2026-04-18 trace benchmark slice
 - [x] do brief research on phase shifts, hot sets, and scan-heavy trace behavior
@@ -61,5 +61,20 @@
 - [x] complete review pass 2
 - [x] complete review pass 3
 - [x] run secret scan
-- [x] commit and push
-- [x] append wrap-up
+- [ ] commit and push
+- [ ] append wrap-up
+
+## 2026-04-18 aging slice
+- [x] do brief research on aging counters and reference-bit history
+- [x] do a short refresh on how aging approximates LRU without exact timestamps
+- [x] update checklist markdown so the slice stays resumable
+- [x] implement an aging page-replacement policy
+- [x] thread aging through compare / study / gallery / CSV / SVG / JSON outputs
+- [x] refresh README, learning notes, and committed page-replacement artifacts
+- [x] add regression tests for aging behavior and dynamic report outputs
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

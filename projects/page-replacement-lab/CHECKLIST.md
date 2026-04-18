@@ -16,13 +16,14 @@
 ## Current demo-ready flow
 - [x] list built-in workloads and larger trace benchmarks for an interview or portfolio walkthrough
 - [x] simulate one policy with `--show-steps` on a preset workload
-- [x] compare FIFO / Clock / LRU / OPT on either a compact preset or a larger benchmark trace
+- [x] compare FIFO / Clock / Aging / LRU / OPT on either a compact preset or a larger benchmark trace
 - [x] study multiple frame counts and call out FIFO anomalies or Clock regressions
 - [x] export JSON for downstream charts or frontend demos
 - [x] export Markdown / SVG / CSV study artifacts for screenshots and portfolio cards
 - [x] generate a browsable gallery that bundles built-in presets plus larger benchmark traces into one static HTML artifact page
 
 ## Next vertical slices
-- [ ] add aging or working-set style policies for stronger systems realism
+- [x] add aging-style page replacement for stronger systems realism
+- [ ] add working-set style policies for stronger systems realism
 - [ ] add cross-workload aggregate comparison charts for slide-ready summaries
 - [ ] add a trace-summary or reuse-distance helper for imported workloads

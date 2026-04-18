@@ -33,6 +33,11 @@
           "hits": 4,
           "hit_rate": 0.222222
         },
+        "aging": {
+          "page_faults": 12,
+          "hits": 6,
+          "hit_rate": 0.333333
+        },
         "lru": {
           "page_faults": 12,
           "hits": 6,
@@ -57,6 +62,11 @@
           "page_faults": 12,
           "hits": 6,
           "hit_rate": 0.333333
+        },
+        "aging": {
+          "page_faults": 8,
+          "hits": 10,
+          "hit_rate": 0.555556
         },
         "lru": {
           "page_faults": 8,
@@ -83,6 +93,11 @@
           "hits": 8,
           "hit_rate": 0.444444
         },
+        "aging": {
+          "page_faults": 8,
+          "hits": 10,
+          "hit_rate": 0.555556
+        },
         "lru": {
           "page_faults": 8,
           "hits": 10,
@@ -104,6 +119,11 @@
           "hit_rate": 0.666667
         },
         "clock": {
+          "page_faults": 6,
+          "hits": 12,
+          "hit_rate": 0.666667
+        },
+        "aging": {
           "page_faults": 6,
           "hits": 12,
           "hit_rate": 0.666667
@@ -133,6 +153,11 @@
           "hits": 12,
           "hit_rate": 0.666667
         },
+        "aging": {
+          "page_faults": 6,
+          "hits": 12,
+          "hit_rate": 0.666667
+        },
         "lru": {
           "page_faults": 6,
           "hits": 12,
@@ -154,6 +179,11 @@
           "hit_rate": 0.666667
         },
         "clock": {
+          "page_faults": 6,
+          "hits": 12,
+          "hit_rate": 0.666667
+        },
+        "aging": {
           "page_faults": 6,
           "hits": 12,
           "hit_rate": 0.666667

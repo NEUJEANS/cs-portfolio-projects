@@ -83,7 +83,10 @@ TRACE_BENCHMARKS: dict[str, TraceBenchmark] = {
     ),
 }
 
-ALGORITHMS = ("fifo", "clock", "lru", "opt")
+AGE_COUNTER_BITS = 8
+AGE_COUNTER_TOP_BIT = 1 << (AGE_COUNTER_BITS - 1)
+
+ALGORITHMS = ("fifo", "clock", "aging", "lru", "opt")
 
 
 @dataclass(slots=True)
@@ -239,6 +242,74 @@ def simulate_clock(reference_string: Iterable[int], frame_count: int) -> Simulat
     )
 
 
+def simulate_aging(reference_string: Iterable[int], frame_count: int) -> SimulationResult:
+    reference = validate_reference(reference_string, frame_count)
+    frames: list[int | None] = [None] * frame_count
+    age_counters = [0] * frame_count
+    reference_bits = [0] * frame_count
+    resident_slots: dict[int, int] = {}
+    loaded_at: dict[int, int] = {}
+    faults = 0
+    steps: list[SimulationStep] = []
+
+    for index, page in enumerate(reference):
+        evicted: int | None = None
+        hit = page in resident_slots
+        if hit:
+            slot = resident_slots[page]
+            reference_bits[slot] = 1
+        else:
+            faults += 1
+            empty_slot = next((slot for slot, current_page in enumerate(frames) if current_page is None), None)
+            if empty_slot is not None:
+                slot = empty_slot
+            else:
+                slot = min(
+                    range(frame_count),
+                    key=lambda candidate: (
+                        age_counters[candidate],
+                        loaded_at[frames[candidate]],
+                        candidate,
+                    ),
+                )
+                evicted = frames[slot]
+                if evicted is not None:
+                    resident_slots.pop(evicted, None)
+                    loaded_at.pop(evicted, None)
+            frames[slot] = page
+            age_counters[slot] = 0
+            reference_bits[slot] = 1
+            resident_slots[page] = slot
+            loaded_at[page] = index
+
+        for slot, current_page in enumerate(frames):
+            if current_page is None:
+                continue
+            age_counters[slot] = (age_counters[slot] >> 1) | (reference_bits[slot] * AGE_COUNTER_TOP_BIT)
+            reference_bits[slot] = 0
+
+        steps.append(
+            SimulationStep(
+                index=index,
+                page=page,
+                hit=hit,
+                frames=[value for value in frames if value is not None],
+                evicted=evicted,
+            )
+        )
+
+    hits = len(reference) - faults
+    return SimulationResult(
+        algorithm="aging",
+        frame_count=frame_count,
+        reference_string=reference,
+        page_faults=faults,
+        hits=hits,
+        hit_rate=hits / len(reference),
+        steps=steps,
+    )
+
+
 def simulate_lru(reference_string: Iterable[int], frame_count: int) -> SimulationResult:
     reference = validate_reference(reference_string, frame_count)
     frames: list[int] = []
@@ -358,6 +429,7 @@ def simulate_opt(reference_string: Iterable[int], frame_count: int) -> Simulatio
 SIMULATORS = {
     "fifo": simulate_fifo,
     "clock": simulate_clock,
+    "aging": simulate_aging,
     "lru": simulate_lru,
     "opt": simulate_opt,
 }
@@ -575,7 +647,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     compare_parser = subparsers.add_parser(
         "compare",
-        help="compare fifo/clock/lru/opt on one workload",
+        help="compare fifo/clock/aging/lru/opt on one workload",
     )
     compare_parser.add_argument("--frames", type=int, required=True)
     add_reference_arguments(compare_parser)
@@ -769,16 +841,13 @@ def build_study_rows(payload: dict) -> list[dict[str, str | int]]:
             for algorithm in ALGORITHMS
             if row["algorithms"][algorithm]["page_faults"] == best_faults
         )
-        rows.append(
-            {
-                "frame_count": row["frame_count"],
-                "fifo_faults": row["algorithms"]["fifo"]["page_faults"],
-                "clock_faults": row["algorithms"]["clock"]["page_faults"],
-                "lru_faults": row["algorithms"]["lru"]["page_faults"],
-                "opt_faults": row["algorithms"]["opt"]["page_faults"],
-                "best_algorithms": winners,
-            }
-        )
+        summary_row: dict[str, str | int] = {
+            "frame_count": row["frame_count"],
+            "best_algorithms": winners,
+        }
+        for algorithm in ALGORITHMS:
+            summary_row[f"{algorithm}_faults"] = row["algorithms"][algorithm]["page_faults"]
+        rows.append(summary_row)
     return rows
 
 
@@ -821,15 +890,13 @@ def write_text_output(path: Path, content: str) -> None:
 def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custom") -> None:
     rows = build_study_rows(payload)
     ensure_output_parent(path)
+    fault_fieldnames = [f"{algorithm}_faults" for algorithm in ALGORITHMS]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
             handle,
             fieldnames=[
                 "frames",
-                "fifo_faults",
-                "clock_faults",
-                "lru_faults",
-                "opt_faults",
+                *fault_fieldnames,
                 "best_algorithms",
                 "reference_source",
             ],
@@ -837,17 +904,14 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
         )
         writer.writeheader()
         for row in rows:
-            writer.writerow(
-                {
-                    "frames": row["frame_count"],
-                    "fifo_faults": row["fifo_faults"],
-                    "clock_faults": row["clock_faults"],
-                    "lru_faults": row["lru_faults"],
-                    "opt_faults": row["opt_faults"],
-                    "best_algorithms": row["best_algorithms"],
-                    "reference_source": reference_source,
-                }
-            )
+            payload_row = {
+                "frames": row["frame_count"],
+                "best_algorithms": row["best_algorithms"],
+                "reference_source": reference_source,
+            }
+            for fieldname in fault_fieldnames:
+                payload_row[fieldname] = row[fieldname]
+            writer.writerow(payload_row)
 
 
 def write_study_json(path: Path, payload: dict) -> None:
@@ -904,18 +968,26 @@ def format_study_markdown(payload: dict, *, reference_source: str = "custom") ->
     lines.append(
         f"- {average_winners} has the lowest average page-fault count across the full frame sweep."
     )
+    header_cells = ["Frames", *[algorithm.upper() for algorithm in ALGORITHMS], "Winner"]
+    separator_cells = ["---:", *["---:" for _ in ALGORITHMS], ":---"]
     lines.extend(
         [
             "",
             "## Faults by frame count",
             "",
-            "| Frames | FIFO | Clock | LRU | OPT | Winner |",
-            "| ---: | ---: | ---: | ---: | ---: | :--- |",
+            "| " + " | ".join(header_cells) + " |",
+            "| " + " | ".join(separator_cells) + " |",
         ]
     )
     for row in rows:
         lines.append(
-            f"| {row['frame_count']} | {row['fifo_faults']} | {row['clock_faults']} | {row['lru_faults']} | {row['opt_faults']} | {row['best_algorithms']} |"
+            "| "
+            + " | ".join(
+                [str(row["frame_count"])]
+                + [str(row[f"{algorithm}_faults"]) for algorithm in ALGORITHMS]
+                + [str(row["best_algorithms"])]
+            )
+            + " |"
         )
 
     lines.extend(["", "## Regression callouts", ""])
@@ -957,6 +1029,7 @@ def choose_tick_step(max_value: int) -> int:
 SVG_COLORS = {
     "fifo": "#ef4444",
     "clock": "#f59e0b",
+    "aging": "#8b5cf6",
     "lru": "#2563eb",
     "opt": "#10b981",
 }
@@ -964,6 +1037,7 @@ SVG_COLORS = {
 SVG_STROKE_PATTERNS = {
     "fifo": None,
     "clock": "10 8",
+    "aging": "2 6",
     "lru": "4 7",
     "opt": None,
 }

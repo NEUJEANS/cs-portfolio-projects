@@ -5,16 +5,16 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 ## Why this project matters
 - demonstrates operating-systems and memory-management fundamentals in runnable code
 - compares practical online heuristics against the theoretical optimal baseline
-- includes **Clock / second-chance**, a more realistic policy than pure FIFO for systems interviews
+- includes **Clock / second-chance** and **Aging**, showing two practical approximations that sit between pure FIFO and idealized recency tracking
 - makes page-fault tradeoffs visible with deterministic step traces, reusable presets, and frame-range studies
 - gives strong interview material around locality, stack algorithms, and Belady's anomaly
 - leaves room for future extensions like trace-file replay, working-set sampling, or chart exports
 
 ## Features
-- simulate **FIFO**, **Clock / second-chance**, **LRU**, and **OPT** page replacement
+- simulate **FIFO**, **Clock / second-chance**, **Aging**, **LRU**, and **OPT** page replacement
 - load a reference string from repeated `--page` flags, a file, a built-in preset, or a larger built-in trace benchmark bundle
 - print a step-by-step trace for one algorithm
-- compare all four algorithms on the same workload
+- compare all five algorithms on the same workload
 - run a frame-range study to detect FIFO Belady anomalies and other fault regressions
 - list built-in workload presets for repeatable demos and screenshots
 - list larger built-in trace benchmarks that model phase shifts, hot-set scans, and streaming-window bursts
@@ -40,7 +40,7 @@ python3 projects/page-replacement-lab/page_replacement_lab.py simulate clock --f
 python3 projects/page-replacement-lab/page_replacement_lab.py list-benchmarks
 ```
 
-### Compare FIFO / Clock / LRU / OPT
+### Compare FIFO / Clock / Aging / LRU / OPT
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 3 \
   --preset classic-belady
@@ -104,6 +104,7 @@ reference: 1 2 3 4 1 2 5 1 2 3 4 5
 algorithm  faults  hits  hit-rate
 fifo       9       3      25.00%
 clock      9       3      25.00%
+aging      10      2      16.67%
 lru        10      2      16.67%
 opt        7       5      41.67%
 best faults: 7 (opt)
@@ -126,13 +127,14 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 ## Interview talking points
 - explain why **OPT** is the gold-standard benchmark even though it is not implementable online
 - describe how **Clock / second-chance** approximates recency using a reference bit and circular hand
+- describe how **Aging** uses a shifting reference-bit history to approximate LRU with lower bookkeeping pressure than exact recency stacks
 - explain why **LRU** and **OPT** are stack algorithms while **FIFO** is not
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
-- discuss how locality of reference changes the ranking between FIFO, Clock, and LRU
+- discuss how locality of reference changes the ranking between FIFO, Clock, Aging, and LRU
 - suggest how this simulator could extend into real trace replay, working-set analysis, or richer report/gallery generation
 
 ## Future improvements
-- add working-set or aging-style algorithms for richer policy comparisons
+- add working-set or WSClock-style algorithms for richer policy comparisons
 - add cross-workload aggregate comparison charts that put several presets and benchmarks on the same axes
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
 - add a trace-summary command that reports reuse-distance / phase-boundary hints for imported workloads
