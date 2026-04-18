@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
@@ -487,6 +488,32 @@ def build_parser() -> argparse.ArgumentParser:
     study_parser.add_argument("--svg-out", type=Path, help="write a self-contained SVG study chart")
     study_parser.add_argument("--csv-out", type=Path, help="write a chart-ready CSV study export")
 
+    gallery_parser = subparsers.add_parser(
+        "gallery",
+        help="generate an HTML gallery plus companion study artifacts for preset workloads",
+    )
+    gallery_parser.add_argument("--min-frames", type=int, required=True)
+    gallery_parser.add_argument("--max-frames", type=int, required=True)
+    gallery_parser.add_argument(
+        "--preset",
+        dest="gallery_presets",
+        action="append",
+        choices=tuple(WORKLOAD_PRESETS),
+        help="repeat to limit the gallery to specific built-in presets (default: all presets)",
+    )
+    gallery_parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        required=True,
+        help="directory where per-preset Markdown/SVG/CSV/JSON study artifacts will be written",
+    )
+    gallery_parser.add_argument(
+        "--html-out",
+        type=Path,
+        help="optional explicit HTML path (default: <artifact-dir>/index.html)",
+    )
+    gallery_parser.add_argument("--json", action="store_true")
+
     preset_parser = subparsers.add_parser(
         "list-presets",
         help="list built-in workload presets for repeatable demos",
@@ -647,6 +674,12 @@ def describe_reference_label(reference_source: str) -> str:
     return "custom workload"
 
 
+def make_safe_identifier(value: str) -> str:
+    safe = "".join(character if character.isalnum() else "-" for character in value.lower())
+    safe = safe.strip("-")
+    return safe or "page-replacement"
+
+
 def ensure_output_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -685,6 +718,10 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
                     "reference_source": reference_source,
                 }
             )
+
+
+def write_study_json(path: Path, payload: dict) -> None:
+    write_text_output(path, json.dumps(payload, indent=2) + "\n")
 
 
 def format_study_markdown(payload: dict, *, reference_source: str = "custom") -> str:
@@ -802,7 +839,12 @@ SVG_STROKE_PATTERNS = {
 }
 
 
-def format_study_svg(payload: dict, *, reference_source: str = "custom") -> str:
+def format_study_svg(
+    payload: dict,
+    *,
+    reference_source: str = "custom",
+    id_prefix: str = "page-replacement-study",
+) -> str:
     rows = build_study_rows(payload)
     width = 1080
     height = 720
@@ -819,6 +861,9 @@ def format_study_svg(payload: dict, *, reference_source: str = "custom") -> str:
     tick_step = choose_tick_step(max_faults)
     y_max = max(tick_step, ((max_faults + tick_step - 1) // tick_step) * tick_step)
     y_ticks = list(range(0, y_max + 1, tick_step))
+    identifier = make_safe_identifier(id_prefix)
+    title_id = f"{identifier}-title"
+    desc_id = f"{identifier}-desc"
 
     def x_position(frame_count: int) -> float:
         if len(frame_counts) == 1:
@@ -918,9 +963,9 @@ def format_study_svg(payload: dict, *, reference_source: str = "custom") -> str:
 
     return "\n".join(
         [
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
-            "  <title id=\"title\">Page replacement frame study chart</title>",
-            f'  <desc id="desc">Page-fault vs frame-count chart for {escape(describe_reference_label(reference_source))}</desc>',
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'  <title id="{title_id}">Page replacement frame study chart</title>',
+            f'  <desc id="{desc_id}">Page-fault vs frame-count chart for {escape(describe_reference_label(reference_source))}</desc>',
             '  <rect width="100%" height="100%" fill="#f8fafc" />',
             '  <rect x="36" y="28" width="1008" height="664" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />',
             '  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Page faults vs frame count</text>',
@@ -938,6 +983,291 @@ def format_study_svg(payload: dict, *, reference_source: str = "custom") -> str:
             "</svg>",
         ]
     )
+
+
+def resolve_gallery_presets(selected_presets: list[str] | None) -> list[WorkloadPreset]:
+    if not selected_presets:
+        return list_workload_presets()
+    ordered: list[WorkloadPreset] = []
+    seen: set[str] = set()
+    for name in selected_presets:
+        if name in seen:
+            continue
+        ordered.append(resolve_preset(name))
+        seen.add(name)
+    return ordered
+
+
+def format_average_fault_summary(averages: dict[str, float]) -> list[str]:
+    return [f"{algorithm.upper()}: {averages[algorithm]:.2f}" for algorithm in ALGORITHMS]
+
+
+def build_gallery_run(
+    preset: WorkloadPreset,
+    *,
+    min_frames: int,
+    max_frames: int,
+    artifact_dir: Path,
+    html_dir: Path,
+) -> dict:
+    reference_source = f"preset:{preset.name}"
+    payload = study_frame_counts(preset.reference_string, min_frames, max_frames)
+    payload["reference_source"] = reference_source
+    stem = f"{preset.name}-study"
+    markdown_path = artifact_dir / f"{stem}.md"
+    svg_path = artifact_dir / f"{stem}.svg"
+    csv_path = artifact_dir / f"{stem}.csv"
+    json_path = artifact_dir / f"{stem}.json"
+
+    write_text_output(
+        markdown_path,
+        format_study_markdown(payload, reference_source=reference_source),
+    )
+    write_text_output(
+        svg_path,
+        format_study_svg(
+            payload,
+            reference_source=reference_source,
+            id_prefix=f"page-replacement-{preset.name}",
+        ),
+    )
+    write_study_csv(csv_path, payload, reference_source=reference_source)
+    write_study_json(json_path, payload)
+
+    averages = summarize_fault_averages(payload)
+    best_average = min(averages.values())
+    best_average_winners = [
+        algorithm for algorithm in ALGORITHMS if averages[algorithm] == best_average
+    ]
+    non_fifo_violations = [
+        violation
+        for violation in payload["monotonicity_violations"]
+        if violation["algorithm"] != "fifo"
+    ]
+    return {
+        "preset": preset,
+        "payload": payload,
+        "average_faults": averages,
+        "best_average_faults": best_average,
+        "best_average_winners": best_average_winners,
+        "fifo_has_anomaly": bool(payload["fifo_belady_anomalies"]),
+        "non_fifo_violations": non_fifo_violations,
+        "relative_paths": {
+            "markdown": os.path.relpath(markdown_path, html_dir),
+            "svg": os.path.relpath(svg_path, html_dir),
+            "csv": os.path.relpath(csv_path, html_dir),
+            "json": os.path.relpath(json_path, html_dir),
+        },
+        "inline_svg": format_study_svg(
+            payload,
+            reference_source=reference_source,
+            id_prefix=f"gallery-{preset.name}",
+        ),
+    }
+
+
+def format_gallery_text(gallery_runs: list[dict], *, html_path: Path) -> str:
+    lines = [
+        f"gallery workloads: {len(gallery_runs)}",
+        f"html report: {html_path}",
+    ]
+    for run in gallery_runs:
+        winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
+        lines.append(
+            f"- {run['preset'].name}: best average faults {winners} ({run['best_average_faults']:.2f}), "
+            f"fifo anomaly={'yes' if run['fifo_has_anomaly'] else 'no'}, "
+            f"other regressions={len(run['non_fifo_violations'])}"
+        )
+    return "\n".join(lines)
+
+
+def format_gallery_html(
+    gallery_runs: list[dict],
+    *,
+    min_frames: int,
+    max_frames: int,
+) -> str:
+    workload_count = len(gallery_runs)
+    fifo_anomaly_count = sum(1 for run in gallery_runs if run["fifo_has_anomaly"])
+    non_fifo_regression_count = sum(
+        1 for run in gallery_runs if run["non_fifo_violations"]
+    )
+    winner_counts: dict[str, int] = {algorithm: 0 for algorithm in ALGORITHMS}
+    for run in gallery_runs:
+        for algorithm in run["best_average_winners"]:
+            winner_counts[algorithm] += 1
+    winner_summary = ", ".join(
+        f"{algorithm.upper()} × {winner_counts[algorithm]}" for algorithm in ALGORITHMS
+    )
+
+    summary_rows: list[str] = []
+    for run in gallery_runs:
+        preset = run["preset"]
+        section_id = f"workload-{make_safe_identifier(preset.name)}"
+        winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
+        summary_rows.append(
+            "<tr>"
+            f"<td><a href=\"#{section_id}\"><code>{escape(preset.name)}</code></a></td>"
+            f"<td>{escape(preset.description)}</td>"
+            f"<td>{run['best_average_faults']:.2f} ({escape(winners)})</td>"
+            f"<td>{'yes' if run['fifo_has_anomaly'] else 'no'}</td>"
+            f"<td>{len(run['non_fifo_violations'])}</td>"
+            "</tr>"
+        )
+
+    sections: list[str] = []
+    for run in gallery_runs:
+        preset = run["preset"]
+        section_id = f"workload-{make_safe_identifier(preset.name)}"
+        averages = format_average_fault_summary(run["average_faults"])
+        average_items = "".join(
+            f"<li><code>{escape(item)}</code></li>" for item in averages
+        )
+        if run["payload"]["fifo_belady_anomalies"]:
+            fifo_items = "".join(
+                "<li>"
+                f"frames {entry['from_frames']} → {entry['to_frames']}: "
+                f"{entry['faults_before']} → {entry['faults_after']} (+{entry['fault_delta']})"
+                "</li>"
+                for entry in run["payload"]["fifo_belady_anomalies"]
+            )
+        else:
+            fifo_items = "<li>none in this frame range</li>"
+
+        if run["non_fifo_violations"]:
+            other_items = "".join(
+                "<li>"
+                f"{escape(entry['algorithm'].upper())}: frames {entry['from_frames']} → {entry['to_frames']} "
+                f"{entry['faults_before']} → {entry['faults_after']} (+{entry['fault_delta']})"
+                "</li>"
+                for entry in run["non_fifo_violations"]
+            )
+        else:
+            other_items = "<li>none in this frame range</li>"
+
+        download_links = " · ".join(
+            f'<a href="{escape(path)}">{label}</a>'
+            for label, path in (
+                ("Markdown", run["relative_paths"]["markdown"]),
+                ("SVG", run["relative_paths"]["svg"]),
+                ("CSV", run["relative_paths"]["csv"]),
+                ("JSON", run["relative_paths"]["json"]),
+            )
+        )
+        sections.append(
+            f"<section class=\"study-card\" id=\"{section_id}\">"
+            "<div class=\"study-card__header\">"
+            f"<div><h2><code>{escape(preset.name)}</code></h2><p>{escape(preset.description)}</p></div>"
+            "<div class=\"study-card__chips\">"
+            f"<span class=\"chip\">frames {min_frames}–{max_frames}</span>"
+            f"<span class=\"chip\">reference length {len(preset.reference_string)}</span>"
+            f"<span class=\"chip chip--accent\">best average {'/'.join(algorithm.upper() for algorithm in run['best_average_winners'])}</span>"
+            f"<span class=\"chip {'chip--warn' if run['fifo_has_anomaly'] else 'chip--ok'}\">FIFO anomaly {'yes' if run['fifo_has_anomaly'] else 'no'}</span>"
+            "</div>"
+            "</div>"
+            f"<figure>{run['inline_svg']}<figcaption>Downloads: {download_links}</figcaption></figure>"
+            "<div class=\"study-card__meta\">"
+            f"<div class=\"meta-panel\"><h3>Average faults</h3><ul>{average_items}</ul></div>"
+            f"<div class=\"meta-panel\"><h3>FIFO anomaly callouts</h3><ul>{fifo_items}</ul></div>"
+            f"<div class=\"meta-panel\"><h3>Other regressions</h3><ul>{other_items}</ul></div>"
+            "</div>"
+            "</section>"
+        )
+
+    return f"""<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Page Replacement Study Gallery</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --ok: #16a34a;
+        --warn: #dc2626;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1480px; margin: 0 auto; padding: 32px 20px 64px; }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      a {{ color: var(--accent); }}
+      code {{ font-family: \"SFMono-Regular\", SFMono-Regular, ui-monospace, monospace; }}
+      .hero, .study-card, .summary-table {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p {{ color: var(--muted); max-width: 960px; }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }}
+      .summary-grid strong {{ display: block; font-size: 1.4rem; margin-bottom: 6px; }}
+      .summary-table {{ overflow: auto; padding: 18px; margin-bottom: 24px; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      .study-grid {{ display: grid; gap: 24px; }}
+      .study-card {{ padding: 22px; }}
+      .study-card__header {{ display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 14px; }}
+      .study-card__header p {{ color: var(--muted); max-width: 70ch; margin-bottom: 0; }}
+      .study-card__chips {{ display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }}
+      .chip {{ display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 999px; background: #e2e8f0; color: var(--text); font-size: 0.92rem; }}
+      .chip--accent {{ background: #dbeafe; color: #1d4ed8; }}
+      .chip--ok {{ background: #dcfce7; color: #166534; }}
+      .chip--warn {{ background: #fee2e2; color: #991b1b; }}
+      figure {{ margin: 0; overflow-x: auto; }}
+      figure svg {{ width: 100%; height: auto; min-width: 720px; display: block; }}
+      figcaption {{ margin-top: 10px; color: var(--muted); }}
+      .study-card__meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 18px; }}
+      .meta-panel {{ border-radius: 18px; background: #f8fafc; border: 1px solid var(--border); padding: 16px; }}
+      .meta-panel h3 {{ margin-bottom: 10px; font-size: 1rem; }}
+      .meta-panel ul {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      .meta-panel li + li {{ margin-top: 8px; }}
+      @media (max-width: 900px) {{
+        .study-card__header {{ flex-direction: column; }}
+        .study-card__chips {{ justify-content: flex-start; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class=\"hero\">
+        <h1>Page Replacement Study Gallery</h1>
+        <p>Frame-range study cards for the built-in workloads in <code>page-replacement-lab</code>. Each section keeps the screenshot-ready SVG inline, links the exported Markdown / SVG / CSV / JSON companions, and highlights where FIFO or other policies regress as frame count increases.</p>
+        <ul class=\"summary-grid\">
+          <li><strong>{workload_count}</strong> workloads</li>
+          <li><strong>{min_frames}–{max_frames}</strong> frame range</li>
+          <li><strong>{fifo_anomaly_count}</strong> FIFO anomaly workloads</li>
+          <li><strong>{non_fifo_regression_count}</strong> workloads with non-FIFO regressions</li>
+          <li><strong>Winner tally</strong>{escape(winner_summary)}</li>
+        </ul>
+      </section>
+      <section class=\"summary-table\">
+        <table>
+          <thead>
+            <tr>
+              <th>Preset</th>
+              <th>Description</th>
+              <th>Best average faults</th>
+              <th>FIFO anomaly</th>
+              <th>Other regressions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(summary_rows)}
+          </tbody>
+        </table>
+      </section>
+      <div class=\"study-grid\">
+        {''.join(sections)}
+      </div>
+    </main>
+  </body>
+</html>
+"""
 
 
 def format_preset_text() -> str:
@@ -975,6 +1305,55 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 print(format_preset_text())
+            return 0
+
+        if args.command == "gallery":
+            presets = resolve_gallery_presets(args.gallery_presets)
+            html_path = args.html_out or (args.artifact_dir / "index.html")
+            gallery_runs = [
+                build_gallery_run(
+                    preset,
+                    min_frames=args.min_frames,
+                    max_frames=args.max_frames,
+                    artifact_dir=args.artifact_dir,
+                    html_dir=html_path.parent,
+                )
+                for preset in presets
+            ]
+            write_text_output(
+                html_path,
+                format_gallery_html(
+                    gallery_runs,
+                    min_frames=args.min_frames,
+                    max_frames=args.max_frames,
+                ),
+            )
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "min_frames": args.min_frames,
+                            "max_frames": args.max_frames,
+                            "html_path": str(html_path),
+                            "artifact_dir": str(args.artifact_dir),
+                            "workloads": [
+                                {
+                                    "preset": run["preset"].name,
+                                    "description": run["preset"].description,
+                                    "best_average_faults": round(run["best_average_faults"], 6),
+                                    "best_average_winners": run["best_average_winners"],
+                                    "fifo_has_anomaly": run["fifo_has_anomaly"],
+                                    "non_fifo_regression_count": len(run["non_fifo_violations"]),
+                                    "paths": run["relative_paths"],
+                                }
+                                for run in gallery_runs
+                            ],
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                print(format_gallery_text(gallery_runs, html_path=html_path))
             return 0
 
         parsed_reference = parse_reference_args(args.page, args.pages_file, args.preset)

@@ -169,6 +169,48 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source", csv_output)
             self.assertIn("3,9,9,10,7,opt,preset:classic-belady", csv_output)
 
+    def test_cli_gallery_writes_html_and_companion_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / "gallery"
+            html_path = artifact_dir / "index.html"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "gallery",
+                    "--min-frames",
+                    "2",
+                    "--max-frames",
+                    "5",
+                    "--preset",
+                    "classic-belady",
+                    "--preset",
+                    "scan-then-reuse",
+                    "--artifact-dir",
+                    str(artifact_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            self.assertIn("gallery workloads: 2", completed.stdout)
+            html = html_path.read_text(encoding="utf-8")
+            classic_json = (artifact_dir / "classic-belady-study.json").read_text(encoding="utf-8")
+            classic_svg = (artifact_dir / "classic-belady-study.svg").read_text(encoding="utf-8")
+            scan_markdown = (artifact_dir / "scan-then-reuse-study.md").read_text(encoding="utf-8")
+
+            self.assertIn("Page Replacement Study Gallery", html)
+            self.assertIn("<figure>", html)
+            self.assertIn("href=\"#workload-classic-belady\"", html)
+            self.assertIn("id=\"workload-classic-belady\"", html)
+            self.assertIn("classic-belady-study.svg", html)
+            self.assertIn("scan-then-reuse-study.csv", html)
+            self.assertIn("gallery-classic-belady-title", html)
+            self.assertIn("page-replacement-classic-belady-title", classic_svg)
+            self.assertIn('"reference_source": "preset:classic-belady"', classic_json)
+            self.assertIn("# Page Replacement Study Report", scan_markdown)
+
     def test_cli_rejects_missing_reference(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(SCRIPT), "simulate", "fifo", "--frames", "3"],

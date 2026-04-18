@@ -1,0 +1,149 @@
+{
+  "reference_string": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    1,
+    2,
+    3,
+    1,
+    2,
+    7,
+    1,
+    2,
+    3
+  ],
+  "frame_results": [
+    {
+      "frame_count": 2,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 15,
+          "hits": 0,
+          "hit_rate": 0.0
+        },
+        "clock": {
+          "page_faults": 15,
+          "hits": 0,
+          "hit_rate": 0.0
+        },
+        "lru": {
+          "page_faults": 15,
+          "hits": 0,
+          "hit_rate": 0.0
+        },
+        "opt": {
+          "page_faults": 12,
+          "hits": 3,
+          "hit_rate": 0.2
+        }
+      }
+    },
+    {
+      "frame_count": 3,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 13,
+          "hits": 2,
+          "hit_rate": 0.133333
+        },
+        "clock": {
+          "page_faults": 13,
+          "hits": 2,
+          "hit_rate": 0.133333
+        },
+        "lru": {
+          "page_faults": 11,
+          "hits": 4,
+          "hit_rate": 0.266667
+        },
+        "opt": {
+          "page_faults": 9,
+          "hits": 6,
+          "hit_rate": 0.4
+        }
+      }
+    },
+    {
+      "frame_count": 4,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "clock": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "lru": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "opt": {
+          "page_faults": 7,
+          "hits": 8,
+          "hit_rate": 0.533333
+        }
+      }
+    },
+    {
+      "frame_count": 5,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "clock": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "lru": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "opt": {
+          "page_faults": 7,
+          "hits": 8,
+          "hit_rate": 0.533333
+        }
+      }
+    },
+    {
+      "frame_count": 6,
+      "algorithms": {
+        "fifo": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "clock": {
+          "page_faults": 10,
+          "hits": 5,
+          "hit_rate": 0.333333
+        },
+        "lru": {
+          "page_faults": 7,
+          "hits": 8,
+          "hit_rate": 0.533333
+        },
+        "opt": {
+          "page_faults": 7,
+          "hits": 8,
+          "hit_rate": 0.533333
+        }
+      }
+    }
+  ],
+  "fifo_belady_anomalies": [],
+  "monotonicity_violations": [],
+  "reference_source": "preset:scan-then-reuse"
+}

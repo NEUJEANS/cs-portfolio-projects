@@ -1,0 +1,6 @@
+frames,fifo_faults,clock_faults,lru_faults,opt_faults,best_algorithms,reference_source
+2,15,15,15,12,opt,preset:scan-then-reuse
+3,13,13,11,9,opt,preset:scan-then-reuse
+4,10,10,10,7,opt,preset:scan-then-reuse
+5,10,10,10,7,opt,preset:scan-then-reuse
+6,10,10,7,7,lru/opt,preset:scan-then-reuse

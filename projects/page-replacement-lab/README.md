@@ -19,6 +19,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - list built-in workload presets for repeatable demos and screenshots
 - export structured JSON for reports, demos, or frontend visualizations later
 - export study results as Markdown, CSV, and self-contained SVG cards for README screenshots and portfolio pages
+- generate a multi-workload HTML gallery that bundles inline SVG study cards with downloadable Markdown / SVG / CSV / JSON companions
 
 ## Quick start
 
@@ -54,6 +55,12 @@ python3 projects/page-replacement-lab/page_replacement_lab.py study --min-frames
   --csv-out docs/artifacts/page-replacement-lab/classic-belady-study.csv
 ```
 
+### Build a browsable gallery across all built-in workloads
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py gallery --min-frames 2 --max-frames 6 \
+  --artifact-dir docs/artifacts/page-replacement-lab/gallery
+```
+
 ### Load pages from a file instead of a preset
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 4 \
@@ -86,6 +93,8 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/classic-belady-study.md` — narrative study report with the winner table and anomaly callouts
 - `docs/artifacts/page-replacement-lab/classic-belady-study.svg` — screenshot-ready chart card for README or portfolio galleries
 - `docs/artifacts/page-replacement-lab/classic-belady-study.csv` — spreadsheet/chart-friendly export of the same frame sweep
+- `docs/artifacts/page-replacement-lab/gallery/index.html` — browsable multi-workload gallery with inline SVG charts and download links for each preset bundle
+- `docs/artifacts/page-replacement-lab/gallery/*.json` — machine-readable study payloads for each built-in preset
 
 ## Testing
 ```bash
@@ -98,10 +107,10 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - explain why **LRU** and **OPT** are stack algorithms while **FIFO** is not
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
 - discuss how locality of reference changes the ranking between FIFO, Clock, and LRU
-- suggest how this simulator could extend into real trace replay, working-set analysis, or chart/report generation
+- suggest how this simulator could extend into real trace replay, working-set analysis, or richer report/gallery generation
 
 ## Future improvements
 - import larger trace files for repeatable benchmark suites
-- add multi-workload chart bundles that compare page faults vs. frame count across several presets at once
 - add working-set or aging-style algorithms for richer policy comparisons
-- generate richer HTML gallery pages that embed the committed Markdown/SVG study artifacts
+- add cross-workload aggregate comparison charts that put several presets on the same axes
+- generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives

@@ -7,8 +7,10 @@
 - [x] built-in workload presets for repeatable demos and locality comparisons
 - [x] frame-range studies that report FIFO Belady anomalies plus other algorithm regressions
 - [x] screenshot-ready study artifact exports (Markdown / SVG / CSV) for page-fault-vs-frame summaries
+- [x] multi-workload HTML gallery generation with per-preset Markdown / SVG / CSV / JSON bundles
 - [x] regression coverage for preset input, preset listing, Clock counts, and mixed-input validation
 - [x] regression coverage for study artifact export paths and generated report content
+- [x] regression coverage for gallery bundle generation and unique inline-SVG accessibility IDs
 
 ## Current demo-ready flow
 - [x] list built-in workloads for an interview or portfolio walkthrough
@@ -17,8 +19,9 @@
 - [x] study multiple frame counts and call out FIFO anomalies or Clock regressions
 - [x] export JSON for downstream charts or frontend demos
 - [x] export Markdown / SVG / CSV study artifacts for screenshots and portfolio cards
+- [x] generate a browsable gallery that bundles all built-in workloads into one static HTML artifact page
 
 ## Next vertical slices
 - [ ] add larger trace-file benchmark bundles beyond the small built-in presets
 - [ ] add aging or working-set style policies for stronger systems realism
-- [ ] add an HTML artifact gallery that bundles multiple study cards for side-by-side browsing
+- [ ] add cross-workload aggregate comparison charts for slide-ready summaries

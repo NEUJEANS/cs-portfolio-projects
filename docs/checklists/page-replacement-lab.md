@@ -31,3 +31,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-18 gallery slice
+- [x] do brief research on semantic figure/caption markup and inline SVG accessibility IDs
+- [x] do a short refresh on static HTML gallery patterns and unique SVG metadata IDs
+- [x] update checklist markdown so the slice stays resumable
+- [x] implement a `gallery` command that batches the built-in preset studies
+- [x] write Markdown / SVG / CSV / JSON companions per preset in one run
+- [x] generate a committed static HTML gallery with inline SVG cards and download links
+- [x] refresh README artifact examples and future follow-up notes
+- [x] add regression tests for gallery generation and SVG ID uniqueness
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
