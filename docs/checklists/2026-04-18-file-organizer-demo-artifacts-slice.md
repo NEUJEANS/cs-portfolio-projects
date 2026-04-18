@@ -13,7 +13,7 @@
 - [x] run secret scan before push
 - [x] commit the feature slice
 - [x] push the feature slice
-- [ ] add wrap-up
+- [x] add wrap-up
 
 ## Review notes
 - review pass 1: artifact inventory drift between the generated bundle and README links.
