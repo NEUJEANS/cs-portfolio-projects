@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import random
 import re
@@ -2037,6 +2039,11 @@ def write_svg_output(path: Path, contents: str) -> None:
     path.write_text(contents, encoding="utf-8")
 
 
+def write_csv_output(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8", newline="")
+
+
 def _perceptron_tuning_cell_fill(accuracy_percent: float, minimum: float, maximum: float) -> str:
     palette = ["#e2e8f0", "#bfdbfe", "#93c5fd", "#60a5fa", "#3b82f6", "#1d4ed8"]
     if maximum <= minimum:
@@ -2071,6 +2078,14 @@ def _budget_predictor_fill(predictor: str) -> str:
     return palette.get(predictor, "#e2e8f0")
 
 
+def _budget_winner_sequence_csv(budget_reports: list[dict[str, Any]]) -> str:
+    return _budget_winner_sequence(budget_reports).replace(" → ", " -> ")
+
+
+def _format_budget_candidate_csv_label(candidate: dict[str, Any]) -> str:
+    return _format_budget_candidate_label(candidate).replace(" · ", " | ")
+
+
 def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     if not scenarios:
         raise ValueError("scenarios must not be empty")
@@ -2087,6 +2102,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
         f"- Compared budgets: `{', '.join(f'{budget} bits' for budget in budgets)}`",
         f"- Search space: table sizes `{', '.join(str(value) for value in table_sizes)}` · history bits `{', '.join(str(value) for value in history_bits_options)}` · perceptron weight limits `{', '.join(str(value) for value in weight_limits)}`",
         "- Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.",
+        "- Export note: pair this Markdown report with the committed CSV winner matrix when you want spreadsheet/chart-friendly reuse without re-parsing the table blocks.",
         "",
         "## Overview",
         "",
@@ -2134,10 +2150,76 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
             "- Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.",
             "- Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.",
             "- The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.",
+            "- Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.",
             "",
         ]
     )
     return "\n".join(lines)
+
+
+def render_budget_sweep_csv(*, scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    budgets = scenarios[0]["budgets"]
+    fieldnames = [
+        "workload",
+        "headline",
+        "branches",
+        "seed",
+        "trace_output",
+        "winner_sequence",
+    ]
+    for budget in budgets:
+        prefix = f"budget_{budget}_"
+        fieldnames.extend(
+            [
+                f"{prefix}winner_predictor",
+                f"{prefix}winner_accuracy_percent",
+                f"{prefix}winner_state_bits",
+                f"{prefix}winner_config",
+                f"{prefix}runner_up_predictor",
+                f"{prefix}runner_up_accuracy_percent",
+                f"{prefix}winner_margin_percent",
+                f"{prefix}best_simple_predictor",
+                f"{prefix}best_simple_accuracy_percent",
+                f"{prefix}best_advanced_predictor",
+                f"{prefix}best_advanced_accuracy_percent",
+            ]
+        )
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for scenario in scenarios:
+        row: dict[str, Any] = {
+            "workload": scenario["workload"],
+            "headline": scenario["headline"],
+            "branches": scenario["config"]["branches"],
+            "seed": scenario["config"]["seed"],
+            "trace_output": scenario.get("trace_output") or "",
+            "winner_sequence": _budget_winner_sequence_csv(scenario["budget_reports"]),
+        }
+        for entry in scenario["budget_reports"]:
+            winner = entry["predictor_results"][0]
+            runner_up = entry["predictor_results"][1] if len(entry["predictor_results"]) > 1 else winner
+            prefix = f"budget_{entry['budget_bits']}_"
+            row.update(
+                {
+                    f"{prefix}winner_predictor": entry["winner_predictor"],
+                    f"{prefix}winner_accuracy_percent": entry["winner_accuracy_percent"],
+                    f"{prefix}winner_state_bits": winner["state_bits"],
+                    f"{prefix}winner_config": _format_budget_candidate_csv_label(winner),
+                    f"{prefix}runner_up_predictor": entry["runner_up_predictor"],
+                    f"{prefix}runner_up_accuracy_percent": runner_up["accuracy_percent"],
+                    f"{prefix}winner_margin_percent": entry["winner_margin_percent"],
+                    f"{prefix}best_simple_predictor": entry["best_simple_predictor"] or "",
+                    f"{prefix}best_simple_accuracy_percent": entry["best_simple_accuracy_percent"] if entry["best_simple_accuracy_percent"] is not None else "",
+                    f"{prefix}best_advanced_predictor": entry["best_advanced_predictor"] or "",
+                    f"{prefix}best_advanced_accuracy_percent": entry["best_advanced_accuracy_percent"] if entry["best_advanced_accuracy_percent"] is not None else "",
+                }
+            )
+        writer.writerow(row)
+    return output.getvalue()
 
 
 def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
@@ -2484,6 +2566,7 @@ def _build_parser() -> argparse.ArgumentParser:
     budget_sweep_parser.add_argument("--trace-dir", type=Path, help="Optional directory to write the generated trace files for the budget sweep.")
     budget_sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown budget report.")
     budget_sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG budget matrix card.")
+    budget_sweep_parser.add_argument("--csv-out", type=Path, help="Write a CSV winner matrix for spreadsheet/chart reuse.")
     budget_sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
     return parser
 
@@ -2623,6 +2706,9 @@ def main(argv: list[str] | None = None) -> int:
             if getattr(args, "svg_out", None):
                 write_svg_output(args.svg_out, render_budget_sweep_svg(scenarios=scenarios))
                 payload["svg_output"] = str(args.svg_out)
+            if getattr(args, "csv_out", None):
+                write_csv_output(args.csv_out, render_budget_sweep_csv(scenarios=scenarios))
+                payload["csv_output"] = str(args.csv_out)
             if args.json:
                 print(json.dumps(payload, indent=2, default=_json_default))
             else:
@@ -2631,6 +2717,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"markdown report: {payload['markdown_output']}")
                 if "svg_output" in payload:
                     print(f"svg card: {payload['svg_output']}")
+                if "csv_output" in payload:
+                    print(f"csv export: {payload['csv_output']}")
                 if args.trace_dir is not None:
                     print(f"trace directory: {args.trace_dir}")
             return 0

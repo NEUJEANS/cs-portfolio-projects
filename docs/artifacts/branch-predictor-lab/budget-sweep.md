@@ -1,10 +1,11 @@
 # Branch predictor budget-normalized sweep
 
-- Generated: `2026-04-18T03:53:43Z`
+- Generated: `2026-04-18T04:05:15Z`
 - Workloads: `5` synthetic families
 - Compared budgets: `64 bits, 128 bits, 256 bits, 512 bits, 1024 bits`
 - Search space: table sizes `4, 8, 16, 32, 64` · history bits `1, 2, 4, 8, 12` · perceptron weight limits `15, 31, 74`
 - Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.
+- Export note: pair this Markdown report with the committed CSV winner matrix when you want spreadsheet/chart-friendly reuse without re-parsing the table blocks.
 
 ## Overview
 
@@ -128,3 +129,4 @@ Representative best-fit configs:
 - Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.
 - Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.
 - The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.
+- Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.

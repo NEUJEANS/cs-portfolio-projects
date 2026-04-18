@@ -35,6 +35,7 @@ generate_synthetic_trace = module.generate_synthetic_trace
 load_trace = module.load_trace
 parse_trace_line = module.parse_trace_line
 render_budget_sweep_markdown = module.render_budget_sweep_markdown
+render_budget_sweep_csv = module.render_budget_sweep_csv
 render_budget_sweep_svg = module.render_budget_sweep_svg
 render_comparison_markdown = module.render_comparison_markdown
 render_comparison_svg = module.render_comparison_svg
@@ -689,6 +690,7 @@ class BranchPredictorLabTests(unittest.TestCase):
         )
 
         markdown = render_budget_sweep_markdown(scenarios=scenarios)
+        csv_text = render_budget_sweep_csv(scenarios=scenarios)
         svg = render_budget_sweep_svg(scenarios=scenarios)
         summary = format_budget_sweep_summary_table(scenarios)
 
@@ -696,16 +698,20 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("## Per-workload notes", markdown)
         self.assertIn("`32 bits`", markdown)
         self.assertIn("Portfolio usage", markdown)
+        self.assertIn("workload,headline,branches,seed,trace_output,winner_sequence", csv_text)
+        self.assertIn("budget_32_winner_predictor", csv_text)
+        self.assertIn("perceptron-majority", csv_text)
         self.assertIn("<svg", svg)
         self.assertIn("Budget-normalized branch predictor sweep", svg)
         self.assertIn("loop-heavy", summary)
         self.assertIn("32b", summary)
 
-    def test_cli_budget_sweep_json_writes_markdown_svg_and_trace_dir(self) -> None:
+    def test_cli_budget_sweep_json_writes_markdown_svg_csv_and_trace_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             trace_dir = Path(tmpdir) / "budget-traces"
             markdown_path = Path(tmpdir) / "budget-sweep.md"
             svg_path = Path(tmpdir) / "budget-sweep.svg"
+            csv_path = Path(tmpdir) / "budget-sweep.csv"
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -733,6 +739,8 @@ class BranchPredictorLabTests(unittest.TestCase):
                     str(markdown_path),
                     "--svg-out",
                     str(svg_path),
+                    "--csv-out",
+                    str(csv_path),
                     "--json",
                 ],
                 check=True,
@@ -746,12 +754,17 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertEqual(payload["trace_dir"], str(trace_dir))
             self.assertEqual(payload["markdown_output"], str(markdown_path))
             self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertEqual(payload["csv_output"], str(csv_path))
             self.assertTrue(markdown_path.exists())
             self.assertTrue(svg_path.exists())
+            self.assertTrue(csv_path.exists())
             self.assertTrue((trace_dir / "loop-heavy-seed7.trace").exists())
             self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())
             self.assertIn("budget-normalized sweep", markdown_path.read_text(encoding="utf-8"))
             self.assertIn("Budget-normalized branch predictor sweep", svg_path.read_text(encoding="utf-8"))
+            csv_text = csv_path.read_text(encoding="utf-8")
+            self.assertIn("budget_32_winner_predictor", csv_text)
+            self.assertIn("perceptron-majority", csv_text)
 
 
 if __name__ == "__main__":

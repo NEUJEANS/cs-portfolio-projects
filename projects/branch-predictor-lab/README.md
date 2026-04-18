@@ -272,7 +272,7 @@ Run the tests:
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
 - the perceptron predictor keeps a signed weight vector per static branch bucket and trains it with the classic update rule when the prediction is wrong or not confident, which makes long-history correlations explainable instead of purely table-lookup based
 - the `perceptron-sweep` command turns threshold and weight-clamp tuning into a committed Markdown/SVG artifact, so the neural predictor story includes practical parameter sensitivity instead of only one lucky run
-- the `budget-sweep` command searches best-fit configs under shared approximate state-bit budgets, which makes it easier to explain why a “best” predictor can change once hardware cost is constrained
+- the `budget-sweep` command searches best-fit configs under shared approximate state-bit budgets and can now emit a CSV winner matrix, which makes it easier to explain why a “best” predictor can change once hardware cost is constrained and to reuse the matrix in charts without scraping Markdown
 - the tournament predictor tracks when local-history vs gshare is doing better for a given PC and exposes chooser-state snapshots so the hybrid behavior is inspectable in JSON output
 - compare output includes both a static PC-index aliasing summary and a dynamic gshare-index aliasing summary, so you can point at exact colliding buckets and history-conditioned conflicts when discussing table-size trade-offs
 - the `alias-thrash` generator intentionally maps opposite-bias branches into the same low-order index bits, which makes interference easy to show without external trace corpora
@@ -290,5 +290,5 @@ Run the tests:
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
-- add budget-normalized sweeps so predictors can be compared under similar total state-bit limits instead of only by table/history knobs
 - add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family
+- add artifact-ready stacked bar / heatmap exports that summarize how often each predictor wins across the whole budget grid, not just per-workload rows

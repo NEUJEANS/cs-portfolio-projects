@@ -17,5 +17,7 @@
 - [x] add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
 - [x] log at least 3 review passes and fix issues found
 - [x] list next candidate slices for advanced architecture follow-ups
-- [ ] add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
-- [ ] add budget-normalized sweeps so predictors can compete under similar state-bit budgets
+- [x] add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
+- [x] add budget-normalized sweeps so predictors can compete under similar state-bit budgets
+- [x] add CSV/export-friendly budget winner matrices so README charts and slide decks can reuse the same sweep without re-parsing Markdown
+- [ ] add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family
