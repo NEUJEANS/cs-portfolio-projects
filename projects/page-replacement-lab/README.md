@@ -8,7 +8,8 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - includes **Clock / second-chance** and **Aging**, showing two practical approximations that sit between pure FIFO and idealized recency tracking
 - makes page-fault tradeoffs visible with deterministic step traces, reusable presets, and frame-range studies
 - gives strong interview material around locality, stack algorithms, and Belady's anomaly
-- leaves room for future extensions like trace-file replay, working-set sampling, or chart exports
+- includes a `trace-summary` workflow that surfaces reuse-distance buckets, sliding working-set sizes, and phase-boundary hints for imported workloads
+- leaves room for future extensions like working-set replacement policies or cross-workload chart exports
 
 ## Features
 - simulate **FIFO**, **Clock / second-chance**, **Aging**, **LRU**, and **OPT** page replacement
@@ -21,6 +22,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - export structured JSON for reports, demos, or frontend visualizations later
 - export study results as Markdown, CSV, and self-contained SVG cards for README screenshots and portfolio pages
 - generate a multi-workload HTML gallery that can mix compact presets with heavier trace benchmarks and downloadable Markdown / SVG / CSV / JSON companions
+- summarize imported traces with reuse-distance buckets, sliding working-set sizes, and phase-boundary hints that explain why a workload changes policy behavior
 
 ## Quick start
 
@@ -74,6 +76,14 @@ python3 projects/page-replacement-lab/page_replacement_lab.py gallery --min-fram
   --include-benchmarks
 ```
 
+### Summarize a heavier trace for reuse distance and phase hints
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py trace-summary \
+  --benchmark compiler-phase-shift \
+  --window-size 12 \
+  --markdown-out docs/artifacts/page-replacement-lab/compiler-phase-shift-trace-summary.md
+```
+
 ### Load pages from a file instead of a preset
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 4 \
@@ -118,6 +128,7 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/gallery/compiler-phase-shift-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the compiler phase-shift workload
 - `docs/artifacts/page-replacement-lab/gallery/db-hotset-scan-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the dashboard/analytics scan workload
 - `docs/artifacts/page-replacement-lab/gallery/streaming-burst-window-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the streaming-window workload
+- `docs/artifacts/page-replacement-lab/compiler-phase-shift-trace-summary.{md,json}` — committed reuse-distance and phase-hint report for the compiler-style benchmark trace
 
 ## Testing
 ```bash
@@ -131,10 +142,11 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - explain why **LRU** and **OPT** are stack algorithms while **FIFO** is not
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
 - discuss how locality of reference changes the ranking between FIFO, Clock, Aging, and LRU
+- explain how reuse distance helps estimate locality pressure and why the trace-summary report flags scan-heavy phase changes
 - suggest how this simulator could extend into real trace replay, working-set analysis, or richer report/gallery generation
 
 ## Future improvements
 - add working-set or WSClock-style algorithms for richer policy comparisons
 - add cross-workload aggregate comparison charts that put several presets and benchmarks on the same axes
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
-- add a trace-summary command that reports reuse-distance / phase-boundary hints for imported workloads
+- add SVG/HTML trace-summary cards or side-by-side imported-trace comparisons for portfolio slides

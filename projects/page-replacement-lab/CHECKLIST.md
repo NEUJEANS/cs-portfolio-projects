@@ -26,4 +26,5 @@
 - [x] add aging-style page replacement for stronger systems realism
 - [ ] add working-set style policies for stronger systems realism
 - [ ] add cross-workload aggregate comparison charts for slide-ready summaries
-- [ ] add a trace-summary or reuse-distance helper for imported workloads
+- [x] add a trace-summary or reuse-distance helper for imported workloads
+- [ ] add SVG/HTML trace-summary cards or side-by-side imported-trace comparisons

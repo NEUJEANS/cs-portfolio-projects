@@ -19,6 +19,7 @@ from page_replacement_lab import (  # noqa: E402
     parse_reference_args,
     simulate,
     study_frame_counts,
+    summarize_trace,
 )
 
 
@@ -78,6 +79,17 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(parsed.source, "benchmark:compiler-phase-shift")
         self.assertGreater(len(parsed.reference_string), len(REFERENCE))
         self.assertEqual(parsed.reference_string[:8], [1, 2, 3, 4, 1, 2, 5, 6])
+
+    def test_trace_summary_detects_phase_boundary_hints(self) -> None:
+        payload = summarize_trace([1, 2, 1, 2, 1, 2, 7, 8, 7, 8, 7, 8], window_size=6)
+        self.assertEqual(payload["first_touches"], 4)
+        self.assertEqual(payload["reuses"], 8)
+        self.assertEqual(payload["working_set_stats"]["max"], 4)
+        self.assertEqual(payload["working_set_stats"]["final"], 2)
+        self.assertEqual(payload["top_pages"][0], {"page": 1, "count": 3})
+        self.assertEqual(len(payload["phase_boundaries"]), 1)
+        self.assertEqual(payload["phase_boundaries"][0]["after_reference"], 6)
+        self.assertEqual(payload["phase_boundaries"][0]["jaccard_similarity"], 0.0)
 
     def test_cli_compare_json_works_with_pages_file(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
@@ -300,6 +312,37 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertEqual(workload["workload"], "db-hotset-scan")
             self.assertGreater(workload["reference_length"], 40)
             self.assertEqual(workload["reference_source"], "benchmark:db-hotset-scan")
+
+    def test_cli_trace_summary_json_writes_markdown_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "trace-summary.md"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "trace-summary",
+                    "--benchmark",
+                    "compiler-phase-shift",
+                    "--window-size",
+                    "12",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            markdown = markdown_path.read_text(encoding="utf-8")
+
+            self.assertEqual(payload["reference_source"], "benchmark:compiler-phase-shift")
+            self.assertEqual(payload["window_size"], 12)
+            self.assertGreaterEqual(payload["unique_pages"], 8)
+            self.assertGreaterEqual(payload["reuses"], 1)
+            self.assertIn("# Page Replacement Trace Summary", markdown)
+            self.assertIn("## Phase-boundary hints", markdown)
+            self.assertIn("benchmark compiler-phase-shift", markdown)
 
     def test_cli_rejects_missing_reference(self) -> None:
         completed = subprocess.run(

@@ -5,7 +5,8 @@ import csv
 import json
 import os
 import sys
-from collections import defaultdict, deque
+from math import ceil
+from collections import Counter, defaultdict, deque
 from dataclasses import asdict, dataclass
 from html import escape
 from pathlib import Path
@@ -714,6 +715,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="list larger built-in trace benchmarks for heavier portfolio demos",
     )
     benchmark_parser.add_argument("--json", action="store_true")
+
+    trace_summary_parser = subparsers.add_parser(
+        "trace-summary",
+        help="summarize reuse-distance and phase-shift hints for one workload",
+    )
+    add_reference_arguments(trace_summary_parser)
+    trace_summary_parser.add_argument(
+        "--window-size",
+        type=int,
+        default=8,
+        help="window size for working-set and phase-hint summaries",
+    )
+    trace_summary_parser.add_argument(
+        "--phase-threshold",
+        type=float,
+        default=0.45,
+        help="flag a phase-boundary hint when consecutive windows overlap at or below this Jaccard similarity",
+    )
+    trace_summary_parser.add_argument("--markdown-out", type=Path, help="write a Markdown trace-summary report")
+    trace_summary_parser.add_argument("--json", action="store_true")
 
     return parser
 
@@ -1499,6 +1520,289 @@ def format_gallery_html(
 '''
 
 
+def compute_reuse_distances(reference_string: list[int]) -> list[int | None]:
+    last_seen: dict[int, int] = {}
+    reuse_distances: list[int | None] = []
+    for index, page in enumerate(reference_string):
+        previous = last_seen.get(page)
+        if previous is None:
+            reuse_distances.append(None)
+        else:
+            reuse_distances.append(len(set(reference_string[previous + 1 : index])))
+        last_seen[page] = index
+    return reuse_distances
+
+
+def bucket_reuse_distance(distance: int | None) -> str:
+    if distance is None:
+        return 'cold'
+    if distance <= 2:
+        return '1-2'
+    if distance <= 5:
+        return '3-5'
+    if distance <= 9:
+        return '6-9'
+    return '10+'
+
+
+def percentile(sorted_values: list[int], value: float) -> float:
+    if not sorted_values:
+        return 0.0
+    index = max(0, ceil(value * len(sorted_values)) - 1)
+    return float(sorted_values[index])
+
+
+def summarize_trace(
+    reference_string: Iterable[int],
+    *,
+    window_size: int = 8,
+    phase_threshold: float = 0.45,
+) -> dict:
+    reference = list(reference_string)
+    if not reference:
+        raise InputError('reference string must contain at least one page')
+    if window_size <= 0:
+        raise InputError('window size must be positive')
+    if not 0 <= phase_threshold <= 1:
+        raise InputError('phase-threshold must be between 0 and 1')
+
+    page_frequencies = Counter(reference)
+    top_pages = [
+        {'page': page, 'count': count}
+        for page, count in sorted(page_frequencies.items(), key=lambda item: (-item[1], item[0]))[:5]
+    ]
+
+    reuse_distances = compute_reuse_distances(reference)
+    finite_reuse_distances = sorted(distance for distance in reuse_distances if distance is not None)
+    bucket_order = ['cold', '1-2', '3-5', '6-9', '10+']
+    bucket_counts = Counter(bucket_reuse_distance(distance) for distance in reuse_distances)
+
+    working_set_sizes: list[int] = []
+    active_window = deque()
+    active_counts: Counter[int] = Counter()
+    for page in reference:
+        active_window.append(page)
+        active_counts[page] += 1
+        if len(active_window) > window_size:
+            removed = active_window.popleft()
+            active_counts[removed] -= 1
+            if active_counts[removed] == 0:
+                del active_counts[removed]
+        working_set_sizes.append(len(active_counts))
+
+    windows: list[dict] = []
+    window_page_sets: list[set[int]] = []
+    for start in range(0, len(reference), window_size):
+        chunk = reference[start : start + window_size]
+        chunk_counts = Counter(chunk)
+        top_chunk_pages = [
+            {'page': page, 'count': count}
+            for page, count in sorted(chunk_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
+        ]
+        windows.append(
+            {
+                'window_index': len(windows) + 1,
+                'start_reference': start + 1,
+                'end_reference': start + len(chunk),
+                'reference_count': len(chunk),
+                'unique_pages': len(chunk_counts),
+                'top_pages': top_chunk_pages,
+            }
+        )
+        window_page_sets.append(set(chunk_counts))
+
+    phase_boundaries: list[dict] = []
+    unique_shift_threshold = max(2, window_size // 3)
+    for previous_window, current_window, previous_pages, current_pages in zip(
+        windows, windows[1:], window_page_sets, window_page_sets[1:]
+    ):
+        union = previous_pages | current_pages
+        jaccard_similarity = len(previous_pages & current_pages) / len(union) if union else 1.0
+        unique_delta = current_window['unique_pages'] - previous_window['unique_pages']
+        if jaccard_similarity <= phase_threshold:
+            reason = 'page-set overlap dropped sharply'
+            if unique_delta >= unique_shift_threshold:
+                reason += ' and the working set expanded'
+            elif unique_delta <= -unique_shift_threshold:
+                reason += ' and the working set contracted'
+            phase_boundaries.append(
+                {
+                    'after_reference': previous_window['end_reference'],
+                    'before_window': previous_window['window_index'],
+                    'after_window': current_window['window_index'],
+                    'jaccard_similarity': round(jaccard_similarity, 4),
+                    'unique_pages_before': previous_window['unique_pages'],
+                    'unique_pages_after': current_window['unique_pages'],
+                    'reason': reason,
+                }
+            )
+
+    reuse_stats = {
+        'count': len(finite_reuse_distances),
+        'min': min(finite_reuse_distances) if finite_reuse_distances else None,
+        'median': percentile(finite_reuse_distances, 0.5) if finite_reuse_distances else None,
+        'p90': percentile(finite_reuse_distances, 0.9) if finite_reuse_distances else None,
+        'max': max(finite_reuse_distances) if finite_reuse_distances else None,
+        'average': round(sum(finite_reuse_distances) / len(finite_reuse_distances), 3) if finite_reuse_distances else None,
+    }
+
+    return {
+        'reference_string': reference,
+        'reference_length': len(reference),
+        'window_size': window_size,
+        'phase_threshold': round(phase_threshold, 4),
+        'unique_pages': len(page_frequencies),
+        'first_touches': sum(distance is None for distance in reuse_distances),
+        'reuses': len(finite_reuse_distances),
+        'top_pages': top_pages,
+        'reuse_distance_stats': reuse_stats,
+        'reuse_distance_buckets': [
+            {'bucket': bucket, 'count': bucket_counts.get(bucket, 0)} for bucket in bucket_order
+        ],
+        'working_set_stats': {
+            'min': min(working_set_sizes),
+            'max': max(working_set_sizes),
+            'average': round(sum(working_set_sizes) / len(working_set_sizes), 3),
+            'final': working_set_sizes[-1],
+        },
+        'windows': windows,
+        'phase_boundaries': phase_boundaries,
+    }
+
+
+def format_trace_summary_text(payload: dict, *, reference_source: str = 'custom') -> str:
+    hot_pages = ', '.join(
+        f"{entry['page']}×{entry['count']}" for entry in payload['top_pages']
+    ) or 'none'
+    bucket_lines = [
+        f"  - {entry['bucket']}: {entry['count']}" for entry in payload['reuse_distance_buckets']
+    ]
+    lines = [
+        format_reference_source(reference_source),
+        f"reference length: {payload['reference_length']}",
+        f"unique pages: {payload['unique_pages']}",
+        f"window size: {payload['window_size']}",
+        f"first touches: {payload['first_touches']}",
+        f"reuses: {payload['reuses']}",
+        f"top hot pages: {hot_pages}",
+    ]
+
+    reuse_stats = payload['reuse_distance_stats']
+    if reuse_stats['count']:
+        lines.append(
+            'reuse distance stats: '
+            f"min={reuse_stats['min']} median={reuse_stats['median']:.1f} "
+            f"p90={reuse_stats['p90']:.1f} max={reuse_stats['max']} avg={reuse_stats['average']:.2f}"
+        )
+    else:
+        lines.append('reuse distance stats: no repeated pages in this workload')
+
+    working_set = payload['working_set_stats']
+    lines.append(
+        'working-set size (sliding window): '
+        f"min={working_set['min']} max={working_set['max']} avg={working_set['average']:.2f} final={working_set['final']}"
+    )
+    lines.append('reuse distance buckets:')
+    lines.extend(bucket_lines)
+    lines.append('window summaries:')
+    for window in payload['windows']:
+        top_pages = ', '.join(
+            f"{entry['page']}×{entry['count']}" for entry in window['top_pages']
+        ) or 'none'
+        lines.append(
+            f"  - window {window['window_index']} ({window['start_reference']}..{window['end_reference']}): "
+            f"unique={window['unique_pages']} hot={top_pages}"
+        )
+
+    if payload['phase_boundaries']:
+        lines.append('phase-boundary hints:')
+        for boundary in payload['phase_boundaries']:
+            lines.append(
+                f"  - after ref {boundary['after_reference']}: windows {boundary['before_window']} -> {boundary['after_window']} "
+                f"overlap={boundary['jaccard_similarity']:.2f} ({boundary['reason']})"
+            )
+    else:
+        lines.append('phase-boundary hints: none detected for this window size')
+    return '\n'.join(lines)
+
+
+def format_trace_summary_markdown(payload: dict, *, reference_source: str = 'custom') -> str:
+    reuse_stats = payload['reuse_distance_stats']
+    working_set = payload['working_set_stats']
+    lines = [
+        '# Page Replacement Trace Summary',
+        '',
+        f"- workload: {describe_reference_label(reference_source)}",
+        f"- reference length: {payload['reference_length']}",
+        f"- unique pages: {payload['unique_pages']}",
+        f"- window size: {payload['window_size']}",
+        f"- first touches: {payload['first_touches']}",
+        f"- reuses: {payload['reuses']}",
+        f"- working-set size (sliding window): min {working_set['min']}, max {working_set['max']}, avg {working_set['average']:.2f}, final {working_set['final']}",
+    ]
+
+    if reuse_stats['count']:
+        lines.append(
+            f"- reuse distance stats: min {reuse_stats['min']}, median {reuse_stats['median']:.1f}, p90 {reuse_stats['p90']:.1f}, max {reuse_stats['max']}, avg {reuse_stats['average']:.2f}"
+        )
+    else:
+        lines.append('- reuse distance stats: no repeated pages in this workload')
+
+    lines.extend(
+        [
+            '',
+            '## Top hot pages',
+            '',
+            '| Page | Hits |',
+            '| ---: | ---: |',
+        ]
+    )
+    for entry in payload['top_pages']:
+        lines.append(f"| {entry['page']} | {entry['count']} |")
+
+    lines.extend(
+        [
+            '',
+            '## Reuse distance buckets',
+            '',
+            '| Bucket | Count |',
+            '| :--- | ---: |',
+        ]
+    )
+    for entry in payload['reuse_distance_buckets']:
+        lines.append(f"| {entry['bucket']} | {entry['count']} |")
+
+    lines.extend(
+        [
+            '',
+            '## Window summaries',
+            '',
+            '| Window | References | Unique pages | Hottest pages |',
+            '| ---: | :--- | ---: | :--- |',
+        ]
+    )
+    for window in payload['windows']:
+        hot_pages = ', '.join(
+            f"{entry['page']}×{entry['count']}" for entry in window['top_pages']
+        ) or 'none'
+        lines.append(
+            f"| {window['window_index']} | {window['start_reference']}..{window['end_reference']} | {window['unique_pages']} | {hot_pages} |"
+        )
+
+    lines.extend(['', '## Phase-boundary hints', ''])
+    if payload['phase_boundaries']:
+        for boundary in payload['phase_boundaries']:
+            lines.append(
+                f"- after reference {boundary['after_reference']}: windows {boundary['before_window']} -> {boundary['after_window']} have Jaccard overlap {boundary['jaccard_similarity']:.2f}; {boundary['reason']}."
+            )
+    else:
+        lines.append('- none detected for this window size.')
+
+    lines.extend(['', '## Reference string', '', '```text', ' '.join(str(page) for page in payload['reference_string']), '```'])
+    return '\n'.join(lines).rstrip() + '\n'
+
+
+
 def format_preset_text() -> str:
     lines = ["built-in workload presets:"]
     for preset in list_workload_presets():
@@ -1635,6 +1939,33 @@ def main(argv: list[str] | None = None) -> int:
             getattr(args, "benchmark", None),
         )
         reference = parsed_reference.reference_string
+
+        if args.command == "trace-summary":
+            payload = summarize_trace(
+                reference,
+                window_size=args.window_size,
+                phase_threshold=args.phase_threshold,
+            )
+            payload["reference_source"] = parsed_reference.source
+            if args.markdown_out:
+                write_text_output(
+                    args.markdown_out,
+                    format_trace_summary_markdown(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    ),
+                )
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(
+                    format_trace_summary_text(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    )
+                )
+            return 0
+
         if args.command == "simulate":
             result = simulate(args.algorithm, reference, args.frames)
             if args.json:
