@@ -5,7 +5,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from crdt_orset_lab import ORSet, ReplicaCluster, load_script, parse_tag
+from crdt_orset_lab import (
+    ORSet,
+    ReplicaCluster,
+    load_script,
+    parse_tag,
+    render_timeline_markdown,
+    render_timeline_mermaid,
+    render_timeline_svg,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -144,6 +152,85 @@ class ORSetLabTests(unittest.TestCase):
 
         self.assertTrue(result["convergence"]["converged"])
         self.assertEqual(result["replicas"]["b"]["active_tags"]["notebook"], ["c:1"])
+
+    def test_timeline_renderers_capture_observed_remove_story(self) -> None:
+        cluster = ReplicaCluster(["a", "b", "c"])
+        snapshot = cluster.run_script(load_script(SAMPLE_SCRIPT))
+
+        markdown = render_timeline_markdown(snapshot, "sample timeline")
+        mermaid = render_timeline_mermaid(snapshot, "sample timeline")
+        svg = render_timeline_svg(snapshot, "sample timeline")
+
+        self.assertIn("Observed-remove story", markdown)
+        self.assertIn("c:1", markdown)
+        self.assertIn("sequenceDiagram", mermaid)
+        self.assertIn("sync both", mermaid)
+        self.assertIn("<svg", svg)
+        self.assertIn("Final convergence", svg)
+        self.assertIn("c:1", svg)
+
+    def test_cli_run_script_writes_timeline_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir) / "artifacts"
+            markdown_path = artifact_dir / "timeline.md"
+            mermaid_path = artifact_dir / "timeline.mmd"
+            svg_path = artifact_dir / "timeline.svg"
+
+            result = run_cli(
+                "run-script",
+                "--replicas",
+                "a",
+                "b",
+                "c",
+                "--script",
+                str(SAMPLE_SCRIPT),
+                "--timeline-markdown-out",
+                str(markdown_path),
+                "--timeline-mermaid-out",
+                str(mermaid_path),
+                "--timeline-svg-out",
+                str(svg_path),
+            )
+
+            self.assertTrue(result["convergence"]["converged"])
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(mermaid_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertIn("OR-Set timeline", markdown_path.read_text())
+            self.assertIn("sequenceDiagram", mermaid_path.read_text())
+            self.assertIn("<svg", svg_path.read_text())
+
+    def test_cli_add_writes_timeline_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir) / "artifacts"
+            markdown_path = artifact_dir / "add.md"
+            mermaid_path = artifact_dir / "add.mmd"
+            svg_path = artifact_dir / "add.svg"
+
+            result = run_cli(
+                "add",
+                "--replicas",
+                "a",
+                "b",
+                "--replica",
+                "a",
+                "--element",
+                "notes",
+                "--timeline-markdown-out",
+                str(markdown_path),
+                "--timeline-mermaid-out",
+                str(mermaid_path),
+                "--timeline-svg-out",
+                str(svg_path),
+            )
+
+            self.assertEqual(result["replicas"]["a"]["active_tags"]["notes"], ["a:1"])
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(mermaid_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertIn("single add a:notes", markdown_path.read_text())
+            self.assertIn("add notes [a:1]", mermaid_path.read_text())
+            self.assertIn("single add a:notes", svg_path.read_text())
 
     def test_duplicate_replicas_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "replica names must be unique"):

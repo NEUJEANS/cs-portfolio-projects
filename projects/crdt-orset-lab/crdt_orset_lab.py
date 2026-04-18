@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
+from html import escape as escape_html
 from pathlib import Path
+from textwrap import wrap
 from typing import Iterable, Sequence
 
 
@@ -260,6 +262,328 @@ def load_script(path: str | Path) -> list[dict[str, object]]:
     return operations
 
 
+def summarize_tag_mapping(mapping: dict[str, Sequence[str]]) -> str:
+    parts: list[str] = []
+    for element in sorted(mapping):
+        tags = [str(tag) for tag in mapping[element]]
+        tag_text = ", ".join(tags) if tags else "∅"
+        parts.append(f"{element}={tag_text}")
+    return "; ".join(parts) if parts else "∅"
+
+
+def summarize_state(state: dict[str, object]) -> str:
+    elements = ", ".join(str(element) for element in state["elements"]) or "∅"
+    active = summarize_tag_mapping(dict(state["active_tags"]))
+    tombstones = ", ".join(str(tag) for tag in state["tombstones"]) or "∅"
+    return f"elements {elements}; active {active}; tombstones {tombstones}"
+
+
+def compact_state_note(state: dict[str, object]) -> str:
+    elements = ", ".join(str(element) for element in state["elements"]) or "∅"
+    active = summarize_tag_mapping(dict(state["active_tags"]))
+    tombstones = ", ".join(str(tag) for tag in state["tombstones"]) or "∅"
+    return f"elements={elements} | active={active} | tombstones={tombstones}"
+
+
+def sanitize_mermaid_text(text: str) -> str:
+    sanitized = " ".join(text.replace("`", "").replace('"', "'").split())
+    return sanitized.replace(" end ", " [end] ").replace(" end", " [end]")
+
+
+def mermaid_span(ids: Sequence[str]) -> str:
+    if not ids:
+        raise ValueError("expected at least one Mermaid actor id")
+    if len(ids) == 1:
+        return ids[0]
+    return f"{ids[0]},{ids[-1]}"
+
+
+def timeline_story(snapshot: dict[str, object]) -> str:
+    first_replica = next(iter(dict(snapshot["replicas"])), None)
+    if first_replica is None:
+        return "No replica state recorded."
+    first_state = dict(snapshot["replicas"])[first_replica]
+    elements = ", ".join(str(element) for element in first_state["elements"]) or "∅"
+    active = summarize_tag_mapping(dict(first_state["active_tags"]))
+    tombstones = ", ".join(str(tag) for tag in first_state["tombstones"]) or "∅"
+    if tombstones != "∅" and active != "∅":
+        return (
+            "Observed-remove story: a remove tombstones only the add-tags a replica has already observed, "
+            f"so membership still survives via {active} while tombstones retain {tombstones}."
+        )
+    return f"Final membership {elements}; active tags {active}; tombstones {tombstones}."
+
+
+def build_timeline_rows(snapshot: dict[str, object]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for step, event in enumerate(snapshot["timeline"], start=1):
+        op = str(event["op"])
+        if op == "add":
+            state = dict(event["state"])
+            rows.append(
+                {
+                    "step": step,
+                    "op": op,
+                    "event": f"{event['replica']} adds {event['element']}",
+                    "details": [
+                        f"new tag: {event['tag']}",
+                        compact_state_note(state),
+                    ],
+                }
+            )
+        elif op == "remove":
+            state = dict(event["state"])
+            removed_tags = ", ".join(str(tag) for tag in event["removed_tags"]) or "∅"
+            rows.append(
+                {
+                    "step": step,
+                    "op": op,
+                    "event": f"{event['replica']} removes {event['element']}",
+                    "details": [
+                        f"observed tags removed: {removed_tags}",
+                        compact_state_note(state),
+                    ],
+                }
+            )
+        else:
+            direction = str(event["direction"])
+            arrow = {"both": "↔", "forward": "→", "reverse": "←"}[direction]
+            source_state = dict(event["source_state"])
+            target_state = dict(event["target_state"])
+            rows.append(
+                {
+                    "step": step,
+                    "op": op,
+                    "event": f"{event['source']} {arrow} {event['target']} sync ({direction})",
+                    "details": [
+                        f"{event['source']}: {compact_state_note(source_state)}",
+                        f"{event['target']}: {compact_state_note(target_state)}",
+                    ],
+                }
+            )
+    return rows
+
+
+def render_timeline_markdown(snapshot: dict[str, object], title: str) -> str:
+    replicas = ", ".join(sorted(dict(snapshot["replicas"])))
+    lines = [
+        f"# OR-Set timeline — {title}",
+        "",
+        f"Replicas: {replicas}",
+        "",
+        f"Story: {timeline_story(snapshot)}",
+        "",
+        "| Step | Event | Details |",
+        "| --- | --- | --- |",
+    ]
+    for row in build_timeline_rows(snapshot):
+        detail_text = "<br>".join(str(detail).replace("|", "\\|") for detail in row["details"])
+        event_text = str(row["event"]).replace("|", "\\|")
+        lines.append(f"| {row['step']} | {event_text} | {detail_text} |")
+
+    lines.extend(["", "## Final replica states", ""])
+    for replica, state in dict(snapshot["replicas"]).items():
+        lines.append(f"- `{replica}` — {summarize_state(dict(state))}")
+
+    lines.extend([
+        "",
+        "## Convergence",
+        "",
+        f"- converged: `{str(snapshot['convergence']['converged']).lower()}`",
+    ])
+    return "\n".join(lines) + "\n"
+
+
+def render_timeline_mermaid(snapshot: dict[str, object], title: str) -> str:
+    replicas = list(sorted(dict(snapshot["replicas"])))
+    actor_ids = {replica: f"R{index + 1}" for index, replica in enumerate(replicas)}
+    span = mermaid_span([actor_ids[replica] for replica in replicas])
+    lines = [
+        "sequenceDiagram",
+        "    autonumber",
+    ]
+    for replica in replicas:
+        lines.append(f"    participant {actor_ids[replica]} as {sanitize_mermaid_text(replica)}")
+    lines.append(f"    Note over {span}: {sanitize_mermaid_text(title)}")
+
+    for event in snapshot["timeline"]:
+        op = str(event["op"])
+        if op == "add":
+            actor = actor_ids[str(event["replica"])]
+            lines.append(
+                f"    {actor}->>{actor}: {sanitize_mermaid_text(f'add {event['element']} [{event['tag']}]')}"
+            )
+            state = compact_state_note(dict(event["state"]))
+            lines.append(f"    Note over {actor}: {sanitize_mermaid_text(state)}")
+        elif op == "remove":
+            actor = actor_ids[str(event["replica"])]
+            removed_tags = ", ".join(str(tag) for tag in event["removed_tags"]) or "∅"
+            lines.append(
+                f"    {actor}->>{actor}: {sanitize_mermaid_text(f'remove {event['element']}')}"
+            )
+            lines.append(
+                f"    Note over {actor}: {sanitize_mermaid_text(f'removed {removed_tags}; {compact_state_note(dict(event['state']))}') }"
+            )
+        else:
+            source = str(event["source"])
+            target = str(event["target"])
+            direction = str(event["direction"])
+            if direction == "reverse":
+                sender, receiver = actor_ids[target], actor_ids[source]
+            else:
+                sender, receiver = actor_ids[source], actor_ids[target]
+            lines.append(
+                f"    {sender}->>{receiver}: {sanitize_mermaid_text(f'sync {direction}')}"
+            )
+            source_note = compact_state_note(dict(event["source_state"]))
+            target_note = compact_state_note(dict(event["target_state"]))
+            lines.append(
+                f"    Note over {actor_ids[source]},{actor_ids[target]}: {sanitize_mermaid_text(f'{source}: {source_note} || {target}: {target_note}') }"
+            )
+
+    lines.append(f"    Note over {span}: {sanitize_mermaid_text(timeline_story(snapshot))}")
+    return "\n".join(lines) + "\n"
+
+
+def wrap_svg_text(text: str, width: int = 70) -> list[str]:
+    pieces = [piece for piece in wrap(text, width=width) if piece]
+    return pieces or [text]
+
+
+def render_timeline_svg(snapshot: dict[str, object], title: str) -> str:
+    rows = build_timeline_rows(snapshot)
+    width = 1080
+    padding = 32
+    content_width = width - (padding * 2)
+    y = 108
+    box_gap = 18
+    row_blocks: list[dict[str, object]] = []
+    colors = {
+        "add": "#d1fae5",
+        "remove": "#fee2e2",
+        "sync": "#dbeafe",
+        "final": "#ede9fe",
+    }
+    border_colors = {
+        "add": "#10b981",
+        "remove": "#ef4444",
+        "sync": "#3b82f6",
+        "final": "#8b5cf6",
+    }
+
+    for row in rows:
+        detail_lines: list[str] = []
+        for detail in row["details"]:
+            detail_lines.extend(wrap_svg_text(str(detail), width=84))
+        block_height = 56 + (len(detail_lines) * 20)
+        row_blocks.append(
+            {
+                "row": row,
+                "detail_lines": detail_lines,
+                "y": y,
+                "height": block_height,
+            }
+        )
+        y += block_height + box_gap
+
+    final_lines = wrap_svg_text(timeline_story(snapshot), width=84)
+    for replica, state in dict(snapshot["replicas"]).items():
+        final_lines.extend(wrap_svg_text(f"{replica}: {summarize_state(dict(state))}", width=84))
+    final_height = 70 + (len(final_lines) * 20)
+    total_height = y + final_height + 36
+
+    svg: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{total_height}" viewBox="0 0 {width} {total_height}" role="img" aria-labelledby="title desc">',
+        "  <defs>",
+        "    <linearGradient id=\"timelineBg\" x1=\"0%\" x2=\"0%\" y1=\"0%\" y2=\"100%\">",
+        "      <stop offset=\"0%\" stop-color=\"#0f172a\" />",
+        "      <stop offset=\"100%\" stop-color=\"#111827\" />",
+        "    </linearGradient>",
+        "  </defs>",
+        f"  <title id=\"title\">{escape_html(title)}</title>",
+        f"  <desc id=\"desc\">{escape_html(timeline_story(snapshot))}</desc>",
+        f'  <rect x="0" y="0" width="{width}" height="{total_height}" fill="url(#timelineBg)" rx="24" />',
+        f'  <text x="{padding}" y="52" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">{escape_html(title)}</text>',
+        f'  <text x="{padding}" y="82" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="16">{escape_html("Observed-remove set timeline export")}</text>',
+    ]
+
+    for block in row_blocks:
+        row = dict(block["row"])
+        box_y = int(block["y"])
+        box_height = int(block["height"])
+        fill = colors[str(row["op"])]
+        border = border_colors[str(row["op"])]
+        svg.extend(
+            [
+                f'  <rect x="{padding}" y="{box_y}" width="{content_width}" height="{box_height}" rx="18" fill="{fill}" fill-opacity="0.95" stroke="{border}" stroke-width="2" />',
+                f'  <circle cx="{padding + 28}" cy="{box_y + 28}" r="18" fill="{border}" />',
+                f'  <text x="{padding + 28}" y="{box_y + 34}" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">{row["step"]}</text>',
+                f'  <text x="{padding + 62}" y="{box_y + 30}" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">{escape_html(str(row["event"]))}</text>',
+            ]
+        )
+        for index, line in enumerate(block["detail_lines"]):
+            svg.append(
+                f'  <text x="{padding + 62}" y="{box_y + 58 + (index * 20)}" fill="#1f2937" font-family="Arial, Helvetica, sans-serif" font-size="16">{escape_html(line)}</text>'
+            )
+
+    final_y = y
+    svg.extend(
+        [
+            f'  <rect x="{padding}" y="{final_y}" width="{content_width}" height="{final_height}" rx="18" fill="{colors['final']}" fill-opacity="0.98" stroke="{border_colors['final']}" stroke-width="2" />',
+            f'  <text x="{padding + 24}" y="{final_y + 32}" fill="#4c1d95" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">Final convergence</text>',
+            f'  <text x="{padding + content_width - 24}" y="{final_y + 32}" text-anchor="end" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">converged={escape_html(str(snapshot['convergence']['converged']).lower())}</text>',
+        ]
+    )
+    for index, line in enumerate(final_lines):
+        svg.append(
+            f'  <text x="{padding + 24}" y="{final_y + 64 + (index * 20)}" fill="#312e81" font-family="Arial, Helvetica, sans-serif" font-size="16">{escape_html(line)}</text>'
+        )
+
+    svg.append("</svg>")
+    return "\n".join(svg) + "\n"
+
+
+def write_text_output(path: str | Path, content: str) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(content)
+
+
+def add_timeline_output_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--timeline-markdown-out")
+    parser.add_argument("--timeline-mermaid-out")
+    parser.add_argument("--timeline-svg-out")
+
+
+def timeline_title_from_args(args: argparse.Namespace) -> str:
+    if args.command == "run-script":
+        return f"script {Path(args.script).name}"
+    if args.command == "add":
+        return f"single add {args.replica}:{args.element}"
+    if args.command == "remove":
+        return f"remove flow {args.replica}:{args.element}"
+    return f"sync flow {args.source} {args.direction} {args.target}"
+
+
+def write_timeline_outputs(args: argparse.Namespace, snapshot: dict[str, object]) -> None:
+    if not any(
+        [
+            args.timeline_markdown_out,
+            args.timeline_mermaid_out,
+            args.timeline_svg_out,
+        ]
+    ):
+        return
+
+    title = timeline_title_from_args(args)
+    if args.timeline_markdown_out:
+        write_text_output(args.timeline_markdown_out, render_timeline_markdown(snapshot, title))
+    if args.timeline_mermaid_out:
+        write_text_output(args.timeline_mermaid_out, render_timeline_mermaid(snapshot, title))
+    if args.timeline_svg_out:
+        write_text_output(args.timeline_svg_out, render_timeline_svg(snapshot, title))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Observed-remove set CRDT lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -267,17 +591,20 @@ def build_parser() -> argparse.ArgumentParser:
     run_script = subparsers.add_parser("run-script", help="run a JSON operation script across replicas")
     run_script.add_argument("--replicas", nargs="+", required=True)
     run_script.add_argument("--script", required=True)
+    add_timeline_output_arguments(run_script)
 
     add = subparsers.add_parser("add", help="apply one add on a fresh cluster")
     add.add_argument("--replicas", nargs="+", required=True)
     add.add_argument("--replica", required=True)
     add.add_argument("--element", required=True)
+    add_timeline_output_arguments(add)
 
     remove = subparsers.add_parser("remove", help="sync optional seed state, then remove an observed element")
     remove.add_argument("--replicas", nargs="+", required=True)
     remove.add_argument("--seed-script")
     remove.add_argument("--replica", required=True)
     remove.add_argument("--element", required=True)
+    add_timeline_output_arguments(remove)
 
     sync = subparsers.add_parser("sync", help="sync two replicas on a fresh or seeded cluster")
     sync.add_argument("--replicas", nargs="+", required=True)
@@ -285,6 +612,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--source", required=True)
     sync.add_argument("--target", required=True)
     sync.add_argument("--direction", choices=["both", "forward", "reverse"], default="both")
+    add_timeline_output_arguments(sync)
 
     return parser
 
@@ -310,6 +638,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cluster.sync(args.source, args.target, direction=args.direction)
         result = cluster.snapshot()
 
+    write_timeline_outputs(args, result)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

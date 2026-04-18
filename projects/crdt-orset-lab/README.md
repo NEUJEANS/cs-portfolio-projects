@@ -10,6 +10,7 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - shows replica-local tag generation, tombstones, and merge/convergence rules clearly
 - includes a scriptable cluster simulator so scenarios are resumable and easy to demo
 - produces JSON snapshots that explain active tags, observed tags, and tombstones per replica
+- now exports Markdown, Mermaid, and SVG timeline artifacts so the distributed story is screenshot-friendly instead of buried in raw JSON
 - covers a distributed-systems topic that pairs well with the repo's Raft, vector-clock, Chord, and snapshot labs
 
 ## Stack
@@ -24,6 +25,7 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - sync can run `both`, `forward`, or `reverse` to model anti-entropy or one-way propagation
 - JSON snapshots expose converged membership plus per-replica `active_tags`, `observed_tags`, and `tombstones`
 - convergence checks require full replica-state equality, not just matching element membership
+- optional timeline exports render the same run as Markdown notes, Mermaid sequence diagrams, and static SVG portfolio cards
 - includes a committed sample scenario that demonstrates a remove not deleting a concurrent/new add
 
 ## Usage
@@ -33,6 +35,18 @@ python3 crdt_orset_lab.py add --replicas a b --replica a --element notebook
 python3 crdt_orset_lab.py remove --replicas a b c --seed-script sample_ops.json --replica b --element notebook
 python3 crdt_orset_lab.py sync --replicas a b c --seed-script sample_ops.json --source a --target b --direction forward
 ```
+
+### Export timeline artifacts for the sample scenario
+```bash
+python3 crdt_orset_lab.py run-script \
+  --replicas a b c \
+  --script sample_ops.json \
+  --timeline-markdown-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.md \
+  --timeline-mermaid-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd \
+  --timeline-svg-out ../../docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg
+```
+
+Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts.
 
 ### Script format
 `sample_ops.json` uses this shape, and the CLI also accepts a plain top-level JSON list of operation objects when you do not need wrapper metadata:
@@ -63,12 +77,17 @@ The committed `sample_ops.json` walks through this sequence:
 
 That makes the OR-Set semantics visible in a way students can explain during a systems interview.
 
+## Committed artifact examples
+- `docs/artifacts/crdt-orset-lab/sample-ops-timeline.md` — step-by-step Markdown table for code review or notes
+- `docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd` — Mermaid sequence diagram source for editable replica timelines
+- `docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg` — screenshot-ready timeline card for README/slide use
+
 ## Test
 ```bash
 python3 -m unittest discover -s projects/crdt-orset-lab -p "test_*.py"
 ```
 
 ## Future improvements
-- add Mermaid timeline or lattice-style visualization exports for replica histories
-- support delta-state payload inspection so merge traffic size can be discussed explicitly
+- add delta-state payload inspection so merge traffic size can be discussed explicitly
 - add another CRDT variant such as an LWW-element-set or PN-counter bundle for side-by-side comparison
+- add a small HTML gallery/index page that links the timeline artifacts and raw JSON snapshot together
