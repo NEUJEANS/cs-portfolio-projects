@@ -1,13 +1,14 @@
 # log-analyzer
 
 ## Overview
-Analyze common, combined, and latency-augmented web access logs from the command line with per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, and per-path upstream hotspot summaries.
+Analyze common, combined, and latency-augmented web access logs from the command line with per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, and incident-style per-path hotspot drill-downs.
 
 ## Why it is portfolio-worthy
 - parses realistic common and combined access-log lines instead of doing loose substring counting
 - surfaces operational metrics that resemble real observability and traffic-analysis tasks
 - includes both human-readable and machine-friendly outputs for scripting and spreadsheet workflows
-- highlights slow endpoints directly with per-path latency hotspot summaries
+- highlights slow endpoints directly with per-path request and upstream latency hotspot summaries
+- supports status/method-filtered hotspot drill-downs for incident-response style analysis
 - handles malformed lines, missing byte counts, and optional latency fields safely
 
 ## Stack
@@ -24,7 +25,8 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - tracks total bytes, average bytes per request, malformed line count, request latency percentiles, and upstream latency percentiles when present
 - surfaces per-path request-latency hotspots ordered by average latency
 - surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--upstream-path-latency-csv`, and `--format text|json`
+- supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--upstream-path-latency-csv`, `--hotspot-status`, `--hotspot-method`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -33,6 +35,7 @@ python3 log_analyzer.py access.log --top 5
 python3 log_analyzer.py access.log --format json
 python3 log_analyzer.py access.log --summary-csv summary.csv --path-latency-csv hotspots.csv
 python3 log_analyzer.py access.log --path-latency-csv request-hotspots.csv --upstream-path-latency-csv upstream-hotspots.csv
+python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
 ```
 
 The parser accepts:
@@ -46,6 +49,19 @@ The parser accepts:
   - `upstream_response_time=0.201` feeds the upstream latency summary
   - multi-attempt upstream values such as `upstream_response_time=0.050, 0.125:0.075` are summed per request so retries stay visible in totals
 
+## Hotspot drill-downs
+Use `--hotspot-status` and `--hotspot-method` when you want the per-path hotspot sections and CSV exports to focus on a particular incident slice while keeping the top-level totals and percentile summaries global.
+
+Examples:
+- `--hotspot-status 500 --hotspot-status 502` isolates failing paths in the hotspot tables/exports
+- `--hotspot-method POST` focuses the hotspot tables/exports on mutating requests
+- combine both flags to highlight slow failing write endpoints without losing the overall traffic summary
+
+When filters are active:
+- text output annotates the hotspot section headings with the active filters
+- JSON output includes a `hotspot_filters` object
+- hotspot CSV exports add `status_filter` and `method_filter` columns so downstream charts stay self-describing
+
 ## CSV exports
 Use `--summary-csv` when you want a flat spreadsheet-friendly export of totals, ranked counters, and latency summary metrics.
 
@@ -57,7 +73,7 @@ Example columns:
 - `count` — count for counter-based rows
 - `value` — scalar metric value
 
-Use `--path-latency-csv` to export one row per hotspot path with these columns:
+Use `--path-latency-csv` to export one row per request-latency hotspot path with these columns:
 - `path`
 - `count`
 - `average_ms`
@@ -65,8 +81,10 @@ Use `--path-latency-csv` to export one row per hotspot path with these columns:
 - `p95_ms`
 - `p99_ms`
 - `max_ms`
+- `status_filter`
+- `method_filter`
 
-Use `--upstream-path-latency-csv` to export the same schema for `upstream_response_time=`-backed hotspots only. This makes it easy to show which endpoints are slow because of downstream services versus app-side processing.
+Use `--upstream-path-latency-csv` to export the same schema for `upstream_response_time=`-backed hotspots only. This makes it easy to show which endpoints are slow because of downstream services versus app-side processing. The filter columns stay blank when no hotspot drill-down flags are active.
 
 This makes it easy to drop a run into Sheets, Numbers, Excel, or plotting notebooks for portfolio screenshots and follow-up analysis.
 
@@ -106,12 +124,10 @@ Upstream latency summary (ms):
   p95: 36.5
   p99: 44.9
   Max: 51.0
-Per-path latency hotspots (ms):
+Per-path latency hotspots (ms): (filters: status=500,502; method=POST)
   /api/export: count=5, avg=91.3, p95=118.1, max=121.0
-  /dashboard: count=8, avg=44.8, p95=58.7, max=63.2
-Per-path upstream latency hotspots (ms):
+Per-path upstream latency hotspots (ms): (filters: status=500,502; method=POST)
   /api/export: count=5, avg=73.6, p95=99.0, max=101.4
-  /dashboard: count=6, avg=18.2, p95=27.4, max=29.1
 ```
 
 ## Test
@@ -120,5 +136,5 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 ```
 
 ## Future Improvements
-- add time-window or status-filter options for larger operational datasets
-- optionally add status/method filters to the per-path hotspot exports for deeper incident drill-downs
+- add time-window filters for larger operational datasets
+- optionally group hotspot drill-down exports by deployment or environment labels when those appear in richer custom log formats

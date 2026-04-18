@@ -1,5 +1,20 @@
 # Log Analyzer Checklist
 
+## Hotspot filter slice (2026-04-18 09:45 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the queued follow-up around status/method-filtered hotspot drill-downs
+- [x] do a short parser/filter refresh and self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add repeatable `--hotspot-status` and `--hotspot-method` CLI flags for incident-style hotspot drill-downs
+- [x] keep global request/upstream summary metrics unfiltered while applying filters only to per-path hotspot breakdowns and exports
+- [x] expose active hotspot filters in text output, JSON output, and hotspot CSV metadata columns
+- [x] extend tests for filtered breakdown behavior, JSON output, CSV exports, and CLI validation
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider a follow-up slice for time-window drill-downs or timestamp-aware hotspot bucketing
+
 ## Nginx timing fields slice (2026-04-18 09:02 UTC run)
 - [x] confirm repo sync before editing
 - [x] choose the queued follow-up around parsing named Nginx timing fields instead of starting a different project
@@ -43,4 +58,4 @@
 - [x] add optional latency summaries when logs include response-time fields
 - [x] export CSV summaries for spreadsheet/chart workflows
 - [x] add per-path latency breakdowns so slow endpoints stand out directly in the report
-- [ ] future slice: parse named timing fields such as `request_time=` and `upstream_response_time=` from richer Nginx-style access logs
+- [x] future slice: parse named timing fields such as `request_time=` and `upstream_response_time=` from richer Nginx-style access logs

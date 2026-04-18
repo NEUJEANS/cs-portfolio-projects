@@ -20,6 +20,7 @@ LOG_RE = re.compile(
 
 NAMED_FIELD_START_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
 NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
+STATUS_CODE_RE = re.compile(r'^\d{3}$')
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,50 @@ def summarize_path_latencies(path_latencies: dict[str, list[float]], limit: int)
     return rows[:limit]
 
 
+def normalize_hotspot_filters(
+    statuses: Iterable[str] | None = None,
+    methods: Iterable[str] | None = None,
+) -> dict[str, list[str]] | None:
+    normalized_statuses = sorted({status.strip() for status in statuses or [] if status.strip()})
+    normalized_methods = sorted(
+        {method.strip().upper() for method in methods or [] if method.strip()}
+    )
+    if not normalized_statuses and not normalized_methods:
+        return None
+    return {
+        "statuses": normalized_statuses,
+        "methods": normalized_methods,
+    }
+
+
+def matches_hotspot_filters(
+    parsed: ParsedLogLine,
+    hotspot_filters: dict[str, list[str]] | None,
+) -> bool:
+    if hotspot_filters is None:
+        return True
+
+    statuses = hotspot_filters["statuses"]
+    methods = hotspot_filters["methods"]
+    if statuses and parsed.status not in statuses:
+        return False
+    if methods and parsed.method not in methods:
+        return False
+    return True
+
+
+def format_hotspot_heading(label: str, hotspot_filters: dict[str, list[str]] | None) -> str:
+    if hotspot_filters is None:
+        return label
+
+    parts: list[str] = []
+    if hotspot_filters["statuses"]:
+        parts.append(f"status={','.join(hotspot_filters['statuses'])}")
+    if hotspot_filters["methods"]:
+        parts.append(f"method={','.join(hotspot_filters['methods'])}")
+    return f"{label} (filters: {'; '.join(parts)})"
+
+
 def parse_line(line: str) -> ParsedLogLine | None:
     match = LOG_RE.match(line.strip())
     if not match:
@@ -181,7 +226,13 @@ def parse_line(line: str) -> ParsedLogLine | None:
     )
 
 
-def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | None = None) -> dict:
+def analyze_lines(
+    lines: Iterable[str],
+    top_n: int = 3,
+    latency_top_n: int | None = None,
+    hotspot_statuses: Iterable[str] | None = None,
+    hotspot_methods: Iterable[str] | None = None,
+) -> dict:
     status_counts = Counter()
     ip_counts = Counter()
     path_counts = Counter()
@@ -197,6 +248,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
     invalid_lines = 0
 
     latency_limit = top_n if latency_top_n is None else latency_top_n
+    hotspot_filters = normalize_hotspot_filters(hotspot_statuses, hotspot_methods)
 
     for line in lines:
         parsed = parse_line(line)
@@ -216,10 +268,12 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
             user_agent_counts[parsed.user_agent] += 1
         if parsed.latency_ms is not None:
             latencies_ms.append(parsed.latency_ms)
-            path_latencies[parsed.path].append(parsed.latency_ms)
+            if matches_hotspot_filters(parsed, hotspot_filters):
+                path_latencies[parsed.path].append(parsed.latency_ms)
         if parsed.upstream_response_time_ms is not None:
             upstream_latencies_ms.append(parsed.upstream_response_time_ms)
-            upstream_path_latencies[parsed.path].append(parsed.upstream_response_time_ms)
+            if matches_hotspot_filters(parsed, hotspot_filters):
+                upstream_path_latencies[parsed.path].append(parsed.upstream_response_time_ms)
 
     average_bytes = round(total_bytes / total_requests, 2) if total_requests else 0.0
     return {
@@ -235,6 +289,7 @@ def analyze_lines(lines: Iterable[str], top_n: int = 3, latency_top_n: int | Non
         "top_user_agents": user_agent_counts.most_common(top_n),
         "latency_summary": summarize_latencies(latencies_ms),
         "upstream_latency_summary": summarize_latencies(upstream_latencies_ms),
+        "hotspot_filters": hotspot_filters,
         "path_latency_breakdown": summarize_path_latencies(path_latencies, latency_limit),
         "upstream_path_latency_breakdown": summarize_path_latencies(
             upstream_path_latencies, latency_limit
@@ -317,7 +372,7 @@ def format_text_report(result: dict) -> str:
     else:
         lines.append("  (none)")
 
-    lines.append("Per-path latency hotspots (ms):")
+    lines.append(format_hotspot_heading("Per-path latency hotspots (ms):", result["hotspot_filters"]))
     if result["path_latency_breakdown"]:
         for row in result["path_latency_breakdown"]:
             lines.append(
@@ -328,7 +383,11 @@ def format_text_report(result: dict) -> str:
     else:
         lines.append("  (none)")
 
-    lines.append("Per-path upstream latency hotspots (ms):")
+    lines.append(
+        format_hotspot_heading(
+            "Per-path upstream latency hotspots (ms):", result["hotspot_filters"]
+        )
+    )
     if result["upstream_path_latency_breakdown"]:
         for row in result["upstream_path_latency_breakdown"]:
             lines.append(
@@ -394,14 +453,38 @@ def write_summary_csv(destination: str | Path, result: dict) -> None:
             writer.writerow({field: row.get(field, "") for field in fieldnames})
 
 
-def write_path_latency_csv(destination: str | Path, rows: list[dict]) -> None:
-    fieldnames = ["path", "count", "average_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"]
+def write_path_latency_csv(
+    destination: str | Path,
+    rows: list[dict],
+    hotspot_filters: dict[str, list[str]] | None = None,
+) -> None:
+    fieldnames = [
+        "path",
+        "count",
+        "average_ms",
+        "p50_ms",
+        "p95_ms",
+        "p99_ms",
+        "max_ms",
+        "status_filter",
+        "method_filter",
+    ]
     destination_path = ensure_parent_directory(destination)
     with destination_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
-            writer.writerow(row)
+            writer.writerow(
+                {
+                    **row,
+                    "status_filter": "|".join(hotspot_filters["statuses"])
+                    if hotspot_filters
+                    else "",
+                    "method_filter": "|".join(hotspot_filters["methods"])
+                    if hotspot_filters
+                    else "",
+                }
+            )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -434,6 +517,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path for a per-path upstream-latency breakdown CSV export",
     )
     parser.add_argument(
+        "--hotspot-status",
+        action="append",
+        default=[],
+        help=(
+            "Restrict per-path hotspot breakdowns/CSV exports to matching status codes "
+            "(repeatable, e.g. --hotspot-status 500 --hotspot-status 502)"
+        ),
+    )
+    parser.add_argument(
+        "--hotspot-method",
+        action="append",
+        default=[],
+        help=(
+            "Restrict per-path hotspot breakdowns/CSV exports to matching HTTP methods "
+            "(repeatable, e.g. --hotspot-method POST)"
+        ),
+    )
+    parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
@@ -450,20 +551,39 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--top must be greater than 0")
     if args.latency_paths is not None and args.latency_paths <= 0:
         parser.error("--latency-paths must be greater than 0")
+    invalid_status_filters = [status for status in args.hotspot_status if not STATUS_CODE_RE.match(status)]
+    if invalid_status_filters:
+        parser.error(
+            "--hotspot-status must be a 3-digit status code "
+            f"(received: {', '.join(invalid_status_filters)})"
+        )
+    if any(not method.strip() for method in args.hotspot_method):
+        parser.error("--hotspot-method must not be blank")
 
     latency_top_n = args.top if args.latency_paths is None else args.latency_paths
 
     with open(args.logfile, encoding="utf-8") as handle:
-        result = analyze_lines(handle, top_n=args.top, latency_top_n=latency_top_n)
+        result = analyze_lines(
+            handle,
+            top_n=args.top,
+            latency_top_n=latency_top_n,
+            hotspot_statuses=args.hotspot_status,
+            hotspot_methods=args.hotspot_method,
+        )
 
     if args.summary_csv:
         write_summary_csv(args.summary_csv, result)
     if args.path_latency_csv:
-        write_path_latency_csv(args.path_latency_csv, result["path_latency_breakdown"])
+        write_path_latency_csv(
+            args.path_latency_csv,
+            result["path_latency_breakdown"],
+            result["hotspot_filters"],
+        )
     if args.upstream_path_latency_csv:
         write_path_latency_csv(
             args.upstream_path_latency_csv,
             result["upstream_path_latency_breakdown"],
+            result["hotspot_filters"],
         )
 
     if args.format == "json":

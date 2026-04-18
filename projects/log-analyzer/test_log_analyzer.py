@@ -148,6 +148,30 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['upstream_path_latency_breakdown'][1]['count'], 2)
         self.assertEqual(result['upstream_path_latency_breakdown'][1]['average_ms'], 120.0)
 
+    def test_analyze_lines_filters_hotspots_without_changing_global_summaries(self):
+        lines = [
+            '10.0.0.1 - - [x] "GET /health HTTP/1.1" 200 10 request_time=0.005 upstream_response_time=0.001',
+            '10.0.0.2 - - [x] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500',
+            '10.0.0.3 - - [x] "POST /api/report HTTP/1.1" 502 13 request_time=0.700 upstream_response_time=0.650',
+            '10.0.0.4 - - [x] "GET /api/report HTTP/1.1" 500 14 request_time=0.450 upstream_response_time=0.300',
+        ]
+        result = analyze_lines(
+            lines,
+            top_n=3,
+            hotspot_statuses=['500', '502'],
+            hotspot_methods=['POST'],
+        )
+        self.assertEqual(result['latency_summary']['count'], 4)
+        self.assertEqual(result['upstream_latency_summary']['count'], 4)
+        self.assertEqual(
+            result['hotspot_filters'],
+            {'statuses': ['500', '502'], 'methods': ['POST']},
+        )
+        self.assertEqual([row['path'] for row in result['path_latency_breakdown']], ['/api/report'])
+        self.assertEqual(result['path_latency_breakdown'][0]['count'], 2)
+        self.assertEqual(result['path_latency_breakdown'][0]['average_ms'], 650.0)
+        self.assertEqual(result['upstream_path_latency_breakdown'][0]['average_ms'], 575.0)
+
     def test_format_text_report_handles_empty_results(self):
         report = format_text_report(analyze_lines([], top_n=3))
         self.assertIn('Total requests: 0', report)
@@ -158,6 +182,20 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('Per-path latency hotspots (ms):', report)
         self.assertIn('Per-path upstream latency hotspots (ms):', report)
         self.assertIn('  (none)', report)
+
+    def test_format_text_report_mentions_hotspot_filters(self):
+        report = format_text_report(
+            analyze_lines(
+                [
+                    '10.0.0.1 - - [x] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500',
+                ],
+                top_n=1,
+                hotspot_statuses=['500'],
+                hotspot_methods=['POST'],
+            )
+        )
+        self.assertIn('Per-path latency hotspots (ms): (filters: status=500; method=POST)', report)
+        self.assertIn('Per-path upstream latency hotspots (ms): (filters: status=500; method=POST)', report)
 
     def test_cli_json_output_includes_named_timing_summaries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -186,6 +224,50 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['upstream_latency_summary']['average_ms'], 100.0)
             self.assertEqual(payload['path_latency_breakdown'][0]['path'], '/login')
             self.assertEqual(payload['upstream_path_latency_breakdown'][0]['path'], '/login')
+            self.assertIsNone(payload['hotspot_filters'])
+
+    def test_cli_json_output_supports_hotspot_filters(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [x] "GET /health HTTP/1.1" 200 10 request_time=0.005 upstream_response_time=0.001
+                    10.0.0.2 - - [x] "POST /api/report HTTP/1.1" 500 12 request_time=0.600 upstream_response_time=0.500
+                    10.0.0.3 - - [x] "POST /api/report HTTP/1.1" 502 13 request_time=0.700 upstream_response_time=0.650
+                    10.0.0.4 - - [x] "GET /api/report HTTP/1.1" 500 14 request_time=0.450 upstream_response_time=0.300
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--top',
+                    '3',
+                    '--hotspot-status',
+                    '500',
+                    '--hotspot-status',
+                    '502',
+                    '--hotspot-method',
+                    'POST',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload['hotspot_filters'], {'statuses': ['500', '502'], 'methods': ['POST']})
+            self.assertEqual(payload['latency_summary']['count'], 4)
+            self.assertEqual(len(payload['path_latency_breakdown']), 1)
+            self.assertEqual(payload['path_latency_breakdown'][0]['path'], '/api/report')
+            self.assertEqual(payload['path_latency_breakdown'][0]['count'], 2)
+            self.assertEqual(payload['upstream_path_latency_breakdown'][0]['average_ms'], 575.0)
 
     def test_cli_csv_exports_include_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -240,6 +322,8 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(latency_rows[0]['path'], '/slow')
             self.assertEqual(latency_rows[0]['count'], '2')
             self.assertEqual(latency_rows[0]['average_ms'], '475.0')
+            self.assertEqual(latency_rows[0]['status_filter'], '')
+            self.assertEqual(latency_rows[0]['method_filter'], '')
 
             with upstream_breakdown_csv.open(encoding='utf-8', newline='') as handle:
                 upstream_rows = list(csv.DictReader(handle))
@@ -247,6 +331,61 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(upstream_rows[0]['path'], '/slow')
             self.assertEqual(upstream_rows[0]['count'], '2')
             self.assertEqual(upstream_rows[0]['average_ms'], '335.0')
+
+    def test_cli_csv_exports_record_hotspot_filter_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            breakdown_csv = Path(tmpdir) / 'exports' / 'path-latency.csv'
+            upstream_breakdown_csv = Path(tmpdir) / 'exports' / 'upstream-path-latency.csv'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [x] "POST /api/report HTTP/1.1" 500 15 request_time=0.450 upstream_response_time=0.300
+                    10.0.0.2 - - [x] "POST /api/report HTTP/1.1" 502 18 request_time=0.500 upstream_response_time=0.320
+                    10.0.0.3 - - [x] "GET /health HTTP/1.1" 200 10 request_time=0.010 upstream_response_time=0.005
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--top',
+                    '2',
+                    '--hotspot-status',
+                    '500',
+                    '--hotspot-status',
+                    '502',
+                    '--hotspot-method',
+                    'POST',
+                    '--path-latency-csv',
+                    str(breakdown_csv),
+                    '--upstream-path-latency-csv',
+                    str(upstream_breakdown_csv),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            with breakdown_csv.open(encoding='utf-8', newline='') as handle:
+                latency_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(latency_rows), 1)
+            self.assertEqual(latency_rows[0]['path'], '/api/report')
+            self.assertEqual(latency_rows[0]['status_filter'], '500|502')
+            self.assertEqual(latency_rows[0]['method_filter'], 'POST')
+
+            with upstream_breakdown_csv.open(encoding='utf-8', newline='') as handle:
+                upstream_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(upstream_rows), 1)
+            self.assertEqual(upstream_rows[0]['path'], '/api/report')
+            self.assertEqual(upstream_rows[0]['status_filter'], '500|502')
+            self.assertEqual(upstream_rows[0]['method_filter'], 'POST')
 
     def test_cli_text_output_mentions_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -268,6 +407,28 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Upstream latency summary (ms):', completed.stdout)
             self.assertIn('Per-path latency hotspots (ms):', completed.stdout)
             self.assertIn('Per-path upstream latency hotspots (ms):', completed.stdout)
+
+    def test_cli_rejects_invalid_hotspot_status(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [x] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--hotspot-status',
+                    'oops',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--hotspot-status must be a 3-digit status code', completed.stderr)
 
 
 if __name__ == '__main__':
