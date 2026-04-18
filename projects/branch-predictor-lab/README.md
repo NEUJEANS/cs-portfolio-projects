@@ -81,7 +81,7 @@ python3 projects/branch-predictor-lab/branch_predictor.py sweep \
   --svg-out docs/artifacts/branch-predictor-lab/trace-family-sweep.svg
 ```
 
-Generate a budget-normalized artifact that lets predictors compete under roughly equal state-bit budgets instead of one shared table/history setting, now with a whole-grid win summary inside the exported Markdown/SVG artifacts:
+Generate a budget-normalized artifact that lets predictors compete under roughly equal state-bit budgets instead of one shared table/history setting, now with a whole-grid win summary plus blue matrix flip chips that mark the exact budget cell where the winner changes:
 
 ```bash
 python3 projects/branch-predictor-lab/branch_predictor.py budget-sweep \
@@ -295,7 +295,7 @@ Run the tests:
 - gshare keeps a small global history register and XORs it with the branch address bits so one static branch can map to different counters based on recent behavior
 - the perceptron predictor keeps a signed weight vector per static branch bucket and trains it with the classic update rule when the prediction is wrong or not confident, which makes long-history correlations explainable instead of purely table-lookup based
 - the `perceptron-sweep` command turns threshold and weight-clamp tuning into a committed Markdown/SVG artifact, so the neural predictor story includes practical parameter sensitivity instead of only one lucky run
-- the `budget-sweep` command searches best-fit configs under shared approximate state-bit budgets, emits a CSV winner matrix for spreadsheet/chart reuse, and now adds margin-trend + runner-up-stability summaries so near-ties stay visible instead of disappearing behind the winner labels
+- the `budget-sweep` command searches best-fit configs under shared approximate state-bit budgets, emits a CSV winner matrix for spreadsheet/chart reuse, adds margin-trend + runner-up-stability summaries so near-ties stay visible instead of disappearing behind the winner labels, and now tags crossover-trigger cells with blue flip chips so the exact winner-change budget is visible directly on the SVG matrix
 - the `table-size-sweep` command compares static PC alias counts, dynamic gshare live collisions, and paired two-bit/gshare accuracy columns across the same seeded workloads, which makes aliasing trade-offs easier to discuss as the table grows
 - the tournament predictor tracks when local-history vs gshare is doing better for a given PC and exposes chooser-state snapshots so the hybrid behavior is inspectable in JSON output
 - compare output includes both a static PC-index aliasing summary and a dynamic gshare-index aliasing summary, so you can point at exact colliding buckets and history-conditioned conflicts when discussing table-size trade-offs
@@ -312,10 +312,11 @@ Run the tests:
 - use the perceptron tuning sweep when you want to show that confidence thresholds and hardware-friendly weight clamps still shape the final accuracy story
 - use the trace-family sweep card when you want one overview slide that shows different workloads favor different predictors instead of implying there is one universal winner
 - use the budget-sweep whole-grid summary when you want a fast macro answer for which predictors dominate the overall budget matrix before showing the per-workload cells underneath
+- use the blue flip chips on the budget-sweep SVG winner matrix when you want the screenshot itself to show exactly which budget cell introduced a new winner
 - use the budget-sweep margin-trend section when you want to show that some budget winners are basically photo finishes while others create clear separation from the runner-up
 - use the alias table-size sweep when you want to explain why larger tables reduce some static collisions while history-aware indexing can still reshuffle dynamic conflicts in non-monotonic ways
 - show recruiters or classmates that the project can generate its own controlled traces, which makes your benchmarking story stronger than a single hand-written input file
 
 ## Future improvements
-- annotate crossover cells directly on the winner matrix or export a crossover-only slide card for even faster portfolio screenshots
-- highlight budget crossover points where the winning predictor flips, so the gallery can call out the exact budgets that trigger architecture changes
+- export a standalone crossover-only slide card (or PNG-friendly companion) for even faster portfolio screenshots when the full matrix is too dense
+- add hover/click-friendly HTML artifact variants that can filter the winner matrix down to one workload or one predictor family at a time

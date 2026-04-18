@@ -24,4 +24,6 @@
 ## Next candidate slices
 - [x] Add artifact-ready stacked bar / heatmap exports that summarize how often each predictor wins across the whole budget grid, not just per-workload rows
 - [x] Add budget-grid runner-up stability or winner-margin trend artifacts so near-ties are visible alongside outright wins
-- [ ] Highlight budget crossover points where the winner changes so the artifact can call out the exact flip budgets
+- [x] Highlight budget crossover points where the winner changes so the artifact can call out the exact flip budgets
+- [x] Annotate crossover-trigger cells directly on the winner matrix so slide screenshots show the exact flip location without reading the separate summary card
+- [ ] Export a standalone crossover-only slide card (or PNG-friendly companion) when the full budget matrix is too dense for one screenshot

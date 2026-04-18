@@ -1,5 +1,19 @@
 # branch-predictor-lab checklist
 
+## Budget matrix crossover annotation slice (2026-04-18 05:35 UTC run)
+- [x] confirm repo sync before editing
+- [x] choose the queued follow-up around annotating crossover cells directly on the winner matrix
+- [x] do a short Python/SVG annotation refresh and self-test if implementation details need it
+- [x] update checklist/docs so the slice is resumable before coding
+- [x] annotate crossover-trigger budget cells directly on the budget-sweep winner matrix so slide screenshots show the flip location without reading the separate summary card
+- [x] mirror the new matrix callouts in Markdown/README/gallery copy so the artifact story stays consistent
+- [x] extend tests for SVG/Markdown annotation coverage and CLI export expectations
+- [x] regenerate the committed budget-sweep artifacts after the annotation pass
+- [x] run targeted tests and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider exporting a standalone crossover-only slide card in a future run
+
 ## Budget crossover highlight slice (2026-04-18 05:04 UTC run)
 - [x] confirm repo sync before editing
 - [x] choose the queued follow-up around budget crossover points where the winning predictor changes
@@ -34,4 +48,4 @@
 - [x] add perceptron threshold/weight-limit sweep reports so the neural predictor has the same artifact depth as the alias-thrash demos
 - [x] add budget-normalized sweeps so predictors can compete under similar state-bit budgets
 - [x] add CSV/export-friendly budget winner matrices so README charts and slide decks can reuse the same sweep without re-parsing Markdown
-- [ ] add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family
+- [x] add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family

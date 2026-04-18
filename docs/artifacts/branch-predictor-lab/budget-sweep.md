@@ -1,11 +1,11 @@
 # Branch predictor budget-normalized sweep
 
-- Generated: `2026-04-18T05:24:28Z`
+- Generated: `2026-04-18T05:43:53Z`
 - Workloads: `5` synthetic families
 - Compared budgets: `64 bits, 128 bits, 256 bits, 512 bits, 1024 bits`
 - Search space: table sizes `4, 8, 16, 32, 64` · history bits `1, 2, 4, 8, 12` · perceptron weight limits `15, 31, 74`
 - Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.
-- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, a winner-margin trend card, and a crossover card that calls out the exact budget steps where the winning predictor flips.
+- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, a winner-margin trend card, a crossover card, and blue flip chips on the winner matrix cells that mark exactly where the winning predictor changes.
 
 ## Overview
 
@@ -101,14 +101,15 @@
 - Trace config: `branches=40` · `seed=7`
 - Winner sequence: 64b:gshare → 128b:gshare → 256b:gshare → 512b:gshare → 1024b:gshare
 - Crossover points: none
+- SVG matrix callouts: none
 
-| Budget | Winner | Runner-up | Best simple | Best advanced |
-| ---: | --- | --- | --- | --- |
-| `64` | `gshare` `82.50%` | `local-history` (`0.00 pp` gap) | `always-taken` `80.00%` | `gshare` `82.50%` |
-| `128` | `gshare` `87.50%` | `local-history` (`5.00 pp` gap) | `always-taken` `80.00%` | `gshare` `87.50%` |
-| `256` | `gshare` `90.00%` | `local-history` (`7.50 pp` gap) | `always-taken` `80.00%` | `gshare` `90.00%` |
-| `512` | `gshare` `90.00%` | `tournament` (`5.00 pp` gap) | `always-taken` `80.00%` | `gshare` `90.00%` |
-| `1024` | `gshare` `90.00%` | `tournament` (`5.00 pp` gap) | `always-taken` `80.00%` | `gshare` `90.00%` |
+| Budget | Winner | Runner-up | Matrix callout | Best simple | Best advanced |
+| ---: | --- | --- | --- | --- | --- |
+| `64` | `gshare` `82.50%` | `local-history` (`0.00 pp` gap) | - | `always-taken` `80.00%` | `gshare` `82.50%` |
+| `128` | `gshare` `87.50%` | `local-history` (`5.00 pp` gap) | - | `always-taken` `80.00%` | `gshare` `87.50%` |
+| `256` | `gshare` `90.00%` | `local-history` (`7.50 pp` gap) | - | `always-taken` `80.00%` | `gshare` `90.00%` |
+| `512` | `gshare` `90.00%` | `tournament` (`5.00 pp` gap) | - | `always-taken` `80.00%` | `gshare` `90.00%` |
+| `1024` | `gshare` `90.00%` | `tournament` (`5.00 pp` gap) | - | `always-taken` `80.00%` | `gshare` `90.00%` |
 
 Representative best-fit configs:
 - `64 bits` → gshare 82.50% (gshare · table=16 · history=4 · bits=36); local-history 82.50% (local-history · table=4 · history=4 · bits=48); always-taken 80.00% (always-taken · stateless)
@@ -123,14 +124,15 @@ Representative best-fit configs:
 - Trace config: `branches=96` · `seed=11`
 - Winner sequence: 64b:always-taken → 128b:two-bit → 256b:two-bit → 512b:two-bit → 1024b:two-bit
 - Crossover points: 64→128b always-taken→two-bit
+- SVG matrix callouts: 64→128b marks always-taken → two-bit
 
-| Budget | Winner | Runner-up | Best simple | Best advanced |
-| ---: | --- | --- | --- | --- |
-| `64` | `always-taken` `52.08%` | `two-bit` (`0.00 pp` gap) | `always-taken` `52.08%` | `local-history` `51.04%` |
-| `128` | `two-bit` `63.54%` | `gshare` (`10.42 pp` gap) | `two-bit` `63.54%` | `gshare` `53.12%` |
-| `256` | `two-bit` `63.54%` | `gshare` (`3.12 pp` gap) | `two-bit` `63.54%` | `gshare` `60.42%` |
-| `512` | `two-bit` `63.54%` | `gshare` (`3.12 pp` gap) | `two-bit` `63.54%` | `gshare` `60.42%` |
-| `1024` | `two-bit` `63.54%` | `perceptron` (`2.08 pp` gap) | `two-bit` `63.54%` | `perceptron` `61.46%` |
+| Budget | Winner | Runner-up | Matrix callout | Best simple | Best advanced |
+| ---: | --- | --- | --- | --- | --- |
+| `64` | `always-taken` `52.08%` | `two-bit` (`0.00 pp` gap) | - | `always-taken` `52.08%` | `local-history` `51.04%` |
+| `128` | `two-bit` `63.54%` | `gshare` (`10.42 pp` gap) | `64→128b` `always-taken → two-bit` | `two-bit` `63.54%` | `gshare` `53.12%` |
+| `256` | `two-bit` `63.54%` | `gshare` (`3.12 pp` gap) | - | `two-bit` `63.54%` | `gshare` `60.42%` |
+| `512` | `two-bit` `63.54%` | `gshare` (`3.12 pp` gap) | - | `two-bit` `63.54%` | `gshare` `60.42%` |
+| `1024` | `two-bit` `63.54%` | `perceptron` (`2.08 pp` gap) | - | `two-bit` `63.54%` | `perceptron` `61.46%` |
 
 Representative best-fit configs:
 - `64 bits` → always-taken 52.08% (always-taken · stateless); two-bit 52.08% (two-bit · table=32 · bits=64); one-bit 52.08% (one-bit · table=64 · bits=64)
@@ -145,14 +147,15 @@ Representative best-fit configs:
 - Trace config: `branches=48` · `seed=5`
 - Winner sequence: 64b:gshare → 128b:gshare → 256b:gshare → 512b:tournament → 1024b:tournament
 - Crossover points: 256→512b gshare→tournament
+- SVG matrix callouts: 256→512b marks gshare → tournament
 
-| Budget | Winner | Runner-up | Best simple | Best advanced |
-| ---: | --- | --- | --- | --- |
-| `64` | `gshare` `72.92%` | `local-history` (`0.00 pp` gap) | `one-bit` `68.75%` | `gshare` `72.92%` |
-| `128` | `gshare` `77.08%` | `local-history` (`0.00 pp` gap) | `one-bit` `68.75%` | `gshare` `77.08%` |
-| `256` | `gshare` `77.08%` | `local-history` (`0.00 pp` gap) | `one-bit` `68.75%` | `gshare` `77.08%` |
-| `512` | `tournament` `83.33%` | `gshare` (`6.25 pp` gap) | `one-bit` `68.75%` | `tournament` `83.33%` |
-| `1024` | `tournament` `83.33%` | `perceptron` (`4.17 pp` gap) | `one-bit` `68.75%` | `tournament` `83.33%` |
+| Budget | Winner | Runner-up | Matrix callout | Best simple | Best advanced |
+| ---: | --- | --- | --- | --- | --- |
+| `64` | `gshare` `72.92%` | `local-history` (`0.00 pp` gap) | - | `one-bit` `68.75%` | `gshare` `72.92%` |
+| `128` | `gshare` `77.08%` | `local-history` (`0.00 pp` gap) | - | `one-bit` `68.75%` | `gshare` `77.08%` |
+| `256` | `gshare` `77.08%` | `local-history` (`0.00 pp` gap) | - | `one-bit` `68.75%` | `gshare` `77.08%` |
+| `512` | `tournament` `83.33%` | `gshare` (`6.25 pp` gap) | `256→512b` `gshare → tournament` | `one-bit` `68.75%` | `tournament` `83.33%` |
+| `1024` | `tournament` `83.33%` | `perceptron` (`4.17 pp` gap) | - | `one-bit` `68.75%` | `tournament` `83.33%` |
 
 Representative best-fit configs:
 - `64 bits` → gshare 72.92% (gshare · table=16 · history=4 · bits=36); local-history 72.92% (local-history · table=4 · history=4 · bits=48); one-bit 68.75% (one-bit · table=4 · bits=4)
@@ -167,14 +170,15 @@ Representative best-fit configs:
 - Trace config: `branches=64` · `seed=7`
 - Winner sequence: 64b:local-history → 128b:gshare → 256b:gshare → 512b:gshare → 1024b:gshare
 - Crossover points: 64→128b local-history→gshare
+- SVG matrix callouts: 64→128b marks local-history → gshare
 
-| Budget | Winner | Runner-up | Best simple | Best advanced |
-| ---: | --- | --- | --- | --- |
-| `64` | `local-history` `79.69%` | `perceptron` (`0.00 pp` gap) | `two-bit` `79.69%` | `local-history` `79.69%` |
-| `128` | `gshare` `81.25%` | `local-history` (`1.56 pp` gap) | `two-bit` `79.69%` | `gshare` `81.25%` |
-| `256` | `gshare` `81.25%` | `local-history` (`1.56 pp` gap) | `two-bit` `79.69%` | `gshare` `81.25%` |
-| `512` | `gshare` `81.25%` | `perceptron` (`0.00 pp` gap) | `two-bit` `79.69%` | `gshare` `81.25%` |
-| `1024` | `gshare` `81.25%` | `perceptron` (`0.00 pp` gap) | `two-bit` `79.69%` | `gshare` `81.25%` |
+| Budget | Winner | Runner-up | Matrix callout | Best simple | Best advanced |
+| ---: | --- | --- | --- | --- | --- |
+| `64` | `local-history` `79.69%` | `perceptron` (`0.00 pp` gap) | - | `two-bit` `79.69%` | `local-history` `79.69%` |
+| `128` | `gshare` `81.25%` | `local-history` (`1.56 pp` gap) | `64→128b` `local-history → gshare` | `two-bit` `79.69%` | `gshare` `81.25%` |
+| `256` | `gshare` `81.25%` | `local-history` (`1.56 pp` gap) | - | `two-bit` `79.69%` | `gshare` `81.25%` |
+| `512` | `gshare` `81.25%` | `perceptron` (`0.00 pp` gap) | - | `two-bit` `79.69%` | `gshare` `81.25%` |
+| `1024` | `gshare` `81.25%` | `perceptron` (`0.00 pp` gap) | - | `two-bit` `79.69%` | `gshare` `81.25%` |
 
 Representative best-fit configs:
 - `64 bits` → local-history 79.69% (local-history · table=4 · history=4 · bits=48); perceptron 79.69% (perceptron · table=4 · history=2 · w=15 · bits=62); two-bit 79.69% (two-bit · table=32 · bits=64)
@@ -189,14 +193,15 @@ Representative best-fit configs:
 - Trace config: `branches=96` · `seed=13`
 - Winner sequence: 64b:perceptron → 128b:perceptron → 256b:gshare → 512b:perceptron → 1024b:perceptron
 - Crossover points: 128→256b perceptron→gshare | 256→512b gshare→perceptron
+- SVG matrix callouts: 128→256b marks perceptron → gshare; 256→512b marks gshare → perceptron
 
-| Budget | Winner | Runner-up | Best simple | Best advanced |
-| ---: | --- | --- | --- | --- |
-| `64` | `perceptron` `82.29%` | `gshare` (`1.04 pp` gap) | `always-not-taken` `75.00%` | `perceptron` `82.29%` |
-| `128` | `perceptron` `82.29%` | `gshare` (`1.04 pp` gap) | `always-not-taken` `75.00%` | `perceptron` `82.29%` |
-| `256` | `gshare` `83.33%` | `perceptron` (`1.04 pp` gap) | `always-not-taken` `75.00%` | `gshare` `83.33%` |
-| `512` | `perceptron` `92.71%` | `gshare` (`9.38 pp` gap) | `always-not-taken` `75.00%` | `perceptron` `92.71%` |
-| `1024` | `perceptron` `92.71%` | `tournament` (`0.00 pp` gap) | `always-not-taken` `75.00%` | `perceptron` `92.71%` |
+| Budget | Winner | Runner-up | Matrix callout | Best simple | Best advanced |
+| ---: | --- | --- | --- | --- | --- |
+| `64` | `perceptron` `82.29%` | `gshare` (`1.04 pp` gap) | - | `always-not-taken` `75.00%` | `perceptron` `82.29%` |
+| `128` | `perceptron` `82.29%` | `gshare` (`1.04 pp` gap) | - | `always-not-taken` `75.00%` | `perceptron` `82.29%` |
+| `256` | `gshare` `83.33%` | `perceptron` (`1.04 pp` gap) | `128→256b` `perceptron → gshare` | `always-not-taken` `75.00%` | `gshare` `83.33%` |
+| `512` | `perceptron` `92.71%` | `gshare` (`9.38 pp` gap) | `256→512b` `gshare → perceptron` | `always-not-taken` `75.00%` | `perceptron` `92.71%` |
+| `1024` | `perceptron` `92.71%` | `tournament` (`0.00 pp` gap) | - | `always-not-taken` `75.00%` | `perceptron` `92.71%` |
 
 Representative best-fit configs:
 - `64 bits` → perceptron 82.29% (perceptron · table=4 · history=2 · w=15 · bits=62); gshare 81.25% (gshare · table=4 · history=2 · bits=10); local-history 81.25% (local-history · table=4 · history=2 · bits=16)
@@ -210,7 +215,7 @@ Representative best-fit configs:
 - Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.
 - Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.
 - Use the margin-trend section when you want to point out that some budget winners are basically photo finishes while others create real separation from the runner-up.
-- Use the crossover section when you want the exact budget step that triggers an architecture change instead of only a winner-at-each-budget table.
+- Use the crossover section when you want the exact budget step that triggers an architecture change instead of only a winner-at-each-budget table, and point at the blue flip chips on the SVG matrix when you need the screenshot to show that trigger directly.
 - Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.
 - The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.
 - Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.

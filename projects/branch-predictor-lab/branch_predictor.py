@@ -2339,6 +2339,17 @@ def _format_budget_crossover_label(crossover: dict[str, Any]) -> str:
     )
 
 
+def _budget_crossover_chip_label(crossover: dict[str, Any]) -> str:
+    return f"{crossover['from_budget_bits']}→{crossover['to_budget_bits']}b"
+
+
+def _build_budget_crossover_lookup(crossover_summary: dict[str, Any]) -> dict[tuple[str, int], dict[str, Any]]:
+    return {
+        (row["workload"], row["to_budget_bits"]): row
+        for row in crossover_summary["crossovers"]
+    }
+
+
 def summarize_budget_crossover_points(scenarios: list[dict[str, Any]]) -> dict[str, Any]:
     if not scenarios:
         raise ValueError("scenarios must not be empty")
@@ -2437,6 +2448,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     winner_summary = summarize_budget_winner_grid(scenarios)
     margin_summary = summarize_budget_margin_story(scenarios)
     crossover_summary = summarize_budget_crossover_points(scenarios)
+    crossover_lookup = _build_budget_crossover_lookup(crossover_summary)
     lines = [
         "# Branch predictor budget-normalized sweep",
         "",
@@ -2445,7 +2457,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
         f"- Compared budgets: `{', '.join(f'{budget} bits' for budget in budgets)}`",
         f"- Search space: table sizes `{', '.join(str(value) for value in table_sizes)}` · history bits `{', '.join(str(value) for value in history_bits_options)}` · perceptron weight limits `{', '.join(str(value) for value in weight_limits)}`",
         "- Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.",
-        "- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, a winner-margin trend card, and a crossover card that calls out the exact budget steps where the winning predictor flips.",
+        "- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, a winner-margin trend card, a crossover card, and blue flip chips on the winner matrix cells that mark exactly where the winning predictor changes.",
         "",
         "## Overview",
         "",
@@ -2568,6 +2580,13 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     lines.extend(["", "## Per-workload notes", ""])
     crossover_rows_by_workload = {row['workload']: row for row in crossover_summary['workload_rows']}
     for scenario in scenarios:
+        workload_crossover_rows = crossover_rows_by_workload[scenario['workload']]['crossovers']
+        workload_callouts = "none"
+        if workload_crossover_rows:
+            workload_callouts = "; ".join(
+                f"{_budget_crossover_chip_label(row)} marks {row['previous_winner_predictor']} → {row['next_winner_predictor']}"
+                for row in workload_crossover_rows
+            )
         lines.extend(
             [
                 f"### `{scenario['workload']}`",
@@ -2576,14 +2595,22 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
                 f"- Trace config: `branches={scenario['config']['branches']}` · `seed={scenario['config']['seed']}`",
                 f"- Winner sequence: {_budget_winner_sequence(scenario['budget_reports'])}",
                 f"- Crossover points: {crossover_rows_by_workload[scenario['workload']]['crossover_sequence']}",
+                f"- SVG matrix callouts: {workload_callouts}",
                 "",
-                "| Budget | Winner | Runner-up | Best simple | Best advanced |",
-                "| ---: | --- | --- | --- | --- |",
+                "| Budget | Winner | Runner-up | Matrix callout | Best simple | Best advanced |",
+                "| ---: | --- | --- | --- | --- | --- |",
             ]
         )
         for entry in scenario["budget_reports"]:
+            crossover = crossover_lookup.get((scenario["workload"], entry["budget_bits"]))
+            matrix_callout = "-"
+            if crossover is not None:
+                matrix_callout = (
+                    f"`{_budget_crossover_chip_label(crossover)}` "
+                    f"`{crossover['previous_winner_predictor']} → {crossover['next_winner_predictor']}`"
+                )
             lines.append(
-                f"| `{entry['budget_bits']}` | `{entry['winner_predictor']}` `{entry['winner_accuracy_percent']:.2f}%` | `{entry['runner_up_predictor']}` (`{entry['winner_margin_percent']:.2f} pp` gap) | {_budget_group_label(entry['best_simple_predictor'], entry['best_simple_accuracy_percent'])} | {_budget_group_label(entry['best_advanced_predictor'], entry['best_advanced_accuracy_percent'])} |"
+                f"| `{entry['budget_bits']}` | `{entry['winner_predictor']}` `{entry['winner_accuracy_percent']:.2f}%` | `{entry['runner_up_predictor']}` (`{entry['winner_margin_percent']:.2f} pp` gap) | {matrix_callout} | {_budget_group_label(entry['best_simple_predictor'], entry['best_simple_accuracy_percent'])} | {_budget_group_label(entry['best_advanced_predictor'], entry['best_advanced_accuracy_percent'])} |"
             )
         lines.append("")
         lines.append("Representative best-fit configs:")
@@ -2602,7 +2629,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
             "- Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.",
             "- Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.",
             "- Use the margin-trend section when you want to point out that some budget winners are basically photo finishes while others create real separation from the runner-up.",
-            "- Use the crossover section when you want the exact budget step that triggers an architecture change instead of only a winner-at-each-budget table.",
+            "- Use the crossover section when you want the exact budget step that triggers an architecture change instead of only a winner-at-each-budget table, and point at the blue flip chips on the SVG matrix when you need the screenshot to show that trigger directly.",
             "- Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.",
             "- The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.",
             "- Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.",
@@ -2691,6 +2718,7 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
     winner_summary = summarize_budget_winner_grid(scenarios)
     margin_summary = summarize_budget_margin_story(scenarios)
     crossover_summary = summarize_budget_crossover_points(scenarios)
+    crossover_lookup = _build_budget_crossover_lookup(crossover_summary)
     display_crossovers = crossover_summary['crossovers'][:6]
     summary_predictors = winner_summary["predictors"]
     width = 1320
@@ -2833,6 +2861,7 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
         parts.append(_svg_text(46, crossover_y + 88, "No winner changes across adjacent budgets in this sweep.", size=13, weight='700', fill='#475569'))
 
     grid_x = 28
+    parts.append(_svg_text(grid_x, grid_y - 14, "Blue flip chips mark the budget cell where the winner changes from the previous column.", size=12, weight="700", fill="#1d4ed8"))
     parts.append(f'<rect x="{grid_x}" y="{grid_y}" width="{left_w}" height="42" rx="14" fill="#e2e8f0" />')
     parts.append(_svg_text(grid_x + 18, grid_y + 27, "Workload", size=13, weight="700", fill="#334155"))
     for column, budget in enumerate(budgets):
@@ -2849,11 +2878,27 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
         for column, entry in enumerate(scenario["budget_reports"]):
             x = grid_x + left_w + (column * cell_w)
             fill = _budget_predictor_fill(entry["winner_predictor"])
-            parts.append(f'<rect x="{x}" y="{y}" width="{cell_w - 12}" height="{cell_h - 10}" rx="18" fill="{fill}" stroke="#dbe4ee" />')
+            crossover = crossover_lookup.get((scenario["workload"], entry["budget_bits"]))
+            stroke = "#2563eb" if crossover is not None else "#dbe4ee"
+            stroke_width = "2" if crossover is not None else "1"
+            parts.append(
+                f'<rect x="{x}" y="{y}" width="{cell_w - 12}" height="{cell_h - 10}" rx="18" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" />'
+            )
             text_fill = "#0f172a"
+            if crossover is not None:
+                badge_label = _budget_crossover_chip_label(crossover)
+                badge_w = max(54, 18 + (len(badge_label) * 6))
+                badge_x = x + (cell_w - 12) - badge_w - 10
+                badge_y = y + 8
+                parts.append(f'<rect x="{badge_x}" y="{badge_y}" width="{badge_w}" height="18" rx="9" fill="#eff6ff" stroke="#60a5fa" />')
+                parts.append(_svg_text(badge_x + 8, badge_y + 12, badge_label, size=9, weight="700", fill="#1d4ed8"))
             parts.append(_svg_text(x + 16, y + 28, entry["winner_predictor"], size=14, weight="700", fill=text_fill))
             parts.append(_svg_text(x + 16, y + 48, f"{entry['winner_accuracy_percent']:.2f}%", size=18, weight="700", fill=text_fill))
-            parts.append(_svg_text(x + 16, y + 66, _truncate_svg_text(f"runner-up: {entry['runner_up_predictor']} (+{entry['winner_margin_percent']:.2f} pp)", 28), size=10, fill=text_fill))
+            runner_up_line = _truncate_svg_text(
+                f"runner-up: {entry['runner_up_predictor']} (+{entry['winner_margin_percent']:.2f} pp)",
+                28 if crossover is None else 24,
+            )
+            parts.append(_svg_text(x + 16, y + 66, runner_up_line, size=10, fill=text_fill))
 
     footer_y = height - 24
     parts.append(_svg_text(28, footer_y, "Use the top summary first for the whole-grid story, then the matrix below for workload-by-workload budget trade-offs.", size=12, fill="#475569"))
