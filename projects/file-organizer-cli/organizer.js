@@ -51,6 +51,7 @@ const PRESET_LIBRARY = Object.freeze({
   }),
 });
 const CONFIG_ALLOWED_KEYS = Object.freeze(['buckets', 'fallbackBucket', 'extendDefaults']);
+const BUCKET_RULE_ALLOWED_KEYS = Object.freeze(['extensions', 'basenamePatterns']);
 
 function normalizeBucketName(name, label = 'bucket name') {
   if (typeof name !== 'string') {
@@ -82,6 +83,110 @@ function normalizeExtension(extension, bucketName) {
   return trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
 }
 
+function normalizeBasenamePattern(pattern, bucketName) {
+  if (typeof pattern !== 'string') {
+    throw new Error(`Expected every basename pattern in bucket ${bucketName} to be a string.`);
+  }
+
+  const trimmed = pattern.trim().toLowerCase();
+  if (!trimmed) {
+    throw new Error(`Basename patterns in bucket ${bucketName} must be non-empty.`);
+  }
+
+  if (trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new Error(`Basename patterns in bucket ${bucketName} must not include path separators.`);
+  }
+
+  return trimmed;
+}
+
+function normalizeExtensionList(rawExtensions, bucketName, { allowEmpty = false } = {}) {
+  if (!Array.isArray(rawExtensions)) {
+    throw new Error(`Bucket ${bucketName} field "extensions" must be an array when provided.`);
+  }
+
+  if (!allowEmpty && rawExtensions.length === 0) {
+    throw new Error(`Bucket ${bucketName} must list at least one extension.`);
+  }
+
+  const extensions = [];
+  for (const rawExtension of rawExtensions) {
+    const extension = normalizeExtension(rawExtension, bucketName);
+    if (!extensions.includes(extension)) {
+      extensions.push(extension);
+    }
+  }
+
+  return extensions;
+}
+
+function normalizeBasenamePatternList(rawPatterns, bucketName, { allowEmpty = false } = {}) {
+  if (!Array.isArray(rawPatterns)) {
+    throw new Error(`Bucket ${bucketName} field "basenamePatterns" must be an array when provided.`);
+  }
+
+  if (!allowEmpty && rawPatterns.length === 0) {
+    throw new Error(`Bucket ${bucketName} must list at least one basename pattern.`);
+  }
+
+  const patterns = [];
+  for (const rawPattern of rawPatterns) {
+    const pattern = normalizeBasenamePattern(rawPattern, bucketName);
+    if (!patterns.includes(pattern)) {
+      patterns.push(pattern);
+    }
+  }
+
+  return patterns;
+}
+
+function normalizeCustomBucketRule(rawRuleDefinition, bucketName) {
+  if (Array.isArray(rawRuleDefinition)) {
+    return {
+      extensions: normalizeExtensionList(rawRuleDefinition, bucketName),
+      basenamePatterns: [],
+    };
+  }
+
+  if (rawRuleDefinition == null || typeof rawRuleDefinition !== 'object') {
+    throw new Error(`Bucket ${bucketName} must be an extension array or an object with "extensions" and/or "basenamePatterns".`);
+  }
+
+  const extensions = rawRuleDefinition.extensions == null
+    ? []
+    : normalizeExtensionList(rawRuleDefinition.extensions, bucketName, { allowEmpty: true });
+  const basenamePatterns = rawRuleDefinition.basenamePatterns == null
+    ? []
+    : normalizeBasenamePatternList(rawRuleDefinition.basenamePatterns, bucketName, { allowEmpty: true });
+
+  if (extensions.length === 0 && basenamePatterns.length === 0) {
+    throw new Error(`Bucket ${bucketName} must define at least one extension or basename pattern.`);
+  }
+
+  return {
+    extensions,
+    basenamePatterns,
+  };
+}
+
+function serializeCustomBucketRule(ruleDefinition) {
+  const extensions = [...ruleDefinition.extensions];
+  const basenamePatterns = [...ruleDefinition.basenamePatterns];
+
+  if (basenamePatterns.length === 0) {
+    return extensions;
+  }
+
+  const serializedRule = {};
+  if (extensions.length > 0) {
+    serializedRule.extensions = extensions;
+  }
+  if (basenamePatterns.length > 0) {
+    serializedRule.basenamePatterns = basenamePatterns;
+  }
+  return serializedRule;
+}
+
 function normalizeExtendDefaults(value) {
   if (value == null) {
     return true;
@@ -94,20 +199,29 @@ function normalizeExtendDefaults(value) {
   return value;
 }
 
+function escapeRegexCharacters(value) {
+  return value.replace(/[|\\{}()[\]^$+.,]/g, '\\$&');
+}
+
+function basenamePatternToRegex(pattern) {
+  return new RegExp(`^${escapeRegexCharacters(pattern).replace(/\*/g, '.*').replace(/\?/g, '.')}$`);
+}
+
 function normalizeCustomBuckets(buckets) {
   if (buckets == null) {
     return {};
   }
 
   if (Array.isArray(buckets) || typeof buckets !== 'object') {
-    throw new Error('Bucket config field "buckets" must be a JSON object that maps bucket names to extension arrays.');
+    throw new Error('Bucket config field "buckets" must be a JSON object that maps bucket names to extension arrays or richer rule objects.');
   }
 
   const normalized = {};
   const extensionOwners = new Map();
+  const basenamePatternOwners = new Map();
   const bucketNameOwners = new Map();
 
-  for (const [rawBucketName, rawExtensions] of Object.entries(buckets)) {
+  for (const [rawBucketName, rawRuleDefinition] of Object.entries(buckets)) {
     const bucketName = normalizeBucketName(rawBucketName, 'bucket name');
     const normalizedOwner = bucketNameOwners.get(bucketName);
     if (normalizedOwner && normalizedOwner !== rawBucketName) {
@@ -115,24 +229,25 @@ function normalizeCustomBuckets(buckets) {
     }
     bucketNameOwners.set(bucketName, rawBucketName);
 
-    if (!Array.isArray(rawExtensions) || rawExtensions.length === 0) {
-      throw new Error(`Bucket ${bucketName} must list at least one extension.`);
-    }
+    const ruleDefinition = normalizeCustomBucketRule(rawRuleDefinition, bucketName);
 
-    const extensions = [];
-    for (const rawExtension of rawExtensions) {
-      const extension = normalizeExtension(rawExtension, bucketName);
+    for (const extension of ruleDefinition.extensions) {
       const owner = extensionOwners.get(extension);
       if (owner && owner !== bucketName) {
         throw new Error(`Extension ${extension} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
       }
       extensionOwners.set(extension, bucketName);
-      if (!extensions.includes(extension)) {
-        extensions.push(extension);
-      }
     }
 
-    normalized[bucketName] = extensions;
+    for (const pattern of ruleDefinition.basenamePatterns) {
+      const owner = basenamePatternOwners.get(pattern);
+      if (owner && owner !== bucketName) {
+        throw new Error(`Basename pattern ${pattern} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+      }
+      basenamePatternOwners.set(pattern, bucketName);
+    }
+
+    normalized[bucketName] = ruleDefinition;
   }
 
   return normalized;
@@ -150,23 +265,39 @@ function buildBucketConfig(config = {}) {
   );
   const customBuckets = normalizeCustomBuckets(config.buckets);
   const extensionToBucket = new Map();
+  const basenamePatternRules = [];
   const bucketNames = [];
 
-  const registerBucketRules = (rules) => {
-    for (const [bucketName, extensions] of Object.entries(rules)) {
+  const registerBucketRules = (rules, { includeBasenamePatterns = false } = {}) => {
+    for (const [bucketName, ruleDefinition] of Object.entries(rules)) {
       if (!bucketNames.includes(bucketName)) {
         bucketNames.push(bucketName);
       }
 
+      const extensions = Array.isArray(ruleDefinition)
+        ? ruleDefinition
+        : ruleDefinition.extensions;
       for (const extension of extensions) {
         if (!extensionToBucket.has(extension)) {
           extensionToBucket.set(extension, bucketName);
         }
       }
+
+      if (!includeBasenamePatterns || Array.isArray(ruleDefinition)) {
+        continue;
+      }
+
+      for (const pattern of ruleDefinition.basenamePatterns) {
+        basenamePatternRules.push({
+          bucketName,
+          pattern,
+          regex: basenamePatternToRegex(pattern),
+        });
+      }
     }
   };
 
-  registerBucketRules(customBuckets);
+  registerBucketRules(customBuckets, { includeBasenamePatterns: true });
   if (extendDefaults) {
     registerBucketRules(DEFAULT_BUCKET_RULES);
   }
@@ -181,20 +312,44 @@ function buildBucketConfig(config = {}) {
     customBuckets,
     bucketNames,
     extensionToBucket,
+    basenamePatternRules,
   };
 }
 
 const DEFAULT_BUCKET_CONFIG = buildBucketConfig();
 const RESERVED_BUCKETS = Object.freeze([...DEFAULT_BUCKET_CONFIG.bucketNames]);
 
+function cloneBucketRuleDefinition(ruleDefinition) {
+  if (Array.isArray(ruleDefinition)) {
+    return [...ruleDefinition];
+  }
+
+  if (ruleDefinition == null || typeof ruleDefinition !== 'object') {
+    return ruleDefinition;
+  }
+
+  const clone = {};
+  if (ruleDefinition.extensions != null) {
+    clone.extensions = [...ruleDefinition.extensions];
+  }
+  if (ruleDefinition.basenamePatterns != null) {
+    clone.basenamePatterns = [...ruleDefinition.basenamePatterns];
+  }
+  return clone;
+}
+
 function cloneBucketTemplate(config = {}) {
   return {
     buckets: Object.fromEntries(
-      Object.entries(config.buckets || {}).map(([bucketName, extensions]) => [bucketName, [...extensions]]),
+      Object.entries(config.buckets || {}).map(([bucketName, ruleDefinition]) => [bucketName, cloneBucketRuleDefinition(ruleDefinition)]),
     ),
     fallbackBucket: config.fallbackBucket || DEFAULT_FALLBACK_BUCKET,
     extendDefaults: normalizeExtendDefaults(config.extendDefaults),
   };
+}
+
+function sortValues(values) {
+  return [...values].sort((left, right) => left.localeCompare(right));
 }
 
 function buildNormalizedConfigPayload(config = {}) {
@@ -202,7 +357,13 @@ function buildNormalizedConfigPayload(config = {}) {
   const buckets = Object.fromEntries(
     Object.entries(bucketConfig.customBuckets)
       .sort(([leftBucket], [rightBucket]) => leftBucket.localeCompare(rightBucket))
-      .map(([bucketName, extensions]) => [bucketName, [...extensions].sort((left, right) => left.localeCompare(right))]),
+      .map(([bucketName, ruleDefinition]) => {
+        const normalizedRule = {
+          extensions: sortValues(ruleDefinition.extensions),
+          basenamePatterns: sortValues(ruleDefinition.basenamePatterns),
+        };
+        return [bucketName, serializeCustomBucketRule(normalizedRule)];
+      }),
   );
 
   return {
@@ -366,12 +527,13 @@ async function lintBucketConfig(configPath) {
 
     if (parsed.buckets != null) {
       if (Array.isArray(parsed.buckets) || typeof parsed.buckets !== 'object') {
-        errors.push('Bucket config field "buckets" must be a JSON object that maps bucket names to extension arrays.');
+        errors.push('Bucket config field "buckets" must be a JSON object that maps bucket names to extension arrays or richer rule objects.');
       } else {
         const extensionOwners = new Map();
+        const basenamePatternOwners = new Map();
         const normalizedBucketNames = new Map();
 
-        for (const [rawBucketName, rawExtensions] of Object.entries(parsed.buckets)) {
+        for (const [rawBucketName, rawRuleDefinition] of Object.entries(parsed.buckets)) {
           let bucketName;
           try {
             bucketName = normalizeBucketName(rawBucketName, 'bucket name');
@@ -390,36 +552,97 @@ async function lintBucketConfig(configPath) {
             normalizedBucketNames.set(bucketName, rawBucketName);
           }
 
-          if (!Array.isArray(rawExtensions) || rawExtensions.length === 0) {
-            errors.push(`Bucket ${bucketName} must list at least one extension.`);
+          let rawExtensions = null;
+          let rawBasenamePatterns = null;
+
+          if (Array.isArray(rawRuleDefinition)) {
+            rawExtensions = rawRuleDefinition;
+          } else if (rawRuleDefinition == null || typeof rawRuleDefinition !== 'object') {
+            errors.push(`Bucket ${bucketName} must be an extension array or an object with "extensions" and/or "basenamePatterns".`);
             continue;
+          } else {
+            for (const key of Object.keys(rawRuleDefinition)) {
+              if (!BUCKET_RULE_ALLOWED_KEYS.includes(key)) {
+                warnings.push(`Bucket ${bucketName} field "${key}" will be ignored by the organizer.`);
+              }
+            }
+            rawExtensions = rawRuleDefinition.extensions == null ? null : rawRuleDefinition.extensions;
+            rawBasenamePatterns = rawRuleDefinition.basenamePatterns == null ? null : rawRuleDefinition.basenamePatterns;
           }
 
-          const bucketExtensions = new Set();
-          for (const rawExtension of rawExtensions) {
-            let normalizedExtension;
-            try {
-              normalizedExtension = normalizeExtension(rawExtension, bucketName);
-              if (typeof rawExtension === 'string' && rawExtension !== normalizedExtension) {
-                warnings.push(`Bucket ${bucketName} extension "${rawExtension}" will normalize to "${normalizedExtension}".`);
-              }
-            } catch (error) {
-              errors.push(error.message);
-              continue;
-            }
+          let extensionCount = 0;
+          let basenamePatternCount = 0;
 
-            if (bucketExtensions.has(normalizedExtension)) {
-              warnings.push(`Bucket ${bucketName} repeats extension "${normalizedExtension}"; duplicate entries are ignored.`);
-              continue;
-            }
-            bucketExtensions.add(normalizedExtension);
-
-            const owner = extensionOwners.get(normalizedExtension);
-            if (owner && owner !== bucketName) {
-              errors.push(`Extension ${normalizedExtension} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+          if (rawExtensions != null) {
+            if (!Array.isArray(rawExtensions)) {
+              errors.push(`Bucket ${bucketName} field "extensions" must be an array when provided.`);
             } else {
-              extensionOwners.set(normalizedExtension, bucketName);
+              const bucketExtensions = new Set();
+              for (const rawExtension of rawExtensions) {
+                let normalizedExtension;
+                try {
+                  normalizedExtension = normalizeExtension(rawExtension, bucketName);
+                  if (typeof rawExtension === 'string' && rawExtension !== normalizedExtension) {
+                    warnings.push(`Bucket ${bucketName} extension "${rawExtension}" will normalize to "${normalizedExtension}".`);
+                  }
+                } catch (error) {
+                  errors.push(error.message);
+                  continue;
+                }
+
+                if (bucketExtensions.has(normalizedExtension)) {
+                  warnings.push(`Bucket ${bucketName} repeats extension "${normalizedExtension}"; duplicate entries are ignored.`);
+                  continue;
+                }
+                bucketExtensions.add(normalizedExtension);
+                extensionCount += 1;
+
+                const owner = extensionOwners.get(normalizedExtension);
+                if (owner && owner !== bucketName) {
+                  errors.push(`Extension ${normalizedExtension} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+                } else {
+                  extensionOwners.set(normalizedExtension, bucketName);
+                }
+              }
             }
+          }
+
+          if (rawBasenamePatterns != null) {
+            if (!Array.isArray(rawBasenamePatterns)) {
+              errors.push(`Bucket ${bucketName} field "basenamePatterns" must be an array when provided.`);
+            } else {
+              const bucketPatterns = new Set();
+              for (const rawPattern of rawBasenamePatterns) {
+                let normalizedPattern;
+                try {
+                  normalizedPattern = normalizeBasenamePattern(rawPattern, bucketName);
+                  if (typeof rawPattern === 'string' && rawPattern !== normalizedPattern) {
+                    warnings.push(`Bucket ${bucketName} basename pattern "${rawPattern}" will normalize to "${normalizedPattern}".`);
+                  }
+                } catch (error) {
+                  errors.push(error.message);
+                  continue;
+                }
+
+                if (bucketPatterns.has(normalizedPattern)) {
+                  warnings.push(`Bucket ${bucketName} repeats basename pattern "${normalizedPattern}"; duplicate entries are ignored.`);
+                  continue;
+                }
+                bucketPatterns.add(normalizedPattern);
+                basenamePatternCount += 1;
+
+                const owner = basenamePatternOwners.get(normalizedPattern);
+                if (owner && owner !== bucketName) {
+                  errors.push(`Basename pattern ${normalizedPattern} is assigned to multiple custom buckets (${owner}, ${bucketName}).`);
+                } else {
+                  basenamePatternOwners.set(normalizedPattern, bucketName);
+                }
+              }
+            }
+          }
+
+          if (extensionCount === 0 && basenamePatternCount === 0) {
+            errors.push(`Bucket ${bucketName} must define at least one extension or basename pattern.`);
           }
         }
       }
@@ -477,35 +700,95 @@ function buildNormalizationPreviewChanges(parsed, normalizedConfig) {
   if (parsed.buckets && !Array.isArray(parsed.buckets) && typeof parsed.buckets === 'object') {
     const rawBucketOrder = [];
 
-    for (const [rawBucketName, rawExtensions] of Object.entries(parsed.buckets)) {
+    for (const [rawBucketName, rawRuleDefinition] of Object.entries(parsed.buckets)) {
       const bucketName = normalizeBucketName(rawBucketName, 'bucket name');
       rawBucketOrder.push(bucketName);
       if (rawBucketName !== bucketName) {
         pushUniqueChange(changes, `Normalize bucket name "${rawBucketName}" -> "${bucketName}".`);
       }
 
-      if (!Array.isArray(rawExtensions)) {
+      const canonicalRule = normalizedConfig.buckets[bucketName];
+      const canonicalExtensions = Array.isArray(canonicalRule)
+        ? canonicalRule
+        : (canonicalRule?.extensions || []);
+      const canonicalBasenamePatterns = Array.isArray(canonicalRule)
+        ? []
+        : (canonicalRule?.basenamePatterns || []);
+
+      if (Array.isArray(rawRuleDefinition)) {
+        const encounteredExtensions = [];
+        const seenExtensions = new Set();
+        for (const rawExtension of rawRuleDefinition) {
+          const normalizedExtension = normalizeExtension(rawExtension, bucketName);
+          if (rawExtension !== normalizedExtension) {
+            pushUniqueChange(changes, `Normalize extension for bucket ${bucketName}: "${rawExtension}" -> "${normalizedExtension}".`);
+          }
+          if (seenExtensions.has(normalizedExtension)) {
+            pushUniqueChange(changes, `Remove duplicate extension "${normalizedExtension}" from bucket ${bucketName}.`);
+            continue;
+          }
+          seenExtensions.add(normalizedExtension);
+          encounteredExtensions.push(normalizedExtension);
+        }
+
+        if (JSON.stringify(encounteredExtensions) !== JSON.stringify(canonicalExtensions)) {
+          pushUniqueChange(changes, `Sort extensions for bucket ${bucketName} into canonical order.`);
+        }
         continue;
       }
 
-      const encounteredExtensions = [];
-      const seenExtensions = new Set();
-      for (const rawExtension of rawExtensions) {
-        const normalizedExtension = normalizeExtension(rawExtension, bucketName);
-        if (rawExtension !== normalizedExtension) {
-          pushUniqueChange(changes, `Normalize extension for bucket ${bucketName}: "${rawExtension}" -> "${normalizedExtension}".`);
-        }
-        if (seenExtensions.has(normalizedExtension)) {
-          pushUniqueChange(changes, `Remove duplicate extension "${normalizedExtension}" from bucket ${bucketName}.`);
-          continue;
-        }
-        seenExtensions.add(normalizedExtension);
-        encounteredExtensions.push(normalizedExtension);
+      if (rawRuleDefinition == null || typeof rawRuleDefinition !== 'object') {
+        continue;
       }
 
-      const canonicalExtensions = normalizedConfig.buckets[bucketName] || [];
+      for (const key of Object.keys(rawRuleDefinition)) {
+        if (!BUCKET_RULE_ALLOWED_KEYS.includes(key)) {
+          pushUniqueChange(changes, `Remove ignored field "${key}" from bucket ${bucketName}.`);
+        }
+      }
+
+      const encounteredExtensions = [];
+      if (Array.isArray(rawRuleDefinition.extensions)) {
+        const seenExtensions = new Set();
+        for (const rawExtension of rawRuleDefinition.extensions) {
+          const normalizedExtension = normalizeExtension(rawExtension, bucketName);
+          if (rawExtension !== normalizedExtension) {
+            pushUniqueChange(changes, `Normalize extension for bucket ${bucketName}: "${rawExtension}" -> "${normalizedExtension}".`);
+          }
+          if (seenExtensions.has(normalizedExtension)) {
+            pushUniqueChange(changes, `Remove duplicate extension "${normalizedExtension}" from bucket ${bucketName}.`);
+            continue;
+          }
+          seenExtensions.add(normalizedExtension);
+          encounteredExtensions.push(normalizedExtension);
+        }
+      }
+
+      const encounteredPatterns = [];
+      if (Array.isArray(rawRuleDefinition.basenamePatterns)) {
+        const seenPatterns = new Set();
+        for (const rawPattern of rawRuleDefinition.basenamePatterns) {
+          const normalizedPattern = normalizeBasenamePattern(rawPattern, bucketName);
+          if (rawPattern !== normalizedPattern) {
+            pushUniqueChange(changes, `Normalize basename pattern for bucket ${bucketName}: "${rawPattern}" -> "${normalizedPattern}".`);
+          }
+          if (seenPatterns.has(normalizedPattern)) {
+            pushUniqueChange(changes, `Remove duplicate basename pattern "${normalizedPattern}" from bucket ${bucketName}.`);
+            continue;
+          }
+          seenPatterns.add(normalizedPattern);
+          encounteredPatterns.push(normalizedPattern);
+        }
+      }
+
       if (JSON.stringify(encounteredExtensions) !== JSON.stringify(canonicalExtensions)) {
         pushUniqueChange(changes, `Sort extensions for bucket ${bucketName} into canonical order.`);
+      }
+      if (JSON.stringify(encounteredPatterns) !== JSON.stringify(canonicalBasenamePatterns)) {
+        pushUniqueChange(changes, `Sort basename patterns for bucket ${bucketName} into canonical order.`);
+      }
+      if (Array.isArray(canonicalRule)) {
+        pushUniqueChange(changes, `Rewrite bucket ${bucketName} into extension-array shorthand.`);
       }
     }
 
@@ -626,11 +909,19 @@ function describeBucketConfig(bucketConfig) {
     extendDefaults: bucketConfig.extendDefaults,
     fallbackBucket: bucketConfig.fallbackBucket,
     bucketNames: [...bucketConfig.bucketNames],
-    customBuckets: bucketConfig.customBuckets,
+    customBuckets: Object.fromEntries(
+      Object.entries(bucketConfig.customBuckets).map(([bucketName, ruleDefinition]) => [bucketName, serializeCustomBucketRule(ruleDefinition)]),
+    ),
   };
 }
 
 function bucketFor(filename, bucketConfig = DEFAULT_BUCKET_CONFIG) {
+  const basename = path.basename(filename, path.extname(filename)).toLowerCase();
+  const patternMatch = bucketConfig.basenamePatternRules.find(ruleDefinition => ruleDefinition.regex.test(basename));
+  if (patternMatch) {
+    return patternMatch.bucketName;
+  }
+
   const ext = path.extname(filename).toLowerCase();
   return bucketConfig.extensionToBucket.get(ext) || bucketConfig.fallbackBucket;
 }

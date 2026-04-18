@@ -11,7 +11,8 @@
 - [x] CI-friendly shared-config linting with `--lint-config`
 - [x] normalized-config helpers with in-place `--fix-config` and exported `--write-normalized-config`
 - [x] normalization preview mode with `--preview-normalized-config` rewrite summaries before editing shared JSON
-- [x] regression coverage for preset export/import, lint warnings/errors, invalid config guards, and normalized-config writes
+- [x] basename-pattern bucket rules (`*` / `?`) that can override extension fallback during organize runs
+- [x] regression coverage for preset export/import, lint warnings/errors, invalid config guards, normalized-config writes, and basename-pattern matching
 
 ## Current demo-ready flow
 - [x] organize a loose folder with a built-in preset
@@ -19,9 +20,9 @@
 - [x] lint the shared config in CI or pre-commit
 - [x] preview normalization changes before editing a shared config
 - [x] auto-fix or export a canonical normalized config for teammates
-- [x] run organize with the shared config
+- [x] run organize with extension + basename-pattern shared rules
 - [x] undo the run from the saved manifest
 
 ## Next vertical slices
-- [ ] support richer matching rules beyond plain extensions (for example basename patterns or MIME-aware detection)
+- [ ] add MIME-aware detection rules for files that share extensions but not content types
 - [ ] add a small publishable demo artifact set that shows before/after folder trees and config preview output for the README and portfolio screenshots

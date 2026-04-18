@@ -41,7 +41,48 @@ test('buildBucketConfig merges custom buckets before defaults and normalizes ext
   assert.equal(bucketFor('report.json', bucketConfig), 'datasets');
   assert.equal(bucketFor('lecture.pptx', bucketConfig), 'slides');
   assert.equal(bucketFor('notes.txt', bucketConfig), 'documents');
-  assert.deepEqual(bucketConfig.customBuckets.datasets, ['.csv', '.json']);
+  assert.deepEqual(bucketConfig.customBuckets.datasets, {
+    extensions: ['.csv', '.json'],
+    basenamePatterns: [],
+  });
+});
+
+test('buildBucketConfig supports basename pattern rules before extension fallback buckets', () => {
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      screenshots: {
+        basenamePatterns: ['Screenshot *', ' screen shot * '],
+      },
+      assignments: {
+        basenamePatterns: ['assignment-*'],
+      },
+    },
+  });
+
+  assert.equal(bucketFor('Screenshot 2026-04-18.png', bucketConfig), 'screenshots');
+  assert.equal(bucketFor('screen shot 12.PNG', bucketConfig), 'screenshots');
+  assert.equal(bucketFor('assignment-2.txt', bucketConfig), 'assignments');
+  assert.equal(bucketFor('diagram.png', bucketConfig), 'images');
+  assert.deepEqual(bucketConfig.customBuckets.screenshots, {
+    extensions: [],
+    basenamePatterns: ['screenshot *', 'screen shot *'],
+  });
+});
+
+test('bucketFor supports single-character basename wildcards alongside extension rules', () => {
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      quizzes: {
+        extensions: ['.txt'],
+        basenamePatterns: ['quiz-2026-04-1?'],
+      },
+    },
+  });
+
+  assert.equal(bucketFor('quiz-2026-04-18.txt', bucketConfig), 'quizzes');
+  assert.equal(bucketFor('quiz-2026-04-19.md', bucketConfig), 'quizzes');
+  assert.equal(bucketFor('quiz-2026-04-180.md', bucketConfig), 'documents');
+  assert.equal(bucketFor('notes.md', bucketConfig), 'documents');
 });
 
 test('buildBucketConfig rejects duplicate custom extensions across buckets', () => {
@@ -53,6 +94,22 @@ test('buildBucketConfig rejects duplicate custom extensions across buckets', () 
       },
     }),
     /assigned to multiple custom buckets/,
+  );
+});
+
+test('buildBucketConfig rejects duplicate basename patterns across buckets', () => {
+  assert.throws(
+    () => buildBucketConfig({
+      buckets: {
+        screenshots: {
+          basenamePatterns: ['screenshot*'],
+        },
+        captures: {
+          basenamePatterns: [' Screenshot* '],
+        },
+      },
+    }),
+    /Basename pattern screenshot\* is assigned to multiple custom buckets/,
   );
 });
 
@@ -146,6 +203,33 @@ test('lintBucketConfig returns CI-friendly invalid results for broken shared con
   assert.equal(result.normalizedConfig, null);
   assert.match(result.errors[0], /Field "extendDefaults" must be true or false when provided\./);
   assert.match(result.errors[1], /Extension \.csv is assigned to multiple custom buckets/);
+});
+
+test('lintBucketConfig normalizes basename-pattern rule objects and ignored bucket fields', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-config-pattern-lint-'));
+  const configPath = path.join(tmp, 'pattern-buckets.json');
+  await fs.writeFile(configPath, JSON.stringify({
+    buckets: {
+      screenshots: {
+        extensions: ['PNG'],
+        basenamePatterns: [' Screenshot * ', 'screenshot *'],
+        matcherNote: 'ignored',
+      },
+    },
+  }, null, 2));
+
+  const result = await lintBucketConfig(configPath);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.errors.length, 0);
+  assert.match(result.warnings.join('\n'), /Bucket screenshots field "matcherNote" will be ignored by the organizer\./);
+  assert.match(result.warnings.join('\n'), /Bucket screenshots extension "PNG" will normalize to "\.png"\./);
+  assert.match(result.warnings.join('\n'), /Bucket screenshots basename pattern " Screenshot \* " will normalize to "screenshot \*"\./);
+  assert.match(result.warnings.join('\n'), /Bucket screenshots repeats basename pattern "screenshot \*"/);
+  assert.deepEqual(result.normalizedConfig.buckets.screenshots, {
+    extensions: ['.png'],
+    basenamePatterns: ['screenshot *'],
+  });
 });
 
 test('previewNormalizedBucketConfig summarizes normalization rewrites before writing files', async () => {
@@ -382,6 +466,31 @@ test('organize honors config-driven buckets and custom fallback buckets', async 
   assert.equal(await fs.readFile(path.join(tmp, 'slides', 'week1.pptx'), 'utf8'), 'slides');
   assert.equal(await fs.readFile(path.join(tmp, 'misc', 'unknown.bin'), 'utf8'), 'blob');
   assert.equal(result.bucketConfig.fallbackBucket, 'misc');
+});
+
+test('organize prefers basename pattern matches over extension buckets during real moves', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'organizer-'));
+  const bucketConfig = buildBucketConfig({
+    buckets: {
+      screenshots: {
+        basenamePatterns: ['Screenshot *'],
+      },
+      quizzes: {
+        basenamePatterns: ['quiz-2026-04-1?'],
+        extensions: ['.txt'],
+      },
+    },
+  });
+  await fs.writeFile(path.join(tmp, 'Screenshot 2026-04-18.png'), 'capture');
+  await fs.writeFile(path.join(tmp, 'quiz-2026-04-18.md'), 'quiz');
+  await fs.writeFile(path.join(tmp, 'notes.txt'), 'notes');
+
+  const result = await organize(tmp, { bucketConfig });
+
+  assert.equal(result.summary.total, 3);
+  assert.equal(await fs.readFile(path.join(tmp, 'screenshots', 'Screenshot 2026-04-18.png'), 'utf8'), 'capture');
+  assert.equal(await fs.readFile(path.join(tmp, 'quizzes', 'quiz-2026-04-18.md'), 'utf8'), 'quiz');
+  assert.equal(await fs.readFile(path.join(tmp, 'quizzes', 'notes.txt'), 'utf8'), 'notes');
 });
 
 test('organize can use a named preset directly without a config file on disk', async () => {
