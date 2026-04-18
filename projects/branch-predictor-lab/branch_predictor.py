@@ -66,6 +66,7 @@ BUDGET_SWEEP_BUDGETS = (64, 128, 256, 512, 1024)
 BUDGET_SWEEP_TABLE_SIZES = (4, 8, 16, 32, 64)
 BUDGET_SWEEP_HISTORY_BITS = (1, 2, 4, 8, 12)
 BUDGET_SWEEP_WEIGHT_LIMITS = (15, 31, 74)
+TABLE_SIZE_ALIAS_SWEEP_TABLE_SIZES = (4, 8, 16, 32, 64)
 BUDGET_SWEEP_PREDICTOR_NAMES = (
     "always-taken",
     "always-not-taken",
@@ -2283,6 +2284,276 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
     return ''.join(parts) + '\n'
 
 
+def run_table_size_alias_sweep(
+    workloads: list[str] | None = None,
+    *,
+    branches_override: int | None = None,
+    seed_override: int | None = None,
+    table_sizes: list[int] | tuple[int, ...] | None = None,
+    history_bits_override: int | None = None,
+    trace_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    selected = workloads or list(SYNTHETIC_WORKLOADS)
+    table_values = sorted({value for value in (table_sizes or TABLE_SIZE_ALIAS_SWEEP_TABLE_SIZES) if value >= 2})
+    if not table_values:
+        raise ValueError("table_sizes must contain at least one value >= 2")
+    scenarios: list[dict[str, Any]] = []
+    if trace_dir is not None:
+        trace_dir.mkdir(parents=True, exist_ok=True)
+
+    for workload in selected:
+        if workload not in WORKLOAD_SWEEP_PROFILES:
+            supported = ", ".join(sorted(WORKLOAD_SWEEP_PROFILES))
+            raise ValueError(f"unsupported table-size sweep workload: {workload}. Expected one of: {supported}")
+        profile = WORKLOAD_SWEEP_PROFILES[workload]
+        branches = branches_override if branches_override is not None else int(profile["branches"])
+        seed = seed_override if seed_override is not None else int(profile["seed"])
+        history_bits = history_bits_override if history_bits_override is not None else int(profile["history_bits"])
+        records = generate_synthetic_trace(workload, branches=branches, seed=seed)
+        trace_output: Path | None = None
+        if trace_dir is not None:
+            trace_output = trace_dir / f"{workload}-seed{seed}.trace"
+            trace_output.write_text(f"{format_trace(records)}\n", encoding="utf-8")
+
+        sweep_rows: list[dict[str, Any]] = []
+        for table_size in table_values:
+            alias_summary = summarize_table_aliasing(records, table_size=table_size)
+            gshare_alias_summary = summarize_gshare_aliasing(records, table_size=table_size, history_bits=history_bits)
+            two_bit = simulate_trace(records, TwoBitPredictor(table_size=table_size))
+            gshare = simulate_trace(records, GSharePredictor(table_size=table_size, history_bits=history_bits))
+            sweep_rows.append(
+                {
+                    "table_size": table_size,
+                    "static_colliding_indices": alias_summary["colliding_indices"],
+                    "static_conflicting_indices": alias_summary["conflicting_indices"],
+                    "static_branch_events_in_collisions": alias_summary["branch_events_in_collisions"],
+                    "dynamic_colliding_indices": gshare_alias_summary["colliding_indices"],
+                    "dynamic_conflicting_indices": gshare_alias_summary["conflicting_indices"],
+                    "dynamic_cross_address_colliding_indices": gshare_alias_summary["cross_address_colliding_indices"],
+                    "dynamic_history_spread_colliding_indices": gshare_alias_summary["history_spread_colliding_indices"],
+                    "dynamic_branch_events_in_collisions": gshare_alias_summary["branch_events_in_collisions"],
+                    "two_bit_accuracy_percent": round(two_bit.accuracy * 100, 3),
+                    "gshare_accuracy_percent": round(gshare.accuracy * 100, 3),
+                }
+            )
+
+        best_static_row = min(
+            sweep_rows,
+            key=lambda row: (row["static_colliding_indices"], row["static_conflicting_indices"], row["table_size"]),
+        )
+        best_dynamic_row = min(
+            sweep_rows,
+            key=lambda row: (
+                row["dynamic_colliding_indices"],
+                row["dynamic_conflicting_indices"],
+                row["dynamic_cross_address_colliding_indices"],
+                row["table_size"],
+            ),
+        )
+        scenarios.append(
+            {
+                "workload": workload,
+                "headline": profile["headline"],
+                "config": {
+                    "branches": branches,
+                    "seed": seed,
+                    "history_bits": history_bits,
+                },
+                "trace_output": str(trace_output) if trace_output is not None else None,
+                "trace_summary": summarize_trace(records),
+                "table_sizes": table_values,
+                "sweep_rows": sweep_rows,
+                "best_static_table_size": best_static_row["table_size"],
+                "best_dynamic_table_size": best_dynamic_row["table_size"],
+                "static_collision_drop": sweep_rows[0]["static_colliding_indices"] - sweep_rows[-1]["static_colliding_indices"],
+                "dynamic_collision_drop": sweep_rows[0]["dynamic_colliding_indices"] - sweep_rows[-1]["dynamic_colliding_indices"],
+            }
+        )
+    return scenarios
+
+
+def format_table_size_alias_summary_table(scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        return "no scenarios"
+    table_sizes = scenarios[0]["table_sizes"]
+    header = ["workload", "history", *[f"{table_size}e" for table_size in table_sizes]]
+    lines = [" | ".join(header), " | ".join(["---"] * len(header))]
+    for scenario in scenarios:
+        cells = [scenario["workload"], str(scenario["config"]["history_bits"])]
+        for row in scenario["sweep_rows"]:
+            cells.append(f"S{row['static_colliding_indices']}/G{row['dynamic_colliding_indices']}")
+        lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
+def render_table_size_alias_markdown(*, scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    table_sizes = scenarios[0]["table_sizes"]
+    lines = [
+        "# Branch predictor alias table-size sweep",
+        "",
+        f"- Generated: `{generated}`",
+        f"- Workloads: `{len(scenarios)}` synthetic families",
+        f"- Table sizes: `{', '.join(str(value) for value in table_sizes)}`",
+        "- Goal: compare static PC-index aliasing and dynamic gshare live collisions side by side across the same workload family as table size changes.",
+        "- Dynamic note: gshare collisions do not have to fall monotonically because XORed history bits can reshuffle which branch-history contexts share each counter bucket.",
+        "",
+        "## Overview",
+        "",
+        "| Workload | History bits | " + " | ".join(f"`{table_size}` entries" for table_size in table_sizes) + " |",
+        "| --- | ---: | " + " | ".join(["---"] * len(table_sizes)) + " |",
+    ]
+    for scenario in scenarios:
+        row = [f"`{scenario['workload']}`", f"`{scenario['config']['history_bits']}`"]
+        for cell in scenario["sweep_rows"]:
+            row.append(f"`S{cell['static_colliding_indices']}/G{cell['dynamic_colliding_indices']}`")
+        lines.append("| " + " | ".join(row) + " |")
+
+    lines.extend(["", "## Per-workload notes", ""])
+    for scenario in scenarios:
+        lines.extend(
+            [
+                f"### `{scenario['workload']}`",
+                "",
+                f"- Focus: {scenario['headline']}",
+                f"- Trace config: `branches={scenario['config']['branches']}` · `seed={scenario['config']['seed']}` · `history={scenario['config']['history_bits']}`",
+                f"- Lowest static PC-collision count appears at table size `{scenario['best_static_table_size']}`; lowest dynamic gshare collision count appears at table size `{scenario['best_dynamic_table_size']}`.",
+                f"- Sweep delta from smallest to largest table: static `{scenario['sweep_rows'][0]['static_colliding_indices']} → {scenario['sweep_rows'][-1]['static_colliding_indices']}` · dynamic `{scenario['sweep_rows'][0]['dynamic_colliding_indices']} → {scenario['sweep_rows'][-1]['dynamic_colliding_indices']}` live collisions.",
+                "",
+                "| Table entries | Static collisions | Static conflicting | Static events | Dynamic collisions | Dynamic conflicting | Cross-PC dynamic | History-spread dynamic | Two-bit acc. | Gshare acc. |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for row in scenario["sweep_rows"]:
+            lines.append(
+                f"| `{row['table_size']}` | `{row['static_colliding_indices']}` | `{row['static_conflicting_indices']}` | `{row['static_branch_events_in_collisions']}` | `{row['dynamic_colliding_indices']}` | `{row['dynamic_conflicting_indices']}` | `{row['dynamic_cross_address_colliding_indices']}` | `{row['dynamic_history_spread_colliding_indices']}` | `{row['two_bit_accuracy_percent']:.2f}%` | `{row['gshare_accuracy_percent']:.2f}%` |"
+            )
+        lines.extend(
+            [
+                "",
+                "Interpretation tips:",
+                "- Static counts answer: 'how many PCs collide if the table indexes only by PC bits?'",
+                "- Dynamic counts answer: 'how many live gshare buckets still merge multiple PC+history contexts after XORing in global history?'",
+                "- The paired accuracy columns keep the alias numbers grounded so interviewers can see when fewer collisions actually translate into fewer mispredictions.",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Portfolio usage",
+            "",
+            "- Use this artifact after the single-trace alias-thrash comparison card when you want to show that static and dynamic aliasing shrink differently as the predictor table grows.",
+            "- Use the CSV export when you want to chart collision counts or overlay accuracy/collision trade-offs in slides without scraping Markdown.",
+            "- The non-monotonic dynamic rows are useful interview material because they show that history-aware predictors change the indexing problem rather than simply eliminating aliasing.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_table_size_alias_csv(*, scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    fieldnames = [
+        "workload",
+        "headline",
+        "branches",
+        "seed",
+        "history_bits",
+        "trace_output",
+        "table_size",
+        "static_colliding_indices",
+        "static_conflicting_indices",
+        "static_branch_events_in_collisions",
+        "dynamic_colliding_indices",
+        "dynamic_conflicting_indices",
+        "dynamic_cross_address_colliding_indices",
+        "dynamic_history_spread_colliding_indices",
+        "dynamic_branch_events_in_collisions",
+        "two_bit_accuracy_percent",
+        "gshare_accuracy_percent",
+    ]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for scenario in scenarios:
+        for row in scenario["sweep_rows"]:
+            writer.writerow(
+                {
+                    "workload": scenario["workload"],
+                    "headline": scenario["headline"],
+                    "branches": scenario["config"]["branches"],
+                    "seed": scenario["config"]["seed"],
+                    "history_bits": scenario["config"]["history_bits"],
+                    "trace_output": scenario.get("trace_output") or "",
+                    "table_size": row["table_size"],
+                    "static_colliding_indices": row["static_colliding_indices"],
+                    "static_conflicting_indices": row["static_conflicting_indices"],
+                    "static_branch_events_in_collisions": row["static_branch_events_in_collisions"],
+                    "dynamic_colliding_indices": row["dynamic_colliding_indices"],
+                    "dynamic_conflicting_indices": row["dynamic_conflicting_indices"],
+                    "dynamic_cross_address_colliding_indices": row["dynamic_cross_address_colliding_indices"],
+                    "dynamic_history_spread_colliding_indices": row["dynamic_history_spread_colliding_indices"],
+                    "dynamic_branch_events_in_collisions": row["dynamic_branch_events_in_collisions"],
+                    "two_bit_accuracy_percent": row["two_bit_accuracy_percent"],
+                    "gshare_accuracy_percent": row["gshare_accuracy_percent"],
+                }
+            )
+    return output.getvalue()
+
+
+def render_table_size_alias_svg(*, scenarios: list[dict[str, Any]]) -> str:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    table_sizes = scenarios[0]["table_sizes"]
+    cell_w = 166
+    cell_h = 96
+    left_w = 238
+    width = 28 + left_w + (len(table_sizes) * cell_w) + 20
+    height = 188 + (len(scenarios) * cell_h) + 82
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
+        '<title id="title">Branch predictor alias table-size sweep</title>',
+        '<desc id="desc">Side-by-side static PC and dynamic gshare collision counts across table sizes.</desc>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc" />',
+        _svg_text(28, 40, "Branch predictor alias table-size sweep", size=28, weight="700"),
+        _svg_text(28, 66, "Each cell shows static PC collisions (S) and dynamic gshare live collisions (G) for the same seeded trace.", size=14, fill="#334155"),
+        _svg_text(28, 92, "Top line = static PC buckets · middle = dynamic gshare buckets · bottom = two-bit vs gshare accuracy.", size=12, fill="#64748b"),
+    ]
+
+    grid_x = 28
+    grid_y = 120
+    parts.append(f'<rect x="{grid_x}" y="{grid_y}" width="{left_w}" height="42" rx="14" fill="#e2e8f0" />')
+    parts.append(_svg_text(grid_x + 18, grid_y + 27, "Workload", size=13, weight="700", fill="#334155"))
+    for column, table_size in enumerate(table_sizes):
+        x = grid_x + left_w + (column * cell_w)
+        parts.append(f'<rect x="{x}" y="{grid_y}" width="{cell_w - 12}" height="42" rx="14" fill="#e2e8f0" />')
+        parts.append(_svg_text(x + 18, grid_y + 27, f"{table_size} entries", size=13, weight="700", fill="#334155"))
+
+    start_y = grid_y + 56
+    for row_index, scenario in enumerate(scenarios):
+        y = start_y + (row_index * cell_h)
+        parts.append(f'<rect x="{grid_x}" y="{y}" width="{left_w}" height="{cell_h - 12}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+        parts.append(_svg_text(grid_x + 18, y + 30, scenario["workload"], size=15, weight="700"))
+        _svg_add_wrapped_text(parts, grid_x + 18, y + 50, scenario["headline"], max_chars=24, size=11, fill="#64748b")
+        parts.append(_svg_text(grid_x + 18, y + 78, f"history={scenario['config']['history_bits']} · seed={scenario['config']['seed']}", size=11, fill="#64748b"))
+        for column, cell in enumerate(scenario["sweep_rows"]):
+            x = grid_x + left_w + (column * cell_w)
+            parts.append(f'<rect x="{x}" y="{y}" width="{cell_w - 12}" height="{cell_h - 12}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+            parts.append(_svg_text(x + 16, y + 26, f"S {cell['static_colliding_indices']} · C {cell['static_conflicting_indices']}", size=13, weight="700", fill="#0f172a"))
+            parts.append(_svg_text(x + 16, y + 46, f"G {cell['dynamic_colliding_indices']} · C {cell['dynamic_conflicting_indices']}", size=13, weight="700", fill="#2563eb"))
+            parts.append(_svg_text(x + 16, y + 64, f"cross {cell['dynamic_cross_address_colliding_indices']} · hist {cell['dynamic_history_spread_colliding_indices']}", size=10, fill="#64748b"))
+            parts.append(_svg_text(x + 16, y + 80, f"2b {cell['two_bit_accuracy_percent']:.1f}% · gsh {cell['gshare_accuracy_percent']:.1f}%", size=10, fill="#64748b"))
+
+    footer_y = height - 24
+    parts.append(_svg_text(28, footer_y, "Use this grid with the alias-thrash comparison card to discuss why history-aware hashing changes, but does not erase, branch-predictor aliasing.", size=12, fill="#475569"))
+    parts.append('</svg>')
+    return ''.join(parts) + "\n"
+
+
 def render_perceptron_tuning_markdown(*, trace_path: Path, report: dict[str, Any]) -> str:
     generated = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     trace_summary = report["trace_summary"]
@@ -2568,6 +2839,26 @@ def _build_parser() -> argparse.ArgumentParser:
     budget_sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG budget matrix card.")
     budget_sweep_parser.add_argument("--csv-out", type=Path, help="Write a CSV winner matrix for spreadsheet/chart reuse.")
     budget_sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
+
+    table_size_sweep_parser = subparsers.add_parser(
+        "table-size-sweep",
+        help="Compare static PC aliasing and dynamic gshare aliasing across table sizes for one or more workloads.",
+    )
+    table_size_sweep_parser.add_argument(
+        "workloads",
+        nargs="*",
+        choices=list(SYNTHETIC_WORKLOADS),
+        help="Optional subset of workload families to include. Defaults to all built-in synthetic workloads.",
+    )
+    table_size_sweep_parser.add_argument("--branches", type=int, help="Override the branch count for every selected workload.")
+    table_size_sweep_parser.add_argument("--seed", type=int, help="Override the random seed for every selected workload.")
+    table_size_sweep_parser.add_argument("--history-bits", type=int, help="Override the history bits used for every selected workload.")
+    table_size_sweep_parser.add_argument("--table-sizes", type=int, nargs="+", help="Optional table sizes to compare in the sweep.")
+    table_size_sweep_parser.add_argument("--trace-dir", type=Path, help="Optional directory to write the generated trace files for the table-size sweep.")
+    table_size_sweep_parser.add_argument("--markdown-out", type=Path, help="Write a Markdown alias sweep report.")
+    table_size_sweep_parser.add_argument("--svg-out", type=Path, help="Write an SVG alias sweep summary card.")
+    table_size_sweep_parser.add_argument("--csv-out", type=Path, help="Write a CSV alias sweep export for charting.")
+    table_size_sweep_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary table.")
     return parser
 
 
@@ -2713,6 +3004,45 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(payload, indent=2, default=_json_default))
             else:
                 print(format_budget_sweep_summary_table(scenarios))
+                if "markdown_output" in payload:
+                    print(f"markdown report: {payload['markdown_output']}")
+                if "svg_output" in payload:
+                    print(f"svg card: {payload['svg_output']}")
+                if "csv_output" in payload:
+                    print(f"csv export: {payload['csv_output']}")
+                if args.trace_dir is not None:
+                    print(f"trace directory: {args.trace_dir}")
+            return 0
+
+        if args.command == "table-size-sweep":
+            scenarios = run_table_size_alias_sweep(
+                list(args.workloads),
+                branches_override=args.branches,
+                seed_override=args.seed,
+                table_sizes=list(args.table_sizes) if args.table_sizes else None,
+                history_bits_override=args.history_bits,
+                trace_dir=args.trace_dir,
+            )
+            payload = {
+                "workloads": [scenario["workload"] for scenario in scenarios],
+                "scenario_count": len(scenarios),
+                "scenarios": scenarios,
+            }
+            if args.trace_dir is not None:
+                payload["trace_dir"] = str(args.trace_dir)
+            if getattr(args, "markdown_out", None):
+                write_markdown_output(args.markdown_out, render_table_size_alias_markdown(scenarios=scenarios))
+                payload["markdown_output"] = str(args.markdown_out)
+            if getattr(args, "svg_out", None):
+                write_svg_output(args.svg_out, render_table_size_alias_svg(scenarios=scenarios))
+                payload["svg_output"] = str(args.svg_out)
+            if getattr(args, "csv_out", None):
+                write_csv_output(args.csv_out, render_table_size_alias_csv(scenarios=scenarios))
+                payload["csv_output"] = str(args.csv_out)
+            if args.json:
+                print(json.dumps(payload, indent=2, default=_json_default))
+            else:
+                print(format_table_size_alias_summary_table(scenarios))
                 if "markdown_output" in payload:
                     print(f"markdown report: {payload['markdown_output']}")
                 if "svg_output" in payload:

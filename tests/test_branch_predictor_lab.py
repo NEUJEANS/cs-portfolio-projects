@@ -31,12 +31,16 @@ compare_predictors = module.compare_predictors
 estimate_predictor_state_bits = module.estimate_predictor_state_bits
 format_budget_sweep_summary_table = module.format_budget_sweep_summary_table
 format_sweep_summary_table = module.format_sweep_summary_table
+format_table_size_alias_summary_table = module.format_table_size_alias_summary_table
 generate_synthetic_trace = module.generate_synthetic_trace
 load_trace = module.load_trace
 parse_trace_line = module.parse_trace_line
 render_budget_sweep_markdown = module.render_budget_sweep_markdown
 render_budget_sweep_csv = module.render_budget_sweep_csv
 render_budget_sweep_svg = module.render_budget_sweep_svg
+render_table_size_alias_markdown = module.render_table_size_alias_markdown
+render_table_size_alias_csv = module.render_table_size_alias_csv
+render_table_size_alias_svg = module.render_table_size_alias_svg
 render_comparison_markdown = module.render_comparison_markdown
 render_comparison_svg = module.render_comparison_svg
 render_perceptron_tuning_markdown = module.render_perceptron_tuning_markdown
@@ -46,6 +50,7 @@ render_sweep_svg = module.render_sweep_svg
 run_budget_normalized_sweep = module.run_budget_normalized_sweep
 run_budget_workload_sweep = module.run_budget_workload_sweep
 run_perceptron_tuning_sweep = module.run_perceptron_tuning_sweep
+run_table_size_alias_sweep = module.run_table_size_alias_sweep
 run_workload_sweep = module.run_workload_sweep
 simulate_trace = module.simulate_trace
 summarize_table_aliasing = module.summarize_table_aliasing
@@ -764,6 +769,98 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertIn("Budget-normalized branch predictor sweep", svg_path.read_text(encoding="utf-8"))
             csv_text = csv_path.read_text(encoding="utf-8")
             self.assertIn("budget_32_winner_predictor", csv_text)
+            self.assertIn("perceptron-majority", csv_text)
+
+
+    def test_run_table_size_alias_sweep_tracks_static_and_dynamic_collisions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_dir = Path(tmpdir) / "table-size-traces"
+            scenarios = run_table_size_alias_sweep(
+                ["alias-thrash", "perceptron-majority"],
+                table_sizes=[4, 16, 64],
+                trace_dir=trace_dir,
+            )
+
+            self.assertEqual([scenario["workload"] for scenario in scenarios], ["alias-thrash", "perceptron-majority"])
+            alias_rows = scenarios[0]["sweep_rows"]
+            self.assertEqual([row["table_size"] for row in alias_rows], [4, 16, 64])
+            self.assertGreater(alias_rows[0]["static_colliding_indices"], alias_rows[-1]["static_colliding_indices"])
+            self.assertGreater(alias_rows[1]["dynamic_colliding_indices"], 0)
+            self.assertGreaterEqual(alias_rows[1]["gshare_accuracy_percent"], alias_rows[1]["two_bit_accuracy_percent"])
+            self.assertEqual(scenarios[1]["best_static_table_size"], 4)
+            self.assertTrue((trace_dir / "alias-thrash-seed7.trace").exists())
+            self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())
+
+    def test_render_table_size_alias_outputs_include_collision_story(self) -> None:
+        scenarios = run_table_size_alias_sweep(
+            ["alias-thrash", "loop-heavy"],
+            table_sizes=[4, 16, 64],
+        )
+
+        markdown = render_table_size_alias_markdown(scenarios=scenarios)
+        csv_text = render_table_size_alias_csv(scenarios=scenarios)
+        svg = render_table_size_alias_svg(scenarios=scenarios)
+        summary = format_table_size_alias_summary_table(scenarios)
+
+        self.assertIn("# Branch predictor alias table-size sweep", markdown)
+        self.assertIn("## Per-workload notes", markdown)
+        self.assertIn("`alias-thrash`", markdown)
+        self.assertIn("Dynamic note", markdown)
+        self.assertIn("workload,headline,branches,seed,history_bits,trace_output,table_size", csv_text)
+        self.assertIn("dynamic_cross_address_colliding_indices", csv_text)
+        self.assertIn("<svg", svg)
+        self.assertIn("Branch predictor alias table-size sweep", svg)
+        self.assertIn("loop-heavy", summary)
+        self.assertIn("4e", summary)
+
+    def test_cli_table_size_sweep_json_writes_markdown_svg_csv_and_trace_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trace_dir = Path(tmpdir) / "table-size-traces"
+            markdown_path = Path(tmpdir) / "table-size-sweep.md"
+            svg_path = Path(tmpdir) / "table-size-sweep.svg"
+            csv_path = Path(tmpdir) / "table-size-sweep.csv"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "table-size-sweep",
+                    "alias-thrash",
+                    "perceptron-majority",
+                    "--table-sizes",
+                    "4",
+                    "16",
+                    "64",
+                    "--trace-dir",
+                    str(trace_dir),
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--csv-out",
+                    str(csv_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["scenario_count"], 2)
+            self.assertEqual(payload["workloads"], ["alias-thrash", "perceptron-majority"])
+            self.assertEqual(payload["trace_dir"], str(trace_dir))
+            self.assertEqual(payload["markdown_output"], str(markdown_path))
+            self.assertEqual(payload["svg_output"], str(svg_path))
+            self.assertEqual(payload["csv_output"], str(csv_path))
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(svg_path.exists())
+            self.assertTrue(csv_path.exists())
+            self.assertTrue((trace_dir / "alias-thrash-seed7.trace").exists())
+            self.assertTrue((trace_dir / "perceptron-majority-seed13.trace").exists())
+            self.assertIn("alias table-size sweep", markdown_path.read_text(encoding="utf-8"))
+            self.assertIn("Branch predictor alias table-size sweep", svg_path.read_text(encoding="utf-8"))
+            csv_text = csv_path.read_text(encoding="utf-8")
+            self.assertIn("dynamic_colliding_indices", csv_text)
             self.assertIn("perceptron-majority", csv_text)
 
 

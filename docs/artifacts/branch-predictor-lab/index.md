@@ -36,6 +36,18 @@ Use this when you want to hold approximate predictor state budget constant and s
   <a href="./budget-sweep.csv">CSV export</a>
 </p>
 
+## Alias table-size sweep
+
+Use this when you want to compare static PC aliasing against dynamic gshare collisions across the same workload family as the table grows.
+
+<p>
+  <strong>Alias table-size sweep grid</strong><br />
+  <img src="./table-size-sweep.svg" alt="Branch predictor alias table-size sweep grid" />
+  <br />
+  <a href="./table-size-sweep.md">Markdown report</a> ·
+  <a href="./table-size-sweep.csv">CSV export</a>
+</p>
+
 ## Comparison cards
 
 <table>
@@ -73,6 +85,7 @@ Use this when you want to hold approximate predictor state budget constant and s
 
 - Sweep overview: `python3 projects/branch-predictor-lab/branch_predictor.py sweep --trace-dir artifacts/branch-predictor-lab/sweep --markdown-out docs/artifacts/branch-predictor-lab/trace-family-sweep.md --svg-out docs/artifacts/branch-predictor-lab/trace-family-sweep.svg`
 - Budget-normalized sweep: `python3 projects/branch-predictor-lab/branch_predictor.py budget-sweep --trace-dir artifacts/branch-predictor-lab/budget-sweep --markdown-out docs/artifacts/branch-predictor-lab/budget-sweep.md --svg-out docs/artifacts/branch-predictor-lab/budget-sweep.svg --csv-out docs/artifacts/branch-predictor-lab/budget-sweep.csv`
+- Alias table-size sweep: `python3 projects/branch-predictor-lab/branch_predictor.py table-size-sweep --trace-dir artifacts/branch-predictor-lab/table-size-sweep --markdown-out docs/artifacts/branch-predictor-lab/table-size-sweep.md --svg-out docs/artifacts/branch-predictor-lab/table-size-sweep.svg --csv-out docs/artifacts/branch-predictor-lab/table-size-sweep.csv`
 - Bundled sample trace: `projects/branch-predictor-lab/sample_trace.txt` with `--table-size 16 --history-bits 2`
 - Synthetic trace: `artifacts/branch-predictor-lab/tournament-style-seed5.trace` generated with `generate tournament-style --branches 48 --seed 5`, then compared with `--table-size 16 --history-bits 4`
 - Alias trace: `artifacts/branch-predictor-lab/alias-thrash-seed7.trace` generated with `generate alias-thrash --branches 48 --seed 7`, then compared with `--table-size 16 --history-bits 4`
@@ -83,6 +96,7 @@ Use this when you want to hold approximate predictor state budget constant and s
 
 - Use the sweep overview card when you want one slide that proves different workload families reward different predictors and configs.
 - Use the budget-normalized matrix when you want to explain that hardware budget can change the “best predictor” answer even on the same workload family. Keep the CSV nearby when you need to chart or filter the same winner matrix in a spreadsheet or slide deck.
+- Use the alias table-size sweep when you want one artifact that shows static collisions can disappear while dynamic gshare conflicts still move around with history-dependent indexing.
 - Use the sample trace card when you want a clean teaching story for loop exits, alternating phases, and cache-ish branches.
 - Use the `tournament-style` card when you want to show that local/global/hybrid predictors can tie or trade places depending on the trace family and history depth.
 - Use the `alias-thrash` card when you want to explain table interference, conflicting branch biases, dynamic gshare-history collisions, and why increasing table size can improve simple predictors without changing the trace.

@@ -18,6 +18,8 @@
 - [x] Add dynamic gshare-index collision summaries so history-dependent aliasing is visible alongside the static PC-index view
 - [x] Add perceptron threshold/weight-limit sweep artifacts so neural tuning is visible in the gallery
 - [x] Add budget-normalized sweeps so predictors can compete under similar state-bit budgets
+- [x] Add CSV/export-friendly budget sweep output so README charts and slide decks can reuse the same winner matrix without re-parsing Markdown
+- [x] Add side-by-side table-size sweep artifacts so static-PC and dynamic-gshare collision counts can be compared across the same workload family
 
 ## Next candidate slices
-- [ ] Add CSV/export-friendly budget sweep output so README charts and slide decks can reuse the same winner matrix without re-parsing Markdown
+- [ ] Add artifact-ready stacked bar / heatmap exports that summarize how often each predictor wins across the whole budget grid, not just per-workload rows

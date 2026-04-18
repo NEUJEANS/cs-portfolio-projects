@@ -1,0 +1,26 @@
+workload,headline,branches,seed,history_bits,trace_output,table_size,static_colliding_indices,static_conflicting_indices,static_branch_events_in_collisions,dynamic_colliding_indices,dynamic_conflicting_indices,dynamic_cross_address_colliding_indices,dynamic_history_spread_colliding_indices,dynamic_branch_events_in_collisions,two_bit_accuracy_percent,gshare_accuracy_percent
+loop-heavy,loop backedges and exits,40,7,4,artifacts/branch-predictor-lab/table-size-sweep/loop-heavy-seed7.trace,4,1,0,40,3,1,3,2,39,80.0,80.0
+loop-heavy,loop backedges and exits,40,7,4,artifacts/branch-predictor-lab/table-size-sweep/loop-heavy-seed7.trace,8,1,0,40,4,1,4,2,38,80.0,75.0
+loop-heavy,loop backedges and exits,40,7,4,artifacts/branch-predictor-lab/table-size-sweep/loop-heavy-seed7.trace,16,1,0,40,5,2,5,0,37,80.0,82.5
+loop-heavy,loop backedges and exits,40,7,4,artifacts/branch-predictor-lab/table-size-sweep/loop-heavy-seed7.trace,32,1,0,28,5,1,5,0,25,80.0,87.5
+loop-heavy,loop backedges and exits,40,7,4,artifacts/branch-predictor-lab/table-size-sweep/loop-heavy-seed7.trace,64,0,0,0,0,0,0,0,0,80.0,90.0
+random-biased,biased hot/cold guard branches,96,11,2,artifacts/branch-predictor-lab/table-size-sweep/random-biased-seed11.trace,4,1,1,96,4,4,4,0,96,46.875,42.708
+random-biased,biased hot/cold guard branches,96,11,2,artifacts/branch-predictor-lab/table-size-sweep/random-biased-seed11.trace,8,1,1,96,4,4,4,0,96,46.875,42.708
+random-biased,biased hot/cold guard branches,96,11,2,artifacts/branch-predictor-lab/table-size-sweep/random-biased-seed11.trace,16,1,1,96,4,4,4,0,96,46.875,42.708
+random-biased,biased hot/cold guard branches,96,11,2,artifacts/branch-predictor-lab/table-size-sweep/random-biased-seed11.trace,32,2,2,96,8,5,8,0,96,52.083,45.833
+random-biased,biased hot/cold guard branches,96,11,2,artifacts/branch-predictor-lab/table-size-sweep/random-biased-seed11.trace,64,0,0,0,0,0,0,0,0,63.542,54.167
+tournament-style,mixed local/global correlation,48,5,4,artifacts/branch-predictor-lab/table-size-sweep/tournament-style-seed5.trace,4,1,1,48,4,4,4,4,48,52.083,60.417
+tournament-style,mixed local/global correlation,48,5,4,artifacts/branch-predictor-lab/table-size-sweep/tournament-style-seed5.trace,8,1,1,48,6,4,6,4,46,52.083,68.75
+tournament-style,mixed local/global correlation,48,5,4,artifacts/branch-predictor-lab/table-size-sweep/tournament-style-seed5.trace,16,1,1,48,8,4,8,0,43,52.083,72.917
+tournament-style,mixed local/global correlation,48,5,4,artifacts/branch-predictor-lab/table-size-sweep/tournament-style-seed5.trace,32,2,2,48,6,2,6,0,24,43.75,77.083
+tournament-style,mixed local/global correlation,48,5,4,artifacts/branch-predictor-lab/table-size-sweep/tournament-style-seed5.trace,64,0,0,0,0,0,0,0,0,54.167,75.0
+alias-thrash,small-table alias interference,64,7,4,artifacts/branch-predictor-lab/table-size-sweep/alias-thrash-seed7.trace,4,1,1,64,4,3,4,4,64,50.0,75.0
+alias-thrash,small-table alias interference,64,7,4,artifacts/branch-predictor-lab/table-size-sweep/alias-thrash-seed7.trace,8,2,2,64,8,4,8,7,64,50.0,73.438
+alias-thrash,small-table alias interference,64,7,4,artifacts/branch-predictor-lab/table-size-sweep/alias-thrash-seed7.trace,16,2,2,64,10,3,10,8,52,50.0,73.438
+alias-thrash,small-table alias interference,64,7,4,artifacts/branch-predictor-lab/table-size-sweep/alias-thrash-seed7.trace,32,0,0,0,5,1,5,5,39,79.688,76.562
+alias-thrash,small-table alias interference,64,7,4,artifacts/branch-predictor-lab/table-size-sweep/alias-thrash-seed7.trace,64,0,0,0,5,1,5,5,39,79.688,76.562
+perceptron-majority,long-history linearly separable branch,96,13,12,artifacts/branch-predictor-lab/table-size-sweep/perceptron-majority-seed13.trace,4,0,0,0,3,2,0,3,96,73.958,81.25
+perceptron-majority,long-history linearly separable branch,96,13,12,artifacts/branch-predictor-lab/table-size-sweep/perceptron-majority-seed13.trace,8,0,0,0,4,2,0,4,88,73.958,79.167
+perceptron-majority,long-history linearly separable branch,96,13,12,artifacts/branch-predictor-lab/table-size-sweep/perceptron-majority-seed13.trace,16,0,0,0,5,2,0,5,80,73.958,78.125
+perceptron-majority,long-history linearly separable branch,96,13,12,artifacts/branch-predictor-lab/table-size-sweep/perceptron-majority-seed13.trace,32,0,0,0,5,2,0,5,64,73.958,75.0
+perceptron-majority,long-history linearly separable branch,96,13,12,artifacts/branch-predictor-lab/table-size-sweep/perceptron-majority-seed13.trace,64,0,0,0,5,1,0,5,48,73.958,83.333
