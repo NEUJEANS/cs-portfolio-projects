@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import zipfile
 from dataclasses import dataclass
 from html import escape as escape_html
 from pathlib import Path
@@ -2828,6 +2829,9 @@ def build_comparison_preset_detail_paths(
     return {
         "bundle_dir": bundle_dir,
         "script": preset.script_path,
+        "bundle_index_html": bundle_dir / "index.html",
+        "bundle_script": bundle_dir / "scenario-script.json",
+        "bundle_zip": bundle_dir / f"{preset.name}-bundle.zip",
         "timeline_markdown": bundle_dir / "timeline.md",
         "timeline_mermaid": bundle_dir / "timeline.mmd",
         "timeline_svg": bundle_dir / "timeline.svg",
@@ -2850,6 +2854,9 @@ def detail_bundle_relative_paths(
 ) -> dict[str, str]:
     return {
         "directory": relative_output_path(paths["bundle_dir"], base_dir),
+        "bundle_index_html": relative_output_path(paths["bundle_index_html"], base_dir),
+        "bundle_script": relative_output_path(paths["bundle_script"], base_dir),
+        "bundle_zip": relative_output_path(paths["bundle_zip"], base_dir),
         "script": relative_output_path(paths["script"], base_dir),
         "timeline_markdown": relative_output_path(paths["timeline_markdown"], base_dir),
         "timeline_mermaid": relative_output_path(paths["timeline_mermaid"], base_dir),
@@ -2887,6 +2894,8 @@ def detail_bundle_markdown_links(detail_bundle: dict[str, object] | None) -> str
     if not detail_bundle:
         return "—"
     link_specs = (
+        ("bundle", "bundle_index_html"),
+        ("zip", "bundle_zip"),
         ("comparison", "comparison_html"),
         ("timeline", "timeline_html"),
         ("replay", "replay_html"),
@@ -2905,6 +2914,8 @@ def detail_bundle_html_links(detail_bundle: dict[str, object] | None) -> str:
     if not detail_bundle:
         return ""
     link_specs = (
+        ("Bundle", "bundle_index_html"),
+        ("ZIP packet", "bundle_zip"),
         ("Comparison", "comparison_html"),
         ("Timeline", "timeline_html"),
         ("Replay", "replay_html"),
@@ -2918,6 +2929,132 @@ def detail_bundle_html_links(detail_bundle: dict[str, object] | None) -> str:
     )
 
 
+def render_comparison_preset_bundle_html(
+    preset: ComparisonPreset,
+    comparison: dict[str, object],
+    detail_bundle: dict[str, str],
+) -> str:
+    divergence_notes = list(comparison["final_divergence"])
+    outcome = "diverge" if divergence_notes else "align"
+    divergence_html = (
+        "<ul class=\"divergence\">"
+        + "".join(
+            f"<li><strong><code>{escape_html(str(item['element']))}</code></strong><span>{escape_html(str(item['why']))}</span></li>"
+            for item in divergence_notes
+        )
+        + "</ul>"
+        if divergence_notes
+        else "<p class=\"aligned\">Both OR-Set and LWW finish with the same final membership in this control case.</p>"
+    )
+    link_specs = (
+        ("Open comparison page", "comparison_html"),
+        ("Open timeline gallery", "timeline_html"),
+        ("Open replay walkthrough", "replay_html"),
+        ("Open anti-entropy report", "anti_entropy_html"),
+        ("Download ZIP packet", "bundle_zip"),
+        ("Scenario script", "bundle_script"),
+        ("Snapshot JSON", "snapshot_json"),
+        ("Timeline Markdown", "timeline_markdown"),
+        ("Timeline Mermaid", "timeline_mermaid"),
+        ("Timeline SVG", "timeline_svg"),
+        ("Comparison Markdown", "comparison_markdown"),
+        ("Comparison JSON", "comparison_json"),
+        ("Anti-entropy Markdown", "anti_entropy_markdown"),
+        ("Anti-entropy JSON", "anti_entropy_json"),
+    )
+    links_html = "".join(
+        f'<a class="link" href="{escape_html(str(detail_bundle[key]))}">{escape_html(label)}</a>'
+        for label, key in link_specs
+        if detail_bundle.get(key)
+    )
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{escape_html(preset.title)} — preset bundle</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .story {{ padding: 12px 14px; border-radius: 16px; background: var(--panel-alt); border: 1px solid #dbeafe; color: #1e3a8a; line-height: 1.5; }}
+      .meta {{ display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 0; margin: 22px 0 0; }}
+      .meta li {{ list-style: none; padding: 14px 16px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }}
+      .meta strong {{ display: block; margin-bottom: 6px; }}
+      .panel {{ padding: 24px; }}
+      .links {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }}
+      .link {{ display: inline-flex; align-items: center; padding: 10px 14px; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--accent); font-weight: 700; text-decoration: none; }}
+      .divergence {{ list-style: none; padding: 0; margin: 18px 0 0; }}
+      .divergence li {{ display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); }}
+      .aligned {{ margin: 18px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--good-bg); color: var(--good); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p><code>{escape_html(preset.name)}</code> · preset bundle</p>
+        <h1>{escape_html(preset.title)}</h1>
+        <p>{escape_html(preset.description)}</p>
+        <p class="story">{escape_html(str(comparison['story']))}</p>
+        <ul class="meta">
+          <li><strong>Outcome</strong><span>{escape_html(outcome)}</span></li>
+          <li><strong>LWW tie bias</strong><span><code>{escape_html(preset.lww_bias)}</code></span></li>
+          <li><strong>OR-Set</strong><span>{escape_html(format_membership_map(dict(comparison['orset']['convergence']['membership'])))}</span></li>
+          <li><strong>LWW</strong><span>{escape_html(format_membership_map(dict(comparison['lww']['convergence']['membership'])))}</span></li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Bundle contents</h2>
+        <p>This page is the portable landing page for a single preset detail bundle. Open the polished HTML artifacts directly, inspect the raw JSON/Markdown companions, or download the ZIP packet for sharing.</p>
+        <div class="links">{links_html}</div>
+        {divergence_html}
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
+def write_bundle_zip(paths: dict[str, Path]) -> None:
+    bundle_dir = paths["bundle_dir"]
+    bundle_zip_path = paths["bundle_zip"]
+    bundle_zip_path.parent.mkdir(parents=True, exist_ok=True)
+    ordered_files = [
+        paths["bundle_index_html"],
+        paths["bundle_script"],
+        paths["timeline_markdown"],
+        paths["timeline_mermaid"],
+        paths["timeline_svg"],
+        paths["timeline_html"],
+        paths["replay_html"],
+        paths["snapshot_json"],
+        paths["anti_entropy_markdown"],
+        paths["anti_entropy_html"],
+        paths["anti_entropy_json"],
+        paths["comparison_markdown"],
+        paths["comparison_html"],
+        paths["comparison_json"],
+    ]
+    with zipfile.ZipFile(bundle_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for file_path in ordered_files:
+            archive.write(file_path, file_path.relative_to(bundle_dir).as_posix())
+
+
 def write_comparison_preset_detail_outputs(
     preset: ComparisonPreset,
     comparison: dict[str, object],
@@ -2929,6 +3066,7 @@ def write_comparison_preset_detail_outputs(
     title = comparison_preset_detail_title(preset)
     anti_entropy_report = build_anti_entropy_report(snapshot)
 
+    write_text_output(paths["bundle_script"], paths["script"].read_text())
     write_text_output(paths["snapshot_json"], json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
     write_text_output(paths["timeline_markdown"], render_timeline_markdown(snapshot, title))
     write_text_output(paths["timeline_mermaid"], render_timeline_mermaid(snapshot, title))
@@ -2944,13 +3082,15 @@ def write_comparison_preset_detail_outputs(
         mermaid_path=paths["timeline_mermaid"],
         svg_path=paths["timeline_svg"],
         json_path=paths["snapshot_json"],
-        script_path=paths["script"],
+        script_path=paths["bundle_script"],
         anti_entropy_markdown_path=paths["anti_entropy_markdown"],
         anti_entropy_html_path=paths["anti_entropy_html"],
         anti_entropy_json_path=paths["anti_entropy_json"],
         replay_html_path=paths["replay_html"],
     )
     for label, target in (
+        ("Bundle landing page", paths["bundle_index_html"]),
+        ("Preset ZIP packet", paths["bundle_zip"]),
         ("Comparison HTML", paths["comparison_html"]),
         ("Comparison Markdown", paths["comparison_markdown"]),
         ("Comparison JSON", paths["comparison_json"]),
@@ -2960,7 +3100,9 @@ def write_comparison_preset_detail_outputs(
 
     anti_entropy_links: dict[str, str] = {}
     for label, target in (
-        ("Scenario script", paths["script"]),
+        ("Bundle landing page", paths["bundle_index_html"]),
+        ("Preset ZIP packet", paths["bundle_zip"]),
+        ("Scenario script", paths["bundle_script"]),
         ("Timeline gallery", paths["timeline_html"]),
         ("Timeline Markdown", paths["timeline_markdown"]),
         ("Timeline Mermaid", paths["timeline_mermaid"]),
@@ -2985,11 +3127,13 @@ def write_comparison_preset_detail_outputs(
         mermaid_path=paths["timeline_mermaid"],
         svg_path=paths["timeline_svg"],
         json_path=paths["snapshot_json"],
-        script_path=paths["script"],
+        script_path=paths["bundle_script"],
         anti_entropy_markdown_path=paths["anti_entropy_markdown"],
         anti_entropy_html_path=paths["anti_entropy_html"],
         anti_entropy_json_path=paths["anti_entropy_json"],
     )
+    replay_links["Bundle landing page"] = relative_output_path(paths["bundle_index_html"], paths["replay_html"].parent)
+    replay_links["Preset ZIP packet"] = relative_output_path(paths["bundle_zip"], paths["replay_html"].parent)
     replay_links["Timeline gallery"] = relative_output_path(paths["timeline_html"], paths["replay_html"].parent)
     for label, target in (
         ("Comparison HTML", paths["comparison_html"]),
@@ -3001,7 +3145,9 @@ def write_comparison_preset_detail_outputs(
 
     comparison_links: dict[str, str] = {}
     for label, target in (
-        ("Scenario script", paths["script"]),
+        ("Bundle landing page", paths["bundle_index_html"]),
+        ("Preset ZIP packet", paths["bundle_zip"]),
+        ("Scenario script", paths["bundle_script"]),
         ("OR-Set gallery", paths["timeline_html"]),
         ("OR-Set replay", paths["replay_html"]),
         ("OR-Set Markdown timeline", paths["timeline_markdown"]),
@@ -3019,6 +3165,10 @@ def write_comparison_preset_detail_outputs(
         paths["comparison_html"],
         render_comparison_html(comparison, title, companion_links=comparison_links),
     )
+
+    detail_bundle = detail_bundle_relative_paths(paths, base_dir=paths["bundle_dir"])
+    write_text_output(paths["bundle_index_html"], render_comparison_preset_bundle_html(preset, comparison, detail_bundle))
+    write_bundle_zip(paths)
     return paths
 
 

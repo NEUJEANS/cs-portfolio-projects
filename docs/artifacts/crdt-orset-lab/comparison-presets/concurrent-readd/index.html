@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Concurrent re-add survives in OR-Set — preset bundle</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .story { padding: 12px 14px; border-radius: 16px; background: var(--panel-alt); border: 1px solid #dbeafe; color: #1e3a8a; line-height: 1.5; }
+      .meta { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 0; margin: 22px 0 0; }
+      .meta li { list-style: none; padding: 14px 16px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }
+      .meta strong { display: block; margin-bottom: 6px; }
+      .panel { padding: 24px; }
+      .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+      .link { display: inline-flex; align-items: center; padding: 10px 14px; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--accent); font-weight: 700; text-decoration: none; }
+      .divergence { list-style: none; padding: 0; margin: 18px 0 0; }
+      .divergence li { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); }
+      .aligned { margin: 18px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--good-bg); color: var(--good); }
+      code { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p><code>concurrent-readd</code> · preset bundle</p>
+        <h1>Concurrent re-add survives in OR-Set</h1>
+        <p>Replica b removes only the tag it observed, while replica c later adds the same element with a fresh tag. OR-Set keeps the new tag after sync, but remove-wins LWW drops the element because the later remove timestamp still dominates.</p>
+        <p class="story">The final states diverge on notebook: OR-Set leaves it present because the remove only tombstoned observed tags, while LWW leaves it absent after comparing add=4 and remove=5 under remove-wins ties.</p>
+        <ul class="meta">
+          <li><strong>Outcome</strong><span>diverge</span></li>
+          <li><strong>LWW tie bias</strong><span><code>remove</code></span></li>
+          <li><strong>OR-Set</strong><span>a=notebook; b=notebook; c=notebook</span></li>
+          <li><strong>LWW</strong><span>a=∅; b=∅; c=∅</span></li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Bundle contents</h2>
+        <p>This page is the portable landing page for a single preset detail bundle. Open the polished HTML artifacts directly, inspect the raw JSON/Markdown companions, or download the ZIP packet for sharing.</p>
+        <div class="links"><a class="link" href="comparison.html">Open comparison page</a><a class="link" href="timeline.html">Open timeline gallery</a><a class="link" href="replay.html">Open replay walkthrough</a><a class="link" href="anti-entropy.html">Open anti-entropy report</a><a class="link" href="concurrent-readd-bundle.zip">Download ZIP packet</a><a class="link" href="scenario-script.json">Scenario script</a><a class="link" href="orset-snapshot.json">Snapshot JSON</a><a class="link" href="timeline.md">Timeline Markdown</a><a class="link" href="timeline.mmd">Timeline Mermaid</a><a class="link" href="timeline.svg">Timeline SVG</a><a class="link" href="comparison.md">Comparison Markdown</a><a class="link" href="comparison.json">Comparison JSON</a><a class="link" href="anti-entropy.md">Anti-entropy Markdown</a><a class="link" href="anti-entropy.json">Anti-entropy JSON</a></div>
+        <ul class="divergence"><li><strong><code>notebook</code></strong><span>OR-Set keeps only observed-remove tombstones, so active tags c:1 can survive. LWW compares add=4 vs remove=5 with remove-wins ties.</span></li></ul>
+      </section>
+    </main>
+  </body>
+</html>

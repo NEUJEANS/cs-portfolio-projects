@@ -1,5 +1,19 @@
 # crdt-orset-lab checklist
 
+## Current slice (2026-04-18 23:23 UTC run)
+- [x] confirm `main` still matches `origin/main` before editing
+- [x] do the brief bundle-packaging refresh needed to make preset detail artifacts self-contained
+- [x] do a short Python/zipfile self-test refresh for bundle-local files and archive generation
+- [x] update/add checklist markdown for the preset bundle landing + ZIP slice
+- [x] add a portable `index.html` landing page and bundled `scenario-script.json` inside each preset detail directory
+- [x] generate a ZIP packet for each preset bundle and surface bundle/ZIP links from the suite outputs
+- [x] regenerate and commit the updated preset-suite summary plus per-preset bundle artifacts under `docs/artifacts/crdt-orset-lab/comparison-presets/`
+- [x] update README language, committed artifact examples, and future follow-up notes
+- [x] extend regression coverage for bundle landing pages, bundled scripts, and ZIP packet contents
+- [x] run targeted tests, smoke checks, and 3 review passes
+- [x] run secret scan
+- [x] commit, push, and write the wrap-up
+
 ## Current slice (2026-04-18 23:02 UTC run)
 - [x] confirm `main` still matches `origin/main` before editing and preserve the local in-progress preset-detail diff
 - [x] do only the brief preset-bundle / relative-link refresh needed to keep the generated static artifacts portable
@@ -117,10 +131,11 @@
 
 ## Current quality checks
 - [x] README explains why observed-remove semantics matter and how to run the simulator
-- [x] README documents Markdown / Mermaid / SVG / HTML / JSON export flags, the anti-entropy report outputs, the replay page, the `compare-script` workflow, and the preset-suite commands including `--detail-output-dir`
-- [x] tests cover add/remove/merge behavior, convergence, script loading, CLI flows, timeline exports, replay exports, anti-entropy exports, comparison exports, preset listing, preset detail-bundle links, and the preset-suite summaries
+- [x] README documents Markdown / Mermaid / SVG / HTML / JSON export flags, the anti-entropy report outputs, the replay page, the `compare-script` workflow, and the preset-suite commands including `--detail-output-dir`, bundle landing pages, and ZIP packets
+- [x] tests cover add/remove/merge behavior, convergence, script loading, CLI flows, timeline exports, replay exports, anti-entropy exports, comparison exports, preset listing, preset detail-bundle links, bundle landing pages, ZIP packet contents, and the preset-suite summaries
 - [x] project is resumable through the sample scripts, checklist, research/learning notes, and review/wrap-up docs
 
 ## Next follow-up ideas
 - [ ] add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
+- [ ] add a cross-preset landing page that can batch-download multiple preset ZIP packets at once
 - [ ] add PNG/export bundling on top of the replay checkpoint SVG downloads for slide decks that need bitmap assets

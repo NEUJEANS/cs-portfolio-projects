@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from crdt_orset_lab import (
@@ -201,6 +202,9 @@ class ORSetLabTests(unittest.TestCase):
         suite = build_comparison_preset_suite(["concurrent-readd", "observed-remove-sync"])
         suite["presets"][0]["detail_bundle"] = {
             "directory": "comparison-presets/concurrent-readd",
+            "bundle_index_html": "comparison-presets/concurrent-readd/index.html",
+            "bundle_script": "comparison-presets/concurrent-readd/scenario-script.json",
+            "bundle_zip": "comparison-presets/concurrent-readd/concurrent-readd-bundle.zip",
             "comparison_html": "comparison-presets/concurrent-readd/comparison.html",
             "timeline_html": "comparison-presets/concurrent-readd/timeline.html",
             "replay_html": "comparison-presets/concurrent-readd/replay.html",
@@ -222,11 +226,15 @@ class ORSetLabTests(unittest.TestCase):
         self.assertIn("concurrent-readd", markdown)
         self.assertIn("observed-remove-sync", markdown)
         self.assertIn("both models converge to the same final membership", markdown)
+        self.assertIn("[bundle](comparison-presets/concurrent-readd/index.html)", markdown)
+        self.assertIn("[zip](comparison-presets/concurrent-readd/concurrent-readd-bundle.zip)", markdown)
         self.assertIn("[comparison](comparison-presets/concurrent-readd/comparison.html)", markdown)
         self.assertIn("OR-Set comparison preset suite", html)
         self.assertIn("Concurrent re-add survives in OR-Set", html)
         self.assertIn("Both models reach the same final membership", html)
+        self.assertIn('href="comparison-presets/concurrent-readd/index.html"', html)
         self.assertIn('href="comparison-presets/concurrent-readd/timeline.html"', html)
+        self.assertIn("ZIP packet", html)
         self.assertIn("Snapshot JSON", html)
 
     def test_parse_tag_rejects_invalid_format(self) -> None:
@@ -545,16 +553,51 @@ class ORSetLabTests(unittest.TestCase):
             html = html_path.read_text()
             self.assertIn("Concurrent re-add survives in OR-Set", html)
             self.assertIn("Observed remove yields the same final answer", html)
+            self.assertIn('href="comparison-presets/concurrent-readd/index.html"', html)
+            self.assertIn('href="comparison-presets/concurrent-readd/concurrent-readd-bundle.zip"', html)
             self.assertIn('href="comparison-presets/concurrent-readd/comparison.html"', html)
             self.assertIn('href="comparison-presets/concurrent-readd/replay.html"', html)
             payload = json.loads(json_path.read_text())
             self.assertEqual(payload["aligned_count"], 1)
             detail_bundle = next(preset for preset in payload["presets"] if preset["name"] == "concurrent-readd")["detail_bundle"]
+            self.assertEqual(detail_bundle["bundle_index_html"], "comparison-presets/concurrent-readd/index.html")
+            self.assertEqual(detail_bundle["bundle_zip"], "comparison-presets/concurrent-readd/concurrent-readd-bundle.zip")
+            self.assertEqual(detail_bundle["bundle_script"], "comparison-presets/concurrent-readd/scenario-script.json")
             self.assertEqual(detail_bundle["comparison_html"], "comparison-presets/concurrent-readd/comparison.html")
+            bundle_index = detail_dir / "concurrent-readd" / "index.html"
+            self.assertTrue(bundle_index.exists())
+            self.assertTrue((detail_dir / "concurrent-readd" / "scenario-script.json").exists())
             self.assertTrue((detail_dir / "concurrent-readd" / "comparison.html").exists())
             self.assertTrue((detail_dir / "concurrent-readd" / "timeline.html").exists())
             self.assertTrue((detail_dir / "concurrent-readd" / "replay.html").exists())
             self.assertTrue((detail_dir / "concurrent-readd" / "anti-entropy.html").exists())
+            bundle_html = bundle_index.read_text()
+            self.assertIn("portable landing page", bundle_html)
+            self.assertIn('href="scenario-script.json"', bundle_html)
+            self.assertIn('href="comparison.html"', bundle_html)
+            self.assertIn('href="concurrent-readd-bundle.zip"', bundle_html)
+            bundle_zip = detail_dir / "concurrent-readd" / "concurrent-readd-bundle.zip"
+            self.assertTrue(bundle_zip.exists())
+            with zipfile.ZipFile(bundle_zip) as archive:
+                self.assertEqual(
+                    archive.namelist(),
+                    [
+                        "index.html",
+                        "scenario-script.json",
+                        "timeline.md",
+                        "timeline.mmd",
+                        "timeline.svg",
+                        "timeline.html",
+                        "replay.html",
+                        "orset-snapshot.json",
+                        "anti-entropy.md",
+                        "anti-entropy.html",
+                        "anti-entropy.json",
+                        "comparison.md",
+                        "comparison.html",
+                        "comparison.json",
+                    ],
+                )
 
     def test_cli_compare_presets_unknown_name_returns_parser_error(self) -> None:
         completed = subprocess.run(

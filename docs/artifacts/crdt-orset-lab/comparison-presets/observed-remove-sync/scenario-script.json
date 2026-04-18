@@ -1,0 +1,10 @@
+{
+  "operations": [
+    {"op": "add", "replica": "a", "element": "notebook", "time": 1},
+    {"op": "sync", "source": "a", "target": "b", "direction": "both"},
+    {"op": "remove", "replica": "b", "element": "notebook", "time": 4},
+    {"op": "sync", "source": "b", "target": "c", "direction": "both"},
+    {"op": "sync", "source": "a", "target": "b", "direction": "both"},
+    {"op": "sync", "source": "a", "target": "c", "direction": "both"}
+  ]
+}

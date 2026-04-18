@@ -2,6 +2,23 @@
 
 Project-local source of truth: `projects/crdt-orset-lab/CHECKLIST.md`
 
+## 2026-04-18 preset bundle landing + ZIP slice
+- [x] verify git sync state before editing
+- [x] do a brief zipfile / static-bundle refresh against the existing preset detail export pattern
+- [x] write a short Python/zip self-test note
+- [x] update resumable checklist state in the project and docs trees
+- [x] add a portable bundle landing page plus bundled scenario script inside each preset detail directory
+- [x] generate ZIP packets for the preset detail bundles and surface bundle/ZIP links from the suite outputs
+- [x] regenerate and commit the preset-suite summary artifacts plus updated per-preset bundles under `docs/artifacts/crdt-orset-lab/comparison-presets/`
+- [x] refresh README language and future follow-up notes
+- [x] add regression coverage for bundle landing pages, bundled scripts, and ZIP packet contents
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
+
 ## 2026-04-18 preset detail-bundles slice
 - [x] verify git sync state before editing and preserve the local in-progress detail-bundle diff
 - [x] do a brief relative-link / static-bundle refresh against the existing artifact-export pattern
