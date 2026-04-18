@@ -23,4 +23,5 @@
 
 ## Next candidate slices
 - [x] Add artifact-ready stacked bar / heatmap exports that summarize how often each predictor wins across the whole budget grid, not just per-workload rows
-- [ ] Add budget-grid runner-up stability or winner-margin trend artifacts so near-ties are visible alongside outright wins
+- [x] Add budget-grid runner-up stability or winner-margin trend artifacts so near-ties are visible alongside outright wins
+- [ ] Highlight budget crossover points where the winner changes so the artifact can call out the exact flip budgets

@@ -26,7 +26,7 @@ Use this when you want a dedicated neural-predictor artifact that shows how thre
 
 ## Budget-normalized sweep
 
-Use this when you want to hold approximate predictor state budget constant and show that the winner can flip once hardware cost, not just raw accuracy, becomes the constraint. The exported SVG now also includes a whole-grid stacked-bar summary and a budget-by-predictor win heatmap so you can tell the macro story before drilling into individual workload rows.
+Use this when you want to hold approximate predictor state budget constant and show that the winner can flip once hardware cost, not just raw accuracy, becomes the constraint. The exported SVG now also includes a whole-grid stacked-bar summary, a budget-by-predictor win heatmap, and a winner-margin trend card so you can tell the macro story without hiding near-ties.
 
 <p>
   <strong>Budget-normalized winner matrix</strong><br />
@@ -95,7 +95,7 @@ Use this when you want to compare static PC aliasing against dynamic gshare coll
 ## Suggested portfolio usage
 
 - Use the sweep overview card when you want one slide that proves different workload families reward different predictors and configs.
-- Use the budget-normalized matrix when you want to explain that hardware budget can change the “best predictor” answer even on the same workload family. Keep the CSV nearby when you need to chart or filter the same winner matrix in a spreadsheet or slide deck.
+- Use the budget-normalized matrix when you want to explain that hardware budget can change the “best predictor” answer even on the same workload family. Keep the CSV nearby when you need to chart or filter the same winner matrix in a spreadsheet or slide deck, and lean on the new margin-trend card when you want to prove some of those wins are only photo finishes.
 - Use the alias table-size sweep when you want one artifact that shows static collisions can disappear while dynamic gshare conflicts still move around with history-dependent indexing.
 - Use the sample trace card when you want a clean teaching story for loop exits, alternating phases, and cache-ish branches.
 - Use the `tournament-style` card when you want to show that local/global/hybrid predictors can tie or trade places depending on the trace family and history depth.

@@ -1,11 +1,11 @@
 # Branch predictor budget-normalized sweep
 
-- Generated: `2026-04-18T04:42:28Z`
+- Generated: `2026-04-18T04:58:16Z`
 - Workloads: `5` synthetic families
 - Compared budgets: `64 bits, 128 bits, 256 bits, 512 bits, 1024 bits`
 - Search space: table sizes `4, 8, 16, 32, 64` · history bits `1, 2, 4, 8, 12` · perceptron weight limits `15, 31, 74`
 - Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.
-- Export note: the SVG now includes both a whole-grid stacked-bar summary and a budget-by-predictor heatmap, while the CSV remains the row-level winner matrix for spreadsheet/chart reuse.
+- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, and a winner-margin trend card so near-ties stay visible instead of getting buried under the winner names.
 
 ## Overview
 
@@ -41,6 +41,33 @@
 | `tournament` | `0` | `0` | `0` | `1` | `1` |
 | `always-taken` | `1` | `0` | `0` | `0` | `0` |
 | `local-history` | `1` | `0` | `0` | `0` | `0` |
+
+## Margin and runner-up story
+
+- Photo finishes (≤0.50 pp): `9` grid cells (`36.00%`).
+- Close races (≤1.00 pp): `9` grid cells (`36.00%`).
+- Tightest cell: `loop-heavy` @ `64 bits` → `gshare` over `local-history` by `0.00 pp`.
+- Widest cell: `random-biased` @ `128 bits` → `two-bit` over `gshare` by `10.42 pp`.
+
+### Margin trend by budget
+
+| Budget | Avg winner gap | Photo finishes (≤0.50 pp) | Close races (≤1.00 pp) | Most common runner-up |
+| ---: | ---: | ---: | ---: | --- |
+| `64` | `0.21 pp` | `4` | `4` | `local-history` (`2/5` cells) |
+| `128` | `3.60 pp` | `1` | `1` | `local-history` (`3/5` cells) |
+| `256` | `2.65 pp` | `1` | `1` | `local-history` (`3/5` cells) |
+| `512` | `4.75 pp` | `1` | `1` | `gshare` (`3/5` cells) |
+| `1024` | `2.25 pp` | `2` | `2` | `perceptron` (`3/5` cells) |
+
+### Runner-up stability by workload
+
+| Workload | Runner-up flow | Changes | Tightest gap | Widest gap |
+| --- | --- | ---: | --- | --- |
+| `loop-heavy` | `local-history ×3 → tournament ×2` | `1` | `64 bits` (`0.00 pp`) | `256 bits` (`7.50 pp`) |
+| `random-biased` | `two-bit → gshare ×3 → perceptron` | `2` | `64 bits` (`0.00 pp`) | `128 bits` (`10.42 pp`) |
+| `tournament-style` | `local-history ×3 → gshare → perceptron` | `2` | `64 bits` (`0.00 pp`) | `512 bits` (`6.25 pp`) |
+| `alias-thrash` | `perceptron → local-history ×2 → perceptron ×2` | `2` | `64 bits` (`0.00 pp`) | `128 bits` (`1.56 pp`) |
+| `perceptron-majority` | `gshare ×2 → perceptron → gshare → tournament` | `3` | `1024 bits` (`0.00 pp`) | `512 bits` (`9.38 pp`) |
 
 ## Per-workload notes
 
@@ -153,6 +180,7 @@ Representative best-fit configs:
 
 - Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.
 - Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.
+- Use the margin-trend section when you want to point out that some budget winners are basically photo finishes while others create real separation from the runner-up.
 - Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.
 - The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.
 - Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.

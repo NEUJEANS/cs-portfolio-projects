@@ -39,6 +39,7 @@ render_budget_sweep_markdown = module.render_budget_sweep_markdown
 render_budget_sweep_csv = module.render_budget_sweep_csv
 render_budget_sweep_svg = module.render_budget_sweep_svg
 summarize_budget_winner_grid = module.summarize_budget_winner_grid
+summarize_budget_margin_story = module.summarize_budget_margin_story
 render_table_size_alias_markdown = module.render_table_size_alias_markdown
 render_table_size_alias_csv = module.render_table_size_alias_csv
 render_table_size_alias_svg = module.render_table_size_alias_svg
@@ -696,16 +697,21 @@ class BranchPredictorLabTests(unittest.TestCase):
         )
 
         winner_summary = summarize_budget_winner_grid(scenarios)
+        margin_summary = summarize_budget_margin_story(scenarios)
         markdown = render_budget_sweep_markdown(scenarios=scenarios)
         csv_text = render_budget_sweep_csv(scenarios=scenarios)
         svg = render_budget_sweep_svg(scenarios=scenarios)
         summary = format_budget_sweep_summary_table(scenarios)
 
         self.assertEqual(winner_summary["total_cells"], 4)
+        self.assertEqual(margin_summary["total_cells"], 4)
+        self.assertEqual([row["threshold"] for row in margin_summary["threshold_rows"]], [0.5, 1.0, 2.0])
         self.assertGreaterEqual(winner_summary["predictor_rows"][0]["wins"], 1)
         self.assertIn("# Branch predictor budget-normalized sweep", markdown)
         self.assertIn("## Whole-grid winner summary", markdown)
         self.assertIn("Budget × predictor win counts", markdown)
+        self.assertIn("## Margin and runner-up story", markdown)
+        self.assertIn("Runner-up stability by workload", markdown)
         self.assertIn("## Per-workload notes", markdown)
         self.assertIn("`32 bits`", markdown)
         self.assertIn("Portfolio usage", markdown)
@@ -716,6 +722,7 @@ class BranchPredictorLabTests(unittest.TestCase):
         self.assertIn("Budget-normalized branch predictor sweep", svg)
         self.assertIn("Grid win totals", svg)
         self.assertIn("Budget winner heatmap", svg)
+        self.assertIn("Winner-margin trend by budget", svg)
         self.assertIn("loop-heavy", summary)
         self.assertIn("32b", summary)
 
@@ -766,6 +773,8 @@ class BranchPredictorLabTests(unittest.TestCase):
             self.assertEqual(payload["workloads"], ["loop-heavy", "perceptron-majority"])
             self.assertEqual(payload["winner_summary"]["total_cells"], 4)
             self.assertIn("predictor_rows", payload["winner_summary"])
+            self.assertEqual(payload["margin_summary"]["total_cells"], 4)
+            self.assertIn("budget_rows", payload["margin_summary"])
             self.assertEqual(payload["trace_dir"], str(trace_dir))
             self.assertEqual(payload["markdown_output"], str(markdown_path))
             self.assertEqual(payload["svg_output"], str(svg_path))

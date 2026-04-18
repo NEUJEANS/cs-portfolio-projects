@@ -2096,6 +2096,23 @@ def _format_budget_candidate_csv_label(candidate: dict[str, Any]) -> str:
     return _format_budget_candidate_label(candidate).replace(" · ", " | ")
 
 
+def _compress_name_sequence(names: list[str]) -> str:
+    if not names:
+        return "-"
+    runs: list[str] = []
+    current = names[0]
+    count = 1
+    for name in names[1:]:
+        if name == current:
+            count += 1
+            continue
+        runs.append(f"{current} ×{count}" if count > 1 else current)
+        current = name
+        count = 1
+    runs.append(f"{current} ×{count}" if count > 1 else current)
+    return " → ".join(runs)
+
+
 def summarize_budget_winner_grid(scenarios: list[dict[str, Any]]) -> dict[str, Any]:
     if not scenarios:
         raise ValueError("scenarios must not be empty")
@@ -2187,6 +2204,134 @@ def summarize_budget_winner_grid(scenarios: list[dict[str, Any]]) -> dict[str, A
     }
 
 
+def summarize_budget_margin_story(scenarios: list[dict[str, Any]]) -> dict[str, Any]:
+    if not scenarios:
+        raise ValueError("scenarios must not be empty")
+    budgets = scenarios[0]["budgets"]
+    total_cells = 0
+    thresholds = (0.5, 1.0, 2.0)
+    threshold_counts = {threshold: 0 for threshold in thresholds}
+    budget_entries: dict[int, list[dict[str, Any]]] = {budget: [] for budget in budgets}
+    winner_entries: dict[str, list[dict[str, Any]]] = {}
+    workload_rows: list[dict[str, Any]] = []
+    tightest_cell: dict[str, Any] | None = None
+    widest_cell: dict[str, Any] | None = None
+
+    for scenario in scenarios:
+        runner_up_names = [entry["runner_up_predictor"] for entry in scenario["budget_reports"]]
+        workload_tightest = min(scenario["budget_reports"], key=lambda entry: entry["winner_margin_percent"])
+        workload_widest = max(scenario["budget_reports"], key=lambda entry: entry["winner_margin_percent"])
+        runner_up_changes = sum(
+            1
+            for previous, current in zip(runner_up_names, runner_up_names[1:])
+            if previous != current
+        )
+        workload_rows.append(
+            {
+                "workload": scenario["workload"],
+                "runner_up_sequence": runner_up_names,
+                "runner_up_flow": _compress_name_sequence(runner_up_names),
+                "unique_runner_up_count": len(set(runner_up_names)),
+                "runner_up_changes": runner_up_changes,
+                "tightest_budget_bits": workload_tightest["budget_bits"],
+                "tightest_margin_percent": workload_tightest["winner_margin_percent"],
+                "widest_budget_bits": workload_widest["budget_bits"],
+                "widest_margin_percent": workload_widest["winner_margin_percent"],
+            }
+        )
+        for entry in scenario["budget_reports"]:
+            row = {
+                "workload": scenario["workload"],
+                "budget_bits": entry["budget_bits"],
+                "winner_predictor": entry["winner_predictor"],
+                "runner_up_predictor": entry["runner_up_predictor"],
+                "winner_margin_percent": float(entry["winner_margin_percent"]),
+            }
+            margin = row["winner_margin_percent"]
+            total_cells += 1
+            for threshold in thresholds:
+                if margin <= threshold:
+                    threshold_counts[threshold] += 1
+            budget_entries[row["budget_bits"]].append(row)
+            winner_entries.setdefault(row["winner_predictor"], []).append(row)
+            if tightest_cell is None or margin < tightest_cell["winner_margin_percent"]:
+                tightest_cell = row
+            if widest_cell is None or margin > widest_cell["winner_margin_percent"]:
+                widest_cell = row
+
+    threshold_rows = [
+        {
+            "threshold": threshold,
+            "label": f"≤{threshold:.2f} pp",
+            "count": threshold_counts[threshold],
+            "share_percent": round((threshold_counts[threshold] / total_cells) * 100, 3) if total_cells else 0.0,
+        }
+        for threshold in thresholds
+    ]
+
+    budget_rows: list[dict[str, Any]] = []
+    max_average_margin = 0.0
+    max_close_races = 0
+    max_photo_finishes = 0
+    for budget in budgets:
+        entries = budget_entries[budget]
+        average_margin = sum(entry["winner_margin_percent"] for entry in entries) / len(entries)
+        close_race_count = sum(1 for entry in entries if entry["winner_margin_percent"] <= 1.0)
+        photo_finish_count = sum(1 for entry in entries if entry["winner_margin_percent"] <= 0.5)
+        runner_up_counts: dict[str, int] = {}
+        for entry in entries:
+            runner_up_counts[entry["runner_up_predictor"]] = runner_up_counts.get(entry["runner_up_predictor"], 0) + 1
+        top_runner_up_predictor = None
+        top_runner_up_count = 0
+        if runner_up_counts:
+            top_runner_up_predictor, top_runner_up_count = sorted(
+                runner_up_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[0]
+        max_average_margin = max(max_average_margin, average_margin)
+        max_close_races = max(max_close_races, close_race_count)
+        max_photo_finishes = max(max_photo_finishes, photo_finish_count)
+        budget_rows.append(
+            {
+                "budget_bits": budget,
+                "cell_count": len(entries),
+                "average_margin_percent": round(average_margin, 3),
+                "close_race_count": close_race_count,
+                "photo_finish_count": photo_finish_count,
+                "top_runner_up_predictor": top_runner_up_predictor,
+                "top_runner_up_count": top_runner_up_count,
+                "runner_up_predictor_counts": runner_up_counts,
+            }
+        )
+
+    winner_rows: list[dict[str, Any]] = []
+    for predictor, entries in sorted(winner_entries.items(), key=lambda item: item[0]):
+        average_margin = sum(entry["winner_margin_percent"] for entry in entries) / len(entries)
+        winner_rows.append(
+            {
+                "predictor": predictor,
+                "win_count": len(entries),
+                "average_margin_percent": round(average_margin, 3),
+                "close_win_count": sum(1 for entry in entries if entry["winner_margin_percent"] <= 1.0),
+                "photo_finish_count": sum(1 for entry in entries if entry["winner_margin_percent"] <= 0.5),
+            }
+        )
+    winner_rows.sort(key=lambda row: (-row["win_count"], row["average_margin_percent"], row["predictor"]))
+
+    return {
+        "total_cells": total_cells,
+        "threshold_rows": threshold_rows,
+        "budget_rows": budget_rows,
+        "winner_rows": winner_rows,
+        "workload_rows": workload_rows,
+        "tightest_cell": tightest_cell,
+        "widest_cell": widest_cell,
+        "max_average_margin": round(max_average_margin, 3),
+        "max_close_races": max_close_races,
+        "max_photo_finishes": max_photo_finishes,
+    }
+
+
 def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     if not scenarios:
         raise ValueError("scenarios must not be empty")
@@ -2196,6 +2341,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
     history_bits_options = scenarios[0]["history_bits_options"]
     weight_limits = scenarios[0]["weight_limits"]
     winner_summary = summarize_budget_winner_grid(scenarios)
+    margin_summary = summarize_budget_margin_story(scenarios)
     lines = [
         "# Branch predictor budget-normalized sweep",
         "",
@@ -2204,7 +2350,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
         f"- Compared budgets: `{', '.join(f'{budget} bits' for budget in budgets)}`",
         f"- Search space: table sizes `{', '.join(str(value) for value in table_sizes)}` · history bits `{', '.join(str(value) for value in history_bits_options)}` · perceptron weight limits `{', '.join(str(value) for value in weight_limits)}`",
         "- Goal: compare the best config each predictor can afford under the same approximate state-bit budget instead of one fixed table/history setting for everyone.",
-        "- Export note: the SVG now includes both a whole-grid stacked-bar summary and a budget-by-predictor heatmap, while the CSV remains the row-level winner matrix for spreadsheet/chart reuse.",
+        "- Export note: the SVG now includes whole-grid win totals, a budget-by-predictor heatmap, and a winner-margin trend card so near-ties stay visible instead of getting buried under the winner names.",
         "",
         "## Overview",
         "",
@@ -2254,6 +2400,40 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
             counts.append(f"`{budget_row['predictor_counts'][predictor]}`")
         lines.append("| " + " | ".join([f"`{predictor}`", *counts]) + " |")
 
+    lines.extend([
+        "",
+        "## Margin and runner-up story",
+        "",
+        f"- Photo finishes (≤0.50 pp): `{margin_summary['threshold_rows'][0]['count']}` grid cells (`{margin_summary['threshold_rows'][0]['share_percent']:.2f}%`).",
+        f"- Close races (≤1.00 pp): `{margin_summary['threshold_rows'][1]['count']}` grid cells (`{margin_summary['threshold_rows'][1]['share_percent']:.2f}%`).",
+        f"- Tightest cell: `{margin_summary['tightest_cell']['workload']}` @ `{margin_summary['tightest_cell']['budget_bits']} bits` → `{margin_summary['tightest_cell']['winner_predictor']}` over `{margin_summary['tightest_cell']['runner_up_predictor']}` by `{margin_summary['tightest_cell']['winner_margin_percent']:.2f} pp`.",
+        f"- Widest cell: `{margin_summary['widest_cell']['workload']}` @ `{margin_summary['widest_cell']['budget_bits']} bits` → `{margin_summary['widest_cell']['winner_predictor']}` over `{margin_summary['widest_cell']['runner_up_predictor']}` by `{margin_summary['widest_cell']['winner_margin_percent']:.2f} pp`.",
+        "",
+        "### Margin trend by budget",
+        "",
+        "| Budget | Avg winner gap | Photo finishes (≤0.50 pp) | Close races (≤1.00 pp) | Most common runner-up |",
+        "| ---: | ---: | ---: | ---: | --- |",
+    ])
+    for row in margin_summary["budget_rows"]:
+        runner_up_label = "-"
+        if row["top_runner_up_predictor"] is not None:
+            runner_up_label = f"`{row['top_runner_up_predictor']}` (`{row['top_runner_up_count']}/{row['cell_count']}` cells)"
+        lines.append(
+            f"| `{row['budget_bits']}` | `{row['average_margin_percent']:.2f} pp` | `{row['photo_finish_count']}` | `{row['close_race_count']}` | {runner_up_label} |"
+        )
+
+    lines.extend([
+        "",
+        "### Runner-up stability by workload",
+        "",
+        "| Workload | Runner-up flow | Changes | Tightest gap | Widest gap |",
+        "| --- | --- | ---: | --- | --- |",
+    ])
+    for row in margin_summary["workload_rows"]:
+        lines.append(
+            f"| `{row['workload']}` | `{row['runner_up_flow']}` | `{row['runner_up_changes']}` | `{row['tightest_budget_bits']} bits` (`{row['tightest_margin_percent']:.2f} pp`) | `{row['widest_budget_bits']} bits` (`{row['widest_margin_percent']:.2f} pp`) |"
+        )
+
     lines.extend(["", "## Per-workload notes", ""])
     for scenario in scenarios:
         lines.extend(
@@ -2288,6 +2468,7 @@ def render_budget_sweep_markdown(*, scenarios: list[dict[str, Any]]) -> str:
             "",
             "- Use this report when you want to show that ‘best predictor’ depends not only on the trace family, but also on the hardware budget you are willing to spend.",
             "- Use the new whole-grid summary before diving into per-workload rows when you want one fast answer for which predictors dominate the entire budget grid most often.",
+            "- Use the margin-trend section when you want to point out that some budget winners are basically photo finishes while others create real separation from the runner-up.",
             "- Pair it with the trace-family sweep and perceptron tuning artifact so you can discuss workload sensitivity, hardware budget, and parameter tuning as three separate design axes.",
             "- The budget-normalized view is especially useful in interviews because it turns a raw accuracy chart into an architecture trade-off conversation.",
             "- Import the CSV export into spreadsheets or slide-deck tooling when you want to chart winner changes across budgets without scraping Markdown.",
@@ -2367,6 +2548,7 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
         raise ValueError("scenarios must not be empty")
     budgets = scenarios[0]["budgets"]
     winner_summary = summarize_budget_winner_grid(scenarios)
+    margin_summary = summarize_budget_margin_story(scenarios)
     summary_predictors = winner_summary["predictors"]
     width = 1320
     cell_w = 180
@@ -2378,7 +2560,9 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
     heatmap_w = width - heatmap_x - 28
     stacked_h = max(156, 54 + (len(summary_predictors) * 28))
     heatmap_h = max(156, 66 + (len(summary_predictors) * 28))
-    grid_y = summary_y + max(stacked_h, heatmap_h) + 34
+    margin_y = summary_y + max(stacked_h, heatmap_h) + 18
+    margin_card_h = 190
+    grid_y = margin_y + margin_card_h + 24
     height = grid_y + 56 + (cell_h * len(scenarios)) + 82
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
@@ -2431,6 +2615,56 @@ def render_budget_sweep_svg(*, scenarios: list[dict[str, Any]]) -> str:
                 f'<rect x="{x}" y="{y}" width="{heatmap_cell_w - 8}" height="18" rx="9" fill="{_budget_heatmap_fill(count, winner_summary["max_budget_wins"])}" stroke="#dbe4ee" />'
             )
             parts.append(_svg_text(x + (heatmap_cell_w / 2) - 4, y + 14, str(count), size=10, weight='700', fill='#0f172a'))
+
+    parts.append(f'<rect x="28" y="{margin_y}" width="{stacked_w}" height="{margin_card_h}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(46, margin_y + 32, "Near-tie counts", size=20, weight="700"))
+    parts.append(_svg_text(46, margin_y + 52, "How often the winner is separated from the runner-up by only a tiny accuracy gap.", size=12, fill="#64748b"))
+    tie_bar_left = 200
+    tie_bar_right = 28 + stacked_w - 22
+    tie_bar_width = tie_bar_right - tie_bar_left
+    max_threshold_count = max((row['count'] for row in margin_summary['threshold_rows']), default=1)
+    for index, row in enumerate(margin_summary['threshold_rows']):
+        y = margin_y + 74 + (index * 32)
+        parts.append(_svg_text(46, y + 14, row['label'], size=12, weight='700', fill='#334155'))
+        parts.append(f'<rect x="{tie_bar_left}" y="{y}" width="{tie_bar_width}" height="16" rx="8" fill="#e2e8f0" />')
+        fill_width = 0 if max_threshold_count == 0 else tie_bar_width * (row['count'] / max_threshold_count)
+        parts.append(f'<rect x="{tie_bar_left}" y="{y}" width="{fill_width:.1f}" height="16" rx="8" fill="#f59e0b" />')
+        parts.append(_svg_text(tie_bar_left + 8, y + 12, f"{row['count']} cells", size=10, weight='700', fill='#0f172a'))
+        parts.append(_svg_text(tie_bar_right - 76, y + 12, f"{row['share_percent']:.1f}%", size=10, weight='700', fill='#0f172a'))
+    parts.append(_svg_text(46, margin_y + 178, f"Tightest: {margin_summary['tightest_cell']['workload']} @ {margin_summary['tightest_cell']['budget_bits']}b ({margin_summary['tightest_cell']['winner_margin_percent']:.2f} pp)", size=11, fill='#475569'))
+
+    parts.append(f'<rect x="{heatmap_x}" y="{margin_y}" width="{heatmap_w}" height="{margin_card_h}" rx="18" fill="#ffffff" stroke="#dbe4ee" />')
+    parts.append(_svg_text(heatmap_x + 18, margin_y + 32, "Winner-margin trend by budget", size=20, weight="700"))
+    parts.append(_svg_text(heatmap_x + 18, margin_y + 52, "Average winner gap per budget, with close-race counts kept alongside each point.", size=12, fill="#64748b"))
+    trend_left = heatmap_x + 68
+    trend_right = heatmap_x + heatmap_w - 26
+    trend_top = margin_y + 76
+    trend_bottom = margin_y + 134
+    trend_w = trend_right - trend_left
+    trend_h = trend_bottom - trend_top
+    parts.append(f'<line x1="{trend_left}" y1="{trend_bottom}" x2="{trend_right}" y2="{trend_bottom}" stroke="#cbd5e1" stroke-width="1" />')
+    parts.append(f'<line x1="{trend_left}" y1="{trend_top}" x2="{trend_left}" y2="{trend_bottom}" stroke="#cbd5e1" stroke-width="1" />')
+    max_average_margin = max(margin_summary['max_average_margin'], 1.0)
+    trend_points: list[tuple[float, float]] = []
+    budget_rows = margin_summary['budget_rows']
+    for index, row in enumerate(budget_rows):
+        x = trend_left if len(budget_rows) == 1 else trend_left + (trend_w * index / (len(budget_rows) - 1))
+        y = trend_bottom - (trend_h * (row['average_margin_percent'] / max_average_margin))
+        trend_points.append((x, y))
+        parts.append(f'<line x1="{x}" y1="{trend_top}" x2="{x}" y2="{trend_bottom}" stroke="#e2e8f0" stroke-dasharray="3 4" />')
+        parts.append(f'<circle cx="{x}" cy="{y}" r="6" fill="#0ea5e9" stroke="#ffffff" stroke-width="2" />')
+        parts.append(_svg_text(x - 18, trend_bottom + 18, f"{row['budget_bits']}b", size=10, weight='700', fill='#475569'))
+        parts.append(_svg_text(x - 22, y - 10, f"{row['average_margin_percent']:.2f}", size=10, weight='700', fill='#0f172a'))
+        parts.append(_svg_text(x - 28, trend_bottom + 34, f"tight {row['close_race_count']}/{row['cell_count']}", size=10, fill='#475569'))
+        if row['top_runner_up_predictor'] is not None:
+            parts.append(_svg_text(x - 34, trend_bottom + 48, _truncate_svg_text(f"RU {row['top_runner_up_predictor']}×{row['top_runner_up_count']}", 16), size=10, fill='#64748b'))
+    if len(trend_points) >= 2:
+        path_data = " ".join(
+            ("M" if index == 0 else "L") + f" {x:.1f} {y:.1f}"
+            for index, (x, y) in enumerate(trend_points)
+        )
+        parts.append(f'<path d="{path_data}" fill="none" stroke="#0ea5e9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />')
+    parts.append(_svg_text(heatmap_x + 18, margin_y + 176, f"Widest: {margin_summary['widest_cell']['workload']} @ {margin_summary['widest_cell']['budget_bits']}b ({margin_summary['widest_cell']['winner_margin_percent']:.2f} pp)", size=11, fill='#475569'))
 
     grid_x = 28
     parts.append(f'<rect x="{grid_x}" y="{grid_y}" width="{left_w}" height="42" rx="14" fill="#e2e8f0" />')
@@ -3165,6 +3399,7 @@ def main(argv: list[str] | None = None) -> int:
                 "workloads": [scenario["workload"] for scenario in scenarios],
                 "scenario_count": len(scenarios),
                 "winner_summary": summarize_budget_winner_grid(scenarios),
+                "margin_summary": summarize_budget_margin_story(scenarios),
                 "scenarios": scenarios,
             }
             if args.trace_dir is not None:
