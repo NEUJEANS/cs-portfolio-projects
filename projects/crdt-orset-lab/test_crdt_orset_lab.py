@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -295,6 +296,9 @@ class ORSetLabTests(unittest.TestCase):
         self.assertIn('id="replay-speed"', html)
         self.assertIn('id="replay-link-list"', html)
         self.assertIn('id="replay-sync-links"', html)
+        self.assertIn('id="replay-copy-exact-link"', html)
+        self.assertIn('id="replay-copy-sync-link"', html)
+        self.assertIn('id="replay-download-svg"', html)
         self.assertIn("Anti-entropy transfer view", html)
         self.assertIn('href="timeline.html"', html)
         self.assertIn("sync-", html)
@@ -306,7 +310,32 @@ class ORSetLabTests(unittest.TestCase):
         self.assertIn("const exactStepHash =", html)
         self.assertIn("window.addEventListener('hashchange'", html)
         self.assertIn("function hashForFrame(frame)", html)
+        self.assertIn("function buildCheckpointSvg(frame)", html)
+        self.assertIn("navigator.clipboard.writeText", html)
+        self.assertIn("URL.createObjectURL", html)
+        self.assertIn("return svg.join('\\n') + '\\n';", html)
         self.assertIn("Playback speed", html)
+
+    def test_render_replay_html_javascript_passes_node_syntax_check(self) -> None:
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("node is required for generated replay JavaScript syntax checks")
+
+        cluster = ReplicaCluster(["a", "b", "c"])
+        snapshot = cluster.run_script(load_script(SAMPLE_SCRIPT))
+        html = render_replay_html(snapshot, "sample replay")
+        script = html.split("<script>", 1)[1].split("</script>", 1)[0]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = Path(temp_dir) / "replay.js"
+            script_path.write_text(script)
+            completed = subprocess.run(
+                [node, "--check", str(script_path)],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_cli_run_script_writes_timeline_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -541,6 +570,8 @@ class ORSetLabTests(unittest.TestCase):
             self.assertIn('href="timeline.html"', replay_html)
             self.assertIn('href="anti-entropy.html"', replay_html)
             self.assertIn('id="replay-play"', replay_html)
+            self.assertIn('id="replay-copy-exact-link"', replay_html)
+            self.assertIn('id="replay-download-svg"', replay_html)
             timeline_html = timeline_html_path.read_text()
             self.assertIn('href="replay.html"', timeline_html)
             anti_html = anti_html_path.read_text()

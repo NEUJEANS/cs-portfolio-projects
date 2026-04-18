@@ -29,7 +29,7 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - convergence checks require full replica-state equality, not just matching element membership
 - optional timeline exports render the same run as Markdown notes, Mermaid sequence diagrams, static SVG portfolio cards, a small HTML gallery/index page, and a replay/animation page with a scrubber
 - optional anti-entropy exports render Markdown/HTML/JSON reports that summarize per-sync transfer sizes, missing tags, tombstones, counters, and bytes saved vs full-state sync
-- replay exports keep the replica-state timeline and anti-entropy transfer table on one browser-friendly page for demos, screenshots, and narrated walk-throughs, now with jump-to-sync shortcuts, playback-speed presets, and hash-based deep links such as `#step-3` or `#sync-2`
+- replay exports keep the replica-state timeline and anti-entropy transfer table on one browser-friendly page for demos, screenshots, and narrated walk-throughs, now with jump-to-sync shortcuts, playback-speed presets, hash-based deep links such as `#step-3` or `#sync-2`, plus built-in copy-link and checkpoint-SVG export actions
 - optional `compare-script` runs the same scenario under OR-Set and timestamped LWW-element-set semantics, then emits Markdown/HTML/JSON comparison artifacts that explain where the models diverge
 - LWW comparison mode supports configurable tie bias (`add` or `remove`) and explicit logical timestamps in the script JSON
 
@@ -57,7 +57,7 @@ python3 crdt_orset_lab.py run-script \
   --anti-entropy-json-out ../../docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.json
 ```
 
-Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts. The HTML gallery is meant for browser-friendly navigation, `--replay-html-out` gives you a scrubber/animation page for live walkthroughs (including prev/next sync jumps, adjustable playback speed, and URL hashes like `#step-3` / `#sync-2` for deep-linking), and `--json-out` preserves the exact raw snapshot behind the rendered story. The anti-entropy outputs are useful when you want to explain what a sync had to transfer instead of just showing the final converged state.
+Timeline export flags are also available on the single-step `add`, `remove`, and `sync` commands so ad-hoc demos can still emit artifacts. The HTML gallery is meant for browser-friendly navigation, `--replay-html-out` gives you a scrubber/animation page for live walkthroughs (including prev/next sync jumps, adjustable playback speed, URL hashes like `#step-3` / `#sync-2` for deep-linking, one-click copy buttons for the current frame or sync checkpoint, and a standalone SVG download for the current checkpoint), and `--json-out` preserves the exact raw snapshot behind the rendered story. The anti-entropy outputs are useful when you want to explain what a sync had to transfer instead of just showing the final converged state.
 
 ### Compare OR-Set vs LWW-element-set on the same scenario
 ```bash
@@ -115,7 +115,7 @@ The committed `sample_compare_ops.json` keeps that same causal shape but assigns
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.mmd` — Mermaid sequence diagram source for editable replica timelines
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.svg` — screenshot-ready timeline card for README/slide use
 - `docs/artifacts/crdt-orset-lab/sample-ops-snapshot.json` — raw replica/timeline/convergence state for tooling or diffs
-- `docs/artifacts/crdt-orset-lab/sample-ops-replay.html` — replay/animation page that scrubs through replica state and anti-entropy transfer details together, with sync-jump shortcuts, playback-speed presets, and deep links for chosen replay/sync checkpoints
+- `docs/artifacts/crdt-orset-lab/sample-ops-replay.html` — replay/animation page that scrubs through replica state and anti-entropy transfer details together, with sync-jump shortcuts, playback-speed presets, deep links for chosen replay/sync checkpoints, copy-link buttons, and checkpoint SVG export
 - `docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.html` — browser-friendly digest/delta report for the baseline OR-Set sync sequence
 - `docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.md` — Markdown transfer table showing what each sync actually had to ship
 - `docs/artifacts/crdt-orset-lab/sample-ops-anti-entropy.json` — machine-readable digest/delta summary for tooling or further analysis
@@ -134,4 +134,4 @@ python3 -m unittest discover -s projects/crdt-orset-lab -p "test_*.py"
 - add more CRDT variants such as PN-counters or MV-registers for broader trade-off comparisons
 - add canned classroom/demo presets that generate multiple comparison scenarios with one command
 - add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
-- add copy-link or image-export affordances from replay checkpoints so slide decks can capture a chosen step even faster
+- add PNG/export bundling on top of the replay checkpoint SVG downloads for slide decks that need bitmap assets

@@ -1280,6 +1280,8 @@ def render_replay_html(
     if not companion_links_html:
         companion_links_html = "<li>This replay page is self-contained, but companion file links appear when you export the timeline, anti-entropy, or comparison artifacts alongside it.</li>"
     frames_json = json.dumps(frames, sort_keys=True).replace("</", "<\\/")
+    title_json = json.dumps(title).replace("</", "<\\/")
+    story_json = json.dumps(timeline_story(snapshot)).replace("</", "<\\/")
 
     return f'''<!doctype html>
 <html lang="en">
@@ -1333,6 +1335,9 @@ def render_replay_html(
       .inline-control select {{ border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; background: var(--panel); color: var(--text); }}
       .sync-jump-note {{ margin-top: 8px; color: var(--muted); }}
       .link-list-note {{ margin: 0 0 12px; color: var(--muted); }}
+      .action-note {{ margin: 12px 0 0; color: var(--muted); }}
+      .action-note.ok {{ color: var(--ok); }}
+      .action-note.warn {{ color: var(--warn); }}
       input[type=range] {{ width: 100%; }}
       .detail-list, .artifact-links, .transfer-list, .checkpoint-list {{ margin: 0; padding-left: 18px; color: var(--muted); }}
       .detail-list li + li, .artifact-links li + li, .transfer-list li + li, .checkpoint-list li + li {{ margin-top: 8px; }}
@@ -1412,6 +1417,15 @@ def render_replay_html(
             <ul id="replay-link-list" class="artifact-links"></ul>
           </div>
           <div>
+            <h3>Checkpoint actions</h3>
+            <div class="button-row">
+              <button type="button" id="replay-copy-exact-link">Copy exact link</button>
+              <button type="button" id="replay-copy-sync-link">Copy sync link</button>
+              <button type="button" id="replay-download-svg">Download SVG card</button>
+            </div>
+            <p id="replay-action-note" class="action-note">Copy the exact frame link on any step, use the stable sync link on sync checkpoints, or download the current checkpoint as a standalone SVG card.</p>
+          </div>
+          <div>
             <h3>Sync checkpoint links</h3>
             <ul id="replay-sync-links" class="checkpoint-list"></ul>
           </div>
@@ -1448,6 +1462,8 @@ def render_replay_html(
     </main>
     <script>
       const frames = {frames_json};
+      const scenarioTitle = {title_json};
+      const scenarioStory = {story_json};
       const stepHeading = document.getElementById('replay-step-heading');
       const stepLabel = document.getElementById('replay-step-label');
       const stepCounter = document.getElementById('replay-step-counter');
@@ -1466,8 +1482,12 @@ def render_replay_html(
       const playButton = document.getElementById('replay-play');
       const nextSyncButton = document.getElementById('replay-next-sync');
       const nextButton = document.getElementById('replay-next');
+      const copyExactButton = document.getElementById('replay-copy-exact-link');
+      const copySyncButton = document.getElementById('replay-copy-sync-link');
+      const downloadSvgButton = document.getElementById('replay-download-svg');
       const speedSelect = document.getElementById('replay-speed');
       const syncNote = document.getElementById('replay-sync-note');
+      const actionNote = document.getElementById('replay-action-note');
       const announce = document.getElementById('replay-announce');
       const syncFrames = frames.filter((frame) => frame.sync_checkpoint !== null);
       const syncFrameIndexes = syncFrames.map((frame) => frame.step);
@@ -1607,6 +1627,207 @@ def render_replay_html(
         }}).join('');
       }}
 
+      function escapeSvgText(value) {{
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }}
+
+      function wrapSvgText(text, width = 88) {{
+        const words = String(text ?? '').split(/\\s+/).filter(Boolean);
+        if (!words.length) {{
+          return [''];
+        }}
+        const lines = [];
+        let current = words[0];
+        for (const word of words.slice(1)) {{
+          if (`${{current}} ${{word}}`.length <= width) {{
+            current = `${{current}} ${{word}}`;
+          }} else {{
+            lines.push(current);
+            current = word;
+          }}
+        }}
+        lines.push(current);
+        return lines;
+      }}
+
+      function summarizeTagMap(mapping) {{
+        const entries = Object.entries(mapping || {{}});
+        return entries.length
+          ? entries.map(([element, tags]) => `${{element}}=${{(tags || []).join(', ') || '∅'}}`).join('; ')
+          : '∅';
+      }}
+
+      function summarizeCounters(counters) {{
+        const entries = Object.entries(counters || {{}});
+        return entries.length ? entries.map(([replica, counter]) => `${{replica}}:${{counter}}`).join(', ') : '∅';
+      }}
+
+      function summarizeReplicaState(replica, state) {{
+        return `${{replica}}: elements=${{(state.elements || []).join(', ') || '∅'}} | active=${{summarizeTagMap(state.active_tags)}} | observed=${{summarizeTagMap(state.observed_tags)}} | tombstones=${{(state.tombstones || []).join(', ') || '∅'}} | counters=${{summarizeCounters(state.counters)}}`;
+      }}
+
+      function pushWrappedLines(lines, text, width = 88) {{
+        for (const line of wrapSvgText(text, width)) {{
+          lines.push(line);
+        }}
+      }}
+
+      function slugifyFilePart(value) {{
+        return String(value || 'crdt-orset-checkpoint')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'crdt-orset-checkpoint';
+      }}
+
+      function fileNameForFrame(frame) {{
+        const suffix = frame.sync_checkpoint !== null ? `sync-${{frame.sync_checkpoint}}` : `step-${{frame.step}}`;
+        return `${{slugifyFilePart(scenarioTitle)}}-${{suffix}}.svg`;
+      }}
+
+      function setActionNote(message, kind = '') {{
+        actionNote.textContent = message;
+        actionNote.className = `action-note${{kind ? ` ${{kind}}` : ''}}`;
+      }}
+
+      async function copyText(text) {{
+        if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {{
+          await navigator.clipboard.writeText(text);
+          return;
+        }}
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.setAttribute('readonly', 'readonly');
+        textArea.style.position = 'fixed';
+        textArea.style.top = '-1000px';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const succeeded = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        if (!succeeded) {{
+          throw new Error('Copy command was rejected by the browser.');
+        }}
+      }}
+
+      function downloadTextFile(text, fileName, mimeType) {{
+        const blob = new Blob([text], {{ type: mimeType }});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }}
+
+      function buildCheckpointSvg(frame) {{
+        const width = 1280;
+        const padding = 40;
+        const contentWidth = width - (padding * 2);
+        const lineHeight = 24;
+        const sections = [];
+
+        const eventLines = [];
+        pushWrappedLines(eventLines, frame.label, 92);
+        for (const detail of frame.details || []) {{
+          pushWrappedLines(eventLines, `• ${{detail}}`, 92);
+        }}
+
+        const replicaLines = Object.entries(frame.replicas || {{}}).flatMap(([replica, state]) => wrapSvgText(summarizeReplicaState(replica, state), 92));
+        const transferLines = [];
+        pushWrappedLines(transferLines, (frame.anti_entropy && frame.anti_entropy.summary) || 'No anti-entropy transfer on this step.', 92);
+        for (const transfer of (frame.anti_entropy && frame.anti_entropy.transfers) || []) {{
+          pushWrappedLines(transferLines, `${{transfer.from}} → ${{transfer.to}} · delta ${{transfer.delta_bytes}} byte(s) · saved ${{transfer.saved}} · ${{transfer.delta_payload}}`, 92);
+        }}
+        const linkLines = [
+          `Exact link: ${{absoluteUrlForHash(`step-${{frame.step}}`)}}`,
+          frame.sync_checkpoint !== null
+            ? `Stable sync link: ${{absoluteUrlForHash(`sync-${{frame.sync_checkpoint}}`)}}`
+            : 'Stable sync link: unavailable on non-sync frames (use the exact frame URL).',
+        ];
+
+        sections.push({{
+          title: `Step ${{frame.step}} summary`,
+          fill: '#dbeafe',
+          border: '#3b82f6',
+          titleColor: '#1d4ed8',
+          textColor: '#0f172a',
+          lines: eventLines,
+        }});
+        sections.push({{
+          title: 'Replica states',
+          fill: '#ecfeff',
+          border: '#0891b2',
+          titleColor: '#0f766e',
+          textColor: '#0f172a',
+          lines: replicaLines.length ? replicaLines : ['No replica state captured.'],
+        }});
+        sections.push({{
+          title: 'Anti-entropy view',
+          fill: '#ede9fe',
+          border: '#7c3aed',
+          titleColor: '#5b21b6',
+          textColor: '#312e81',
+          lines: transferLines,
+        }});
+        sections.push({{
+          title: 'Deep links',
+          fill: '#dcfce7',
+          border: '#16a34a',
+          titleColor: '#166534',
+          textColor: '#14532d',
+          lines: linkLines.flatMap((line) => wrapSvgText(line, 92)),
+        }});
+
+        let y = 176;
+        const sectionGap = 20;
+        const sectionBoxes = sections.map((section) => {{
+          const height = 58 + (section.lines.length * lineHeight);
+          const box = {{ ...section, y, height }};
+          y += height + sectionGap;
+          return box;
+        }});
+        const totalHeight = y + 36;
+        const currentHash = frame.sync_checkpoint !== null ? `sync-${{frame.sync_checkpoint}}` : `step-${{frame.step}}`;
+        const focusSummary = (frame.focus_replicas || []).length ? `focus replicas: ${{frame.focus_replicas.join(', ')}}` : 'focus replicas: none';
+        const checkpointBadge = frame.sync_checkpoint !== null
+          ? `sync checkpoint #${{frame.sync_checkpoint}}`
+          : 'exact frame checkpoint';
+        const svg = [
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${{width}}" height="${{totalHeight}}" viewBox="0 0 ${{width}} ${{totalHeight}}" role="img" aria-labelledby="title desc">`,
+          '<defs>',
+          '<linearGradient id="checkpointBg" x1="0%" x2="0%" y1="0%" y2="100%">',
+          '<stop offset="0%" stop-color="#0f172a" />',
+          '<stop offset="100%" stop-color="#111827" />',
+          '</linearGradient>',
+          '</defs>',
+          `<title id="title">${{escapeSvgText(`OR-Set replay checkpoint — ${{scenarioTitle}} — step ${{frame.step}}`)}}</title>`,
+          `<desc id="desc">${{escapeSvgText(`${{scenarioStory}} Current checkpoint hash: #${{currentHash}}.`)}}</desc>`,
+          `<rect x="0" y="0" width="${{width}}" height="${{totalHeight}}" rx="28" fill="url(#checkpointBg)" />`,
+          `<text x="${{padding}}" y="58" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">${{escapeSvgText('OR-Set replay checkpoint export')}}</text>`,
+          `<text x="${{padding}}" y="92" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="20">${{escapeSvgText(scenarioTitle)}}</text>`,
+          `<text x="${{padding}}" y="122" fill="#bfdbfe" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">${{escapeSvgText(`Step ${{frame.step}} · ${{checkpointBadge}} · ${{frame.converged ? 'converged' : 'diverged'}}`)}}</text>`,
+          `<text x="${{padding}}" y="148" fill="#94a3b8" font-family="Arial, Helvetica, sans-serif" font-size="16">${{escapeSvgText(`${{focusSummary}} · hash #${{currentHash}}`)}}</text>`,
+        ];
+
+        for (const section of sectionBoxes) {{
+          svg.push(`<rect x="${{padding}}" y="${{section.y}}" width="${{contentWidth}}" height="${{section.height}}" rx="22" fill="${{section.fill}}" fill-opacity="0.97" stroke="${{section.border}}" stroke-width="2" />`);
+          svg.push(`<text x="${{padding + 24}}" y="${{section.y + 34}}" fill="${{section.titleColor}}" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">${{escapeSvgText(section.title)}}</text>`);
+          section.lines.forEach((line, index) => {{
+            svg.push(`<text x="${{padding + 24}}" y="${{section.y + 68 + (index * lineHeight)}}" fill="${{section.textColor}}" font-family="Arial, Helvetica, sans-serif" font-size="18">${{escapeSvgText(line)}}</text>`);
+          }});
+        }}
+        svg.push('</svg>');
+        return svg.join('\\n') + '\\n';
+      }}
+
       function renderTransfers(frame) {{
         const transfers = (frame.anti_entropy && frame.anti_entropy.transfers) || [];
         antiSummary.textContent = frame.anti_entropy ? frame.anti_entropy.summary : 'No anti-entropy transfer on this step.';
@@ -1640,6 +1861,13 @@ def render_replay_html(
         nextButton.disabled = index === frames.length - 1;
         prevSyncButton.disabled = previousSync === null;
         nextSyncButton.disabled = nextSync === null;
+        copySyncButton.disabled = frame.sync_checkpoint === null;
+        copySyncButton.textContent = frame.sync_checkpoint === null ? 'Copy sync link' : `Copy sync #${{frame.sync_checkpoint}} link`;
+        setActionNote(
+          frame.sync_checkpoint === null
+            ? 'Copy the exact frame link on any step, or download this checkpoint as an SVG card. Stable sync links activate only on sync steps.'
+            : `Copy the exact frame link, share stable sync #${{frame.sync_checkpoint}}, or download this checkpoint as an SVG card.`,
+        );
         if (!syncFrameIndexes.length) {{
           syncNote.textContent = 'This scenario has no sync steps yet, so jump-to-sync stays disabled.';
         }} else if (frame.op === 'sync' && syncPosition >= 0) {{
@@ -1679,6 +1907,33 @@ def render_replay_html(
         if (nextSync !== null) {{
           renderFrame(nextSync);
         }}
+      }});
+      copyExactButton.addEventListener('click', async () => {{
+        const frame = frames[frameIndex];
+        try {{
+          await copyText(absoluteUrlForHash(`step-${{frame.step}}`));
+          setActionNote(`Copied exact frame link for step ${{frame.step}}.`, 'ok');
+        }} catch (error) {{
+          setActionNote(`Could not copy the exact frame link automatically: ${{error.message}}`, 'warn');
+        }}
+      }});
+      copySyncButton.addEventListener('click', async () => {{
+        const frame = frames[frameIndex];
+        if (frame.sync_checkpoint === null) {{
+          setActionNote('Stable sync links are only available on sync checkpoints. Copy the exact frame link instead.', 'warn');
+          return;
+        }}
+        try {{
+          await copyText(absoluteUrlForHash(`sync-${{frame.sync_checkpoint}}`));
+          setActionNote(`Copied stable sync link #${{frame.sync_checkpoint}}.`, 'ok');
+        }} catch (error) {{
+          setActionNote(`Could not copy the stable sync link automatically: ${{error.message}}`, 'warn');
+        }}
+      }});
+      downloadSvgButton.addEventListener('click', () => {{
+        const frame = frames[frameIndex];
+        downloadTextFile(buildCheckpointSvg(frame), fileNameForFrame(frame), 'image/svg+xml;charset=utf-8');
+        setActionNote(`Downloaded ${{fileNameForFrame(frame)}} for the current checkpoint.`, 'ok');
       }});
       playButton.addEventListener('click', () => {{
         if (playTimer !== null) {{

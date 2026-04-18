@@ -2,6 +2,23 @@
 
 Project-local source of truth: `projects/crdt-orset-lab/CHECKLIST.md`
 
+## 2026-04-18 replay export-affordances slice
+- [x] verify git sync state before editing
+- [x] do brief Clipboard API / blob-download research for static replay exports
+- [x] write a short browser-action self-test note
+- [x] update resumable checklist state in the project and docs trees
+- [x] add copy-link actions for exact replay-frame URLs and stable sync checkpoint URLs
+- [x] add standalone checkpoint SVG download/export from the replay page
+- [x] regenerate committed replay artifacts for the baseline and comparison scenarios
+- [x] refresh README language and future follow-up notes
+- [x] add regression coverage for replay action controls and checkpoint-SVG export wiring
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
+
 ## 2026-04-18 deep-link replay slice
 - [x] verify git sync state before editing
 - [x] do brief URL fragment / hashchange research for static replay deep links

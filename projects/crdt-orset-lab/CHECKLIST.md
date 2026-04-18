@@ -14,6 +14,20 @@
 - [x] run secret scan
 - [x] commit, push, and write the wrap-up
 
+## Current slice (2026-04-18 21:41 UTC run)
+- [x] confirm `main` still matches `origin/main` before editing
+- [x] do the brief clipboard / blob-download research needed for replay checkpoint share/export actions
+- [x] do a short JavaScript/browser self-test refresh for copy-link fallback and generated SVG download wiring
+- [x] update/add checklist markdown for the replay export-affordances slice
+- [x] add copy-link actions for the exact replay frame and stable sync checkpoints inside the replay artifact
+- [x] add standalone checkpoint SVG export so the current replay state can be downloaded directly from the browser
+- [x] regenerate updated replay artifacts for the baseline OR-Set sample and comparison scenario
+- [x] update README usage, committed artifact examples, and future follow-up notes
+- [x] extend regression coverage for replay action controls and checkpoint-SVG export wiring
+- [x] run targeted tests, smoke checks, and 3 review passes
+- [x] run secret scan
+- [x] commit, push, and write the wrap-up
+
 ## Previous slice (2026-04-18 21:04 UTC run)
 - [x] confirm `main` still matches `origin/main` before editing
 - [x] do only the brief replay-control accessibility refresh needed for jump/playback controls
@@ -81,4 +95,4 @@
 ## Next follow-up ideas
 - [ ] add canned comparison presets that emit multiple OR-Set vs LWW scenarios at once
 - [ ] add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
-- [ ] add copy-link or image-export affordances from replay checkpoints so slide decks can capture a chosen step even faster
+- [ ] add PNG/export bundling on top of the replay checkpoint SVG downloads for slide decks that need bitmap assets
