@@ -11,7 +11,7 @@
 - [x] regenerate the committed budget-sweep artifacts after the annotation pass
 - [x] run targeted tests and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider exporting a standalone crossover-only slide card in a future run
 
 ## Budget crossover highlight slice (2026-04-18 05:04 UTC run)
