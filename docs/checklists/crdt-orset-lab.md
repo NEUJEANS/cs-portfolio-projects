@@ -2,6 +2,23 @@
 
 Project-local source of truth: `projects/crdt-orset-lab/CHECKLIST.md`
 
+## 2026-04-18 comparison presets slice
+- [x] verify git sync state before editing
+- [x] do a brief preset-pattern refresh against the existing built-in scenario style
+- [x] write a short preset-suite self-test note
+- [x] update resumable checklist state in the project and docs trees
+- [x] add built-in OR-Set vs LWW comparison preset metadata and committed preset scripts
+- [x] add `list-presets` and `compare-presets` CLI flows plus summary Markdown/HTML/JSON outputs
+- [x] regenerate and commit the preset-suite artifacts under `docs/artifacts/crdt-orset-lab/`
+- [x] refresh README language and future follow-up notes
+- [x] add regression coverage for preset listing, suite rendering, artifact writing, and unknown-preset error handling
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
+
 ## 2026-04-18 replay export-affordances slice
 - [x] verify git sync state before editing
 - [x] do brief Clipboard API / blob-download research for static replay exports

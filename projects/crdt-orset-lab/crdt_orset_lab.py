@@ -18,6 +18,19 @@ class SyncOperation:
     direction: str = "both"
 
 
+PROJECT_DIR = Path(__file__).resolve().parent
+
+
+@dataclass(frozen=True)
+class ComparisonPreset:
+    name: str
+    title: str
+    description: str
+    script_path: Path
+    replicas: tuple[str, ...]
+    lww_bias: str = "remove"
+
+
 class ORSet:
     def __init__(
         self,
@@ -519,6 +532,149 @@ def load_script(path: str | Path) -> list[dict[str, object]]:
         if not isinstance(operation, dict):
             raise ValueError("each operation must be an object")
     return operations
+
+
+COMPARISON_PRESETS: dict[str, ComparisonPreset] = {
+    "concurrent-readd": ComparisonPreset(
+        name="concurrent-readd",
+        title="Concurrent re-add survives in OR-Set",
+        description=(
+            "Replica b removes only the tag it observed, while replica c later adds the same element with a fresh tag. "
+            "OR-Set keeps the new tag after sync, but remove-wins LWW drops the element because the later remove timestamp still dominates."
+        ),
+        script_path=PROJECT_DIR / "sample_compare_ops.json",
+        replicas=("a", "b", "c"),
+        lww_bias="remove",
+    ),
+    "unobserved-remove": ComparisonPreset(
+        name="unobserved-remove",
+        title="Unobserved remove cannot tombstone unseen tags",
+        description=(
+            "Replica c issues a remove before it has ever observed a's add. "
+            "The OR-Set remove is effectively empty, but LWW still records a later remove timestamp that suppresses the earlier add once replicas merge."
+        ),
+        script_path=PROJECT_DIR / "presets" / "unobserved-remove.json",
+        replicas=("a", "b", "c"),
+        lww_bias="remove",
+    ),
+    "observed-remove-sync": ComparisonPreset(
+        name="observed-remove-sync",
+        title="Observed remove yields the same final answer",
+        description=(
+            "Replica b first syncs the add and then removes the element, so both models agree on the final absence. "
+            "This preset is a useful control case beside the divergence-heavy scenarios."
+        ),
+        script_path=PROJECT_DIR / "presets" / "observed-remove-sync.json",
+        replicas=("a", "b", "c"),
+        lww_bias="remove",
+    ),
+}
+
+
+def list_comparison_presets() -> list[ComparisonPreset]:
+    return list(COMPARISON_PRESETS.values())
+
+
+def resolve_comparison_preset(name: str) -> ComparisonPreset:
+    try:
+        return COMPARISON_PRESETS[name]
+    except KeyError as exc:
+        available = ", ".join(sorted(COMPARISON_PRESETS))
+        raise ValueError(f"unknown comparison preset: {name}. choose from: {available}") from exc
+
+
+def select_comparison_presets(selected_names: Sequence[str] | None = None) -> list[ComparisonPreset]:
+    if not selected_names:
+        return list_comparison_presets()
+    presets: list[ComparisonPreset] = []
+    seen: set[str] = set()
+    for name in selected_names:
+        if name in seen:
+            continue
+        seen.add(name)
+        presets.append(resolve_comparison_preset(name))
+    return presets
+
+
+def comparison_preset_script_label(preset: ComparisonPreset) -> str:
+    return Path(os.path.relpath(preset.script_path, PROJECT_DIR)).as_posix()
+
+
+def comparison_preset_to_dict(preset: ComparisonPreset) -> dict[str, object]:
+    return {
+        "name": preset.name,
+        "title": preset.title,
+        "description": preset.description,
+        "script": comparison_preset_script_label(preset),
+        "replicas": list(preset.replicas),
+        "lww_bias": preset.lww_bias,
+    }
+
+
+def format_membership_map(membership: dict[str, object]) -> str:
+    parts: list[str] = []
+    for replica, elements in sorted(membership.items()):
+        element_list = [str(element) for element in elements]
+        parts.append(f"{replica}={','.join(element_list) if element_list else '∅'}")
+    return "; ".join(parts) or "∅"
+
+
+def build_comparison_preset_suite(selected_names: Sequence[str] | None = None) -> dict[str, object]:
+    selected = select_comparison_presets(selected_names)
+    scenarios: list[dict[str, object]] = []
+    divergent_count = 0
+    for preset in selected:
+        comparison = build_semantics_comparison(
+            preset.replicas,
+            load_script(preset.script_path),
+            lww_bias=preset.lww_bias,
+        )
+        final_divergence = list(comparison["final_divergence"])
+        divergent_count += 1 if final_divergence else 0
+        lww_membership = {
+            replica: list(dict(state)["elements"])
+            for replica, state in dict(comparison["lww"]["replicas"]).items()
+        }
+        scenarios.append(
+            {
+                "name": preset.name,
+                "title": preset.title,
+                "description": preset.description,
+                "script": comparison_preset_script_label(preset),
+                "replicas": list(preset.replicas),
+                "lww_bias": preset.lww_bias,
+                "step_count": comparison["step_count"],
+                "story": comparison["story"],
+                "outcome": "diverge" if final_divergence else "align",
+                "final_divergence_count": len(final_divergence),
+                "final_divergence": final_divergence,
+                "orset_membership": dict(comparison["orset"]["convergence"]["membership"]),
+                "lww_membership": lww_membership,
+            }
+        )
+    aligned_count = len(scenarios) - divergent_count
+    story = (
+        f"{divergent_count} preset(s) finish with different OR-Set vs LWW membership, while {aligned_count} preset(s) agree on the final answer. "
+        "Together they make it easier to explain when observed-remove tags matter and when timestamp ordering is enough."
+    )
+    return {
+        "preset_count": len(scenarios),
+        "divergent_count": divergent_count,
+        "aligned_count": aligned_count,
+        "story": story,
+        "presets": scenarios,
+    }
+
+
+def format_comparison_preset_text() -> str:
+    lines = ["built-in OR-Set comparison presets:"]
+    for preset in list_comparison_presets():
+        lines.append(
+            f"- {preset.name} ({preset.lww_bias}-wins LWW, replicas={','.join(preset.replicas)}): {preset.title}"
+        )
+        lines.append(f"  script: {comparison_preset_script_label(preset)}")
+        lines.append(f"  {preset.description}")
+    return "\n".join(lines) + "\n"
 
 
 def canonical_json_text(value: object) -> str:
@@ -2656,6 +2812,135 @@ def write_comparison_outputs(args: argparse.Namespace, comparison: dict[str, obj
         )
 
 
+def render_comparison_preset_suite_markdown(suite: dict[str, object]) -> str:
+    lines = [
+        "# OR-Set comparison preset suite",
+        "",
+        str(suite["story"]),
+        "",
+        "| Preset | Outcome | OR-Set final membership | LWW final membership | Notes |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for preset in suite["presets"]:
+        lines.append(
+            f"| `{preset['name']}` | {preset['outcome']} | {format_membership_map(dict(preset['orset_membership']))} | "
+            f"{format_membership_map(dict(preset['lww_membership']))} | {str(preset['story']).replace('|', '\\|')} |"
+        )
+    lines.extend(["", "## Scenario notes", ""])
+    for preset in suite["presets"]:
+        lines.append(f"### {preset['title']} (`{preset['name']}`)")
+        lines.append("")
+        lines.append(f"- script: `{preset['script']}`")
+        lines.append(f"- LWW tie bias: `{preset['lww_bias']}`")
+        lines.append(f"- description: {preset['description']}")
+        lines.append(f"- story: {preset['story']}")
+        lines.append(f"- OR-Set final membership: {format_membership_map(dict(preset['orset_membership']))}")
+        lines.append(f"- LWW final membership: {format_membership_map(dict(preset['lww_membership']))}")
+        final_divergence = list(preset["final_divergence"])
+        if final_divergence:
+            lines.append("- divergence notes:")
+            for item in final_divergence:
+                lines.append(
+                    f"  - `{item['element']}` — OR-Set={'present' if item['orset_present'] else 'absent'}, "
+                    f"LWW={'present' if item['lww_present'] else 'absent'}; {item['why']}"
+                )
+        else:
+            lines.append("- divergence notes: none; both models converge to the same final membership here.")
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def render_comparison_preset_suite_html(suite: dict[str, object]) -> str:
+    cards_html = "".join(
+        "<article class=\"card\">"
+        f"<h2>{escape_html(str(preset['title']))}</h2>"
+        f"<p class=\"eyebrow\"><code>{escape_html(str(preset['name']))}</code> · {escape_html(str(preset['outcome']))} · {preset['step_count']} step(s)</p>"
+        f"<p>{escape_html(str(preset['description']))}</p>"
+        f"<p class=\"story\">{escape_html(str(preset['story']))}</p>"
+        f"<ul class=\"meta\"><li><strong>script</strong><span><code>{escape_html(str(preset['script']))}</code></span></li><li><strong>LWW tie bias</strong><span><code>{escape_html(str(preset['lww_bias']))}</code></span></li><li><strong>OR-Set</strong><span>{escape_html(format_membership_map(dict(preset['orset_membership'])))}</span></li><li><strong>LWW</strong><span>{escape_html(format_membership_map(dict(preset['lww_membership'])))}</span></li></ul>"
+        + (
+            "<ul class=\"divergence\">"
+            + "".join(
+                f"<li><strong><code>{escape_html(str(item['element']))}</code></strong><span>{escape_html(str(item['why']))}</span></li>"
+                for item in preset['final_divergence']
+            )
+            + "</ul>"
+            if preset['final_divergence']
+            else "<p class=\"aligned\">Both models reach the same final membership in this control case.</p>"
+        )
+        + "</article>"
+        for preset in suite["presets"]
+    )
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set comparison preset suite</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+        --warn: #9a3412;
+        --warn-bg: #ffedd5;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }}
+      .hero, .card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .summary-grid {{ display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 0; margin: 24px 0 0; }}
+      .summary-grid li {{ list-style: none; padding: 16px 18px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }}
+      .summary-grid strong {{ display: block; font-size: 1.3rem; margin-bottom: 6px; }}
+      .cards {{ display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+      .card {{ padding: 22px; }}
+      .eyebrow {{ color: var(--muted); margin-top: -4px; }}
+      .story {{ padding: 12px 14px; border-radius: 16px; background: var(--panel-alt); border: 1px solid #dbeafe; color: #1e3a8a; line-height: 1.5; }}
+      .meta, .divergence {{ list-style: none; padding: 0; margin: 16px 0 0; }}
+      .meta li, .divergence li {{ display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); }}
+      .meta strong, .divergence strong {{ color: var(--text); }}
+      .meta span, .divergence span {{ color: var(--muted); line-height: 1.5; }}
+      .aligned {{ margin: 16px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--good-bg); color: var(--good); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set comparison preset suite</h1>
+        <p>This gallery packages multiple OR-Set vs LWW-element-set scenarios into one reviewable artifact so a portfolio reviewer can see both divergence-heavy cases and a control case without opening each script manually.</p>
+        <p class="story">{escape_html(str(suite['story']))}</p>
+        <ul class="summary-grid">
+          <li><strong>{suite['preset_count']}</strong> canned scenario(s)</li>
+          <li><strong>{suite['divergent_count']}</strong> divergent final outcomes</li>
+          <li><strong>{suite['aligned_count']}</strong> aligned control case(s)</li>
+        </ul>
+      </section>
+      <section class="cards">
+        {cards_html}
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
+def write_comparison_preset_suite_outputs(args: argparse.Namespace, suite: dict[str, object]) -> None:
+    if getattr(args, "suite_json_out", None):
+        write_text_output(args.suite_json_out, json.dumps(suite, indent=2, sort_keys=True) + "\n")
+    if getattr(args, "suite_markdown_out", None):
+        write_text_output(args.suite_markdown_out, render_comparison_preset_suite_markdown(suite))
+    if getattr(args, "suite_html_out", None):
+        write_text_output(args.suite_html_out, render_comparison_preset_suite_html(suite))
+
 
 def write_text_output(path: str | Path, content: str) -> None:
     output_path = Path(path)
@@ -2778,6 +3063,26 @@ def build_parser() -> argparse.ArgumentParser:
     add_timeline_output_arguments(compare_script)
     add_comparison_output_arguments(compare_script)
 
+    preset_list = subparsers.add_parser(
+        "list-presets",
+        help="list built-in OR-Set vs LWW comparison presets",
+    )
+    preset_list.add_argument("--json", action="store_true")
+
+    compare_presets = subparsers.add_parser(
+        "compare-presets",
+        help="run the built-in OR-Set comparison presets and summarize the outcomes",
+    )
+    compare_presets.add_argument(
+        "--preset",
+        dest="presets",
+        action="append",
+        help="repeat to run only selected built-in presets; defaults to all presets",
+    )
+    compare_presets.add_argument("--suite-markdown-out")
+    compare_presets.add_argument("--suite-html-out")
+    compare_presets.add_argument("--suite-json-out")
+
     add = subparsers.add_parser("add", help="apply one add on a fresh cluster")
     add.add_argument("--replicas", nargs="+", required=True)
     add.add_argument("--replica", required=True)
@@ -2805,6 +3110,23 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "list-presets":
+        presets = [comparison_preset_to_dict(preset) for preset in list_comparison_presets()]
+        if args.json:
+            print(json.dumps({"presets": presets}, indent=2, sort_keys=True))
+        else:
+            print(format_comparison_preset_text(), end="")
+        return 0
+
+    if args.command == "compare-presets":
+        try:
+            suite = build_comparison_preset_suite(args.presets)
+        except ValueError as exc:
+            parser.error(str(exc))
+        write_comparison_preset_suite_outputs(args, suite)
+        print(json.dumps(suite, indent=2, sort_keys=True))
+        return 0
 
     if args.command == "compare-script":
         comparison = build_semantics_comparison(

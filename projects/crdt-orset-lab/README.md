@@ -31,6 +31,7 @@ This project focuses on the interview-useful question: **why doesn't a remove al
 - optional anti-entropy exports render Markdown/HTML/JSON reports that summarize per-sync transfer sizes, missing tags, tombstones, counters, and bytes saved vs full-state sync
 - replay exports keep the replica-state timeline and anti-entropy transfer table on one browser-friendly page for demos, screenshots, and narrated walk-throughs, now with jump-to-sync shortcuts, playback-speed presets, hash-based deep links such as `#step-3` or `#sync-2`, plus built-in copy-link and checkpoint-SVG export actions
 - optional `compare-script` runs the same scenario under OR-Set and timestamped LWW-element-set semantics, then emits Markdown/HTML/JSON comparison artifacts that explain where the models diverge
+- built-in comparison presets cover both divergence-heavy and control-case scenarios, and `compare-presets` turns them into a single portfolio-friendly summary gallery
 - LWW comparison mode supports configurable tie bias (`add` or `remove`) and explicit logical timestamps in the script JSON
 
 ## Usage
@@ -80,6 +81,22 @@ python3 crdt_orset_lab.py compare-script \
 
 `sample_compare_ops.json` is intentionally timestamped so the final OR-Set membership keeps `notebook`, while the LWW-element-set drops it because a later remove timestamp beats the concurrent add. The extra anti-entropy report stays focused on the OR-Set side of that scenario and makes the merge-cost story reviewable alongside the semantics comparison page. The replay page keeps that same OR-Set state trace and the transfer table on one screen so you can narrate the divergence step by step.
 
+### List and summarize the built-in comparison presets
+```bash
+python3 crdt_orset_lab.py list-presets --json
+python3 crdt_orset_lab.py compare-presets \
+  --suite-markdown-out ../../docs/artifacts/crdt-orset-lab/comparison-presets.md \
+  --suite-html-out ../../docs/artifacts/crdt-orset-lab/comparison-presets.html \
+  --suite-json-out ../../docs/artifacts/crdt-orset-lab/comparison-presets.json
+```
+
+The built-in preset suite currently includes:
+- `concurrent-readd` — the same timestamped divergence story as `sample_compare_ops.json`
+- `unobserved-remove` — a remove that happens before the remover has seen the original add
+- `observed-remove-sync` — a control case where both models converge on the same final absence
+
+This summary command is useful when you want one browser-friendly artifact that demonstrates both **where OR-Set beats naive timestamp ordering** and **where both approaches agree**.
+
 ### Script format
 `sample_ops.json` and `sample_compare_ops.json` use this shape, and the CLI also accepts a plain top-level JSON list of operation objects when you do not need wrapper metadata:
 
@@ -109,6 +126,8 @@ The committed `sample_ops.json` walks through this sequence:
 
 The committed `sample_compare_ops.json` keeps that same causal shape but assigns explicit timestamps so the LWW-element-set ends up absent while the OR-Set still keeps the concurrent tag. That contrast is exactly the point of the comparison slice.
 
+The built-in preset scripts extend that story with two more resumable cases: `presets/unobserved-remove.json` shows that a replica cannot tombstone tags it has never seen, while `presets/observed-remove-sync.json` acts as a control case where both OR-Set and LWW agree after the remover has observed the add first.
+
 ## Committed artifact examples
 - `docs/artifacts/crdt-orset-lab/index.html` — browser-friendly OR-Set gallery/index for the baseline sample scenario
 - `docs/artifacts/crdt-orset-lab/sample-ops-timeline.md` — step-by-step Markdown table for code review or notes
@@ -124,6 +143,9 @@ The committed `sample_compare_ops.json` keeps that same causal shape but assigns
 - `docs/artifacts/crdt-orset-lab/lww-vs-orset-replay.html` — replay/animation page for the OR-Set side of the timestamped comparison scenario
 - `docs/artifacts/crdt-orset-lab/lww-vs-orset.md` — Markdown comparison table for review notes or class writeups
 - `docs/artifacts/crdt-orset-lab/lww-vs-orset.json` — full machine-readable OR-Set/LWW comparison snapshot
+- `docs/artifacts/crdt-orset-lab/comparison-presets.html` — browser-friendly summary gallery for the built-in divergence/control-case preset suite
+- `docs/artifacts/crdt-orset-lab/comparison-presets.md` — Markdown version of the preset suite for notes or code review
+- `docs/artifacts/crdt-orset-lab/comparison-presets.json` — machine-readable preset-suite summary for tooling or future batch export steps
 
 ## Test
 ```bash
@@ -132,6 +154,6 @@ python3 -m unittest discover -s projects/crdt-orset-lab -p "test_*.py"
 
 ## Future improvements
 - add more CRDT variants such as PN-counters or MV-registers for broader trade-off comparisons
-- add canned classroom/demo presets that generate multiple comparison scenarios with one command
+- add per-preset detail export bundles so the preset suite can link directly to timeline/replay/anti-entropy pages for each scenario
 - add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
 - add PNG/export bundling on top of the replay checkpoint SVG downloads for slide decks that need bitmap assets

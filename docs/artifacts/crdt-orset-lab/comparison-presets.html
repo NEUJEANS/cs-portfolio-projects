@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OR-Set comparison preset suite</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --good: #166534;
+        --good-bg: #dcfce7;
+        --warn: #9a3412;
+        --warn-bg: #ffedd5;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }
+      .hero, .card { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .summary-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 0; margin: 24px 0 0; }
+      .summary-grid li { list-style: none; padding: 16px 18px; border-radius: 18px; background: #f8fbff; border: 1px solid #dbeafe; }
+      .summary-grid strong { display: block; font-size: 1.3rem; margin-bottom: 6px; }
+      .cards { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+      .card { padding: 22px; }
+      .eyebrow { color: var(--muted); margin-top: -4px; }
+      .story { padding: 12px 14px; border-radius: 16px; background: var(--panel-alt); border: 1px solid #dbeafe; color: #1e3a8a; line-height: 1.5; }
+      .meta, .divergence { list-style: none; padding: 0; margin: 16px 0 0; }
+      .meta li, .divergence li { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); }
+      .meta strong, .divergence strong { color: var(--text); }
+      .meta span, .divergence span { color: var(--muted); line-height: 1.5; }
+      .aligned { margin: 16px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--good-bg); color: var(--good); }
+      code { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OR-Set comparison preset suite</h1>
+        <p>This gallery packages multiple OR-Set vs LWW-element-set scenarios into one reviewable artifact so a portfolio reviewer can see both divergence-heavy cases and a control case without opening each script manually.</p>
+        <p class="story">2 preset(s) finish with different OR-Set vs LWW membership, while 1 preset(s) agree on the final answer. Together they make it easier to explain when observed-remove tags matter and when timestamp ordering is enough.</p>
+        <ul class="summary-grid">
+          <li><strong>3</strong> canned scenario(s)</li>
+          <li><strong>2</strong> divergent final outcomes</li>
+          <li><strong>1</strong> aligned control case(s)</li>
+        </ul>
+      </section>
+      <section class="cards">
+        <article class="card"><h2>Concurrent re-add survives in OR-Set</h2><p class="eyebrow"><code>concurrent-readd</code> · diverge · 7 step(s)</p><p>Replica b removes only the tag it observed, while replica c later adds the same element with a fresh tag. OR-Set keeps the new tag after sync, but remove-wins LWW drops the element because the later remove timestamp still dominates.</p><p class="story">The final states diverge on notebook: OR-Set leaves it present because the remove only tombstoned observed tags, while LWW leaves it absent after comparing add=4 and remove=5 under remove-wins ties.</p><ul class="meta"><li><strong>script</strong><span><code>sample_compare_ops.json</code></span></li><li><strong>LWW tie bias</strong><span><code>remove</code></span></li><li><strong>OR-Set</strong><span>a=notebook; b=notebook; c=notebook</span></li><li><strong>LWW</strong><span>a=∅; b=∅; c=∅</span></li></ul><ul class="divergence"><li><strong><code>notebook</code></strong><span>OR-Set keeps only observed-remove tombstones, so active tags c:1 can survive. LWW compares add=4 vs remove=5 with remove-wins ties.</span></li></ul></article><article class="card"><h2>Unobserved remove cannot tombstone unseen tags</h2><p class="eyebrow"><code>unobserved-remove</code> · diverge · 5 step(s)</p><p>Replica c issues a remove before it has ever observed a&#x27;s add. The OR-Set remove is effectively empty, but LWW still records a later remove timestamp that suppresses the earlier add once replicas merge.</p><p class="story">The final states diverge on notebook: OR-Set leaves it present because the remove only tombstoned observed tags, while LWW leaves it absent after comparing add=1 and remove=4 under remove-wins ties.</p><ul class="meta"><li><strong>script</strong><span><code>presets/unobserved-remove.json</code></span></li><li><strong>LWW tie bias</strong><span><code>remove</code></span></li><li><strong>OR-Set</strong><span>a=notebook; b=notebook; c=notebook</span></li><li><strong>LWW</strong><span>a=∅; b=∅; c=∅</span></li></ul><ul class="divergence"><li><strong><code>notebook</code></strong><span>OR-Set keeps only observed-remove tombstones, so active tags a:1 can survive. LWW compares add=1 vs remove=4 with remove-wins ties.</span></li></ul></article><article class="card"><h2>Observed remove yields the same final answer</h2><p class="eyebrow"><code>observed-remove-sync</code> · align · 6 step(s)</p><p>Replica b first syncs the add and then removes the element, so both models agree on the final absence. This preset is a useful control case beside the divergence-heavy scenarios.</p><p class="story">This script converges to the same final membership in both models; the comparison is still useful for showing that OR-Set tracks tags while LWW relies on timestamp ordering.</p><ul class="meta"><li><strong>script</strong><span><code>presets/observed-remove-sync.json</code></span></li><li><strong>LWW tie bias</strong><span><code>remove</code></span></li><li><strong>OR-Set</strong><span>a=∅; b=∅; c=∅</span></li><li><strong>LWW</strong><span>a=∅; b=∅; c=∅</span></li></ul><p class="aligned">Both models reach the same final membership in this control case.</p></article>
+      </section>
+    </main>
+  </body>
+</html>

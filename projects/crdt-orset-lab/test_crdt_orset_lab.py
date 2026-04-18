@@ -12,14 +12,18 @@ from crdt_orset_lab import (
     ReplicaCluster,
     build_anti_entropy_report,
     build_companion_links,
+    build_comparison_preset_suite,
     build_replay_frames,
     build_semantics_comparison,
+    list_comparison_presets,
     load_script,
     parse_tag,
     render_anti_entropy_html,
     render_anti_entropy_markdown,
     render_comparison_html,
     render_comparison_markdown,
+    render_comparison_preset_suite_html,
+    render_comparison_preset_suite_markdown,
     render_replay_html,
     render_timeline_html,
     render_timeline_markdown,
@@ -30,6 +34,7 @@ from crdt_orset_lab import (
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SCRIPT = PROJECT_DIR / "crdt_orset_lab.py"
+PRESET_DIR = PROJECT_DIR / "presets"
 SAMPLE_SCRIPT = PROJECT_DIR / "sample_ops.json"
 SAMPLE_COMPARE_SCRIPT = PROJECT_DIR / "sample_compare_ops.json"
 
@@ -166,6 +171,45 @@ class ORSetLabTests(unittest.TestCase):
         self.assertIn("OR-Set vs LWW-element-set", html)
         self.assertIn("Final divergence notes", html)
         self.assertIn("notebook", html)
+
+    def test_list_comparison_presets_includes_control_and_divergence_cases(self) -> None:
+        presets = list_comparison_presets()
+
+        self.assertEqual([preset.name for preset in presets], [
+            "concurrent-readd",
+            "unobserved-remove",
+            "observed-remove-sync",
+        ])
+        self.assertTrue(all(preset.script_path.exists() for preset in presets))
+        self.assertEqual(presets[-1].script_path, PRESET_DIR / "observed-remove-sync.json")
+
+    def test_build_comparison_preset_suite_reports_divergent_and_aligned_cases(self) -> None:
+        suite = build_comparison_preset_suite()
+
+        self.assertEqual(suite["preset_count"], 3)
+        self.assertEqual(suite["divergent_count"], 2)
+        self.assertEqual(suite["aligned_count"], 1)
+        outcomes = {preset["name"]: preset["outcome"] for preset in suite["presets"]}
+        self.assertEqual(outcomes["concurrent-readd"], "diverge")
+        self.assertEqual(outcomes["unobserved-remove"], "diverge")
+        self.assertEqual(outcomes["observed-remove-sync"], "align")
+        observed = next(preset for preset in suite["presets"] if preset["name"] == "observed-remove-sync")
+        self.assertEqual(observed["orset_membership"]["a"], [])
+        self.assertEqual(observed["lww_membership"]["a"], [])
+
+    def test_render_comparison_preset_suite_views_include_suite_story(self) -> None:
+        suite = build_comparison_preset_suite(["concurrent-readd", "observed-remove-sync"])
+
+        markdown = render_comparison_preset_suite_markdown(suite)
+        html = render_comparison_preset_suite_html(suite)
+
+        self.assertIn("OR-Set comparison preset suite", markdown)
+        self.assertIn("concurrent-readd", markdown)
+        self.assertIn("observed-remove-sync", markdown)
+        self.assertIn("both models converge to the same final membership", markdown)
+        self.assertIn("OR-Set comparison preset suite", html)
+        self.assertIn("Concurrent re-add survives in OR-Set", html)
+        self.assertIn("Both models reach the same final membership", html)
 
     def test_parse_tag_rejects_invalid_format(self) -> None:
         with self.assertRaisesRegex(ValueError, "invalid OR-Set tag"):
@@ -436,6 +480,64 @@ class ORSetLabTests(unittest.TestCase):
             comparison_json = json.loads(comparison_json_path.read_text())
             self.assertFalse(comparison_json["lww"]["convergence"]["membership"]["a"])
             self.assertEqual(comparison_json["orset"]["convergence"]["membership"]["a"], ["notebook"])
+
+    def test_cli_list_presets_json_includes_known_scripts(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "list-presets", "--json"],
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        payload = json.loads(completed.stdout)
+        self.assertEqual([preset["name"] for preset in payload["presets"]], [
+            "concurrent-readd",
+            "unobserved-remove",
+            "observed-remove-sync",
+        ])
+        self.assertEqual(payload["presets"][1]["script"], "presets/unobserved-remove.json")
+
+    def test_cli_compare_presets_writes_suite_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir) / "artifacts"
+            markdown_path = artifact_dir / "comparison-presets.md"
+            html_path = artifact_dir / "comparison-presets.html"
+            json_path = artifact_dir / "comparison-presets.json"
+
+            result = run_cli(
+                "compare-presets",
+                "--suite-markdown-out",
+                str(markdown_path),
+                "--suite-html-out",
+                str(html_path),
+                "--suite-json-out",
+                str(json_path),
+            )
+
+            self.assertEqual(result["preset_count"], 3)
+            self.assertEqual(result["divergent_count"], 2)
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(html_path.exists())
+            self.assertTrue(json_path.exists())
+            self.assertIn("OR-Set comparison preset suite", markdown_path.read_text())
+            html = html_path.read_text()
+            self.assertIn("Concurrent re-add survives in OR-Set", html)
+            self.assertIn("Observed remove yields the same final answer", html)
+            payload = json.loads(json_path.read_text())
+            self.assertEqual(payload["aligned_count"], 1)
+
+    def test_cli_compare_presets_unknown_name_returns_parser_error(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "compare-presets", "--preset", "missing"],
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("unknown comparison preset: missing", completed.stderr)
+        self.assertNotIn("Traceback", completed.stderr)
 
     def test_cli_add_writes_timeline_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

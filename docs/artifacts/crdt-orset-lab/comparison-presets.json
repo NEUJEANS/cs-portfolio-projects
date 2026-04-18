@@ -1,0 +1,129 @@
+{
+  "aligned_count": 1,
+  "divergent_count": 2,
+  "preset_count": 3,
+  "presets": [
+    {
+      "description": "Replica b removes only the tag it observed, while replica c later adds the same element with a fresh tag. OR-Set keeps the new tag after sync, but remove-wins LWW drops the element because the later remove timestamp still dominates.",
+      "final_divergence": [
+        {
+          "element": "notebook",
+          "lww_add_timestamp": 4,
+          "lww_present": false,
+          "lww_remove_timestamp": 5,
+          "orset_active_tags": [
+            "c:1"
+          ],
+          "orset_present": true,
+          "orset_tombstones": [
+            "a:1"
+          ],
+          "why": "OR-Set keeps only observed-remove tombstones, so active tags c:1 can survive. LWW compares add=4 vs remove=5 with remove-wins ties."
+        }
+      ],
+      "final_divergence_count": 1,
+      "lww_bias": "remove",
+      "lww_membership": {
+        "a": [],
+        "b": [],
+        "c": []
+      },
+      "name": "concurrent-readd",
+      "orset_membership": {
+        "a": [
+          "notebook"
+        ],
+        "b": [
+          "notebook"
+        ],
+        "c": [
+          "notebook"
+        ]
+      },
+      "outcome": "diverge",
+      "replicas": [
+        "a",
+        "b",
+        "c"
+      ],
+      "script": "sample_compare_ops.json",
+      "step_count": 7,
+      "story": "The final states diverge on notebook: OR-Set leaves it present because the remove only tombstoned observed tags, while LWW leaves it absent after comparing add=4 and remove=5 under remove-wins ties.",
+      "title": "Concurrent re-add survives in OR-Set"
+    },
+    {
+      "description": "Replica c issues a remove before it has ever observed a's add. The OR-Set remove is effectively empty, but LWW still records a later remove timestamp that suppresses the earlier add once replicas merge.",
+      "final_divergence": [
+        {
+          "element": "notebook",
+          "lww_add_timestamp": 1,
+          "lww_present": false,
+          "lww_remove_timestamp": 4,
+          "orset_active_tags": [
+            "a:1"
+          ],
+          "orset_present": true,
+          "orset_tombstones": [],
+          "why": "OR-Set keeps only observed-remove tombstones, so active tags a:1 can survive. LWW compares add=1 vs remove=4 with remove-wins ties."
+        }
+      ],
+      "final_divergence_count": 1,
+      "lww_bias": "remove",
+      "lww_membership": {
+        "a": [],
+        "b": [],
+        "c": []
+      },
+      "name": "unobserved-remove",
+      "orset_membership": {
+        "a": [
+          "notebook"
+        ],
+        "b": [
+          "notebook"
+        ],
+        "c": [
+          "notebook"
+        ]
+      },
+      "outcome": "diverge",
+      "replicas": [
+        "a",
+        "b",
+        "c"
+      ],
+      "script": "presets/unobserved-remove.json",
+      "step_count": 5,
+      "story": "The final states diverge on notebook: OR-Set leaves it present because the remove only tombstoned observed tags, while LWW leaves it absent after comparing add=1 and remove=4 under remove-wins ties.",
+      "title": "Unobserved remove cannot tombstone unseen tags"
+    },
+    {
+      "description": "Replica b first syncs the add and then removes the element, so both models agree on the final absence. This preset is a useful control case beside the divergence-heavy scenarios.",
+      "final_divergence": [],
+      "final_divergence_count": 0,
+      "lww_bias": "remove",
+      "lww_membership": {
+        "a": [],
+        "b": [],
+        "c": []
+      },
+      "name": "observed-remove-sync",
+      "orset_membership": {
+        "a": [],
+        "b": [],
+        "c": []
+      },
+      "outcome": "align",
+      "replicas": [
+        "a",
+        "b",
+        "c"
+      ],
+      "script": "presets/observed-remove-sync.json",
+      "step_count": 6,
+      "story": "This script converges to the same final membership in both models; the comparison is still useful for showing that OR-Set tracks tags while LWW relies on timestamp ordering.",
+      "title": "Observed remove yields the same final answer"
+    }
+  ],
+  "story": "2 preset(s) finish with different OR-Set vs LWW membership, while 1 preset(s) agree on the final answer. Together they make it easier to explain when observed-remove tags matter and when timestamp ordering is enough."
+}
