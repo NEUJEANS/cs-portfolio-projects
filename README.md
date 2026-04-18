@@ -47,6 +47,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `tfidf-search-lab`
 - [x] `dependency-graph-planner`
 - [x] `memory-allocator-simulator`
+- [x] `page-replacement-lab`
 - [x] `union-find-network-lab`
 - [x] `merkle-sync-lab`
 - [x] `b-tree-index-lab`
