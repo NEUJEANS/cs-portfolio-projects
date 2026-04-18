@@ -7,7 +7,7 @@ import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -23,6 +23,7 @@ COMMON_LOG_TIMESTAMP_FORMAT = "%d/%b/%Y:%H:%M:%S %z"
 NAMED_FIELD_START_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
 NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
 STATUS_CODE_RE = re.compile(r'^\d{3}$')
+TIME_BUCKET_GRANULARITIES = ("minute", "hour")
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,80 @@ def build_time_window_metadata(
         "matched_requests": matched_requests,
         "excluded_requests": excluded_requests,
     }
+
+
+def get_time_bucket_delta(granularity: str) -> timedelta:
+    if granularity == "hour":
+        return timedelta(hours=1)
+    return timedelta(minutes=1)
+
+
+def bucket_timestamp(timestamp: datetime, granularity: str) -> datetime:
+    normalized = timestamp.astimezone(timezone.utc)
+    if granularity == "hour":
+        return normalized.replace(minute=0, second=0, microsecond=0)
+    return normalized.replace(second=0, microsecond=0)
+
+
+def build_time_bucket_metadata(
+    granularity: str | None,
+    bucket_count: int,
+) -> dict[str, str | int] | None:
+    if granularity is None:
+        return None
+    return {
+        "granularity": granularity,
+        "bucket_count": bucket_count,
+    }
+
+
+def summarize_time_buckets(
+    bucket_rows: dict[datetime, dict[str, object]],
+    granularity: str | None,
+) -> list[dict]:
+    if granularity is None:
+        return []
+
+    rows: list[dict] = []
+    bucket_delta = get_time_bucket_delta(granularity)
+    for bucket_start in sorted(bucket_rows):
+        bucket = bucket_rows[bucket_start]
+        request_count = int(bucket["request_count"])
+        error_count = int(bucket["error_count"])
+        path_counts = bucket["path_counts"]
+        request_summary = summarize_latencies(bucket["latencies_ms"])
+        upstream_summary = summarize_latencies(bucket["upstream_latencies_ms"])
+        top_path = None
+        top_path_count = 0
+        if path_counts:
+            top_path, top_path_count = path_counts.most_common(1)[0]
+
+        rows.append(
+            {
+                "bucket_start": format_datetime_for_output(bucket_start),
+                "bucket_end": format_datetime_for_output(bucket_start + bucket_delta),
+                "request_count": request_count,
+                "error_count": error_count,
+                "error_rate_pct": round((error_count / request_count) * 100, 3)
+                if request_count
+                else 0.0,
+                "top_path": top_path,
+                "top_path_count": top_path_count,
+                "latency_sample_count": request_summary["count"] if request_summary else 0,
+                "average_latency_ms": request_summary["average_ms"] if request_summary else None,
+                "p95_latency_ms": request_summary["p95_ms"] if request_summary else None,
+                "max_latency_ms": request_summary["max_ms"] if request_summary else None,
+                "upstream_latency_sample_count": upstream_summary["count"]
+                if upstream_summary
+                else 0,
+                "average_upstream_latency_ms": upstream_summary["average_ms"]
+                if upstream_summary
+                else None,
+                "p95_upstream_latency_ms": upstream_summary["p95_ms"] if upstream_summary else None,
+                "max_upstream_latency_ms": upstream_summary["max_ms"] if upstream_summary else None,
+            }
+        )
+    return rows
 
 
 def parse_extra_fields(extra: str | None) -> tuple[str | None, dict[str, str]]:
@@ -261,6 +336,19 @@ def format_hotspot_heading(label: str, hotspot_filters: dict[str, list[str]] | N
     return f"{label} (filters: {'; '.join(parts)})"
 
 
+def format_bucket_latency_summary(
+    sample_count: int,
+    average_ms: float | None,
+    p95_ms: float | None,
+    max_ms: float | None,
+) -> str:
+    if sample_count == 0:
+        return "samples=0"
+    return (
+        f"samples={sample_count}, avg={average_ms}, p95={p95_ms}, max={max_ms}"
+    )
+
+
 def parse_line(line: str) -> ParsedLogLine | None:
     match = LOG_RE.match(line.strip())
     if not match:
@@ -301,6 +389,7 @@ def analyze_lines(
     hotspot_methods: Iterable[str] | None = None,
     window_start: datetime | None = None,
     window_end: datetime | None = None,
+    time_bucket_granularity: str | None = None,
 ) -> dict:
     status_counts = Counter()
     ip_counts = Counter()
@@ -312,6 +401,7 @@ def analyze_lines(
     upstream_latencies_ms: list[float] = []
     path_latencies: dict[str, list[float]] = defaultdict(list)
     upstream_path_latencies: dict[str, list[float]] = defaultdict(list)
+    time_bucket_rows: dict[datetime, dict[str, object]] = {}
     total_bytes = 0
     total_requests = 0
     invalid_lines = 0
@@ -348,7 +438,29 @@ def analyze_lines(
             if matches_hotspot_filters(parsed, hotspot_filters):
                 upstream_path_latencies[parsed.path].append(parsed.upstream_response_time_ms)
 
+        if time_bucket_granularity and parsed.timestamp is not None:
+            bucket_start = bucket_timestamp(parsed.timestamp, time_bucket_granularity)
+            bucket = time_bucket_rows.setdefault(
+                bucket_start,
+                {
+                    "request_count": 0,
+                    "error_count": 0,
+                    "path_counts": Counter(),
+                    "latencies_ms": [],
+                    "upstream_latencies_ms": [],
+                },
+            )
+            bucket["request_count"] += 1
+            if parsed.status.startswith(("4", "5")):
+                bucket["error_count"] += 1
+            bucket["path_counts"][parsed.path] += 1
+            if parsed.latency_ms is not None:
+                bucket["latencies_ms"].append(parsed.latency_ms)
+            if parsed.upstream_response_time_ms is not None:
+                bucket["upstream_latencies_ms"].append(parsed.upstream_response_time_ms)
+
     average_bytes = round(total_bytes / total_requests, 2) if total_requests else 0.0
+    time_buckets = summarize_time_buckets(time_bucket_rows, time_bucket_granularity)
     return {
         "total_requests": total_requests,
         "invalid_lines": invalid_lines,
@@ -369,6 +481,11 @@ def analyze_lines(
             matched_requests=total_requests,
             excluded_requests=excluded_requests,
         ),
+        "time_bucketing": build_time_bucket_metadata(
+            time_bucket_granularity,
+            len(time_buckets),
+        ),
+        "time_buckets": time_buckets,
         "path_latency_breakdown": summarize_path_latencies(path_latencies, latency_limit),
         "upstream_path_latency_breakdown": summarize_path_latencies(
             upstream_path_latencies, latency_limit
@@ -396,6 +513,44 @@ def format_text_report(result: dict) -> str:
                 f"  Excluded requests: {time_window['excluded_requests']}",
             ]
         )
+
+    time_bucketing = result["time_bucketing"]
+    if time_bucketing:
+        lines.append(f"Time bucket trends ({time_bucketing['granularity']}):")
+        if result["time_buckets"]:
+            for bucket in result["time_buckets"]:
+                top_path = bucket["top_path"]
+                top_path_fragment = (
+                    f", top_path={top_path} ({bucket['top_path_count']})"
+                    if top_path
+                    else ""
+                )
+                lines.append(
+                    "  "
+                    f"{bucket['bucket_start']} -> requests={bucket['request_count']}, "
+                    f"errors={bucket['error_count']} ({bucket['error_rate_pct']}%)"
+                    f"{top_path_fragment}"
+                )
+                lines.append(
+                    "    request latency: "
+                    + format_bucket_latency_summary(
+                        bucket["latency_sample_count"],
+                        bucket["average_latency_ms"],
+                        bucket["p95_latency_ms"],
+                        bucket["max_latency_ms"],
+                    )
+                )
+                lines.append(
+                    "    upstream latency: "
+                    + format_bucket_latency_summary(
+                        bucket["upstream_latency_sample_count"],
+                        bucket["average_upstream_latency_ms"],
+                        bucket["p95_upstream_latency_ms"],
+                        bucket["max_upstream_latency_ms"],
+                    )
+                )
+        else:
+            lines.append("  (none)")
 
     lines.append("Status counts:")
 
@@ -533,6 +688,22 @@ def write_summary_csv(destination: str | Path, result: dict) -> None:
             ]
         )
 
+    if result["time_bucketing"]:
+        rows.extend(
+            [
+                {
+                    "section": "summary",
+                    "metric": "time_bucket_granularity",
+                    "value": result["time_bucketing"]["granularity"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "time_bucket_count",
+                    "value": result["time_bucketing"]["bucket_count"],
+                },
+            ]
+        )
+
     for status, count in sorted(result["status_counts"].items()):
         rows.append({"section": "status_counts", "key": status, "count": count})
     for method, count in sorted(result["method_counts"].items()):
@@ -610,6 +781,51 @@ def write_path_latency_csv(
             )
 
 
+def write_time_bucket_csv(
+    destination: str | Path,
+    rows: list[dict],
+    time_bucketing: dict[str, str | int] | None = None,
+    time_window: dict[str, str | int] | None = None,
+) -> None:
+    fieldnames = [
+        "granularity",
+        "bucket_start",
+        "bucket_end",
+        "request_count",
+        "error_count",
+        "error_rate_pct",
+        "top_path",
+        "top_path_count",
+        "latency_sample_count",
+        "average_latency_ms",
+        "p95_latency_ms",
+        "max_latency_ms",
+        "upstream_latency_sample_count",
+        "average_upstream_latency_ms",
+        "p95_upstream_latency_ms",
+        "max_upstream_latency_ms",
+        "window_start",
+        "window_end",
+    ]
+    destination_path = ensure_parent_directory(destination)
+    with destination_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            combined_row = {
+                "granularity": time_bucketing["granularity"] if time_bucketing else "",
+                "window_start": str(time_window["start"]) if time_window else "",
+                "window_end": str(time_window["end"]) if time_window else "",
+                **row,
+            }
+            writer.writerow(
+                {
+                    field: "" if combined_row.get(field) is None else combined_row.get(field, "")
+                    for field in fieldnames
+                }
+            )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Analyze common, combined, and latency-augmented web access logs"
@@ -638,6 +854,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--upstream-path-latency-csv",
         help="Optional path for a per-path upstream-latency breakdown CSV export",
+    )
+    parser.add_argument(
+        "--time-bucket",
+        choices=TIME_BUCKET_GRANULARITIES,
+        help=(
+            "Optional time-series bucketing granularity for matched requests "
+            "(minute or hour)"
+        ),
+    )
+    parser.add_argument(
+        "--time-bucket-csv",
+        help="Optional path for a time-bucket trend CSV export (requires --time-bucket)",
     )
     parser.add_argument(
         "--hotspot-status",
@@ -698,6 +926,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if any(not method.strip() for method in args.hotspot_method):
         parser.error("--hotspot-method must not be blank")
+    if args.time_bucket_csv and not args.time_bucket:
+        parser.error("--time-bucket-csv requires --time-bucket")
 
     window_start = None
     if args.window_start:
@@ -731,6 +961,7 @@ def main(argv: list[str] | None = None) -> int:
             hotspot_methods=args.hotspot_method,
             window_start=window_start,
             window_end=window_end,
+            time_bucket_granularity=args.time_bucket,
         )
 
     if args.summary_csv:
@@ -747,6 +978,13 @@ def main(argv: list[str] | None = None) -> int:
             args.upstream_path_latency_csv,
             result["upstream_path_latency_breakdown"],
             result["hotspot_filters"],
+            result["time_window"],
+        )
+    if args.time_bucket_csv:
+        write_time_bucket_csv(
+            args.time_bucket_csv,
+            result["time_buckets"],
+            result["time_bucketing"],
             result["time_window"],
         )
 

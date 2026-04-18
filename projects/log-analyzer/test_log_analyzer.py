@@ -112,6 +112,8 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['path_latency_breakdown'][0]['path'], '/login')
         self.assertEqual(result['path_latency_breakdown'][0]['average_ms'], 350.0)
         self.assertIsNone(result['time_window'])
+        self.assertIsNone(result['time_bucketing'])
+        self.assertEqual(result['time_buckets'], [])
 
     def test_analyze_lines_reports_upstream_latency_summary_from_named_fields(self):
         lines = [
@@ -203,6 +205,38 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['time_window']['start'], '2026-04-18T09:00:00+00:00')
         self.assertEqual(result['time_window']['end'], '2026-04-18T09:05:00+00:00')
 
+    def test_analyze_lines_summarizes_minute_time_buckets(self):
+        lines = [
+            '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030',
+            '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250',
+            '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350',
+        ]
+        result = analyze_lines(lines, top_n=2, time_bucket_granularity='minute')
+        self.assertEqual(result['time_bucketing'], {'granularity': 'minute', 'bucket_count': 2})
+        self.assertEqual(len(result['time_buckets']), 2)
+        first_bucket = result['time_buckets'][0]
+        self.assertEqual(first_bucket['bucket_start'], '2026-04-18T09:00:00+00:00')
+        self.assertEqual(first_bucket['bucket_end'], '2026-04-18T09:01:00+00:00')
+        self.assertEqual(first_bucket['request_count'], 2)
+        self.assertEqual(first_bucket['error_count'], 1)
+        self.assertEqual(first_bucket['error_rate_pct'], 50.0)
+        self.assertEqual(first_bucket['top_path'], '/api/report')
+        self.assertEqual(first_bucket['top_path_count'], 2)
+        self.assertEqual(first_bucket['latency_sample_count'], 2)
+        self.assertEqual(first_bucket['average_latency_ms'], 225.0)
+        self.assertEqual(first_bucket['max_latency_ms'], 400.0)
+        self.assertEqual(first_bucket['upstream_latency_sample_count'], 2)
+        self.assertEqual(first_bucket['average_upstream_latency_ms'], 140.0)
+
+    def test_analyze_lines_normalizes_time_buckets_to_utc(self):
+        lines = [
+            '10.0.0.1 - - [18/Apr/2026:18:00:05 +0900] "GET /seoul HTTP/1.1" 200 10 request_time=0.050',
+        ]
+        result = analyze_lines(lines, top_n=1, time_bucket_granularity='hour')
+        self.assertEqual(result['time_bucketing'], {'granularity': 'hour', 'bucket_count': 1})
+        self.assertEqual(result['time_buckets'][0]['bucket_start'], '2026-04-18T09:00:00+00:00')
+        self.assertEqual(result['time_buckets'][0]['bucket_end'], '2026-04-18T10:00:00+00:00')
+
     def test_format_text_report_handles_empty_results(self):
         report = format_text_report(analyze_lines([], top_n=3))
         self.assertIn('Total requests: 0', report)
@@ -243,6 +277,21 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('End: 2026-04-18T09:05:00+00:00', report)
         self.assertIn('Excluded requests: 1', report)
 
+    def test_format_text_report_mentions_time_bucket_trends(self):
+        report = format_text_report(
+            analyze_lines(
+                [
+                    '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030',
+                    '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250',
+                ],
+                top_n=1,
+                time_bucket_granularity='minute',
+            )
+        )
+        self.assertIn('Time bucket trends (minute):', report)
+        self.assertIn('2026-04-18T09:00:00+00:00 -> requests=2, errors=1 (50.0%), top_path=/api/report (2)', report)
+        self.assertIn('request latency: samples=2, avg=225.0, p95=382.5, max=400.0', report)
+
     def test_cli_json_output_includes_named_timing_summaries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -272,6 +321,8 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['upstream_path_latency_breakdown'][0]['path'], '/login')
             self.assertIsNone(payload['hotspot_filters'])
             self.assertIsNone(payload['time_window'])
+            self.assertIsNone(payload['time_bucketing'])
+            self.assertEqual(payload['time_buckets'], [])
 
     def test_cli_json_output_supports_hotspot_filters(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -356,6 +407,42 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['time_window']['end'], '2026-04-18T09:05:00+00:00')
             self.assertEqual(payload['time_window']['matched_requests'], 2)
             self.assertEqual(payload['time_window']['excluded_requests'], 2)
+
+    def test_cli_json_output_supports_time_buckets(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--time-bucket',
+                    'minute',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload['time_bucketing'], {'bucket_count': 2, 'granularity': 'minute'})
+            self.assertEqual(payload['time_buckets'][0]['bucket_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(payload['time_buckets'][0]['request_count'], 2)
+            self.assertEqual(payload['time_buckets'][0]['error_rate_pct'], 50.0)
+            self.assertEqual(payload['time_buckets'][1]['bucket_start'], '2026-04-18T09:01:00+00:00')
+            self.assertEqual(payload['time_buckets'][1]['error_count'], 1)
 
     def test_cli_time_window_accepts_naive_iso_as_utc(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -558,6 +645,68 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(latency_rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
             self.assertEqual(latency_rows[0]['window_end'], '2026-04-18T09:05:00+00:00')
 
+    def test_cli_time_bucket_csv_exports_record_bucket_and_window_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            summary_csv = Path(tmpdir) / 'exports' / 'summary.csv'
+            bucket_csv = Path(tmpdir) / 'exports' / 'time-buckets.csv'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:08:59:00 +0000] "GET /before HTTP/1.1" 200 10 request_time=0.040
+                    10.0.0.2 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 11 request_time=0.080 upstream_response_time=0.050
+                    10.0.0.3 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.500 upstream_response_time=0.350
+                    10.0.0.4 - - [18/Apr/2026:09:01:10 +0000] "GET /after HTTP/1.1" 200 13 request_time=0.060
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--format',
+                    'json',
+                    '--window-start',
+                    '2026-04-18T09:00:00Z',
+                    '--window-end',
+                    '2026-04-18T09:00:59Z',
+                    '--time-bucket',
+                    'minute',
+                    '--summary-csv',
+                    str(summary_csv),
+                    '--time-bucket-csv',
+                    str(bucket_csv),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            with summary_csv.open(encoding='utf-8', newline='') as handle:
+                summary_rows = list(csv.DictReader(handle))
+            self.assertTrue(any(row['metric'] == 'time_bucket_granularity' and row['value'] == 'minute' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'time_bucket_count' and row['value'] == '1' for row in summary_rows))
+
+            with bucket_csv.open(encoding='utf-8', newline='') as handle:
+                bucket_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(bucket_rows), 1)
+            self.assertEqual(bucket_rows[0]['granularity'], 'minute')
+            self.assertEqual(bucket_rows[0]['bucket_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(bucket_rows[0]['bucket_end'], '2026-04-18T09:01:00+00:00')
+            self.assertEqual(bucket_rows[0]['request_count'], '2')
+            self.assertEqual(bucket_rows[0]['error_count'], '1')
+            self.assertEqual(bucket_rows[0]['error_rate_pct'], '50.0')
+            self.assertEqual(bucket_rows[0]['top_path'], '/api/report')
+            self.assertEqual(bucket_rows[0]['top_path_count'], '2')
+            self.assertEqual(bucket_rows[0]['latency_sample_count'], '2')
+            self.assertEqual(bucket_rows[0]['average_latency_ms'], '290.0')
+            self.assertEqual(bucket_rows[0]['average_upstream_latency_ms'], '200.0')
+            self.assertEqual(bucket_rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(bucket_rows[0]['window_end'], '2026-04-18T09:00:59+00:00')
+
     def test_cli_text_output_mentions_upstream_latency_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -646,6 +795,29 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('--window-start must be less than or equal to --window-end', completed.stderr)
+
+    def test_cli_rejects_time_bucket_csv_without_granularity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            bucket_csv = Path(tmpdir) / 'exports' / 'time-buckets.csv'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket-csv',
+                    str(bucket_csv),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--time-bucket-csv requires --time-bucket', completed.stderr)
 
 
 if __name__ == '__main__':

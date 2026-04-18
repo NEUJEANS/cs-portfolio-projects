@@ -1,14 +1,15 @@
 # log-analyzer
 
 ## Overview
-Analyze common, combined, and latency-augmented web access logs from the command line with time-window slicing, per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, and incident-style per-path hotspot drill-downs.
+Analyze common, combined, and latency-augmented web access logs from the command line with time-window slicing, minute/hour trend bucketing, per-status, per-method, top-IP, top-path, referrer, user-agent, request-latency, upstream-latency, and incident-style per-path hotspot drill-downs.
 
 ## Why it is portfolio-worthy
 - parses realistic common and combined access-log lines instead of doing loose substring counting
 - surfaces operational metrics that resemble real observability and traffic-analysis tasks
-- includes both human-readable and machine-friendly outputs for scripting and spreadsheet workflows
+- includes both human-readable and machine-friendly outputs for scripting, spreadsheets, and chart pipelines
 - highlights slow endpoints directly with per-path request and upstream latency hotspot summaries
 - supports status/method-filtered hotspot drill-downs plus bounded time-window analysis for incident-response style investigations
+- exports minute/hour trend buckets so students can turn raw logs into screenshot-ready latency and error-rate stories
 - handles malformed lines, missing byte counts, and optional latency fields safely
 
 ## Stack
@@ -27,7 +28,8 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - surfaces per-path request-latency hotspots ordered by average latency
 - surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
 - supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--upstream-path-latency-csv`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--upstream-path-latency-csv`, `--time-bucket`, `--time-bucket-csv`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -36,8 +38,10 @@ python3 log_analyzer.py access.log --top 5
 python3 log_analyzer.py access.log --format json
 python3 log_analyzer.py access.log --summary-csv summary.csv --path-latency-csv hotspots.csv
 python3 log_analyzer.py access.log --path-latency-csv request-hotspots.csv --upstream-path-latency-csv upstream-hotspots.csv
+python3 log_analyzer.py access.log --time-bucket minute --format json
+python3 log_analyzer.py access.log --time-bucket minute --time-bucket-csv minute-trends.csv --summary-csv summary.csv
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
-python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --format json
+python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
 ```
 
 The parser accepts:
@@ -70,6 +74,27 @@ Examples:
 - `--window-start 2026-04-18T09:00:00Z` keeps only entries at or after `09:00 UTC`
 - `--window-end 2026-04-18T10:00:00Z` keeps only entries at or before `10:00 UTC`
 - combine both flags to isolate the exact 5-minute outage window, then layer `--hotspot-status 500 --hotspot-method POST` on top for a narrower drill-down
+
+## Time-bucket trends
+Use `--time-bucket minute` or `--time-bucket hour` when you want the matched requests summarized into chart-friendly trend buckets after any active `--window-start` / `--window-end` filtering is applied.
+
+Each bucket includes:
+- `bucket_start` / `bucket_end`
+- request and error counts plus `error_rate_pct`
+- the most frequent path inside the bucket
+- request-latency sample count plus average / p95 / max latency
+- upstream-latency sample count plus average / p95 / max latency when `upstream_response_time=` data is present
+
+Outputs:
+- text mode prints a `Time bucket trends (...)` section for quick incident reviews
+- JSON mode includes `time_bucketing` metadata plus a `time_buckets` array
+- summary CSV exports add `time_bucket_granularity` and `time_bucket_count` rows
+- `--time-bucket-csv` writes one row per bucket for spreadsheet/chart workflows and requires `--time-bucket`
+
+Examples:
+- `--time-bucket minute` highlights minute-by-minute spikes during a short outage
+- `--window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour` compares hourly trend buckets inside a bounded incident window
+- `--time-bucket minute --time-bucket-csv minute-trends.csv` exports chart-ready bucket rows for Sheets or notebooks
 
 ## Hotspot drill-downs
 Use `--hotspot-status` and `--hotspot-method` when you want the per-path hotspot sections and CSV exports to focus on a particular incident slice while keeping the top-level totals and percentile summaries global **within the currently selected time window**.
@@ -110,6 +135,26 @@ Use `--path-latency-csv` to export one row per request-latency hotspot path with
 
 Use `--upstream-path-latency-csv` to export the same schema for `upstream_response_time=`-backed hotspots only. This makes it easy to show which endpoints are slow because of downstream services versus app-side processing. The filter/window columns stay blank when no hotspot or time-window flags are active.
 
+Use `--time-bucket-csv` together with `--time-bucket` to export one row per bucket with these columns:
+- `granularity`
+- `bucket_start`
+- `bucket_end`
+- `request_count`
+- `error_count`
+- `error_rate_pct`
+- `top_path`
+- `top_path_count`
+- `latency_sample_count`
+- `average_latency_ms`
+- `p95_latency_ms`
+- `max_latency_ms`
+- `upstream_latency_sample_count`
+- `average_upstream_latency_ms`
+- `p95_upstream_latency_ms`
+- `max_upstream_latency_ms`
+- `window_start`
+- `window_end`
+
 This makes it easy to drop a run into Sheets, Numbers, Excel, or plotting notebooks for portfolio screenshots and follow-up analysis.
 
 ## Sample text output
@@ -124,6 +169,10 @@ Time window:
   End: 2026-04-18T10:00:00+00:00
   Matched requests: 42
   Excluded requests: 18
+Time bucket trends (hour):
+  2026-04-18T09:00:00+00:00 -> requests=42, errors=7 (16.667%), top_path=/api/export (8)
+    request latency: samples=40, avg=18.225, p95=52.8, max=109.0
+    upstream latency: samples=28, avg=13.417, p95=36.5, max=51.0
 Status counts:
   200: 35
   404: 5
@@ -166,4 +215,4 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 
 ## Future Improvements
 - optionally group hotspot drill-down exports by deployment or environment labels when those appear in richer custom log formats
-- add timestamp bucketing (for example minute-by-minute latency or error-rate exports) on top of the new time-window filter workflow
+- add deployment/environment facets to time-bucket exports so trend charts can be split by shard, release, or region
