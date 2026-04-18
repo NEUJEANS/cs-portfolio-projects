@@ -1187,7 +1187,7 @@ def build_replay_frames(snapshot: dict[str, object]) -> list[dict[str, object]]:
             "label": "Cluster starts empty",
             "details": [
                 "No operations have run yet.",
-                "Use the slider or play button to scrub through adds, removes, and sync steps.",
+                "Use the slider, sync-jump buttons, or play button to scrub through adds, removes, and sync steps.",
             ],
             "focus_replicas": [],
             "replicas": {replica: clone_state_view(state) for replica, state in current_states.items()},
@@ -1301,7 +1301,7 @@ def render_replay_html(
       body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
       main {{ max-width: 1420px; margin: 0 auto; padding: 32px 20px 64px; }}
       a {{ color: var(--accent); }}
-      button, input {{ font: inherit; }}
+      button, input, select {{ font: inherit; }}
       button {{ cursor: pointer; }}
       .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
       .hero {{ padding: 28px; margin-bottom: 24px; }}
@@ -1320,8 +1320,12 @@ def render_replay_html(
       .button-row {{ display: flex; flex-wrap: wrap; gap: 10px; }}
       .button-row button {{ border: 1px solid #bfdbfe; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 10px 16px; font-weight: 700; }}
       .button-row button:disabled {{ opacity: 0.55; cursor: default; }}
+      .slider-grid {{ display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); align-items: end; }}
       .slider-wrap {{ display: grid; gap: 8px; }}
-      .slider-wrap label {{ font-weight: 700; }}
+      .slider-wrap label, .inline-control label {{ font-weight: 700; }}
+      .inline-control {{ display: grid; gap: 8px; }}
+      .inline-control select {{ border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; background: var(--panel); color: var(--text); }}
+      .sync-jump-note {{ margin-top: 8px; color: var(--muted); }}
       input[type=range] {{ width: 100%; }}
       .detail-list, .artifact-links, .transfer-list {{ margin: 0; padding-left: 18px; color: var(--muted); }}
       .detail-list li + li, .artifact-links li + li, .transfer-list li + li {{ margin-top: 8px; }}
@@ -1339,7 +1343,7 @@ def render_replay_html(
       .sr-only {{ position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }}
       .note {{ padding: 14px 16px; border-radius: 18px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }}
       @media (max-width: 1080px) {{
-        .layout, .anti-grid {{ grid-template-columns: 1fr; }}
+        .layout, .anti-grid, .slider-grid {{ grid-template-columns: 1fr; }}
       }}
     </style>
   </head>
@@ -1347,7 +1351,7 @@ def render_replay_html(
     <main>
       <section class="hero">
         <h1>OR-Set replay / animation</h1>
-        <p>This replay page turns the OR-Set timeline into a stepper you can scrub in a browser. It keeps the anti-entropy notes beside the replica states so a reviewer can see both the semantic change and the payload-cost story on the same screen.</p>
+        <p>This replay page turns the OR-Set timeline into a stepper you can scrub in a browser. It keeps the anti-entropy notes beside the replica states so a reviewer can see both the semantic change and the payload-cost story on the same screen, now with sync-jump shortcuts and adjustable playback speed for faster demos.</p>
         <p class="note">{escape_html(timeline_story(snapshot))}</p>
         <ul class="summary-grid">
           <li><strong>{len(replicas)}</strong> replicas ({escape_html(', '.join(replicas) or 'none')})</li>
@@ -1369,13 +1373,27 @@ def render_replay_html(
           </div>
           <div class="button-row">
             <button type="button" id="replay-prev">← Prev</button>
+            <button type="button" id="replay-prev-sync">↺ Prev sync</button>
             <button type="button" id="replay-play" aria-pressed="false">▶ Play</button>
+            <button type="button" id="replay-next-sync">Next sync ↻</button>
             <button type="button" id="replay-next">Next →</button>
           </div>
-          <div class="slider-wrap">
-            <label for="replay-range">Replay step</label>
-            <input type="range" id="replay-range" min="0" max="{frame_count}" step="1" value="0" />
-            <div id="replay-step-counter" style="color: var(--muted);">Step 0 of {frame_count}</div>
+          <div class="slider-grid">
+            <div class="slider-wrap">
+              <label for="replay-range">Replay step</label>
+              <input type="range" id="replay-range" min="0" max="{frame_count}" step="1" value="0" />
+              <div id="replay-step-counter" style="color: var(--muted);">Step 0 of {frame_count}</div>
+              <div id="replay-sync-note" class="sync-jump-note">Jump-to-sync buttons stay disabled until the script reaches a sync step.</div>
+            </div>
+            <div class="inline-control">
+              <label for="replay-speed">Playback speed</label>
+              <select id="replay-speed">
+                <option value="2200">Slow walkthrough · 0.75×</option>
+                <option value="1600" selected>Normal classroom pace · 1×</option>
+                <option value="950">Fast recap · 1.7×</option>
+                <option value="550">Sprint to next sync · 2.9×</option>
+              </select>
+            </div>
           </div>
           <div>
             <h3>What changed on this step?</h3>
@@ -1425,20 +1443,63 @@ def render_replay_html(
       const transferTableBody = document.getElementById('transfer-table-body');
       const range = document.getElementById('replay-range');
       const prevButton = document.getElementById('replay-prev');
+      const prevSyncButton = document.getElementById('replay-prev-sync');
       const playButton = document.getElementById('replay-play');
+      const nextSyncButton = document.getElementById('replay-next-sync');
       const nextButton = document.getElementById('replay-next');
+      const speedSelect = document.getElementById('replay-speed');
+      const syncNote = document.getElementById('replay-sync-note');
       const announce = document.getElementById('replay-announce');
+      const syncFrameIndexes = frames.filter((frame, index) => index > 0 && frame.op === 'sync').map((frame) => frame.step);
 
       let frameIndex = 0;
       let playTimer = null;
 
       function stopPlayback() {{
         if (playTimer !== null) {{
-          window.clearInterval(playTimer);
+          window.clearTimeout(playTimer);
           playTimer = null;
         }}
         playButton.textContent = '▶ Play';
         playButton.setAttribute('aria-pressed', 'false');
+      }}
+
+      function playbackDelayMs() {{
+        return Number(speedSelect.value || 1600);
+      }}
+
+      function schedulePlaybackTick() {{
+        if (frameIndex >= frames.length - 1) {{
+          stopPlayback();
+          return;
+        }}
+        playTimer = window.setTimeout(() => {{
+          renderFrame(frameIndex + 1);
+          schedulePlaybackTick();
+        }}, playbackDelayMs());
+      }}
+
+      function startPlayback() {{
+        stopPlayback();
+        if (frameIndex >= frames.length - 1) {{
+          renderFrame(0);
+        }}
+        playButton.textContent = '❚❚ Pause';
+        playButton.setAttribute('aria-pressed', 'true');
+        schedulePlaybackTick();
+      }}
+
+      function findNextSyncIndex(fromIndex) {{
+        return syncFrameIndexes.find((syncIndex) => syncIndex > fromIndex) ?? null;
+      }}
+
+      function findPreviousSyncIndex(fromIndex) {{
+        for (let index = syncFrameIndexes.length - 1; index >= 0; index -= 1) {{
+          if (syncFrameIndexes[index] < fromIndex) {{
+            return syncFrameIndexes[index];
+          }}
+        }}
+        return null;
       }}
 
       function renderReplicaCards(frame) {{
@@ -1472,6 +1533,9 @@ def render_replay_html(
         const frame = frames[index];
         range.value = String(index);
         const heading = index === 0 ? 'Initial state' : `Step ${{frame.step}}`;
+        const previousSync = findPreviousSyncIndex(index);
+        const nextSync = findNextSyncIndex(index);
+        const syncPosition = syncFrameIndexes.indexOf(index);
         stepHeading.textContent = heading;
         stepLabel.textContent = frame.label;
         stepCounter.textContent = `Step ${{index}} of ${{frames.length - 1}}`;
@@ -1482,6 +1546,19 @@ def render_replay_html(
         renderTransfers(frame);
         prevButton.disabled = index === 0;
         nextButton.disabled = index === frames.length - 1;
+        prevSyncButton.disabled = previousSync === null;
+        nextSyncButton.disabled = nextSync === null;
+        if (!syncFrameIndexes.length) {{
+          syncNote.textContent = 'This scenario has no sync steps yet, so jump-to-sync stays disabled.';
+        }} else if (frame.op === 'sync' && syncPosition >= 0) {{
+          syncNote.textContent = `On sync step ${{index}} (${{syncPosition + 1}} of ${{syncFrameIndexes.length}} sync checkpoints).`;
+        }} else if (nextSync !== null) {{
+          syncNote.textContent = `Next sync checkpoint: step ${{nextSync}}. Previous sync: ${{previousSync === null ? 'none yet' : `step ${{previousSync}}`}}.`;
+        }} else {{
+          syncNote.textContent = previousSync === null
+            ? 'No sync checkpoints appear in this scenario yet.'
+            : `No later sync steps remain. Last sync checkpoint: step ${{previousSync}}.`;
+        }}
         announce.textContent = `${{heading}} — ${{frame.label}}`;
       }}
 
@@ -1489,24 +1566,35 @@ def render_replay_html(
         stopPlayback();
         renderFrame(Math.max(0, frameIndex - 1));
       }});
+      prevSyncButton.addEventListener('click', () => {{
+        stopPlayback();
+        const previousSync = findPreviousSyncIndex(frameIndex);
+        if (previousSync !== null) {{
+          renderFrame(previousSync);
+        }}
+      }});
       nextButton.addEventListener('click', () => {{
         stopPlayback();
         renderFrame(Math.min(frames.length - 1, frameIndex + 1));
+      }});
+      nextSyncButton.addEventListener('click', () => {{
+        stopPlayback();
+        const nextSync = findNextSyncIndex(frameIndex);
+        if (nextSync !== null) {{
+          renderFrame(nextSync);
+        }}
       }});
       playButton.addEventListener('click', () => {{
         if (playTimer !== null) {{
           stopPlayback();
           return;
         }}
-        playButton.textContent = '❚❚ Pause';
-        playButton.setAttribute('aria-pressed', 'true');
-        playTimer = window.setInterval(() => {{
-          if (frameIndex >= frames.length - 1) {{
-            stopPlayback();
-            return;
-          }}
-          renderFrame(frameIndex + 1);
-        }}, 1600);
+        startPlayback();
+      }});
+      speedSelect.addEventListener('change', () => {{
+        if (playTimer !== null) {{
+          startPlayback();
+        }}
       }});
       range.addEventListener('input', (event) => {{
         stopPlayback();

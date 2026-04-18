@@ -286,11 +286,16 @@ class ORSetLabTests(unittest.TestCase):
 
         self.assertIn("OR-Set replay / animation", html)
         self.assertIn('id="replay-range"', html)
+        self.assertIn('id="replay-prev-sync"', html)
+        self.assertIn('id="replay-next-sync"', html)
+        self.assertIn('id="replay-speed"', html)
         self.assertIn("Anti-entropy transfer view", html)
         self.assertIn('href="timeline.html"', html)
         self.assertIn('aria-pressed="false"', html)
         self.assertIn('aria-live="polite" aria-atomic="true"', html)
         self.assertIn("const frames =", html)
+        self.assertIn("const syncFrameIndexes =", html)
+        self.assertIn("Playback speed", html)
 
     def test_cli_run_script_writes_timeline_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1,6 +1,18 @@
 # crdt-orset-lab checklist
 
-## Current slice (2026-04-18 20:31 UTC run)
+## Current slice (2026-04-18 21:04 UTC run)
+- [x] confirm `main` still matches `origin/main` before editing
+- [x] do only the brief replay-control accessibility refresh needed for jump/playback controls
+- [x] do a short Python/CLI self-test refresh for replay-control wiring
+- [x] update/add checklist markdown for the replay-controls slice
+- [x] add jump-to-sync and playback-speed controls to the replay HTML so demos can skip directly to reconciliation steps
+- [x] regenerate and commit updated replay artifacts for the baseline OR-Set sample and comparison scenario
+- [x] update README usage, committed artifact examples, and future follow-up notes
+- [x] extend regression coverage for replay-control rendering and sync-step navigation metadata
+- [x] run targeted tests, smoke checks, and 3 review passes
+- [ ] run secret scan, commit, push, and write the wrap-up
+
+## Previous slice (2026-04-18 20:31 UTC run)
 - [x] confirm `main` still matches `origin/main` before editing and preserve the already-finished anti-entropy/checklist diff
 - [x] do only the brief HTML replay / accessibility research needed for the scrubber and announcement behavior
 - [x] do a short Python/CLI self-test refresh for replay-output wiring
@@ -44,6 +56,7 @@
 - [x] OR-Set vs LWW-element-set comparison workflow with committed divergence artifacts
 - [x] digest + delta-state anti-entropy reports for baseline and comparison-linked OR-Set scenarios
 - [x] replay/animation HTML exports that pair the state timeline with anti-entropy transfer details
+- [x] replay controls that jump directly between sync checkpoints and adjust playback speed for demos
 
 ## Current quality checks
 - [x] README explains why observed-remove semantics matter and how to run the simulator
@@ -54,4 +67,4 @@
 ## Next follow-up ideas
 - [ ] add canned comparison presets that emit multiple OR-Set vs LWW scenarios at once
 - [ ] add another CRDT contrast page such as OR-Set vs MV-register or PN-counter trade-offs
-- [ ] add jump-to-sync or playback-speed controls so classroom demos can skip directly to the expensive reconciliation steps
+- [ ] add deep-linkable replay checkpoints or hash-based step links so demos can open directly on a chosen sync step
