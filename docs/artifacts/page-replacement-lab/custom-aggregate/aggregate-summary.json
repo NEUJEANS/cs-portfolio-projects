@@ -1,0 +1,133 @@
+{
+  "min_frames": 3,
+  "max_frames": 8,
+  "artifact_dir": "docs/artifacts/page-replacement-lab/custom-aggregate",
+  "html_path": "docs/artifacts/page-replacement-lab/custom-aggregate/index.html",
+  "summary": {
+    "workload_count": 3,
+    "preset_count": 1,
+    "benchmark_count": 1,
+    "custom_count": 1,
+    "fifo_anomaly_count": 1,
+    "non_fifo_regression_count": 1,
+    "winner_counts": {
+      "fifo": 0,
+      "clock": 0,
+      "aging": 0,
+      "lru": 0,
+      "opt": 3
+    },
+    "overall_average_fault_rates": {
+      "fifo": 0.648765,
+      "clock": 0.647222,
+      "aging": 0.610185,
+      "lru": 0.610185,
+      "opt": 0.496296
+    },
+    "overall_average_faults": {
+      "fifo": 32.944444,
+      "clock": 32.833333,
+      "aging": 30.666667,
+      "lru": 30.666667,
+      "opt": 24.444444
+    },
+    "overall_best_rate_winners": [
+      "opt"
+    ]
+  },
+  "workloads": [
+    {
+      "type": "preset",
+      "workload": "classic-belady",
+      "description": "classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames",
+      "reference_length": 12,
+      "reference_source": "preset:classic-belady",
+      "best_average_faults": 5.5,
+      "best_average_fault_rate": 0.458333,
+      "best_average_winners": [
+        "opt"
+      ],
+      "best_rate_winners": [
+        "opt"
+      ],
+      "fifo_has_anomaly": true,
+      "non_fifo_regression_count": 1,
+      "average_faults": {
+        "fifo": 6.5,
+        "clock": 6.5,
+        "aging": 6.333333,
+        "lru": 6.333333,
+        "opt": 5.5
+      },
+      "average_fault_rates": {
+        "fifo": 0.541667,
+        "clock": 0.541667,
+        "aging": 0.527778,
+        "lru": 0.527778,
+        "opt": 0.458333
+      }
+    },
+    {
+      "type": "benchmark",
+      "workload": "compiler-phase-shift",
+      "description": "larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts",
+      "reference_length": 72,
+      "reference_source": "benchmark:compiler-phase-shift",
+      "best_average_faults": 36.0,
+      "best_average_fault_rate": 0.5,
+      "best_average_winners": [
+        "opt"
+      ],
+      "best_rate_winners": [
+        "opt"
+      ],
+      "fifo_has_anomaly": false,
+      "non_fifo_regression_count": 0,
+      "average_faults": {
+        "fifo": 48.333333,
+        "clock": 48.0,
+        "aging": 45.0,
+        "lru": 45.0,
+        "opt": 36.0
+      },
+      "average_fault_rates": {
+        "fifo": 0.671296,
+        "clock": 0.666667,
+        "aging": 0.625,
+        "lru": 0.625,
+        "opt": 0.5
+      }
+    },
+    {
+      "type": "custom",
+      "workload": "mobile-app-session",
+      "description": "custom imported trace from projects/page-replacement-lab/custom-traces/mobile-app-session.txt",
+      "reference_length": 60,
+      "reference_source": "pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt",
+      "best_average_faults": 31.833333,
+      "best_average_fault_rate": 0.530556,
+      "best_average_winners": [
+        "opt"
+      ],
+      "best_rate_winners": [
+        "opt"
+      ],
+      "fifo_has_anomaly": false,
+      "non_fifo_regression_count": 0,
+      "average_faults": {
+        "fifo": 44.0,
+        "clock": 44.0,
+        "aging": 40.666667,
+        "lru": 40.666667,
+        "opt": 31.833333
+      },
+      "average_fault_rates": {
+        "fifo": 0.733333,
+        "clock": 0.733333,
+        "aging": 0.677778,
+        "lru": 0.677778,
+        "opt": 0.530556
+      }
+    }
+  ]
+}

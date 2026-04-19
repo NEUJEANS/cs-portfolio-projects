@@ -402,7 +402,7 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("Normalized average page-fault rate by workload", svg)
             self.assertIn("compiler-phase-shift", svg)
             self.assertIn(
-                "type,workload,reference_length,best_average_fault_algorithms,best_average_fault_rate_algorithms,fifo_has_anomaly,non_fifo_regression_count,fifo_avg_faults,clock_avg_faults,aging_avg_faults,lru_avg_faults,opt_avg_faults,fifo_avg_fault_rate,clock_avg_fault_rate,aging_avg_fault_rate,lru_avg_fault_rate,opt_avg_fault_rate",
+                "type,workload,reference_source,reference_length,best_average_fault_algorithms,best_average_fault_rate_algorithms,fifo_has_anomaly,non_fifo_regression_count,fifo_avg_faults,clock_avg_faults,aging_avg_faults,lru_avg_faults,opt_avg_faults,fifo_avg_fault_rate,clock_avg_fault_rate,aging_avg_fault_rate,lru_avg_fault_rate,opt_avg_fault_rate",
                 csv_output,
             )
             self.assertEqual({entry["workload"] for entry in payload["workloads"]}, {"classic-belady", "compiler-phase-shift"})
@@ -437,6 +437,83 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertEqual(payload["workloads"][0]["reference_source"], "benchmark:db-hotset-scan")
             self.assertGreater(payload["workloads"][0]["average_fault_rates"]["fifo"], 0)
             self.assertIn("overall_best_rate_winners", payload["summary"])
+
+
+    def test_cli_aggregate_accepts_imported_pages_file_workloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            custom_path = Path(tmpdir) / "mobile-app-session.txt"
+            custom_path.write_text(
+                "1 2 3 1 2 4 1 2 5 6 7 5 6 7 8 9 8 9\n",
+                encoding="utf-8",
+            )
+            artifact_dir = Path(tmpdir) / "aggregate"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "aggregate",
+                    "--min-frames",
+                    "3",
+                    "--max-frames",
+                    "6",
+                    "--preset",
+                    "classic-belady",
+                    "--pages-file",
+                    str(custom_path),
+                    "--artifact-dir",
+                    str(artifact_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            payload = json.loads((artifact_dir / "aggregate-summary.json").read_text(encoding="utf-8"))
+            html = (artifact_dir / "index.html").read_text(encoding="utf-8")
+            csv_output = (artifact_dir / "aggregate-workload-comparison.csv").read_text(encoding="utf-8")
+
+            self.assertIn("aggregate workloads: 2", completed.stdout)
+            self.assertEqual(payload["summary"]["workload_count"], 2)
+            self.assertEqual(payload["summary"]["benchmark_count"], 0)
+            self.assertEqual(payload["summary"]["custom_count"], 1)
+            custom_workload = next(entry for entry in payload["workloads"] if entry["type"] == "custom")
+            self.assertEqual(custom_workload["workload"], "mobile-app-session")
+            self.assertTrue(custom_workload["reference_source"].startswith("pages-file:"))
+            self.assertIn("custom imported trace", html)
+            self.assertIn("pages-file:", html)
+            self.assertIn("custom,mobile-app-session,pages-file:", csv_output)
+
+    def test_cli_aggregate_json_with_only_pages_file_skips_default_presets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            custom_path = Path(tmpdir) / "one-off-trace.json"
+            custom_path.write_text(json.dumps([1, 2, 3, 1, 2, 4, 5, 4, 5, 6, 7, 6, 7]), encoding="utf-8")
+            artifact_dir = Path(tmpdir) / "aggregate"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "aggregate",
+                    "--min-frames",
+                    "2",
+                    "--max-frames",
+                    "5",
+                    "--pages-file",
+                    str(custom_path),
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["summary"]["workload_count"], 1)
+            self.assertEqual(payload["summary"]["custom_count"], 1)
+            self.assertEqual(payload["summary"]["benchmark_count"], 0)
+            self.assertEqual(payload["workloads"][0]["type"], "custom")
+            self.assertEqual(payload["workloads"][0]["workload"], "one-off-trace")
+            self.assertTrue(payload["workloads"][0]["reference_source"].startswith("pages-file:"))
 
     def test_cli_rejects_missing_reference(self) -> None:
         completed = subprocess.run(

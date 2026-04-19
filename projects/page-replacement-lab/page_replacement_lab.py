@@ -570,6 +570,29 @@ def workload_from_benchmark(benchmark: TraceBenchmark) -> GalleryWorkload:
     )
 
 
+def describe_pages_file(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(path)
+
+
+def workload_from_pages_file(path: Path) -> GalleryWorkload:
+    display_path = describe_pages_file(path)
+    return GalleryWorkload(
+        name=path.stem,
+        description=f"custom imported trace from {display_path}",
+        reference_string=tuple(
+            parse_reference_text(
+                path.read_text(encoding="utf-8"),
+                source_label=f"pages file {display_path}",
+            )
+        ),
+        reference_source=f"pages-file:{display_path}",
+        source_kind="custom",
+    )
+
+
 def parse_reference_args(
     pages: list[str],
     pages_file: str | None,
@@ -728,6 +751,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-benchmarks",
         action="store_true",
         help="add all built-in trace benchmarks to the default preset aggregate run",
+    )
+    aggregate_parser.add_argument(
+        "--pages-file",
+        dest="aggregate_pages_files",
+        action="append",
+        metavar="PATH",
+        type=Path,
+        help="repeat to include imported custom trace files in the aggregate dashboard",
     )
     aggregate_parser.add_argument(
         "--artifact-dir",
@@ -1254,22 +1285,40 @@ def resolve_gallery_workloads(
     selected_presets: list[str] | None,
     selected_benchmarks: list[str] | None,
     *,
+    selected_pages_files: list[Path] | None = None,
     include_benchmarks: bool,
 ) -> list[GalleryWorkload]:
     ordered: list[GalleryWorkload] = []
-    seen: set[str] = set()
+    seen_sources: set[str] = set()
+    seen_names: set[str] = set()
 
     def add_workload(workload: GalleryWorkload) -> None:
-        if workload.reference_source in seen:
+        if workload.reference_source in seen_sources:
             return
+        unique_name = workload.name
+        suffix = 2
+        while unique_name in seen_names:
+            unique_name = f"{workload.name}-{suffix}"
+            suffix += 1
+        if unique_name != workload.name:
+            workload = GalleryWorkload(
+                name=unique_name,
+                description=workload.description,
+                reference_string=workload.reference_string,
+                reference_source=workload.reference_source,
+                source_kind=workload.source_kind,
+            )
         ordered.append(workload)
-        seen.add(workload.reference_source)
+        seen_sources.add(workload.reference_source)
+        seen_names.add(workload.name)
 
-    if selected_presets or selected_benchmarks:
+    if selected_presets or selected_benchmarks or selected_pages_files:
         for name in selected_presets or []:
             add_workload(workload_from_preset(resolve_preset(name)))
         for name in selected_benchmarks or []:
             add_workload(workload_from_benchmark(resolve_trace_benchmark(name)))
+        for path in selected_pages_files or []:
+            add_workload(workload_from_pages_file(path))
         return ordered
 
     for preset in list_workload_presets():
@@ -1628,8 +1677,14 @@ def summarize_aggregate_runs(aggregate_runs: list[dict]) -> dict:
         / len(aggregate_runs)
         for algorithm in ALGORITHMS
     }
+    preset_count = sum(
+        1 for run in aggregate_runs if run["workload"].source_kind == "preset"
+    )
     benchmark_count = sum(
         1 for run in aggregate_runs if run["workload"].source_kind == "benchmark"
+    )
+    custom_count = sum(
+        1 for run in aggregate_runs if run["workload"].source_kind == "custom"
     )
     fifo_anomaly_count = sum(1 for run in aggregate_runs if run["fifo_has_anomaly"])
     non_fifo_regression_count = sum(
@@ -1637,7 +1692,9 @@ def summarize_aggregate_runs(aggregate_runs: list[dict]) -> dict:
     )
     return {
         "workload_count": len(aggregate_runs),
+        "preset_count": preset_count,
         "benchmark_count": benchmark_count,
+        "custom_count": custom_count,
         "fifo_anomaly_count": fifo_anomaly_count,
         "non_fifo_regression_count": non_fifo_regression_count,
         "winner_counts": winner_counts,
@@ -1653,6 +1710,7 @@ def write_aggregate_csv(path: Path, aggregate_runs: list[dict]) -> None:
         fieldnames = [
             "type",
             "workload",
+            "reference_source",
             "reference_length",
             "best_average_fault_algorithms",
             "best_average_fault_rate_algorithms",
@@ -1667,6 +1725,7 @@ def write_aggregate_csv(path: Path, aggregate_runs: list[dict]) -> None:
             row = {
                 "type": run["workload"].source_kind,
                 "workload": run["workload"].name,
+                "reference_source": run["workload"].reference_source,
                 "reference_length": run["reference_length"],
                 "best_average_fault_algorithms": "/".join(run["best_average_winners"]),
                 "best_average_fault_rate_algorithms": "/".join(run["best_rate_winners"]),
@@ -1834,7 +1893,7 @@ def format_aggregate_svg(
         for algorithm in ALGORITHMS
     )
     summary_lines = [
-        f"frame range: {min_frames} to {max_frames} frames across {summary['workload_count']} workloads ({summary['benchmark_count']} benchmarks)",
+        f"frame range: {min_frames} to {max_frames} frames across {summary['workload_count']} workloads ({summary['benchmark_count']} benchmarks, {summary['custom_count']} custom traces)",
         f"overall best normalized average fault rate: {overall_winners}",
         f"winner tally: {winner_tally}",
         f"FIFO anomalies in {summary['fifo_anomaly_count']} workloads; non-FIFO regressions in {summary['non_fifo_regression_count']} workloads",
@@ -1915,7 +1974,7 @@ def format_aggregate_html(
         workload_rows.append(
             "<tr>"
             f"<td>{escape(workload.source_kind)}</td>"
-            f"<td><code>{escape(workload.name)}</code><div class=\"muted\">len {run['reference_length']}</div></td>"
+            f"<td><code>{escape(workload.name)}</code><div class=\"muted\">len {run['reference_length']}</div><div class=\"muted\">{escape(workload.reference_source)}</div></td>"
             f"<td>{escape(workload.description)}</td>"
             f"<td>{escape('/'.join(algorithm.upper() for algorithm in run['best_rate_winners']))}<div class=\"muted\">{escape(format_percentage(run['best_average_fault_rate']))}</div></td>"
             f"<td>{'yes' if run['fifo_has_anomaly'] else 'no'}</td>"
@@ -1966,10 +2025,11 @@ def format_aggregate_html(
     <main>
       <section class="hero">
         <h1>Page Replacement Aggregate Dashboard</h1>
-        <p>Cross-workload summary for <code>page-replacement-lab</code>. This dashboard normalizes page faults by reference length so the compact presets and heavier benchmark traces can share the same slide-ready comparison chart.</p>
+        <p>Cross-workload summary for <code>page-replacement-lab</code>. This dashboard normalizes page faults by reference length so compact presets, heavier benchmark traces, and imported custom traces can share the same slide-ready comparison chart.</p>
         <ul class="summary-grid">
           <li><strong>{summary['workload_count']}</strong> workloads</li>
           <li><strong>{summary['benchmark_count']}</strong> trace benchmarks</li>
+          <li><strong>{summary['custom_count']}</strong> custom traces</li>
           <li><strong>{min_frames}–{max_frames}</strong> frame range</li>
           <li><strong>{'/'.join(algorithm.upper() for algorithm in summary['overall_best_rate_winners'])}</strong> overall normalized winner</li>
           <li><strong>{summary['fifo_anomaly_count']}</strong> FIFO anomaly workloads</li>
@@ -2781,6 +2841,7 @@ def main(argv: list[str] | None = None) -> int:
             workloads = resolve_gallery_workloads(
                 args.aggregate_presets,
                 args.aggregate_benchmarks,
+                selected_pages_files=args.aggregate_pages_files,
                 include_benchmarks=args.include_benchmarks,
             )
             html_path = args.html_out or (args.artifact_dir / "index.html")
