@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regex engine lab showcase</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1480px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    h1, h2 { line-height: 1.12; }
+    p, dd { line-height: 1.55; }
+    code { font-family: "SFMono-Regular", ui-monospace, monospace; word-break: break-word; }
+    .hero, .trace-card, .benchmark-card { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.35rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06); }
+    .hero { padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.95), rgba(236, 253, 245, 0.95)); }
+    .hero-meta, .chip-row { display: flex; flex-wrap: wrap; gap: 0.7rem; }
+    .hero-meta { margin-top: 1rem; }
+    .eyebrow { margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }
+    .lede { margin-top: 0.45rem; }
+    .subtle { color: #475569; }
+    .chip { display: inline-flex; align-items: center; padding: 0.42rem 0.72rem; border-radius: 999px; background: rgba(224, 231, 255, 0.88); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; text-decoration: none; font-size: 0.93rem; }
+    .chip.muted { background: rgba(226, 232, 240, 0.78); border-color: rgba(148, 163, 184, 0.3); color: #475569; }
+    .section-title { margin: 1.8rem 0 0.85rem; }
+    .trace-grid, .benchmark-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+    .trace-card, .benchmark-card { padding: 1rem; }
+    .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem 1rem; margin: 0.95rem 0; }
+    .metric-grid dt { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+    .metric-grid dd { margin: 0.15rem 0 0; }
+    iframe { width: 100%; min-height: 420px; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; margin-top: 0.9rem; }
+    .actions { margin-top: 0.9rem; }
+    @media (max-width: 820px) {
+      main { padding: 1rem 0.75rem 2rem; }
+      .metric-grid { grid-template-columns: 1fr; }
+      iframe { min-height: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Regex engine lab</p>
+      <h1>Combined showcase: traces + benchmark dashboards</h1>
+      <p>One browser-friendly landing page for the committed teaching artifacts in <code>regex-engine-lab</code>. Reviewers can start with the two step-by-step Thompson-NFA traces, then jump straight into the benchmark dashboards that use the same regex cases in interview-demo and broader portfolio workloads.</p>
+      <div class="hero-meta">
+        <span class="chip">Generated 2026-04-19T19:20:13Z</span>
+        <span class="chip">2 trace artifact(s)</span>
+        <span class="chip">3 benchmark dashboard(s)</span>
+      </div>
+    </section>
+    <h2 class="section-title">Trace walk-throughs</h2>
+    <section class="trace-grid">
+      <article class="trace-card">
+      <p class="eyebrow">Trace artifact</p>
+      <h2>Anchored ID fullmatch trace</h2>
+      <p class="lede">Matched via fullmatch mode.</p>
+      <dl class="metric-grid">
+        <div><dt>Pattern</dt><dd><code>^ID-\d\d\d\d-\w+$</code></dd></div>
+        <div><dt>Text</dt><dd><code>ID-2026-demo_user</code></dd></div>
+        <div><dt>Summary</dt><dd>17 consume steps · ran to the final closure</dd></div>
+        <div><dt>Raw JSON</dt><dd><a href="trace-id-fullmatch.json">trace-id-fullmatch.json</a></dd></div>
+      </dl>
+      <p class="subtle">Also appears in these committed benchmark dashboards:</p>
+      <div class="chip-row"><a class="chip" href="benchmark-sample-suite.html">sample-suite dashboard</a><a class="chip" href="benchmark-portfolio-workload.html">portfolio-workload dashboard</a><a class="chip" href="benchmark-interview-demo.html">interview-demo dashboard</a></div>
+    </article><article class="trace-card">
+      <p class="eyebrow">Trace artifact</p>
+      <h2>Pet search trace</h2>
+      <p class="lede">Matched via search mode.</p>
+      <dl class="metric-grid">
+        <div><dt>Pattern</dt><dd><code>(cat|dog)s?</code></dd></div>
+        <div><dt>Text</dt><dd><code>xxdogs</code></dd></div>
+        <div><dt>Summary</dt><dd>3 start-offset attempts · 6 consume steps · leftmost match &#x27;dogs&#x27;</dd></div>
+        <div><dt>Raw JSON</dt><dd><a href="trace-dogs-search.json">trace-dogs-search.json</a></dd></div>
+      </dl>
+      <p class="subtle">Also appears in these committed benchmark dashboards:</p>
+      <div class="chip-row"><a class="chip" href="benchmark-sample-suite.html">sample-suite dashboard</a><a class="chip" href="benchmark-portfolio-workload.html">portfolio-workload dashboard</a><a class="chip" href="benchmark-interview-demo.html">interview-demo dashboard</a></div>
+    </article>
+    </section>
+    <h2 class="section-title">Benchmark dashboards</h2>
+    <section class="benchmark-grid">
+      <article class="benchmark-card">
+      <p class="eyebrow">Benchmark dashboard</p>
+      <h2>Sample suite dashboard</h2>
+      <p class="lede"><strong>sample-suite</strong> · 3 case(s) · all cases agree</p>
+      <p class="subtle">Source: <code>built-in defaults</code><br>Filters: <code>none</code></p>
+      <div class="chip-row"><span class="chip">alternation</span><span class="chip">anchored</span><span class="chip">interview-demo</span><span class="chip">portfolio-batch</span><span class="chip">search</span><span class="chip">shorthand</span></div>
+      <iframe src="benchmark-sample-suite.html" title="Sample suite dashboard" loading="lazy"></iframe>
+      <div class="chip-row actions">
+        <a class="chip" href="benchmark-sample-suite.html">Open HTML</a>
+        <a class="chip" href="benchmark-sample-suite.md">Open Markdown</a>
+        <a class="chip" href="benchmark-sample-suite.json">Open JSON</a>
+      </div>
+    </article><article class="benchmark-card">
+      <p class="eyebrow">Benchmark dashboard</p>
+      <h2>Portfolio workload dashboard</h2>
+      <p class="lede"><strong>portfolio-workload</strong> · 4 case(s) · all cases agree</p>
+      <p class="subtle">Source: <code>docs/examples/regex-engine-benchmark-suite.json</code><br>Filters: <code>none</code></p>
+      <div class="chip-row"><span class="chip">alternation</span><span class="chip">anchored</span><span class="chip">interview-demo</span><span class="chip">portfolio-batch</span><span class="chip">search</span><span class="chip">shorthand</span><span class="chip">whitespace</span></div>
+      <iframe src="benchmark-portfolio-workload.html" title="Portfolio workload dashboard" loading="lazy"></iframe>
+      <div class="chip-row actions">
+        <a class="chip" href="benchmark-portfolio-workload.html">Open HTML</a>
+        <a class="chip" href="benchmark-portfolio-workload.md">Open Markdown</a>
+        <a class="chip" href="benchmark-portfolio-workload.json">Open JSON</a>
+      </div>
+    </article><article class="benchmark-card">
+      <p class="eyebrow">Benchmark dashboard</p>
+      <h2>Interview demo dashboard</h2>
+      <p class="lede"><strong>interview-demo</strong> · 2 case(s) · all cases agree</p>
+      <p class="subtle">Source: <code>docs/examples/regex-engine-benchmark-suite.json</code><br>Filters: <code>include interview-demo · exclude none</code></p>
+      <div class="chip-row"><span class="chip">alternation</span><span class="chip">anchored</span><span class="chip">interview-demo</span><span class="chip">search</span><span class="chip">shorthand</span></div>
+      <iframe src="benchmark-interview-demo.html" title="Interview demo dashboard" loading="lazy"></iframe>
+      <div class="chip-row actions">
+        <a class="chip" href="benchmark-interview-demo.html">Open HTML</a>
+        <a class="chip" href="benchmark-interview-demo.md">Open Markdown</a>
+        <a class="chip" href="benchmark-interview-demo.json">Open JSON</a>
+      </div>
+    </article>
+    </section>
+  </main>
+</body>
+</html>

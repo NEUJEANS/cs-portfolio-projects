@@ -12,10 +12,13 @@ from regex_engine_lab import (
     BenchmarkSuiteError,
     RegexEngine,
     RegexSyntaxError,
+    build_showcase_paths,
+    build_showcase_report,
     filter_benchmark_cases,
     load_benchmark_suite,
     render_benchmark_html,
     render_benchmark_markdown,
+    render_showcase_html,
     run_benchmark_report,
 )
 
@@ -175,6 +178,103 @@ class RegexEngineTests(unittest.TestCase):
         self.assertIn("<code>dogs</code>", html)
         self.assertIn("agreement: yes", html)
         self.assertIn("search · 1", html)
+
+    def test_build_showcase_paths_defaults_to_output_directory(self) -> None:
+        paths = build_showcase_paths(html_out=Path("docs/artifacts/regex-engine-lab/showcase.html"))
+        self.assertEqual(paths["trace-id-fullmatch"], Path("docs/artifacts/regex-engine-lab/trace-id-fullmatch.json"))
+        self.assertEqual(
+            paths["benchmark-interview-demo_html"],
+            Path("docs/artifacts/regex-engine-lab/benchmark-interview-demo.html"),
+        )
+
+    def test_build_showcase_report_links_traces_to_related_dashboards(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            html_out = temp_path / "showcase.html"
+            (temp_path / "trace-id-fullmatch.json").write_text(
+                json.dumps(
+                    {
+                        "pattern": r"^ID-\d+$",
+                        "mode": "fullmatch",
+                        "text": "ID-42",
+                        "matched": True,
+                        "stopped_early": False,
+                        "steps": [
+                            {"phase": "start"},
+                            {"phase": "consume"},
+                            {"phase": "consume"},
+                        ],
+                    }
+                )
+            )
+            (temp_path / "trace-dogs-search.json").write_text(
+                json.dumps(
+                    {
+                        "pattern": "(cat|dog)s?",
+                        "mode": "search",
+                        "text": "xxdogs",
+                        "matched": True,
+                        "result": {"matched": True, "start": 2, "end": 6, "match": "dogs"},
+                        "attempts": [
+                            {"steps": [{"phase": "start"}, {"phase": "consume"}]},
+                            {"steps": [{"phase": "start"}, {"phase": "consume"}, {"phase": "consume"}]},
+                        ],
+                    }
+                )
+            )
+            benchmark_payloads = {
+                "benchmark-sample-suite": {
+                    "suite_label": "sample-suite",
+                    "case_count": 2,
+                    "all_cases_agree": True,
+                    "suite_tags": ["anchored", "interview-demo", "search"],
+                    "case_definitions": [
+                        {"label": "id", "pattern": r"^ID-\d+$", "text": "ID-42", "mode": "fullmatch"},
+                        {"label": "dogs", "pattern": "(cat|dog)s?", "text": "xxdogs", "mode": "search"},
+                    ],
+                },
+                "benchmark-portfolio-workload": {
+                    "suite_label": "portfolio-workload",
+                    "case_count": 1,
+                    "all_cases_agree": True,
+                    "suite_tags": ["anchored"],
+                    "case_definitions": [
+                        {"label": "id", "pattern": r"^ID-\d+$", "text": "ID-42", "mode": "fullmatch"},
+                    ],
+                },
+                "benchmark-interview-demo": {
+                    "suite_label": "interview-demo",
+                    "case_count": 1,
+                    "all_cases_agree": True,
+                    "suite_tags": ["interview-demo", "search"],
+                    "applied_filters": {"include_tags": ["interview-demo"], "exclude_tags": []},
+                    "case_definitions": [
+                        {"label": "dogs", "pattern": "(cat|dog)s?", "text": "xxdogs", "mode": "search"},
+                    ],
+                },
+            }
+            for stem, payload in benchmark_payloads.items():
+                (temp_path / f"{stem}.json").write_text(json.dumps(payload))
+                (temp_path / f"{stem}.md").write_text(f"# {stem}\n")
+                (temp_path / f"{stem}.html").write_text(f"<html><body>{stem}</body></html>")
+
+            showcase = build_showcase_report(html_out=html_out, artifact_dir=temp_path)
+            self.assertEqual(showcase["trace_count"], 2)
+            self.assertEqual(showcase["benchmark_count"], 3)
+            traces = {trace["title"]: trace for trace in showcase["traces"]}
+            self.assertEqual(
+                [link["label"] for link in traces["Anchored ID fullmatch trace"]["related_dashboards"]],
+                ["sample-suite", "portfolio-workload"],
+            )
+            self.assertEqual(
+                [link["label"] for link in traces["Pet search trace"]["related_dashboards"]],
+                ["sample-suite", "interview-demo"],
+            )
+            html = render_showcase_html(showcase)
+            self.assertIn("Combined showcase: traces + benchmark dashboards", html)
+            self.assertIn("sample-suite dashboard", html)
+            self.assertIn("interview-demo dashboard", html)
+            self.assertIn("iframe", html)
 
     def test_load_benchmark_suite_reads_named_cases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -507,6 +607,72 @@ class RegexEngineCliTests(unittest.TestCase):
             self.assertEqual(payload["case_count"], 1)
             self.assertEqual([case["label"] for case in payload["cases"]], ["anchored-id"])
             self.assertEqual(payload["applied_filters"], {"include_tags": ["interview-demo"], "exclude_tags": ["search"]})
+
+    def test_cli_showcase_demo_writes_combined_showcase_page(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            (temp_path / "trace-id-fullmatch.json").write_text(
+                json.dumps(
+                    {
+                        "pattern": r"^ID-\d+$",
+                        "mode": "fullmatch",
+                        "text": "ID-42",
+                        "matched": True,
+                        "stopped_early": False,
+                        "steps": [{"phase": "start"}, {"phase": "consume"}],
+                    }
+                )
+            )
+            (temp_path / "trace-dogs-search.json").write_text(
+                json.dumps(
+                    {
+                        "pattern": "(cat|dog)s?",
+                        "mode": "search",
+                        "text": "xxdogs",
+                        "matched": True,
+                        "result": {"matched": True, "start": 2, "end": 6, "match": "dogs"},
+                        "attempts": [{"steps": [{"phase": "start"}, {"phase": "consume"}]}],
+                    }
+                )
+            )
+            for stem, payload in {
+                "benchmark-sample-suite": {
+                    "suite_label": "sample-suite",
+                    "case_count": 1,
+                    "all_cases_agree": True,
+                    "suite_tags": ["anchored"],
+                    "case_definitions": [{"label": "id", "pattern": r"^ID-\d+$", "text": "ID-42", "mode": "fullmatch"}],
+                },
+                "benchmark-portfolio-workload": {
+                    "suite_label": "portfolio-workload",
+                    "case_count": 1,
+                    "all_cases_agree": True,
+                    "suite_tags": ["portfolio-batch"],
+                    "case_definitions": [{"label": "id", "pattern": r"^ID-\d+$", "text": "ID-42", "mode": "fullmatch"}],
+                },
+                "benchmark-interview-demo": {
+                    "suite_label": "interview-demo",
+                    "case_count": 1,
+                    "all_cases_agree": True,
+                    "suite_tags": ["interview-demo", "search"],
+                    "case_definitions": [{"label": "dogs", "pattern": "(cat|dog)s?", "text": "xxdogs", "mode": "search"}],
+                },
+            }.items():
+                (temp_path / f"{stem}.json").write_text(json.dumps(payload))
+                (temp_path / f"{stem}.md").write_text(f"# {stem}\n")
+                (temp_path / f"{stem}.html").write_text(f"<html><body>{stem}</body></html>")
+
+            html_path = temp_path / "showcase.html"
+            completed = self.run_cli("showcase-demo", "--html-out", str(html_path), "--artifact-dir", str(temp_path))
+            self.assertEqual(completed.returncode, 0)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "showcase-demo")
+            self.assertEqual(payload["trace_count"], 2)
+            self.assertTrue(html_path.exists())
+            html = html_path.read_text()
+            self.assertIn("Combined showcase: traces + benchmark dashboards", html)
+            self.assertIn("sample-suite dashboard", html)
+            self.assertIn("interview-demo dashboard", html)
 
     def test_cli_reports_invalid_benchmark_suite_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

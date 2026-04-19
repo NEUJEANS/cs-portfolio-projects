@@ -78,3 +78,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-19 combined showcase slice
+- [x] inspect the current regex engine lab and choose the combined trace+benchmark showcase as the next portfolio-friendly upgrade
+- [x] capture a brief research note on why a single landing page helps the portfolio narrative more than another isolated artifact
+- [x] do a short static-HTML / relative-path refresh and self-test for linking committed artifacts without a frontend build step
+- [x] add a resumable slice checklist entry for this upgrade
+- [x] implement `showcase-demo --html-out ... --artifact-dir ...` to build a combined landing page over the committed traces and benchmark dashboards
+- [x] cross-link each trace artifact to the benchmark dashboards that exercise the same regex case
+- [x] add regression coverage for showcase path resolution, related-dashboard matching, HTML rendering, and CLI writing
+- [x] generate the committed showcase artifact and document it in the README
+- [x] run tests and smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [ ] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

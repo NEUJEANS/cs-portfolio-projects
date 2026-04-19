@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 import string
 import time
@@ -22,6 +23,10 @@ class RegexSyntaxError(ValueError):
 
 class BenchmarkSuiteError(ValueError):
     """Raised when a benchmark suite file is invalid."""
+
+
+class ShowcaseArtifactError(ValueError):
+    """Raised when the combined showcase page cannot be built from the committed artifacts."""
 
 
 @dataclass(frozen=True)
@@ -113,6 +118,17 @@ DEFAULT_BENCHMARK_CASES: tuple[BenchmarkCase, ...] = (
         mode="search",
         tags=("portfolio-batch", "search", "shorthand"),
     ),
+)
+
+SHOWCASE_TRACE_ARTIFACTS: tuple[tuple[str, str], ...] = (
+    ("trace-id-fullmatch", "Anchored ID fullmatch trace"),
+    ("trace-dogs-search", "Pet search trace"),
+)
+
+SHOWCASE_BENCHMARK_ARTIFACTS: tuple[tuple[str, str], ...] = (
+    ("benchmark-sample-suite", "Sample suite dashboard"),
+    ("benchmark-portfolio-workload", "Portfolio workload dashboard"),
+    ("benchmark-interview-demo", "Interview demo dashboard"),
 )
 
 
@@ -1163,6 +1179,257 @@ def render_benchmark_html(report: dict[str, object]) -> str:
 '''
 
 
+def build_showcase_paths(*, html_out: str | Path, artifact_dir: str | Path | None = None) -> dict[str, Path]:
+    output_path = Path(html_out)
+    base_dir = Path(artifact_dir) if artifact_dir is not None else output_path.parent
+    paths: dict[str, Path] = {}
+    for stem, _title in SHOWCASE_TRACE_ARTIFACTS:
+        paths[stem] = base_dir / f"{stem}.json"
+    for stem, _title in SHOWCASE_BENCHMARK_ARTIFACTS:
+        paths[f"{stem}_html"] = base_dir / f"{stem}.html"
+        paths[f"{stem}_markdown"] = base_dir / f"{stem}.md"
+        paths[f"{stem}_json"] = base_dir / f"{stem}.json"
+    return paths
+
+
+def _relative_href(target: Path, *, html_out: Path) -> str:
+    return Path(os.path.relpath(target, start=html_out.parent)).as_posix()
+
+
+def _load_json_object(path: Path, *, label: str) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise ShowcaseArtifactError(f"missing {label}: {path}") from error
+    except json.JSONDecodeError as error:
+        raise ShowcaseArtifactError(
+            f"invalid JSON in {label} ({path}): {error.msg} at line {error.lineno} column {error.colno}"
+        ) from error
+    if not isinstance(payload, dict):
+        raise ShowcaseArtifactError(f"{label} must contain a top-level JSON object: {path}")
+    return payload
+
+
+def build_showcase_report(*, html_out: str | Path, artifact_dir: str | Path | None = None) -> dict[str, object]:
+    output_path = Path(html_out)
+    paths = build_showcase_paths(html_out=output_path, artifact_dir=artifact_dir)
+
+    trace_payloads: dict[str, dict[str, object]] = {}
+    benchmark_payloads: dict[str, dict[str, object]] = {}
+    for stem, title in SHOWCASE_TRACE_ARTIFACTS:
+        trace_payloads[stem] = _load_json_object(paths[stem], label=title)
+    for stem, title in SHOWCASE_BENCHMARK_ARTIFACTS:
+        benchmark_payloads[stem] = _load_json_object(paths[f"{stem}_json"], label=title)
+
+    benchmark_matches: dict[tuple[str, str], list[dict[str, str]]] = {}
+    benchmarks: list[dict[str, object]] = []
+    for stem, title in SHOWCASE_BENCHMARK_ARTIFACTS:
+        report = benchmark_payloads[stem]
+        suite_label = str(report.get("suite_label", stem))
+        html_path = paths[f"{stem}_html"]
+        markdown_path = paths[f"{stem}_markdown"]
+        json_path = paths[f"{stem}_json"]
+        for required_path, label_suffix in ((html_path, "HTML dashboard"), (markdown_path, "Markdown report")):
+            if not required_path.exists():
+                raise ShowcaseArtifactError(f"missing {title} {label_suffix.lower()}: {required_path}")
+        filters = report.get("applied_filters")
+        filter_text = "none"
+        if isinstance(filters, dict):
+            include_tags = filters.get("include_tags") or []
+            exclude_tags = filters.get("exclude_tags") or []
+            filter_text = (
+                f"include {', '.join(str(tag) for tag in include_tags) if include_tags else 'none'}"
+                f" · exclude {', '.join(str(tag) for tag in exclude_tags) if exclude_tags else 'none'}"
+            )
+        benchmark_entry = {
+            "title": title,
+            "suite_label": suite_label,
+            "case_count": int(report.get("case_count", 0)),
+            "all_cases_agree": bool(report.get("all_cases_agree", False)),
+            "suite_tags": [str(tag) for tag in report.get("suite_tags", [])],
+            "filter_text": filter_text,
+            "html_href": _relative_href(html_path, html_out=output_path),
+            "markdown_href": _relative_href(markdown_path, html_out=output_path),
+            "json_href": _relative_href(json_path, html_out=output_path),
+            "source": str(report.get("suite_source", "built-in/default or ad-hoc CLI case")),
+        }
+        benchmarks.append(benchmark_entry)
+
+        for case_definition in report.get("case_definitions", []):
+            if not isinstance(case_definition, dict):
+                continue
+            pattern = case_definition.get("pattern")
+            mode = case_definition.get("mode", "fullmatch")
+            if not isinstance(pattern, str) or not isinstance(mode, str):
+                continue
+            benchmark_matches.setdefault((pattern, mode), []).append(
+                {"label": suite_label, "href": benchmark_entry["html_href"]}
+            )
+
+    traces: list[dict[str, object]] = []
+    for stem, title in SHOWCASE_TRACE_ARTIFACTS:
+        payload = trace_payloads[stem]
+        json_path = paths[stem]
+        mode = str(payload.get("mode", "fullmatch"))
+        pattern = str(payload.get("pattern", ""))
+        text = str(payload.get("text", ""))
+        matched = bool(payload.get("matched", False))
+        if mode == "search":
+            attempts = payload.get("attempts", [])
+            result = payload.get("result", {}) if isinstance(payload.get("result"), dict) else {}
+            steps = 0
+            if isinstance(attempts, list):
+                steps = sum(
+                    1
+                    for attempt in attempts
+                    if isinstance(attempt, dict)
+                    for step in attempt.get("steps", [])
+                    if isinstance(step, dict) and step.get("phase") == "consume"
+                )
+            match_text = str(result.get("match", "")) if matched else ""
+            detail_line = (
+                f"{len(attempts) if isinstance(attempts, list) else 0} start-offset attempts · "
+                f"{steps} consume steps · leftmost match {match_text!r}"
+            )
+        else:
+            steps = sum(
+                1
+                for step in payload.get("steps", [])
+                if isinstance(step, dict) and step.get("phase") == "consume"
+            )
+            stopped_early = bool(payload.get("stopped_early", False))
+            detail_line = f"{steps} consume steps · {'stopped early' if stopped_early else 'ran to the final closure'}"
+        traces.append(
+            {
+                "title": title,
+                "mode": mode,
+                "pattern": pattern,
+                "text": text,
+                "matched": matched,
+                "detail_line": detail_line,
+                "json_href": _relative_href(json_path, html_out=output_path),
+                "related_dashboards": benchmark_matches.get((pattern, mode), []),
+            }
+        )
+
+    return {
+        "trace_count": len(traces),
+        "benchmark_count": len(benchmarks),
+        "traces": traces,
+        "benchmarks": benchmarks,
+    }
+
+
+def render_showcase_html(showcase: dict[str, object]) -> str:
+    generated = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    traces = list(showcase["traces"])
+    benchmarks = list(showcase["benchmarks"])
+    trace_cards = []
+    for trace in traces:
+        related_dashboards = trace.get("related_dashboards", [])
+        related_html = "".join(
+            f'<a class="chip" href="{_html_escape(link["href"])}">{_html_escape(link["label"])} dashboard</a>'
+            for link in related_dashboards
+        ) or '<span class="chip muted">No related dashboard link yet</span>'
+        trace_cards.append(
+            f'''<article class="trace-card">
+      <p class="eyebrow">Trace artifact</p>
+      <h2>{_html_escape(trace['title'])}</h2>
+      <p class="lede">{_html_escape('Matched' if trace['matched'] else 'Did not match')} via {_html_escape(trace['mode'])} mode.</p>
+      <dl class="metric-grid">
+        <div><dt>Pattern</dt><dd><code>{_html_escape(trace['pattern'])}</code></dd></div>
+        <div><dt>Text</dt><dd><code>{_html_escape(trace['text'])}</code></dd></div>
+        <div><dt>Summary</dt><dd>{_html_escape(trace['detail_line'])}</dd></div>
+        <div><dt>Raw JSON</dt><dd><a href="{_html_escape(trace['json_href'])}">{_html_escape(trace['json_href'])}</a></dd></div>
+      </dl>
+      <p class="subtle">Also appears in these committed benchmark dashboards:</p>
+      <div class="chip-row">{related_html}</div>
+    </article>'''
+        )
+    benchmark_cards = []
+    for benchmark in benchmarks:
+        tag_html = "".join(
+            f'<span class="chip">{_html_escape(tag)}</span>' for tag in benchmark.get("suite_tags", [])
+        ) or '<span class="chip muted">untagged</span>'
+        benchmark_cards.append(
+            f'''<article class="benchmark-card">
+      <p class="eyebrow">Benchmark dashboard</p>
+      <h2>{_html_escape(benchmark['title'])}</h2>
+      <p class="lede"><strong>{_html_escape(benchmark['suite_label'])}</strong> · {_html_escape(str(benchmark['case_count']))} case(s) · {_html_escape('all cases agree' if benchmark['all_cases_agree'] else 'mismatch present')}</p>
+      <p class="subtle">Source: <code>{_html_escape(benchmark['source'])}</code><br>Filters: <code>{_html_escape(benchmark['filter_text'])}</code></p>
+      <div class="chip-row">{tag_html}</div>
+      <iframe src="{_html_escape(benchmark['html_href'])}" title="{_html_escape(benchmark['title'])}" loading="lazy"></iframe>
+      <div class="chip-row actions">
+        <a class="chip" href="{_html_escape(benchmark['html_href'])}">Open HTML</a>
+        <a class="chip" href="{_html_escape(benchmark['markdown_href'])}">Open Markdown</a>
+        <a class="chip" href="{_html_escape(benchmark['json_href'])}">Open JSON</a>
+      </div>
+    </article>'''
+        )
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regex engine lab showcase</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1480px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2 {{ line-height: 1.12; }}
+    p, dd {{ line-height: 1.55; }}
+    code {{ font-family: "SFMono-Regular", ui-monospace, monospace; word-break: break-word; }}
+    .hero, .trace-card, .benchmark-card {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.35rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06); }}
+    .hero {{ padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.95), rgba(236, 253, 245, 0.95)); }}
+    .hero-meta, .chip-row {{ display: flex; flex-wrap: wrap; gap: 0.7rem; }}
+    .hero-meta {{ margin-top: 1rem; }}
+    .eyebrow {{ margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }}
+    .lede {{ margin-top: 0.45rem; }}
+    .subtle {{ color: #475569; }}
+    .chip {{ display: inline-flex; align-items: center; padding: 0.42rem 0.72rem; border-radius: 999px; background: rgba(224, 231, 255, 0.88); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; text-decoration: none; font-size: 0.93rem; }}
+    .chip.muted {{ background: rgba(226, 232, 240, 0.78); border-color: rgba(148, 163, 184, 0.3); color: #475569; }}
+    .section-title {{ margin: 1.8rem 0 0.85rem; }}
+    .trace-grid, .benchmark-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }}
+    .trace-card, .benchmark-card {{ padding: 1rem; }}
+    .metric-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem 1rem; margin: 0.95rem 0; }}
+    .metric-grid dt {{ font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }}
+    .metric-grid dd {{ margin: 0.15rem 0 0; }}
+    iframe {{ width: 100%; min-height: 420px; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 1rem; background: white; margin-top: 0.9rem; }}
+    .actions {{ margin-top: 0.9rem; }}
+    @media (max-width: 820px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+      .metric-grid {{ grid-template-columns: 1fr; }}
+      iframe {{ min-height: 300px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Regex engine lab</p>
+      <h1>Combined showcase: traces + benchmark dashboards</h1>
+      <p>One browser-friendly landing page for the committed teaching artifacts in <code>regex-engine-lab</code>. Reviewers can start with the two step-by-step Thompson-NFA traces, then jump straight into the benchmark dashboards that use the same regex cases in interview-demo and broader portfolio workloads.</p>
+      <div class="hero-meta">
+        <span class="chip">Generated {generated}</span>
+        <span class="chip">{showcase['trace_count']} trace artifact(s)</span>
+        <span class="chip">{showcase['benchmark_count']} benchmark dashboard(s)</span>
+      </div>
+    </section>
+    <h2 class="section-title">Trace walk-throughs</h2>
+    <section class="trace-grid">
+      {''.join(trace_cards)}
+    </section>
+    <h2 class="section-title">Benchmark dashboards</h2>
+    <section class="benchmark-grid">
+      {''.join(benchmark_cards)}
+    </section>
+  </main>
+</body>
+</html>
+'''
+
+
 def write_text(path_str: str, content: str) -> None:
     path = Path(path_str)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1234,6 +1501,16 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--markdown-out")
     benchmark_parser.add_argument("--html-out")
 
+    showcase_parser = subparsers.add_parser(
+        "showcase-demo",
+        help="write a small HTML hub that links the committed trace artifacts and benchmark dashboards",
+    )
+    showcase_parser.add_argument("--html-out", required=True)
+    showcase_parser.add_argument(
+        "--artifact-dir",
+        help="directory that already contains the committed trace and benchmark artifacts; defaults to the output directory",
+    )
+
     return parser
 
 
@@ -1304,6 +1581,26 @@ def main(argv: list[str] | None = None) -> int:
         if args.html_out:
             write_text(args.html_out, render_benchmark_html(report))
         print(json.dumps(report, indent=2))
+        return 0
+
+    if args.command == "showcase-demo":
+        try:
+            showcase = build_showcase_report(html_out=args.html_out, artifact_dir=args.artifact_dir)
+        except ShowcaseArtifactError as error:
+            print(json.dumps({"error": str(error)}))
+            return 2
+        write_text(args.html_out, render_showcase_html(showcase))
+        print(
+            json.dumps(
+                {
+                    "command": "showcase-demo",
+                    "html_output": args.html_out,
+                    "trace_count": showcase["trace_count"],
+                    "benchmark_count": showcase["benchmark_count"],
+                },
+                indent=2,
+            )
+        )
         return 0
 
     try:
