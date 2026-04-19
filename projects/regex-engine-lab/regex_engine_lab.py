@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 import string
@@ -955,6 +956,213 @@ def render_benchmark_markdown(report: dict[str, object]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _html_escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def render_benchmark_html(report: dict[str, object]) -> str:
+    cases = list(report["cases"])
+    mode_counts = {"fullmatch": 0, "search": 0}
+    faster_counts = {"lab": 0, "python_re": 0, "tie": 0}
+    tag_counts: dict[str, int] = {}
+    ratio_values: list[float] = []
+    for case in cases:
+        mode_counts[str(case["mode"])] = mode_counts.get(str(case["mode"]), 0) + 1
+        faster_counts[str(case["faster_engine"])] = faster_counts.get(str(case["faster_engine"]), 0) + 1
+        for tag in case.get("tags", []):
+            tag_counts[str(tag)] = tag_counts.get(str(tag), 0) + 1
+        ratio = case.get("lab_vs_python_elapsed_ratio")
+        if isinstance(ratio, (int, float)):
+            ratio_values.append(float(ratio))
+
+    avg_ratio = sum(ratio_values) / len(ratio_values) if ratio_values else None
+    generated = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    filters = report.get("applied_filters")
+    filter_text = "None"
+    if filters:
+        filter_text = (
+            f"include {', '.join(filters['include_tags']) if filters['include_tags'] else 'none'} · "
+            f"exclude {', '.join(filters['exclude_tags']) if filters['exclude_tags'] else 'none'}"
+        )
+    tag_chip_html = "".join(
+        f'<span class="chip">{_html_escape(tag)} · {count}</span>' for tag, count in sorted(tag_counts.items())
+    ) or '<span class="chip muted">No tags</span>'
+
+    summary_cards = [
+        ("Cases", str(report["case_count"]), "Named benchmark cases included in this report."),
+        ("Agreement", "All cases agree" if report["all_cases_agree"] else "Mismatch present", "Whether the lab and Python re returned the same semantic result."),
+        ("Modes", f"{mode_counts.get('fullmatch', 0)} fullmatch · {mode_counts.get('search', 0)} search", "Split between anchored whole-string checks and substring searches."),
+        (
+            "Speed ratio",
+            f"{avg_ratio:.1f}× lab/python elapsed" if avg_ratio is not None else "n/a",
+            "Average elapsed-time ratio across the cases in this suite.",
+        ),
+    ]
+    summary_cards_html = "\n".join(
+        f'''<article class="summary-card">
+      <p class="summary-label">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description in summary_cards
+    )
+
+    case_rows = []
+    case_cards = []
+    for case in cases:
+        lab_elapsed_ms = float(case["lab"]["elapsed_seconds"]) * 1000.0
+        python_elapsed_ms = float(case["python_re"]["elapsed_seconds"]) * 1000.0
+        lab_ops = case["lab"]["ops_per_second"]
+        python_ops = case["python_re"]["ops_per_second"]
+        ratio = case.get("lab_vs_python_elapsed_ratio")
+        agreement_text = "yes" if case["agreement"] else "no"
+        faster_engine = str(case["faster_engine"]).replace("python_re", "python re")
+        row_class = "agree" if case["agreement"] else "disagree"
+        lab_ops_text = f"{float(lab_ops):.1f}" if lab_ops is not None else "n/a"
+        python_ops_text = f"{float(python_ops):.1f}" if python_ops is not None else "n/a"
+        ratio_text = f"{float(ratio):.1f}×" if ratio is not None else "n/a"
+        ratio_detail_text = f"{float(ratio):.1f}× lab/python" if ratio is not None else "n/a"
+        case_tag_html = "".join(f'<span class="chip">{_html_escape(tag)}</span>' for tag in case.get("tags", [])) or '<span class="chip muted">untagged</span>'
+        case_rows.append(
+            f'''<tr class="{row_class}">
+        <td><code>{_html_escape(case['label'])}</code></td>
+        <td>{_html_escape(case['mode'])}</td>
+        <td>{case_tag_html}</td>
+        <td>{_html_escape(agreement_text)}</td>
+        <td>{lab_elapsed_ms:.3f}</td>
+        <td>{python_elapsed_ms:.3f}</td>
+        <td>{lab_ops_text}</td>
+        <td>{python_ops_text}</td>
+        <td>{_html_escape(faster_engine)}</td>
+        <td>{ratio_text}</td>
+      </tr>'''
+        )
+        case_cards.append(
+            f'''<article class="case-card">
+      <div class="case-header">
+        <div>
+          <p class="eyebrow">{_html_escape(case['mode'])}</p>
+          <h3><code>{_html_escape(case['label'])}</code></h3>
+        </div>
+        <span class="pill {row_class}">{_html_escape('agreement: ' + agreement_text)}</span>
+      </div>
+      <p class="case-copy">Pattern and sample text stay visible here so reviewers can talk through the benchmark without opening the raw JSON first.</p>
+      <dl class="metric-grid">
+        <div><dt>Pattern</dt><dd><code>{_html_escape(case['pattern'])}</code></dd></div>
+        <div><dt>Text</dt><dd><code>{_html_escape(case['text'])}</code></dd></div>
+        <div><dt>Lab elapsed</dt><dd>{lab_elapsed_ms:.3f} ms</dd></div>
+        <div><dt>Python re elapsed</dt><dd>{python_elapsed_ms:.3f} ms</dd></div>
+        <div><dt>Lab ops/s</dt><dd>{lab_ops_text}</dd></div>
+        <div><dt>Python re ops/s</dt><dd>{python_ops_text}</dd></div>
+        <div><dt>Faster engine</dt><dd>{_html_escape(faster_engine)}</dd></div>
+        <div><dt>Elapsed ratio</dt><dd>{ratio_detail_text}</dd></div>
+        <div><dt>Lab result</dt><dd><code>{_html_escape(json.dumps(case['lab_result'], ensure_ascii=False))}</code></dd></div>
+        <div><dt>Python result</dt><dd><code>{_html_escape(json.dumps(case['python_result'], ensure_ascii=False))}</code></dd></div>
+      </dl>
+      <div class="chip-row">{case_tag_html}</div>
+    </article>'''
+        )
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regex engine benchmark dashboard — {_html_escape(report['suite_label'])}</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1380px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2, h3 {{ line-height: 1.15; }}
+    p, li, dd {{ line-height: 1.55; }}
+    code {{ font-family: "SFMono-Regular", ui-monospace, monospace; word-break: break-word; }}
+    .hero {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.96), rgba(240, 253, 250, 0.96)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
+    .hero p {{ max-width: 78ch; }}
+    .hero-meta, .chip-row {{ display: flex; flex-wrap: wrap; gap: 0.65rem; }}
+    .hero-meta {{ margin-top: 1rem; }}
+    .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem; }}
+    .summary-card, .table-shell, .case-card {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.2rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }}
+    .summary-card {{ padding: 1rem; }}
+    .summary-label, .eyebrow {{ margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }}
+    .summary-card strong {{ display: block; margin-top: 0.3rem; font-size: 1.18rem; }}
+    .section-title {{ margin: 1.8rem 0 0.8rem; }}
+    .chip {{ display: inline-flex; align-items: center; padding: 0.4rem 0.7rem; border-radius: 999px; background: rgba(224, 231, 255, 0.85); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; font-size: 0.92rem; }}
+    .chip.muted {{ background: rgba(226, 232, 240, 0.7); border-color: rgba(148, 163, 184, 0.3); color: #475569; }}
+    .table-shell {{ overflow-x: auto; padding: 1rem; }}
+    table {{ width: 100%; border-collapse: collapse; min-width: 960px; }}
+    th, td {{ padding: 0.75rem 0.65rem; border-bottom: 1px solid rgba(226, 232, 240, 0.9); text-align: left; vertical-align: top; }}
+    th {{ font-size: 0.84rem; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }}
+    tr.agree td {{ background: rgba(236, 253, 245, 0.45); }}
+    tr.disagree td {{ background: rgba(254, 242, 242, 0.65); }}
+    .case-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1rem; }}
+    .case-card {{ padding: 1rem; }}
+    .case-header {{ display: flex; gap: 0.75rem; align-items: start; justify-content: space-between; }}
+    .case-header h3 {{ margin: 0.15rem 0 0; }}
+    .pill {{ display: inline-flex; align-items: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-weight: 700; font-size: 0.88rem; }}
+    .pill.agree {{ background: rgba(220, 252, 231, 0.9); color: #166534; }}
+    .pill.disagree {{ background: rgba(254, 226, 226, 0.95); color: #b91c1c; }}
+    .metric-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem 1rem; margin: 1rem 0; }}
+    .metric-grid dt {{ font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }}
+    .metric-grid dd {{ margin: 0.15rem 0 0; }}
+    .case-copy {{ margin-top: 0.8rem; }}
+    @media (max-width: 820px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+      .metric-grid {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Regex engine lab</p>
+      <h1>Benchmark dashboard — {_html_escape(report['suite_label'])}</h1>
+      <p>Browser-friendly performance companion for the Thompson-NFA teaching engine. Use this page when you want the tagged benchmark suites to feel like a portfolio artifact instead of a raw terminal transcript.</p>
+      <div class="hero-meta">
+        <span class="chip">Generated {_html_escape(generated)}</span>
+        <span class="chip">Iterations {report['iterations']}</span>
+        <span class="chip">Warmup {report['warmup']}</span>
+        <span class="chip">Python re faster in {faster_counts.get('python_re', 0)} case(s)</span>
+        <span class="chip">Lab faster in {faster_counts.get('lab', 0)} case(s)</span>
+        <span class="chip">Ties {faster_counts.get('tie', 0)}</span>
+      </div>
+      <p><strong>Suite source:</strong> <code>{_html_escape(report.get('suite_source', 'built-in/default or ad-hoc CLI case'))}</code><br><strong>Applied filters:</strong> <code>{_html_escape(filter_text)}</code></p>
+      <div class="chip-row">{tag_chip_html}</div>
+    </section>
+    <section class="summary-grid">
+{summary_cards_html}
+    </section>
+    <h2 class="section-title">Case-by-case table</h2>
+    <section class="table-shell">
+      <table>
+        <thead>
+          <tr>
+            <th>Case</th>
+            <th>Mode</th>
+            <th>Tags</th>
+            <th>Agree?</th>
+            <th>Lab ms</th>
+            <th>Python ms</th>
+            <th>Lab ops/s</th>
+            <th>Python ops/s</th>
+            <th>Faster</th>
+            <th>Ratio</th>
+          </tr>
+        </thead>
+        <tbody>
+{''.join(case_rows)}
+        </tbody>
+      </table>
+    </section>
+    <h2 class="section-title">Case notes</h2>
+    <section class="case-grid">
+{''.join(case_cards)}
+    </section>
+  </main>
+</body>
+</html>
+'''
+
+
 def write_text(path_str: str, content: str) -> None:
     path = Path(path_str)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1024,6 +1232,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--warmup", type=int, default=200)
     benchmark_parser.add_argument("--json-out")
     benchmark_parser.add_argument("--markdown-out")
+    benchmark_parser.add_argument("--html-out")
 
     return parser
 
@@ -1092,6 +1301,8 @@ def main(argv: list[str] | None = None) -> int:
             write_text(args.json_out, json.dumps(report, indent=2) + "\n")
         if args.markdown_out:
             write_text(args.markdown_out, render_benchmark_markdown(report))
+        if args.html_out:
+            write_text(args.html_out, render_benchmark_html(report))
         print(json.dumps(report, indent=2))
         return 0
 

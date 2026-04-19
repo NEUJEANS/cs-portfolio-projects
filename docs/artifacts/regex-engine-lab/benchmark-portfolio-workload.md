@@ -9,10 +9,10 @@
 
 | case | mode | tags | agreement | lab ms | python re ms | lab ops/s | python ops/s | faster |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
-| anchored-id-fullmatch | fullmatch | interview-demo, anchored, shorthand | yes | 0.884 | 0.017 | 56581.6 | 2871088.0 | python_re |
-| pet-search | search | interview-demo, search, alternation | yes | 0.494 | 0.013 | 101142.5 | 3950696.2 | python_re |
-| release-token-search | search | portfolio-batch, search, shorthand | yes | 1.772 | 0.021 | 28219.5 | 2404655.5 | python_re |
-| whitespace-fullmatch | fullmatch | portfolio-batch, whitespace | yes | 0.211 | 0.011 | 236727.9 | 4540500.5 | python_re |
+| anchored-id-fullmatch | fullmatch | interview-demo, anchored, shorthand | yes | 0.921 | 0.018 | 54306.6 | 2846731.7 | python_re |
+| pet-search | search | interview-demo, search, alternation | yes | 0.517 | 0.013 | 96779.0 | 3963536.4 | python_re |
+| release-token-search | search | portfolio-batch, search, shorthand | yes | 1.753 | 0.020 | 28523.9 | 2459419.5 | python_re |
+| whitespace-fullmatch | fullmatch | portfolio-batch, whitespace | yes | 0.204 | 0.011 | 245046.4 | 4499639.0 | python_re |
 
 ## Case notes
 

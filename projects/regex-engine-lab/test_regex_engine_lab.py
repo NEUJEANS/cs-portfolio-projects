@@ -14,6 +14,7 @@ from regex_engine_lab import (
     RegexSyntaxError,
     filter_benchmark_cases,
     load_benchmark_suite,
+    render_benchmark_html,
     render_benchmark_markdown,
     run_benchmark_report,
 )
@@ -152,6 +153,28 @@ class RegexEngineTests(unittest.TestCase):
         self.assertIn("### dogs", markdown)
         self.assertIn("`search`", markdown)
         self.assertIn("demo, search", markdown)
+
+    def test_render_benchmark_html_includes_summary_and_case_notes(self) -> None:
+        report = run_benchmark_report(
+            [
+                BenchmarkCase("dogs", "(cat|dog)s?", "xxdogs", mode="search", tags=("demo", "search")),
+                BenchmarkCase("id", r"^ID-\d+$", "ID-42", tags=("demo", "anchored")),
+            ],
+            iterations=2,
+            warmup=0,
+            suite_label="unit-dashboard",
+            suite_source="suite.json",
+            applied_filters={"include_tags": ["demo"], "exclude_tags": []},
+        )
+        html = render_benchmark_html(report)
+        self.assertIn("<title>Regex engine benchmark dashboard — unit-dashboard</title>", html)
+        self.assertIn("Benchmark dashboard — unit-dashboard", html)
+        self.assertIn("Case-by-case table", html)
+        self.assertIn("suite.json", html)
+        self.assertIn("include demo", html)
+        self.assertIn("<code>dogs</code>", html)
+        self.assertIn("agreement: yes", html)
+        self.assertIn("search · 1", html)
 
     def test_load_benchmark_suite_reads_named_cases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -347,10 +370,11 @@ class RegexEngineCliTests(unittest.TestCase):
         self.assertTrue(payload["all_cases_agree"])
         self.assertEqual(payload["cases"][0]["lab_result"], {"matched": True})
 
-    def test_cli_benchmark_sample_suite_writes_markdown(self) -> None:
+    def test_cli_benchmark_sample_suite_writes_markdown_and_html(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             markdown_path = Path(temp_dir) / "benchmark.md"
             json_path = Path(temp_dir) / "benchmark.json"
+            html_path = Path(temp_dir) / "benchmark.html"
             completed = self.run_cli(
                 "benchmark",
                 "--sample-suite",
@@ -362,6 +386,8 @@ class RegexEngineCliTests(unittest.TestCase):
                 str(markdown_path),
                 "--json-out",
                 str(json_path),
+                "--html-out",
+                str(html_path),
             )
             self.assertEqual(completed.returncode, 0)
             payload = json.loads(completed.stdout)
@@ -370,7 +396,9 @@ class RegexEngineCliTests(unittest.TestCase):
             self.assertEqual(payload["suite_source"], "built-in defaults")
             self.assertTrue(markdown_path.exists())
             self.assertTrue(json_path.exists())
+            self.assertTrue(html_path.exists())
             self.assertIn("Regex engine benchmark report", markdown_path.read_text())
+            self.assertIn("Regex engine benchmark dashboard", html_path.read_text())
             written_json = json.loads(json_path.read_text())
             self.assertEqual(written_json["case_count"], 3)
 

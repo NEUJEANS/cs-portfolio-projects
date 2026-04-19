@@ -27,19 +27,19 @@
       "lab": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 0.0008836800006974954,
-        "avg_seconds": 1.7673600013949907e-05,
-        "ops_per_second": 56581.56794375183
+        "elapsed_seconds": 0.0009206989998347126,
+        "avg_seconds": 1.8413979996694253e-05,
+        "ops_per_second": 54306.56491315424
       },
       "python_re": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 1.7415000911569223e-05,
-        "avg_seconds": 3.4830001823138444e-07,
-        "ops_per_second": 2871087.9921219954
+        "elapsed_seconds": 1.7564001609571278e-05,
+        "avg_seconds": 3.5128003219142554e-07,
+        "ops_per_second": 2846731.69084391
       },
       "faster_engine": "python_re",
-      "lab_vs_python_elapsed_ratio": 50.74246077761871
+      "lab_vs_python_elapsed_ratio": 52.41966041115536
     },
     {
       "label": "pet-search",
@@ -69,19 +69,19 @@
       "lab": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 0.000494351999805076,
-        "avg_seconds": 9.88703999610152e-06,
-        "ops_per_second": 101142.50578477501
+        "elapsed_seconds": 0.0005166409973753616,
+        "avg_seconds": 1.0332819947507232e-05,
+        "ops_per_second": 96779.00177107485
       },
       "python_re": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 1.2655997124966234e-05,
-        "avg_seconds": 2.531199424993247e-07,
-        "ops_per_second": 3950696.2198471106
+        "elapsed_seconds": 1.261499710381031e-05,
+        "avg_seconds": 2.522999420762062e-07,
+        "ops_per_second": 3963536.383603108
       },
       "faster_engine": "python_re",
-      "lab_vs_python_elapsed_ratio": 39.06069153807547
+      "lab_vs_python_elapsed_ratio": 40.95450780716487
     },
     {
       "label": "release-token-search",
@@ -111,19 +111,19 @@
       "lab": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 0.0017718270028126426,
-        "avg_seconds": 3.5436540056252855e-05,
-        "ops_per_second": 28219.459304225948
+        "elapsed_seconds": 0.0017529139986436348,
+        "avg_seconds": 3.5058279972872694e-05,
+        "ops_per_second": 28523.93217162329
       },
       "python_re": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 2.079299883916974e-05,
-        "avg_seconds": 4.158599767833948e-07,
-        "ops_per_second": 2404655.547126289
+        "elapsed_seconds": 2.0330000552348793e-05,
+        "avg_seconds": 4.0660001104697585e-07,
+        "ops_per_second": 2459419.5101594985
       },
       "faster_engine": "python_re",
-      "lab_vs_python_elapsed_ratio": 85.21267261723135
+      "lab_vs_python_elapsed_ratio": 86.22301775791712
     },
     {
       "label": "whitespace-fullmatch",
@@ -146,19 +146,19 @@
       "lab": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 0.00021121299869264476,
-        "avg_seconds": 4.224259973852895e-06,
-        "ops_per_second": 236727.8543910053
+        "elapsed_seconds": 0.00020404299721121788,
+        "avg_seconds": 4.0808599442243576e-06,
+        "ops_per_second": 245046.3906303132
       },
       "python_re": {
         "iterations": 50,
         "warmup": 5,
-        "elapsed_seconds": 1.1012001777999103e-05,
-        "avg_seconds": 2.2024003555998207e-07,
-        "ops_per_second": 4540500.538230486
+        "elapsed_seconds": 1.111200253944844e-05,
+        "avg_seconds": 2.222400507889688e-07,
+        "ops_per_second": 4499639.00048585
       },
       "faster_engine": "python_re",
-      "lab_vs_python_elapsed_ratio": 19.180254684904572
+      "lab_vs_python_elapsed_ratio": 18.362396560552426
     }
   ],
   "case_definitions": [
