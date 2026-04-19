@@ -815,6 +815,45 @@ def build_parser() -> argparse.ArgumentParser:
     trace_summary_parser.add_argument("--html-out", type=Path, help="write a browsable HTML trace-summary card")
     trace_summary_parser.add_argument("--json", action="store_true")
 
+    trace_compare_parser = subparsers.add_parser(
+        "trace-compare",
+        help="compare exactly two imported trace files side by side",
+    )
+    trace_compare_parser.add_argument("--min-frames", type=int, required=True)
+    trace_compare_parser.add_argument("--max-frames", type=int, required=True)
+    trace_compare_parser.add_argument(
+        "--pages-file",
+        dest="trace_compare_pages_files",
+        action="append",
+        metavar="PATH",
+        type=Path,
+        help="repeat exactly twice to compare two imported trace files side by side",
+    )
+    trace_compare_parser.add_argument(
+        "--window-size",
+        type=int,
+        default=8,
+        help="window size for per-trace working-set and phase-hint summaries",
+    )
+    trace_compare_parser.add_argument(
+        "--phase-threshold",
+        type=float,
+        default=0.45,
+        help="flag a phase-boundary hint when consecutive windows overlap at or below this Jaccard similarity",
+    )
+    trace_compare_parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        required=True,
+        help="directory where Markdown / SVG / CSV / JSON / HTML comparison artifacts will be written",
+    )
+    trace_compare_parser.add_argument(
+        "--html-out",
+        type=Path,
+        help="optional explicit HTML path (default: <artifact-dir>/<left>-vs-<right>-trace-compare.html)",
+    )
+    trace_compare_parser.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -2847,6 +2886,780 @@ def format_trace_summary_html(
 '''
 
 
+def build_trace_compare_payload(
+    left_workload: GalleryWorkload,
+    right_workload: GalleryWorkload,
+    *,
+    min_frames: int,
+    max_frames: int,
+    window_size: int,
+    phase_threshold: float,
+) -> dict:
+    left_study = study_frame_counts(left_workload.reference_string, min_frames, max_frames)
+    left_study["reference_source"] = left_workload.reference_source
+    right_study = study_frame_counts(right_workload.reference_string, min_frames, max_frames)
+    right_study["reference_source"] = right_workload.reference_source
+
+    left_trace_summary = summarize_trace(
+        left_workload.reference_string,
+        window_size=window_size,
+        phase_threshold=phase_threshold,
+    )
+    left_trace_summary["reference_source"] = left_workload.reference_source
+    right_trace_summary = summarize_trace(
+        right_workload.reference_string,
+        window_size=window_size,
+        phase_threshold=phase_threshold,
+    )
+    right_trace_summary["reference_source"] = right_workload.reference_source
+
+    left_average_faults = summarize_fault_averages(left_study)
+    right_average_faults = summarize_fault_averages(right_study)
+    left_average_fault_rates = {
+        algorithm: left_average_faults[algorithm] / len(left_workload.reference_string)
+        for algorithm in ALGORITHMS
+    }
+    right_average_fault_rates = {
+        algorithm: right_average_faults[algorithm] / len(right_workload.reference_string)
+        for algorithm in ALGORITHMS
+    }
+
+    left_best_average_faults = min(left_average_faults.values())
+    right_best_average_faults = min(right_average_faults.values())
+    left_best_average_winners = select_lowest_keys(left_average_faults)
+    right_best_average_winners = select_lowest_keys(right_average_faults)
+
+    algorithm_summaries: list[dict] = []
+    for algorithm in ALGORITHMS:
+        fault_delta = round(
+            right_average_faults[algorithm] - left_average_faults[algorithm],
+            6,
+        )
+        rate_delta = round(
+            right_average_fault_rates[algorithm] - left_average_fault_rates[algorithm],
+            6,
+        )
+        if abs(fault_delta) <= 1e-12:
+            better = "tie"
+        elif fault_delta > 0:
+            better = "left"
+        else:
+            better = "right"
+        algorithm_summaries.append(
+            {
+                "algorithm": algorithm,
+                "left_average_faults": round(left_average_faults[algorithm], 6),
+                "right_average_faults": round(right_average_faults[algorithm], 6),
+                "fault_delta_right_minus_left": fault_delta,
+                "left_average_fault_rate": round(left_average_fault_rates[algorithm], 6),
+                "right_average_fault_rate": round(right_average_fault_rates[algorithm], 6),
+                "fault_rate_delta_right_minus_left": rate_delta,
+                "better_average_faults": better,
+            }
+        )
+
+    frame_comparisons: list[dict] = []
+    for left_row, right_row in zip(
+        left_study["frame_results"],
+        right_study["frame_results"],
+        strict=True,
+    ):
+        left_faults = {
+            algorithm: left_row["algorithms"][algorithm]["page_faults"]
+            for algorithm in ALGORITHMS
+        }
+        right_faults = {
+            algorithm: right_row["algorithms"][algorithm]["page_faults"]
+            for algorithm in ALGORITHMS
+        }
+        algorithm_rows: dict[str, dict] = {}
+        for algorithm in ALGORITHMS:
+            fault_delta = right_faults[algorithm] - left_faults[algorithm]
+            if fault_delta == 0:
+                better = "tie"
+            elif fault_delta > 0:
+                better = "left"
+            else:
+                better = "right"
+            algorithm_rows[algorithm] = {
+                "left_faults": left_faults[algorithm],
+                "right_faults": right_faults[algorithm],
+                "fault_delta_right_minus_left": fault_delta,
+                "left_hit_rate": left_row["algorithms"][algorithm]["hit_rate"],
+                "right_hit_rate": right_row["algorithms"][algorithm]["hit_rate"],
+                "better": better,
+            }
+        frame_comparisons.append(
+            {
+                "frame_count": left_row["frame_count"],
+                "left_best_algorithms": select_lowest_keys(left_faults),
+                "right_best_algorithms": select_lowest_keys(right_faults),
+                "algorithms": algorithm_rows,
+            }
+        )
+
+    overall_left_rate = sum(left_average_fault_rates.values()) / len(ALGORITHMS)
+    overall_right_rate = sum(right_average_fault_rates.values()) / len(ALGORITHMS)
+    if abs(overall_left_rate - overall_right_rate) <= 1e-12:
+        overall_better = "tie"
+    elif overall_left_rate < overall_right_rate:
+        overall_better = "left"
+    else:
+        overall_better = "right"
+
+    largest_gap = max(
+        algorithm_summaries,
+        key=lambda entry: abs(entry["fault_delta_right_minus_left"]),
+    )
+
+    return {
+        "min_frames": min_frames,
+        "max_frames": max_frames,
+        "window_size": window_size,
+        "phase_threshold": round(phase_threshold, 4),
+        "left": {
+            "workload": left_workload.name,
+            "description": left_workload.description,
+            "reference_source": left_workload.reference_source,
+            "reference_length": len(left_workload.reference_string),
+            "reference_string": list(left_workload.reference_string),
+            "study": left_study,
+            "trace_summary": left_trace_summary,
+            "average_faults": {
+                algorithm: round(value, 6)
+                for algorithm, value in left_average_faults.items()
+            },
+            "average_fault_rates": {
+                algorithm: round(value, 6)
+                for algorithm, value in left_average_fault_rates.items()
+            },
+            "best_average_faults": round(left_best_average_faults, 6),
+            "best_average_winners": left_best_average_winners,
+            "fifo_anomaly_count": len(left_study["fifo_belady_anomalies"]),
+            "non_fifo_regression_count": sum(
+                1
+                for violation in left_study["monotonicity_violations"]
+                if violation["algorithm"] != "fifo"
+            ),
+        },
+        "right": {
+            "workload": right_workload.name,
+            "description": right_workload.description,
+            "reference_source": right_workload.reference_source,
+            "reference_length": len(right_workload.reference_string),
+            "reference_string": list(right_workload.reference_string),
+            "study": right_study,
+            "trace_summary": right_trace_summary,
+            "average_faults": {
+                algorithm: round(value, 6)
+                for algorithm, value in right_average_faults.items()
+            },
+            "average_fault_rates": {
+                algorithm: round(value, 6)
+                for algorithm, value in right_average_fault_rates.items()
+            },
+            "best_average_faults": round(right_best_average_faults, 6),
+            "best_average_winners": right_best_average_winners,
+            "fifo_anomaly_count": len(right_study["fifo_belady_anomalies"]),
+            "non_fifo_regression_count": sum(
+                1
+                for violation in right_study["monotonicity_violations"]
+                if violation["algorithm"] != "fifo"
+            ),
+        },
+        "algorithm_summaries": algorithm_summaries,
+        "frame_comparisons": frame_comparisons,
+        "summary": {
+            "overall_better_average_fault_rate": overall_better,
+            "largest_average_fault_gap": {
+                "algorithm": largest_gap["algorithm"],
+                "better_average_faults": largest_gap["better_average_faults"],
+                "fault_delta_right_minus_left": largest_gap[
+                    "fault_delta_right_minus_left"
+                ],
+            },
+            "left_phase_hint_count": len(left_trace_summary["phase_boundaries"]),
+            "right_phase_hint_count": len(right_trace_summary["phase_boundaries"]),
+            "left_fifo_anomaly_count": len(left_study["fifo_belady_anomalies"]),
+            "right_fifo_anomaly_count": len(right_study["fifo_belady_anomalies"]),
+            "left_non_fifo_regression_count": sum(
+                1
+                for violation in left_study["monotonicity_violations"]
+                if violation["algorithm"] != "fifo"
+            ),
+            "right_non_fifo_regression_count": sum(
+                1
+                for violation in right_study["monotonicity_violations"]
+                if violation["algorithm"] != "fifo"
+            ),
+        },
+    }
+
+
+def write_trace_compare_csv(path: Path, payload: dict) -> None:
+    ensure_output_parent(path)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "frame_count",
+                "algorithm",
+                "left_workload",
+                "right_workload",
+                "left_faults",
+                "right_faults",
+                "fault_delta_right_minus_left",
+                "left_hit_rate",
+                "right_hit_rate",
+                "better",
+            ],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for frame in payload["frame_comparisons"]:
+            for algorithm in ALGORITHMS:
+                entry = frame["algorithms"][algorithm]
+                writer.writerow(
+                    {
+                        "frame_count": frame["frame_count"],
+                        "algorithm": algorithm,
+                        "left_workload": payload["left"]["workload"],
+                        "right_workload": payload["right"]["workload"],
+                        "left_faults": entry["left_faults"],
+                        "right_faults": entry["right_faults"],
+                        "fault_delta_right_minus_left": entry[
+                            "fault_delta_right_minus_left"
+                        ],
+                        "left_hit_rate": entry["left_hit_rate"],
+                        "right_hit_rate": entry["right_hit_rate"],
+                        "better": entry["better"],
+                    }
+                )
+
+
+def format_trace_compare_markdown(payload: dict) -> str:
+    left = payload["left"]
+    right = payload["right"]
+    lines = [
+        "# Page Replacement Imported Trace Comparison",
+        "",
+        f"- left trace: {describe_reference_label(left['reference_source'])}",
+        f"- right trace: {describe_reference_label(right['reference_source'])}",
+        f"- frame range: {payload['min_frames']} to {payload['max_frames']}",
+        f"- window size: {payload['window_size']}",
+        f"- phase threshold: {payload['phase_threshold']:.2f}",
+        "",
+        "## Trace overview",
+        "",
+        "| Trace | References | Unique pages | Working-set avg | Phase hints | Best average faults |",
+        "| :--- | ---: | ---: | ---: | ---: | :--- |",
+        (
+            f"| {left['workload']} | {left['reference_length']} | {left['trace_summary']['unique_pages']} | "
+            f"{left['trace_summary']['working_set_stats']['average']:.2f} | {len(left['trace_summary']['phase_boundaries'])} | "
+            f"{'/'.join(algorithm.upper() for algorithm in left['best_average_winners'])} ({left['best_average_faults']:.2f}) |"
+        ),
+        (
+            f"| {right['workload']} | {right['reference_length']} | {right['trace_summary']['unique_pages']} | "
+            f"{right['trace_summary']['working_set_stats']['average']:.2f} | {len(right['trace_summary']['phase_boundaries'])} | "
+            f"{'/'.join(algorithm.upper() for algorithm in right['best_average_winners'])} ({right['best_average_faults']:.2f}) |"
+        ),
+        "",
+        "## Average algorithm comparison",
+        "",
+        "| Algorithm | Left avg faults | Right avg faults | Δ right-left | Better avg | Left avg fault rate | Right avg fault rate |",
+        "| :--- | ---: | ---: | ---: | :--- | ---: | ---: |",
+    ]
+    for entry in payload["algorithm_summaries"]:
+        lines.append(
+            f"| {entry['algorithm'].upper()} | {entry['left_average_faults']:.2f} | {entry['right_average_faults']:.2f} | "
+            f"{entry['fault_delta_right_minus_left']:.2f} | {entry['better_average_faults']} | "
+            f"{format_percentage(entry['left_average_fault_rate'])} | {format_percentage(entry['right_average_fault_rate'])} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Frame-by-frame comparison",
+            "",
+            "| Frames | Left winner | Right winner | FIFO L/R | CLOCK L/R | AGING L/R | LRU L/R | OPT L/R |",
+            "| ---: | :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
+        ]
+    )
+    for frame in payload["frame_comparisons"]:
+        lines.append(
+            f"| {frame['frame_count']} | {'/'.join(algorithm.upper() for algorithm in frame['left_best_algorithms'])} | "
+            f"{'/'.join(algorithm.upper() for algorithm in frame['right_best_algorithms'])} | "
+            f"{frame['algorithms']['fifo']['left_faults']}/{frame['algorithms']['fifo']['right_faults']} | "
+            f"{frame['algorithms']['clock']['left_faults']}/{frame['algorithms']['clock']['right_faults']} | "
+            f"{frame['algorithms']['aging']['left_faults']}/{frame['algorithms']['aging']['right_faults']} | "
+            f"{frame['algorithms']['lru']['left_faults']}/{frame['algorithms']['lru']['right_faults']} | "
+            f"{frame['algorithms']['opt']['left_faults']}/{frame['algorithms']['opt']['right_faults']} |"
+        )
+
+    def add_trace_snapshot(label: str, trace_payload: dict) -> None:
+        reuse_stats = trace_payload["reuse_distance_stats"]
+        working_set = trace_payload["working_set_stats"]
+        if reuse_stats["count"]:
+            reuse_line = (
+                f"min {reuse_stats['min']}, median {reuse_stats['median']:.1f}, p90 {reuse_stats['p90']:.1f}, "
+                f"max {reuse_stats['max']}, avg {reuse_stats['average']:.2f}"
+            )
+        else:
+            reuse_line = "no repeated pages in this workload"
+        hot_pages = ", ".join(
+            f"{entry['page']}×{entry['count']}" for entry in trace_payload["top_pages"]
+        ) or "none"
+        lines.extend(
+            [
+                "",
+                f"## {label} locality snapshot",
+                "",
+                f"- working-set size: min {working_set['min']}, max {working_set['max']}, avg {working_set['average']:.2f}, final {working_set['final']}",
+                f"- reuse distance: {reuse_line}",
+                f"- hot pages: {hot_pages}",
+            ]
+        )
+        if trace_payload["phase_boundaries"]:
+            lines.append("- phase-boundary hints:")
+            for boundary in trace_payload["phase_boundaries"][:4]:
+                lines.append(
+                    f"  - after reference {boundary['after_reference']}: windows {boundary['before_window']} -> {boundary['after_window']} overlap {boundary['jaccard_similarity']:.2f}; {boundary['reason']}."
+                )
+        else:
+            lines.append("- phase-boundary hints: none detected for this window size.")
+
+    add_trace_snapshot(left["workload"], left["trace_summary"])
+    add_trace_snapshot(right["workload"], right["trace_summary"])
+
+    lines.extend(
+        [
+            "",
+            f"## {left['workload']} reference string",
+            "",
+            "```text",
+            " ".join(str(page) for page in left["reference_string"]),
+            "```",
+            "",
+            f"## {right['workload']} reference string",
+            "",
+            "```text",
+            " ".join(str(page) for page in right["reference_string"]),
+            "```",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def format_trace_compare_svg(
+    payload: dict,
+    *,
+    id_prefix: str = "page-replacement-trace-compare",
+) -> str:
+    width = 1480
+    height = 1120
+    identifier = make_safe_identifier(id_prefix)
+    title_id = f"{identifier}-title"
+    desc_id = f"{identifier}-desc"
+    left = payload["left"]
+    right = payload["right"]
+
+    chart_left = 120
+    chart_top = 410
+    chart_width = 1180
+    chart_height = 300
+    chart_bottom = chart_top + chart_height
+    left_color = "#2563eb"
+    right_color = "#7c3aed"
+
+    percent_values = [
+        entry["left_average_fault_rate"] * 100 for entry in payload["algorithm_summaries"]
+    ] + [
+        entry["right_average_fault_rate"] * 100 for entry in payload["algorithm_summaries"]
+    ]
+    max_percent = max(percent_values, default=1.0)
+    percent_ceiling = max(1, ceil(max_percent))
+    tick_step = choose_tick_step(percent_ceiling)
+    tick_max = max(tick_step, ((percent_ceiling + tick_step - 1) // tick_step) * tick_step)
+
+    def chart_y(value: float) -> float:
+        return chart_bottom - (value / tick_max) * chart_height
+
+    grid_parts: list[str] = []
+    for tick in range(0, tick_max + 1, tick_step):
+        y = chart_y(tick)
+        grid_parts.append(
+            f'<line x1="{chart_left}" y1="{y:.2f}" x2="{chart_left + chart_width}" y2="{y:.2f}" stroke="#d7dde8" stroke-width="1" />'
+        )
+        grid_parts.append(
+            f'<text x="{chart_left - 16}" y="{y + 5:.2f}" font-size="12" text-anchor="end" fill="#475569">{tick}%</text>'
+        )
+
+    group_width = chart_width / len(ALGORITHMS)
+    bar_width = min(74.0, group_width * 0.24)
+    bar_gap = bar_width * 0.45
+    bar_parts: list[str] = []
+    for index, entry in enumerate(payload["algorithm_summaries"]):
+        group_center = chart_left + (index + 0.5) * group_width
+        left_percent = entry["left_average_fault_rate"] * 100
+        right_percent = entry["right_average_fault_rate"] * 100
+        for offset, percent, color in (
+            (-(bar_width / 2 + bar_gap / 2), left_percent, left_color),
+            ((bar_width / 2 + bar_gap / 2), right_percent, right_color),
+        ):
+            x = group_center + offset - bar_width / 2
+            y = chart_y(percent)
+            height_value = chart_bottom - y
+            bar_parts.append(
+                f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{height_value:.2f}" rx="16" fill="{color}" />'
+            )
+            bar_parts.append(
+                f'<text x="{group_center + offset:.2f}" y="{y - 10:.2f}" font-size="12" text-anchor="middle" fill="{color}">{percent:.1f}%</text>'
+            )
+        bar_parts.append(
+            f'<text x="{group_center:.2f}" y="{chart_bottom + 28}" font-size="13" text-anchor="middle" fill="#475569">{entry["algorithm"].upper()}</text>'
+        )
+
+    def build_overview_lines(trace_payload: dict) -> list[str]:
+        reuse_stats = trace_payload["trace_summary"]["reuse_distance_stats"]
+        working_set = trace_payload["trace_summary"]["working_set_stats"]
+        reuse_line = (
+            f"reuse median {reuse_stats['median']:.1f} · p90 {reuse_stats['p90']:.1f}"
+            if reuse_stats["count"]
+            else "reuse median n/a · no repeated pages"
+        )
+        return [
+            trace_payload["workload"],
+            f"refs {trace_payload['reference_length']} · unique {trace_payload['trace_summary']['unique_pages']} · phase hints {len(trace_payload['trace_summary']['phase_boundaries'])}",
+            f"working-set avg {working_set['average']:.2f} · final {working_set['final']} · {reuse_line}",
+            f"best avg {'/'.join(algorithm.upper() for algorithm in trace_payload['best_average_winners'])} ({trace_payload['best_average_faults']:.2f})",
+            f"FIFO anomalies {trace_payload['fifo_anomaly_count']} · other regressions {trace_payload['non_fifo_regression_count']}",
+        ]
+
+    left_overview = [
+        f'<text x="92" y="{156 + index * 28}" font-size="18" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(build_overview_lines(left))
+    ]
+    right_overview = [
+        f'<text x="748" y="{156 + index * 28}" font-size="18" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(build_overview_lines(right))
+    ]
+
+    algorithm_lines = []
+    for entry in payload["algorithm_summaries"]:
+        better = entry["better_average_faults"]
+        if better == "left":
+            better_label = left["workload"]
+        elif better == "right":
+            better_label = right["workload"]
+        else:
+            better_label = "tie"
+        algorithm_lines.append(
+            f"{entry['algorithm'].upper()}: {entry['left_average_faults']:.2f} vs {entry['right_average_faults']:.2f} avg faults → {better_label}"
+        )
+    algorithm_text = [
+        f'<text x="92" y="{858 + index * 28}" font-size="18" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(algorithm_lines)
+    ]
+
+    left_frame_winners = ", ".join(
+        f"{frame['frame_count']}:{'/'.join(algorithm.upper() for algorithm in frame['left_best_algorithms'])}"
+        for frame in payload["frame_comparisons"]
+    )
+    right_frame_winners = ", ".join(
+        f"{frame['frame_count']}:{'/'.join(algorithm.upper() for algorithm in frame['right_best_algorithms'])}"
+        for frame in payload["frame_comparisons"]
+    )
+    largest_gap = payload["summary"]["largest_average_fault_gap"]
+    if largest_gap["better_average_faults"] == "left":
+        largest_gap_winner = left["workload"]
+    elif largest_gap["better_average_faults"] == "right":
+        largest_gap_winner = right["workload"]
+    else:
+        largest_gap_winner = "tie"
+    overall_better = payload["summary"]["overall_better_average_fault_rate"]
+    if overall_better == "left":
+        overall_label = left["workload"]
+    elif overall_better == "right":
+        overall_label = right["workload"]
+    else:
+        overall_label = "tie"
+    comparison_lines = [
+        f"frame range {payload['min_frames']}–{payload['max_frames']} · window size {payload['window_size']} · phase threshold {payload['phase_threshold']:.2f}",
+        f"lower normalized overall average fault rate: {overall_label}",
+        f"largest average gap: {largest_gap['algorithm'].upper()} → {largest_gap_winner} ({abs(largest_gap['fault_delta_right_minus_left']):.2f} faults)",
+        f"phase hints: left {payload['summary']['left_phase_hint_count']} · right {payload['summary']['right_phase_hint_count']}",
+        f"left winners by frame: {left_frame_winners}",
+        f"right winners by frame: {right_frame_winners}",
+    ]
+    comparison_text = [
+        f'<text x="748" y="{858 + index * 28}" font-size="18" fill="#0f172a">{escape(line)}</text>'
+        for index, line in enumerate(comparison_lines)
+    ]
+
+    return "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'  <title id="{title_id}">Page replacement imported-trace comparison card</title>',
+            f'  <desc id="{desc_id}">Side-by-side average fault-rate comparison for imported traces {escape(left["workload"])} and {escape(right["workload"])}.</desc>',
+            '  <rect width="100%" height="100%" fill="#f8fafc" />',
+            '  <rect x="28" y="24" width="1424" height="1072" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />',
+            '  <text x="72" y="62" font-size="32" font-weight="700" fill="#0f172a">Imported trace comparison card</text>',
+            '  <text x="72" y="96" font-size="18" fill="#475569">Compare exactly two custom traces side by side across the same frame sweep for portfolio-ready memory-management storytelling.</text>',
+            '  <rect x="64" y="118" width="620" height="236" rx="24" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" />',
+            f'  <text x="92" y="146" font-size="22" font-weight="700" fill="{left_color}">Left trace</text>',
+            *left_overview,
+            '  <rect x="720" y="118" width="620" height="236" rx="24" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5" />',
+            f'  <text x="748" y="146" font-size="22" font-weight="700" fill="{right_color}">Right trace</text>',
+            *right_overview,
+            '  <rect x="64" y="378" width="1312" height="372" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />',
+            '  <text x="92" y="410" font-size="24" font-weight="700" fill="#0f172a">Average page-fault rate by algorithm</text>',
+            '  <text x="92" y="438" font-size="14" fill="#475569">Blue bars show the left trace. Purple bars show the right trace. Lower is better because it means fewer page faults per reference.</text>',
+            f'  <line x1="{chart_left}" y1="{chart_top}" x2="{chart_left}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="2" />',
+            f'  <line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_left + chart_width}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="2" />',
+            *grid_parts,
+            *bar_parts,
+            f'  <text x="{chart_left + chart_width / 2:.2f}" y="{chart_bottom + 60}" font-size="14" text-anchor="middle" fill="#475569">Algorithms</text>',
+            f'  <text x="48" y="{chart_top + chart_height / 2:.2f}" font-size="14" fill="#475569" transform="rotate(-90 48 {chart_top + chart_height / 2:.2f})">Average page-fault rate</text>',
+            f'  <circle cx="1098" cy="92" r="8" fill="{left_color}" />',
+            f'  <text x="1114" y="98" font-size="15" fill="#0f172a">{escape(left["workload"])}</text>',
+            f'  <circle cx="1238" cy="92" r="8" fill="{right_color}" />',
+            f'  <text x="1254" y="98" font-size="15" fill="#0f172a">{escape(right["workload"])}</text>',
+            '  <rect x="64" y="796" width="620" height="256" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />',
+            '  <text x="92" y="832" font-size="22" font-weight="700" fill="#0f172a">Algorithm gaps</text>',
+            *algorithm_text,
+            '  <rect x="720" y="796" width="620" height="256" rx="24" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />',
+            '  <text x="748" y="832" font-size="22" font-weight="700" fill="#1e3a8a">Overall comparison</text>',
+            *comparison_text,
+            '</svg>',
+        ]
+    )
+
+
+def format_trace_compare_html(
+    payload: dict,
+    *,
+    inline_svg: str,
+    downloads: list[tuple[str, str]] | None = None,
+) -> str:
+    downloads = downloads or []
+    download_links = ' · '.join(
+        f'<a href="{escape(path)}">{escape(label)}</a>' for label, path in downloads
+    ) or 'inline card only'
+
+    algorithm_rows = ''.join(
+        '<tr>'
+        f'<td><code>{escape(entry["algorithm"].upper())}</code></td>'
+        f'<td>{entry["left_average_faults"]:.2f}</td>'
+        f'<td>{entry["right_average_faults"]:.2f}</td>'
+        f'<td>{entry["fault_delta_right_minus_left"]:.2f}</td>'
+        f'<td>{escape(entry["better_average_faults"])}</td>'
+        f'<td>{escape(format_percentage(entry["left_average_fault_rate"]))}</td>'
+        f'<td>{escape(format_percentage(entry["right_average_fault_rate"]))}</td>'
+        '</tr>'
+        for entry in payload['algorithm_summaries']
+    )
+
+    frame_rows = ''.join(
+        '<tr>'
+        f'<td>{frame["frame_count"]}</td>'
+        f'<td>{escape("/".join(algorithm.upper() for algorithm in frame["left_best_algorithms"]))}</td>'
+        f'<td>{escape("/".join(algorithm.upper() for algorithm in frame["right_best_algorithms"]))}</td>'
+        f'<td>{frame["algorithms"]["fifo"]["left_faults"]}/{frame["algorithms"]["fifo"]["right_faults"]}</td>'
+        f'<td>{frame["algorithms"]["clock"]["left_faults"]}/{frame["algorithms"]["clock"]["right_faults"]}</td>'
+        f'<td>{frame["algorithms"]["aging"]["left_faults"]}/{frame["algorithms"]["aging"]["right_faults"]}</td>'
+        f'<td>{frame["algorithms"]["lru"]["left_faults"]}/{frame["algorithms"]["lru"]["right_faults"]}</td>'
+        f'<td>{frame["algorithms"]["opt"]["left_faults"]}/{frame["algorithms"]["opt"]["right_faults"]}</td>'
+        '</tr>'
+        for frame in payload['frame_comparisons']
+    )
+
+    def render_trace_panel(title: str, trace_payload: dict) -> str:
+        working_set = trace_payload['trace_summary']['working_set_stats']
+        reuse_stats = trace_payload['trace_summary']['reuse_distance_stats']
+        reuse_line = (
+            f"min {reuse_stats['min']}, median {reuse_stats['median']:.1f}, p90 {reuse_stats['p90']:.1f}, max {reuse_stats['max']}, avg {reuse_stats['average']:.2f}"
+            if reuse_stats['count']
+            else 'no repeated pages in this workload'
+        )
+        hot_pages = ', '.join(
+            f"{entry['page']}×{entry['count']}" for entry in trace_payload['trace_summary']['top_pages']
+        ) or 'none'
+        if trace_payload['trace_summary']['phase_boundaries']:
+            phase_items = ''.join(
+                '<li>'
+                f"after reference {boundary['after_reference']}: windows {boundary['before_window']} → {boundary['after_window']} overlap {boundary['jaccard_similarity']:.2f}; {escape(boundary['reason'])}."
+                '</li>'
+                for boundary in trace_payload['trace_summary']['phase_boundaries'][:4]
+            )
+        else:
+            phase_items = '<li>none detected for this window size.</li>'
+        return f'''<section class="panel">
+        <h2>{escape(title)}</h2>
+        <p class="muted"><code>{escape(trace_payload['workload'])}</code> · {escape(describe_reference_label(trace_payload['reference_source']))}</p>
+        <ul class="summary-list">
+          <li><strong>{trace_payload['reference_length']}</strong> references</li>
+          <li><strong>{trace_payload['trace_summary']['unique_pages']}</strong> unique pages</li>
+          <li><strong>{trace_payload['trace_summary']['working_set_stats']['average']:.2f}</strong> avg working-set size</li>
+          <li><strong>{len(trace_payload['trace_summary']['phase_boundaries'])}</strong> phase hints</li>
+        </ul>
+        <p class="muted">Best average faults: {'/'.join(algorithm.upper() for algorithm in trace_payload['best_average_winners'])} ({trace_payload['best_average_faults']:.2f})</p>
+        <p class="muted">Reuse distance: {escape(reuse_line)}</p>
+        <p class="muted">Working-set window: min {working_set['min']}, max {working_set['max']}, avg {working_set['average']:.2f}, final {working_set['final']}</p>
+        <p class="muted">Hot pages: {escape(hot_pages)}</p>
+        <h3>Phase-boundary hints</h3>
+        <ul>{phase_items}</ul>
+        <h3>Reference string</h3>
+        <pre>{escape(' '.join(str(page) for page in trace_payload['reference_string']))}</pre>
+      </section>'''
+
+    left = payload['left']
+    right = payload['right']
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page Replacement Imported Trace Comparison</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1500px; margin: 0 auto; padding: 32px 20px 64px; }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      a {{ color: var(--accent); }}
+      code, pre {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p, .muted {{ color: var(--muted); }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }}
+      .summary-grid strong {{ display: block; font-size: 1.35rem; margin-bottom: 6px; }}
+      .panel {{ padding: 20px; margin-bottom: 24px; overflow: auto; }}
+      .chart svg {{ width: 100%; height: auto; min-width: 1080px; display: block; }}
+      .two-up {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 24px; }}
+      .summary-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 0; margin: 0 0 16px; }}
+      .summary-list li {{ list-style: none; padding: 12px 14px; border-radius: 16px; background: #f8fafc; border: 1px solid var(--border); }}
+      .summary-list strong {{ display: block; font-size: 1.2rem; margin-bottom: 4px; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.95rem; color: var(--muted); }}
+      ul {{ margin: 0; padding-left: 18px; color: var(--muted); }}
+      li + li {{ margin-top: 8px; }}
+      pre {{ background: #0f172a; color: #e2e8f0; padding: 18px; border-radius: 18px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>Page Replacement Imported Trace Comparison</h1>
+        <p>Side-by-side study for two imported traces. The inline SVG card compares normalized average page-fault rates by algorithm, while the tables below keep the exact frame-by-frame and locality details easy to inspect for portfolio screenshots or interview walkthroughs.</p>
+        <ul class="summary-grid">
+          <li><strong>{left['workload']}</strong> left trace</li>
+          <li><strong>{right['workload']}</strong> right trace</li>
+          <li><strong>{payload['min_frames']}–{payload['max_frames']}</strong> frame range</li>
+          <li><strong>{payload['window_size']}</strong> window size</li>
+          <li><strong>{payload['summary']['left_phase_hint_count']}</strong> left phase hints</li>
+          <li><strong>{payload['summary']['right_phase_hint_count']}</strong> right phase hints</li>
+        </ul>
+        <p class="muted">Downloads: {download_links}</p>
+      </section>
+      <section class="panel chart">
+        <h2>Imported trace comparison card</h2>
+        {inline_svg}
+      </section>
+      <section class="panel">
+        <h2>Average algorithm comparison</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Algorithm</th>
+              <th>Left avg faults</th>
+              <th>Right avg faults</th>
+              <th>Δ right-left</th>
+              <th>Better avg</th>
+              <th>Left avg fault rate</th>
+              <th>Right avg fault rate</th>
+            </tr>
+          </thead>
+          <tbody>{algorithm_rows}</tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Frame-by-frame comparison</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Frames</th>
+              <th>Left winner</th>
+              <th>Right winner</th>
+              <th>FIFO L/R</th>
+              <th>CLOCK L/R</th>
+              <th>AGING L/R</th>
+              <th>LRU L/R</th>
+              <th>OPT L/R</th>
+            </tr>
+          </thead>
+          <tbody>{frame_rows}</tbody>
+        </table>
+      </section>
+      <div class="two-up">
+        {render_trace_panel('Left trace details', left)}
+        {render_trace_panel('Right trace details', right)}
+      </div>
+    </main>
+  </body>
+</html>
+'''
+
+
+def format_trace_compare_text(payload: dict, *, html_path: Path, svg_path: Path) -> str:
+    left = payload['left']
+    right = payload['right']
+    overall_better = payload['summary']['overall_better_average_fault_rate']
+    if overall_better == 'left':
+        overall_label = left['workload']
+    elif overall_better == 'right':
+        overall_label = right['workload']
+    else:
+        overall_label = 'tie'
+    largest_gap = payload['summary']['largest_average_fault_gap']
+    if largest_gap['better_average_faults'] == 'left':
+        largest_gap_label = left['workload']
+    elif largest_gap['better_average_faults'] == 'right':
+        largest_gap_label = right['workload']
+    else:
+        largest_gap_label = 'tie'
+    lines = [
+        f"trace comparison: {left['workload']} vs {right['workload']}",
+        f"html report: {html_path}",
+        f"svg card: {svg_path}",
+        f"lower normalized overall average fault rate: {overall_label}",
+        (
+            f"largest average fault gap: {largest_gap['algorithm'].upper()} → "
+            f"{largest_gap_label} ({abs(largest_gap['fault_delta_right_minus_left']):.2f} faults)"
+        ),
+    ]
+    for entry in payload['algorithm_summaries']:
+        if entry['better_average_faults'] == 'left':
+            winner = left['workload']
+        elif entry['better_average_faults'] == 'right':
+            winner = right['workload']
+        else:
+            winner = 'tie'
+        lines.append(
+            f"- {entry['algorithm']}: {left['workload']}={entry['left_average_faults']:.2f}, {right['workload']}={entry['right_average_faults']:.2f}, better={winner}"
+        )
+    return '\n'.join(lines)
 def format_preset_text() -> str:
     lines = ["built-in workload presets:"]
     for preset in list_workload_presets():
@@ -3038,6 +3851,76 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(aggregate_payload, indent=2))
             else:
                 print(format_aggregate_text(aggregate_runs, html_path=html_path, svg_path=svg_path))
+            return 0
+
+        if args.command == "trace-compare":
+            selected_pages_files = args.trace_compare_pages_files or []
+            if len(selected_pages_files) != 2:
+                raise InputError("trace-compare needs exactly two --pages-file inputs")
+            workloads = resolve_gallery_workloads(
+                None,
+                None,
+                selected_pages_files=selected_pages_files,
+                include_benchmarks=False,
+            )
+            if len(workloads) != 2:
+                raise InputError("trace-compare needs exactly two distinct imported trace files")
+            left_workload, right_workload = workloads
+            payload = build_trace_compare_payload(
+                left_workload,
+                right_workload,
+                min_frames=args.min_frames,
+                max_frames=args.max_frames,
+                window_size=args.window_size,
+                phase_threshold=args.phase_threshold,
+            )
+            stem = f"{left_workload.name}-vs-{right_workload.name}-trace-compare"
+            markdown_path = args.artifact_dir / f"{stem}.md"
+            svg_path = args.artifact_dir / f"{stem}.svg"
+            csv_path = args.artifact_dir / f"{stem}.csv"
+            json_path = args.artifact_dir / f"{stem}.json"
+            html_path = args.html_out or (args.artifact_dir / f"{stem}.html")
+
+            write_text_output(markdown_path, format_trace_compare_markdown(payload))
+            svg_markup = format_trace_compare_svg(
+                payload,
+                id_prefix=f"page-replacement-{stem}",
+            )
+            write_text_output(svg_path, svg_markup)
+            write_trace_compare_csv(csv_path, payload)
+            trace_compare_payload = {
+                **payload,
+                "artifact_dir": str(args.artifact_dir),
+                "html_path": str(html_path),
+                "paths": {
+                    "markdown": str(markdown_path),
+                    "svg": str(svg_path),
+                    "csv": str(csv_path),
+                    "json": str(json_path),
+                    "html": str(html_path),
+                },
+            }
+            write_text_output(json_path, json.dumps(trace_compare_payload, indent=2) + "\n")
+            write_text_output(
+                html_path,
+                format_trace_compare_html(
+                    payload,
+                    inline_svg=format_trace_compare_svg(
+                        payload,
+                        id_prefix=f"page-replacement-inline-{stem}",
+                    ),
+                    downloads=[
+                        ("Markdown", os.path.relpath(markdown_path, html_path.parent)),
+                        ("SVG", os.path.relpath(svg_path, html_path.parent)),
+                        ("CSV", os.path.relpath(csv_path, html_path.parent)),
+                        ("JSON", os.path.relpath(json_path, html_path.parent)),
+                    ],
+                ),
+            )
+            if args.json:
+                print(json.dumps(trace_compare_payload, indent=2))
+            else:
+                print(format_trace_compare_text(payload, html_path=html_path, svg_path=svg_path))
             return 0
 
         parsed_reference = parse_reference_args(

@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1120" viewBox="0 0 1480 1120" role="img" aria-labelledby="page-replacement-mobile-app-session-vs-reporting-scan-session-trace-compare-title page-replacement-mobile-app-session-vs-reporting-scan-session-trace-compare-desc">
+  <title id="page-replacement-mobile-app-session-vs-reporting-scan-session-trace-compare-title">Page replacement imported-trace comparison card</title>
+  <desc id="page-replacement-mobile-app-session-vs-reporting-scan-session-trace-compare-desc">Side-by-side average fault-rate comparison for imported traces mobile-app-session and reporting-scan-session.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="28" y="24" width="1424" height="1072" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="72" y="62" font-size="32" font-weight="700" fill="#0f172a">Imported trace comparison card</text>
+  <text x="72" y="96" font-size="18" fill="#475569">Compare exactly two custom traces side by side across the same frame sweep for portfolio-ready memory-management storytelling.</text>
+  <rect x="64" y="118" width="620" height="236" rx="24" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" />
+  <text x="92" y="146" font-size="22" font-weight="700" fill="#2563eb">Left trace</text>
+<text x="92" y="156" font-size="18" fill="#0f172a">mobile-app-session</text>
+<text x="92" y="184" font-size="18" fill="#0f172a">refs 60 · unique 30 · phase hints 6</text>
+<text x="92" y="212" font-size="18" fill="#0f172a">working-set avg 6.15 · final 6 · reuse median 4.0 · p90 11.0</text>
+<text x="92" y="240" font-size="18" fill="#0f172a">best avg OPT (31.83)</text>
+<text x="92" y="268" font-size="18" fill="#0f172a">FIFO anomalies 0 · other regressions 0</text>
+  <rect x="720" y="118" width="620" height="236" rx="24" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5" />
+  <text x="748" y="146" font-size="22" font-weight="700" fill="#7c3aed">Right trace</text>
+<text x="748" y="156" font-size="18" fill="#0f172a">reporting-scan-session</text>
+<text x="748" y="184" font-size="18" fill="#0f172a">refs 24 · unique 18 · phase hints 2</text>
+<text x="748" y="212" font-size="18" fill="#0f172a">working-set avg 6.54 · final 6 · reuse median 5.0 · p90 7.0</text>
+<text x="748" y="240" font-size="18" fill="#0f172a">best avg OPT (18.00)</text>
+<text x="748" y="268" font-size="18" fill="#0f172a">FIFO anomalies 0 · other regressions 0</text>
+  <rect x="64" y="378" width="1312" height="372" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />
+  <text x="92" y="410" font-size="24" font-weight="700" fill="#0f172a">Average page-fault rate by algorithm</text>
+  <text x="92" y="438" font-size="14" fill="#475569">Blue bars show the left trace. Purple bars show the right trace. Lower is better because it means fewer page faults per reference.</text>
+  <line x1="120" y1="410" x2="120" y2="710" stroke="#0f172a" stroke-width="2" />
+  <line x1="120" y1="710" x2="1300" y2="710" stroke="#0f172a" stroke-width="2" />
+<line x1="120" y1="710.00" x2="1300" y2="710.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="715.00" font-size="12" text-anchor="end" fill="#475569">0%</text>
+<line x1="120" y1="680.00" x2="1300" y2="680.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="685.00" font-size="12" text-anchor="end" fill="#475569">10%</text>
+<line x1="120" y1="650.00" x2="1300" y2="650.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="655.00" font-size="12" text-anchor="end" fill="#475569">20%</text>
+<line x1="120" y1="620.00" x2="1300" y2="620.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="625.00" font-size="12" text-anchor="end" fill="#475569">30%</text>
+<line x1="120" y1="590.00" x2="1300" y2="590.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="595.00" font-size="12" text-anchor="end" fill="#475569">40%</text>
+<line x1="120" y1="560.00" x2="1300" y2="560.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="565.00" font-size="12" text-anchor="end" fill="#475569">50%</text>
+<line x1="120" y1="530.00" x2="1300" y2="530.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="535.00" font-size="12" text-anchor="end" fill="#475569">60%</text>
+<line x1="120" y1="500.00" x2="1300" y2="500.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="505.00" font-size="12" text-anchor="end" fill="#475569">70%</text>
+<line x1="120" y1="470.00" x2="1300" y2="470.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="475.00" font-size="12" text-anchor="end" fill="#475569">80%</text>
+<line x1="120" y1="440.00" x2="1300" y2="440.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="445.00" font-size="12" text-anchor="end" fill="#475569">90%</text>
+<line x1="120" y1="410.00" x2="1300" y2="410.00" stroke="#d7dde8" stroke-width="1" />
+<text x="104" y="415.00" font-size="12" text-anchor="end" fill="#475569">100%</text>
+<rect x="168.62" y="490.00" width="56.64" height="220.00" rx="16" fill="#2563eb" />
+<text x="196.94" y="480.00" font-size="12" text-anchor="middle" fill="#2563eb">73.3%</text>
+<rect x="250.74" y="426.67" width="56.64" height="283.33" rx="16" fill="#7c3aed" />
+<text x="279.06" y="416.67" font-size="12" text-anchor="middle" fill="#7c3aed">94.4%</text>
+<text x="238.00" y="738" font-size="13" text-anchor="middle" fill="#475569">FIFO</text>
+<rect x="404.62" y="490.00" width="56.64" height="220.00" rx="16" fill="#2563eb" />
+<text x="432.94" y="480.00" font-size="12" text-anchor="middle" fill="#2563eb">73.3%</text>
+<rect x="486.74" y="426.67" width="56.64" height="283.33" rx="16" fill="#7c3aed" />
+<text x="515.06" y="416.67" font-size="12" text-anchor="middle" fill="#7c3aed">94.4%</text>
+<text x="474.00" y="738" font-size="13" text-anchor="middle" fill="#475569">CLOCK</text>
+<rect x="640.62" y="506.67" width="56.64" height="203.33" rx="16" fill="#2563eb" />
+<text x="668.94" y="496.67" font-size="12" text-anchor="middle" fill="#2563eb">67.8%</text>
+<rect x="722.74" y="439.17" width="56.64" height="270.83" rx="16" fill="#7c3aed" />
+<text x="751.06" y="429.17" font-size="12" text-anchor="middle" fill="#7c3aed">90.3%</text>
+<text x="710.00" y="738" font-size="13" text-anchor="middle" fill="#475569">AGING</text>
+<rect x="876.62" y="506.67" width="56.64" height="203.33" rx="16" fill="#2563eb" />
+<text x="904.94" y="496.67" font-size="12" text-anchor="middle" fill="#2563eb">67.8%</text>
+<rect x="958.74" y="439.17" width="56.64" height="270.83" rx="16" fill="#7c3aed" />
+<text x="987.06" y="429.17" font-size="12" text-anchor="middle" fill="#7c3aed">90.3%</text>
+<text x="946.00" y="738" font-size="13" text-anchor="middle" fill="#475569">LRU</text>
+<rect x="1112.62" y="550.83" width="56.64" height="159.17" rx="16" fill="#2563eb" />
+<text x="1140.94" y="540.83" font-size="12" text-anchor="middle" fill="#2563eb">53.1%</text>
+<rect x="1194.74" y="485.00" width="56.64" height="225.00" rx="16" fill="#7c3aed" />
+<text x="1223.06" y="475.00" font-size="12" text-anchor="middle" fill="#7c3aed">75.0%</text>
+<text x="1182.00" y="738" font-size="13" text-anchor="middle" fill="#475569">OPT</text>
+  <text x="710.00" y="770" font-size="14" text-anchor="middle" fill="#475569">Algorithms</text>
+  <text x="48" y="560.00" font-size="14" fill="#475569" transform="rotate(-90 48 560.00)">Average page-fault rate</text>
+  <circle cx="1098" cy="92" r="8" fill="#2563eb" />
+  <text x="1114" y="98" font-size="15" fill="#0f172a">mobile-app-session</text>
+  <circle cx="1238" cy="92" r="8" fill="#7c3aed" />
+  <text x="1254" y="98" font-size="15" fill="#0f172a">reporting-scan-session</text>
+  <rect x="64" y="796" width="620" height="256" rx="24" fill="#f8fafc" stroke="#d7dde8" stroke-width="1.5" />
+  <text x="92" y="832" font-size="22" font-weight="700" fill="#0f172a">Algorithm gaps</text>
+<text x="92" y="858" font-size="18" fill="#0f172a">FIFO: 44.00 vs 22.67 avg faults → reporting-scan-session</text>
+<text x="92" y="886" font-size="18" fill="#0f172a">CLOCK: 44.00 vs 22.67 avg faults → reporting-scan-session</text>
+<text x="92" y="914" font-size="18" fill="#0f172a">AGING: 40.67 vs 21.67 avg faults → reporting-scan-session</text>
+<text x="92" y="942" font-size="18" fill="#0f172a">LRU: 40.67 vs 21.67 avg faults → reporting-scan-session</text>
+<text x="92" y="970" font-size="18" fill="#0f172a">OPT: 31.83 vs 18.00 avg faults → reporting-scan-session</text>
+  <rect x="720" y="796" width="620" height="256" rx="24" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+  <text x="748" y="832" font-size="22" font-weight="700" fill="#1e3a8a">Overall comparison</text>
+<text x="748" y="858" font-size="18" fill="#0f172a">frame range 3–8 · window size 8 · phase threshold 0.45</text>
+<text x="748" y="886" font-size="18" fill="#0f172a">lower normalized overall average fault rate: mobile-app-session</text>
+<text x="748" y="914" font-size="18" fill="#0f172a">largest average gap: FIFO → reporting-scan-session (21.33 faults)</text>
+<text x="748" y="942" font-size="18" fill="#0f172a">phase hints: left 6 · right 2</text>
+<text x="748" y="970" font-size="18" fill="#0f172a">left winners by frame: 3:OPT, 4:OPT, 5:OPT, 6:OPT, 7:OPT, 8:OPT</text>
+<text x="748" y="998" font-size="18" fill="#0f172a">right winners by frame: 3:OPT, 4:OPT, 5:OPT, 6:OPT, 7:OPT, 8:AGING/LRU/OPT</text>
+</svg>

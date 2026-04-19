@@ -26,6 +26,7 @@
 - [x] generate a browsable gallery that bundles built-in presets, larger benchmark traces, and imported custom traces into one static HTML artifact page
 - [x] export trace-summary Markdown / SVG / HTML artifacts for a benchmark or imported workload
 - [x] link imported gallery workloads to their own drill-down trace-summary cards
+- [x] compare exactly two imported traces side by side with one portfolio-ready artifact bundle
 
 ## Next vertical slices
 - [x] add aging-style page replacement for stronger systems realism
@@ -33,4 +34,4 @@
 - [x] add cross-workload aggregate comparison charts for slide-ready summaries
 - [x] add a trace-summary or reuse-distance helper for imported workloads
 - [x] add SVG/HTML trace-summary cards for portfolio slides
-- [ ] add side-by-side imported-trace comparisons
+- [x] add side-by-side imported-trace comparisons

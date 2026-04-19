@@ -437,6 +437,92 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("trace-summary.svg", html)
             self.assertIn("compiler-phase-shift", html)
 
+    def test_cli_trace_compare_writes_side_by_side_artifacts_for_imported_traces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            left_path = Path(tmpdir) / "mobile-app-session.txt"
+            right_path = Path(tmpdir) / "reporting-scan-session.txt"
+            left_path.write_text(
+                "1 2 3 1 2 4 1 2 5 6 7 5 6 7 8 9 8 9\n",
+                encoding="utf-8",
+            )
+            right_path.write_text(
+                "1 2 3 4 5 6 7 8 9 10 3 4 11 12 13 14 3 4 15 16 17 18 3 4\n",
+                encoding="utf-8",
+            )
+            artifact_dir = Path(tmpdir) / "trace-compare"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "trace-compare",
+                    "--min-frames",
+                    "3",
+                    "--max-frames",
+                    "6",
+                    "--pages-file",
+                    str(left_path),
+                    "--pages-file",
+                    str(right_path),
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            markdown = Path(payload["paths"]["markdown"]).read_text(encoding="utf-8")
+            svg = Path(payload["paths"]["svg"]).read_text(encoding="utf-8")
+            csv_output = Path(payload["paths"]["csv"]).read_text(encoding="utf-8")
+            html = Path(payload["paths"]["html"]).read_text(encoding="utf-8")
+            json_output = Path(payload["paths"]["json"]).read_text(encoding="utf-8")
+
+            self.assertEqual(payload["left"]["workload"], "mobile-app-session")
+            self.assertEqual(payload["right"]["workload"], "reporting-scan-session")
+            self.assertTrue(payload["left"]["reference_source"].startswith("pages-file:"))
+            self.assertTrue(payload["right"]["reference_source"].startswith("pages-file:"))
+            self.assertIn(payload["summary"]["overall_better_average_fault_rate"], {"left", "right", "tie"})
+            self.assertIn("# Page Replacement Imported Trace Comparison", markdown)
+            self.assertIn("## Frame-by-frame comparison", markdown)
+            self.assertIn("<svg", svg)
+            self.assertIn("Imported trace comparison card", svg)
+            self.assertIn(
+                "frame_count,algorithm,left_workload,right_workload,left_faults,right_faults",
+                csv_output,
+            )
+            self.assertIn("Page Replacement Imported Trace Comparison", html)
+            self.assertIn("Average algorithm comparison", html)
+            self.assertIn("Downloads:", html)
+            self.assertIn("\"html_path\"", json_output)
+            self.assertIn("mobile-app-session", json_output)
+
+    def test_cli_trace_compare_requires_exactly_two_pages_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            only_path = Path(tmpdir) / "only-trace.txt"
+            only_path.write_text("1 2 3 1 2 4 5 4 5 6\n", encoding="utf-8")
+            artifact_dir = Path(tmpdir) / "trace-compare"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "trace-compare",
+                    "--min-frames",
+                    "2",
+                    "--max-frames",
+                    "5",
+                    "--pages-file",
+                    str(only_path),
+                    "--artifact-dir",
+                    str(artifact_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("trace-compare needs exactly two --pages-file inputs", completed.stderr)
+
     def test_cli_aggregate_writes_dashboard_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact_dir = Path(tmpdir) / "aggregate"

@@ -10,7 +10,8 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - gives strong interview material around locality, stack algorithms, and Belady's anomaly
 - includes a `trace-summary` workflow that surfaces reuse-distance buckets, sliding working-set sizes, and phase-boundary hints for imported workloads
 - includes an `aggregate` dashboard workflow that normalizes page-fault rates across presets, larger benchmark traces, and imported custom traces for one slide-ready comparison view
-- leaves room for future extensions like working-set replacement policies or side-by-side trace-summary comparisons
+- includes a `trace-compare` workflow that contrasts exactly two imported traces side by side with rate charts, frame tables, and locality snapshots
+- leaves room for future extensions like working-set replacement policies or richer narrative trace write-ups
 
 ## Features
 - simulate **FIFO**, **Clock / second-chance**, **Aging**, **LRU**, and **OPT** page replacement
@@ -26,6 +27,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - summarize imported traces with reuse-distance buckets, sliding working-set sizes, and phase-boundary hints that explain why a workload changes policy behavior
 - export trace-summary results as Markdown, slide-ready SVG cards, and browsable HTML companion pages
 - build a cross-workload aggregate dashboard with normalized average page-fault-rate charts plus CSV / SVG / JSON / HTML artifacts
+- compare exactly two imported traces side by side with one `trace-compare` run that emits Markdown / SVG / CSV / JSON / HTML artifacts
 - mix imported `--pages-file` workloads into aggregate dashboard or gallery runs without editing the source code
 
 ## Quick start
@@ -126,6 +128,16 @@ python3 projects/page-replacement-lab/page_replacement_lab.py aggregate --min-fr
 
 Repeat `--pages-file` to add more imported traces to the same dashboard build.
 
+### Compare two imported traces side by side
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py trace-compare --min-frames 3 --max-frames 8 \
+  --pages-file projects/page-replacement-lab/custom-traces/mobile-app-session.txt \
+  --pages-file projects/page-replacement-lab/custom-traces/reporting-scan-session.txt \
+  --artifact-dir docs/artifacts/page-replacement-lab/trace-compare
+```
+
+`trace-compare` requires exactly two imported `--pages-file` inputs and emits one Markdown / SVG / CSV / JSON / HTML bundle for that left-vs-right comparison.
+
 ### Load pages from a file instead of a preset
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 4 \
@@ -146,7 +158,7 @@ These presets make demos reproducible and help explain how locality changes poli
 - `streaming-burst-window` — stream-processing working-set shifts with cold backfill bursts and rolling-window updates
 
 These benchmark bundles are longer than the compact presets and better for portfolio screenshots that need stronger separation between locality-friendly and scan-heavy workloads.
-Use exactly one of `--preset`, `--benchmark`, or explicit `--page` / `--pages-file` input for a single-workload run. The `aggregate` and `gallery` commands can intentionally mix repeated `--preset`, `--benchmark`, and `--pages-file` selections in one dashboard build or gallery export.
+Use exactly one of `--preset`, `--benchmark`, or explicit `--page` / `--pages-file` input for a single-workload run. The `aggregate` and `gallery` commands can intentionally mix repeated `--preset`, `--benchmark`, and `--pages-file` selections in one dashboard build or gallery export. The dedicated `trace-compare` command instead requires exactly two imported `--pages-file` arguments.
 
 ## Example output
 ```text
@@ -181,7 +193,9 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/aggregate/aggregate-summary.json` — machine-readable aggregate payload for future frontend or notebook reuse
 - `docs/artifacts/page-replacement-lab/custom-aggregate/index.html` — committed mixed aggregate dashboard that includes a custom imported trace file alongside built-in workloads
 - `docs/artifacts/page-replacement-lab/custom-aggregate/aggregate-summary.json` — sample mixed-workload payload that records preset / benchmark / custom counts together
-- `projects/page-replacement-lab/custom-traces/mobile-app-session.txt` — sample imported trace file used to demonstrate custom aggregate and gallery workflows without editing the source code
+- `docs/artifacts/page-replacement-lab/trace-compare/mobile-app-session-vs-reporting-scan-session-trace-compare.{md,svg,csv,json,html}` — committed side-by-side imported-trace bundle that contrasts a locality-friendly mobile session against a scan-heavy reporting session
+- `projects/page-replacement-lab/custom-traces/mobile-app-session.txt` — sample imported trace file used to demonstrate custom aggregate, gallery, and trace-compare workflows without editing the source code
+- `projects/page-replacement-lab/custom-traces/reporting-scan-session.txt` — sample imported trace file with repeated pinned hot pages separated by long cold scans for a stronger contrast workload
 
 ## Testing
 ```bash
@@ -196,9 +210,10 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
 - discuss how locality of reference changes the ranking between FIFO, Clock, Aging, and LRU
 - explain how reuse distance helps estimate locality pressure and why the trace-summary report flags scan-heavy phase changes
+- compare two imported traces by normalized average fault rate and explain why the lower-rate winner still needs the frame-by-frame table for nuance
 - suggest how this simulator could extend into real trace replay, working-set analysis, or richer report/gallery generation
 
 ## Future improvements
 - add working-set or WSClock-style algorithms for richer policy comparisons
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
-- add side-by-side imported-trace comparison cards for portfolio slides
+- add narrative annotations or callout overlays that explain why one imported trace wins on specific frame counts
