@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="760" viewBox="0 0 1120 760" role="img" aria-labelledby="wsclock-mode-study-benchmark-adaptive-phase-turnover-title wsclock-mode-study-benchmark-adaptive-phase-turnover-desc">
+  <title id="wsclock-mode-study-benchmark-adaptive-phase-turnover-title">WSClock frame-budget study</title>
+  <desc id="wsclock-mode-study-benchmark-adaptive-phase-turnover-desc">Adaptive vs fixed WSClock page-fault comparison for benchmark adaptive-phase-turnover — three short overlapping hot-set phases crafted to show where an adaptive WSClock tau beats any single fixed window</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="36" y="28" width="1048" height="692" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Adaptive vs fixed WSClock across frame budgets</text>
+  <text x="84" y="98" font-size="16" fill="#475569">benchmark adaptive-phase-turnover — three short overlapping hot-set phases crafted to show where an adaptive WSClock tau beats any single fixed window</text>
+<line x1="84" y1="76" x2="112" y2="76" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" />
+<text x="122" y="81" font-size="14" fill="#0f172a">auto-fixed</text>
+<line x1="294" y1="76" x2="322" y2="76" stroke="#0f766e" stroke-width="4" stroke-linecap="round" />
+<text x="332" y="81" font-size="14" fill="#0f172a">tuned-fixed</text>
+<line x1="504" y1="76" x2="532" y2="76" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" />
+<text x="542" y="81" font-size="14" fill="#0f172a">adaptive-heuristic</text>
+  <line x1="84" y1="126" x2="84" y2="446" stroke="#0f172a" stroke-width="2" />
+  <line x1="84" y1="446" x2="844" y2="446" stroke="#0f172a" stroke-width="2" />
+<line x1="84" y1="446.00" x2="844" y2="446.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="451.00" font-size="13" text-anchor="end" fill="#475569">0</text>
+<line x1="84" y1="410.44" x2="844" y2="410.44" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="415.44" font-size="13" text-anchor="end" fill="#475569">2</text>
+<line x1="84" y1="374.89" x2="844" y2="374.89" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="379.89" font-size="13" text-anchor="end" fill="#475569">4</text>
+<line x1="84" y1="339.33" x2="844" y2="339.33" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="344.33" font-size="13" text-anchor="end" fill="#475569">6</text>
+<line x1="84" y1="303.78" x2="844" y2="303.78" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="308.78" font-size="13" text-anchor="end" fill="#475569">8</text>
+<line x1="84" y1="268.22" x2="844" y2="268.22" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="273.22" font-size="13" text-anchor="end" fill="#475569">10</text>
+<line x1="84" y1="232.67" x2="844" y2="232.67" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="237.67" font-size="13" text-anchor="end" fill="#475569">12</text>
+<line x1="84" y1="197.11" x2="844" y2="197.11" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="202.11" font-size="13" text-anchor="end" fill="#475569">14</text>
+<line x1="84" y1="161.56" x2="844" y2="161.56" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="166.56" font-size="13" text-anchor="end" fill="#475569">16</text>
+<line x1="84" y1="126.00" x2="844" y2="126.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="131.00" font-size="13" text-anchor="end" fill="#475569">18</text>
+<text x="84.00" y="474" font-size="13" text-anchor="middle" fill="#475569">2</text>
+<text x="274.00" y="474" font-size="13" text-anchor="middle" fill="#475569">3</text>
+<text x="464.00" y="474" font-size="13" text-anchor="middle" fill="#475569">4</text>
+<text x="654.00" y="474" font-size="13" text-anchor="middle" fill="#475569">5</text>
+<text x="844.00" y="474" font-size="13" text-anchor="middle" fill="#475569">6</text>
+  <text x="464.00" y="502" font-size="14" text-anchor="middle" fill="#475569">Frames</text>
+  <text x="28" y="286.00" font-size="14" fill="#475569" transform="rotate(-90 28 286.00)">Page faults</text>
+<polyline fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,126.00 274.00,197.11 464.00,303.78 654.00,321.56 844.00,339.33" />
+<circle cx="84.00" cy="126.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="114.00" font-size="11" text-anchor="middle" fill="#f59e0b">18</text>
+<circle cx="274.00" cy="197.11" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="274.00" y="185.11" font-size="11" text-anchor="middle" fill="#f59e0b">14</text>
+<circle cx="464.00" cy="303.78" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="464.00" y="291.78" font-size="11" text-anchor="middle" fill="#f59e0b">8</text>
+<circle cx="654.00" cy="321.56" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="654.00" y="309.56" font-size="11" text-anchor="middle" fill="#f59e0b">7</text>
+<circle cx="844.00" cy="339.33" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="844.00" y="327.33" font-size="11" text-anchor="middle" fill="#f59e0b">6</text>
+<polyline fill="none" stroke="#0f766e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,126.00 274.00,197.11 464.00,303.78 654.00,321.56 844.00,339.33" />
+<circle cx="84.00" cy="126.00" r="5.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="114.00" font-size="11" text-anchor="middle" fill="#0f766e">18</text>
+<circle cx="274.00" cy="197.11" r="5.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
+<text x="274.00" y="185.11" font-size="11" text-anchor="middle" fill="#0f766e">14</text>
+<circle cx="464.00" cy="303.78" r="5.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
+<text x="464.00" y="291.78" font-size="11" text-anchor="middle" fill="#0f766e">8</text>
+<circle cx="654.00" cy="321.56" r="5.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
+<text x="654.00" y="309.56" font-size="11" text-anchor="middle" fill="#0f766e">7</text>
+<circle cx="844.00" cy="339.33" r="5.5" fill="#0f766e" stroke="#ffffff" stroke-width="2" />
+<text x="844.00" y="327.33" font-size="11" text-anchor="middle" fill="#0f766e">6</text>
+<polyline fill="none" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,126.00 274.00,214.89 464.00,303.78 654.00,321.56 844.00,339.33" />
+<circle cx="84.00" cy="126.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="114.00" font-size="11" text-anchor="middle" fill="#8b5cf6">18</text>
+<circle cx="274.00" cy="214.89" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="274.00" y="202.89" font-size="11" text-anchor="middle" fill="#8b5cf6">13</text>
+<circle cx="464.00" cy="303.78" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="464.00" y="291.78" font-size="11" text-anchor="middle" fill="#8b5cf6">8</text>
+<circle cx="654.00" cy="321.56" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="654.00" y="309.56" font-size="11" text-anchor="middle" fill="#8b5cf6">7</text>
+<circle cx="844.00" cy="339.33" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="844.00" y="327.33" font-size="11" text-anchor="middle" fill="#8b5cf6">6</text>
+  <text x="84" y="486" font-size="20" font-weight="700" fill="#0f172a">Adaptive outcome by frame budget</text>
+<rect x="84" y="504" width="120" height="64" rx="16" fill="#f59e0b" opacity="0.16" stroke="#f59e0b" stroke-width="1.5" />
+<text x="144.0" y="528" font-size="14" text-anchor="middle" fill="#0f172a">frame 2</text>
+<text x="144.0" y="550" font-size="16" font-weight="700" text-anchor="middle" fill="#f59e0b">tied</text>
+<rect x="220" y="504" width="120" height="64" rx="16" fill="#10b981" opacity="0.16" stroke="#10b981" stroke-width="1.5" />
+<text x="280.0" y="528" font-size="14" text-anchor="middle" fill="#0f172a">frame 3</text>
+<text x="280.0" y="550" font-size="16" font-weight="700" text-anchor="middle" fill="#10b981">better</text>
+<rect x="356" y="504" width="120" height="64" rx="16" fill="#f59e0b" opacity="0.16" stroke="#f59e0b" stroke-width="1.5" />
+<text x="416.0" y="528" font-size="14" text-anchor="middle" fill="#0f172a">frame 4</text>
+<text x="416.0" y="550" font-size="16" font-weight="700" text-anchor="middle" fill="#f59e0b">tied</text>
+<rect x="492" y="504" width="120" height="64" rx="16" fill="#f59e0b" opacity="0.16" stroke="#f59e0b" stroke-width="1.5" />
+<text x="552.0" y="528" font-size="14" text-anchor="middle" fill="#0f172a">frame 5</text>
+<text x="552.0" y="550" font-size="16" font-weight="700" text-anchor="middle" fill="#f59e0b">tied</text>
+<rect x="628" y="504" width="120" height="64" rx="16" fill="#f59e0b" opacity="0.16" stroke="#f59e0b" stroke-width="1.5" />
+<text x="688.0" y="528" font-size="14" text-anchor="middle" fill="#0f172a">frame 6</text>
+<text x="688.0" y="550" font-size="16" font-weight="700" text-anchor="middle" fill="#f59e0b">tied</text>
+  <rect x="64" y="592" width="992" height="104" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+<text x="84" y="620" font-size="18" fill="#0f172a">workload: benchmark adaptive-phase-turnover — three short overlapping hot-set phases crafted to show where an adaptive WSClock tau beats any single fixed window</text>
+<text x="84" y="648" font-size="18" fill="#0f172a">frame range: 2 to 6 | writeback penalty 1.00</text>
+<text x="84" y="676" font-size="18" fill="#0f172a">adaptive vs best fixed: better 1 | tied 4 | worse 0</text>
+<text x="84" y="704" font-size="18" fill="#0f172a">best average weighted score: adaptive-heuristic</text>
+<text x="84" y="732" font-size="18" fill="#0f172a">best adaptive gain: frame 3 with Δscore -1.00 and Δfaults -1</text>
+</svg>

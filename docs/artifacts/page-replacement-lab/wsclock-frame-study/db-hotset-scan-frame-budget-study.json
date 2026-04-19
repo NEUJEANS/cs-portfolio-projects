@@ -1,0 +1,474 @@
+{
+  "reference_string": [
+    1,
+    2,
+    3,
+    1,
+    2,
+    4,
+    1,
+    2,
+    5,
+    1,
+    2,
+    3,
+    1,
+    2,
+    4,
+    1,
+    2,
+    5,
+    1,
+    2,
+    3,
+    1,
+    2,
+    4,
+    1,
+    2,
+    5,
+    1,
+    2,
+    3,
+    1,
+    2,
+    4,
+    1,
+    2,
+    5,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    1,
+    2,
+    3,
+    6,
+    1,
+    2,
+    3,
+    7,
+    1,
+    2,
+    3,
+    6,
+    1,
+    2,
+    3,
+    7,
+    1,
+    2,
+    3,
+    6,
+    1,
+    2,
+    3,
+    7,
+    60,
+    61,
+    62,
+    63,
+    1,
+    2,
+    3,
+    4
+  ],
+  "reference_length": 84,
+  "min_frames": 3,
+  "max_frames": 8,
+  "writeback_penalty": 1.0,
+  "min_window": 2,
+  "max_window": 14,
+  "segment_length": 10,
+  "reuse_percentile": 0.5,
+  "dirty_window_bonus": 2,
+  "dirty_pages": [],
+  "dirty_page_count": 0,
+  "dirty_page_description": "none",
+  "frame_results": [
+    {
+      "frame_count": 3,
+      "winner_mode": "tuned-fixed",
+      "leader_modes": [
+        "auto-fixed",
+        "tuned-fixed",
+        "adaptive-heuristic"
+      ],
+      "best_fixed_mode": "tuned-fixed",
+      "adaptive_vs_best_fixed": {
+        "status": "tied",
+        "fault_delta": 0,
+        "writeback_delta": 0,
+        "score_delta": 0.0,
+        "baseline_mode": "tuned-fixed",
+        "candidate_mode": "adaptive-heuristic"
+      },
+      "auto_window": 6,
+      "tuned_window": 2,
+      "adaptive_segment_length": 10,
+      "adaptive_average_window": 3.47619,
+      "adaptive_min_window": 3,
+      "adaptive_max_window": 6,
+      "modes": {
+        "auto-fixed": {
+          "page_faults": 62,
+          "hits": 22,
+          "hit_rate": 0.261905,
+          "fault_rate": 0.738095,
+          "writebacks": 0,
+          "weighted_score": 62.0,
+          "window_value": 6,
+          "window_description": "auto (max(4, frames * 2))"
+        },
+        "tuned-fixed": {
+          "page_faults": 62,
+          "hits": 22,
+          "hit_rate": 0.261905,
+          "fault_rate": 0.738095,
+          "writebacks": 0,
+          "weighted_score": 62.0,
+          "window_value": 2,
+          "window_description": "fixed 2 references"
+        },
+        "adaptive-heuristic": {
+          "page_faults": 62,
+          "hits": 22,
+          "hit_rate": 0.261905,
+          "fault_rate": 0.738095,
+          "writebacks": 0,
+          "weighted_score": 62.0,
+          "window_value": null,
+          "window_description": "adaptive segments of 10 references using recent reuse p50"
+        }
+      }
+    },
+    {
+      "frame_count": 4,
+      "winner_mode": "tuned-fixed",
+      "leader_modes": [
+        "auto-fixed",
+        "tuned-fixed",
+        "adaptive-heuristic"
+      ],
+      "best_fixed_mode": "tuned-fixed",
+      "adaptive_vs_best_fixed": {
+        "status": "tied",
+        "fault_delta": 0,
+        "writeback_delta": 0,
+        "score_delta": 0.0,
+        "baseline_mode": "tuned-fixed",
+        "candidate_mode": "adaptive-heuristic"
+      },
+      "auto_window": 8,
+      "tuned_window": 2,
+      "adaptive_segment_length": 10,
+      "adaptive_average_window": 4.0,
+      "adaptive_min_window": 3,
+      "adaptive_max_window": 8,
+      "modes": {
+        "auto-fixed": {
+          "page_faults": 47,
+          "hits": 37,
+          "hit_rate": 0.440476,
+          "fault_rate": 0.559524,
+          "writebacks": 0,
+          "weighted_score": 47.0,
+          "window_value": 8,
+          "window_description": "auto (max(4, frames * 2))"
+        },
+        "tuned-fixed": {
+          "page_faults": 47,
+          "hits": 37,
+          "hit_rate": 0.440476,
+          "fault_rate": 0.559524,
+          "writebacks": 0,
+          "weighted_score": 47.0,
+          "window_value": 2,
+          "window_description": "fixed 2 references"
+        },
+        "adaptive-heuristic": {
+          "page_faults": 47,
+          "hits": 37,
+          "hit_rate": 0.440476,
+          "fault_rate": 0.559524,
+          "writebacks": 0,
+          "weighted_score": 47.0,
+          "window_value": null,
+          "window_description": "adaptive segments of 10 references using recent reuse p50"
+        }
+      }
+    },
+    {
+      "frame_count": 5,
+      "winner_mode": "tuned-fixed",
+      "leader_modes": [
+        "tuned-fixed",
+        "adaptive-heuristic"
+      ],
+      "best_fixed_mode": "tuned-fixed",
+      "adaptive_vs_best_fixed": {
+        "status": "tied",
+        "fault_delta": 0,
+        "writeback_delta": 0,
+        "score_delta": 0.0,
+        "baseline_mode": "tuned-fixed",
+        "candidate_mode": "adaptive-heuristic"
+      },
+      "auto_window": 10,
+      "tuned_window": 3,
+      "adaptive_segment_length": 10,
+      "adaptive_average_window": 4.404762,
+      "adaptive_min_window": 3,
+      "adaptive_max_window": 10,
+      "modes": {
+        "auto-fixed": {
+          "page_faults": 34,
+          "hits": 50,
+          "hit_rate": 0.595238,
+          "fault_rate": 0.404762,
+          "writebacks": 0,
+          "weighted_score": 34.0,
+          "window_value": 10,
+          "window_description": "auto (max(4, frames * 2))"
+        },
+        "tuned-fixed": {
+          "page_faults": 33,
+          "hits": 51,
+          "hit_rate": 0.607143,
+          "fault_rate": 0.392857,
+          "writebacks": 0,
+          "weighted_score": 33.0,
+          "window_value": 3,
+          "window_description": "fixed 3 references"
+        },
+        "adaptive-heuristic": {
+          "page_faults": 33,
+          "hits": 51,
+          "hit_rate": 0.607143,
+          "fault_rate": 0.392857,
+          "writebacks": 0,
+          "weighted_score": 33.0,
+          "window_value": null,
+          "window_description": "adaptive segments of 10 references using recent reuse p50"
+        }
+      }
+    },
+    {
+      "frame_count": 6,
+      "winner_mode": "tuned-fixed",
+      "leader_modes": [
+        "tuned-fixed"
+      ],
+      "best_fixed_mode": "tuned-fixed",
+      "adaptive_vs_best_fixed": {
+        "status": "worse",
+        "fault_delta": 3,
+        "writeback_delta": 0,
+        "score_delta": 3.0,
+        "baseline_mode": "tuned-fixed",
+        "candidate_mode": "adaptive-heuristic"
+      },
+      "auto_window": 12,
+      "tuned_window": 2,
+      "adaptive_segment_length": 10,
+      "adaptive_average_window": 4.761905,
+      "adaptive_min_window": 3,
+      "adaptive_max_window": 12,
+      "modes": {
+        "auto-fixed": {
+          "page_faults": 34,
+          "hits": 50,
+          "hit_rate": 0.595238,
+          "fault_rate": 0.404762,
+          "writebacks": 0,
+          "weighted_score": 34.0,
+          "window_value": 12,
+          "window_description": "auto (max(4, frames * 2))"
+        },
+        "tuned-fixed": {
+          "page_faults": 31,
+          "hits": 53,
+          "hit_rate": 0.630952,
+          "fault_rate": 0.369048,
+          "writebacks": 0,
+          "weighted_score": 31.0,
+          "window_value": 2,
+          "window_description": "fixed 2 references"
+        },
+        "adaptive-heuristic": {
+          "page_faults": 34,
+          "hits": 50,
+          "hit_rate": 0.595238,
+          "fault_rate": 0.404762,
+          "writebacks": 0,
+          "weighted_score": 34.0,
+          "window_value": null,
+          "window_description": "adaptive segments of 10 references using recent reuse p50"
+        }
+      }
+    },
+    {
+      "frame_count": 7,
+      "winner_mode": "tuned-fixed",
+      "leader_modes": [
+        "tuned-fixed",
+        "adaptive-heuristic"
+      ],
+      "best_fixed_mode": "tuned-fixed",
+      "adaptive_vs_best_fixed": {
+        "status": "tied",
+        "fault_delta": 0,
+        "writeback_delta": 0,
+        "score_delta": 0.0,
+        "baseline_mode": "tuned-fixed",
+        "candidate_mode": "adaptive-heuristic"
+      },
+      "auto_window": 14,
+      "tuned_window": 2,
+      "adaptive_segment_length": 10,
+      "adaptive_average_window": 5.119048,
+      "adaptive_min_window": 3,
+      "adaptive_max_window": 14,
+      "modes": {
+        "auto-fixed": {
+          "page_faults": 34,
+          "hits": 50,
+          "hit_rate": 0.595238,
+          "fault_rate": 0.404762,
+          "writebacks": 0,
+          "weighted_score": 34.0,
+          "window_value": 14,
+          "window_description": "auto (max(4, frames * 2))"
+        },
+        "tuned-fixed": {
+          "page_faults": 31,
+          "hits": 53,
+          "hit_rate": 0.630952,
+          "fault_rate": 0.369048,
+          "writebacks": 0,
+          "weighted_score": 31.0,
+          "window_value": 2,
+          "window_description": "fixed 2 references"
+        },
+        "adaptive-heuristic": {
+          "page_faults": 31,
+          "hits": 53,
+          "hit_rate": 0.630952,
+          "fault_rate": 0.369048,
+          "writebacks": 0,
+          "weighted_score": 31.0,
+          "window_value": null,
+          "window_description": "adaptive segments of 10 references using recent reuse p50"
+        }
+      }
+    },
+    {
+      "frame_count": 8,
+      "winner_mode": "tuned-fixed",
+      "leader_modes": [
+        "tuned-fixed",
+        "adaptive-heuristic"
+      ],
+      "best_fixed_mode": "tuned-fixed",
+      "adaptive_vs_best_fixed": {
+        "status": "tied",
+        "fault_delta": 0,
+        "writeback_delta": 0,
+        "score_delta": 0.0,
+        "baseline_mode": "tuned-fixed",
+        "candidate_mode": "adaptive-heuristic"
+      },
+      "auto_window": 16,
+      "tuned_window": 2,
+      "adaptive_segment_length": 10,
+      "adaptive_average_window": 5.238095,
+      "adaptive_min_window": 3,
+      "adaptive_max_window": 14,
+      "modes": {
+        "auto-fixed": {
+          "page_faults": 32,
+          "hits": 52,
+          "hit_rate": 0.619048,
+          "fault_rate": 0.380952,
+          "writebacks": 0,
+          "weighted_score": 32.0,
+          "window_value": 16,
+          "window_description": "auto (max(4, frames * 2))"
+        },
+        "tuned-fixed": {
+          "page_faults": 31,
+          "hits": 53,
+          "hit_rate": 0.630952,
+          "fault_rate": 0.369048,
+          "writebacks": 0,
+          "weighted_score": 31.0,
+          "window_value": 2,
+          "window_description": "fixed 2 references"
+        },
+        "adaptive-heuristic": {
+          "page_faults": 31,
+          "hits": 53,
+          "hit_rate": 0.630952,
+          "fault_rate": 0.369048,
+          "writebacks": 0,
+          "weighted_score": 31.0,
+          "window_value": null,
+          "window_description": "adaptive segments of 10 references using recent reuse p50"
+        }
+      }
+    }
+  ],
+  "summary": {
+    "adaptive_status_counts": {
+      "better": 0,
+      "tied": 5,
+      "worse": 1
+    },
+    "adaptive_better_frames": [],
+    "adaptive_tied_frames": [
+      3,
+      4,
+      5,
+      7,
+      8
+    ],
+    "adaptive_worse_frames": [
+      6
+    ],
+    "average_faults": {
+      "auto-fixed": 40.5,
+      "tuned-fixed": 39.166667,
+      "adaptive-heuristic": 39.666667
+    },
+    "average_scores": {
+      "auto-fixed": 40.5,
+      "tuned-fixed": 39.166667,
+      "adaptive-heuristic": 39.666667
+    },
+    "average_writebacks": {
+      "auto-fixed": 0.0,
+      "tuned-fixed": 0.0,
+      "adaptive-heuristic": 0.0
+    },
+    "best_average_score_modes": [
+      "tuned-fixed"
+    ],
+    "best_average_fault_modes": [
+      "tuned-fixed"
+    ],
+    "best_adaptive_improvement": null
+  },
+  "reference_source": "benchmark:db-hotset-scan"
+}

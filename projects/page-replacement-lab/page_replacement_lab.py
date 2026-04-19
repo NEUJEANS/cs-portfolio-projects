@@ -1226,6 +1226,177 @@ def compare_wsclock_modes(
     }
 
 
+def study_wsclock_modes(
+    reference_string: Iterable[int],
+    min_frames: int,
+    max_frames: int,
+    *,
+    min_window: int = 1,
+    max_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
+    writeback_penalty: float = 1.0,
+    segment_length: int | None = None,
+    reuse_percentile: float = 0.5,
+    dirty_window_bonus: int = 2,
+) -> dict:
+    reference = list(reference_string)
+    if min_frames <= 0 or max_frames <= 0:
+        raise InputError("frame counts must be positive")
+    if min_frames > max_frames:
+        raise InputError("min-frames must be less than or equal to max-frames")
+    if not reference:
+        raise InputError("reference string must contain at least one page")
+
+    frame_results: list[dict] = []
+    adaptive_status_counts: Counter[str] = Counter({"better": 0, "tied": 0, "worse": 0})
+    mode_names = ("auto-fixed", "tuned-fixed", "adaptive-heuristic")
+
+    for frame_count in range(min_frames, max_frames + 1):
+        payload = compare_wsclock_modes(
+            reference,
+            frame_count,
+            min_window=min_window,
+            max_window=max_window,
+            dirty_pages=dirty_pages,
+            writeback_penalty=writeback_penalty,
+            segment_length=segment_length,
+            reuse_percentile=reuse_percentile,
+            dirty_window_bonus=dirty_window_bonus,
+        )
+        modes = {entry["mode"]: entry for entry in payload["modes"]}
+        status = payload["adaptive_vs_best_fixed"]["status"]
+        adaptive_status_counts[status] += 1
+        frame_results.append(
+            {
+                "frame_count": frame_count,
+                "winner_mode": payload["winner"]["mode"],
+                "leader_modes": payload["leader_modes"],
+                "best_fixed_mode": payload["best_fixed_mode"],
+                "adaptive_vs_best_fixed": payload["adaptive_vs_best_fixed"],
+                "auto_window": payload["fixed_window_sweep"]["auto_window"],
+                "tuned_window": payload["fixed_window_sweep"]["recommended_window"],
+                "adaptive_segment_length": payload["adaptive_schedule"]["segment_length"],
+                "adaptive_average_window": payload["adaptive_schedule"]["average_window"],
+                "adaptive_min_window": payload["adaptive_schedule"]["window_range"]["min"],
+                "adaptive_max_window": payload["adaptive_schedule"]["window_range"]["max"],
+                "modes": {
+                    mode: {
+                        "page_faults": modes[mode]["page_faults"],
+                        "hits": modes[mode]["hits"],
+                        "hit_rate": modes[mode]["hit_rate"],
+                        "fault_rate": modes[mode]["fault_rate"],
+                        "writebacks": modes[mode]["writebacks"],
+                        "weighted_score": modes[mode]["weighted_score"],
+                        "window_value": modes[mode]["window_value"],
+                        "window_description": modes[mode]["window_description"],
+                    }
+                    for mode in mode_names
+                },
+            }
+        )
+
+    average_faults = {
+        mode: round(
+            sum(row["modes"][mode]["page_faults"] for row in frame_results) / len(frame_results),
+            6,
+        )
+        for mode in mode_names
+    }
+    average_scores = {
+        mode: round(
+            sum(row["modes"][mode]["weighted_score"] for row in frame_results) / len(frame_results),
+            6,
+        )
+        for mode in mode_names
+    }
+    average_writebacks = {
+        mode: round(
+            sum(row["modes"][mode]["writebacks"] for row in frame_results) / len(frame_results),
+            6,
+        )
+        for mode in mode_names
+    }
+    best_average_score = min(average_scores.values())
+    best_average_faults = min(average_faults.values())
+
+    adaptive_improvements = [
+        row
+        for row in frame_results
+        if row["adaptive_vs_best_fixed"]["score_delta"] < 0
+    ]
+    best_improvement = (
+        min(
+            adaptive_improvements,
+            key=lambda row: (
+                row["adaptive_vs_best_fixed"]["score_delta"],
+                row["adaptive_vs_best_fixed"]["fault_delta"],
+                row["frame_count"],
+            ),
+        )
+        if adaptive_improvements
+        else None
+    )
+
+    return {
+        "reference_string": reference,
+        "reference_length": len(reference),
+        "min_frames": min_frames,
+        "max_frames": max_frames,
+        "writeback_penalty": round(writeback_penalty, 6),
+        "min_window": min_window,
+        "max_window": max_window,
+        "segment_length": segment_length,
+        "reuse_percentile": round(reuse_percentile, 6),
+        "dirty_window_bonus": dirty_window_bonus,
+        "dirty_pages": list(normalize_dirty_pages(dirty_pages)),
+        "dirty_page_count": len(normalize_dirty_pages(dirty_pages)),
+        "dirty_page_description": describe_dirty_pages_setting(dirty_pages),
+        "frame_results": frame_results,
+        "summary": {
+            "adaptive_status_counts": {
+                "better": adaptive_status_counts["better"],
+                "tied": adaptive_status_counts["tied"],
+                "worse": adaptive_status_counts["worse"],
+            },
+            "adaptive_better_frames": [
+                row["frame_count"]
+                for row in frame_results
+                if row["adaptive_vs_best_fixed"]["status"] == "better"
+            ],
+            "adaptive_tied_frames": [
+                row["frame_count"]
+                for row in frame_results
+                if row["adaptive_vs_best_fixed"]["status"] == "tied"
+            ],
+            "adaptive_worse_frames": [
+                row["frame_count"]
+                for row in frame_results
+                if row["adaptive_vs_best_fixed"]["status"] == "worse"
+            ],
+            "average_faults": average_faults,
+            "average_scores": average_scores,
+            "average_writebacks": average_writebacks,
+            "best_average_score_modes": [
+                mode for mode in mode_names if average_scores[mode] == best_average_score
+            ],
+            "best_average_fault_modes": [
+                mode for mode in mode_names if average_faults[mode] == best_average_faults
+            ],
+            "best_adaptive_improvement": (
+                {
+                    "frame_count": best_improvement["frame_count"],
+                    "status": best_improvement["adaptive_vs_best_fixed"]["status"],
+                    "fault_delta": best_improvement["adaptive_vs_best_fixed"]["fault_delta"],
+                    "writeback_delta": best_improvement["adaptive_vs_best_fixed"]["writeback_delta"],
+                    "score_delta": best_improvement["adaptive_vs_best_fixed"]["score_delta"],
+                }
+                if best_improvement is not None
+                else None
+            ),
+        },
+    }
+
+
 def list_workload_presets() -> list[WorkloadPreset]:
     return list(WORKLOAD_PRESETS.values())
 
@@ -1662,6 +1833,53 @@ def build_parser() -> argparse.ArgumentParser:
     compare_wsclock_modes_parser.add_argument("--markdown-out", type=Path, help="write a Markdown comparison report")
     compare_wsclock_modes_parser.add_argument("--csv-out", type=Path, help="write a CSV comparison export")
     compare_wsclock_modes_parser.add_argument("--json", action="store_true")
+
+    study_wsclock_modes_parser = subparsers.add_parser(
+        "study-wsclock-modes",
+        help="study adaptive-vs-fixed WSClock outcomes across a frame-count range",
+    )
+    study_wsclock_modes_parser.add_argument("--min-frames", type=int, required=True)
+    study_wsclock_modes_parser.add_argument("--max-frames", type=int, required=True)
+    add_reference_arguments(study_wsclock_modes_parser)
+    add_dirty_page_arguments(study_wsclock_modes_parser)
+    study_wsclock_modes_parser.add_argument(
+        "--min-window",
+        type=int,
+        default=1,
+        help="smallest tau / working-set window to evaluate for the fixed sweep",
+    )
+    study_wsclock_modes_parser.add_argument(
+        "--max-window",
+        type=int,
+        help="largest tau / working-set window to evaluate for the fixed sweep and adaptive clamp",
+    )
+    study_wsclock_modes_parser.add_argument(
+        "--writeback-penalty",
+        type=float,
+        default=1.0,
+        help="weight applied to each writeback in the comparison score",
+    )
+    study_wsclock_modes_parser.add_argument(
+        "--segment-length",
+        type=int,
+        help="references per adaptive segment (default: max(8, frames * 2) per frame budget)",
+    )
+    study_wsclock_modes_parser.add_argument(
+        "--reuse-percentile",
+        type=float,
+        default=0.5,
+        help="reuse-distance percentile used by the adaptive heuristic (0 to 1)",
+    )
+    study_wsclock_modes_parser.add_argument(
+        "--dirty-window-bonus",
+        type=int,
+        default=2,
+        help="extra tau slack when recent dirty-page density is high",
+    )
+    study_wsclock_modes_parser.add_argument("--markdown-out", type=Path, help="write a Markdown study report")
+    study_wsclock_modes_parser.add_argument("--svg-out", type=Path, help="write a slide-ready SVG study card")
+    study_wsclock_modes_parser.add_argument("--csv-out", type=Path, help="write a CSV frame-study export")
+    study_wsclock_modes_parser.add_argument("--json", action="store_true")
 
     trace_compare_parser = subparsers.add_parser(
         "trace-compare",
@@ -2253,6 +2471,347 @@ def format_wsclock_mode_markdown(payload: dict, *, reference_source: str = "cust
         ]
     )
     return "\n".join(lines)
+
+
+def write_wsclock_mode_study_csv(path: Path, payload: dict, *, reference_source: str = "custom") -> None:
+    ensure_output_parent(path)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "frame_count",
+                "winner_mode",
+                "best_fixed_mode",
+                "leader_modes",
+                "adaptive_status",
+                "adaptive_fault_delta",
+                "adaptive_writeback_delta",
+                "adaptive_score_delta",
+                "auto_window",
+                "tuned_window",
+                "adaptive_segment_length",
+                "adaptive_average_window",
+                "adaptive_min_window",
+                "adaptive_max_window",
+                "auto_faults",
+                "tuned_faults",
+                "adaptive_faults",
+                "auto_writebacks",
+                "tuned_writebacks",
+                "adaptive_writebacks",
+                "auto_weighted_score",
+                "tuned_weighted_score",
+                "adaptive_weighted_score",
+                "reference_source",
+            ],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for row in payload["frame_results"]:
+            writer.writerow(
+                {
+                    "frame_count": row["frame_count"],
+                    "winner_mode": row["winner_mode"],
+                    "best_fixed_mode": row["best_fixed_mode"],
+                    "leader_modes": "/".join(row["leader_modes"]),
+                    "adaptive_status": row["adaptive_vs_best_fixed"]["status"],
+                    "adaptive_fault_delta": row["adaptive_vs_best_fixed"]["fault_delta"],
+                    "adaptive_writeback_delta": row["adaptive_vs_best_fixed"]["writeback_delta"],
+                    "adaptive_score_delta": row["adaptive_vs_best_fixed"]["score_delta"],
+                    "auto_window": row["auto_window"],
+                    "tuned_window": row["tuned_window"],
+                    "adaptive_segment_length": row["adaptive_segment_length"],
+                    "adaptive_average_window": row["adaptive_average_window"],
+                    "adaptive_min_window": row["adaptive_min_window"],
+                    "adaptive_max_window": row["adaptive_max_window"],
+                    "auto_faults": row["modes"]["auto-fixed"]["page_faults"],
+                    "tuned_faults": row["modes"]["tuned-fixed"]["page_faults"],
+                    "adaptive_faults": row["modes"]["adaptive-heuristic"]["page_faults"],
+                    "auto_writebacks": row["modes"]["auto-fixed"]["writebacks"],
+                    "tuned_writebacks": row["modes"]["tuned-fixed"]["writebacks"],
+                    "adaptive_writebacks": row["modes"]["adaptive-heuristic"]["writebacks"],
+                    "auto_weighted_score": row["modes"]["auto-fixed"]["weighted_score"],
+                    "tuned_weighted_score": row["modes"]["tuned-fixed"]["weighted_score"],
+                    "adaptive_weighted_score": row["modes"]["adaptive-heuristic"]["weighted_score"],
+                    "reference_source": reference_source,
+                }
+            )
+
+
+def format_wsclock_mode_study_text(payload: dict, *, reference_source: str = "custom") -> str:
+    counts = payload["summary"]["adaptive_status_counts"]
+    best_average_modes = ", ".join(payload["summary"]["best_average_score_modes"])
+    lines = [
+        f"frames: {payload['min_frames']} to {payload['max_frames']}",
+        format_reference_source(reference_source),
+        f"writeback penalty: {payload['writeback_penalty']:.2f}",
+        f"dirty pages: {payload['dirty_page_description']}",
+        (
+            f"adaptive heuristic: recent reuse p{int(payload['reuse_percentile'] * 100):02d} "
+            f"with segment length {payload['segment_length'] if payload['segment_length'] is not None else 'auto per frame'}"
+        ),
+        f"adaptive vs best fixed: better {counts['better']}, tied {counts['tied']}, worse {counts['worse']}",
+        f"best average weighted score: {best_average_modes}",
+        "frame  auto  tuned  adaptive  status  tuned-τ  adaptive-avg-τ  winner",
+        "-----  ----  -----  --------  ------  -------  --------------  ------",
+    ]
+    for row in payload["frame_results"]:
+        lines.append(
+            f"{row['frame_count']:<5}  "
+            f"{row['modes']['auto-fixed']['page_faults']:<4}  "
+            f"{row['modes']['tuned-fixed']['page_faults']:<5}  "
+            f"{row['modes']['adaptive-heuristic']['page_faults']:<8}  "
+            f"{row['adaptive_vs_best_fixed']['status']:<6}  "
+            f"{row['tuned_window']:<7}  "
+            f"{row['adaptive_average_window']:<14.2f}  "
+            f"{row['winner_mode']}"
+        )
+    best_improvement = payload["summary"]["best_adaptive_improvement"]
+    if best_improvement is not None:
+        lines.append(
+            "largest adaptive score gain: "
+            f"frame {best_improvement['frame_count']} "
+            f"(Δfaults {best_improvement['fault_delta']:+d}, "
+            f"Δwritebacks {best_improvement['writeback_delta']:+d}, "
+            f"Δscore {best_improvement['score_delta']:+.2f})"
+        )
+    else:
+        lines.append("largest adaptive score gain: none (adaptive never beat the best fixed mode in this frame range)")
+    return "\n".join(lines)
+
+
+def format_wsclock_mode_study_markdown(payload: dict, *, reference_source: str = "custom") -> str:
+    counts = payload["summary"]["adaptive_status_counts"]
+    best_improvement = payload["summary"]["best_adaptive_improvement"]
+    lines = [
+        "# WSClock Frame-Budget Study",
+        "",
+        f"- workload: {describe_reference_label(reference_source)}",
+        f"- frame range: {payload['min_frames']} to {payload['max_frames']}",
+        f"- writeback penalty: {payload['writeback_penalty']:.2f}",
+        f"- dirty pages: {payload['dirty_page_description']}",
+        f"- fixed sweep range: {payload['min_window']} to {payload['max_window'] if payload['max_window'] is not None else 'auto per frame'}",
+        (
+            f"- adaptive heuristic: recent reuse p{int(payload['reuse_percentile'] * 100):02d} with "
+            f"segment length {payload['segment_length'] if payload['segment_length'] is not None else 'auto per frame'}"
+        ),
+        (
+            f"- adaptive vs best fixed: **better on {counts['better']} frame budgets**, "
+            f"tied on {counts['tied']}, worse on {counts['worse']}"
+        ),
+        (
+            "- best average weighted score modes: "
+            + ", ".join(f"`{mode}`" for mode in payload["summary"]["best_average_score_modes"])
+        ),
+        (
+            "- best average fault modes: "
+            + ", ".join(f"`{mode}`" for mode in payload["summary"]["best_average_fault_modes"])
+        ),
+        "",
+        "## Average performance across the frame sweep",
+        "",
+        "| Mode | Avg faults | Avg weighted score | Avg writebacks |",
+        "| :--- | ---: | ---: | ---: |",
+    ]
+    for mode in ("auto-fixed", "tuned-fixed", "adaptive-heuristic"):
+        lines.append(
+            f"| {mode} | {payload['summary']['average_faults'][mode]:.2f} | {payload['summary']['average_scores'][mode]:.2f} | {payload['summary']['average_writebacks'][mode]:.2f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Per-frame outcomes",
+            "",
+            "| Frames | Auto faults | Tuned faults | Adaptive faults | Tuned τ | Adaptive avg τ | Adaptive vs best fixed | Winner |",
+            "| ---: | ---: | ---: | ---: | ---: | ---: | :--- | :--- |",
+        ]
+    )
+    for row in payload["frame_results"]:
+        lines.append(
+            f"| {row['frame_count']} | {row['modes']['auto-fixed']['page_faults']} | {row['modes']['tuned-fixed']['page_faults']} | {row['modes']['adaptive-heuristic']['page_faults']} | {row['tuned_window']} | {row['adaptive_average_window']:.2f} | {row['adaptive_vs_best_fixed']['status']} (Δscore {row['adaptive_vs_best_fixed']['score_delta']:+.2f}) | {row['winner_mode']} |"
+        )
+    lines.extend(["", "## Interpretation", ""])
+    if best_improvement is not None:
+        lines.append(
+            f"- The strongest adaptive improvement appears at frame {best_improvement['frame_count']} with Δfaults {best_improvement['fault_delta']:+d}, Δwritebacks {best_improvement['writeback_delta']:+d}, and Δscore {best_improvement['score_delta']:+.2f} versus the best fixed mode."
+        )
+    else:
+        lines.append("- Adaptive WSClock never beats the best fixed mode in this frame range, so this workload behaves like a tie-or-loss case rather than an adaptive win.")
+    if counts["worse"]:
+        lines.append(
+            "- Adaptive loses on frame budgets: "
+            + ", ".join(str(frame) for frame in payload["summary"]["adaptive_worse_frames"])
+            + "."
+        )
+    else:
+        lines.append("- Adaptive never loses to the best fixed mode in this frame range.")
+    if counts["better"]:
+        lines.append(
+            "- Adaptive wins on frame budgets: "
+            + ", ".join(str(frame) for frame in payload["summary"]["adaptive_better_frames"])
+            + "."
+        )
+    else:
+        lines.append("- Adaptive does not outperform the best fixed mode on any frame budget in this study.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def format_wsclock_mode_study_svg(
+    payload: dict,
+    *,
+    reference_source: str = "custom",
+    id_prefix: str = "wsclock-mode-study",
+) -> str:
+    rows = payload["frame_results"]
+    frames = [row["frame_count"] for row in rows]
+    mode_series = {
+        "auto-fixed": [row["modes"]["auto-fixed"]["page_faults"] for row in rows],
+        "tuned-fixed": [row["modes"]["tuned-fixed"]["page_faults"] for row in rows],
+        "adaptive-heuristic": [row["modes"]["adaptive-heuristic"]["page_faults"] for row in rows],
+    }
+    mode_colors = {
+        "auto-fixed": "#f59e0b",
+        "tuned-fixed": "#0f766e",
+        "adaptive-heuristic": "#8b5cf6",
+    }
+    status_colors = {
+        "better": "#10b981",
+        "tied": "#f59e0b",
+        "worse": "#ef4444",
+    }
+    width = 1120
+    height = 760
+    chart_left = 84
+    chart_top = 126
+    chart_width = 760
+    chart_height = 320
+    chart_bottom = chart_top + chart_height
+    chart_right = chart_left + chart_width
+    max_faults = max(value for values in mode_series.values() for value in values)
+    tick_step = choose_tick_step(max_faults)
+    y_max = max(tick_step, ((max_faults + tick_step - 1) // tick_step) * tick_step)
+    y_ticks = list(range(0, y_max + 1, tick_step))
+    identifier = make_safe_identifier(id_prefix)
+    title_id = f"{identifier}-title"
+    desc_id = f"{identifier}-desc"
+
+    def x_position(frame_count: int) -> float:
+        if len(frames) == 1:
+            return chart_left + chart_width / 2
+        span = frames[-1] - frames[0]
+        return chart_left + ((frame_count - frames[0]) / span) * chart_width
+
+    def y_position(faults: int) -> float:
+        return chart_bottom - (faults / y_max) * chart_height
+
+    grid_lines: list[str] = []
+    for tick in y_ticks:
+        y = y_position(tick)
+        grid_lines.append(
+            f'<line x1="{chart_left}" y1="{y:.2f}" x2="{chart_right}" y2="{y:.2f}" stroke="#d7dde8" stroke-width="1" />'
+        )
+        grid_lines.append(
+            f'<text x="{chart_left - 14}" y="{y + 5:.2f}" font-size="13" text-anchor="end" fill="#475569">{tick}</text>'
+        )
+
+    x_labels = [
+        f'<text x="{x_position(frame):.2f}" y="{chart_bottom + 28}" font-size="13" text-anchor="middle" fill="#475569">{frame}</text>'
+        for frame in frames
+    ]
+
+    legend_items: list[str] = []
+    for index, mode in enumerate(("auto-fixed", "tuned-fixed", "adaptive-heuristic")):
+        x = chart_left + index * 210
+        legend_items.append(
+            f'<line x1="{x}" y1="76" x2="{x + 28}" y2="76" stroke="{mode_colors[mode]}" stroke-width="4" stroke-linecap="round" />'
+        )
+        legend_items.append(
+            f'<text x="{x + 38}" y="81" font-size="14" fill="#0f172a">{escape(mode)}</text>'
+        )
+
+    series_parts: list[str] = []
+    for mode, values in mode_series.items():
+        points = " ".join(
+            f"{x_position(frame):.2f},{y_position(value):.2f}"
+            for frame, value in zip(frames, values)
+        )
+        color = mode_colors[mode]
+        series_parts.append(
+            f'<polyline fill="none" stroke="{color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="{points}" />'
+        )
+        for frame, value in zip(frames, values):
+            x = x_position(frame)
+            y = y_position(value)
+            series_parts.append(
+                f'<circle cx="{x:.2f}" cy="{y:.2f}" r="5.5" fill="{color}" stroke="#ffffff" stroke-width="2" />'
+            )
+            series_parts.append(
+                f'<text x="{x:.2f}" y="{y - 12:.2f}" font-size="11" text-anchor="middle" fill="{color}">{value}</text>'
+            )
+
+    status_strip: list[str] = []
+    strip_y = 504
+    strip_width = 120
+    strip_gap = 16
+    for index, row in enumerate(rows):
+        x = 84 + index * (strip_width + strip_gap)
+        status = row["adaptive_vs_best_fixed"]["status"]
+        status_strip.append(
+            f'<rect x="{x}" y="{strip_y}" width="{strip_width}" height="64" rx="16" fill="{status_colors[status]}" opacity="0.16" stroke="{status_colors[status]}" stroke-width="1.5" />'
+        )
+        status_strip.append(
+            f'<text x="{x + strip_width / 2}" y="{strip_y + 24}" font-size="14" text-anchor="middle" fill="#0f172a">frame {row["frame_count"]}</text>'
+        )
+        status_strip.append(
+            f'<text x="{x + strip_width / 2}" y="{strip_y + 46}" font-size="16" font-weight="700" text-anchor="middle" fill="{status_colors[status]}">{status}</text>'
+        )
+
+    counts = payload["summary"]["adaptive_status_counts"]
+    best_modes = "/".join(payload["summary"]["best_average_score_modes"])
+    summary_lines = [
+        f"workload: {describe_reference_label(reference_source)}",
+        f"frame range: {payload['min_frames']} to {payload['max_frames']} | writeback penalty {payload['writeback_penalty']:.2f}",
+        f"adaptive vs best fixed: better {counts['better']} | tied {counts['tied']} | worse {counts['worse']}",
+        f"best average weighted score: {best_modes}",
+    ]
+    if payload["summary"]["best_adaptive_improvement"] is not None:
+        best = payload["summary"]["best_adaptive_improvement"]
+        summary_lines.append(
+            f"best adaptive gain: frame {best['frame_count']} with Δscore {best['score_delta']:+.2f} and Δfaults {best['fault_delta']:+d}"
+        )
+    else:
+        summary_lines.append("best adaptive gain: none in this frame range")
+
+    summary_text = []
+    for index, line in enumerate(summary_lines):
+        summary_text.append(
+            f'<text x="84" y="{620 + index * 28}" font-size="18" fill="#0f172a">{escape(line)}</text>'
+        )
+
+    return "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f'  <title id="{title_id}">WSClock frame-budget study</title>',
+            f'  <desc id="{desc_id}">Adaptive vs fixed WSClock page-fault comparison for {escape(describe_reference_label(reference_source))}</desc>',
+            '  <rect width="100%" height="100%" fill="#f8fafc" />',
+            '  <rect x="36" y="28" width="1048" height="692" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />',
+            '  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Adaptive vs fixed WSClock across frame budgets</text>',
+            f'  <text x="84" y="98" font-size="16" fill="#475569">{escape(describe_reference_label(reference_source))}</text>',
+            *legend_items,
+            f'  <line x1="{chart_left}" y1="{chart_top}" x2="{chart_left}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="2" />',
+            f'  <line x1="{chart_left}" y1="{chart_bottom}" x2="{chart_right}" y2="{chart_bottom}" stroke="#0f172a" stroke-width="2" />',
+            *grid_lines,
+            *x_labels,
+            f'  <text x="{chart_left + chart_width / 2:.2f}" y="{chart_bottom + 56}" font-size="14" text-anchor="middle" fill="#475569">Frames</text>',
+            f'  <text x="28" y="{chart_top + chart_height / 2:.2f}" font-size="14" fill="#475569" transform="rotate(-90 28 {chart_top + chart_height / 2:.2f})">Page faults</text>',
+            *series_parts,
+            '  <text x="84" y="486" font-size="20" font-weight="700" fill="#0f172a">Adaptive outcome by frame budget</text>',
+            *status_strip,
+            '  <rect x="64" y="592" width="992" height="104" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />',
+            *summary_text,
+            '</svg>',
+        ]
+    )
 
 
 def format_study_markdown(payload: dict, *, reference_source: str = "custom") -> str:
@@ -5380,6 +5939,54 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(
                     format_wsclock_mode_text(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    )
+                )
+            return 0
+
+        if args.command == "study-wsclock-modes":
+            payload = study_wsclock_modes(
+                reference,
+                args.min_frames,
+                args.max_frames,
+                min_window=args.min_window,
+                max_window=args.max_window,
+                dirty_pages=dirty_pages,
+                writeback_penalty=args.writeback_penalty,
+                segment_length=args.segment_length,
+                reuse_percentile=args.reuse_percentile,
+                dirty_window_bonus=args.dirty_window_bonus,
+            )
+            payload["reference_source"] = parsed_reference.source
+            if args.csv_out:
+                write_wsclock_mode_study_csv(
+                    args.csv_out,
+                    payload,
+                    reference_source=parsed_reference.source,
+                )
+            if args.markdown_out:
+                write_text_output(
+                    args.markdown_out,
+                    format_wsclock_mode_study_markdown(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    ),
+                )
+            if args.svg_out:
+                write_text_output(
+                    args.svg_out,
+                    format_wsclock_mode_study_svg(
+                        payload,
+                        reference_source=parsed_reference.source,
+                        id_prefix=f"wsclock-mode-study-{parsed_reference.source.replace(':', '-')}",
+                    ),
+                )
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(
+                    format_wsclock_mode_study_text(
                         payload,
                         reference_source=parsed_reference.source,
                     )

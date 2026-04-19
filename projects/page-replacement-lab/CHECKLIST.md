@@ -45,4 +45,5 @@
 - [x] add a trace-summary or reuse-distance helper for imported workloads
 - [x] add SVG/HTML trace-summary cards for portfolio slides
 - [x] add side-by-side imported-trace comparisons
-- [ ] export adaptive-vs-fixed WSClock comparisons across multiple frame budgets or gallery cards
+- [x] export adaptive-vs-fixed WSClock comparisons across multiple frame budgets or gallery cards
+- [ ] fold adaptive-vs-fixed WSClock frame-budget studies into the aggregate dashboard or gallery view

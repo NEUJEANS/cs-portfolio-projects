@@ -1,0 +1,15 @@
+frames: 2 to 6
+source: benchmark adaptive-phase-turnover — three short overlapping hot-set phases crafted to show where an adaptive WSClock tau beats any single fixed window
+writeback penalty: 1.00
+dirty pages: none
+adaptive heuristic: recent reuse p50 with segment length 8
+adaptive vs best fixed: better 1, tied 4, worse 0
+best average weighted score: adaptive-heuristic
+frame  auto  tuned  adaptive  status  tuned-τ  adaptive-avg-τ  winner
+-----  ----  -----  --------  ------  -------  --------------  ------
+2      18    18     18        tied    1        3.00            tuned-fixed
+3      14    14     13        better  1        3.67            adaptive-heuristic
+4      8     8      8         tied    1        4.33            tuned-fixed
+5      7     7      7         tied    1        4.67            tuned-fixed
+6      6     6      6         tied    1        4.67            tuned-fixed
+largest adaptive score gain: frame 3 (Δfaults -1, Δwritebacks +0, Δscore -1.00)

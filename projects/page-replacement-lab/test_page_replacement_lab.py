@@ -18,6 +18,7 @@ from page_replacement_lab import (  # noqa: E402
     compare_algorithms,
     compare_wsclock_modes,
     load_trace_benchmark_reference,
+    study_wsclock_modes,
     parse_dirty_page_args,
     parse_reference_args,
     simulate,
@@ -492,6 +493,82 @@ class PageReplacementSimulationTests(unittest.TestCase):
                 csv_output,
             )
             self.assertIn("adaptive-heuristic,adaptive,,adaptive segments of 8 references using recent reuse p50", csv_output)
+
+    def test_study_wsclock_modes_summarizes_adaptive_outcomes_across_frame_budgets(self) -> None:
+        benchmark_reference = load_trace_benchmark_reference(TRACE_BENCHMARKS["adaptive-phase-turnover"])
+        payload = study_wsclock_modes(
+            benchmark_reference,
+            2,
+            6,
+            min_window=1,
+            max_window=9,
+            segment_length=8,
+        )
+        self.assertEqual(payload["summary"]["adaptive_status_counts"], {"better": 1, "tied": 4, "worse": 0})
+        self.assertEqual(payload["summary"]["adaptive_better_frames"], [3])
+        self.assertEqual(payload["summary"]["best_adaptive_improvement"], {
+            "frame_count": 3,
+            "status": "better",
+            "fault_delta": -1,
+            "writeback_delta": 0,
+            "score_delta": -1.0,
+        })
+        frame_three = next(row for row in payload["frame_results"] if row["frame_count"] == 3)
+        self.assertEqual(frame_three["winner_mode"], "adaptive-heuristic")
+        self.assertEqual(frame_three["modes"]["adaptive-heuristic"]["page_faults"], 13)
+
+    def test_cli_study_wsclock_modes_writes_markdown_svg_and_csv_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "wsclock-mode-study.md"
+            svg_path = Path(tmpdir) / "wsclock-mode-study.svg"
+            csv_path = Path(tmpdir) / "wsclock-mode-study.csv"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "study-wsclock-modes",
+                    "--min-frames",
+                    "2",
+                    "--max-frames",
+                    "6",
+                    "--benchmark",
+                    "adaptive-phase-turnover",
+                    "--min-window",
+                    "1",
+                    "--max-window",
+                    "9",
+                    "--segment-length",
+                    "8",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--svg-out",
+                    str(svg_path),
+                    "--csv-out",
+                    str(csv_path),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            markdown = markdown_path.read_text(encoding="utf-8")
+            svg_output = svg_path.read_text(encoding="utf-8")
+            csv_output = csv_path.read_text(encoding="utf-8")
+
+            self.assertEqual(payload["reference_source"], "benchmark:adaptive-phase-turnover")
+            self.assertEqual(payload["summary"]["adaptive_status_counts"], {"better": 1, "tied": 4, "worse": 0})
+            self.assertIn("# WSClock Frame-Budget Study", markdown)
+            self.assertIn("better on 1 frame budgets", markdown)
+            self.assertIn("Adaptive vs fixed WSClock across frame budgets", svg_output)
+            self.assertIn(
+                "frame_count,winner_mode,best_fixed_mode,leader_modes,adaptive_status,adaptive_fault_delta,adaptive_writeback_delta,adaptive_score_delta,auto_window,tuned_window,adaptive_segment_length,adaptive_average_window,adaptive_min_window,adaptive_max_window,auto_faults,tuned_faults,adaptive_faults,auto_writebacks,tuned_writebacks,adaptive_writebacks,auto_weighted_score,tuned_weighted_score,adaptive_weighted_score,reference_source",
+                csv_output,
+            )
+            self.assertIn(
+                "3,adaptive-heuristic,tuned-fixed,adaptive-heuristic,better,-1,0,-1.0,6,1,8,3.666667,2,6,14,14,13,0,0,0,14.0,14.0,13.0,benchmark:adaptive-phase-turnover",
+                csv_output,
+            )
 
     def test_cli_list_presets_json_includes_known_workloads(self) -> None:
         completed = subprocess.run(

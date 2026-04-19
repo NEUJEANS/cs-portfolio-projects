@@ -1,0 +1,6 @@
+frame_count,winner_mode,best_fixed_mode,leader_modes,adaptive_status,adaptive_fault_delta,adaptive_writeback_delta,adaptive_score_delta,auto_window,tuned_window,adaptive_segment_length,adaptive_average_window,adaptive_min_window,adaptive_max_window,auto_faults,tuned_faults,adaptive_faults,auto_writebacks,tuned_writebacks,adaptive_writebacks,auto_weighted_score,tuned_weighted_score,adaptive_weighted_score,reference_source
+2,tuned-fixed,tuned-fixed,auto-fixed/tuned-fixed/adaptive-heuristic,tied,0,0,0.0,4,1,8,3.0,2,4,18,18,18,0,0,0,18.0,18.0,18.0,benchmark:adaptive-phase-turnover
+3,adaptive-heuristic,tuned-fixed,adaptive-heuristic,better,-1,0,-1.0,6,1,8,3.666667,2,6,14,14,13,0,0,0,14.0,14.0,13.0,benchmark:adaptive-phase-turnover
+4,tuned-fixed,tuned-fixed,auto-fixed/tuned-fixed/adaptive-heuristic,tied,0,0,0.0,8,1,8,4.333333,2,8,8,8,8,0,0,0,8.0,8.0,8.0,benchmark:adaptive-phase-turnover
+5,tuned-fixed,tuned-fixed,auto-fixed/tuned-fixed/adaptive-heuristic,tied,0,0,0.0,10,1,8,4.666667,2,9,7,7,7,0,0,0,7.0,7.0,7.0,benchmark:adaptive-phase-turnover
+6,tuned-fixed,tuned-fixed,auto-fixed/tuned-fixed/adaptive-heuristic,tied,0,0,0.0,12,1,8,4.666667,2,9,6,6,6,0,0,0,6.0,6.0,6.0,benchmark:adaptive-phase-turnover
