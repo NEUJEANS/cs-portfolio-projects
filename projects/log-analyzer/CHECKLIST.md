@@ -1,13 +1,13 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 00:31 UTC run)
-- [x] resume the queued custom-annotation-preset follow-up after confirming `main` matches `origin/main`
-- [x] add `--card-annotation-preset-file` support so built-in presets can be extended with reusable JSON-defined story recipes
-- [x] keep custom preset expansion compatible with the existing trend-card and comparison-card annotation rendering/output paths
-- [x] validate custom preset files clearly (JSON shape, duplicate names, supported themes, step counts)
-- [x] refresh README/checklists/review notes and commit a reusable sample preset file plus regenerated annotated sample artifacts
-- [x] run targeted tests, real export smoke checks, and 3 review passes
-- [x] run secret scan, commit, push, and write the wrap-up
+## Current slice (2026-04-19 01:21 UTC run)
+- [x] resume the queued preset-utility follow-up after confirming `main` matches `origin/main`
+- [x] add no-logfile `--list-card-annotation-presets` support so built-in/custom story names can be inspected quickly
+- [x] add no-logfile `--preview-card-annotation-preset` support so preset expansions can be verified before card export runs
+- [x] keep preset list/preview flows compatible with JSON-backed custom preset files and the existing card export codepaths
+- [x] refresh README/checklist/review notes and commit sample preset catalog/preview helper artifacts under `docs/artifacts/log-analyzer/`
+- [x] run targeted tests, real helper/export smoke checks, and 3 review passes
+- [ ] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] parse common and combined access-log formats
@@ -33,4 +33,4 @@
 ## Next follow-up ideas
 - [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
 - [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster assets over SVG/HTML
-- [ ] optionally add preset-listing or preset-preview helpers so README/gallery pages can show available built-in + custom story names without opening JSON by hand
+- [ ] optionally add a small preset-gallery HTML page that links the catalog/preview helpers to the committed annotated card artifacts

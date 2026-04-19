@@ -1,0 +1,17 @@
+Card annotation presets
+- deploy-incident-recovery [built-in] (3 steps)
+  1. deploy | Deploy started
+  2. incident | Incident detected
+  3. recovery | Recovery confirmed
+- deploy-rollback-recovery [built-in] (3 steps)
+  1. deploy | Deploy started
+  2. rollback | Rollback started
+  3. recovery | Recovery confirmed
+- release-watch [docs/artifacts/log-analyzer/custom-card-annotation-presets.json] (3 steps)
+  1. deploy | Canary deploy started
+  2. incident | Error budget burn noticed
+  3. recovery | Traffic stabilized
+- rollback-watch [docs/artifacts/log-analyzer/custom-card-annotation-presets.json] (3 steps)
+  1. deploy | Release opened
+  2. rollback | Rollback triggered
+  3. recovery | Recovery confirmed

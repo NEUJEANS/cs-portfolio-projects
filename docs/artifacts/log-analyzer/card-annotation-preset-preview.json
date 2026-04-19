@@ -1,0 +1,28 @@
+{
+  "card_annotation_preset_preview": [
+    {
+      "annotations": [
+        {
+          "annotation": "2026-04-18T09:00:20Z=deploy|Canary deploy started",
+          "label": "Canary deploy started",
+          "theme": "deploy",
+          "timestamp": "2026-04-18T09:00:20Z"
+        },
+        {
+          "annotation": "2026-04-18T09:01:40Z=incident|Error budget burn noticed",
+          "label": "Error budget burn noticed",
+          "theme": "incident",
+          "timestamp": "2026-04-18T09:01:40Z"
+        },
+        {
+          "annotation": "2026-04-18T09:03:10Z=recovery|Traffic stabilized",
+          "label": "Traffic stabilized",
+          "theme": "recovery",
+          "timestamp": "2026-04-18T09:03:10Z"
+        }
+      ],
+      "preset": "release-watch",
+      "step_count": 3
+    }
+  ]
+}

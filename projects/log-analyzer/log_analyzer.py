@@ -821,10 +821,21 @@ def parse_card_annotation_preset_step(raw_step: object) -> tuple[str, str]:
     return normalized_theme, label
 
 
-def load_card_annotation_preset_definitions(
+def build_card_annotation_preset_catalog(
     raw_paths: Iterable[str] | None,
-) -> dict[str, list[tuple[str, str]]]:
-    preset_definitions = dict(CARD_ANNOTATION_PRESETS)
+) -> list[dict[str, object]]:
+    catalog: dict[str, dict[str, object]] = {}
+    for preset_name, steps in CARD_ANNOTATION_PRESETS.items():
+        catalog[preset_name] = {
+            "name": preset_name,
+            "source": "built-in",
+            "step_count": len(steps),
+            "steps": [
+                {"theme": theme, "label": label}
+                for theme, label in steps
+            ],
+        }
+
     for raw_path in raw_paths or []:
         cleaned_path = raw_path.strip()
         if not cleaned_path:
@@ -853,7 +864,7 @@ def load_card_annotation_preset_definitions(
             if not isinstance(raw_name, str):
                 raise ValueError(f"{source_label} preset names must be strings")
             preset_name = normalize_card_annotation_preset_name(raw_name)
-            if preset_name in preset_definitions:
+            if preset_name in catalog:
                 raise ValueError(
                     f"{source_label} preset '{preset_name}' duplicates an existing preset name"
                 )
@@ -866,16 +877,65 @@ def load_card_annotation_preset_definitions(
                     f"{source_label} preset '{preset_name}' cannot contain more than 4 steps"
                 )
 
-            steps: list[tuple[str, str]] = []
+            steps: list[dict[str, str]] = []
             for index, raw_step in enumerate(raw_steps, start=1):
                 try:
-                    steps.append(parse_card_annotation_preset_step(raw_step))
+                    theme, label = parse_card_annotation_preset_step(raw_step)
                 except ValueError as exc:
                     raise ValueError(
                         f"{source_label} preset '{preset_name}' step {index}: {exc}"
                     ) from exc
-            preset_definitions[preset_name] = steps
-    return preset_definitions
+                steps.append({"theme": theme, "label": label})
+            catalog[preset_name] = {
+                "name": preset_name,
+                "source": str(path),
+                "step_count": len(steps),
+                "steps": steps,
+            }
+    return [catalog[name] for name in sorted(catalog)]
+
+
+def load_card_annotation_preset_definitions(
+    raw_paths: Iterable[str] | None,
+) -> dict[str, list[tuple[str, str]]]:
+    return {
+        str(entry["name"]): [
+            (str(step["theme"]), str(step["label"]))
+            for step in entry["steps"]
+        ]
+        for entry in build_card_annotation_preset_catalog(raw_paths)
+    }
+
+
+def parse_card_annotation_preset_invocation(
+    raw_preset: str,
+    *,
+    available_presets: dict[str, list[tuple[str, str]]],
+    flag_name: str,
+) -> tuple[str, list[str], list[tuple[str, str]]]:
+    cleaned = raw_preset.strip()
+    if not cleaned:
+        raise ValueError(f"{flag_name} values must not be blank")
+    if "=" not in cleaned:
+        raise ValueError(
+            f"{flag_name} must use PRESET=TIMESTAMP[,TIMESTAMP...] "
+            "(for example deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z)"
+        )
+    raw_name, raw_timestamps = cleaned.split("=", 1)
+    preset_name = normalize_card_annotation_preset_name(raw_name)
+    if preset_name not in available_presets:
+        valid_presets = ", ".join(sorted(available_presets))
+        raise ValueError(
+            f"Unknown {flag_name} '{raw_name.strip()}'; use one of: {valid_presets}"
+        )
+    timestamps = [item.strip() for item in raw_timestamps.split(",") if item.strip()]
+    preset_steps = available_presets[preset_name]
+    if len(timestamps) != len(preset_steps):
+        raise ValueError(
+            f"{flag_name} {preset_name} expects {len(preset_steps)} timestamps "
+            f"but received {len(timestamps)}"
+        )
+    return preset_name, timestamps, preset_steps
 
 
 def expand_card_annotation_presets(
@@ -886,33 +946,98 @@ def expand_card_annotation_presets(
     available_presets = preset_definitions or CARD_ANNOTATION_PRESETS
     expanded: list[str] = []
     for raw_preset in raw_presets or []:
-        cleaned = raw_preset.strip()
-        if not cleaned:
-            raise ValueError("--card-annotation-preset values must not be blank")
-        if "=" not in cleaned:
-            raise ValueError(
-                "--card-annotation-preset must use PRESET=TIMESTAMP[,TIMESTAMP...] "
-                "(for example deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z)"
-            )
-        raw_name, raw_timestamps = cleaned.split("=", 1)
-        preset_name = normalize_card_annotation_preset_name(raw_name)
-        if preset_name not in available_presets:
-            valid_presets = ", ".join(sorted(available_presets))
-            raise ValueError(
-                f"Unknown --card-annotation-preset '{raw_name.strip()}'; use one of: {valid_presets}"
-            )
-        timestamps = [item.strip() for item in raw_timestamps.split(",") if item.strip()]
-        preset_steps = available_presets[preset_name]
-        if len(timestamps) != len(preset_steps):
-            raise ValueError(
-                f"--card-annotation-preset {preset_name} expects {len(preset_steps)} timestamps "
-                f"but received {len(timestamps)}"
-            )
+        _preset_name, timestamps, preset_steps = parse_card_annotation_preset_invocation(
+            raw_preset,
+            available_presets=available_presets,
+            flag_name="--card-annotation-preset",
+        )
         expanded.extend(
             f"{timestamp}={theme}|{label}"
             for timestamp, (theme, label) in zip(timestamps, preset_steps)
         )
     return expanded
+
+
+def build_card_annotation_preset_previews(
+    raw_presets: Iterable[str] | None,
+    *,
+    preset_definitions: dict[str, list[tuple[str, str]]] | None = None,
+) -> list[dict[str, object]]:
+    available_presets = preset_definitions or CARD_ANNOTATION_PRESETS
+    previews: list[dict[str, object]] = []
+    for raw_preset in raw_presets or []:
+        preset_name, timestamps, preset_steps = parse_card_annotation_preset_invocation(
+            raw_preset,
+            available_presets=available_presets,
+            flag_name="--preview-card-annotation-preset",
+        )
+        previews.append(
+            {
+                "preset": preset_name,
+                "step_count": len(preset_steps),
+                "annotations": [
+                    {
+                        "timestamp": timestamp,
+                        "theme": theme,
+                        "label": label,
+                        "annotation": f"{timestamp}={theme}|{label}",
+                    }
+                    for timestamp, (theme, label) in zip(timestamps, preset_steps)
+                ],
+            }
+        )
+    return previews
+
+
+def format_card_annotation_preset_catalog_text(
+    preset_catalog: list[dict[str, object]],
+) -> str:
+    lines = ["Card annotation presets"]
+    if not preset_catalog:
+        lines.append("  (none)")
+        return "\n".join(lines)
+
+    for entry in preset_catalog:
+        step_count = int(entry["step_count"])
+        step_word = "step" if step_count == 1 else "steps"
+        lines.append(
+            f'- {entry["name"]} [{entry["source"]}] ({step_count} {step_word})'
+        )
+        for index, step in enumerate(entry["steps"], start=1):
+            lines.append(
+                f'  {index}. {step["theme"]} | {step["label"]}'
+            )
+    return "\n".join(lines)
+
+
+def format_card_annotation_preset_preview_text(
+    preset_previews: list[dict[str, object]],
+) -> str:
+    lines = ["Card annotation preset preview"]
+    if not preset_previews:
+        lines.append("  (none)")
+        return "\n".join(lines)
+
+    for preview in preset_previews:
+        lines.append(f'- {preview["preset"]}')
+        for index, annotation in enumerate(preview["annotations"], start=1):
+            lines.append(
+                f'  {index}. {annotation["timestamp"]} -> {annotation["theme"]} | {annotation["label"]}'
+            )
+    return "\n".join(lines)
+
+
+def format_card_annotation_preset_utility_text(
+    *,
+    preset_catalog: list[dict[str, object]] | None = None,
+    preset_previews: list[dict[str, object]] | None = None,
+) -> str:
+    sections: list[str] = []
+    if preset_catalog is not None:
+        sections.append(format_card_annotation_preset_catalog_text(preset_catalog))
+    if preset_previews is not None:
+        sections.append(format_card_annotation_preset_preview_text(preset_previews))
+    return "\n\n".join(sections)
 
 
 def get_card_annotation_theme(theme_key: str | None) -> dict[str, str]:
@@ -3315,7 +3440,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Analyze common, combined, and latency-augmented web access logs"
     )
-    parser.add_argument("logfile", help="Path to an access log file")
+    parser.add_argument(
+        "logfile",
+        nargs="?",
+        help="Path to an access log file (omit when using preset-list/preview helper flags)",
+    )
     parser.add_argument(
         "--top",
         type=int,
@@ -3414,7 +3543,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help=(
             "Optional JSON file that defines custom card-annotation presets; combines with "
-            "the built-ins and requires at least one --card-annotation-preset"
+            "the built-ins and requires preset usage, preview usage, or preset listing"
+        ),
+    )
+    parser.add_argument(
+        "--list-card-annotation-presets",
+        action="store_true",
+        help=(
+            "List built-in and custom card-annotation presets, then exit; works without a "
+            "logfile and can be combined with --card-annotation-preset-file"
+        ),
+    )
+    parser.add_argument(
+        "--preview-card-annotation-preset",
+        action="append",
+        default=[],
+        help=(
+            "Preview the expanded themed annotations for a built-in or custom preset using "
+            "PRESET=TIMESTAMP[,TIMESTAMP...] syntax, then exit; works without a logfile"
         ),
     )
     parser.add_argument(
@@ -3510,6 +3656,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    preset_utility_mode = args.list_card_annotation_presets or bool(
+        args.preview_card_annotation_preset
+    )
 
     if args.top <= 0:
         parser.error("--top must be greater than 0")
@@ -3590,8 +3739,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--card-annotation-preset requires --time-bucket")
     if args.card_annotation_preset and not has_card_exports:
         parser.error("--card-annotation-preset requires at least one card export flag")
-    if args.card_annotation_preset_file and not args.card_annotation_preset:
-        parser.error("--card-annotation-preset-file requires at least one --card-annotation-preset")
+    if args.card_annotation_preset_file and not (
+        args.card_annotation_preset
+        or args.preview_card_annotation_preset
+        or args.list_card_annotation_presets
+    ):
+        parser.error(
+            "--card-annotation-preset-file requires at least one --card-annotation-preset, "
+            "--preview-card-annotation-preset, or --list-card-annotation-presets"
+        )
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
@@ -3602,6 +3758,49 @@ def main(argv: list[str] | None = None) -> int:
     if any(facet_export_flags) and not normalized_facet_fields:
         parser.error(
             "facet-specific export flags require at least one --facet-field"
+        )
+
+    try:
+        preset_catalog = build_card_annotation_preset_catalog(
+            args.card_annotation_preset_file
+        )
+        preset_definitions = {
+            str(entry["name"]): [
+                (str(step["theme"]), str(step["label"]))
+                for step in entry["steps"]
+            ]
+            for entry in preset_catalog
+        }
+        preset_previews = None
+        if args.preview_card_annotation_preset:
+            preset_previews = build_card_annotation_preset_previews(
+                args.preview_card_annotation_preset,
+                preset_definitions=preset_definitions,
+            )
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    if preset_utility_mode:
+        utility_payload: dict[str, object] = {}
+        if args.list_card_annotation_presets:
+            utility_payload["card_annotation_preset_catalog"] = preset_catalog
+        if preset_previews is not None:
+            utility_payload["card_annotation_preset_preview"] = preset_previews
+        if args.format == "json":
+            print(json.dumps(utility_payload, indent=2, sort_keys=True))
+        else:
+            print(
+                format_card_annotation_preset_utility_text(
+                    preset_catalog=preset_catalog if args.list_card_annotation_presets else None,
+                    preset_previews=preset_previews,
+                )
+            )
+        return 0
+
+    if args.logfile is None:
+        parser.error(
+            "logfile is required unless --list-card-annotation-presets or "
+            "--preview-card-annotation-preset is used"
         )
 
     window_start = None
@@ -3643,9 +3842,6 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     try:
-        preset_definitions = load_card_annotation_preset_definitions(
-            args.card_annotation_preset_file
-        )
         all_card_annotations = [
             *args.card_annotation,
             *expand_card_annotation_presets(

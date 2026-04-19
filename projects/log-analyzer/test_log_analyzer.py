@@ -14,6 +14,8 @@ if str(PROJECT_DIR) not in sys.path:
 
 from log_analyzer import (
     analyze_lines,
+    build_card_annotation_preset_catalog,
+    build_card_annotation_preset_previews,
     expand_card_annotation_presets,
     format_facet_comparison_card_html,
     format_facet_comparison_card_svg,
@@ -570,6 +572,50 @@ class LogAnalyzerTests(unittest.TestCase):
                 '2026-04-18T09:01:40Z=incident|5xx spike noticed',
                 '2026-04-18T09:03:10Z=recovery|Traffic stabilized',
             ],
+        )
+
+    def test_build_card_annotation_preset_catalog_includes_source_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_path = Path(tmpdir) / 'presets.json'
+            preset_path.write_text(
+                json.dumps(
+                    {
+                        'presets': {
+                            'canary-watch': [
+                                {'theme': 'deploy', 'label': 'Canary enabled'},
+                                {'theme': 'incident', 'label': '5xx spike noticed'},
+                                {'theme': 'recovery', 'label': 'Traffic stabilized'},
+                            ]
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+            catalog = build_card_annotation_preset_catalog([str(preset_path)])
+            deploy_entry = next(entry for entry in catalog if entry['name'] == 'deploy-incident-recovery')
+            custom_entry = next(entry for entry in catalog if entry['name'] == 'canary-watch')
+            self.assertEqual(deploy_entry['source'], 'built-in')
+            self.assertEqual(custom_entry['source'], str(preset_path))
+            self.assertEqual(custom_entry['step_count'], 3)
+            self.assertEqual(custom_entry['steps'][1]['theme'], 'incident')
+            self.assertEqual(custom_entry['steps'][1]['label'], '5xx spike noticed')
+
+    def test_build_card_annotation_preset_previews_expand_timestamps(self):
+        previews = build_card_annotation_preset_previews(
+            [
+                'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+            ]
+        )
+        self.assertEqual(len(previews), 1)
+        self.assertEqual(previews[0]['preset'], 'deploy-rollback-recovery')
+        self.assertEqual(
+            previews[0]['annotations'][1],
+            {
+                'timestamp': '2026-04-18T09:01:40Z',
+                'theme': 'rollback',
+                'label': 'Rollback started',
+                'annotation': '2026-04-18T09:01:40Z=rollback|Rollback started',
+            },
         )
 
     def test_normalize_card_annotations_rejects_unknown_theme(self):
@@ -1915,7 +1961,162 @@ class LogAnalyzerTests(unittest.TestCase):
                 text=True,
             )
             self.assertNotEqual(completed.returncode, 0)
-            self.assertIn('--card-annotation-preset-file requires at least one --card-annotation-preset', completed.stderr)
+            self.assertIn(
+                '--card-annotation-preset-file requires at least one --card-annotation-preset, '
+                '--preview-card-annotation-preset, or --list-card-annotation-presets',
+                completed.stderr,
+            )
+
+    def test_cli_lists_card_annotation_presets_without_logfile(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                'log_analyzer.py',
+                '--list-card-annotation-presets',
+            ],
+            cwd=Path(__file__).parent,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn('Card annotation presets', completed.stdout)
+        self.assertIn('deploy-incident-recovery [built-in] (3 steps)', completed.stdout)
+        self.assertIn('1. deploy | Deploy started', completed.stdout)
+
+    def test_cli_preview_card_annotation_presets_without_logfile(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                'log_analyzer.py',
+                '--format',
+                'json',
+                '--preview-card-annotation-preset',
+                'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+            ],
+            cwd=Path(__file__).parent,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(len(payload['card_annotation_preset_preview']), 1)
+        self.assertEqual(payload['card_annotation_preset_preview'][0]['preset'], 'deploy-rollback-recovery')
+        self.assertEqual(
+            payload['card_annotation_preset_preview'][0]['annotations'][1]['annotation'],
+            '2026-04-18T09:01:40Z=rollback|Rollback started',
+        )
+
+    def test_cli_lists_custom_card_annotation_presets_from_file_without_logfile(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_path = Path(tmpdir) / 'custom-presets.json'
+            preset_path.write_text(
+                json.dumps(
+                    {
+                        'presets': {
+                            'canary-watch': [
+                                {'theme': 'deploy', 'label': 'Canary enabled'},
+                                {'theme': 'incident', 'label': '5xx spike noticed'},
+                                {'theme': 'recovery', 'label': 'Traffic stabilized'},
+                            ]
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    '--list-card-annotation-presets',
+                    '--card-annotation-preset-file',
+                    str(preset_path),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn(f'canary-watch [{preset_path}] (3 steps)', completed.stdout)
+            self.assertIn('2. incident | 5xx spike noticed', completed.stdout)
+
+    def test_cli_previews_custom_card_annotation_presets_from_file_without_logfile(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_path = Path(tmpdir) / 'custom-presets.json'
+            preset_path.write_text(
+                json.dumps(
+                    {
+                        'presets': {
+                            'canary-watch': [
+                                {'theme': 'deploy', 'label': 'Canary enabled'},
+                                {'theme': 'incident', 'label': '5xx spike noticed'},
+                                {'theme': 'recovery', 'label': 'Traffic stabilized'},
+                            ]
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    '--format',
+                    'json',
+                    '--card-annotation-preset-file',
+                    str(preset_path),
+                    '--preview-card-annotation-preset',
+                    'canary-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(len(payload['card_annotation_preset_preview']), 1)
+            self.assertEqual(payload['card_annotation_preset_preview'][0]['preset'], 'canary-watch')
+            self.assertEqual(
+                payload['card_annotation_preset_preview'][0]['annotations'][1]['annotation'],
+                '2026-04-18T09:01:40Z=incident|5xx spike noticed',
+            )
+
+    def test_cli_lists_and_previews_card_annotation_presets_in_single_json_payload(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                'log_analyzer.py',
+                '--format',
+                'json',
+                '--list-card-annotation-presets',
+                '--preview-card-annotation-preset',
+                'deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+            ],
+            cwd=Path(__file__).parent,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertIn('card_annotation_preset_catalog', payload)
+        self.assertIn('card_annotation_preset_preview', payload)
+        self.assertEqual(payload['card_annotation_preset_catalog'][0]['name'], 'deploy-incident-recovery')
+        self.assertEqual(payload['card_annotation_preset_preview'][0]['annotations'][0]['theme'], 'deploy')
+
+    def test_cli_requires_logfile_without_preset_utility_flags(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                'log_analyzer.py',
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            'logfile is required unless --list-card-annotation-presets or --preview-card-annotation-preset is used',
+            completed.stderr,
+        )
 
     def test_cli_rejects_card_annotation_outside_bucket_range(self):
         with tempfile.TemporaryDirectory() as tmpdir:
