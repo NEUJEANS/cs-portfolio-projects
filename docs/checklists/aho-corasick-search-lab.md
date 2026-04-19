@@ -6,3 +6,5 @@
 - [x] support file input, pattern files, case-insensitive mode, and JSON output
 - [x] add focused tests for suffix matches, CLI behavior, and pattern loading
 - [x] document usage, complexity, and future improvements
+- [x] add chunked file scanning that preserves cross-boundary matches
+- [x] add sampled context windows for chunked searches without loading the full file

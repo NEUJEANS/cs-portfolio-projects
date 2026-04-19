@@ -9,12 +9,24 @@ from typing import Dict, Iterable, Iterator, List, Sequence
 
 
 @dataclass(slots=True)
+class MatchContext:
+    before: str
+    match: str
+    after: str = ""
+
+    @property
+    def excerpt(self) -> str:
+        return f"{self.before}⟦{self.match}⟧{self.after}"
+
+
+@dataclass(slots=True)
 class Match:
     pattern: str
     start: int
     end: int
     line: int
     column: int
+    context: MatchContext | None = None
 
 
 @dataclass(slots=True)
@@ -22,6 +34,18 @@ class Node:
     transitions: Dict[str, int] = field(default_factory=dict)
     failure: int = 0
     outputs: List[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class PendingContext:
+    match: Match
+    remaining_after: int
+
+
+def ensure_non_negative_context(context_chars: int) -> int:
+    if context_chars < 0:
+        raise ValueError("context_chars must be non-negative")
+    return context_chars
 
 
 class AhoCorasickAutomaton:
@@ -71,12 +95,40 @@ class AhoCorasickAutomaton:
                     if pattern not in self.nodes[next_index].outputs:
                         self.nodes[next_index].outputs.append(pattern)
 
-    def scan_chunks(self, chunks: Iterable[str]) -> tuple[List[Match], int, int]:
+    def _trim_history(self, history: deque[str], *, max_history: int, history_start: int) -> int:
+        while len(history) > max_history:
+            history.popleft()
+            history_start += 1
+        return history_start
+
+    def _context_before_and_match(
+        self,
+        history_chars: Sequence[str],
+        *,
+        history_start: int,
+        start: int,
+        end: int,
+        context_chars: int,
+    ) -> MatchContext:
+        window_start = max(history_start, start - context_chars)
+        start_index = start - history_start
+        window_start_index = window_start - history_start
+        end_index = end - history_start
+        before = "".join(history_chars[window_start_index:start_index])
+        matched = "".join(history_chars[start_index:end_index])
+        return MatchContext(before=before, match=matched)
+
+    def scan_chunks(self, chunks: Iterable[str], *, context_chars: int = 0) -> tuple[List[Match], int, int]:
+        context_chars = ensure_non_negative_context(context_chars)
         line_starts = [0]
         matches: List[Match] = []
         state = 0
         offset = 0
         chunk_count = 0
+        history: deque[str] = deque()
+        history_start = 0
+        max_history = self.max_pattern_length + max(context_chars, 0)
+        pending_contexts: List[PendingContext] = []
 
         for chunk in chunks:
             if not chunk:
@@ -88,39 +140,60 @@ class AhoCorasickAutomaton:
                     state = self.nodes[state].failure
                 state = self.nodes[state].transitions.get(char, 0)
                 absolute_index = offset + index
+
+                history.append(raw_char)
+                history_start = self._trim_history(history, max_history=max_history, history_start=history_start)
+
+                if pending_contexts:
+                    still_pending: List[PendingContext] = []
+                    for pending in pending_contexts:
+                        context = pending.match.context
+                        assert context is not None
+                        if pending.remaining_after > 0:
+                            context.after += raw_char
+                            pending.remaining_after -= 1
+                        if pending.remaining_after > 0:
+                            still_pending.append(pending)
+                    pending_contexts = still_pending
+
+                history_chars = list(history) if context_chars > 0 and self.nodes[state].outputs else None
                 for pattern in self.nodes[state].outputs:
                     start = absolute_index - len(pattern) + 1
                     line, column = offset_to_line_column(line_starts, start)
-                    matches.append(
-                        Match(
-                            pattern=pattern,
+                    context = None
+                    if context_chars > 0 and history_chars is not None:
+                        context = self._context_before_and_match(
+                            history_chars,
+                            history_start=history_start,
                             start=start,
                             end=absolute_index + 1,
-                            line=line,
-                            column=column,
+                            context_chars=context_chars,
                         )
+                    match = Match(
+                        pattern=pattern,
+                        start=start,
+                        end=absolute_index + 1,
+                        line=line,
+                        column=column,
+                        context=context,
                     )
+                    matches.append(match)
+                    if context_chars > 0 and context is not None:
+                        pending_contexts.append(PendingContext(match=match, remaining_after=context_chars))
+
                 if raw_char == "\n":
                     line_starts.append(absolute_index + 1)
             offset += len(chunk)
 
         return matches, offset, chunk_count
 
-    def find_matches(self, text: str) -> List[Match]:
-        matches, _, _ = self.scan_chunks([text])
+    def find_matches(self, text: str, *, context_chars: int = 0) -> List[Match]:
+        matches, _, _ = self.scan_chunks([text], context_chars=context_chars)
         return matches
 
-    def find_matches_in_chunks(self, chunks: Iterable[str]) -> List[Match]:
-        matches, _, _ = self.scan_chunks(chunks)
+    def find_matches_in_chunks(self, chunks: Iterable[str], *, context_chars: int = 0) -> List[Match]:
+        matches, _, _ = self.scan_chunks(chunks, context_chars=context_chars)
         return matches
-
-
-def compute_line_starts(text: str) -> List[int]:
-    starts = [0]
-    for index, char in enumerate(text):
-        if char == "\n":
-            starts.append(index + 1)
-    return starts
 
 
 def offset_to_line_column(line_starts: Sequence[int], offset: int) -> tuple[int, int]:
@@ -149,6 +222,22 @@ def load_patterns(patterns: Sequence[str], pattern_file: str | None) -> List[str
     return unique
 
 
+def serialize_match(match: Match) -> dict:
+    payload = {
+        "pattern": match.pattern,
+        "start": match.start,
+        "end": match.end,
+        "line": match.line,
+        "column": match.column,
+    }
+    if match.context is not None:
+        payload["context"] = {
+            **asdict(match.context),
+            "excerpt": match.context.excerpt,
+        }
+    return payload
+
+
 def build_result(
     automaton: AhoCorasickAutomaton,
     matches: Sequence[Match],
@@ -156,6 +245,7 @@ def build_result(
     characters_processed: int,
     chunk_count: int,
     chunk_size: int | None,
+    context_chars: int = 0,
 ) -> dict:
     counts = {pattern: 0 for pattern in automaton.patterns}
     for match in matches:
@@ -169,26 +259,38 @@ def build_result(
     if chunk_size is not None:
         input_meta["chunk_size"] = chunk_size
         input_meta["boundary_overlap"] = max(automaton.max_pattern_length - 1, 0)
+    if context_chars > 0:
+        input_meta["context_chars"] = context_chars
+        if chunk_size is not None:
+            input_meta["context_mode"] = "sampled"
 
     return {
         "pattern_count": len(automaton.patterns),
         "match_count": len(matches),
         "case_sensitive": automaton.case_sensitive,
         "counts": counts,
-        "matches": [asdict(match) for match in matches],
+        "matches": [serialize_match(match) for match in matches],
         "input": input_meta,
     }
 
 
-def search_text(text: str, patterns: Sequence[str], *, case_sensitive: bool = True) -> dict:
+def search_text(
+    text: str,
+    patterns: Sequence[str],
+    *,
+    case_sensitive: bool = True,
+    context_chars: int = 0,
+) -> dict:
+    context_chars = ensure_non_negative_context(context_chars)
     automaton = AhoCorasickAutomaton(patterns, case_sensitive=case_sensitive)
-    matches, characters_processed, chunk_count = automaton.scan_chunks([text])
+    matches, characters_processed, chunk_count = automaton.scan_chunks([text], context_chars=context_chars)
     return build_result(
         automaton,
         matches,
         characters_processed=characters_processed,
         chunk_count=chunk_count,
         chunk_size=None,
+        context_chars=context_chars,
     )
 
 
@@ -198,15 +300,18 @@ def search_chunks(
     *,
     case_sensitive: bool = True,
     chunk_size: int | None = None,
+    context_chars: int = 0,
 ) -> dict:
+    context_chars = ensure_non_negative_context(context_chars)
     automaton = AhoCorasickAutomaton(patterns, case_sensitive=case_sensitive)
-    matches, characters_processed, chunk_count = automaton.scan_chunks(chunks)
+    matches, characters_processed, chunk_count = automaton.scan_chunks(chunks, context_chars=context_chars)
     return build_result(
         automaton,
         matches,
         characters_processed=characters_processed,
         chunk_count=chunk_count,
         chunk_size=chunk_size,
+        context_chars=context_chars,
     )
 
 
@@ -219,10 +324,18 @@ def iter_file_chunks(path: str | Path, chunk_size: int) -> Iterator[str]:
             yield chunk
 
 
-def search_file(path: str | Path, patterns: Sequence[str], *, case_sensitive: bool = True, chunk_size: int | None = None) -> tuple[str | None, dict]:
+def search_file(
+    path: str | Path,
+    patterns: Sequence[str],
+    *,
+    case_sensitive: bool = True,
+    chunk_size: int | None = None,
+    context_chars: int = 0,
+) -> tuple[str | None, dict]:
+    context_chars = ensure_non_negative_context(context_chars)
     if chunk_size is None:
         text = Path(path).read_text(encoding="utf-8")
-        return text, search_text(text, patterns, case_sensitive=case_sensitive)
+        return text, search_text(text, patterns, case_sensitive=case_sensitive, context_chars=context_chars)
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     result = search_chunks(
@@ -230,6 +343,7 @@ def search_file(path: str | Path, patterns: Sequence[str], *, case_sensitive: bo
         patterns,
         case_sensitive=case_sensitive,
         chunk_size=chunk_size,
+        context_chars=context_chars,
     )
     return None, result
 
@@ -242,7 +356,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", help="path to a text file to search")
     parser.add_argument("--ignore-case", action="store_true", help="perform case-insensitive matching")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
-    parser.add_argument("--context", type=int, default=0, help="include N context chars around each match in text mode")
+    parser.add_argument(
+        "--context",
+        type=int,
+        default=0,
+        help="include N context chars around each match; chunked mode emits sampled windows without loading the full file",
+    )
     parser.add_argument(
         "--chunk-size",
         type=int,
@@ -251,7 +370,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def render_text_output(text: str | None, result: dict, *, context: int = 0) -> str:
+def render_text_output(result: dict) -> str:
     lines = [
         f"patterns: {result['pattern_count']}",
         f"matches: {result['match_count']}",
@@ -263,6 +382,11 @@ def render_text_output(text: str | None, result: dict, *, context: int = 0) -> s
             f" ({input_meta['chunk_count']} chunks @ {input_meta['chunk_size']} chars,"
             f" boundary overlap {input_meta['boundary_overlap']})"
         )
+    if input_meta.get("context_chars", 0) > 0:
+        context_line = f"context chars: {input_meta['context_chars']}"
+        if input_meta.get("context_mode") == "sampled":
+            context_line += " (sampled around matches)"
+        lines.append(context_line)
     lines.append("counts:")
     for pattern, count in result["counts"].items():
         lines.append(f"  - {pattern}: {count}")
@@ -270,10 +394,9 @@ def render_text_output(text: str | None, result: dict, *, context: int = 0) -> s
         lines.append("matches detail:")
         for item in result["matches"]:
             snippet = ""
-            if context > 0 and text is not None:
-                start = max(0, item["start"] - context)
-                end = min(len(text), item["end"] + context)
-                snippet = f" | context={text[start:end]!r}"
+            context = item.get("context")
+            if context:
+                snippet = f" | context={context['excerpt']!r}"
             lines.append(
                 f"  - {item['pattern']} @ line {item['line']}, col {item['column']}"
                 f" [{item['start']}:{item['end']}]" + snippet
@@ -294,25 +417,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--chunk-size requires --input")
     if args.chunk_size is not None and args.chunk_size <= 0:
         parser.error("--chunk-size must be positive")
-    if args.chunk_size is not None and args.context > 0:
-        parser.error("--context is not supported with --chunk-size; read the whole file or omit context")
+    if args.context < 0:
+        parser.error("--context must be non-negative")
 
     if args.input:
-        text, result = search_file(
+        _, result = search_file(
             args.input,
             patterns,
             case_sensitive=not args.ignore_case,
             chunk_size=args.chunk_size,
+            context_chars=args.context,
         )
     else:
         text = args.text
         assert text is not None
-        result = search_text(text, patterns, case_sensitive=not args.ignore_case)
+        result = search_text(
+            text,
+            patterns,
+            case_sensitive=not args.ignore_case,
+            context_chars=args.context,
+        )
 
     if args.json:
         print(json.dumps(result, indent=2))
     else:
-        print(render_text_output(text, result, context=max(args.context, 0)))
+        print(render_text_output(result))
     return 0
 
 

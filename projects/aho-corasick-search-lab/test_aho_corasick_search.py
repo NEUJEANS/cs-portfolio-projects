@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -48,10 +49,8 @@ class AhoCorasickSearchTests(unittest.TestCase):
         self.assertEqual(result["matches"][1]["column"], 1)
 
     def test_search_file_streaming_matches_whole_file_search(self) -> None:
-        tmp_dir = Path(self.id().replace(".", "_"))
-        tmp_dir.mkdir(exist_ok=True)
-        try:
-            input_file = tmp_dir / "sample.txt"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_file = Path(tmpdir) / "sample.txt"
             text = "alpha\nher beta\nhers again\n"
             input_file.write_text(text, encoding="utf-8")
             memory_text, memory_result = search_file(input_file, ["her", "hers"])
@@ -60,33 +59,42 @@ class AhoCorasickSearchTests(unittest.TestCase):
             self.assertIsNone(stream_text)
             self.assertEqual(memory_result["matches"], stream_result["matches"])
             self.assertEqual(stream_result["input"]["chunk_size"], 3)
-        finally:
-            if tmp_dir.exists():
-                for path in tmp_dir.iterdir():
-                    path.unlink()
-                tmp_dir.rmdir()
+
+    def test_streaming_context_windows_capture_before_and_after_samples(self) -> None:
+        result = search_chunks(
+            ["alpha wa", "rning! b", "eta warning?"],
+            ["warning"],
+            chunk_size=8,
+            context_chars=2,
+        )
+        self.assertEqual(result["input"]["context_chars"], 2)
+        self.assertEqual(result["input"]["context_mode"], "sampled")
+        self.assertEqual(
+            [match["context"]["excerpt"] for match in result["matches"]],
+            ["a ⟦warning⟧! ", "a ⟦warning⟧?"],
+        )
+        self.assertEqual(result["matches"][0]["context"]["before"], "a ")
+        self.assertEqual(result["matches"][0]["context"]["match"], "warning")
+        self.assertEqual(result["matches"][0]["context"]["after"], "! ")
+
+    def test_streaming_context_windows_truncate_cleanly_at_end_of_input(self) -> None:
+        result = search_chunks(["tail warning"], ["warning"], chunk_size=32, context_chars=4)
+        self.assertEqual(result["matches"][0]["context"]["before"], "ail ")
+        self.assertEqual(result["matches"][0]["context"]["match"], "warning")
+        self.assertEqual(result["matches"][0]["context"]["after"], "")
 
     def test_pattern_file_loading_deduplicates(self) -> None:
-        tmp_dir = Path(self.id().replace(".", "_"))
-        tmp_dir.mkdir(exist_ok=True)
-        try:
-            pattern_file = tmp_dir / "patterns.txt"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pattern_file = Path(tmpdir) / "patterns.txt"
             pattern_file.write_text("error\nwarning\nerror\n", encoding="utf-8")
             self.assertEqual(
                 load_patterns(["warning", "critical"], str(pattern_file)),
                 ["warning", "critical", "error"],
             )
-        finally:
-            if tmp_dir.exists():
-                for path in tmp_dir.iterdir():
-                    path.unlink()
-                tmp_dir.rmdir()
 
     def test_cli_json_output(self) -> None:
-        tmp_dir = Path(self.id().replace(".", "_"))
-        tmp_dir.mkdir(exist_ok=True)
-        try:
-            input_file = tmp_dir / "sample.txt"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_file = Path(tmpdir) / "sample.txt"
             input_file.write_text("fail fast\nwarn louder\nfail again\n", encoding="utf-8")
             completed = subprocess.run(
                 [
@@ -106,17 +114,10 @@ class AhoCorasickSearchTests(unittest.TestCase):
             self.assertEqual(payload["match_count"], 3)
             self.assertEqual(payload["counts"], {"fail": 2, "warn": 1})
             self.assertEqual(payload["input"]["mode"], "memory")
-        finally:
-            if tmp_dir.exists():
-                for path in tmp_dir.iterdir():
-                    path.unlink()
-                tmp_dir.rmdir()
 
-    def test_cli_chunked_json_output_reports_stream_metadata(self) -> None:
-        tmp_dir = Path(self.id().replace(".", "_"))
-        tmp_dir.mkdir(exist_ok=True)
-        try:
-            input_file = tmp_dir / "sample.txt"
+    def test_cli_chunked_json_output_reports_stream_metadata_and_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_file = Path(tmpdir) / "sample.txt"
             input_file.write_text("error\nwarning\ncritical\n", encoding="utf-8")
             completed = subprocess.run(
                 [
@@ -128,6 +129,8 @@ class AhoCorasickSearchTests(unittest.TestCase):
                     str(input_file),
                     "--chunk-size",
                     "5",
+                    "--context",
+                    "2",
                     "--json",
                 ],
                 check=True,
@@ -138,32 +141,72 @@ class AhoCorasickSearchTests(unittest.TestCase):
             self.assertEqual(payload["counts"], {"warning": 1, "critical": 1})
             self.assertEqual(payload["input"]["mode"], "stream")
             self.assertEqual(payload["input"]["chunk_size"], 5)
+            self.assertEqual(payload["input"]["context_mode"], "sampled")
+            self.assertEqual(payload["matches"][0]["context"]["excerpt"], "r\n⟦warning⟧\nc")
             self.assertEqual(payload["matches"][0]["line"], 2)
             self.assertEqual(payload["matches"][1]["line"], 3)
-        finally:
-            if tmp_dir.exists():
-                for path in tmp_dir.iterdir():
-                    path.unlink()
-                tmp_dir.rmdir()
 
-    def test_cli_rejects_context_with_chunked_file_mode(self) -> None:
+    def test_cli_chunked_text_output_includes_sampled_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_file = Path(tmpdir) / "sample.txt"
+            input_file.write_text("alpha warning omega\n", encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "warning",
+                    "--input",
+                    str(input_file),
+                    "--chunk-size",
+                    "4",
+                    "--context",
+                    "3",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("context chars: 3 (sampled around matches)", completed.stdout)
+            self.assertIn("context='ha ⟦warning⟧ om'", completed.stdout)
+
+    def test_cli_inline_text_output_still_includes_context(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "warning",
+                "--text",
+                "alpha warning omega",
+                "--context",
+                "3",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("context chars: 3", completed.stdout)
+        self.assertIn("context='ha ⟦warning⟧ om'", completed.stdout)
+
+    def test_cli_rejects_negative_context(self) -> None:
         completed = subprocess.run(
             [
                 sys.executable,
                 str(SCRIPT),
                 "warn",
-                "--input",
-                str(HERE / "sample_text.txt"),
-                "--chunk-size",
-                "4",
+                "--text",
+                "warning",
                 "--context",
-                "2",
+                "-1",
             ],
             capture_output=True,
             text=True,
         )
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("--context is not supported with --chunk-size", completed.stderr)
+        self.assertIn("--context must be non-negative", completed.stderr)
+
+    def test_direct_api_rejects_negative_context(self) -> None:
+        with self.assertRaises(ValueError):
+            search_text("warning", ["warn"], context_chars=-1)
 
     def test_rejects_missing_patterns(self) -> None:
         with self.assertRaises(ValueError):

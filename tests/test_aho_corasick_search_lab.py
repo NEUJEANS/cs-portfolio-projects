@@ -63,6 +63,21 @@ class AhoCorasickSearchLabTests(unittest.TestCase):
         ]
         self.assertEqual(single_pass, chunked)
 
+    def test_chunked_context_windows_are_sampled_without_full_text(self) -> None:
+        result = search_chunks(
+            ["error wa", "rning\ncr", "itical"],
+            ["warning", "critical"],
+            chunk_size=8,
+            context_chars=2,
+        )
+        self.assertEqual(result["input"]["context_mode"], "sampled")
+        self.assertEqual(result["matches"][0]["context"]["excerpt"], "r ⟦warning⟧\nc")
+        self.assertEqual(result["matches"][1]["context"]["excerpt"], "g\n⟦critical⟧")
+
+    def test_direct_api_rejects_negative_context(self) -> None:
+        with self.assertRaises(ValueError):
+            search_text("warning", ["warning"], context_chars=-1)
+
     def test_cli_chunked_json_output_exposes_stream_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "sample.txt"
@@ -88,6 +103,47 @@ class AhoCorasickSearchLabTests(unittest.TestCase):
             self.assertEqual(payload["input"]["mode"], "stream")
             self.assertEqual(payload["input"]["chunk_size"], 4)
             self.assertEqual(payload["input"]["boundary_overlap"], len("critical") - 1)
+
+    def test_cli_chunked_context_is_available_in_text_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "sample.txt"
+            path.write_text("before warning after", encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "warning",
+                    "--input",
+                    str(path),
+                    "--chunk-size",
+                    "3",
+                    "--context",
+                    "2",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("context chars: 2 (sampled around matches)", completed.stdout)
+            self.assertIn("context='e ⟦warning⟧ a'", completed.stdout)
+
+    def test_inline_text_context_still_uses_shared_context_path(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT_PATH),
+                "warning",
+                "--text",
+                "before warning after",
+                "--context",
+                "2",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("context chars: 2", completed.stdout)
+        self.assertIn("context='e ⟦warning⟧ a'", completed.stdout)
 
 
 if __name__ == "__main__":
