@@ -17,6 +17,7 @@ from page_replacement_lab import (  # noqa: E402
     WORKLOAD_PRESETS,
     compare_algorithms,
     load_trace_benchmark_reference,
+    parse_dirty_page_args,
     parse_reference_args,
     simulate,
     study_frame_counts,
@@ -96,6 +97,29 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(parsed.source, "benchmark:compiler-phase-shift")
         self.assertGreater(len(parsed.reference_string), len(REFERENCE))
         self.assertEqual(parsed.reference_string[:8], [1, 2, 3, 4, 1, 2, 5, 6])
+
+    def test_parse_dirty_page_args_merges_flags_and_file(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump([6, 7, 8], handle)
+            handle.flush()
+            dirty_path = handle.name
+
+        self.addCleanup(lambda: Path(dirty_path).unlink(missing_ok=True))
+        parsed = parse_dirty_page_args(["4", "5", "4"], dirty_path)
+        self.assertEqual(parsed, (4, 5, 6, 7, 8))
+
+    def test_wsclock_dirty_pages_trigger_writebacks_on_compiler_benchmark(self) -> None:
+        benchmark_reference = load_trace_benchmark_reference(TRACE_BENCHMARKS["compiler-phase-shift"])
+        result = simulate(
+            "wsclock",
+            benchmark_reference,
+            5,
+            wsclock_window=1,
+            dirty_pages=[1, 2, 3, 4, 5, 6],
+        )
+        self.assertEqual(result.page_faults, 55)
+        self.assertEqual(result.writebacks, 15)
+        self.assertTrue(any(step.writebacks_scheduled for step in result.steps))
 
     def test_trace_summary_detects_phase_boundary_hints(self) -> None:
         payload = summarize_trace([1, 2, 1, 2, 1, 2, 7, 8, 7, 8, 7, 8], window_size=6)
@@ -208,6 +232,44 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(payload["wsclock_window_description"], "fixed 1 reference")
         self.assertEqual(wsclock_result["page_faults"], 54)
 
+    def test_cli_compare_json_reports_dirty_page_metadata_and_writebacks(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "compare",
+                "--frames",
+                "5",
+                "--benchmark",
+                "compiler-phase-shift",
+                "--wsclock-window",
+                "1",
+                "--dirty-page",
+                "1",
+                "--dirty-page",
+                "2",
+                "--dirty-page",
+                "3",
+                "--dirty-page",
+                "4",
+                "--dirty-page",
+                "5",
+                "--dirty-page",
+                "6",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        wsclock_result = next(result for result in payload["results"] if result["algorithm"] == "wsclock")
+        self.assertEqual(payload["dirty_pages"], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(payload["dirty_page_count"], 6)
+        self.assertEqual(payload["dirty_page_description"], "1, 2, 3, 4, 5, 6")
+        self.assertEqual(wsclock_result["writebacks"], 15)
+        self.assertEqual(wsclock_result["page_faults"], 55)
+
     def test_cli_list_presets_json_includes_known_workloads(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(SCRIPT), "list-presets", "--json"],
@@ -277,10 +339,10 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("classic-belady", svg)
             self.assertIn("WSCLOCK", svg)
             self.assertIn(
-                "frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,best_algorithms,reference_source",
+                "frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,wsclock_writebacks,best_algorithms,reference_source",
                 csv_output,
             )
-            self.assertIn("3,9,9,10,10,10,7,6,opt,preset:classic-belady", csv_output)
+            self.assertIn("3,9,9,10,10,10,7,6,0,opt,preset:classic-belady", csv_output)
 
     def test_cli_gallery_writes_html_and_companion_artifacts_for_presets_and_benchmarks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -610,7 +672,7 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("Normalized average page-fault rate by workload", svg)
             self.assertIn("compiler-phase-shift", svg)
             self.assertIn(
-                "type,workload,reference_source,reference_length,best_average_fault_algorithms,best_average_fault_rate_algorithms,fifo_has_anomaly,non_fifo_regression_count,fifo_avg_faults,clock_avg_faults,aging_avg_faults,wsclock_avg_faults,lru_avg_faults,opt_avg_faults,fifo_avg_fault_rate,clock_avg_fault_rate,aging_avg_fault_rate,wsclock_avg_fault_rate,lru_avg_fault_rate,opt_avg_fault_rate",
+                "type,workload,reference_source,reference_length,best_average_fault_algorithms,best_average_fault_rate_algorithms,fifo_has_anomaly,non_fifo_regression_count,wsclock_avg_writebacks,fifo_avg_faults,clock_avg_faults,aging_avg_faults,wsclock_avg_faults,lru_avg_faults,opt_avg_faults,fifo_avg_fault_rate,clock_avg_fault_rate,aging_avg_fault_rate,wsclock_avg_fault_rate,lru_avg_fault_rate,opt_avg_fault_rate",
                 csv_output,
             )
             self.assertEqual({entry["workload"] for entry in payload["workloads"]}, {"classic-belady", "compiler-phase-shift"})
@@ -645,6 +707,7 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertEqual(payload["workloads"][0]["reference_source"], "benchmark:db-hotset-scan")
             self.assertGreater(payload["workloads"][0]["average_fault_rates"]["fifo"], 0)
             self.assertIn("overall_best_rate_winners", payload["summary"])
+            self.assertIn("overall_average_wsclock_writebacks", payload["summary"])
 
 
     def test_cli_aggregate_accepts_imported_pages_file_workloads(self) -> None:

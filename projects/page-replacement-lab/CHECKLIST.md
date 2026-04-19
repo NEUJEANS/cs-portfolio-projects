@@ -17,11 +17,13 @@
 - [x] regression coverage for imported gallery workloads and trace-summary bundle paths
 - [x] simplified clean-page WSClock policy threaded through compare / study / gallery / aggregate / trace-compare outputs
 - [x] tunable WSClock working-set window (`--wsclock-window`) propagated through CLI output and exported artifacts
+- [x] dirty-page-aware WSClock inputs (`--dirty-page`, `--dirty-pages-file`) plus writeback tracking across compare / study / gallery / aggregate / trace-compare outputs
 
 ## Current demo-ready flow
 - [x] list built-in workloads and larger trace benchmarks for an interview or portfolio walkthrough
 - [x] simulate one policy with `--show-steps` on a preset workload
 - [x] compare FIFO / Clock / Aging / WSClock / LRU / OPT on either a compact preset or a larger benchmark trace
+- [x] mark dirty/write-heavy pages for WSClock sensitivity demos with explicit writeback counts
 - [x] study multiple frame counts and call out FIFO anomalies or Clock regressions
 - [x] export JSON for downstream charts or frontend demos
 - [x] export Markdown / SVG / CSV study artifacts for screenshots and portfolio cards
@@ -33,7 +35,7 @@
 ## Next vertical slices
 - [x] add aging-style page replacement for stronger systems realism
 - [x] add working-set style policies for stronger systems realism
-- [ ] add dirty-page-aware WSClock refinement with dirty-bit-aware cleaning or adaptive tau heuristics
+- [x] add dirty-page-aware WSClock refinement with dirty-bit-aware cleaning and writeback tracking
 - [x] add cross-workload aggregate comparison charts for slide-ready summaries
 - [x] add a trace-summary or reuse-distance helper for imported workloads
 - [x] add SVG/HTML trace-summary cards for portfolio slides

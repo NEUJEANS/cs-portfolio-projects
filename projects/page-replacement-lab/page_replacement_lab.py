@@ -7,7 +7,7 @@ import os
 import sys
 from math import ceil
 from collections import Counter, defaultdict, deque
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from html import escape
 from pathlib import Path
 from typing import Iterable
@@ -115,6 +115,17 @@ def resolve_wsclock_window(frame_count: int, wsclock_window: int | None = None) 
     return max(WS_CLOCK_WINDOW_FLOOR, frame_count * WS_CLOCK_WINDOW_MULTIPLIER)
 
 
+def normalize_dirty_pages(dirty_pages: Iterable[int] | None) -> tuple[int, ...]:
+    return tuple(sorted({int(page) for page in dirty_pages or ()}))
+
+
+def describe_dirty_pages_setting(dirty_pages: Iterable[int] | None) -> str:
+    values = normalize_dirty_pages(dirty_pages)
+    if not values:
+        return "none"
+    return ", ".join(str(page) for page in values)
+
+
 @dataclass(slots=True)
 class SimulationStep:
     index: int
@@ -122,6 +133,7 @@ class SimulationStep:
     hit: bool
     frames: list[int]
     evicted: int | None
+    writebacks_scheduled: list[int] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -133,6 +145,7 @@ class SimulationResult:
     hits: int
     hit_rate: float
     steps: list[SimulationStep]
+    writebacks: int = 0
 
     def to_dict(self, *, include_steps: bool = True) -> dict:
         payload = {
@@ -143,6 +156,7 @@ class SimulationResult:
             "page_faults": self.page_faults,
             "hits": self.hits,
             "hit_rate": round(self.hit_rate, 6),
+            "writebacks": self.writebacks,
         }
         if include_steps:
             payload["steps"] = [asdict(step) for step in self.steps]
@@ -340,28 +354,37 @@ def simulate_wsclock(
     reference_string: Iterable[int],
     frame_count: int,
     wsclock_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
 ) -> SimulationResult:
     reference = validate_reference(reference_string, frame_count)
+    dirty_page_set = set(normalize_dirty_pages(dirty_pages))
     frames: list[int | None] = [None] * frame_count
     reference_bits = [0] * frame_count
+    dirty_bits = [0] * frame_count
     last_used = [-1] * frame_count
     resident_slots: dict[int, int] = {}
     hand = 0
     faults = 0
+    writebacks = 0
     steps: list[SimulationStep] = []
     window = resolve_wsclock_window(frame_count, wsclock_window)
 
     for index, page in enumerate(reference):
         evicted: int | None = None
+        writebacks_scheduled: list[int] = []
         hit = page in resident_slots
+        is_dirty_access = page in dirty_page_set
         if hit:
             slot = resident_slots[page]
             reference_bits[slot] = 1
             last_used[slot] = index
+            if is_dirty_access:
+                dirty_bits[slot] = 1
         else:
             faults += 1
             slot: int | None = None
             fallback_slot: int | None = None
+            cleaned_old_slot: int | None = None
             scanned = 0
             while scanned < frame_count:
                 current_page = frames[hand]
@@ -373,9 +396,18 @@ def simulate_wsclock(
                 else:
                     age = index - last_used[hand]
                     if age > window:
-                        slot = hand
-                        break
-                    if fallback_slot is None or (last_used[hand], hand) < (
+                        if dirty_bits[hand] == 0:
+                            slot = hand
+                            break
+                        dirty_bits[hand] = 0
+                        writebacks += 1
+                        writebacks_scheduled.append(current_page)
+                        if cleaned_old_slot is None or (last_used[hand], hand) < (
+                            last_used[cleaned_old_slot],
+                            cleaned_old_slot,
+                        ):
+                            cleaned_old_slot = hand
+                    elif fallback_slot is None or (last_used[hand], hand) < (
                         last_used[fallback_slot],
                         fallback_slot,
                     ):
@@ -384,9 +416,12 @@ def simulate_wsclock(
                 scanned += 1
 
             if slot is None:
-                if fallback_slot is None:
-                    fallback_slot = min(range(frame_count), key=lambda candidate: (last_used[candidate], candidate))
-                slot = fallback_slot
+                if cleaned_old_slot is not None:
+                    slot = cleaned_old_slot
+                else:
+                    if fallback_slot is None:
+                        fallback_slot = min(range(frame_count), key=lambda candidate: (last_used[candidate], candidate))
+                    slot = fallback_slot
 
             evicted = frames[slot]
             if evicted is not None:
@@ -394,6 +429,7 @@ def simulate_wsclock(
 
             frames[slot] = page
             reference_bits[slot] = 1
+            dirty_bits[slot] = 1 if is_dirty_access else 0
             last_used[slot] = index
             resident_slots[page] = slot
             hand = (slot + 1) % frame_count
@@ -405,6 +441,7 @@ def simulate_wsclock(
                 hit=hit,
                 frames=[value for value in frames if value is not None],
                 evicted=evicted,
+                writebacks_scheduled=list(writebacks_scheduled),
             )
         )
 
@@ -417,6 +454,7 @@ def simulate_wsclock(
         hits=hits,
         hit_rate=hits / len(reference),
         steps=steps,
+        writebacks=writebacks,
     )
 
 
@@ -552,11 +590,17 @@ def simulate(
     frame_count: int,
     *,
     wsclock_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
 ) -> SimulationResult:
     if algorithm not in SIMULATORS:
         raise InputError(f"unsupported algorithm: {algorithm}")
     if algorithm == "wsclock":
-        return simulate_wsclock(reference_string, frame_count, wsclock_window=wsclock_window)
+        return simulate_wsclock(
+            reference_string,
+            frame_count,
+            wsclock_window=wsclock_window,
+            dirty_pages=dirty_pages,
+        )
     return SIMULATORS[algorithm](reference_string, frame_count)
 
 
@@ -565,9 +609,19 @@ def compare_algorithms(
     frame_count: int,
     *,
     wsclock_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
 ) -> list[SimulationResult]:
     reference = validate_reference(reference_string, frame_count)
-    return [simulate(name, reference, frame_count, wsclock_window=wsclock_window) for name in ALGORITHMS]
+    return [
+        simulate(
+            name,
+            reference,
+            frame_count,
+            wsclock_window=wsclock_window,
+            dirty_pages=dirty_pages,
+        )
+        for name in ALGORITHMS
+    ]
 
 
 def study_frame_counts(
@@ -576,6 +630,7 @@ def study_frame_counts(
     max_frames: int,
     *,
     wsclock_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
 ) -> dict:
     reference = list(reference_string)
     if min_frames <= 0 or max_frames <= 0:
@@ -585,6 +640,7 @@ def study_frame_counts(
     if not reference:
         raise InputError("reference string must contain at least one page")
 
+    resolved_dirty_pages = list(normalize_dirty_pages(dirty_pages))
     frame_results: list[dict] = []
     previous_faults: dict[str, int | None] = {algorithm: None for algorithm in ALGORITHMS}
     monotonicity_violations: list[dict] = []
@@ -596,6 +652,7 @@ def study_frame_counts(
                 reference,
                 frame_count,
                 wsclock_window=wsclock_window,
+                dirty_pages=resolved_dirty_pages,
             )
             for algorithm in ALGORITHMS
         }
@@ -608,6 +665,7 @@ def study_frame_counts(
                         "page_faults": result.page_faults,
                         "hits": result.hits,
                         "hit_rate": round(result.hit_rate, 6),
+                        "writebacks": result.writebacks,
                     }
                     for name, result in run.items()
                 },
@@ -642,6 +700,9 @@ def study_frame_counts(
         "wsclock_window_mode": wsclock_window_mode(wsclock_window),
         "wsclock_window_override": wsclock_window,
         "wsclock_window_description": describe_wsclock_window_setting(wsclock_window),
+        "dirty_pages": resolved_dirty_pages,
+        "dirty_page_count": len(resolved_dirty_pages),
+        "dirty_page_description": describe_dirty_pages_setting(resolved_dirty_pages),
     }
 
 
@@ -776,6 +837,21 @@ def parse_reference_args(
     return ParsedReference(reference_string=raw_pages, source="custom")
 
 
+def parse_dirty_page_args(
+    dirty_pages: list[str] | None,
+    dirty_pages_file: str | None,
+) -> tuple[int, ...]:
+    resolved = [int(token) for token in (dirty_pages or [])]
+    if dirty_pages_file:
+        resolved.extend(
+            parse_reference_text(
+                Path(dirty_pages_file).read_text(encoding="utf-8"),
+                source_label="dirty pages file",
+            )
+        )
+    return normalize_dirty_pages(resolved)
+
+
 def add_wsclock_window_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--wsclock-window",
@@ -783,6 +859,25 @@ def add_wsclock_window_argument(parser: argparse.ArgumentParser) -> None:
         help=(
             "override WSClock tau / working-set age window in references; "
             "default is auto max(4, frames * 2)"
+        ),
+    )
+
+
+def add_dirty_page_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--dirty-page",
+        action="append",
+        default=[],
+        help=(
+            "repeat to treat a page number as write-heavy for WSClock; "
+            "every access to that page sets the dirty bit"
+        ),
+    )
+    parser.add_argument(
+        "--dirty-pages-file",
+        help=(
+            "optional JSON/whitespace page list to mark write-heavy for WSClock; "
+            "applies globally to the selected workload(s)"
         ),
     )
 
@@ -813,6 +908,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate_parser.add_argument("--frames", type=int, required=True)
     add_reference_arguments(simulate_parser)
     add_wsclock_window_argument(simulate_parser)
+    add_dirty_page_arguments(simulate_parser)
     simulate_parser.add_argument("--json", action="store_true")
     simulate_parser.add_argument(
         "--show-steps",
@@ -827,6 +923,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("--frames", type=int, required=True)
     add_reference_arguments(compare_parser)
     add_wsclock_window_argument(compare_parser)
+    add_dirty_page_arguments(compare_parser)
     compare_parser.add_argument("--json", action="store_true")
 
     study_parser = subparsers.add_parser(
@@ -837,6 +934,7 @@ def build_parser() -> argparse.ArgumentParser:
     study_parser.add_argument("--max-frames", type=int, required=True)
     add_reference_arguments(study_parser)
     add_wsclock_window_argument(study_parser)
+    add_dirty_page_arguments(study_parser)
     study_parser.add_argument("--json", action="store_true")
     study_parser.add_argument("--markdown-out", type=Path, help="write a Markdown study report")
     study_parser.add_argument("--svg-out", type=Path, help="write a self-contained SVG study chart")
@@ -849,6 +947,7 @@ def build_parser() -> argparse.ArgumentParser:
     gallery_parser.add_argument("--min-frames", type=int, required=True)
     gallery_parser.add_argument("--max-frames", type=int, required=True)
     add_wsclock_window_argument(gallery_parser)
+    add_dirty_page_arguments(gallery_parser)
     gallery_parser.add_argument(
         "--preset",
         dest="gallery_presets",
@@ -896,6 +995,7 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate_parser.add_argument("--min-frames", type=int, required=True)
     aggregate_parser.add_argument("--max-frames", type=int, required=True)
     add_wsclock_window_argument(aggregate_parser)
+    add_dirty_page_arguments(aggregate_parser)
     aggregate_parser.add_argument(
         "--preset",
         dest="aggregate_presets",
@@ -977,6 +1077,7 @@ def build_parser() -> argparse.ArgumentParser:
     trace_compare_parser.add_argument("--min-frames", type=int, required=True)
     trace_compare_parser.add_argument("--max-frames", type=int, required=True)
     add_wsclock_window_argument(trace_compare_parser)
+    add_dirty_page_arguments(trace_compare_parser)
     trace_compare_parser.add_argument(
         "--pages-file",
         dest="trace_compare_pages_files",
@@ -1033,6 +1134,7 @@ def format_simulation_text(
     show_steps: bool = False,
     reference_source: str = "custom",
     wsclock_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
 ) -> str:
     lines = [
         f"algorithm: {result.algorithm}",
@@ -1045,17 +1147,24 @@ def format_simulation_text(
             f"wsclock window: {describe_wsclock_window_setting(wsclock_window)} "
             f"(effective {resolve_wsclock_window(result.frame_count, wsclock_window)})"
         )
+        lines.append(f"dirty pages: {describe_dirty_pages_setting(dirty_pages)}")
     if show_steps:
         lines.append("steps:")
         for step in result.steps:
             state = "HIT" if step.hit else "MISS"
             evicted = f" evicted={step.evicted}" if step.evicted is not None else ""
-            lines.append(
-                f"  {step.index:>2}: page={step.page:<3} {state:<4} frames={step.frames}{evicted}"
+            writeback = (
+                f" writebacks={step.writebacks_scheduled}"
+                if step.writebacks_scheduled
+                else ""
             )
-    lines.append(
-        f"summary: faults={result.page_faults} hits={result.hits} hit_rate={result.hit_rate:.2%}"
-    )
+            lines.append(
+                f"  {step.index:>2}: page={step.page:<3} {state:<4} frames={step.frames}{evicted}{writeback}"
+            )
+    summary_line = f"summary: faults={result.page_faults} hits={result.hits} hit_rate={result.hit_rate:.2%}"
+    if result.algorithm == "wsclock":
+        summary_line += f" writebacks={result.writebacks}"
+    lines.append(summary_line)
     return "\n".join(lines)
 
 
@@ -1066,6 +1175,7 @@ def format_compare_text(
     *,
     reference_source: str = "custom",
     wsclock_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
 ) -> str:
     algorithm_width = max(len("algorithm"), *(len(result.algorithm) for result in results))
     lines = [
@@ -1073,17 +1183,20 @@ def format_compare_text(
         format_reference_source(reference_source),
         "reference: " + " ".join(str(page) for page in reference),
         f"wsclock window: {describe_wsclock_window_setting(wsclock_window)} (effective {resolve_wsclock_window(frame_count, wsclock_window)})",
-        f"{'algorithm':<{algorithm_width}}  faults  hits  hit-rate",
+        f"dirty pages: {describe_dirty_pages_setting(dirty_pages)}",
+        f"{'algorithm':<{algorithm_width}}  faults  hits  writebacks  hit-rate",
     ]
     for result in results:
         lines.append(
-            f"{result.algorithm:<{algorithm_width}}  {result.page_faults:<6}  {result.hits:<4}  {result.hit_rate:>7.2%}"
+            f"{result.algorithm:<{algorithm_width}}  {result.page_faults:<6}  {result.hits:<4}  {result.writebacks:<10}  {result.hit_rate:>7.2%}"
         )
     best_faults = min(result.page_faults for result in results)
     winners = ", ".join(
         result.algorithm for result in results if result.page_faults == best_faults
     )
+    wsclock_writebacks = next(result.writebacks for result in results if result.algorithm == "wsclock")
     lines.append(f"best faults: {best_faults} ({winners})")
+    lines.append(f"wsclock writebacks: {wsclock_writebacks}")
     return "\n".join(lines)
 
 
@@ -1094,6 +1207,7 @@ def format_study_text(payload: dict, *, reference_source: str = "custom") -> str
         format_reference_source(reference_source),
         "reference: " + " ".join(str(page) for page in payload["reference_string"]),
         f"wsclock window: {payload['wsclock_window_description']}",
+        f"dirty pages: {payload['dirty_page_description']}",
         " ".join(
             [f"{'frames':<{column_width}}"]
             + [f"{algorithm:<{column_width}}" for algorithm in algorithms]
@@ -1135,6 +1249,13 @@ def format_study_text(payload: dict, *, reference_source: str = "custom") -> str
             )
     else:
         lines.append("other fault regressions: none detected in this frame range")
+    lines.append(
+        "wsclock writebacks by frame: "
+        + ", ".join(
+            f"{row['frame_count']}→{row['algorithms']['wsclock']['writebacks']}"
+            for row in payload["frame_results"]
+        )
+    )
     return "\n".join(lines)
 
 
@@ -1152,6 +1273,7 @@ def build_study_rows(payload: dict) -> list[dict[str, str | int]]:
         summary_row: dict[str, str | int] = {
             "frame_count": row["frame_count"],
             "wsclock_window": row["wsclock_window"],
+            "wsclock_writebacks": row["algorithms"]["wsclock"]["writebacks"],
             "best_algorithms": winners,
         }
         for algorithm in ALGORITHMS:
@@ -1169,6 +1291,11 @@ def summarize_fault_averages(payload: dict) -> dict[str, float]:
         / len(frame_results)
         for algorithm in ALGORITHMS
     }
+
+
+def summarize_wsclock_writeback_average(payload: dict) -> float:
+    frame_results = payload["frame_results"]
+    return sum(row["algorithms"]["wsclock"]["writebacks"] for row in frame_results) / len(frame_results)
 
 
 def describe_reference_label(reference_source: str) -> str:
@@ -1211,6 +1338,7 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
                 "frames",
                 *fault_fieldnames,
                 "wsclock_window",
+                "wsclock_writebacks",
                 "best_algorithms",
                 "reference_source",
             ],
@@ -1221,6 +1349,7 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
             payload_row = {
                 "frames": row["frame_count"],
                 "wsclock_window": row["wsclock_window"],
+                "wsclock_writebacks": row["wsclock_writebacks"],
                 "best_algorithms": row["best_algorithms"],
                 "reference_source": reference_source,
             }
@@ -1236,6 +1365,7 @@ def write_study_json(path: Path, payload: dict) -> None:
 def format_study_markdown(payload: dict, *, reference_source: str = "custom") -> str:
     rows = build_study_rows(payload)
     averages = summarize_fault_averages(payload)
+    average_wsclock_writebacks = summarize_wsclock_writeback_average(payload)
     best_average = min(averages.values())
     average_winners = "/".join(
         algorithm for algorithm in ALGORITHMS if averages[algorithm] == best_average
@@ -1247,7 +1377,9 @@ def format_study_markdown(payload: dict, *, reference_source: str = "custom") ->
         f"- frame range: {rows[0]['frame_count']} to {rows[-1]['frame_count']}",
         f"- reference length: {len(payload['reference_string'])}",
         f"- WSClock window: {payload['wsclock_window_description']}",
+        f"- dirty pages: {payload['dirty_page_description']}",
         f"- best average faults: {average_winners} ({best_average:.2f})",
+        f"- average WSClock writebacks: {average_wsclock_writebacks:.2f}",
         "",
         "## Reference string",
         "",
@@ -1627,6 +1759,7 @@ def build_gallery_run(
     min_frames: int,
     max_frames: int,
     wsclock_window: int | None,
+    dirty_pages: Iterable[int] | None,
     artifact_dir: Path,
     html_dir: Path,
 ) -> dict:
@@ -1636,6 +1769,7 @@ def build_gallery_run(
         min_frames,
         max_frames,
         wsclock_window=wsclock_window,
+        dirty_pages=dirty_pages,
     )
     payload["reference_source"] = reference_source
     stem = f"{workload.name}-study"
@@ -1705,6 +1839,7 @@ def format_gallery_text(gallery_runs: list[dict], *, html_path: Path) -> str:
         f"gallery workloads: {len(gallery_runs)}",
         f"html report: {html_path}",
         f"wsclock window: {gallery_runs[0]['payload']['wsclock_window_description']}" if gallery_runs else "wsclock window: n/a",
+        f"dirty pages: {gallery_runs[0]['payload']['dirty_page_description']}" if gallery_runs else "dirty pages: n/a",
     ]
     for run in gallery_runs:
         winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
@@ -1938,6 +2073,8 @@ def format_gallery_html(
           <li><strong>{min_frames}–{max_frames}</strong> frame range</li>
           <li><strong>{fifo_anomaly_count}</strong> FIFO anomaly workloads</li>
           <li><strong>{non_fifo_regression_count}</strong> workloads with non-FIFO regressions</li>
+          <li><strong>{escape(gallery_runs[0]['payload']['wsclock_window_description']) if gallery_runs else 'n/a'}</strong> WSClock τ</li>
+          <li><strong>{escape(gallery_runs[0]['payload']['dirty_page_description']) if gallery_runs else 'n/a'}</strong> dirty pages</li>
           <li><strong>Winner tally</strong>{escape(winner_summary)}</li>
         </ul>
       </section>
@@ -1984,15 +2121,18 @@ def build_aggregate_run(
     min_frames: int,
     max_frames: int,
     wsclock_window: int | None,
+    dirty_pages: Iterable[int] | None,
 ) -> dict:
     payload = study_frame_counts(
         workload.reference_string,
         min_frames,
         max_frames,
         wsclock_window=wsclock_window,
+        dirty_pages=dirty_pages,
     )
     payload["reference_source"] = workload.reference_source
     average_faults = summarize_fault_averages(payload)
+    average_wsclock_writebacks = summarize_wsclock_writeback_average(payload)
     reference_length = len(workload.reference_string)
     average_fault_rates = {
         algorithm: average_faults[algorithm] / reference_length
@@ -2012,6 +2152,7 @@ def build_aggregate_run(
         "payload": payload,
         "reference_length": reference_length,
         "average_faults": average_faults,
+        "average_wsclock_writebacks": average_wsclock_writebacks,
         "average_fault_rates": average_fault_rates,
         "best_average_faults": best_average_faults,
         "best_average_winners": best_average_winners,
@@ -2041,6 +2182,9 @@ def summarize_aggregate_runs(aggregate_runs: list[dict]) -> dict:
         / len(aggregate_runs)
         for algorithm in ALGORITHMS
     }
+    overall_average_wsclock_writebacks = sum(
+        run["average_wsclock_writebacks"] for run in aggregate_runs
+    ) / len(aggregate_runs)
     preset_count = sum(
         1 for run in aggregate_runs if run["workload"].source_kind == "preset"
     )
@@ -2064,6 +2208,7 @@ def summarize_aggregate_runs(aggregate_runs: list[dict]) -> dict:
         "winner_counts": winner_counts,
         "overall_average_fault_rates": overall_average_fault_rates,
         "overall_average_faults": overall_average_faults,
+        "overall_average_wsclock_writebacks": overall_average_wsclock_writebacks,
         "overall_best_rate_winners": select_lowest_keys(overall_average_fault_rates),
     }
 
@@ -2080,6 +2225,7 @@ def write_aggregate_csv(path: Path, aggregate_runs: list[dict]) -> None:
             "best_average_fault_rate_algorithms",
             "fifo_has_anomaly",
             "non_fifo_regression_count",
+            "wsclock_avg_writebacks",
             *[f"{algorithm}_avg_faults" for algorithm in ALGORITHMS],
             *[f"{algorithm}_avg_fault_rate" for algorithm in ALGORITHMS],
         ]
@@ -2095,6 +2241,7 @@ def write_aggregate_csv(path: Path, aggregate_runs: list[dict]) -> None:
                 "best_average_fault_rate_algorithms": "/".join(run["best_rate_winners"]),
                 "fifo_has_anomaly": "yes" if run["fifo_has_anomaly"] else "no",
                 "non_fifo_regression_count": len(run["non_fifo_violations"]),
+                "wsclock_avg_writebacks": f"{run['average_wsclock_writebacks']:.6f}",
             }
             for algorithm in ALGORITHMS:
                 row[f"{algorithm}_avg_faults"] = f"{run['average_faults'][algorithm]:.6f}"
@@ -2119,6 +2266,9 @@ def build_aggregate_payload(
         "wsclock_window_mode": aggregate_runs[0]["payload"]["wsclock_window_mode"],
         "wsclock_window_override": aggregate_runs[0]["payload"]["wsclock_window_override"],
         "wsclock_window_description": aggregate_runs[0]["payload"]["wsclock_window_description"],
+        "dirty_pages": aggregate_runs[0]["payload"]["dirty_pages"],
+        "dirty_page_count": aggregate_runs[0]["payload"]["dirty_page_count"],
+        "dirty_page_description": aggregate_runs[0]["payload"]["dirty_page_description"],
         "summary": {
             **summary,
             "overall_average_fault_rates": {
@@ -2129,6 +2279,7 @@ def build_aggregate_payload(
                 algorithm: round(value, 6)
                 for algorithm, value in summary["overall_average_faults"].items()
             },
+            "overall_average_wsclock_writebacks": round(summary["overall_average_wsclock_writebacks"], 6),
         },
         "workloads": [
             {
@@ -2139,6 +2290,7 @@ def build_aggregate_payload(
                 "reference_source": run["workload"].reference_source,
                 "best_average_faults": round(run["best_average_faults"], 6),
                 "best_average_fault_rate": round(run["best_average_fault_rate"], 6),
+                "average_wsclock_writebacks": round(run["average_wsclock_writebacks"], 6),
                 "best_average_winners": run["best_average_winners"],
                 "best_rate_winners": run["best_rate_winners"],
                 "fifo_has_anomaly": run["fifo_has_anomaly"],
@@ -2300,13 +2452,15 @@ def format_aggregate_text(aggregate_runs: list[dict], *, html_path: Path, svg_pa
         f"html report: {html_path}",
         f"svg chart: {svg_path}",
         f"wsclock window: {aggregate_runs[0]['payload']['wsclock_window_description']}" if aggregate_runs else "wsclock window: n/a",
+        f"dirty pages: {aggregate_runs[0]['payload']['dirty_page_description']}" if aggregate_runs else "dirty pages: n/a",
         f"overall best normalized average fault rate: {overall_winners}",
+        f"overall average WSClock writebacks: {summary['overall_average_wsclock_writebacks']:.2f}",
     ]
     for run in aggregate_runs:
         workload = run["workload"]
         winners = "/".join(algorithm.upper() for algorithm in run["best_rate_winners"])
         lines.append(
-            f"- {workload.source_kind} {workload.name}: best normalized average rate {winners} ({format_percentage(run['best_average_fault_rate'])}), fifo anomaly={'yes' if run['fifo_has_anomaly'] else 'no'}, other regressions={len(run['non_fifo_violations'])}"
+            f"- {workload.source_kind} {workload.name}: best normalized average rate {winners} ({format_percentage(run['best_average_fault_rate'])}), wsclock avg writebacks={run['average_wsclock_writebacks']:.2f}, fifo anomaly={'yes' if run['fifo_has_anomaly'] else 'no'}, other regressions={len(run['non_fifo_violations'])}"
         )
     return "\n".join(lines)
 
@@ -2344,7 +2498,7 @@ def format_aggregate_html(
             f"<td>{escape(workload.source_kind)}</td>"
             f"<td><code>{escape(workload.name)}</code><div class=\"muted\">len {run['reference_length']}</div><div class=\"muted\">{escape(workload.reference_source)}</div></td>"
             f"<td>{escape(workload.description)}</td>"
-            f"<td>{escape('/'.join(algorithm.upper() for algorithm in run['best_rate_winners']))}<div class=\"muted\">{escape(format_percentage(run['best_average_fault_rate']))}</div></td>"
+            f"<td>{escape('/'.join(algorithm.upper() for algorithm in run['best_rate_winners']))}<div class=\"muted\">{escape(format_percentage(run['best_average_fault_rate']))}</div><div class=\"muted\">WSClock writes {run['average_wsclock_writebacks']:.2f}</div></td>"
             f"<td>{'yes' if run['fifo_has_anomaly'] else 'no'}</td>"
             f"<td>{len(run['non_fifo_violations'])}</td>"
             f"<td>{rate_cells}</td>"
@@ -2402,6 +2556,8 @@ def format_aggregate_html(
           <li><strong>{'/'.join(algorithm.upper() for algorithm in summary['overall_best_rate_winners'])}</strong> overall normalized winner</li>
           <li><strong>{summary['fifo_anomaly_count']}</strong> FIFO anomaly workloads</li>
           <li><strong>{escape(aggregate_runs[0]['payload']['wsclock_window_description']) if aggregate_runs else 'n/a'}</strong> WSClock τ</li>
+          <li><strong>{escape(aggregate_runs[0]['payload']['dirty_page_description']) if aggregate_runs else 'n/a'}</strong> dirty pages</li>
+          <li><strong>{summary['overall_average_wsclock_writebacks']:.2f}</strong> avg WSClock writebacks</li>
           <li><strong>Winner tally</strong>{escape(winner_summary)}</li>
         </ul>
         <p class="downloads">Downloads: <a href="{escape(svg_filename)}">SVG chart</a> · <a href="{escape(csv_filename)}">CSV table</a> · <a href="{escape(json_filename)}">JSON payload</a></p>
@@ -3086,12 +3242,14 @@ def build_trace_compare_payload(
     window_size: int,
     phase_threshold: float,
     wsclock_window: int | None,
+    dirty_pages: Iterable[int] | None,
 ) -> dict:
     left_study = study_frame_counts(
         left_workload.reference_string,
         min_frames,
         max_frames,
         wsclock_window=wsclock_window,
+        dirty_pages=dirty_pages,
     )
     left_study["reference_source"] = left_workload.reference_source
     right_study = study_frame_counts(
@@ -3099,6 +3257,7 @@ def build_trace_compare_payload(
         min_frames,
         max_frames,
         wsclock_window=wsclock_window,
+        dirty_pages=dirty_pages,
     )
     right_study["reference_source"] = right_workload.reference_source
 
@@ -3132,6 +3291,8 @@ def build_trace_compare_payload(
     right_best_average_winners = select_lowest_keys(right_average_faults)
 
     algorithm_summaries: list[dict] = []
+    left_average_wsclock_writebacks = summarize_wsclock_writeback_average(left_study)
+    right_average_wsclock_writebacks = summarize_wsclock_writeback_average(right_study)
     for algorithm in ALGORITHMS:
         fault_delta = round(
             right_average_faults[algorithm] - left_average_faults[algorithm],
@@ -3155,6 +3316,14 @@ def build_trace_compare_payload(
                 "fault_delta_right_minus_left": fault_delta,
                 "left_average_fault_rate": round(left_average_fault_rates[algorithm], 6),
                 "right_average_fault_rate": round(right_average_fault_rates[algorithm], 6),
+                "left_average_writebacks": round(
+                    left_average_wsclock_writebacks if algorithm == "wsclock" else 0.0,
+                    6,
+                ),
+                "right_average_writebacks": round(
+                    right_average_wsclock_writebacks if algorithm == "wsclock" else 0.0,
+                    6,
+                ),
                 "fault_rate_delta_right_minus_left": rate_delta,
                 "better_average_faults": better,
             }
@@ -3189,6 +3358,8 @@ def build_trace_compare_payload(
                 "fault_delta_right_minus_left": fault_delta,
                 "left_hit_rate": left_row["algorithms"][algorithm]["hit_rate"],
                 "right_hit_rate": right_row["algorithms"][algorithm]["hit_rate"],
+                "left_writebacks": left_row["algorithms"][algorithm]["writebacks"],
+                "right_writebacks": right_row["algorithms"][algorithm]["writebacks"],
                 "better": better,
             }
         frame_comparisons.append(
@@ -3223,6 +3394,9 @@ def build_trace_compare_payload(
         "wsclock_window_mode": left_study["wsclock_window_mode"],
         "wsclock_window_override": left_study["wsclock_window_override"],
         "wsclock_window_description": left_study["wsclock_window_description"],
+        "dirty_pages": left_study["dirty_pages"],
+        "dirty_page_count": left_study["dirty_page_count"],
+        "dirty_page_description": left_study["dirty_page_description"],
         "left": {
             "workload": left_workload.name,
             "description": left_workload.description,
@@ -3318,6 +3492,8 @@ def write_trace_compare_csv(path: Path, payload: dict) -> None:
                 "fault_delta_right_minus_left",
                 "left_hit_rate",
                 "right_hit_rate",
+                "left_writebacks",
+                "right_writebacks",
                 "better",
             ],
             lineterminator="\n",
@@ -3340,6 +3516,8 @@ def write_trace_compare_csv(path: Path, payload: dict) -> None:
                         ],
                         "left_hit_rate": entry["left_hit_rate"],
                         "right_hit_rate": entry["right_hit_rate"],
+                        "left_writebacks": entry["left_writebacks"],
+                        "right_writebacks": entry["right_writebacks"],
                         "better": entry["better"],
                     }
                 )
@@ -3357,6 +3535,7 @@ def format_trace_compare_markdown(payload: dict) -> str:
         f"- window size: {payload['window_size']}",
         f"- phase threshold: {payload['phase_threshold']:.2f}",
         f"- WSClock window: {payload['wsclock_window_description']}",
+        f"- dirty pages: {payload['dirty_page_description']}",
         "",
         "## Trace overview",
         "",
@@ -3375,15 +3554,23 @@ def format_trace_compare_markdown(payload: dict) -> str:
         "",
         "## Average algorithm comparison",
         "",
-        "| Algorithm | Left avg faults | Right avg faults | Δ right-left | Better avg | Left avg fault rate | Right avg fault rate |",
-        "| :--- | ---: | ---: | ---: | :--- | ---: | ---: |",
+        "| Algorithm | Left avg faults | Right avg faults | Δ right-left | Better avg | Left avg fault rate | Right avg fault rate | Left avg writebacks | Right avg writebacks |",
+        "| :--- | ---: | ---: | ---: | :--- | ---: | ---: | ---: | ---: |",
     ]
     for entry in payload["algorithm_summaries"]:
         lines.append(
             f"| {entry['algorithm'].upper()} | {entry['left_average_faults']:.2f} | {entry['right_average_faults']:.2f} | "
             f"{entry['fault_delta_right_minus_left']:.2f} | {entry['better_average_faults']} | "
-            f"{format_percentage(entry['left_average_fault_rate'])} | {format_percentage(entry['right_average_fault_rate'])} |"
+            f"{format_percentage(entry['left_average_fault_rate'])} | {format_percentage(entry['right_average_fault_rate'])} | "
+            f"{entry['left_average_writebacks']:.2f} | {entry['right_average_writebacks']:.2f} |"
         )
+
+    lines.extend(
+        [
+            "",
+            f"- WSClock average writebacks: left {summarize_wsclock_writeback_average(left['study']):.2f}, right {summarize_wsclock_writeback_average(right['study']):.2f}",
+        ]
+    )
 
     frame_header_cells = ["Frames", "WSClock τ", "Left winner", "Right winner", *[f"{algorithm.upper()} L/R" for algorithm in ALGORITHMS]]
     frame_separator_cells = ["---:", "---:", ":---", ":---", *[":---" for _ in ALGORITHMS]]
@@ -3666,6 +3853,8 @@ def format_trace_compare_html(
         f'<td>{escape(entry["better_average_faults"])}</td>'
         f'<td>{escape(format_percentage(entry["left_average_fault_rate"]))}</td>'
         f'<td>{escape(format_percentage(entry["right_average_fault_rate"]))}</td>'
+        f'<td>{entry["left_average_writebacks"]:.2f}</td>'
+        f'<td>{entry["right_average_writebacks"]:.2f}</td>'
         '</tr>'
         for entry in payload['algorithm_summaries']
     )
@@ -3787,6 +3976,7 @@ def format_trace_compare_html(
           <li><strong>{payload['summary']['left_phase_hint_count']}</strong> left phase hints</li>
           <li><strong>{payload['summary']['right_phase_hint_count']}</strong> right phase hints</li>
           <li><strong>{escape(payload['wsclock_window_description'])}</strong> WSClock τ</li>
+          <li><strong>{escape(payload['dirty_page_description'])}</strong> dirty pages</li>
         </ul>
         <p class="muted">Downloads: {download_links}</p>
       </section>
@@ -3806,6 +3996,8 @@ def format_trace_compare_html(
               <th>Better avg</th>
               <th>Left avg fault rate</th>
               <th>Right avg fault rate</th>
+              <th>Left avg writebacks</th>
+              <th>Right avg writebacks</th>
             </tr>
           </thead>
           <tbody>{algorithm_rows}</tbody>
@@ -3858,7 +4050,13 @@ def format_trace_compare_text(payload: dict, *, html_path: Path, svg_path: Path)
         f"html report: {html_path}",
         f"svg card: {svg_path}",
         f"wsclock window: {payload['wsclock_window_description']}",
+        f"dirty pages: {payload['dirty_page_description']}",
         f"lower normalized overall average fault rate: {overall_label}",
+        (
+            f"wsclock average writebacks: {left['workload']}="
+            f"{summarize_wsclock_writeback_average(left['study']):.2f}, "
+            f"{right['workload']}={summarize_wsclock_writeback_average(right['study']):.2f}"
+        ),
         (
             f"largest average fault gap: {largest_gap['algorithm'].upper()} → "
             f"{largest_gap_label} ({abs(largest_gap['fault_delta_right_minus_left']):.2f} faults)"
@@ -3904,6 +4102,10 @@ def format_benchmark_text() -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    dirty_pages = parse_dirty_page_args(
+        getattr(args, "dirty_page", None),
+        getattr(args, "dirty_pages_file", None),
+    )
 
     try:
         if args.command == "list-presets":
@@ -3962,6 +4164,7 @@ def main(argv: list[str] | None = None) -> int:
                     min_frames=args.min_frames,
                     max_frames=args.max_frames,
                     wsclock_window=args.wsclock_window,
+                    dirty_pages=dirty_pages,
                     artifact_dir=args.artifact_dir,
                     html_dir=html_path.parent,
                 )
@@ -3986,6 +4189,9 @@ def main(argv: list[str] | None = None) -> int:
                             "wsclock_window_mode": wsclock_window_mode(args.wsclock_window),
                             "wsclock_window_override": args.wsclock_window,
                             "wsclock_window_description": describe_wsclock_window_setting(args.wsclock_window),
+                            "dirty_pages": list(dirty_pages),
+                            "dirty_page_count": len(dirty_pages),
+                            "dirty_page_description": describe_dirty_pages_setting(dirty_pages),
                             "workloads": [
                                 {
                                     "type": run["workload"].source_kind,
@@ -3994,6 +4200,10 @@ def main(argv: list[str] | None = None) -> int:
                                     "reference_length": len(run["workload"].reference_string),
                                     "reference_source": run["workload"].reference_source,
                                     "best_average_faults": round(run["best_average_faults"], 6),
+                                    "average_wsclock_writebacks": round(
+                                        summarize_wsclock_writeback_average(run["payload"]),
+                                        6,
+                                    ),
                                     "best_average_winners": run["best_average_winners"],
                                     "fifo_has_anomaly": run["fifo_has_anomaly"],
                                     "non_fifo_regression_count": len(run["non_fifo_violations"]),
@@ -4036,6 +4246,7 @@ def main(argv: list[str] | None = None) -> int:
                     min_frames=args.min_frames,
                     max_frames=args.max_frames,
                     wsclock_window=args.wsclock_window,
+                    dirty_pages=dirty_pages,
                 )
                 for workload in workloads
             ]
@@ -4094,6 +4305,7 @@ def main(argv: list[str] | None = None) -> int:
                 window_size=args.window_size,
                 phase_threshold=args.phase_threshold,
                 wsclock_window=args.wsclock_window,
+                dirty_pages=dirty_pages,
             )
             stem = f"{left_workload.name}-vs-{right_workload.name}-trace-compare"
             markdown_path = args.artifact_dir / f"{stem}.md"
@@ -4214,6 +4426,7 @@ def main(argv: list[str] | None = None) -> int:
                 reference,
                 args.frames,
                 wsclock_window=args.wsclock_window,
+                dirty_pages=dirty_pages,
             )
             if args.json:
                 print(
@@ -4229,6 +4442,9 @@ def main(argv: list[str] | None = None) -> int:
                                 if result.algorithm == "wsclock"
                                 else None
                             ),
+                            "dirty_pages": list(dirty_pages),
+                            "dirty_page_count": len(dirty_pages),
+                            "dirty_page_description": describe_dirty_pages_setting(dirty_pages),
                         },
                         indent=2,
                     )
@@ -4240,6 +4456,7 @@ def main(argv: list[str] | None = None) -> int:
                         show_steps=args.show_steps,
                         reference_source=parsed_reference.source,
                         wsclock_window=args.wsclock_window,
+                        dirty_pages=dirty_pages,
                     )
                 )
             return 0
@@ -4249,6 +4466,7 @@ def main(argv: list[str] | None = None) -> int:
                 reference,
                 args.frames,
                 wsclock_window=args.wsclock_window,
+                dirty_pages=dirty_pages,
             )
             if args.json:
                 print(
@@ -4261,6 +4479,9 @@ def main(argv: list[str] | None = None) -> int:
                             "wsclock_window_override": args.wsclock_window,
                             "wsclock_window_description": describe_wsclock_window_setting(args.wsclock_window),
                             "effective_wsclock_window": resolve_wsclock_window(args.frames, args.wsclock_window),
+                            "dirty_pages": list(dirty_pages),
+                            "dirty_page_count": len(dirty_pages),
+                            "dirty_page_description": describe_dirty_pages_setting(dirty_pages),
                             "results": [result.to_dict(include_steps=False) for result in results],
                         },
                         indent=2,
@@ -4274,6 +4495,7 @@ def main(argv: list[str] | None = None) -> int:
                         reference,
                         reference_source=parsed_reference.source,
                         wsclock_window=args.wsclock_window,
+                        dirty_pages=dirty_pages,
                     )
                 )
             return 0
@@ -4284,6 +4506,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.min_frames,
                 args.max_frames,
                 wsclock_window=args.wsclock_window,
+                dirty_pages=dirty_pages,
             )
             payload["reference_source"] = parsed_reference.source
             if args.csv_out:

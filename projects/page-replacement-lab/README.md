@@ -5,19 +5,19 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 ## Why this project matters
 - demonstrates operating-systems and memory-management fundamentals in runnable code
 - compares practical online heuristics against the theoretical optimal baseline
-- includes **Clock / second-chance**, **Aging**, and a simplified **WSClock** policy with a configurable working-set window, showing three practical approximations that sit between pure FIFO and idealized recency tracking
+- includes **Clock / second-chance**, **Aging**, and a simplified **WSClock** policy with a configurable working-set window plus dirty-page/writeback tracking, showing practical approximations that sit between pure FIFO and idealized recency tracking
 - makes page-fault tradeoffs visible with deterministic step traces, reusable presets, and frame-range studies
 - gives strong interview material around locality, stack algorithms, and Belady's anomaly
 - includes a `trace-summary` workflow that surfaces reuse-distance buckets, sliding working-set sizes, and phase-boundary hints for imported workloads
 - includes an `aggregate` dashboard workflow that normalizes page-fault rates across presets, larger benchmark traces, and imported custom traces for one slide-ready comparison view
 - includes a `trace-compare` workflow that contrasts exactly two imported traces side by side with rate charts, frame tables, and locality snapshots
-- leaves room for future extensions like dirty-page-aware WSClock refinements, adaptive working-set-window heuristics, or richer narrative trace write-ups
+- leaves room for future extensions like adaptive working-set-window heuristics, richer narrative trace write-ups, or more detailed async-cleaner simulations
 
 ## Features
-- simulate **FIFO**, **Clock / second-chance**, **Aging**, **WSClock** (clean-page approximation with configurable `tau` / working-set window), **LRU**, and **OPT** page replacement
+- simulate **FIFO**, **Clock / second-chance**, **Aging**, **WSClock** (dirty-page-aware with configurable `tau` / working-set window plus writeback counts), **LRU**, and **OPT** page replacement
 - load a reference string from repeated `--page` flags, a file, a built-in preset, or a larger built-in trace benchmark bundle
 - print a step-by-step trace for one algorithm
-- compare all six bundled algorithms on the same workload, including optional `--wsclock-window` overrides for WSClock sensitivity studies
+- compare all six bundled algorithms on the same workload, including optional `--wsclock-window` overrides and `--dirty-page` / `--dirty-pages-file` inputs for WSClock sensitivity studies
 - run a frame-range study to detect FIFO Belady anomalies and other fault regressions
 - list built-in workload presets for repeatable demos and screenshots
 - list larger built-in trace benchmarks that model phase shifts, hot-set scans, and streaming-window bursts
@@ -26,7 +26,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - generate a multi-workload HTML gallery that can mix compact presets, heavier trace benchmarks, and imported custom traces with downloadable Markdown / SVG / CSV / JSON companions
 - summarize imported traces with reuse-distance buckets, sliding working-set sizes, and phase-boundary hints that explain why a workload changes policy behavior
 - export trace-summary results as Markdown, slide-ready SVG cards, and browsable HTML companion pages
-- build a cross-workload aggregate dashboard with normalized average page-fault-rate charts plus CSV / SVG / JSON / HTML artifacts
+- build a cross-workload aggregate dashboard with normalized average page-fault-rate charts plus CSV / SVG / JSON / HTML artifacts, including WSClock writeback averages
 - compare exactly two imported traces side by side with one `trace-compare` run that emits Markdown / SVG / CSV / JSON / HTML artifacts
 - mix imported `--pages-file` workloads into aggregate dashboard or gallery runs without editing the source code
 
@@ -67,6 +67,14 @@ python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 5
   --wsclock-window 1
 ```
 
+### Compare dirty-page-aware WSClock behavior on the same benchmark
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 5 \
+  --benchmark compiler-phase-shift \
+  --wsclock-window 1 \
+  --dirty-pages-file projects/page-replacement-lab/dirty-pages/compiler-phase-shift-write-heavy.json
+```
+
 ### Study frame counts and flag regressions
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py study --min-frames 2 --max-frames 5 \
@@ -100,6 +108,8 @@ python3 projects/page-replacement-lab/page_replacement_lab.py gallery --min-fram
 Repeat `--pages-file` to add more imported traces, each with its own study bundle plus trace-summary drill-down card.
 
 Use `--wsclock-window <references>` with `simulate`, `compare`, `study`, `gallery`, `aggregate`, or `trace-compare` to override WSClock's `tau` value instead of using the default `max(4, frames * 2)` heuristic. The exported Markdown / CSV / JSON / SVG / HTML artifacts record both the chosen mode and each frame's effective WSClock window.
+
+Use `--dirty-page <page>` repeatedly or `--dirty-pages-file <path>` to mark write-heavy pages for WSClock. When a dirty page ages out of the working set, WSClock schedules a writeback before reclaiming it, and the CLI plus exported artifacts report those writeback counts alongside page faults.
 
 ### Summarize a heavier trace for reuse distance and phase hints
 ```bash
@@ -175,14 +185,16 @@ frames: 3
 source: preset classic-belady — classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames
 reference: 1 2 3 4 1 2 5 1 2 3 4 5
 wsclock window: auto (max(4, frames * 2)) (effective 6)
-algorithm  faults  hits  hit-rate
-fifo       9       3      25.00%
-clock      9       3      25.00%
-aging      10      2      16.67%
-wsclock    10      2      16.67%
-lru        10      2      16.67%
-opt        7       5      41.67%
+dirty pages: none
+algorithm  faults  hits  writebacks  hit-rate
+fifo       9       3      0           25.00%
+clock      9       3      0           25.00%
+aging      10      2      0           16.67%
+wsclock    10      2      0           16.67%
+lru        10      2      0           16.67%
+opt        7       5      0           41.67%
 best faults: 7 (opt)
+wsclock writebacks: 0
 ```
 
 ## Committed artifact examples
@@ -206,6 +218,9 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/custom-aggregate/aggregate-summary.json` — sample mixed-workload payload that records preset / benchmark / custom counts together
 - `docs/artifacts/page-replacement-lab/trace-compare/mobile-app-session-vs-reporting-scan-session-trace-compare.{md,svg,csv,json,html}` — committed side-by-side imported-trace bundle that contrasts a locality-friendly mobile session against a scan-heavy reporting session
 - `docs/artifacts/page-replacement-lab/wsclock-window/compiler-phase-shift-window1-study.{md,svg,csv,json}` — committed WSClock sensitivity bundle that shows how a tighter `tau` window changes the compiler benchmark study
+- `docs/artifacts/page-replacement-lab/wsclock-dirty/compiler-phase-shift-write-heavy-study.{md,svg,csv,json}` — committed dirty-page-aware WSClock study bundle that exposes how write-heavy pages add background cleaning and writeback pressure
+- `docs/artifacts/page-replacement-lab/wsclock-dirty/compiler-phase-shift-write-heavy-compare.txt` — committed text compare snapshot for the same dirty-page benchmark scenario
+- `projects/page-replacement-lab/dirty-pages/compiler-phase-shift-write-heavy.json` — sample dirty-page list used for repeatable write-heavy WSClock demos
 - `projects/page-replacement-lab/custom-traces/mobile-app-session.txt` — sample imported trace file used to demonstrate custom aggregate, gallery, and trace-compare workflows without editing the source code
 - `projects/page-replacement-lab/custom-traces/reporting-scan-session.txt` — sample imported trace file with repeated pinned hot pages separated by long cold scans for a stronger contrast workload
 
@@ -218,16 +233,17 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - explain why **OPT** is the gold-standard benchmark even though it is not implementable online
 - describe how **Clock / second-chance** approximates recency using a reference bit and circular hand
 - describe how **Aging** uses a shifting reference-bit history to approximate LRU with lower bookkeeping pressure than exact recency stacks
-- explain how the simplified **WSClock** policy combines Clock hand scans with a virtual-time working-set window and an LRU-style fallback when every page still looks active
+- explain how the simplified **WSClock** policy combines Clock hand scans with a virtual-time working-set window, dirty-bit-aware cleaning, and an LRU-style fallback when every page still looks active
 - explain how tightening or relaxing the WSClock `tau` / working-set window changes eviction aggressiveness on phase-shifted workloads
+- explain how dirty/write-heavy pages can raise writebacks even when page-fault counts stay close, and why that matters for storage pressure
 - explain why **LRU** and **OPT** are stack algorithms while **FIFO** is not
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
 - discuss how locality of reference changes the ranking between FIFO, Clock, Aging, WSClock, and LRU
 - explain how reuse distance helps estimate locality pressure and why the trace-summary report flags scan-heavy phase changes
 - compare two imported traces by normalized average fault rate and explain why the lower-rate winner still needs the frame-by-frame table for nuance
-- suggest how this simulator could extend into dirty-page-aware WSClock replay, richer working-set analysis, or more narrative report/gallery generation
+- suggest how this simulator could extend into more detailed async-cleaner replay, richer working-set analysis, or more narrative report/gallery generation
 
 ## Future improvements
-- add dirty-page-aware WSClock scans or adaptive `tau` / working-set-window heuristics for deeper systems realism
+- add adaptive `tau` / workload-sensitive dirty-page heuristics for deeper systems realism
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
 - add narrative annotations or callout overlays that explain why one imported trace wins on specific frame counts
