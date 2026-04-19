@@ -12,7 +12,7 @@
 - [x] extend regression coverage for explainer counts, AST stories, and showcase HTML wording
 - [x] run targeted tests, smoke checks, and 3 review passes
 - [x] run secret scan
-- [ ] commit, push, and write the wrap-up
+- [x] commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] initial Thompson-NFA regex engine with fullmatch/search/explain CLI flows
