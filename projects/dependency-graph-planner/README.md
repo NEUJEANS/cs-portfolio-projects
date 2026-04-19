@@ -1,11 +1,11 @@
 # Dependency Graph Planner
 
-A compact Python project that models a build or delivery workflow as a directed acyclic graph, validates dependencies, produces a deterministic execution plan, computes parallel layers, and highlights the critical path.
+A compact Python project that models a build or delivery workflow as a directed acyclic graph, validates dependencies, produces a deterministic execution plan, computes parallel layers, highlights the critical path, and exports recruiter-friendly diagrams.
 
 ## Why this project is portfolio-worthy
 - demonstrates core graph algorithms that show up in build systems, CI pipelines, schedulers, and package managers
-- turns DAG theory into a runnable CLI with cycle detection, topological sorting, and timing analysis
-- gives you concrete interview material for dependency resolution, parallel scheduling, and critical-path tradeoffs
+- turns DAG theory into a runnable CLI with cycle detection, topological sorting, timing analysis, and visual exports
+- gives you concrete interview material for dependency resolution, parallel scheduling, critical-path tradeoffs, and artifact generation
 - stays lightweight and dependency-free so the implementation is easy to study and extend
 
 ## Features
@@ -15,11 +15,13 @@ A compact Python project that models a build or delivery workflow as a directed 
 - parallel layer generation for "what can run together" views
 - critical-path and slack calculation using task durations
 - CLI output in text or JSON form for scripting
+- Mermaid and Graphviz DOT diagram export with per-layer grouping and critical-path highlighting
 
 ## Project structure
-- `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, and CLI
+- `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, CLI, and diagram export helpers
 - `sample_graph.json` - example build-style workflow manifest
 - `test_dependency_graph_planner.py` - unit and CLI tests
+- `docs/artifacts/dependency-graph-planner/` - committed sample Mermaid, Markdown-wrapper, and DOT outputs from the example graph
 
 ## Manifest format
 ```json
@@ -66,6 +68,27 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py layers \
   projects/dependency-graph-planner/sample_graph.json
 ```
 
+### Export a Mermaid dependency diagram
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py diagram \
+  projects/dependency-graph-planner/sample_graph.json \
+  --format mermaid \
+  > /tmp/dependency-graph.mmd
+```
+
+### Export a Graphviz DOT dependency diagram
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py diagram \
+  projects/dependency-graph-planner/sample_graph.json \
+  --format dot \
+  > /tmp/dependency-graph.dot
+```
+
+Committed example artifacts:
+- `docs/artifacts/dependency-graph-planner/sample_graph.mmd`
+- `docs/artifacts/dependency-graph-planner/sample_graph_mermaid.md`
+- `docs/artifacts/dependency-graph-planner/sample_graph.dot`
+
 ## Testing
 ```bash
 python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py' -v
@@ -75,10 +98,11 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - why deterministic topological sorts are useful for reproducible tooling
 - how layered execution exposes parallel work even when the overall graph is dependency-constrained
 - why the critical path, not total task count, often dominates end-to-end completion time
+- why Mermaid and DOT are useful complementary export targets for README-friendly diagrams versus richer offline rendering
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
-- export Graphviz DOT or Mermaid diagrams for visual dependency maps
 - add resource constraints so plans can respect limited workers, cores, or environments
 - support weighted heuristics such as longest-processing-time-first within ready queues
 - simulate execution traces and compare heuristic schedulers on the same DAG
+- generate Markdown walkthrough reports that bundle plan summaries with diagram artifacts

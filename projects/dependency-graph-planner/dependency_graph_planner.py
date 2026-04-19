@@ -291,15 +291,92 @@ def _render_text_plan(plan: PlanResult) -> str:
     return "\n".join(lines)
 
 
+def _quote_dot(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return '"' + escaped + '"'
+
+
+def _escape_mermaid(value: str) -> str:
+    return value.replace("&", "&amp;").replace('"', "&quot;").replace("\n", "<br/>")
+
+
+def _diagram_label(timing: TaskTiming) -> str:
+    return f"{timing.name}\nd={timing.duration}, slack={timing.slack}"
+
+
+def render_dependency_diagram(tasks: dict[str, Task], plan: PlanResult, *, diagram_format: str) -> str:
+    timings = {timing.name: timing for timing in plan.timings}
+    critical_nodes = set(plan.critical_path)
+    critical_edges = set(zip(plan.critical_path, plan.critical_path[1:]))
+
+    if diagram_format == "mermaid":
+        node_ids = {name: f"task_{index}" for index, name in enumerate(plan.order)}
+        lines = [
+            "flowchart LR",
+            f"  %% makespan={plan.total_duration}",
+            f"  %% critical_path={','.join(plan.critical_path)}",
+            "  classDef critical fill:#fee2e2,stroke:#b91c1c,stroke-width:2px",
+        ]
+        for layer_index, layer in enumerate(plan.layers):
+            lines.append(f'  subgraph layer_{layer_index}["layer {layer_index}"]')
+            for name in layer:
+                label = _escape_mermaid(_diagram_label(timings[name]))
+                lines.append(f'    {node_ids[name]}["{label}"]')
+            lines.append("  end")
+        for name in plan.order:
+            for dep in tasks[name].deps:
+                lines.append(f"  {node_ids[dep]} --> {node_ids[name]}")
+        if critical_nodes:
+            lines.append("  class " + ",".join(node_ids[name] for name in plan.critical_path) + " critical")
+        return "\n".join(lines)
+
+    if diagram_format != "dot":
+        raise ValueError("diagram_format must be 'mermaid' or 'dot'")
+
+    lines = [
+        "digraph DependencyGraph {",
+        "  rankdir=LR;",
+        f"  label={_quote_dot(f'Dependency graph (makespan={plan.total_duration})')};",
+        "  labelloc=t;",
+        '  node [shape=box, style="rounded", fontname="Helvetica"];',
+        '  edge [fontname="Helvetica"];',
+    ]
+    for layer_index, layer in enumerate(plan.layers):
+        lines.append(f"  subgraph layer_{layer_index} {{")
+        lines.append("    rank=same;")
+        for name in layer:
+            attributes = [f"label={_quote_dot(_diagram_label(timings[name]))}"]
+            if name in critical_nodes:
+                attributes.extend(['color="firebrick"', "penwidth=2", "peripheries=2"])
+            lines.append(f"    {_quote_dot(name)} [{', '.join(attributes)}];")
+        lines.append("  }")
+    for name in plan.order:
+        for dep in tasks[name].deps:
+            edge_attributes = []
+            if (dep, name) in critical_edges:
+                edge_attributes.extend(['color="firebrick"', "penwidth=2"])
+            attribute_suffix = f" [{', '.join(edge_attributes)}]" if edge_attributes else ""
+            lines.append(f"  {_quote_dot(dep)} -> {_quote_dot(name)}{attribute_suffix};")
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect and plan dependency graphs")
-    parser.add_argument("command", choices=["validate", "plan", "critical-path", "layers"], help="command to run")
+    parser.add_argument("command", choices=["validate", "plan", "critical-path", "layers", "diagram"], help="command to run")
     parser.add_argument("graph", help="path to a JSON manifest")
     parser.add_argument("--json", action="store_true", dest="as_json", help="render machine-readable JSON output")
+    parser.add_argument(
+        "--format",
+        dest="diagram_format",
+        default="mermaid",
+        choices=["mermaid", "dot"],
+        help="diagram output format for the diagram command",
+    )
     return parser
 
 
-def run_command(command: str, graph_path: str, as_json: bool = False) -> str:
+def run_command(command: str, graph_path: str, as_json: bool = False, diagram_format: str = "mermaid") -> str:
     tasks = parse_tasks(load_manifest(graph_path))
     plan = build_plan(tasks)
     if command == "validate":
@@ -308,6 +385,11 @@ def run_command(command: str, graph_path: str, as_json: bool = False) -> str:
         payload = {"critical_path": plan.critical_path, "total_duration": plan.total_duration}
     elif command == "layers":
         payload = {"layers": plan.layers, "total_duration": plan.total_duration}
+    elif command == "diagram":
+        diagram = render_dependency_diagram(tasks, plan, diagram_format=diagram_format)
+        if as_json:
+            return json.dumps({"format": diagram_format, "diagram": diagram}, indent=2)
+        return diagram
     else:
         payload = plan_to_dict(plan)
 
@@ -326,8 +408,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        output = run_command(args.command, args.graph, as_json=args.as_json)
-    except (GraphValidationError, CycleError, json.JSONDecodeError) as exc:
+        output = run_command(args.command, args.graph, as_json=args.as_json, diagram_format=args.diagram_format)
+    except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")
     print(output)
     return 0

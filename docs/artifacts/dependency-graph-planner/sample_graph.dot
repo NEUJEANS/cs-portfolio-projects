@@ -1,0 +1,29 @@
+digraph DependencyGraph {
+  rankdir=LR;
+  label="Dependency graph (makespan=8)";
+  labelloc=t;
+  node [shape=box, style="rounded", fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  subgraph layer_0 {
+    rank=same;
+    "lint" [label="lint\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_1 {
+    rank=same;
+    "compile" [label="compile\nd=4, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_2 {
+    rank=same;
+    "package" [label="package\nd=1, slack=1"];
+    "unit" [label="unit\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_3 {
+    rank=same;
+    "publish" [label="publish\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  "lint" -> "compile" [color="firebrick", penwidth=2];
+  "compile" -> "package";
+  "compile" -> "unit" [color="firebrick", penwidth=2];
+  "unit" -> "publish" [color="firebrick", penwidth=2];
+  "package" -> "publish";
+}
