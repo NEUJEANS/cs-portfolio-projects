@@ -1,4 +1,4 @@
-# Sample dependency graph
+# Dependency graph — Sample Graph
 
 ```mermaid
 flowchart LR

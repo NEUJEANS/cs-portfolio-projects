@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import heapq
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -361,9 +362,226 @@ def render_dependency_diagram(tasks: dict[str, Task], plan: PlanResult, *, diagr
     return "\n".join(lines)
 
 
+def _markdown_code(value: object) -> str:
+    return f"`{str(value).replace('`', '\\`')}`"
+
+
+def _escape_markdown_table_cell(value: object) -> str:
+    return str(value).replace("|", "\\|").replace("\n", "<br/>")
+
+
+def _humanize_stem(value: str) -> str:
+    return value.replace("-", " ").replace("_", " ").strip() or value
+
+
+def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
+    if explicit_title:
+        return explicit_title
+    display_name = _humanize_stem(Path(source_label).stem).title()
+    return f"Dependency graph walkthrough — {display_name}"
+
+
+def render_mermaid_wrapper(diagram: str, *, source_label: str) -> str:
+    title = f"Dependency graph — {_humanize_stem(Path(source_label).stem).title()}"
+    return f"# {title}\n\n```mermaid\n{diagram}\n```\n"
+
+
+def _relative_markdown_link(target_path: str | Path, *, from_path: str | Path) -> str:
+    return Path(os.path.relpath(Path(target_path), start=Path(from_path).parent)).as_posix()
+
+
+def _write_text(path: str | Path, content: str) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def write_report_supporting_artifacts(
+    tasks: dict[str, Task],
+    plan: PlanResult,
+    *,
+    graph_path: str | Path,
+    output_dir: str | Path,
+) -> dict[str, str]:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(graph_path).stem
+
+    mermaid_path = output_dir / f"{stem}.mmd"
+    dot_path = output_dir / f"{stem}.dot"
+    mermaid_preview_path = output_dir / f"{stem}_mermaid.md"
+
+    mermaid_diagram = render_dependency_diagram(tasks, plan, diagram_format="mermaid")
+    dot_diagram = render_dependency_diagram(tasks, plan, diagram_format="dot")
+
+    _write_text(mermaid_path, mermaid_diagram + "\n")
+    _write_text(dot_path, dot_diagram + "\n")
+    _write_text(mermaid_preview_path, render_mermaid_wrapper(mermaid_diagram, source_label=str(graph_path)))
+
+    return {
+        "mermaid_source": str(mermaid_path),
+        "mermaid_preview": str(mermaid_preview_path),
+        "dot_source": str(dot_path),
+    }
+
+
+def render_report_markdown(
+    tasks: dict[str, Task],
+    plan: PlanResult,
+    *,
+    source_label: str,
+    title: str | None = None,
+    diagram_links: Sequence[tuple[str, str]] | None = None,
+) -> str:
+    resolved_title = build_report_title(source_label=source_label, explicit_title=title)
+    timings_by_name = {timing.name: timing for timing in plan.timings}
+    layer_by_name = {name: index for index, layer in enumerate(plan.layers) for name in layer}
+    total_slack = sum(item.slack for item in plan.timings if not item.critical)
+    widest_layer_index, widest_layer = max(
+        enumerate(plan.layers),
+        key=lambda item: (len(item[1]), -item[0]),
+        default=(0, []),
+    )
+    critical_path_rendered = " -> ".join(plan.critical_path) if plan.critical_path else "(none)"
+
+    lines = [f"# {resolved_title}", ""]
+    lines.extend(
+        [
+            f"- Source manifest: {_markdown_code(source_label)}",
+            f"- Task count: {_markdown_code(len(tasks))}",
+            f"- Parallel layers: {_markdown_code(len(plan.layers))}",
+            f"- Estimated makespan: {_markdown_code(plan.total_duration)}",
+            f"- Critical path: {_markdown_code(critical_path_rendered)}",
+        ]
+    )
+
+    if diagram_links:
+        lines.extend(["", "## Linked artifacts", ""])
+        for label, target in diagram_links:
+            lines.append(f"- [{label}]({target})")
+
+    lines.extend(
+        [
+            "",
+            "## Portfolio summary",
+            "",
+            f"- deterministic ready-queue ordering keeps the plan stable: {_markdown_code(', '.join(plan.order))}",
+            (
+                f"- widest parallel layer: {_markdown_code(f'layer {widest_layer_index}') } with "
+                f"{_markdown_code(len(widest_layer))} task(s)"
+                + (
+                    ": " + ", ".join(_markdown_code(name) for name in widest_layer)
+                    if widest_layer
+                    else ""
+                )
+            ),
+            f"- non-critical slack budget available for schedule tradeoffs: {_markdown_code(total_slack)} time units",
+            "",
+            "## Parallel layer windows",
+            "",
+        ]
+    )
+
+    for index, layer in enumerate(plan.layers):
+        if not layer:
+            lines.append(f"- Layer {index}: no tasks")
+            continue
+        starts = [timings_by_name[name].earliest_start for name in layer]
+        finishes = [timings_by_name[name].earliest_finish for name in layer]
+        rendered_tasks = ", ".join(_markdown_code(name) for name in layer)
+        lines.append(
+            f"- Layer {index} ({_markdown_code(min(starts))} → {_markdown_code(max(finishes))}): {rendered_tasks}"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Task timing table",
+            "",
+            "| Task | Layer | Depends on | Duration | ES | EF | LS | LF | Slack | Critical | Command |",
+            "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        ]
+    )
+    for name in plan.order:
+        task = tasks[name]
+        timing = timings_by_name[name]
+        deps = ", ".join(task.deps) if task.deps else "—"
+        command = task.command or "—"
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _escape_markdown_table_cell(name),
+                    str(layer_by_name[name]),
+                    _escape_markdown_table_cell(deps),
+                    str(task.duration),
+                    str(timing.earliest_start),
+                    str(timing.earliest_finish),
+                    str(timing.latest_start),
+                    str(timing.latest_finish),
+                    str(timing.slack),
+                    "yes" if timing.critical else "no",
+                    _escape_markdown_table_cell(command),
+                ]
+            )
+            + " |"
+        )
+
+    lines.extend(["", "## Deterministic execution order", ""])
+    for index, name in enumerate(plan.order, start=1):
+        task = tasks[name]
+        timing = timings_by_name[name]
+        deps = ", ".join(_markdown_code(dep) for dep in task.deps) if task.deps else _markdown_code("ready at start")
+        command = _markdown_code(task.command) if task.command else _markdown_code("documentation only")
+        lines.extend(
+            [
+                f"{index}. {_markdown_code(name)}",
+                f"   - Dependencies: {deps}",
+                f"   - Window: {_markdown_code(f'{timing.earliest_start} → {timing.earliest_finish}')}",
+                f"   - Slack: {_markdown_code(timing.slack)}",
+                f"   - Command: {command}",
+            ]
+        )
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _build_report_artifact_links(
+    artifacts: dict[str, str],
+    *,
+    report_markdown_out: str | None,
+) -> list[tuple[str, str]]:
+    ordered = [
+        ("GitHub-friendly Mermaid preview", artifacts["mermaid_preview"]),
+        ("Mermaid source", artifacts["mermaid_source"]),
+        ("Graphviz DOT source", artifacts["dot_source"]),
+    ]
+    if report_markdown_out:
+        return [
+            (label, _relative_markdown_link(target, from_path=report_markdown_out))
+            for label, target in ordered
+        ]
+    return ordered
+
+
+def _ensure_report_flags_are_valid(
+    command: str,
+    *,
+    report_markdown_out: str | None,
+    report_title: str | None,
+    diagram_output_dir: str | None,
+) -> None:
+    if command != "report" and any(value is not None for value in (report_markdown_out, report_title, diagram_output_dir)):
+        raise ValueError("report-specific flags require the report command")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect and plan dependency graphs")
-    parser.add_argument("command", choices=["validate", "plan", "critical-path", "layers", "diagram"], help="command to run")
+    parser.add_argument(
+        "command",
+        choices=["validate", "plan", "critical-path", "layers", "diagram", "report"],
+        help="command to run",
+    )
     parser.add_argument("graph", help="path to a JSON manifest")
     parser.add_argument("--json", action="store_true", dest="as_json", help="render machine-readable JSON output")
     parser.add_argument(
@@ -373,10 +591,30 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["mermaid", "dot"],
         help="diagram output format for the diagram command",
     )
+    parser.add_argument("--report-markdown-out", help="write a recruiter-friendly Markdown walkthrough report")
+    parser.add_argument("--report-title", help="optional title for the report command")
+    parser.add_argument(
+        "--diagram-output-dir",
+        help="optional directory where the report command should emit Mermaid and DOT companion artifacts",
+    )
     return parser
 
 
-def run_command(command: str, graph_path: str, as_json: bool = False, diagram_format: str = "mermaid") -> str:
+def run_command(
+    command: str,
+    graph_path: str,
+    as_json: bool = False,
+    diagram_format: str = "mermaid",
+    report_markdown_out: str | None = None,
+    report_title: str | None = None,
+    diagram_output_dir: str | None = None,
+) -> str:
+    _ensure_report_flags_are_valid(
+        command,
+        report_markdown_out=report_markdown_out,
+        report_title=report_title,
+        diagram_output_dir=diagram_output_dir,
+    )
     tasks = parse_tasks(load_manifest(graph_path))
     plan = build_plan(tasks)
     if command == "validate":
@@ -390,6 +628,34 @@ def run_command(command: str, graph_path: str, as_json: bool = False, diagram_fo
         if as_json:
             return json.dumps({"format": diagram_format, "diagram": diagram}, indent=2)
         return diagram
+    elif command == "report":
+        artifacts = (
+            write_report_supporting_artifacts(tasks, plan, graph_path=graph_path, output_dir=diagram_output_dir)
+            if diagram_output_dir
+            else {}
+        )
+        diagram_links = _build_report_artifact_links(artifacts, report_markdown_out=report_markdown_out) if artifacts else None
+        report = render_report_markdown(
+            tasks,
+            plan,
+            source_label=graph_path,
+            title=report_title,
+            diagram_links=diagram_links,
+        )
+        if report_markdown_out:
+            _write_text(report_markdown_out, report)
+        if as_json:
+            return json.dumps(
+                {
+                    "summary": plan_to_dict(plan),
+                    "report_title": build_report_title(source_label=graph_path, explicit_title=report_title),
+                    "report_markdown": report,
+                    "artifacts": artifacts,
+                    "report_markdown_out": report_markdown_out,
+                },
+                indent=2,
+            )
+        return report
     else:
         payload = plan_to_dict(plan)
 
@@ -408,7 +674,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        output = run_command(args.command, args.graph, as_json=args.as_json, diagram_format=args.diagram_format)
+        output = run_command(
+            args.command,
+            args.graph,
+            as_json=args.as_json,
+            diagram_format=args.diagram_format,
+            report_markdown_out=args.report_markdown_out,
+            report_title=args.report_title,
+            diagram_output_dir=args.diagram_output_dir,
+        )
     except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")
     print(output)

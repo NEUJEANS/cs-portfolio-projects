@@ -25,5 +25,19 @@
 - [x] complete review pass 2 and fix issues
 - [x] complete review pass 3 and fix issues
 - [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up
+
+## 2026-04-19 walkthrough report slice
+- [x] do brief research on GitHub-friendly Markdown diagram/report linking
+- [x] refresh Markdown report-export patterns and capture a short self-test note
+- [x] update project docs and checklist for the walkthrough-report slice
+- [x] implement a `report` workflow that emits recruiter-friendly Markdown walkthroughs plus linked Mermaid/DOT companion artifacts
+- [x] add regression coverage for report rendering, artifact writing, and report-flag validation
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [ ] run secret scan
 - [ ] commit and push
 - [ ] append wrap-up
