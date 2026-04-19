@@ -26,12 +26,14 @@ build_report = module.build_report
 build_route_table = module.build_route_table
 build_shortest_path_results = module.build_shortest_path_results
 compare_reports = module.compare_reports
+export_compare_html = module.export_compare_html
 export_compare_markdown = module.export_compare_markdown
 export_dot = module.export_dot
 export_markdown = module.export_markdown
 export_mermaid = module.export_mermaid
 johnson = module.johnson
 load_graph = module.load_graph
+render_html_comparison = module.render_html_comparison
 render_markdown_comparison = module.render_markdown_comparison
 render_pretty = module.render_pretty
 
@@ -267,6 +269,27 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn("path changed at same cost: [A -> C -> B -> D] => [A -> C -> D]", rendered)
             self.assertIn("## Route-table diff", render_markdown_comparison(comparison))
 
+    def test_export_compare_html_writes_dashboard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "route-diff.html"
+            baseline = build_report(*load_graph(SAMPLE_PATH), source="A", mode="bellman-ford")
+            candidate = build_report(*load_graph(ROUTE_SHIFT_PATH), source="A", mode="bellman-ford")
+            comparison = compare_reports(baseline, candidate)
+            export_compare_html(comparison, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", rendered)
+            self.assertIn("Graph routing route diff dashboard", rendered)
+            self.assertIn("Same-cost reroutes", rendered)
+            self.assertIn("Predecessor changes", rendered)
+            self.assertIn("Deterministic static artifact", rendered)
+            self.assertIn("cost 1 -&gt; 4; predecessor C -&gt; A; path: [A -&gt; C -&gt; B] =&gt; [A -&gt; B]", rendered)
+            self.assertIn("Baseline predecessor", rendered)
+            self.assertIn("Predecessor shift", rendered)
+            self.assertIn("unchanged", rendered)
+            self.assertIn("route-card--path", rendered)
+            self.assertIn("weight-changed", rendered)
+            self.assertIn("Route-table diff audit", render_html_comparison(comparison))
+
     def test_cli_json_mode_with_compare_graph_emits_comparison_payload(self) -> None:
         completed = subprocess.run(
             [
@@ -319,6 +342,32 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertTrue(output_path.exists())
             self.assertIn("## Route-table diff", output_path.read_text(encoding="utf-8"))
 
+    def test_cli_can_export_compare_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "cli-route-diff.html"
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    str(SAMPLE_PATH),
+                    "--source",
+                    "A",
+                    "--mode",
+                    "bellman-ford",
+                    "--compare-graph",
+                    str(ROUTE_SHIFT_PATH),
+                    "--export-compare-html",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("Route-table comparison:", completed.stdout)
+            self.assertTrue(output_path.exists())
+            self.assertIn("Changed route highlights", output_path.read_text(encoding="utf-8"))
+
     def test_cli_compare_markdown_requires_compare_graph(self) -> None:
         completed = subprocess.run(
             [
@@ -339,6 +388,27 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("--export-compare-markdown requires --compare-graph", completed.stderr)
+
+    def test_cli_compare_html_requires_compare_graph(self) -> None:
+        completed = subprocess.run(
+            [
+                str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                str(MODULE_PATH),
+                str(SAMPLE_PATH),
+                "--source",
+                "A",
+                "--mode",
+                "bellman-ford",
+                "--export-compare-html",
+                str(PROJECT_ROOT / "docs" / "artifacts" / "should-not-exist.html"),
+            ],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--export-compare-html requires --compare-graph", completed.stderr)
 
     def test_cli_json_mode_emits_johnson_payload(self) -> None:
         completed = subprocess.run(

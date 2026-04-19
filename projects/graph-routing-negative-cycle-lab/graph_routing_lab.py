@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 from collections import deque
 from dataclasses import dataclass
@@ -385,6 +386,10 @@ def _markdown_table(lines: list[str], headers: list[str], rows: Iterable[Iterabl
         lines.append("| " + " | ".join(_escape_markdown_cell(cell) for cell in row) + " |")
 
 
+def _html_escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
 def _nodes_reachable_from_starts(edges: Iterable[Edge], starts: Iterable[str]) -> set[str]:
     adjacency: dict[str, list[str]] = {}
     for edge in edges:
@@ -706,6 +711,19 @@ def _format_route_entry_status(entry: RouteTableEntry | None) -> str:
     return entry.status
 
 
+def _format_cost_delta(baseline: RouteTableEntry | None, candidate: RouteTableEntry | None) -> str:
+    if baseline is None or candidate is None:
+        return 'n/a'
+    if baseline.cost == INF or candidate.cost == INF:
+        return 'n/a'
+    delta = candidate.cost - baseline.cost
+    if isinstance(delta, float) and delta.is_integer():
+        delta = int(delta)
+    if delta == 0:
+        return 'unchanged'
+    return f'{delta:+}'
+
+
 def _summarize_route_diff(baseline: RouteTableEntry | None, candidate: RouteTableEntry | None, changed_fields: tuple[str, ...]) -> str:
     if baseline is None and candidate is None:
         return 'absent in both graphs'
@@ -928,10 +946,293 @@ def render_markdown_comparison(comparison: RoutingComparison) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_changed_field_badges(changed_fields: tuple[str, ...]) -> str:
+    if not changed_fields:
+        return '<span class="badge muted">unchanged</span>'
+    return ''.join(
+        f'<span class="badge field-{_html_escape(field)}">{_html_escape(field.replace("-", " "))}</span>'
+        for field in changed_fields
+    )
+
+
+def render_html_comparison(comparison: RoutingComparison) -> str:
+    changed_diffs = [diff for diff in comparison.route_diffs if diff.changed_fields]
+    same_cost_reroutes = sum(
+        1 for diff in changed_diffs if 'path' in diff.changed_fields and 'cost' not in diff.changed_fields
+    )
+    cost_changes = sum(1 for diff in changed_diffs if 'cost' in diff.changed_fields)
+    predecessor_changes = sum(1 for diff in changed_diffs if 'predecessor' in diff.changed_fields)
+    presence_changes = sum(1 for diff in changed_diffs if 'presence' in diff.changed_fields)
+
+    summary_cards = [
+        ('Changed edges', str(len(comparison.edge_changes)), 'Edge-weight or edge-presence differences between the two graph variants.'),
+        ('Changed routes', str(comparison.changed_route_count), 'Route-table entries whose cost, path, predecessor, or status changed.'),
+        ('Same-cost reroutes', str(same_cost_reroutes), 'Routes that kept the same total cost but switched to a different path.'),
+        ('Predecessor changes', str(predecessor_changes), 'Routes whose Bellman-Ford predecessor changed in the candidate graph.'),
+    ]
+    if presence_changes:
+        summary_cards.append(
+            ('Node presence changes', str(presence_changes), 'Nodes that only appear in one route table variant.')
+        )
+    if cost_changes:
+        summary_cards.append(
+            ('Cost-changing routes', str(cost_changes), 'Routes whose total Bellman-Ford cost changed between graphs.')
+        )
+
+    summary_cards_html = ''.join(
+        f'''<article class="summary-card">
+      <p class="summary-label">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description in summary_cards
+    )
+
+    route_cards_html = ''.join(
+        f'''<article class="route-card {'route-card--cost' if 'cost' in diff.changed_fields else ('route-card--presence' if 'presence' in diff.changed_fields or 'status' in diff.changed_fields else 'route-card--path')}">
+      <div class="route-card-header">
+        <div>
+          <p class="eyebrow">Node {_html_escape(diff.node)}</p>
+          <h3>{_html_escape(diff.summary)}</h3>
+        </div>
+        <div class="badge-row">{_render_changed_field_badges(diff.changed_fields)}</div>
+      </div>
+      <dl class="route-metrics">
+        <div><dt>Baseline cost</dt><dd>{_html_escape(_format_route_entry_cost(diff.baseline))}</dd></div>
+        <div><dt>Candidate cost</dt><dd>{_html_escape(_format_route_entry_cost(diff.candidate))}</dd></div>
+        <div><dt>Cost delta</dt><dd>{_html_escape(_format_cost_delta(diff.baseline, diff.candidate))}</dd></div>
+        <div><dt>Baseline predecessor</dt><dd>{_html_escape(_format_route_entry_predecessor(diff.baseline))}</dd></div>
+        <div><dt>Candidate predecessor</dt><dd>{_html_escape(_format_route_entry_predecessor(diff.candidate))}</dd></div>
+        <div><dt>Status</dt><dd>{_html_escape(_format_route_entry_status(diff.baseline))} → {_html_escape(_format_route_entry_status(diff.candidate))}</dd></div>
+      </dl>
+      <div class="path-columns">
+        <div>
+          <p class="path-label">Baseline path</p>
+          <code>{_html_escape(_format_route_entry_path(diff.baseline))}</code>
+        </div>
+        <div>
+          <p class="path-label">Candidate path</p>
+          <code>{_html_escape(_format_route_entry_path(diff.candidate))}</code>
+        </div>
+      </div>
+    </article>'''
+        for diff in changed_diffs
+    ) or '<p class="empty-state">No changed route entries. The two route tables are identical for this source.</p>'
+
+    edge_rows_html = ''.join(
+        f'''<tr>
+          <td><code>{_html_escape(change.source)}</code></td>
+          <td><code>{_html_escape(change.target)}</code></td>
+          <td>{_html_escape(str(change.baseline_weight) if change.baseline_weight is not None else 'absent')}</td>
+          <td>{_html_escape(str(change.candidate_weight) if change.candidate_weight is not None else 'absent')}</td>
+          <td><span class="badge field-{_html_escape(change.change)}">{_html_escape(change.change)}</span></td>
+        </tr>'''
+        for change in comparison.edge_changes
+    ) or '<tr><td colspan="5" class="empty-cell">No edge changes.</td></tr>'
+
+    route_table_rows_html = ''.join(
+        f'''<tr class="{'row-cost' if 'cost' in diff.changed_fields else ('row-presence' if 'presence' in diff.changed_fields or 'status' in diff.changed_fields else 'row-path')}">
+          <td><code>{_html_escape(diff.node)}</code></td>
+          <td>{_html_escape(_format_route_entry_cost(diff.baseline))}</td>
+          <td>{_html_escape(_format_route_entry_cost(diff.candidate))}</td>
+          <td><code>{_html_escape(_format_route_entry_path(diff.baseline))}</code></td>
+          <td><code>{_html_escape(_format_route_entry_path(diff.candidate))}</code></td>
+          <td>{_html_escape(_format_route_entry_predecessor(diff.baseline))} → {_html_escape(_format_route_entry_predecessor(diff.candidate))}</td>
+          <td><div class="badge-row">{_render_changed_field_badges(diff.changed_fields)}</div></td>
+          <td>{_html_escape(diff.summary)}</td>
+        </tr>'''
+        for diff in changed_diffs
+    ) or '<tr><td colspan="8" class="empty-cell">No route-table changes.</td></tr>'
+
+    negative_cycle_note = ''
+    if comparison.baseline_negative_cycle or comparison.candidate_negative_cycle:
+        negative_cycle_note = f'''<section class="callout warning">
+      <h2>Negative-cycle context</h2>
+      <p>Baseline cycle: <code>{_html_escape(' -> '.join(comparison.baseline_negative_cycle) if comparison.baseline_negative_cycle else 'none')}</code></p>
+      <p>Candidate cycle: <code>{_html_escape(' -> '.join(comparison.candidate_negative_cycle) if comparison.candidate_negative_cycle else 'none')}</code></p>
+    </section>'''
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_html_escape(comparison.baseline_graph)} vs {_html_escape(comparison.candidate_graph)} route diff dashboard</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #dbe3ef;
+        --text: #10233d;
+        --muted: #51627a;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --path: #7c3aed;
+        --path-soft: #ede9fe;
+        --warn: #dc2626;
+        --warn-soft: #fee2e2;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 18rem); color: var(--text); }}
+      main {{ max-width: 1180px; margin: 0 auto; padding: 32px 20px 56px; }}
+      .hero, .panel, .callout {{ background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.06); }}
+      .hero {{ padding: 28px; margin-bottom: 20px; }}
+      .eyebrow {{ margin: 0 0 8px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }}
+      h1, h2, h3 {{ margin: 0; }}
+      .lede {{ margin: 14px 0 0; max-width: 72ch; color: var(--muted); line-height: 1.6; }}
+      .meta {{ display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; color: var(--muted); font-size: 0.95rem; }}
+      .summary-grid, .route-card-grid {{ display: grid; gap: 16px; }}
+      .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px; }}
+      .summary-card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 18px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05); }}
+      .summary-card strong {{ display: block; margin-top: 6px; font-size: 1.8rem; }}
+      .summary-label {{ margin: 0; color: var(--muted); font-size: 0.92rem; }}
+      .summary-card p:last-child {{ margin-bottom: 0; color: var(--muted); line-height: 1.5; }}
+      .panel {{ padding: 24px; margin-bottom: 20px; }}
+      .panel-header {{ display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 16px; }}
+      .panel-header p {{ margin: 8px 0 0; color: var(--muted); }}
+      .route-card-grid {{ grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }}
+      .route-card {{ border: 1px solid var(--border); border-radius: 18px; padding: 18px; background: #fcfdff; }}
+      .route-card--cost {{ background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #bfdbfe; }}
+      .route-card--path {{ background: linear-gradient(180deg, #ffffff 0%, #f5f3ff 100%); border-color: #ddd6fe; }}
+      .route-card--presence {{ background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%); border-color: #fecaca; }}
+      .route-card-header {{ display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 16px; }}
+      .route-card h3 {{ margin-top: 4px; font-size: 1.05rem; line-height: 1.45; }}
+      .badge-row {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+      .badge {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 0.8rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); }}
+      .badge.field-path {{ background: var(--path-soft); color: var(--path); }}
+      .badge.field-cost, .badge.field-weight-changed {{ background: var(--accent-soft); color: var(--accent); }}
+      .badge.field-predecessor {{ background: #e0f2fe; color: #0369a1; }}
+      .badge.field-status, .badge.field-presence, .badge.field-added, .badge.field-removed {{ background: var(--warn-soft); color: var(--warn); }}
+      .badge.muted {{ background: #e2e8f0; color: #475569; }}
+      .route-metrics {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 16px; }}
+      .route-metrics div {{ padding: 10px 12px; background: rgba(255,255,255,0.8); border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.25); }}
+      .route-metrics dt {{ margin: 0 0 4px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
+      .route-metrics dd {{ margin: 0; font-size: 1rem; font-weight: 600; }}
+      .path-columns {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }}
+      .path-label {{ margin: 0 0 6px; font-size: 0.84rem; color: var(--muted); }}
+      code {{ display: inline-block; max-width: 100%; white-space: normal; word-break: break-word; font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(15, 23, 42, 0.05); padding: 2px 6px; border-radius: 8px; }}
+      .table-wrap {{ overflow-x: auto; border: 1px solid var(--border); border-radius: 16px; }}
+      table {{ width: 100%; border-collapse: collapse; min-width: 760px; background: white; }}
+      th, td {{ padding: 12px 14px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: left; }}
+      th {{ background: #eff6ff; font-size: 0.84rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d4ed8; }}
+      tr:last-child td {{ border-bottom: none; }}
+      .row-cost td:first-child {{ box-shadow: inset 4px 0 0 var(--accent); }}
+      .row-path td:first-child {{ box-shadow: inset 4px 0 0 var(--path); }}
+      .row-presence td:first-child {{ box-shadow: inset 4px 0 0 var(--warn); }}
+      .callout {{ padding: 20px 24px; margin-bottom: 20px; }}
+      .callout.warning {{ background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%); border-color: #fdba74; }}
+      .empty-state, .empty-cell {{ color: var(--muted); }}
+      .empty-cell {{ text-align: center; padding: 18px; }}
+      @media (max-width: 820px) {{
+        main {{ padding-inline: 14px; }}
+        .hero, .panel, .callout {{ border-radius: 16px; }}
+        .route-card-header, .panel-header {{ flex-direction: column; align-items: start; }}
+        .route-metrics, .path-columns {{ grid-template-columns: 1fr; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Graph routing route diff dashboard</p>
+        <h1>{_html_escape(comparison.baseline_graph)} → {_html_escape(comparison.candidate_graph)}</h1>
+        <p class="lede">Bellman-Ford source <code>{_html_escape(comparison.source)}</code>. This static artifact turns the route-table diff into portfolio-friendly cards plus a detailed audit table so reviewers can quickly see whether the candidate graph changed path cost, predecessor, or only the chosen path.</p>
+        <div class="meta">
+          <span>Deterministic static artifact</span>
+          <span>Changed routes: {comparison.changed_route_count}</span>
+          <span>Unchanged routes: {comparison.unchanged_route_count}</span>
+          <span>Edge changes: {len(comparison.edge_changes)}</span>
+        </div>
+      </section>
+
+      <section class="summary-grid">
+        {summary_cards_html}
+      </section>
+
+      {negative_cycle_note}
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Changed route highlights</h2>
+            <p>Card-style summaries make cost regressions, same-cost reroutes, and predecessor shifts easy to show in screenshots.</p>
+          </div>
+        </div>
+        <div class="route-card-grid">
+          {route_cards_html}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Edge changes</h2>
+            <p>Direct graph differences that explain the route-table shifts.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Target</th>
+                <th>Baseline weight</th>
+                <th>Candidate weight</th>
+                <th>Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {edge_rows_html}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Route-table diff audit</h2>
+            <p>Detailed baseline-versus-candidate comparison for the changed nodes only.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Node</th>
+                <th>Baseline cost</th>
+                <th>Candidate cost</th>
+                <th>Baseline path</th>
+                <th>Candidate path</th>
+                <th>Predecessor shift</th>
+                <th>Changed fields</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              {route_table_rows_html}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
 def export_compare_markdown(comparison: RoutingComparison, output_path: str | Path) -> Path:
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_markdown_comparison(comparison), encoding='utf-8')
+    return output
+
+
+def export_compare_html(comparison: RoutingComparison, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_html_comparison(comparison), encoding='utf-8')
     return output
 
 
@@ -975,6 +1276,10 @@ def parse_args() -> argparse.Namespace:
         "--export-compare-markdown",
         help="Write a Markdown route-table diff artifact comparing the main graph to --compare-graph",
     )
+    parser.add_argument(
+        "--export-compare-html",
+        help="Write a static HTML route-table diff dashboard comparing the main graph to --compare-graph",
+    )
     return parser.parse_args()
 
 
@@ -990,6 +1295,8 @@ def main() -> None:
         export_markdown(report, args.export_markdown)
     if args.export_compare_markdown and not args.compare_graph:
         raise ValueError('--export-compare-markdown requires --compare-graph')
+    if args.export_compare_html and not args.compare_graph:
+        raise ValueError('--export-compare-html requires --compare-graph')
     if args.compare_graph:
         if args.mode not in {'bellman-ford', 'full'} or not args.source:
             raise ValueError('--compare-graph requires --mode bellman-ford/full with --source')
@@ -1004,6 +1311,8 @@ def main() -> None:
         comparison = compare_reports(report, candidate_report)
         if args.export_compare_markdown:
             export_compare_markdown(comparison, args.export_compare_markdown)
+        if args.export_compare_html:
+            export_compare_html(comparison, args.export_compare_html)
         if args.format == 'json':
             print(
                 json.dumps(

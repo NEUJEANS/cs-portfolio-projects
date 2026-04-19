@@ -13,3 +13,4 @@
 - [x] add Graphviz DOT artifact export for Bellman-Ford shortest-path trees and reachable negative cycles
 - [x] add Markdown report export for unreachable-path explanations and Bellman-Ford iteration summaries
 - [x] add route-table diff reporting so two graph variants can be compared side by side from the same source
+- [x] add a static HTML route-diff dashboard so graph changes can be shown as portfolio-friendly cards and audit tables
