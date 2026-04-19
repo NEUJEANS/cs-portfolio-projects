@@ -19,8 +19,10 @@ Record expenses in SQLite, filter entries by date/category, and generate categor
 - summarize totals by category for a selected window
 - summarize totals by month for trend reporting
 - set per-category monthly budgets with configurable threshold alerts
+- save recurring budget templates for categories that repeat every month
+- seed a new month from templates, optionally rolling forward positive remaining balance from a prior month
 - report budget status with warning/over-budget states and remaining balance
-- migrate older databases missing the `spent_on` column
+- migrate older databases missing the `spent_on` column or newer budget-template threshold column
 - validate positive amounts, ISO dates, and `YYYY-MM` budget months
 
 ## Usage
@@ -30,6 +32,9 @@ python3 expense_tracker.py --db expenses.db list --category food --start-date 20
 python3 expense_tracker.py --db expenses.db summary
 python3 expense_tracker.py --db expenses.db summary --group-by month
 python3 expense_tracker.py --db expenses.db budget set food 200 --month 2026-04 --threshold 0.8
+python3 expense_tracker.py --db expenses.db budget template set food 200 --threshold 0.8
+python3 expense_tracker.py --db expenses.db budget template list
+python3 expense_tracker.py --db expenses.db budget seed 2026-05 --rollover --from-month 2026-04
 python3 expense_tracker.py --db expenses.db budget status --month 2026-04
 ```
 
@@ -39,6 +44,6 @@ python3 -m unittest discover -s . -p "test_*.py"
 ```
 
 ## Future Improvements
-- add recurring month-to-month budget templates and rollover support
-- export filtered reports to CSV or Markdown
+- export filtered budget and expense reports to CSV or Markdown
+- support negative rollover / deficit carry-forward policies in addition to positive-only rollover
 - support merchant-level aggregation and richer dashboards
