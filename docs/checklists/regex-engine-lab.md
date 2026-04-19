@@ -28,3 +28,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-19 NFA trace slice
+- [x] inspect the current regex engine lab and choose step-by-step NFA state tracing as the next portfolio-friendly upgrade
+- [x] capture a brief research note on why Thompson-style active-state tracing is a strong teaching and debugging surface
+- [x] do a short runtime refresh and self-test for epsilon closure, per-character transitions, and leftmost search attempts
+- [x] add a resumable slice checklist file for this upgrade
+- [x] implement JSON trace helpers for both `fullmatch` and `search`
+- [x] expose the trace flow through a new CLI subcommand and keep explain/search/fullmatch behavior stable
+- [x] add regression coverage for successful traces, early-stop traces, and leftmost-search attempt reporting
+- [x] generate committed sample trace artifacts and document them in the README
+- [x] run tests and smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

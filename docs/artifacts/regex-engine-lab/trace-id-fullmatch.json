@@ -1,0 +1,1089 @@
+{
+  "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+  "mode": "fullmatch",
+  "text": "ID-2026-demo_user",
+  "matched": true,
+  "stopped_early": false,
+  "states": [
+    {
+      "index": 0,
+      "kind": "BOL",
+      "out1": 1
+    },
+    {
+      "index": 1,
+      "kind": "CHAR",
+      "char": "I",
+      "out1": 2
+    },
+    {
+      "index": 2,
+      "kind": "CHAR",
+      "char": "D",
+      "out1": 3
+    },
+    {
+      "index": 3,
+      "kind": "CHAR",
+      "char": "-",
+      "out1": 4
+    },
+    {
+      "index": 4,
+      "kind": "CLASS",
+      "terms": [
+        {
+          "chars": "0123456789",
+          "negated": false
+        }
+      ],
+      "chars": "0123456789",
+      "negated": false,
+      "out1": 5
+    },
+    {
+      "index": 5,
+      "kind": "CLASS",
+      "terms": [
+        {
+          "chars": "0123456789",
+          "negated": false
+        }
+      ],
+      "chars": "0123456789",
+      "negated": false,
+      "out1": 6
+    },
+    {
+      "index": 6,
+      "kind": "CLASS",
+      "terms": [
+        {
+          "chars": "0123456789",
+          "negated": false
+        }
+      ],
+      "chars": "0123456789",
+      "negated": false,
+      "out1": 7
+    },
+    {
+      "index": 7,
+      "kind": "CLASS",
+      "terms": [
+        {
+          "chars": "0123456789",
+          "negated": false
+        }
+      ],
+      "chars": "0123456789",
+      "negated": false,
+      "out1": 8
+    },
+    {
+      "index": 8,
+      "kind": "CHAR",
+      "char": "-",
+      "out1": 9
+    },
+    {
+      "index": 9,
+      "kind": "CLASS",
+      "terms": [
+        {
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false
+        }
+      ],
+      "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+      "negated": false,
+      "out1": 10
+    },
+    {
+      "index": 10,
+      "kind": "SPLIT",
+      "out1": 9,
+      "out2": 11
+    },
+    {
+      "index": 11,
+      "kind": "EOL",
+      "out1": 12
+    },
+    {
+      "index": 12,
+      "kind": "MATCH"
+    }
+  ],
+  "steps": [
+    {
+      "phase": "start",
+      "position": 0,
+      "active_states": [
+        {
+          "index": 1,
+          "kind": "CHAR",
+          "char": "I",
+          "out1": 2
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 1,
+      "char": "I",
+      "from_active_states": [
+        {
+          "index": 1,
+          "kind": "CHAR",
+          "char": "I",
+          "out1": 2
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 1,
+            "kind": "CHAR",
+            "char": "I",
+            "out1": 2
+          },
+          "matched": true,
+          "target": 2
+        }
+      ],
+      "raw_next_indexes": [
+        2
+      ],
+      "active_states": [
+        {
+          "index": 2,
+          "kind": "CHAR",
+          "char": "D",
+          "out1": 3
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 2,
+      "char": "D",
+      "from_active_states": [
+        {
+          "index": 2,
+          "kind": "CHAR",
+          "char": "D",
+          "out1": 3
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 2,
+            "kind": "CHAR",
+            "char": "D",
+            "out1": 3
+          },
+          "matched": true,
+          "target": 3
+        }
+      ],
+      "raw_next_indexes": [
+        3
+      ],
+      "active_states": [
+        {
+          "index": 3,
+          "kind": "CHAR",
+          "char": "-",
+          "out1": 4
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 3,
+      "char": "-",
+      "from_active_states": [
+        {
+          "index": 3,
+          "kind": "CHAR",
+          "char": "-",
+          "out1": 4
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 3,
+            "kind": "CHAR",
+            "char": "-",
+            "out1": 4
+          },
+          "matched": true,
+          "target": 4
+        }
+      ],
+      "raw_next_indexes": [
+        4
+      ],
+      "active_states": [
+        {
+          "index": 4,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 5
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 4,
+      "char": "2",
+      "from_active_states": [
+        {
+          "index": 4,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 5
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 4,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789",
+            "negated": false,
+            "out1": 5
+          },
+          "matched": true,
+          "target": 5
+        }
+      ],
+      "raw_next_indexes": [
+        5
+      ],
+      "active_states": [
+        {
+          "index": 5,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 6
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 5,
+      "char": "0",
+      "from_active_states": [
+        {
+          "index": 5,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 6
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 5,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789",
+            "negated": false,
+            "out1": 6
+          },
+          "matched": true,
+          "target": 6
+        }
+      ],
+      "raw_next_indexes": [
+        6
+      ],
+      "active_states": [
+        {
+          "index": 6,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 7
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 6,
+      "char": "2",
+      "from_active_states": [
+        {
+          "index": 6,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 7
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 6,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789",
+            "negated": false,
+            "out1": 7
+          },
+          "matched": true,
+          "target": 7
+        }
+      ],
+      "raw_next_indexes": [
+        7
+      ],
+      "active_states": [
+        {
+          "index": 7,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 8
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 7,
+      "char": "6",
+      "from_active_states": [
+        {
+          "index": 7,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789",
+          "negated": false,
+          "out1": 8
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 7,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789",
+            "negated": false,
+            "out1": 8
+          },
+          "matched": true,
+          "target": 8
+        }
+      ],
+      "raw_next_indexes": [
+        8
+      ],
+      "active_states": [
+        {
+          "index": 8,
+          "kind": "CHAR",
+          "char": "-",
+          "out1": 9
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 8,
+      "char": "-",
+      "from_active_states": [
+        {
+          "index": 8,
+          "kind": "CHAR",
+          "char": "-",
+          "out1": 9
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 8,
+            "kind": "CHAR",
+            "char": "-",
+            "out1": 9
+          },
+          "matched": true,
+          "target": 9
+        }
+      ],
+      "raw_next_indexes": [
+        9
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 9,
+      "char": "d",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 10,
+      "char": "e",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 11,
+      "char": "m",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 12,
+      "char": "o",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 13,
+      "char": "_",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 14,
+      "char": "u",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 15,
+      "char": "s",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 16,
+      "char": "e",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "match_active": false
+    },
+    {
+      "phase": "consume",
+      "position": 17,
+      "char": "r",
+      "from_active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        }
+      ],
+      "transitions": [
+        {
+          "state": {
+            "index": 9,
+            "kind": "CLASS",
+            "terms": [
+              {
+                "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+                "negated": false
+              }
+            ],
+            "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+            "negated": false,
+            "out1": 10
+          },
+          "matched": true,
+          "target": 10
+        }
+      ],
+      "raw_next_indexes": [
+        10
+      ],
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        },
+        {
+          "index": 12,
+          "kind": "MATCH"
+        }
+      ],
+      "match_active": true
+    },
+    {
+      "phase": "final",
+      "position": 17,
+      "active_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        },
+        {
+          "index": 12,
+          "kind": "MATCH"
+        }
+      ],
+      "closure_states": [
+        {
+          "index": 9,
+          "kind": "CLASS",
+          "terms": [
+            {
+              "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+              "negated": false
+            }
+          ],
+          "chars": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+          "negated": false,
+          "out1": 10
+        },
+        {
+          "index": 12,
+          "kind": "MATCH"
+        }
+      ],
+      "matched": true
+    }
+  ]
+}

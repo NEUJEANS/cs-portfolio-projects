@@ -20,7 +20,7 @@ A compact regular-expression engine that parses a small regex language, compiles
 - anchors `^` and `$`
 
 ## Project structure
-- `regex_engine_lab.py` - parser, compiler, matcher, and CLI
+- `regex_engine_lab.py` - parser, compiler, matcher, trace helpers, and CLI
 - `test_regex_engine_lab.py` - unit and CLI tests
 
 ## Usage
@@ -49,6 +49,18 @@ python3 regex_engine_lab.py search '\d+\s\w+' 'build 2026 portfolio'
 python3 regex_engine_lab.py explain 'ab|c*'
 ```
 
+### Trace step-by-step NFA execution
+```bash
+python3 regex_engine_lab.py trace '^ID-\d\d\d\d-\w+$' 'ID-2026-demo_user'
+python3 regex_engine_lab.py trace '(cat|dog)s?' 'xxdogs' --mode search
+```
+
+`trace` emits JSON showing the active state set before matching, each consumed character, the concrete transitions that matched, and the final accepting closure. Search traces also show each start-offset attempt until the first leftmost match wins.
+
+## Sample artifacts
+- `docs/artifacts/regex-engine-lab/trace-id-fullmatch.json` - fullmatch trace for a shorthand-heavy ID pattern
+- `docs/artifacts/regex-engine-lab/trace-dogs-search.json` - search trace showing how the engine advances start offsets before landing on `dogs`
+
 ## Testing
 ```bash
 python3 -m unittest discover -s projects/regex-engine-lab -p 'test_*.py' -v
@@ -58,10 +70,11 @@ python3 -m unittest discover -s projects/regex-engine-lab -p 'test_*.py' -v
 - how recursive-descent parsing models regex operator precedence
 - how patchable NFA fragments make Thompson construction compact
 - why epsilon closure matters for zero-width transitions and assertions
+- how trace output turns a black-box matcher into a teachable state-machine walkthrough
 - which modern regex features fall outside regular languages and were intentionally excluded here
 
 ## Future improvements
-- expose step-by-step state tracing for debugging and teaching
+- render trace output into a small HTML timeline or SVG teaching card
 - compile to DFA for faster repeated matching on the same pattern
 - add a tiny benchmark comparing this engine with Python's `re` on safe regular-language patterns
 - add optional Unicode-aware shorthand classes as a follow-on contrast with the current ASCII teaching mode

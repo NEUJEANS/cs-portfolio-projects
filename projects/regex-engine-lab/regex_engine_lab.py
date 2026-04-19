@@ -357,26 +357,27 @@ def ast_to_dict(node: object) -> object:
     raise TypeError(f"unsupported AST node: {node!r}")
 
 
+def state_to_dict(index: int, state: State) -> dict[str, object]:
+    entry: dict[str, object] = {"index": index, "kind": state.kind}
+    if state.char is not None:
+        entry["char"] = state.char
+    if state.class_terms is not None:
+        entry["terms"] = [
+            {"chars": "".join(sorted(term.chars)), "negated": term.negated}
+            for term in state.class_terms
+        ]
+        if len(state.class_terms) == 1 and not state.class_terms[0].negated:
+            entry["chars"] = "".join(sorted(state.class_terms[0].chars))
+        entry["negated"] = state.negated
+    if state.out1 is not None:
+        entry["out1"] = state.out1
+    if state.out2 is not None:
+        entry["out2"] = state.out2
+    return entry
+
+
 def states_to_dict(states: list[State]) -> list[dict[str, object]]:
-    rendered: list[dict[str, object]] = []
-    for index, state in enumerate(states):
-        entry: dict[str, object] = {"index": index, "kind": state.kind}
-        if state.char is not None:
-            entry["char"] = state.char
-        if state.class_terms is not None:
-            entry["terms"] = [
-                {"chars": "".join(sorted(term.chars)), "negated": term.negated}
-                for term in state.class_terms
-            ]
-            if len(state.class_terms) == 1 and not state.class_terms[0].negated:
-                entry["chars"] = "".join(sorted(state.class_terms[0].chars))
-            entry["negated"] = state.negated
-        if state.out1 is not None:
-            entry["out1"] = state.out1
-        if state.out2 is not None:
-            entry["out2"] = state.out2
-        rendered.append(entry)
-    return rendered
+    return [state_to_dict(index, state) for index, state in enumerate(states)]
 
 
 class RegexEngine:
@@ -411,27 +412,64 @@ class RegexEngine:
             self._add_state(result, index, pos, text, visited)
         return result
 
+    def _state_matches(self, state: State, char: str) -> bool:
+        if state.kind == "CHAR":
+            return state.char == char
+        if state.kind == "ANY":
+            return True
+        if state.kind == "CLASS":
+            matched = any(
+                (char not in term.chars) if term.negated else (char in term.chars)
+                for term in (state.class_terms or ())
+            )
+            if state.negated:
+                matched = not matched
+            return matched
+        return False
+
+    def _contains_match(self, indices: Iterable[int]) -> bool:
+        return any(self.states[index].kind == "MATCH" for index in indices)
+
+    def _render_state_set(self, indices: Iterable[int]) -> list[dict[str, object]]:
+        return [state_to_dict(index, self.states[index]) for index in sorted(indices)]
+
     def _step(self, active: set[int], char: str, next_pos: int, text: str) -> set[int]:
         raw_next: set[int] = set()
         for index in active:
             state = self.states[index]
-            matched = False
-            if state.kind == "CHAR":
-                matched = state.char == char
-            elif state.kind == "ANY":
-                matched = True
-            elif state.kind == "CLASS":
-                matched = any(
-                    (char not in term.chars) if term.negated else (char in term.chars)
-                    for term in (state.class_terms or ())
-                )
-                if state.negated:
-                    matched = not matched
-            elif state.kind == "MATCH":
+            if state.kind == "MATCH":
                 continue
-            if matched:
+            if self._state_matches(state, char):
                 raw_next.add(state.out1)  # type: ignore[arg-type]
         return self._closure(raw_next, next_pos, text)
+
+    def _step_with_details(
+        self,
+        active: set[int],
+        char: str,
+        next_pos: int,
+        text: str,
+    ) -> tuple[set[int], list[dict[str, object]], list[int]]:
+        raw_next: set[int] = set()
+        transitions: list[dict[str, object]] = []
+        for index in sorted(active):
+            state = self.states[index]
+            transition: dict[str, object] = {
+                "state": state_to_dict(index, state),
+                "matched": False,
+            }
+            if state.kind == "MATCH":
+                transition["note"] = "accept state does not consume characters"
+                transitions.append(transition)
+                continue
+            matched = self._state_matches(state, char)
+            transition["matched"] = matched
+            if matched:
+                transition["target"] = state.out1
+                raw_next.add(state.out1)  # type: ignore[arg-type]
+            transitions.append(transition)
+        next_active = self._closure(raw_next, next_pos, text)
+        return next_active, transitions, sorted(raw_next)
 
     def fullmatch(self, text: str) -> bool:
         active = self._closure([self.start], 0, text)
@@ -439,22 +477,153 @@ class RegexEngine:
             active = self._step(active, char, position, text)
             if not active:
                 return False
-        return any(self.states[index].kind == "MATCH" for index in self._closure(active, len(text), text))
+        return self._contains_match(self._closure(active, len(text), text))
 
     def search(self, text: str) -> dict[str, object] | None:
         starts = [0] if self.pattern.startswith("^") else list(range(len(text) + 1))
         for start in starts:
             active = self._closure([self.start], start, text)
-            best_end: int | None = start if any(self.states[index].kind == "MATCH" for index in active) else None
+            best_end: int | None = start if self._contains_match(active) else None
             for end in range(start + 1, len(text) + 1):
                 active = self._step(active, text[end - 1], end, text)
                 if not active:
                     break
-                if any(self.states[index].kind == "MATCH" for index in active):
+                if self._contains_match(active):
                     best_end = end
             if best_end is not None:
                 return {"matched": True, "start": start, "end": best_end, "match": text[start:best_end]}
         return None
+
+    def trace_fullmatch(self, text: str) -> dict[str, object]:
+        active = self._closure([self.start], 0, text)
+        steps: list[dict[str, object]] = [
+            {
+                "phase": "start",
+                "position": 0,
+                "active_states": self._render_state_set(active),
+                "match_active": self._contains_match(active),
+            }
+        ]
+        stopped_early = False
+        final_position = 0
+        for position, char in enumerate(text, start=1):
+            previous_active = set(active)
+            active, transitions, raw_next = self._step_with_details(active, char, position, text)
+            final_position = position
+            steps.append(
+                {
+                    "phase": "consume",
+                    "position": position,
+                    "char": char,
+                    "from_active_states": self._render_state_set(previous_active),
+                    "transitions": transitions,
+                    "raw_next_indexes": raw_next,
+                    "active_states": self._render_state_set(active),
+                    "match_active": self._contains_match(active),
+                }
+            )
+            if not active:
+                stopped_early = True
+                break
+        if not stopped_early:
+            final_position = len(text)
+        final_closure = self._closure(active, final_position, text)
+        matched = self._contains_match(final_closure)
+        steps.append(
+            {
+                "phase": "final",
+                "position": final_position,
+                "active_states": self._render_state_set(active),
+                "closure_states": self._render_state_set(final_closure),
+                "matched": matched,
+            }
+        )
+        return {
+            "pattern": self.pattern,
+            "mode": "fullmatch",
+            "text": text,
+            "matched": matched,
+            "stopped_early": stopped_early,
+            "states": states_to_dict(self.states),
+            "steps": steps,
+        }
+
+    def trace_search(self, text: str) -> dict[str, object]:
+        starts = [0] if self.pattern.startswith("^") else list(range(len(text) + 1))
+        attempts: list[dict[str, object]] = []
+        final_result: dict[str, object] | None = None
+        for start in starts:
+            active = self._closure([self.start], start, text)
+            best_end: int | None = start if self._contains_match(active) else None
+            steps: list[dict[str, object]] = [
+                {
+                    "phase": "start",
+                    "start": start,
+                    "position": start,
+                    "active_states": self._render_state_set(active),
+                    "match_active": self._contains_match(active),
+                }
+            ]
+            stopped_early = False
+            for end in range(start + 1, len(text) + 1):
+                previous_active = set(active)
+                active, transitions, raw_next = self._step_with_details(active, text[end - 1], end, text)
+                match_active = self._contains_match(active)
+                if match_active:
+                    best_end = end
+                steps.append(
+                    {
+                        "phase": "consume",
+                        "start": start,
+                        "position": end,
+                        "char": text[end - 1],
+                        "from_active_states": self._render_state_set(previous_active),
+                        "transitions": transitions,
+                        "raw_next_indexes": raw_next,
+                        "active_states": self._render_state_set(active),
+                        "match_active": match_active,
+                    }
+                )
+                if not active:
+                    stopped_early = True
+                    break
+            result: dict[str, object]
+            if best_end is None:
+                result = {"matched": False, "start": start}
+            else:
+                result = {
+                    "matched": True,
+                    "start": start,
+                    "end": best_end,
+                    "match": text[start:best_end],
+                }
+            attempts.append(
+                {
+                    "start": start,
+                    "stopped_early": stopped_early,
+                    "result": result,
+                    "steps": steps,
+                }
+            )
+            if best_end is not None:
+                final_result = result
+                break
+        return {
+            "pattern": self.pattern,
+            "mode": "search",
+            "text": text,
+            "matched": final_result is not None,
+            "result": final_result or {"matched": False},
+            "states": states_to_dict(self.states),
+            "attempts": attempts,
+        }
+
+    def trace(self, text: str, *, mode: str = "fullmatch") -> dict[str, object]:
+        if mode == "fullmatch":
+            return self.trace_fullmatch(text)
+        if mode == "search":
+            return self.trace_search(text)
+        raise ValueError(f"unsupported trace mode: {mode}")
 
     def explain(self) -> dict[str, object]:
         return {"pattern": self.pattern, "ast": ast_to_dict(self.ast), "states": states_to_dict(self.states)}
@@ -475,6 +644,16 @@ def build_parser() -> argparse.ArgumentParser:
     explain_parser = subparsers.add_parser("explain", help="print AST and NFA states as JSON")
     explain_parser.add_argument("pattern")
 
+    trace_parser = subparsers.add_parser("trace", help="print a step-by-step NFA trace as JSON")
+    trace_parser.add_argument("pattern")
+    trace_parser.add_argument("text")
+    trace_parser.add_argument(
+        "--mode",
+        choices=("fullmatch", "search"),
+        default="fullmatch",
+        help="trace either fullmatch execution or search attempts",
+    )
+
     return parser
 
 
@@ -493,6 +672,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "explain":
             print(json.dumps(engine.explain(), indent=2))
+            return 0
+        if args.command == "trace":
+            print(json.dumps(engine.trace(args.text, mode=args.mode), indent=2))
             return 0
     except RegexSyntaxError as error:
         print(json.dumps({"error": str(error)}))

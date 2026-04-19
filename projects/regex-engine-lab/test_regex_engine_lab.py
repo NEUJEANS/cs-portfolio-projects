@@ -70,6 +70,38 @@ class RegexEngineTests(unittest.TestCase):
         self.assertEqual(first_repeat_node["node"]["terms"][0]["chars"], "0123456789")
         self.assertTrue(any(state.get("chars") == "0123456789" for state in payload["states"]))
 
+    def test_trace_fullmatch_reports_stepwise_state_sets(self) -> None:
+        payload = RegexEngine(r"^ID-\d\d\d\d-\w+$").trace("ID-2026-demo_user", mode="fullmatch")
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["mode"], "fullmatch")
+        self.assertEqual(payload["steps"][0]["phase"], "start")
+        consume_steps = [step for step in payload["steps"] if step["phase"] == "consume"]
+        self.assertEqual(len(consume_steps), len("ID-2026-demo_user"))
+        self.assertEqual(consume_steps[0]["char"], "I")
+        self.assertTrue(any(transition["matched"] for transition in consume_steps[0]["transitions"]))
+        self.assertEqual(payload["steps"][-1]["phase"], "final")
+        self.assertTrue(payload["steps"][-1]["matched"])
+
+    def test_trace_fullmatch_marks_early_stop_on_failure(self) -> None:
+        payload = RegexEngine("ab").trace("axy", mode="fullmatch")
+        self.assertFalse(payload["matched"])
+        self.assertTrue(payload["stopped_early"])
+        self.assertEqual(payload["steps"][-1]["phase"], "final")
+        self.assertEqual(payload["steps"][-1]["position"], 2)
+        self.assertEqual(payload["steps"][-1]["closure_states"], [])
+
+    def test_trace_search_reports_attempts_and_first_match(self) -> None:
+        payload = RegexEngine("(cat|dog)s?").trace("xxdogs", mode="search")
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["mode"], "search")
+        self.assertEqual(payload["result"]["match"], "dogs")
+        self.assertEqual(payload["result"]["start"], 2)
+        self.assertGreaterEqual(len(payload["attempts"]), 3)
+        winning_attempt = payload["attempts"][-1]
+        self.assertTrue(winning_attempt["result"]["matched"])
+        self.assertEqual(winning_attempt["result"]["match"], "dogs")
+        self.assertEqual(winning_attempt["steps"][0]["phase"], "start")
+
     def test_invalid_patterns_raise_syntax_error(self) -> None:
         with self.assertRaises(RegexSyntaxError):
             RegexEngine("(")
@@ -114,6 +146,23 @@ class RegexEngineCliTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["pattern"], "a|b")
         self.assertIn("states", payload)
+
+    def test_cli_trace_fullmatch(self) -> None:
+        completed = self.run_cli("trace", r"^ID-\d\d\d\d-\w+$", "ID-2026-demo_user")
+        self.assertEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mode"], "fullmatch")
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["steps"][0]["phase"], "start")
+        self.assertEqual(payload["steps"][-1]["phase"], "final")
+
+    def test_cli_trace_search_mode(self) -> None:
+        completed = self.run_cli("trace", "(cat|dog)s?", "xxdogs", "--mode", "search")
+        self.assertEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["mode"], "search")
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["result"]["match"], "dogs")
 
     def test_cli_reports_syntax_errors(self) -> None:
         completed = self.run_cli("fullmatch", "[abc", "a")

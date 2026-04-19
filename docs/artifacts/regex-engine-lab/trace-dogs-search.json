@@ -1,0 +1,433 @@
+{
+  "pattern": "(cat|dog)s?",
+  "mode": "search",
+  "text": "xxdogs",
+  "matched": true,
+  "result": {
+    "matched": true,
+    "start": 2,
+    "end": 6,
+    "match": "dogs"
+  },
+  "states": [
+    {
+      "index": 0,
+      "kind": "CHAR",
+      "char": "c",
+      "out1": 1
+    },
+    {
+      "index": 1,
+      "kind": "CHAR",
+      "char": "a",
+      "out1": 2
+    },
+    {
+      "index": 2,
+      "kind": "CHAR",
+      "char": "t",
+      "out1": 8
+    },
+    {
+      "index": 3,
+      "kind": "CHAR",
+      "char": "d",
+      "out1": 4
+    },
+    {
+      "index": 4,
+      "kind": "CHAR",
+      "char": "o",
+      "out1": 5
+    },
+    {
+      "index": 5,
+      "kind": "CHAR",
+      "char": "g",
+      "out1": 8
+    },
+    {
+      "index": 6,
+      "kind": "SPLIT",
+      "out1": 0,
+      "out2": 3
+    },
+    {
+      "index": 7,
+      "kind": "CHAR",
+      "char": "s",
+      "out1": 9
+    },
+    {
+      "index": 8,
+      "kind": "SPLIT",
+      "out1": 7,
+      "out2": 9
+    },
+    {
+      "index": 9,
+      "kind": "MATCH"
+    }
+  ],
+  "attempts": [
+    {
+      "start": 0,
+      "stopped_early": true,
+      "result": {
+        "matched": false,
+        "start": 0
+      },
+      "steps": [
+        {
+          "phase": "start",
+          "start": 0,
+          "position": 0,
+          "active_states": [
+            {
+              "index": 0,
+              "kind": "CHAR",
+              "char": "c",
+              "out1": 1
+            },
+            {
+              "index": 3,
+              "kind": "CHAR",
+              "char": "d",
+              "out1": 4
+            }
+          ],
+          "match_active": false
+        },
+        {
+          "phase": "consume",
+          "start": 0,
+          "position": 1,
+          "char": "x",
+          "from_active_states": [
+            {
+              "index": 0,
+              "kind": "CHAR",
+              "char": "c",
+              "out1": 1
+            },
+            {
+              "index": 3,
+              "kind": "CHAR",
+              "char": "d",
+              "out1": 4
+            }
+          ],
+          "transitions": [
+            {
+              "state": {
+                "index": 0,
+                "kind": "CHAR",
+                "char": "c",
+                "out1": 1
+              },
+              "matched": false
+            },
+            {
+              "state": {
+                "index": 3,
+                "kind": "CHAR",
+                "char": "d",
+                "out1": 4
+              },
+              "matched": false
+            }
+          ],
+          "raw_next_indexes": [],
+          "active_states": [],
+          "match_active": false
+        }
+      ]
+    },
+    {
+      "start": 1,
+      "stopped_early": true,
+      "result": {
+        "matched": false,
+        "start": 1
+      },
+      "steps": [
+        {
+          "phase": "start",
+          "start": 1,
+          "position": 1,
+          "active_states": [
+            {
+              "index": 0,
+              "kind": "CHAR",
+              "char": "c",
+              "out1": 1
+            },
+            {
+              "index": 3,
+              "kind": "CHAR",
+              "char": "d",
+              "out1": 4
+            }
+          ],
+          "match_active": false
+        },
+        {
+          "phase": "consume",
+          "start": 1,
+          "position": 2,
+          "char": "x",
+          "from_active_states": [
+            {
+              "index": 0,
+              "kind": "CHAR",
+              "char": "c",
+              "out1": 1
+            },
+            {
+              "index": 3,
+              "kind": "CHAR",
+              "char": "d",
+              "out1": 4
+            }
+          ],
+          "transitions": [
+            {
+              "state": {
+                "index": 0,
+                "kind": "CHAR",
+                "char": "c",
+                "out1": 1
+              },
+              "matched": false
+            },
+            {
+              "state": {
+                "index": 3,
+                "kind": "CHAR",
+                "char": "d",
+                "out1": 4
+              },
+              "matched": false
+            }
+          ],
+          "raw_next_indexes": [],
+          "active_states": [],
+          "match_active": false
+        }
+      ]
+    },
+    {
+      "start": 2,
+      "stopped_early": false,
+      "result": {
+        "matched": true,
+        "start": 2,
+        "end": 6,
+        "match": "dogs"
+      },
+      "steps": [
+        {
+          "phase": "start",
+          "start": 2,
+          "position": 2,
+          "active_states": [
+            {
+              "index": 0,
+              "kind": "CHAR",
+              "char": "c",
+              "out1": 1
+            },
+            {
+              "index": 3,
+              "kind": "CHAR",
+              "char": "d",
+              "out1": 4
+            }
+          ],
+          "match_active": false
+        },
+        {
+          "phase": "consume",
+          "start": 2,
+          "position": 3,
+          "char": "d",
+          "from_active_states": [
+            {
+              "index": 0,
+              "kind": "CHAR",
+              "char": "c",
+              "out1": 1
+            },
+            {
+              "index": 3,
+              "kind": "CHAR",
+              "char": "d",
+              "out1": 4
+            }
+          ],
+          "transitions": [
+            {
+              "state": {
+                "index": 0,
+                "kind": "CHAR",
+                "char": "c",
+                "out1": 1
+              },
+              "matched": false
+            },
+            {
+              "state": {
+                "index": 3,
+                "kind": "CHAR",
+                "char": "d",
+                "out1": 4
+              },
+              "matched": true,
+              "target": 4
+            }
+          ],
+          "raw_next_indexes": [
+            4
+          ],
+          "active_states": [
+            {
+              "index": 4,
+              "kind": "CHAR",
+              "char": "o",
+              "out1": 5
+            }
+          ],
+          "match_active": false
+        },
+        {
+          "phase": "consume",
+          "start": 2,
+          "position": 4,
+          "char": "o",
+          "from_active_states": [
+            {
+              "index": 4,
+              "kind": "CHAR",
+              "char": "o",
+              "out1": 5
+            }
+          ],
+          "transitions": [
+            {
+              "state": {
+                "index": 4,
+                "kind": "CHAR",
+                "char": "o",
+                "out1": 5
+              },
+              "matched": true,
+              "target": 5
+            }
+          ],
+          "raw_next_indexes": [
+            5
+          ],
+          "active_states": [
+            {
+              "index": 5,
+              "kind": "CHAR",
+              "char": "g",
+              "out1": 8
+            }
+          ],
+          "match_active": false
+        },
+        {
+          "phase": "consume",
+          "start": 2,
+          "position": 5,
+          "char": "g",
+          "from_active_states": [
+            {
+              "index": 5,
+              "kind": "CHAR",
+              "char": "g",
+              "out1": 8
+            }
+          ],
+          "transitions": [
+            {
+              "state": {
+                "index": 5,
+                "kind": "CHAR",
+                "char": "g",
+                "out1": 8
+              },
+              "matched": true,
+              "target": 8
+            }
+          ],
+          "raw_next_indexes": [
+            8
+          ],
+          "active_states": [
+            {
+              "index": 7,
+              "kind": "CHAR",
+              "char": "s",
+              "out1": 9
+            },
+            {
+              "index": 9,
+              "kind": "MATCH"
+            }
+          ],
+          "match_active": true
+        },
+        {
+          "phase": "consume",
+          "start": 2,
+          "position": 6,
+          "char": "s",
+          "from_active_states": [
+            {
+              "index": 7,
+              "kind": "CHAR",
+              "char": "s",
+              "out1": 9
+            },
+            {
+              "index": 9,
+              "kind": "MATCH"
+            }
+          ],
+          "transitions": [
+            {
+              "state": {
+                "index": 7,
+                "kind": "CHAR",
+                "char": "s",
+                "out1": 9
+              },
+              "matched": true,
+              "target": 9
+            },
+            {
+              "state": {
+                "index": 9,
+                "kind": "MATCH"
+              },
+              "matched": false,
+              "note": "accept state does not consume characters"
+            }
+          ],
+          "raw_next_indexes": [
+            9
+          ],
+          "active_states": [
+            {
+              "index": 9,
+              "kind": "MATCH"
+            }
+          ],
+          "match_active": true
+        }
+      ]
+    }
+  ]
+}
