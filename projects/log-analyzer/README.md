@@ -33,10 +33,10 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
 - supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
-- supports repeatable `--facet-field` selections so richer named log fields can drive per-facet hotspot and trend breakdowns in text, JSON, and dedicated CSV exports
+- supports repeatable `--facet-field` selections so richer named log fields can drive per-facet top-IP/top-path rankings, hotspot/trend breakdowns, and dedicated CSV exports
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
 - supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -57,6 +57,7 @@ python3 log_analyzer.py --list-card-annotation-presets --preview-card-annotation
 python3 log_analyzer.py --card-annotation-preset-file docs/artifacts/log-analyzer/custom-card-annotation-presets.json --preview-card-annotation-preset 'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z' --preview-card-annotation-preset 'release-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z' --card-annotation-preset-gallery-link 'Preset catalog=card-annotation-preset-catalog.txt' --card-annotation-preset-gallery-link 'Preset preview JSON=card-annotation-preset-preview.json' --card-annotation-preset-gallery-link 'Annotated trend card HTML=release-trend-card-annotated.html' --card-annotation-preset-gallery-link 'Annotated comparison card HTML=release-comparison-card-annotated.html' --card-annotation-preset-gallery-html docs/artifacts/log-analyzer/card-annotation-preset-gallery.html
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
 python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
+python3 log_analyzer.py access.log --facet-field env --facet-field region --top-ip-facet-csv ip-facets.csv --top-path-facet-csv path-facets.csv
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-csv release-compare.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html
@@ -154,6 +155,22 @@ Examples:
 - `--time-bucket minute --time-bucket-csv minute-trends.csv` exports chart-ready bucket rows for Sheets or notebooks
 - `--time-bucket minute --facet-field env --facet-field region --time-bucket-facet-csv bucket-facets.csv` exports one row per bucket/facet combination so deploy, shard, or region charts can be split without extra spreadsheet wrangling
 
+## Facet-aware top rankings
+Use one or more `--facet-field` values when you want the usual top-IP and top-path tables broken out by deployment, release, region, or other named log labels such as `env=prod` or `release=2026.04`.
+
+Behavior:
+- text output adds `Top IPs by facet` and `Top paths by facet` sections after the global ranking tables
+- JSON output includes `top_ips_by_facet` and `top_paths_by_facet` arrays with `facet_label`, per-field `facets`, `rank`, `count`, and the ranked `ip` or `path`
+- facet groups are ordered by total request volume first, then label, so the busiest deployment or release tags show up first in screenshots and exports
+- `--top-ip-facet-csv` and `--top-path-facet-csv` write spreadsheet-friendly ranked tables with one row per facet/rank pair
+- missing named-field values are preserved as `(missing)` so partial log enrichment still produces explicit rows instead of silently dropping requests
+
+Examples:
+- `--facet-field env --top-ip-facet-csv ip-facets.csv`
+- `--facet-field env --facet-field region --top-path-facet-csv path-facets.csv`
+- combine the ranking CSVs with `--time-bucket-facet-csv` or hotspot facet exports when you want both traffic-share and latency stories for the same deploy labels
+- committed sample artifacts now live under `docs/artifacts/log-analyzer/facet-ranking-sample.log`, `top-ips-by-facet.csv`, and `top-paths-by-facet.csv`
+
 ## Facet comparisons for release reviews
 Use `--facet-compare-field FIELD --facet-compare-values LEFT RIGHT` when you want two deployment, release, or environment values compared side by side without losing the normal global summary. This is useful for portfolio screenshots and release-review notes such as `env=prod` vs `env=staging` or `release=2026.04` vs `release=2026.05`.
 
@@ -247,6 +264,15 @@ Use `--path-latency-csv` to export one row per request-latency hotspot path with
 - `window_end`
 
 Use `--upstream-path-latency-csv` to export the same schema for `upstream_response_time=`-backed hotspots only. This makes it easy to show which endpoints are slow because of downstream services versus app-side processing. The filter/window columns stay blank when no hotspot or time-window flags are active.
+
+Use `--top-ip-facet-csv` and `--top-path-facet-csv` together with one or more `--facet-field` selections to export ranked facet tables with these columns:
+- `ip` or `path`
+- `facet_label`
+- one `facet_<field>` column per selected field (for example `facet_env`, `facet_region`)
+- `rank`
+- `count`
+- `window_start`
+- `window_end`
 
 Use `--path-latency-facet-csv` and `--upstream-path-latency-facet-csv` together with one or more `--facet-field` selections to export the same hotspot schema plus:
 - `facet_label`
@@ -352,6 +378,6 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 ```
 
 ## Future Improvements
-- optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
 - consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
 - add richer gallery grouping/filtering if the preset catalog grows beyond a handful of built-in + custom stories
+- optionally add facet-aware referrer/user-agent rankings if a future dataset needs marketer- or bot-heavy drill-downs

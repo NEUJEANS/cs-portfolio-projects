@@ -1,0 +1,6 @@
+path,facet_label,facet_env,facet_region,rank,count,window_start,window_end
+/api/report,"env=prod, region=us-east-1",prod,us-east-1,1,2,,
+/health,"env=prod, region=us-east-1",prod,us-east-1,2,1,,
+/api/export,"env=staging, region=us-west-2",staging,us-west-2,1,2,,
+/api/report,"env=staging, region=us-west-2",staging,us-west-2,2,1,,
+/preview,"env=preview, region=(missing)",preview,(missing),1,2,,

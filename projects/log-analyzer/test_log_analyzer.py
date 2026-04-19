@@ -280,6 +280,12 @@ class LogAnalyzerTests(unittest.TestCase):
             result['faceting'],
             {'fields': ['env', 'region'], 'missing_value': '(missing)'},
         )
+        self.assertEqual(result['top_ips_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+        self.assertEqual(result['top_ips_by_facet'][0]['ip'], '10.0.0.1')
+        self.assertEqual(result['top_ips_by_facet'][0]['rank'], 1)
+        self.assertEqual(result['top_paths_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+        self.assertEqual(result['top_paths_by_facet'][0]['path'], '/api/report')
+        self.assertEqual(result['top_paths_by_facet'][0]['count'], 2)
         self.assertEqual(result['path_latency_facet_breakdown'][0]['path'], '/api/report')
         self.assertEqual(result['path_latency_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
         self.assertEqual(result['path_latency_facet_breakdown'][0]['average_ms'], 450.0)
@@ -288,6 +294,22 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['time_bucket_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
         self.assertEqual(result['time_bucket_facet_breakdown'][0]['request_count'], 2)
         self.assertEqual(result['time_bucket_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
+
+    def test_analyze_lines_orders_top_rankings_by_busiest_facet_first(self):
+        lines = [
+            '10.0.0.9 - - [18/Apr/2026:09:00:01 +0000] "GET /preview HTTP/1.1" 200 10 request_time=0.020 env=preview',
+            '10.0.0.9 - - [18/Apr/2026:09:00:02 +0000] "GET /preview HTTP/1.1" 200 10 request_time=0.030 env=preview',
+            '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 env=prod region=us-east-1',
+            '10.0.0.1 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 env=prod region=us-east-1',
+            '10.0.0.2 - - [18/Apr/2026:09:01:10 +0000] "GET /health HTTP/1.1" 200 13 request_time=0.020 env=prod region=us-east-1',
+            '10.0.0.3 - - [18/Apr/2026:09:01:20 +0000] "GET /api/export HTTP/1.1" 200 13 request_time=0.025 env=staging region=us-west-2',
+        ]
+        result = analyze_lines(lines, top_n=2, facet_fields=['env', 'region'])
+        self.assertEqual(result['top_ips_by_facet'][0]['facet_label'], 'env=prod, region=us-east-1')
+        self.assertEqual(result['top_ips_by_facet'][0]['ip'], '10.0.0.1')
+        self.assertEqual(result['top_paths_by_facet'][0]['facet_label'], 'env=prod, region=us-east-1')
+        self.assertEqual(result['top_paths_by_facet'][0]['path'], '/api/report')
+        self.assertEqual(result['top_ips_by_facet'][-1]['facet_label'], 'env=staging, region=us-west-2')
 
     def test_analyze_lines_builds_facet_comparison(self):
         lines = [
@@ -411,6 +433,10 @@ class LogAnalyzerTests(unittest.TestCase):
                 facet_fields=['env', 'region'],
             )
         )
+        self.assertIn('Top IPs by facet: (facets: env, region)', report)
+        self.assertIn('env=prod, region=us-east-1 | #1 10.0.0.1: 1', report)
+        self.assertIn('Top paths by facet: (facets: env, region)', report)
+        self.assertIn('env=prod, region=us-east-1 | #1 /api/report: 2', report)
         self.assertIn('Time bucket facet breakdowns: (facets: env, region)', report)
         self.assertIn('2026-04-18T09:00:00+00:00 | env=prod, region=us-east-1 -> requests=2, errors=2 (100.0%), top_path=/api/report (2)', report)
         self.assertIn('Per-path latency hotspots by facet (ms): (filters: status=500,502; method=POST) (facets: env, region)', report)
@@ -996,11 +1022,74 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             payload = json.loads(completed.stdout)
             self.assertEqual(payload['faceting'], {'fields': ['env', 'region'], 'missing_value': '(missing)'})
+            self.assertEqual(payload['top_ips_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+            self.assertEqual(payload['top_ips_by_facet'][0]['ip'], '10.0.0.1')
+            self.assertEqual(payload['top_paths_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+            self.assertEqual(payload['top_paths_by_facet'][0]['path'], '/api/report')
             self.assertEqual(payload['path_latency_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
             self.assertEqual(payload['path_latency_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
             self.assertEqual(payload['time_bucket_facet_breakdown'][0]['request_count'], 2)
             self.assertEqual(payload['time_bucket_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
 
+
+    def test_cli_top_facet_csv_exports_include_rank_and_facet_columns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            top_ip_csv = Path(tmpdir) / 'exports' / 'top-ips-by-facet.csv'
+            top_path_csv = Path(tmpdir) / 'exports' / 'top-paths-by-facet.csv'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.9 - - [18/Apr/2026:08:59:50 +0000] "GET /ignored HTTP/1.1" 200 9 request_time=0.010 env=preview
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 env=prod region=us-east-1
+                    10.0.0.1 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 env=prod region=us-east-1
+                    10.0.0.3 - - [18/Apr/2026:09:00:50 +0000] "GET /health HTTP/1.1" 200 11 request_time=0.040 env=prod region=us-east-1
+                    10.0.0.2 - - [18/Apr/2026:09:01:10 +0000] "GET /health HTTP/1.1" 200 13 request_time=0.020 env=staging region=us-west-2
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--facet-field',
+                    'region',
+                    '--window-start',
+                    '2026-04-18T09:00:00Z',
+                    '--window-end',
+                    '2026-04-18T09:02:00Z',
+                    '--top-ip-facet-csv',
+                    str(top_ip_csv),
+                    '--top-path-facet-csv',
+                    str(top_path_csv),
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            with top_ip_csv.open(encoding='utf-8', newline='') as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]['ip'], '10.0.0.1')
+            self.assertEqual(rows[0]['facet_label'], 'env=prod, region=us-east-1')
+            self.assertEqual(rows[0]['facet_env'], 'prod')
+            self.assertEqual(rows[0]['facet_region'], 'us-east-1')
+            self.assertEqual(rows[0]['rank'], '1')
+            self.assertEqual(rows[0]['count'], '2')
+            self.assertEqual(rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(rows[0]['window_end'], '2026-04-18T09:02:00+00:00')
+            with top_path_csv.open(encoding='utf-8', newline='') as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]['path'], '/api/report')
+            self.assertEqual(rows[0]['facet_label'], 'env=prod, region=us-east-1')
+            self.assertEqual(rows[0]['rank'], '1')
+            self.assertEqual(rows[0]['count'], '2')
+            self.assertEqual(rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(rows[0]['window_end'], '2026-04-18T09:02:00+00:00')
 
     def test_cli_json_output_supports_facet_comparison(self):
         with tempfile.TemporaryDirectory() as tmpdir:

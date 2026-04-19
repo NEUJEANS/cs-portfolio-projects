@@ -1,0 +1,6 @@
+ip,facet_label,facet_env,facet_region,rank,count,window_start,window_end
+10.1.0.1,"env=prod, region=us-east-1",prod,us-east-1,1,2,,
+10.1.0.2,"env=prod, region=us-east-1",prod,us-east-1,2,1,,
+10.2.0.3,"env=staging, region=us-west-2",staging,us-west-2,1,2,,
+10.2.0.4,"env=staging, region=us-west-2",staging,us-west-2,2,1,,
+10.3.0.5,"env=preview, region=(missing)",preview,(missing),1,2,,

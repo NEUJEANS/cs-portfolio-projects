@@ -622,6 +622,46 @@ def summarize_path_latencies_by_facet(
     return rows[:limit]
 
 
+def summarize_top_counts_by_facet(
+    counts: Counter[tuple[str, tuple[str, ...]]],
+    facet_fields: list[str],
+    limit: int,
+    *,
+    value_key: str,
+) -> list[dict]:
+    grouped_counts: dict[tuple[str, ...], list[tuple[str, int]]] = defaultdict(list)
+    for (value, facet_values), count in counts.items():
+        grouped_counts[facet_values].append((value, count))
+
+    sorted_facet_groups: list[tuple[tuple[str, ...], str, dict[str, str], int]] = []
+    for facet_values, entries in grouped_counts.items():
+        facets = build_facet_map(facet_fields, facet_values)
+        facet_label = format_facet_label(facets)
+        total_count = sum(count for _, count in entries)
+        sorted_facet_groups.append((facet_values, facet_label, facets, total_count))
+
+    rows = []
+    for facet_values, facet_label, facets, _ in sorted(
+        sorted_facet_groups,
+        key=lambda item: (-item[3], item[1]),
+    ):
+        ranked_entries = sorted(
+            grouped_counts[facet_values],
+            key=lambda item: (-item[1], item[0]),
+        )[:limit]
+        for rank, (value, count) in enumerate(ranked_entries, start=1):
+            rows.append(
+                {
+                    value_key: value,
+                    "facets": facets,
+                    "facet_label": facet_label,
+                    "rank": rank,
+                    "count": count,
+                }
+            )
+    return rows
+
+
 def normalize_hotspot_filters(
     statuses: Iterable[str] | None = None,
     methods: Iterable[str] | None = None,
@@ -2641,6 +2681,8 @@ def analyze_parsed_lines(
     upstream_latencies_ms: list[float] = []
     path_latencies: dict[str, list[float]] = defaultdict(list)
     upstream_path_latencies: dict[str, list[float]] = defaultdict(list)
+    ip_counts_by_facet: Counter[tuple[str, tuple[str, ...]]] = Counter()
+    path_counts_by_facet: Counter[tuple[str, tuple[str, ...]]] = Counter()
     path_latencies_by_facet: dict[tuple[str, tuple[str, ...]], list[float]] = defaultdict(list)
     upstream_path_latencies_by_facet: dict[tuple[str, tuple[str, ...]], list[float]] = defaultdict(list)
     time_bucket_rows: dict[datetime, dict[str, object]] = {}
@@ -2658,6 +2700,9 @@ def analyze_parsed_lines(
         status_counts[parsed.status] += 1
         ip_counts[parsed.ip] += 1
         path_counts[parsed.path] += 1
+        if facet_values is not None:
+            ip_counts_by_facet[(parsed.ip, facet_values)] += 1
+            path_counts_by_facet[(parsed.path, facet_values)] += 1
         method_counts[parsed.method] += 1
         if parsed.referrer:
             referrer_counts[parsed.referrer] += 1
@@ -2729,7 +2774,19 @@ def analyze_parsed_lines(
         "status_counts": dict(status_counts),
         "method_counts": dict(method_counts),
         "top_ips": ip_counts.most_common(top_n),
+        "top_ips_by_facet": summarize_top_counts_by_facet(
+            ip_counts_by_facet,
+            normalized_facet_fields,
+            top_n,
+            value_key="ip",
+        ),
         "top_paths": path_counts.most_common(top_n),
+        "top_paths_by_facet": summarize_top_counts_by_facet(
+            path_counts_by_facet,
+            normalized_facet_fields,
+            top_n,
+            value_key="path",
+        ),
         "top_referrers": referrer_counts.most_common(top_n),
         "top_user_agents": user_agent_counts.most_common(top_n),
         "latency_summary": summarize_latencies(latencies_ms),
@@ -3101,12 +3158,32 @@ def format_text_report(result: dict) -> str:
     else:
         lines.append("  (none)")
 
+    if result["faceting"]:
+        lines.append(format_faceting_heading("Top IPs by facet:", result["faceting"]))
+        if result["top_ips_by_facet"]:
+            for row in result["top_ips_by_facet"]:
+                lines.append(
+                    f"  {row['facet_label']} | #{row['rank']} {row['ip']}: {row['count']}"
+                )
+        else:
+            lines.append("  (none)")
+
     lines.append("Top paths:")
     if result["top_paths"]:
         for path, count in result["top_paths"]:
             lines.append(f"  {path}: {count}")
     else:
         lines.append("  (none)")
+
+    if result["faceting"]:
+        lines.append(format_faceting_heading("Top paths by facet:", result["faceting"]))
+        if result["top_paths_by_facet"]:
+            for row in result["top_paths_by_facet"]:
+                lines.append(
+                    f"  {row['facet_label']} | #{row['rank']} {row['path']}: {row['count']}"
+                )
+        else:
+            lines.append("  (none)")
 
     lines.append("Top referrers:")
     if result["top_referrers"]:
@@ -3462,6 +3539,45 @@ def write_path_latency_facet_csv(
             )
 
 
+def write_top_counts_by_facet_csv(
+    destination: str | Path,
+    rows: list[dict],
+    facet_fields: list[str],
+    *,
+    value_field: str,
+    time_window: dict[str, str | int] | None = None,
+) -> None:
+    facet_fieldnames = [f"facet_{field_name}" for field_name in facet_fields]
+    fieldnames = [
+        value_field,
+        "facet_label",
+        *facet_fieldnames,
+        "rank",
+        "count",
+        "window_start",
+        "window_end",
+    ]
+    destination_path = ensure_parent_directory(destination)
+    with destination_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            combined_row = {
+                **row,
+                "window_start": str(time_window["start"]) if time_window else "",
+                "window_end": str(time_window["end"]) if time_window else "",
+            }
+            for field_name in facet_fields:
+                combined_row[f"facet_{field_name}"] = row["facets"].get(field_name, "")
+            writer.writerow(
+                {
+                    field: "" if combined_row.get(field) is None else combined_row.get(field, "")
+                    for field in fieldnames
+                }
+            )
+
+
+
 def write_time_bucket_csv(
     destination: str | Path,
     rows: list[dict],
@@ -3702,6 +3818,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Optional path for a per-path request-latency breakdown split by selected "
             "--facet-field values"
+        ),
+    )
+    parser.add_argument(
+        "--top-ip-facet-csv",
+        help=(
+            "Optional path for a top-IP ranking CSV split by selected --facet-field "
+            "values"
+        ),
+    )
+    parser.add_argument(
+        "--top-path-facet-csv",
+        help=(
+            "Optional path for a top-path ranking CSV split by selected --facet-field "
+            "values"
         ),
     )
     parser.add_argument(
@@ -4008,6 +4138,8 @@ def main(argv: list[str] | None = None) -> int:
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
         args.path_latency_facet_csv,
+        args.top_ip_facet_csv,
+        args.top_path_facet_csv,
         args.upstream_path_latency_facet_csv,
         args.time_bucket_facet_csv,
     ]
@@ -4157,6 +4289,22 @@ def main(argv: list[str] | None = None) -> int:
             normalized_facet_fields,
             result["hotspot_filters"],
             result["time_window"],
+        )
+    if args.top_ip_facet_csv:
+        write_top_counts_by_facet_csv(
+            args.top_ip_facet_csv,
+            result["top_ips_by_facet"],
+            normalized_facet_fields,
+            value_field="ip",
+            time_window=result["time_window"],
+        )
+    if args.top_path_facet_csv:
+        write_top_counts_by_facet_csv(
+            args.top_path_facet_csv,
+            result["top_paths_by_facet"],
+            normalized_facet_fields,
+            value_field="path",
+            time_window=result["time_window"],
         )
     if args.upstream_path_latency_csv:
         write_path_latency_csv(
