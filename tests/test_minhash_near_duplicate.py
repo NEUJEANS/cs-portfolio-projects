@@ -443,6 +443,16 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertTrue((destination / "replica_sync.py").exists())
             self.assertTrue((destination / "lag_demo.json").exists())
 
+    def test_write_preset_corpus_creates_web_dev_component_demo_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "web-dev"
+            written = write_preset_corpus("web-dev-component-clones", destination)
+
+            self.assertEqual(len(written), 8)
+            self.assertTrue((destination / "user_stats_card.tsx").exists())
+            self.assertTrue((destination / "engagement_summary_card.tsx").exists())
+            self.assertTrue((destination / "card-shell.css").exists())
+
     def test_write_preset_corpus_requires_force_when_files_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             destination = Path(tmpdir) / "preset"
@@ -589,6 +599,53 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             corpus_payload = json.loads(corpus_completed.stdout)
             self.assertEqual(corpus_payload["documents_scanned"], payload["files_written"])
             self.assertGreaterEqual(len(corpus_payload["pairs"]), 1)
+
+    def test_cli_write_preset_supports_web_dev_component_corpus_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "preset"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "write-preset",
+                    "web-dev-component-clones",
+                    str(destination),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertGreaterEqual(payload["files_written"], 7)
+
+            corpus_completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "corpus",
+                    str(destination),
+                    "--glob",
+                    "*.md,*.tsx,*.ts,*.css",
+                    "--token-mode",
+                    "code",
+                    "--normalize-identifiers",
+                    "--normalize-literals",
+                    "--shingle-size",
+                    "4",
+                    "--threshold",
+                    "0.15",
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            corpus_payload = json.loads(corpus_completed.stdout)
+            self.assertEqual(corpus_payload["documents_scanned"], payload["files_written"])
+            self.assertGreaterEqual(len(corpus_payload["pairs"]), 2)
 
     def test_cli_compare_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

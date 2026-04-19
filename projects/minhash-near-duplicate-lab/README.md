@@ -23,8 +23,8 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - optional literal normalization for `code` mode so integer, float, string, boolean, and `None`-only edits can be grouped into stronger clone-detection demos
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - benchmark export support for JSON, CSV, or Markdown portfolio summaries
-- curated demo corpus presets for mixed Markdown/code notebooks, data-science feature pipelines, and systems reconciliation stories
-- comma-separated glob support so one run can scan `.md`, `.py`, and `.ipynb` files together
+- curated demo corpus presets for mixed Markdown/code notebooks, data-science feature pipelines, systems reconciliation stories, and web-dev component clone portfolios
+- comma-separated glob support so one run can scan `.md`, `.py`, `.ipynb`, `.tsx`, `.ts`, and other mixed corpus files together
 - CLI output in human-readable or JSON form
 - repository-level tests for API behavior and CLI workflows
 
@@ -117,6 +117,25 @@ Generate a systems-programming preset centered on replica lag / WAL reconciliati
 python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-preset \
   systems-churn-reconciliation \
   tmp/minhash-systems-demo \
+  --json
+```
+
+Generate a frontend-focused preset with near-duplicate React dashboard cards and hooks, then scan `.tsx`, `.ts`, `.md`, and `.css` files together:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-preset \
+  web-dev-component-clones \
+  tmp/minhash-web-dev-demo \
+  --json
+
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus \
+  tmp/minhash-web-dev-demo \
+  --glob '*.tsx,*.ts,*.md,*.css' \
+  --token-mode code \
+  --normalize-identifiers \
+  --normalize-literals \
+  --shingle-size 4 \
+  --threshold 0.15 \
   --json
 ```
 
@@ -220,5 +239,5 @@ python3 -m unittest tests.test_minhash_near_duplicate
 
 ## Future improvements
 - add richer benchmark dataset packs with expected-recall scenarios across tiny, medium, and noisy corpora
-- add a web-dev flavored preset family so clone-detection demos cover frontend/component portfolios too
-- add language-aware literal buckets for lists, dicts, and f-strings in code mode
+- add language-aware literal buckets for lists, dicts, template strings, and JSX-specific inline objects in code mode
+- add an artifact-ready preset bundle exporter that emits sample screenshots/markdown cards alongside the generated frontend corpus
