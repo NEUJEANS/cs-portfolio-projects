@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="page-replacement-mobile-app-session-title page-replacement-mobile-app-session-desc">
+  <title id="page-replacement-mobile-app-session-title">Page replacement frame study chart</title>
+  <desc id="page-replacement-mobile-app-session-desc">Page-fault vs frame-count chart for imported trace mobile-app-session — projects/page-replacement-lab/custom-traces/mobile-app-session.txt</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="36" y="28" width="1008" height="664" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Page faults vs frame count</text>
+  <text x="84" y="96" font-size="16" fill="#475569">imported trace mobile-app-session — projects/page-replacement-lab/custom-traces/mobile-app-session.txt</text>
+<line x1="84" y1="72" x2="112" y2="72" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />
+<text x="122" y="77" font-size="14" fill="#0f172a">FIFO</text>
+<line x1="234" y1="72" x2="262" y2="72" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-dasharray="10 8" />
+<text x="272" y="77" font-size="14" fill="#0f172a">CLOCK</text>
+<line x1="384" y1="72" x2="412" y2="72" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 6" />
+<text x="422" y="77" font-size="14" fill="#0f172a">AGING</text>
+<line x1="534" y1="72" x2="562" y2="72" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 7" />
+<text x="572" y="77" font-size="14" fill="#0f172a">LRU</text>
+<line x1="684" y1="72" x2="712" y2="72" stroke="#10b981" stroke-width="4" stroke-linecap="round" />
+<text x="722" y="77" font-size="14" fill="#0f172a">OPT</text>
+  <line x1="84" y1="118" x2="84" y2="478" stroke="#0f172a" stroke-width="2" />
+  <line x1="84" y1="478" x2="804" y2="478" stroke="#0f172a" stroke-width="2" />
+<line x1="84" y1="478.00" x2="804" y2="478.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="483.00" font-size="13" text-anchor="end" fill="#475569">0</text>
+<line x1="84" y1="418.00" x2="804" y2="418.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="423.00" font-size="13" text-anchor="end" fill="#475569">10</text>
+<line x1="84" y1="358.00" x2="804" y2="358.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="363.00" font-size="13" text-anchor="end" fill="#475569">20</text>
+<line x1="84" y1="298.00" x2="804" y2="298.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="303.00" font-size="13" text-anchor="end" fill="#475569">30</text>
+<line x1="84" y1="238.00" x2="804" y2="238.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="243.00" font-size="13" text-anchor="end" fill="#475569">40</text>
+<line x1="84" y1="178.00" x2="804" y2="178.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="183.00" font-size="13" text-anchor="end" fill="#475569">50</text>
+<line x1="84" y1="118.00" x2="804" y2="118.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="123.00" font-size="13" text-anchor="end" fill="#475569">60</text>
+<text x="84.00" y="506" font-size="13" text-anchor="middle" fill="#475569">3</text>
+<text x="228.00" y="506" font-size="13" text-anchor="middle" fill="#475569">4</text>
+<text x="372.00" y="506" font-size="13" text-anchor="middle" fill="#475569">5</text>
+<text x="516.00" y="506" font-size="13" text-anchor="middle" fill="#475569">6</text>
+<text x="660.00" y="506" font-size="13" text-anchor="middle" fill="#475569">7</text>
+<text x="804.00" y="506" font-size="13" text-anchor="middle" fill="#475569">8</text>
+  <text x="444.00" y="534" font-size="14" text-anchor="middle" fill="#475569">Frames</text>
+  <text x="28" y="298.00" font-size="14" fill="#475569" transform="rotate(-90 28 298.00)">Page faults</text>
+<polyline fill="none" stroke="#ef4444" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,160.00 228.00,178.00 372.00,214.00 516.00,232.00 660.00,232.00 804.00,268.00" />
+<circle cx="84.00" cy="160.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="148.00" font-size="11" text-anchor="middle" fill="#ef4444">53</text>
+<circle cx="228.00" cy="178.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="166.00" font-size="11" text-anchor="middle" fill="#ef4444">50</text>
+<circle cx="372.00" cy="214.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="202.00" font-size="11" text-anchor="middle" fill="#ef4444">44</text>
+<circle cx="516.00" cy="232.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="220.00" font-size="11" text-anchor="middle" fill="#ef4444">41</text>
+<circle cx="660.00" cy="232.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="220.00" font-size="11" text-anchor="middle" fill="#ef4444">41</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#ef4444">35</text>
+<polyline fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,160.00 228.00,178.00 372.00,214.00 516.00,232.00 660.00,232.00 804.00,268.00" stroke-dasharray="10 8" />
+<circle cx="84.00" cy="160.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="148.00" font-size="11" text-anchor="middle" fill="#f59e0b">53</text>
+<circle cx="228.00" cy="178.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="166.00" font-size="11" text-anchor="middle" fill="#f59e0b">50</text>
+<circle cx="372.00" cy="214.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="202.00" font-size="11" text-anchor="middle" fill="#f59e0b">44</text>
+<circle cx="516.00" cy="232.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="220.00" font-size="11" text-anchor="middle" fill="#f59e0b">41</text>
+<circle cx="660.00" cy="232.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="220.00" font-size="11" text-anchor="middle" fill="#f59e0b">41</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#f59e0b">35</text>
+<polyline fill="none" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,172.00 228.00,190.00 372.00,250.00 516.00,256.00 660.00,268.00 804.00,268.00" stroke-dasharray="2 6" />
+<circle cx="84.00" cy="172.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="160.00" font-size="11" text-anchor="middle" fill="#8b5cf6">51</text>
+<circle cx="228.00" cy="190.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="178.00" font-size="11" text-anchor="middle" fill="#8b5cf6">48</text>
+<circle cx="372.00" cy="250.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="238.00" font-size="11" text-anchor="middle" fill="#8b5cf6">38</text>
+<circle cx="516.00" cy="256.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="244.00" font-size="11" text-anchor="middle" fill="#8b5cf6">37</text>
+<circle cx="660.00" cy="268.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="256.00" font-size="11" text-anchor="middle" fill="#8b5cf6">35</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#8b5cf6">35</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,172.00 228.00,190.00 372.00,250.00 516.00,256.00 660.00,268.00 804.00,268.00" stroke-dasharray="4 7" />
+<circle cx="84.00" cy="172.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="160.00" font-size="11" text-anchor="middle" fill="#2563eb">51</text>
+<circle cx="228.00" cy="190.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="178.00" font-size="11" text-anchor="middle" fill="#2563eb">48</text>
+<circle cx="372.00" cy="250.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="238.00" font-size="11" text-anchor="middle" fill="#2563eb">38</text>
+<circle cx="516.00" cy="256.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="244.00" font-size="11" text-anchor="middle" fill="#2563eb">37</text>
+<circle cx="660.00" cy="268.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="256.00" font-size="11" text-anchor="middle" fill="#2563eb">35</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#2563eb">35</text>
+<polyline fill="none" stroke="#10b981" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,256.00 228.00,280.00 372.00,292.00 516.00,298.00 660.00,298.00 804.00,298.00" />
+<circle cx="84.00" cy="256.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="244.00" font-size="11" text-anchor="middle" fill="#10b981">37</text>
+<circle cx="228.00" cy="280.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="268.00" font-size="11" text-anchor="middle" fill="#10b981">33</text>
+<circle cx="372.00" cy="292.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="280.00" font-size="11" text-anchor="middle" fill="#10b981">31</text>
+<circle cx="516.00" cy="298.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="286.00" font-size="11" text-anchor="middle" fill="#10b981">30</text>
+<circle cx="660.00" cy="298.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="286.00" font-size="11" text-anchor="middle" fill="#10b981">30</text>
+<circle cx="804.00" cy="298.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="286.00" font-size="11" text-anchor="middle" fill="#10b981">30</text>
+  <rect x="64" y="514" width="952" height="142" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+<text x="84" y="545" font-size="18" fill="#0f172a">workload: imported trace mobile-app-session — projects/page-replacement-lab/custom-traces/mobile-app-session.txt</text>
+<text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (31.83)</text>
+<text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
+<text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
+</svg>

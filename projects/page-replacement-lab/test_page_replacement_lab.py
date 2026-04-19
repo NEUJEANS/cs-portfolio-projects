@@ -313,6 +313,83 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertGreater(workload["reference_length"], 40)
             self.assertEqual(workload["reference_source"], "benchmark:db-hotset-scan")
 
+    def test_cli_gallery_accepts_imported_pages_file_workloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            custom_path = Path(tmpdir) / "mobile-app-session.txt"
+            custom_path.write_text(
+                "1 2 3 1 2 4 1 2 5 6 7 5 6 7 8 9 8 9\n",
+                encoding="utf-8",
+            )
+            artifact_dir = Path(tmpdir) / "gallery"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "gallery",
+                    "--min-frames",
+                    "3",
+                    "--max-frames",
+                    "6",
+                    "--preset",
+                    "classic-belady",
+                    "--pages-file",
+                    str(custom_path),
+                    "--artifact-dir",
+                    str(artifact_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            html = (artifact_dir / "index.html").read_text(encoding="utf-8")
+            custom_json = json.loads((artifact_dir / "mobile-app-session-study.json").read_text(encoding="utf-8"))
+            trace_summary_html = (artifact_dir / "mobile-app-session-trace-summary.html").read_text(encoding="utf-8")
+
+            self.assertIn("gallery workloads: 2", completed.stdout)
+            self.assertEqual(custom_json["reference_source"], f"pages-file:{custom_path}")
+            self.assertIn("custom imported trace", html)
+            self.assertIn("custom trace card", html)
+            self.assertIn("mobile-app-session-trace-summary.html", html)
+            self.assertIn("Page Replacement Trace Summary", trace_summary_html)
+            self.assertIn(str(custom_path), trace_summary_html)
+
+    def test_cli_gallery_json_with_only_pages_file_reports_trace_summary_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            custom_path = Path(tmpdir) / "one-off-trace.json"
+            custom_path.write_text(
+                json.dumps([1, 2, 3, 1, 2, 4, 5, 4, 5, 6]),
+                encoding="utf-8",
+            )
+            artifact_dir = Path(tmpdir) / "gallery"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "gallery",
+                    "--min-frames",
+                    "2",
+                    "--max-frames",
+                    "5",
+                    "--pages-file",
+                    str(custom_path),
+                    "--artifact-dir",
+                    str(artifact_dir),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(len(payload["workloads"]), 1)
+            workload = payload["workloads"][0]
+            self.assertEqual(workload["type"], "custom")
+            self.assertEqual(workload["workload"], "one-off-trace")
+            self.assertTrue(workload["reference_source"].startswith("pages-file:"))
+            self.assertEqual(workload["trace_summary_paths"]["html"], "one-off-trace-trace-summary.html")
+            self.assertGreaterEqual(workload["trace_summary_phase_hint_count"], 0)
+
     def test_cli_trace_summary_json_writes_markdown_svg_and_html_reports(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             markdown_path = Path(tmpdir) / "trace-summary.md"

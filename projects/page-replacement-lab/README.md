@@ -22,11 +22,11 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - list larger built-in trace benchmarks that model phase shifts, hot-set scans, and streaming-window bursts
 - export structured JSON for reports, demos, or frontend visualizations later
 - export study results as Markdown, CSV, and self-contained SVG cards for README screenshots and portfolio pages
-- generate a multi-workload HTML gallery that can mix compact presets with heavier trace benchmarks and downloadable Markdown / SVG / CSV / JSON companions
+- generate a multi-workload HTML gallery that can mix compact presets, heavier trace benchmarks, and imported custom traces with downloadable Markdown / SVG / CSV / JSON companions
 - summarize imported traces with reuse-distance buckets, sliding working-set sizes, and phase-boundary hints that explain why a workload changes policy behavior
 - export trace-summary results as Markdown, slide-ready SVG cards, and browsable HTML companion pages
 - build a cross-workload aggregate dashboard with normalized average page-fault-rate charts plus CSV / SVG / JSON / HTML artifacts
-- mix imported `--pages-file` workloads into aggregate dashboard runs without editing the source code
+- mix imported `--pages-file` workloads into aggregate dashboard or gallery runs without editing the source code
 
 ## Quick start
 
@@ -79,6 +79,16 @@ python3 projects/page-replacement-lab/page_replacement_lab.py gallery --min-fram
   --artifact-dir docs/artifacts/page-replacement-lab/gallery \
   --include-benchmarks
 ```
+
+### Mix one or more imported traces into the gallery with drill-down cards
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py gallery --min-frames 3 --max-frames 8 \
+  --preset classic-belady \
+  --pages-file projects/page-replacement-lab/custom-traces/mobile-app-session.txt \
+  --artifact-dir docs/artifacts/page-replacement-lab/gallery
+```
+
+Repeat `--pages-file` to add more imported traces, each with its own study bundle plus trace-summary drill-down card.
 
 ### Summarize a heavier trace for reuse distance and phase hints
 ```bash
@@ -136,7 +146,7 @@ These presets make demos reproducible and help explain how locality changes poli
 - `streaming-burst-window` — stream-processing working-set shifts with cold backfill bursts and rolling-window updates
 
 These benchmark bundles are longer than the compact presets and better for portfolio screenshots that need stronger separation between locality-friendly and scan-heavy workloads.
-Use exactly one of `--preset`, `--benchmark`, or explicit `--page` / `--pages-file` input for a single-workload run. The `aggregate` command can intentionally mix repeated `--preset`, `--benchmark`, and `--pages-file` selections in one dashboard build.
+Use exactly one of `--preset`, `--benchmark`, or explicit `--page` / `--pages-file` input for a single-workload run. The `aggregate` and `gallery` commands can intentionally mix repeated `--preset`, `--benchmark`, and `--pages-file` selections in one dashboard build or gallery export.
 
 ## Example output
 ```text
@@ -156,10 +166,12 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/classic-belady-study.md` — narrative study report with the winner table and anomaly callouts
 - `docs/artifacts/page-replacement-lab/classic-belady-study.svg` — screenshot-ready chart card for README or portfolio galleries
 - `docs/artifacts/page-replacement-lab/classic-belady-study.csv` — spreadsheet/chart-friendly export of the same frame sweep
-- `docs/artifacts/page-replacement-lab/gallery/index.html` — browsable multi-workload gallery with inline SVG charts and download links for each preset and benchmark bundle
+- `docs/artifacts/page-replacement-lab/gallery/index.html` — browsable multi-workload gallery with inline SVG charts, benchmark bundles, and imported-trace drill-down links
 - `docs/artifacts/page-replacement-lab/gallery/compiler-phase-shift-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the compiler phase-shift workload
 - `docs/artifacts/page-replacement-lab/gallery/db-hotset-scan-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the dashboard/analytics scan workload
 - `docs/artifacts/page-replacement-lab/gallery/streaming-burst-window-study.{md,svg,csv,json}` — committed heavier-trace benchmark bundle for the streaming-window workload
+- `docs/artifacts/page-replacement-lab/gallery/mobile-app-session-study.{md,svg,csv,json}` — committed imported-trace study bundle used to demonstrate gallery-ready custom workloads
+- `docs/artifacts/page-replacement-lab/gallery/mobile-app-session-trace-summary.{md,svg,html,json}` — committed drill-down card bundle for the imported mobile-app-session trace
 - `docs/artifacts/page-replacement-lab/compiler-phase-shift-trace-summary.{md,json}` — committed reuse-distance and phase-hint report for the compiler-style benchmark trace
 - `docs/artifacts/page-replacement-lab/compiler-phase-shift-trace-summary.svg` — slide-ready trace-summary card with reuse-distance buckets and per-window pressure charts
 - `docs/artifacts/page-replacement-lab/compiler-phase-shift-trace-summary.html` — browsable trace-summary companion page with the inline SVG card plus bucket/window tables
@@ -169,7 +181,7 @@ best faults: 7 (opt)
 - `docs/artifacts/page-replacement-lab/aggregate/aggregate-summary.json` — machine-readable aggregate payload for future frontend or notebook reuse
 - `docs/artifacts/page-replacement-lab/custom-aggregate/index.html` — committed mixed aggregate dashboard that includes a custom imported trace file alongside built-in workloads
 - `docs/artifacts/page-replacement-lab/custom-aggregate/aggregate-summary.json` — sample mixed-workload payload that records preset / benchmark / custom counts together
-- `projects/page-replacement-lab/custom-traces/mobile-app-session.txt` — sample imported trace file used to demonstrate custom aggregate workflows without editing the source code
+- `projects/page-replacement-lab/custom-traces/mobile-app-session.txt` — sample imported trace file used to demonstrate custom aggregate and gallery workflows without editing the source code
 
 ## Testing
 ```bash
@@ -190,4 +202,3 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - add working-set or WSClock-style algorithms for richer policy comparisons
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
 - add side-by-side imported-trace comparison cards for portfolio slides
-- let imported custom traces flow into the gallery workflow with per-workload drill-down cards, not just the aggregate dashboard

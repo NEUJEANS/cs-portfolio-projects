@@ -13,6 +13,8 @@
 - [x] regression coverage for gallery bundle generation and unique inline-SVG accessibility IDs
 - [x] larger trace-file benchmark bundles beyond the small built-in presets, including benchmark listing, benchmark-aware compare/study flows, and mixed gallery exports
 - [x] trace-summary SVG / HTML card exports for slide-ready locality summaries
+- [x] gallery support for imported custom traces with per-workload trace-summary drill-down cards
+- [x] regression coverage for imported gallery workloads and trace-summary bundle paths
 
 ## Current demo-ready flow
 - [x] list built-in workloads and larger trace benchmarks for an interview or portfolio walkthrough
@@ -21,8 +23,9 @@
 - [x] study multiple frame counts and call out FIFO anomalies or Clock regressions
 - [x] export JSON for downstream charts or frontend demos
 - [x] export Markdown / SVG / CSV study artifacts for screenshots and portfolio cards
-- [x] generate a browsable gallery that bundles built-in presets plus larger benchmark traces into one static HTML artifact page
+- [x] generate a browsable gallery that bundles built-in presets, larger benchmark traces, and imported custom traces into one static HTML artifact page
 - [x] export trace-summary Markdown / SVG / HTML artifacts for a benchmark or imported workload
+- [x] link imported gallery workloads to their own drill-down trace-summary cards
 
 ## Next vertical slices
 - [x] add aging-style page replacement for stronger systems realism

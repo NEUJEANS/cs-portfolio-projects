@@ -715,6 +715,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="add all built-in trace benchmarks to the default preset gallery",
     )
     gallery_parser.add_argument(
+        "--pages-file",
+        dest="gallery_pages_files",
+        action="append",
+        metavar="PATH",
+        type=Path,
+        help="repeat to include imported custom trace files with per-workload drill-down cards",
+    )
+    gallery_parser.add_argument(
         "--artifact-dir",
         type=Path,
         required=True,
@@ -817,6 +825,10 @@ def format_reference_source(reference_source: str) -> str:
     if reference_source.startswith("benchmark:"):
         benchmark = resolve_trace_benchmark(reference_source.split(":", 1)[1])
         return f"source: benchmark {benchmark.name} — {benchmark.description}"
+    if reference_source.startswith("pages-file:"):
+        display_path = reference_source.split(":", 1)[1]
+        workload_name = Path(display_path).stem or display_path
+        return f"source: imported trace {workload_name} — {display_path}"
     return "source: custom"
 
 
@@ -961,6 +973,10 @@ def describe_reference_label(reference_source: str) -> str:
     if reference_source.startswith("benchmark:"):
         benchmark = resolve_trace_benchmark(reference_source.split(":", 1)[1])
         return f"benchmark {benchmark.name} — {benchmark.description}"
+    if reference_source.startswith("pages-file:"):
+        display_path = reference_source.split(":", 1)[1]
+        workload_name = Path(display_path).stem or display_path
+        return f"imported trace {workload_name} — {display_path}"
     return "custom workload"
 
 
@@ -1333,6 +1349,66 @@ def format_average_fault_summary(averages: dict[str, float]) -> list[str]:
     return [f"{algorithm.upper()}: {averages[algorithm]:.2f}" for algorithm in ALGORITHMS]
 
 
+def build_trace_summary_bundle(
+    workload: GalleryWorkload,
+    *,
+    artifact_dir: Path,
+    html_dir: Path,
+    window_size: int = 8,
+    phase_threshold: float = 0.45,
+) -> dict:
+    reference_source = workload.reference_source
+    payload = summarize_trace(
+        workload.reference_string,
+        window_size=window_size,
+        phase_threshold=phase_threshold,
+    )
+    payload["reference_source"] = reference_source
+    stem = f"{workload.name}-trace-summary"
+    markdown_path = artifact_dir / f"{stem}.md"
+    svg_path = artifact_dir / f"{stem}.svg"
+    html_path = artifact_dir / f"{stem}.html"
+    json_path = artifact_dir / f"{stem}.json"
+
+    write_text_output(
+        markdown_path,
+        format_trace_summary_markdown(payload, reference_source=reference_source),
+    )
+    svg_markup = format_trace_summary_svg(
+        payload,
+        reference_source=reference_source,
+        id_prefix=f"page-replacement-trace-summary-{workload.name}",
+    )
+    write_text_output(svg_path, svg_markup)
+    write_text_output(json_path, json.dumps(payload, indent=2) + "\n")
+    write_text_output(
+        html_path,
+        format_trace_summary_html(
+            payload,
+            reference_source=reference_source,
+            inline_svg=format_trace_summary_svg(
+                payload,
+                reference_source=reference_source,
+                id_prefix=f"gallery-trace-summary-{workload.name}",
+            ),
+            downloads=[
+                ("Markdown", os.path.relpath(markdown_path, html_path.parent)),
+                ("SVG", os.path.relpath(svg_path, html_path.parent)),
+                ("JSON", os.path.relpath(json_path, html_path.parent)),
+            ],
+        ),
+    )
+    return {
+        "payload": payload,
+        "relative_paths": {
+            "markdown": os.path.relpath(markdown_path, html_dir),
+            "svg": os.path.relpath(svg_path, html_dir),
+            "html": os.path.relpath(html_path, html_dir),
+            "json": os.path.relpath(json_path, html_dir),
+        },
+    }
+
+
 def build_gallery_run(
     workload: GalleryWorkload,
     *,
@@ -1365,6 +1441,14 @@ def build_gallery_run(
     write_study_csv(csv_path, payload, reference_source=reference_source)
     write_study_json(json_path, payload)
 
+    trace_summary = None
+    if workload.source_kind == "custom":
+        trace_summary = build_trace_summary_bundle(
+            workload,
+            artifact_dir=artifact_dir,
+            html_dir=html_dir,
+        )
+
     averages = summarize_fault_averages(payload)
     best_average = min(averages.values())
     best_average_winners = [
@@ -1389,6 +1473,7 @@ def build_gallery_run(
             "csv": os.path.relpath(csv_path, html_dir),
             "json": os.path.relpath(json_path, html_dir),
         },
+        "trace_summary": trace_summary,
         "inline_svg": format_study_svg(
             payload,
             reference_source=reference_source,
@@ -1405,10 +1490,11 @@ def format_gallery_text(gallery_runs: list[dict], *, html_path: Path) -> str:
     for run in gallery_runs:
         winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
         workload = run["workload"]
+        drilldown_suffix = ", trace drill-down=yes" if run["trace_summary"] else ""
         lines.append(
             f"- {workload.source_kind} {workload.name}: best average faults {winners} ({run['best_average_faults']:.2f}), "
             f"fifo anomaly={'yes' if run['fifo_has_anomaly'] else 'no'}, "
-            f"other regressions={len(run['non_fifo_violations'])}"
+            f"other regressions={len(run['non_fifo_violations'])}{drilldown_suffix}"
         )
     return "\n".join(lines)
 
@@ -1427,6 +1513,10 @@ def format_gallery_html(
     benchmark_count = sum(
         1 for run in gallery_runs if run["workload"].source_kind == "benchmark"
     )
+    custom_count = sum(
+        1 for run in gallery_runs if run["workload"].source_kind == "custom"
+    )
+    trace_drilldown_count = sum(1 for run in gallery_runs if run["trace_summary"])
     winner_counts: dict[str, int] = {algorithm: 0 for algorithm in ALGORITHMS}
     for run in gallery_runs:
         for algorithm in run["best_average_winners"]:
@@ -1440,6 +1530,12 @@ def format_gallery_html(
         workload = run["workload"]
         section_id = f"workload-{make_safe_identifier(workload.name)}"
         winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
+        drilldown_cell = "—"
+        if run["trace_summary"]:
+            drilldown_cell = (
+                f'<a href="{escape(run["trace_summary"]["relative_paths"]["html"])}">'
+                'custom trace card</a>'
+            )
         summary_rows.append(
             "<tr>"
             f"<td>{escape(workload.source_kind)}</td>"
@@ -1448,6 +1544,7 @@ def format_gallery_html(
             f"<td>{run['best_average_faults']:.2f} ({escape(winners)})</td>"
             f"<td>{'yes' if run['fifo_has_anomaly'] else 'no'}</td>"
             f"<td>{len(run['non_fifo_violations'])}</td>"
+            f"<td>{drilldown_cell}</td>"
             "</tr>"
         )
 
@@ -1490,6 +1587,42 @@ def format_gallery_html(
                 ("JSON", run["relative_paths"]["json"]),
             )
         )
+        trace_summary_panel = ""
+        if run["trace_summary"]:
+            trace_payload = run["trace_summary"]["payload"]
+            working_set = trace_payload["working_set_stats"]
+            reuse_stats = trace_payload["reuse_distance_stats"]
+            reuse_line = (
+                f"min {reuse_stats['min']}, median {reuse_stats['median']:.1f}, p90 {reuse_stats['p90']:.1f}, max {reuse_stats['max']}, avg {reuse_stats['average']:.2f}"
+                if reuse_stats["count"]
+                else "no repeated pages in this workload"
+            )
+            trace_downloads = " · ".join(
+                f'<a href="{escape(path)}">{label}</a>'
+                for label, path in (
+                    ("HTML", run["trace_summary"]["relative_paths"]["html"]),
+                    ("Markdown", run["trace_summary"]["relative_paths"]["markdown"]),
+                    ("SVG", run["trace_summary"]["relative_paths"]["svg"]),
+                    ("JSON", run["trace_summary"]["relative_paths"]["json"]),
+                )
+            )
+            trace_summary_panel = (
+                '<div class="meta-panel">'
+                '<h3>Custom trace drill-down</h3>'
+                '<ul>'
+                f'<li>window size {trace_payload["window_size"]}</li>'
+                f'<li>working-set range {working_set["min"]}–{working_set["max"]} (avg {working_set["average"]:.2f})</li>'
+                f'<li>phase hints {len(trace_payload["phase_boundaries"])}</li>'
+                f'<li>reuse summary {escape(reuse_line)}</li>'
+                '</ul>'
+                f'<p class="muted">Trace drill-down downloads: {trace_downloads}</p>'
+                '</div>'
+            )
+        trace_chip = (
+            '<span class="chip chip--accent">trace drill-down ready</span>'
+            if run["trace_summary"]
+            else ""
+        )
         sections.append(
             f"<section class=\"study-card\" id=\"{section_id}\">"
             "<div class=\"study-card__header\">"
@@ -1500,13 +1633,15 @@ def format_gallery_html(
             f"<span class=\"chip\">reference length {len(workload.reference_string)}</span>"
             f"<span class=\"chip chip--accent\">best average {'/'.join(algorithm.upper() for algorithm in run['best_average_winners'])}</span>"
             f"<span class=\"chip {'chip--warn' if run['fifo_has_anomaly'] else 'chip--ok'}\">FIFO anomaly {'yes' if run['fifo_has_anomaly'] else 'no'}</span>"
+            f"{trace_chip}"
             "</div>"
             "</div>"
-            f"<figure>{run['inline_svg']}<figcaption>Downloads: {download_links}</figcaption></figure>"
+            f"<figure>{run['inline_svg']}<figcaption>Study downloads: {download_links}</figcaption></figure>"
             "<div class=\"study-card__meta\">"
             f"<div class=\"meta-panel\"><h3>Average faults</h3><ul>{average_items}</ul></div>"
             f"<div class=\"meta-panel\"><h3>FIFO anomaly callouts</h3><ul>{fifo_items}</ul></div>"
             f"<div class=\"meta-panel\"><h3>Other regressions</h3><ul>{other_items}</ul></div>"
+            f"{trace_summary_panel}"
             "</div>"
             "</section>"
         )
@@ -1563,6 +1698,8 @@ def format_gallery_html(
       .meta-panel h3 {{ margin-bottom: 10px; font-size: 1rem; }}
       .meta-panel ul {{ margin: 0; padding-left: 18px; color: var(--muted); }}
       .meta-panel li + li {{ margin-top: 8px; }}
+      .meta-panel p {{ margin: 10px 0 0; }}
+      .muted {{ color: var(--muted); }}
       @media (max-width: 900px) {{
         .study-card__header {{ flex-direction: column; }}
         .study-card__chips {{ justify-content: flex-start; }}
@@ -1573,10 +1710,12 @@ def format_gallery_html(
     <main>
       <section class="hero">
         <h1>Page Replacement Study Gallery</h1>
-        <p>Frame-range study cards for the built-in workloads in <code>page-replacement-lab</code>. The gallery can mix compact presets with larger trace-benchmark bundles, keeps the screenshot-ready SVG inline, links the exported Markdown / SVG / CSV / JSON companions, and highlights where FIFO or other policies regress as frame count increases.</p>
+        <p>Frame-range study cards for <code>page-replacement-lab</code>. The gallery can mix compact presets, larger trace benchmarks, and imported custom traces, keeps the screenshot-ready SVG study cards inline, links the exported Markdown / SVG / CSV / JSON companions, and now adds trace-summary drill-down cards for imported workloads.</p>
         <ul class="summary-grid">
           <li><strong>{workload_count}</strong> workloads</li>
           <li><strong>{benchmark_count}</strong> trace benchmarks</li>
+          <li><strong>{custom_count}</strong> imported traces</li>
+          <li><strong>{trace_drilldown_count}</strong> trace drill-down cards</li>
           <li><strong>{min_frames}–{max_frames}</strong> frame range</li>
           <li><strong>{fifo_anomaly_count}</strong> FIFO anomaly workloads</li>
           <li><strong>{non_fifo_regression_count}</strong> workloads with non-FIFO regressions</li>
@@ -1593,6 +1732,7 @@ def format_gallery_html(
               <th>Best average faults</th>
               <th>FIFO anomaly</th>
               <th>Other regressions</th>
+              <th>Drill-down</th>
             </tr>
           </thead>
           <tbody>
@@ -1607,7 +1747,6 @@ def format_gallery_html(
   </body>
 </html>
 '''
-
 
 def select_lowest_keys(values: dict[str, float], *, tolerance: float = 1e-12) -> list[str]:
     best_value = min(values.values())
@@ -2785,6 +2924,7 @@ def main(argv: list[str] | None = None) -> int:
             workloads = resolve_gallery_workloads(
                 args.gallery_presets,
                 args.gallery_benchmarks,
+                selected_pages_files=args.gallery_pages_files,
                 include_benchmarks=args.include_benchmarks,
             )
             html_path = args.html_out or (args.artifact_dir / "index.html")
@@ -2826,6 +2966,16 @@ def main(argv: list[str] | None = None) -> int:
                                     "fifo_has_anomaly": run["fifo_has_anomaly"],
                                     "non_fifo_regression_count": len(run["non_fifo_violations"]),
                                     "paths": run["relative_paths"],
+                                    "trace_summary_paths": (
+                                        run["trace_summary"]["relative_paths"]
+                                        if run["trace_summary"]
+                                        else None
+                                    ),
+                                    "trace_summary_phase_hint_count": (
+                                        len(run["trace_summary"]["payload"]["phase_boundaries"])
+                                        if run["trace_summary"]
+                                        else 0
+                                    ),
                                 }
                                 for run in gallery_runs
                             ],

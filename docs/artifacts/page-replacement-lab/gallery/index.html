@@ -50,6 +50,8 @@
       .meta-panel h3 { margin-bottom: 10px; font-size: 1rem; }
       .meta-panel ul { margin: 0; padding-left: 18px; color: var(--muted); }
       .meta-panel li + li { margin-top: 8px; }
+      .meta-panel p { margin: 10px 0 0; }
+      .muted { color: var(--muted); }
       @media (max-width: 900px) {
         .study-card__header { flex-direction: column; }
         .study-card__chips { justify-content: flex-start; }
@@ -60,14 +62,16 @@
     <main>
       <section class="hero">
         <h1>Page Replacement Study Gallery</h1>
-        <p>Frame-range study cards for the built-in workloads in <code>page-replacement-lab</code>. The gallery can mix compact presets with larger trace-benchmark bundles, keeps the screenshot-ready SVG inline, links the exported Markdown / SVG / CSV / JSON companions, and highlights where FIFO or other policies regress as frame count increases.</p>
+        <p>Frame-range study cards for <code>page-replacement-lab</code>. The gallery can mix compact presets, larger trace benchmarks, and imported custom traces, keeps the screenshot-ready SVG study cards inline, links the exported Markdown / SVG / CSV / JSON companions, and now adds trace-summary drill-down cards for imported workloads.</p>
         <ul class="summary-grid">
-          <li><strong>7</strong> workloads</li>
+          <li><strong>8</strong> workloads</li>
           <li><strong>3</strong> trace benchmarks</li>
+          <li><strong>1</strong> imported traces</li>
+          <li><strong>1</strong> trace drill-down cards</li>
           <li><strong>3–8</strong> frame range</li>
           <li><strong>1</strong> FIFO anomaly workloads</li>
           <li><strong>1</strong> workloads with non-FIFO regressions</li>
-          <li><strong>Winner tally</strong>FIFO × 0, CLOCK × 0, AGING × 0, LRU × 0, OPT × 7</li>
+          <li><strong>Winner tally</strong>FIFO × 0, CLOCK × 0, AGING × 0, LRU × 0, OPT × 8</li>
         </ul>
       </section>
       <section class="summary-table">
@@ -80,10 +84,11 @@
               <th>Best average faults</th>
               <th>FIFO anomaly</th>
               <th>Other regressions</th>
+              <th>Drill-down</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td>preset</td><td><a href="#workload-classic-belady"><code>classic-belady</code></a></td><td>classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames</td><td>5.50 (OPT)</td><td>yes</td><td>1</td></tr><tr><td>preset</td><td><a href="#workload-looping-hotset"><code>looping-hotset</code></a></td><td>small hot working set with a short burst page that rewards recency-aware policies</td><td>4.33 (OPT)</td><td>no</td><td>0</td></tr><tr><td>preset</td><td><a href="#workload-scan-then-reuse"><code>scan-then-reuse</code></a></td><td>large sequential scan followed by a tighter reuse window to show cache pollution pressure</td><td>7.33 (OPT)</td><td>no</td><td>0</td></tr><tr><td>preset</td><td><a href="#workload-mixed-locality-bursts"><code>mixed-locality-bursts</code></a></td><td>alternates hot-loop bursts with cold misses to mimic uneven interactive workloads</td><td>6.50 (OPT)</td><td>no</td><td>0</td></tr><tr><td>benchmark</td><td><a href="#workload-compiler-phase-shift"><code>compiler-phase-shift</code></a></td><td>larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts</td><td>36.00 (OPT)</td><td>no</td><td>0</td></tr><tr><td>benchmark</td><td><a href="#workload-db-hotset-scan"><code>db-hotset-scan</code></a></td><td>dashboard-style hot pages interrupted by analytics scans and checkpoint bursts</td><td>32.33 (OPT)</td><td>no</td><td>0</td></tr><tr><td>benchmark</td><td><a href="#workload-streaming-burst-window"><code>streaming-burst-window</code></a></td><td>stream-processing sliding window with cold backfill bursts and shifting hotsets</td><td>37.50 (OPT)</td><td>no</td><td>0</td></tr>
+            <tr><td>preset</td><td><a href="#workload-classic-belady"><code>classic-belady</code></a></td><td>classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames</td><td>5.50 (OPT)</td><td>yes</td><td>1</td><td>—</td></tr><tr><td>preset</td><td><a href="#workload-looping-hotset"><code>looping-hotset</code></a></td><td>small hot working set with a short burst page that rewards recency-aware policies</td><td>4.33 (OPT)</td><td>no</td><td>0</td><td>—</td></tr><tr><td>preset</td><td><a href="#workload-scan-then-reuse"><code>scan-then-reuse</code></a></td><td>large sequential scan followed by a tighter reuse window to show cache pollution pressure</td><td>7.33 (OPT)</td><td>no</td><td>0</td><td>—</td></tr><tr><td>preset</td><td><a href="#workload-mixed-locality-bursts"><code>mixed-locality-bursts</code></a></td><td>alternates hot-loop bursts with cold misses to mimic uneven interactive workloads</td><td>6.50 (OPT)</td><td>no</td><td>0</td><td>—</td></tr><tr><td>benchmark</td><td><a href="#workload-compiler-phase-shift"><code>compiler-phase-shift</code></a></td><td>larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts</td><td>36.00 (OPT)</td><td>no</td><td>0</td><td>—</td></tr><tr><td>benchmark</td><td><a href="#workload-db-hotset-scan"><code>db-hotset-scan</code></a></td><td>dashboard-style hot pages interrupted by analytics scans and checkpoint bursts</td><td>32.33 (OPT)</td><td>no</td><td>0</td><td>—</td></tr><tr><td>benchmark</td><td><a href="#workload-streaming-burst-window"><code>streaming-burst-window</code></a></td><td>stream-processing sliding window with cold backfill bursts and shifting hotsets</td><td>37.50 (OPT)</td><td>no</td><td>0</td><td>—</td></tr><tr><td>custom</td><td><a href="#workload-mobile-app-session"><code>mobile-app-session</code></a></td><td>custom imported trace from projects/page-replacement-lab/custom-traces/mobile-app-session.txt</td><td>31.83 (OPT)</td><td>no</td><td>0</td><td><a href="mobile-app-session-trace-summary.html">custom trace card</a></td></tr>
           </tbody>
         </table>
       </section>
@@ -207,7 +212,7 @@
 <text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (5.50)</text>
 <text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: 3 -&gt; 4 frames, 9 -&gt; 10 faults</text>
 <text x="84" y="629" font-size="18" fill="#0f172a">Other regression: CLOCK 3 -&gt; 4 frames, 9 -&gt; 10 faults</text>
-</svg><figcaption>Downloads: <a href="classic-belady-study.md">Markdown</a> · <a href="classic-belady-study.svg">SVG</a> · <a href="classic-belady-study.csv">CSV</a> · <a href="classic-belady-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 6.50</code></li><li><code>CLOCK: 6.50</code></li><li><code>AGING: 6.33</code></li><li><code>LRU: 6.33</code></li><li><code>OPT: 5.50</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>frames 3 → 4: 9 → 10 (+1)</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>CLOCK: frames 3 → 4 9 → 10 (+1)</li></ul></div></div></section><section class="study-card" id="workload-looping-hotset"><div class="study-card__header"><div><h2><code>looping-hotset</code></h2><p>small hot working set with a short burst page that rewards recency-aware policies</p></div><div class="study-card__chips"><span class="chip">preset</span><span class="chip">frames 3–8</span><span class="chip">reference length 12</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-looping-hotset-title gallery-looping-hotset-desc">
+</svg><figcaption>Study downloads: <a href="classic-belady-study.md">Markdown</a> · <a href="classic-belady-study.svg">SVG</a> · <a href="classic-belady-study.csv">CSV</a> · <a href="classic-belady-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 6.50</code></li><li><code>CLOCK: 6.50</code></li><li><code>AGING: 6.33</code></li><li><code>LRU: 6.33</code></li><li><code>OPT: 5.50</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>frames 3 → 4: 9 → 10 (+1)</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>CLOCK: frames 3 → 4 9 → 10 (+1)</li></ul></div></div></section><section class="study-card" id="workload-looping-hotset"><div class="study-card__header"><div><h2><code>looping-hotset</code></h2><p>small hot working set with a short burst page that rewards recency-aware policies</p></div><div class="study-card__chips"><span class="chip">preset</span><span class="chip">frames 3–8</span><span class="chip">reference length 12</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-looping-hotset-title gallery-looping-hotset-desc">
   <title id="gallery-looping-hotset-title">Page replacement frame study chart</title>
   <desc id="gallery-looping-hotset-desc">Page-fault vs frame-count chart for preset looping-hotset — small hot working set with a short burst page that rewards recency-aware policies</desc>
   <rect width="100%" height="100%" fill="#f8fafc" />
@@ -326,7 +331,7 @@
 <text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (4.33)</text>
 <text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
 <text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
-</svg><figcaption>Downloads: <a href="looping-hotset-study.md">Markdown</a> · <a href="looping-hotset-study.svg">SVG</a> · <a href="looping-hotset-study.csv">CSV</a> · <a href="looping-hotset-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 5.00</code></li><li><code>CLOCK: 5.00</code></li><li><code>AGING: 4.67</code></li><li><code>LRU: 4.67</code></li><li><code>OPT: 4.33</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-scan-then-reuse"><div class="study-card__header"><div><h2><code>scan-then-reuse</code></h2><p>large sequential scan followed by a tighter reuse window to show cache pollution pressure</p></div><div class="study-card__chips"><span class="chip">preset</span><span class="chip">frames 3–8</span><span class="chip">reference length 15</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-scan-then-reuse-title gallery-scan-then-reuse-desc">
+</svg><figcaption>Study downloads: <a href="looping-hotset-study.md">Markdown</a> · <a href="looping-hotset-study.svg">SVG</a> · <a href="looping-hotset-study.csv">CSV</a> · <a href="looping-hotset-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 5.00</code></li><li><code>CLOCK: 5.00</code></li><li><code>AGING: 4.67</code></li><li><code>LRU: 4.67</code></li><li><code>OPT: 4.33</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-scan-then-reuse"><div class="study-card__header"><div><h2><code>scan-then-reuse</code></h2><p>large sequential scan followed by a tighter reuse window to show cache pollution pressure</p></div><div class="study-card__chips"><span class="chip">preset</span><span class="chip">frames 3–8</span><span class="chip">reference length 15</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-scan-then-reuse-title gallery-scan-then-reuse-desc">
   <title id="gallery-scan-then-reuse-title">Page replacement frame study chart</title>
   <desc id="gallery-scan-then-reuse-desc">Page-fault vs frame-count chart for preset scan-then-reuse — large sequential scan followed by a tighter reuse window to show cache pollution pressure</desc>
   <rect width="100%" height="100%" fill="#f8fafc" />
@@ -439,7 +444,7 @@
 <text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (7.33)</text>
 <text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
 <text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
-</svg><figcaption>Downloads: <a href="scan-then-reuse-study.md">Markdown</a> · <a href="scan-then-reuse-study.svg">SVG</a> · <a href="scan-then-reuse-study.csv">CSV</a> · <a href="scan-then-reuse-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 9.50</code></li><li><code>CLOCK: 9.50</code></li><li><code>AGING: 8.67</code></li><li><code>LRU: 8.67</code></li><li><code>OPT: 7.33</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-mixed-locality-bursts"><div class="study-card__header"><div><h2><code>mixed-locality-bursts</code></h2><p>alternates hot-loop bursts with cold misses to mimic uneven interactive workloads</p></div><div class="study-card__chips"><span class="chip">preset</span><span class="chip">frames 3–8</span><span class="chip">reference length 18</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-mixed-locality-bursts-title gallery-mixed-locality-bursts-desc">
+</svg><figcaption>Study downloads: <a href="scan-then-reuse-study.md">Markdown</a> · <a href="scan-then-reuse-study.svg">SVG</a> · <a href="scan-then-reuse-study.csv">CSV</a> · <a href="scan-then-reuse-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 9.50</code></li><li><code>CLOCK: 9.50</code></li><li><code>AGING: 8.67</code></li><li><code>LRU: 8.67</code></li><li><code>OPT: 7.33</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-mixed-locality-bursts"><div class="study-card__header"><div><h2><code>mixed-locality-bursts</code></h2><p>alternates hot-loop bursts with cold misses to mimic uneven interactive workloads</p></div><div class="study-card__chips"><span class="chip">preset</span><span class="chip">frames 3–8</span><span class="chip">reference length 18</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-mixed-locality-bursts-title gallery-mixed-locality-bursts-desc">
   <title id="gallery-mixed-locality-bursts-title">Page replacement frame study chart</title>
   <desc id="gallery-mixed-locality-bursts-desc">Page-fault vs frame-count chart for preset mixed-locality-bursts — alternates hot-loop bursts with cold misses to mimic uneven interactive workloads</desc>
   <rect width="100%" height="100%" fill="#f8fafc" />
@@ -552,7 +557,7 @@
 <text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (6.50)</text>
 <text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
 <text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
-</svg><figcaption>Downloads: <a href="mixed-locality-bursts-study.md">Markdown</a> · <a href="mixed-locality-bursts-study.svg">SVG</a> · <a href="mixed-locality-bursts-study.csv">CSV</a> · <a href="mixed-locality-bursts-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 9.00</code></li><li><code>CLOCK: 9.00</code></li><li><code>AGING: 7.67</code></li><li><code>LRU: 7.67</code></li><li><code>OPT: 6.50</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-compiler-phase-shift"><div class="study-card__header"><div><h2><code>compiler-phase-shift</code></h2><p>larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts</p></div><div class="study-card__chips"><span class="chip">benchmark</span><span class="chip">frames 3–8</span><span class="chip">reference length 72</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-compiler-phase-shift-title gallery-compiler-phase-shift-desc">
+</svg><figcaption>Study downloads: <a href="mixed-locality-bursts-study.md">Markdown</a> · <a href="mixed-locality-bursts-study.svg">SVG</a> · <a href="mixed-locality-bursts-study.csv">CSV</a> · <a href="mixed-locality-bursts-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 9.00</code></li><li><code>CLOCK: 9.00</code></li><li><code>AGING: 7.67</code></li><li><code>LRU: 7.67</code></li><li><code>OPT: 6.50</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-compiler-phase-shift"><div class="study-card__header"><div><h2><code>compiler-phase-shift</code></h2><p>larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts</p></div><div class="study-card__chips"><span class="chip">benchmark</span><span class="chip">frames 3–8</span><span class="chip">reference length 72</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-compiler-phase-shift-title gallery-compiler-phase-shift-desc">
   <title id="gallery-compiler-phase-shift-title">Page replacement frame study chart</title>
   <desc id="gallery-compiler-phase-shift-desc">Page-fault vs frame-count chart for benchmark compiler-phase-shift — larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts</desc>
   <rect width="100%" height="100%" fill="#f8fafc" />
@@ -667,7 +672,7 @@
 <text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (36.00)</text>
 <text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
 <text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
-</svg><figcaption>Downloads: <a href="compiler-phase-shift-study.md">Markdown</a> · <a href="compiler-phase-shift-study.svg">SVG</a> · <a href="compiler-phase-shift-study.csv">CSV</a> · <a href="compiler-phase-shift-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 48.33</code></li><li><code>CLOCK: 48.00</code></li><li><code>AGING: 45.00</code></li><li><code>LRU: 45.00</code></li><li><code>OPT: 36.00</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-db-hotset-scan"><div class="study-card__header"><div><h2><code>db-hotset-scan</code></h2><p>dashboard-style hot pages interrupted by analytics scans and checkpoint bursts</p></div><div class="study-card__chips"><span class="chip">benchmark</span><span class="chip">frames 3–8</span><span class="chip">reference length 84</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-db-hotset-scan-title gallery-db-hotset-scan-desc">
+</svg><figcaption>Study downloads: <a href="compiler-phase-shift-study.md">Markdown</a> · <a href="compiler-phase-shift-study.svg">SVG</a> · <a href="compiler-phase-shift-study.csv">CSV</a> · <a href="compiler-phase-shift-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 48.33</code></li><li><code>CLOCK: 48.00</code></li><li><code>AGING: 45.00</code></li><li><code>LRU: 45.00</code></li><li><code>OPT: 36.00</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-db-hotset-scan"><div class="study-card__header"><div><h2><code>db-hotset-scan</code></h2><p>dashboard-style hot pages interrupted by analytics scans and checkpoint bursts</p></div><div class="study-card__chips"><span class="chip">benchmark</span><span class="chip">frames 3–8</span><span class="chip">reference length 84</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-db-hotset-scan-title gallery-db-hotset-scan-desc">
   <title id="gallery-db-hotset-scan-title">Page replacement frame study chart</title>
   <desc id="gallery-db-hotset-scan-desc">Page-fault vs frame-count chart for benchmark db-hotset-scan — dashboard-style hot pages interrupted by analytics scans and checkpoint bursts</desc>
   <rect width="100%" height="100%" fill="#f8fafc" />
@@ -782,7 +787,7 @@
 <text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (32.33)</text>
 <text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
 <text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
-</svg><figcaption>Downloads: <a href="db-hotset-scan-study.md">Markdown</a> · <a href="db-hotset-scan-study.svg">SVG</a> · <a href="db-hotset-scan-study.csv">CSV</a> · <a href="db-hotset-scan-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 44.50</code></li><li><code>CLOCK: 43.67</code></li><li><code>AGING: 40.33</code></li><li><code>LRU: 40.33</code></li><li><code>OPT: 32.33</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-streaming-burst-window"><div class="study-card__header"><div><h2><code>streaming-burst-window</code></h2><p>stream-processing sliding window with cold backfill bursts and shifting hotsets</p></div><div class="study-card__chips"><span class="chip">benchmark</span><span class="chip">frames 3–8</span><span class="chip">reference length 96</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-streaming-burst-window-title gallery-streaming-burst-window-desc">
+</svg><figcaption>Study downloads: <a href="db-hotset-scan-study.md">Markdown</a> · <a href="db-hotset-scan-study.svg">SVG</a> · <a href="db-hotset-scan-study.csv">CSV</a> · <a href="db-hotset-scan-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 44.50</code></li><li><code>CLOCK: 43.67</code></li><li><code>AGING: 40.33</code></li><li><code>LRU: 40.33</code></li><li><code>OPT: 32.33</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-streaming-burst-window"><div class="study-card__header"><div><h2><code>streaming-burst-window</code></h2><p>stream-processing sliding window with cold backfill bursts and shifting hotsets</p></div><div class="study-card__chips"><span class="chip">benchmark</span><span class="chip">frames 3–8</span><span class="chip">reference length 96</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-streaming-burst-window-title gallery-streaming-burst-window-desc">
   <title id="gallery-streaming-burst-window-title">Page replacement frame study chart</title>
   <desc id="gallery-streaming-burst-window-desc">Page-fault vs frame-count chart for benchmark streaming-burst-window — stream-processing sliding window with cold backfill bursts and shifting hotsets</desc>
   <rect width="100%" height="100%" fill="#f8fafc" />
@@ -901,7 +906,118 @@
 <text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (37.50)</text>
 <text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
 <text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
-</svg><figcaption>Downloads: <a href="streaming-burst-window-study.md">Markdown</a> · <a href="streaming-burst-window-study.svg">SVG</a> · <a href="streaming-burst-window-study.csv">CSV</a> · <a href="streaming-burst-window-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 58.00</code></li><li><code>CLOCK: 57.83</code></li><li><code>AGING: 55.33</code></li><li><code>LRU: 55.33</code></li><li><code>OPT: 37.50</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section>
+</svg><figcaption>Study downloads: <a href="streaming-burst-window-study.md">Markdown</a> · <a href="streaming-burst-window-study.svg">SVG</a> · <a href="streaming-burst-window-study.csv">CSV</a> · <a href="streaming-burst-window-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 58.00</code></li><li><code>CLOCK: 57.83</code></li><li><code>AGING: 55.33</code></li><li><code>LRU: 55.33</code></li><li><code>OPT: 37.50</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div></div></section><section class="study-card" id="workload-mobile-app-session"><div class="study-card__header"><div><h2><code>mobile-app-session</code></h2><p>custom imported trace from projects/page-replacement-lab/custom-traces/mobile-app-session.txt</p></div><div class="study-card__chips"><span class="chip">custom</span><span class="chip">frames 3–8</span><span class="chip">reference length 60</span><span class="chip chip--accent">best average OPT</span><span class="chip chip--ok">FIFO anomaly no</span><span class="chip chip--accent">trace drill-down ready</span></div></div><figure><svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" role="img" aria-labelledby="gallery-mobile-app-session-title gallery-mobile-app-session-desc">
+  <title id="gallery-mobile-app-session-title">Page replacement frame study chart</title>
+  <desc id="gallery-mobile-app-session-desc">Page-fault vs frame-count chart for imported trace mobile-app-session — projects/page-replacement-lab/custom-traces/mobile-app-session.txt</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="36" y="28" width="1008" height="664" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="84" y="64" font-size="30" font-weight="700" fill="#0f172a">Page faults vs frame count</text>
+  <text x="84" y="96" font-size="16" fill="#475569">imported trace mobile-app-session — projects/page-replacement-lab/custom-traces/mobile-app-session.txt</text>
+<line x1="84" y1="72" x2="112" y2="72" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />
+<text x="122" y="77" font-size="14" fill="#0f172a">FIFO</text>
+<line x1="234" y1="72" x2="262" y2="72" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-dasharray="10 8" />
+<text x="272" y="77" font-size="14" fill="#0f172a">CLOCK</text>
+<line x1="384" y1="72" x2="412" y2="72" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 6" />
+<text x="422" y="77" font-size="14" fill="#0f172a">AGING</text>
+<line x1="534" y1="72" x2="562" y2="72" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 7" />
+<text x="572" y="77" font-size="14" fill="#0f172a">LRU</text>
+<line x1="684" y1="72" x2="712" y2="72" stroke="#10b981" stroke-width="4" stroke-linecap="round" />
+<text x="722" y="77" font-size="14" fill="#0f172a">OPT</text>
+  <line x1="84" y1="118" x2="84" y2="478" stroke="#0f172a" stroke-width="2" />
+  <line x1="84" y1="478" x2="804" y2="478" stroke="#0f172a" stroke-width="2" />
+<line x1="84" y1="478.00" x2="804" y2="478.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="483.00" font-size="13" text-anchor="end" fill="#475569">0</text>
+<line x1="84" y1="418.00" x2="804" y2="418.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="423.00" font-size="13" text-anchor="end" fill="#475569">10</text>
+<line x1="84" y1="358.00" x2="804" y2="358.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="363.00" font-size="13" text-anchor="end" fill="#475569">20</text>
+<line x1="84" y1="298.00" x2="804" y2="298.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="303.00" font-size="13" text-anchor="end" fill="#475569">30</text>
+<line x1="84" y1="238.00" x2="804" y2="238.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="243.00" font-size="13" text-anchor="end" fill="#475569">40</text>
+<line x1="84" y1="178.00" x2="804" y2="178.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="183.00" font-size="13" text-anchor="end" fill="#475569">50</text>
+<line x1="84" y1="118.00" x2="804" y2="118.00" stroke="#d7dde8" stroke-width="1" />
+<text x="70" y="123.00" font-size="13" text-anchor="end" fill="#475569">60</text>
+<text x="84.00" y="506" font-size="13" text-anchor="middle" fill="#475569">3</text>
+<text x="228.00" y="506" font-size="13" text-anchor="middle" fill="#475569">4</text>
+<text x="372.00" y="506" font-size="13" text-anchor="middle" fill="#475569">5</text>
+<text x="516.00" y="506" font-size="13" text-anchor="middle" fill="#475569">6</text>
+<text x="660.00" y="506" font-size="13" text-anchor="middle" fill="#475569">7</text>
+<text x="804.00" y="506" font-size="13" text-anchor="middle" fill="#475569">8</text>
+  <text x="444.00" y="534" font-size="14" text-anchor="middle" fill="#475569">Frames</text>
+  <text x="28" y="298.00" font-size="14" fill="#475569" transform="rotate(-90 28 298.00)">Page faults</text>
+<polyline fill="none" stroke="#ef4444" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,160.00 228.00,178.00 372.00,214.00 516.00,232.00 660.00,232.00 804.00,268.00" />
+<circle cx="84.00" cy="160.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="148.00" font-size="11" text-anchor="middle" fill="#ef4444">53</text>
+<circle cx="228.00" cy="178.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="166.00" font-size="11" text-anchor="middle" fill="#ef4444">50</text>
+<circle cx="372.00" cy="214.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="202.00" font-size="11" text-anchor="middle" fill="#ef4444">44</text>
+<circle cx="516.00" cy="232.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="220.00" font-size="11" text-anchor="middle" fill="#ef4444">41</text>
+<circle cx="660.00" cy="232.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="220.00" font-size="11" text-anchor="middle" fill="#ef4444">41</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#ef4444">35</text>
+<polyline fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,160.00 228.00,178.00 372.00,214.00 516.00,232.00 660.00,232.00 804.00,268.00" stroke-dasharray="10 8" />
+<circle cx="84.00" cy="160.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="148.00" font-size="11" text-anchor="middle" fill="#f59e0b">53</text>
+<circle cx="228.00" cy="178.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="166.00" font-size="11" text-anchor="middle" fill="#f59e0b">50</text>
+<circle cx="372.00" cy="214.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="202.00" font-size="11" text-anchor="middle" fill="#f59e0b">44</text>
+<circle cx="516.00" cy="232.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="220.00" font-size="11" text-anchor="middle" fill="#f59e0b">41</text>
+<circle cx="660.00" cy="232.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="220.00" font-size="11" text-anchor="middle" fill="#f59e0b">41</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#f59e0b">35</text>
+<polyline fill="none" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,172.00 228.00,190.00 372.00,250.00 516.00,256.00 660.00,268.00 804.00,268.00" stroke-dasharray="2 6" />
+<circle cx="84.00" cy="172.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="160.00" font-size="11" text-anchor="middle" fill="#8b5cf6">51</text>
+<circle cx="228.00" cy="190.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="178.00" font-size="11" text-anchor="middle" fill="#8b5cf6">48</text>
+<circle cx="372.00" cy="250.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="238.00" font-size="11" text-anchor="middle" fill="#8b5cf6">38</text>
+<circle cx="516.00" cy="256.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="244.00" font-size="11" text-anchor="middle" fill="#8b5cf6">37</text>
+<circle cx="660.00" cy="268.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="256.00" font-size="11" text-anchor="middle" fill="#8b5cf6">35</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#8b5cf6">35</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,172.00 228.00,190.00 372.00,250.00 516.00,256.00 660.00,268.00 804.00,268.00" stroke-dasharray="4 7" />
+<circle cx="84.00" cy="172.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="160.00" font-size="11" text-anchor="middle" fill="#2563eb">51</text>
+<circle cx="228.00" cy="190.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="178.00" font-size="11" text-anchor="middle" fill="#2563eb">48</text>
+<circle cx="372.00" cy="250.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="238.00" font-size="11" text-anchor="middle" fill="#2563eb">38</text>
+<circle cx="516.00" cy="256.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="244.00" font-size="11" text-anchor="middle" fill="#2563eb">37</text>
+<circle cx="660.00" cy="268.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="256.00" font-size="11" text-anchor="middle" fill="#2563eb">35</text>
+<circle cx="804.00" cy="268.00" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="256.00" font-size="11" text-anchor="middle" fill="#2563eb">35</text>
+<polyline fill="none" stroke="#10b981" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="84.00,256.00 228.00,280.00 372.00,292.00 516.00,298.00 660.00,298.00 804.00,298.00" />
+<circle cx="84.00" cy="256.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="84.00" y="244.00" font-size="11" text-anchor="middle" fill="#10b981">37</text>
+<circle cx="228.00" cy="280.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="228.00" y="268.00" font-size="11" text-anchor="middle" fill="#10b981">33</text>
+<circle cx="372.00" cy="292.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="372.00" y="280.00" font-size="11" text-anchor="middle" fill="#10b981">31</text>
+<circle cx="516.00" cy="298.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="516.00" y="286.00" font-size="11" text-anchor="middle" fill="#10b981">30</text>
+<circle cx="660.00" cy="298.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="660.00" y="286.00" font-size="11" text-anchor="middle" fill="#10b981">30</text>
+<circle cx="804.00" cy="298.00" r="5.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+<text x="804.00" y="286.00" font-size="11" text-anchor="middle" fill="#10b981">30</text>
+  <rect x="64" y="514" width="952" height="142" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+<text x="84" y="545" font-size="18" fill="#0f172a">workload: imported trace mobile-app-session — projects/page-replacement-lab/custom-traces/mobile-app-session.txt</text>
+<text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (31.83)</text>
+<text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
+<text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
+</svg><figcaption>Study downloads: <a href="mobile-app-session-study.md">Markdown</a> · <a href="mobile-app-session-study.svg">SVG</a> · <a href="mobile-app-session-study.csv">CSV</a> · <a href="mobile-app-session-study.json">JSON</a></figcaption></figure><div class="study-card__meta"><div class="meta-panel"><h3>Average faults</h3><ul><li><code>FIFO: 44.00</code></li><li><code>CLOCK: 44.00</code></li><li><code>AGING: 40.67</code></li><li><code>LRU: 40.67</code></li><li><code>OPT: 31.83</code></li></ul></div><div class="meta-panel"><h3>FIFO anomaly callouts</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Other regressions</h3><ul><li>none in this frame range</li></ul></div><div class="meta-panel"><h3>Custom trace drill-down</h3><ul><li>window size 8</li><li>working-set range 1–8 (avg 6.15)</li><li>phase hints 6</li><li>reuse summary min 2, median 4.0, p90 11.0, max 15, avg 4.73</li></ul><p class="muted">Trace drill-down downloads: <a href="mobile-app-session-trace-summary.html">HTML</a> · <a href="mobile-app-session-trace-summary.md">Markdown</a> · <a href="mobile-app-session-trace-summary.svg">SVG</a> · <a href="mobile-app-session-trace-summary.json">JSON</a></p></div></div></section>
       </div>
     </main>
   </body>
