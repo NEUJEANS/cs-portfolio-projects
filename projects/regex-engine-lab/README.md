@@ -57,9 +57,24 @@ python3 regex_engine_lab.py trace '(cat|dog)s?' 'xxdogs' --mode search
 
 `trace` emits JSON showing the active state set before matching, each consumed character, the concrete transitions that matched, and the final accepting closure. Search traces also show each start-offset attempt until the first leftmost match wins.
 
+### Benchmark against Python's `re`
+```bash
+python3 regex_engine_lab.py benchmark '^ID-\d\d\d\d-\w+$' 'ID-2026-demo_user' \
+  --iterations 5000 --warmup 200 --label id-fullmatch
+
+python3 regex_engine_lab.py benchmark --sample-suite \
+  --iterations 3000 --warmup 200 \
+  --json-out ../../docs/artifacts/regex-engine-lab/benchmark-sample-suite.json \
+  --markdown-out ../../docs/artifacts/regex-engine-lab/benchmark-sample-suite.md
+```
+
+`benchmark` reuses one compiled lab engine and one compiled Python `re.Pattern`, measures both with `time.perf_counter()`, and reports whether the two engines agree on the chosen safe regular-language cases. The built-in suite stays intentionally ASCII-only so shorthand-class parity is about engine behavior, not Unicode-policy differences.
+
 ## Sample artifacts
 - `docs/artifacts/regex-engine-lab/trace-id-fullmatch.json` - fullmatch trace for a shorthand-heavy ID pattern
 - `docs/artifacts/regex-engine-lab/trace-dogs-search.json` - search trace showing how the engine advances start offsets before landing on `dogs`
+- `docs/artifacts/regex-engine-lab/benchmark-sample-suite.json` - JSON benchmark comparison report for the built-in safe sample suite
+- `docs/artifacts/regex-engine-lab/benchmark-sample-suite.md` - reviewer-friendly Markdown summary of the same benchmark suite
 
 ## Testing
 ```bash
@@ -71,10 +86,11 @@ python3 -m unittest discover -s projects/regex-engine-lab -p 'test_*.py' -v
 - how patchable NFA fragments make Thompson construction compact
 - why epsilon closure matters for zero-width transitions and assertions
 - how trace output turns a black-box matcher into a teachable state-machine walkthrough
+- how the new benchmark flow checks semantic agreement with Python's `re` while also giving a grounded performance story for a teaching-oriented engine
 - which modern regex features fall outside regular languages and were intentionally excluded here
 
 ## Future improvements
 - render trace output into a small HTML timeline or SVG teaching card
 - compile to DFA for faster repeated matching on the same pattern
-- add a tiny benchmark comparing this engine with Python's `re` on safe regular-language patterns
+- add JSON-defined benchmark suites so larger reproducible case bundles can ship without editing code
 - add optional Unicode-aware shorthand classes as a follow-on contrast with the current ASCII teaching mode

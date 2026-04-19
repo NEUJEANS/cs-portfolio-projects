@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
-from regex_engine_lab import RegexEngine, RegexSyntaxError
+from regex_engine_lab import BenchmarkCase, RegexEngine, RegexSyntaxError, render_benchmark_markdown, run_benchmark_report
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -110,6 +111,35 @@ class RegexEngineTests(unittest.TestCase):
         with self.assertRaises(RegexSyntaxError):
             RegexEngine(r"[a-\d]")
 
+    def test_benchmark_report_agrees_with_python_re(self) -> None:
+        report = run_benchmark_report(
+            [BenchmarkCase("id", r"^ID-\d\d\d\d-\w+$", "ID-2026-demo_user")],
+            iterations=3,
+            warmup=0,
+            suite_label="unit",
+        )
+        self.assertEqual(report["suite_label"], "unit")
+        self.assertTrue(report["all_cases_agree"])
+        self.assertEqual(report["case_count"], 1)
+        case = report["cases"][0]
+        self.assertTrue(case["agreement"])
+        self.assertEqual(case["lab_result"], {"matched": True})
+        self.assertEqual(case["python_result"], {"matched": True})
+        self.assertIn(case["faster_engine"], {"lab", "python_re", "tie"})
+
+    def test_render_benchmark_markdown_includes_case_table(self) -> None:
+        report = run_benchmark_report(
+            [BenchmarkCase("dogs", "(cat|dog)s?", "xxdogs", mode="search")],
+            iterations=2,
+            warmup=0,
+            suite_label="unit",
+        )
+        markdown = render_benchmark_markdown(report)
+        self.assertIn("# Regex engine benchmark report", markdown)
+        self.assertIn("| case | mode | agreement |", markdown)
+        self.assertIn("### dogs", markdown)
+        self.assertIn("`search`", markdown)
+
 
 class RegexEngineCliTests(unittest.TestCase):
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
@@ -163,6 +193,50 @@ class RegexEngineCliTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "search")
         self.assertTrue(payload["matched"])
         self.assertEqual(payload["result"]["match"], "dogs")
+
+    def test_cli_benchmark_single_case(self) -> None:
+        completed = self.run_cli(
+            "benchmark",
+            r"^ID-\d\d\d\d-\w+$",
+            "ID-2026-demo_user",
+            "--iterations",
+            "3",
+            "--warmup",
+            "0",
+            "--label",
+            "id-case",
+        )
+        self.assertEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["suite_label"], "id-case")
+        self.assertTrue(payload["all_cases_agree"])
+        self.assertEqual(payload["cases"][0]["lab_result"], {"matched": True})
+
+    def test_cli_benchmark_sample_suite_writes_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            markdown_path = Path(temp_dir) / "benchmark.md"
+            json_path = Path(temp_dir) / "benchmark.json"
+            completed = self.run_cli(
+                "benchmark",
+                "--sample-suite",
+                "--iterations",
+                "1",
+                "--warmup",
+                "0",
+                "--markdown-out",
+                str(markdown_path),
+                "--json-out",
+                str(json_path),
+            )
+            self.assertEqual(completed.returncode, 0)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["suite_label"], "sample-suite")
+            self.assertEqual(payload["case_count"], 3)
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(json_path.exists())
+            self.assertIn("Regex engine benchmark report", markdown_path.read_text())
+            written_json = json.loads(json_path.read_text())
+            self.assertEqual(written_json["case_count"], 3)
 
     def test_cli_reports_syntax_errors(self) -> None:
         completed = self.run_cli("fullmatch", "[abc", "a")

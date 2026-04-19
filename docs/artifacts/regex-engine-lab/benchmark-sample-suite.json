@@ -1,0 +1,114 @@
+{
+  "suite_label": "sample-suite",
+  "iterations": 3000,
+  "warmup": 200,
+  "case_count": 3,
+  "all_cases_agree": true,
+  "cases": [
+    {
+      "label": "anchored_id_fullmatch",
+      "mode": "fullmatch",
+      "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+      "text": "ID-2026-demo_user",
+      "pattern_length": 17,
+      "text_length": 17,
+      "agreement": true,
+      "lab_result": {
+        "matched": true
+      },
+      "python_result": {
+        "matched": true
+      },
+      "lab": {
+        "iterations": 3000,
+        "warmup": 200,
+        "elapsed_seconds": 0.05251248499916983,
+        "avg_seconds": 1.750416166638994e-05,
+        "ops_per_second": 57129.27125896684
+      },
+      "python_re": {
+        "iterations": 3000,
+        "warmup": 200,
+        "elapsed_seconds": 0.0009837679972406477,
+        "avg_seconds": 3.2792266574688254e-07,
+        "ops_per_second": 3049499.484039574
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 53.37893197020142
+    },
+    {
+      "label": "pet_search",
+      "mode": "search",
+      "pattern": "(cat|dog)s?",
+      "text": "xxdogs walked by",
+      "pattern_length": 11,
+      "text_length": 16,
+      "agreement": true,
+      "lab_result": {
+        "matched": true,
+        "start": 2,
+        "end": 6,
+        "match": "dogs"
+      },
+      "python_result": {
+        "matched": true,
+        "start": 2,
+        "end": 6,
+        "match": "dogs"
+      },
+      "lab": {
+        "iterations": 3000,
+        "warmup": 200,
+        "elapsed_seconds": 0.029648627998540178,
+        "avg_seconds": 9.882875999513392e-06,
+        "ops_per_second": 101185.12061157475
+      },
+      "python_re": {
+        "iterations": 3000,
+        "warmup": 200,
+        "elapsed_seconds": 0.0007297720003407449,
+        "avg_seconds": 2.4325733344691495e-07,
+        "ops_per_second": 4110872.9830676448
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 40.62724794140725
+    },
+    {
+      "label": "release_token_search",
+      "mode": "search",
+      "pattern": "\\d+\\s\\w+",
+      "text": "build 2026 portfolio",
+      "pattern_length": 8,
+      "text_length": 20,
+      "agreement": true,
+      "lab_result": {
+        "matched": true,
+        "start": 6,
+        "end": 20,
+        "match": "2026 portfolio"
+      },
+      "python_result": {
+        "matched": true,
+        "start": 6,
+        "end": 20,
+        "match": "2026 portfolio"
+      },
+      "lab": {
+        "iterations": 3000,
+        "warmup": 200,
+        "elapsed_seconds": 0.10480290800114744,
+        "avg_seconds": 3.4934302667049146e-05,
+        "ops_per_second": 28625.159904600685
+      },
+      "python_re": {
+        "iterations": 3000,
+        "warmup": 200,
+        "elapsed_seconds": 0.0012477729978854768,
+        "avg_seconds": 4.159243326284923e-07,
+        "ops_per_second": 2404283.475507094
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 83.99196663074967
+    }
+  ]
+}

@@ -45,3 +45,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-19 benchmark slice
+- [x] inspect the current regex engine lab and choose benchmark parity with Python `re` as the next portfolio-friendly upgrade
+- [x] capture a brief research note on `re.fullmatch` / `re.search` parity plus `time.perf_counter()` timing
+- [x] do a short benchmark refresh and self-test for compiled-pattern reuse and ASCII-safe shorthand cases
+- [x] add a resumable slice checklist file for this upgrade
+- [x] implement a `benchmark` CLI for custom cases plus a built-in sample suite
+- [x] add Markdown / JSON benchmark report output helpers
+- [x] add regression coverage for benchmark helpers, CLI behavior, and artifact writing
+- [x] generate committed sample benchmark artifacts and document them in the README
+- [x] run tests and smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

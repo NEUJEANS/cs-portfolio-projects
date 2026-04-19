@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import string
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable
 
 
@@ -73,6 +76,21 @@ class State:
 class Fragment:
     start: int
     outs: list[tuple[int, str]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class BenchmarkCase:
+    label: str
+    pattern: str
+    text: str
+    mode: str = "fullmatch"
+
+
+DEFAULT_BENCHMARK_CASES: tuple[BenchmarkCase, ...] = (
+    BenchmarkCase("anchored_id_fullmatch", r"^ID-\d\d\d\d-\w+$", "ID-2026-demo_user"),
+    BenchmarkCase("pet_search", "(cat|dog)s?", "xxdogs walked by", mode="search"),
+    BenchmarkCase("release_token_search", r"\d+\s\w+", "build 2026 portfolio", mode="search"),
+)
 
 
 class Parser:
@@ -629,6 +647,154 @@ class RegexEngine:
         return {"pattern": self.pattern, "ast": ast_to_dict(self.ast), "states": states_to_dict(self.states)}
 
 
+def normalize_search_result(match: re.Match[str] | None) -> dict[str, object]:
+    if match is None:
+        return {"matched": False}
+    return {
+        "matched": True,
+        "start": match.start(),
+        "end": match.end(),
+        "match": match.group(0),
+    }
+
+
+def benchmark_callable(runner, *, iterations: int, warmup: int) -> dict[str, float | int | None]:
+    for _ in range(warmup):
+        runner()
+    started_at = time.perf_counter()
+    for _ in range(iterations):
+        runner()
+    elapsed_seconds = time.perf_counter() - started_at
+    return {
+        "iterations": iterations,
+        "warmup": warmup,
+        "elapsed_seconds": elapsed_seconds,
+        "avg_seconds": elapsed_seconds / iterations if iterations else 0.0,
+        "ops_per_second": (iterations / elapsed_seconds) if elapsed_seconds > 0 else None,
+    }
+
+
+def run_benchmark_case(case: BenchmarkCase, *, iterations: int, warmup: int) -> dict[str, object]:
+    if case.mode not in {"fullmatch", "search"}:
+        raise ValueError(f"unsupported benchmark mode: {case.mode}")
+
+    engine = RegexEngine(case.pattern)
+    compiled = re.compile(case.pattern)
+
+    if case.mode == "fullmatch":
+        def lab_runner() -> bool:
+            return engine.fullmatch(case.text)
+
+        def python_runner() -> re.Match[str] | None:
+            return compiled.fullmatch(case.text)
+
+        lab_result = {"matched": lab_runner()}
+        python_result = {"matched": python_runner() is not None}
+    else:
+        def lab_runner() -> dict[str, object] | None:
+            return engine.search(case.text)
+
+        def python_runner() -> re.Match[str] | None:
+            return compiled.search(case.text)
+
+        lab_result = lab_runner() or {"matched": False}
+        python_result = normalize_search_result(python_runner())
+
+    lab_metrics = benchmark_callable(lab_runner, iterations=iterations, warmup=warmup)
+    python_metrics = benchmark_callable(python_runner, iterations=iterations, warmup=warmup)
+    lab_elapsed = float(lab_metrics["elapsed_seconds"])
+    python_elapsed = float(python_metrics["elapsed_seconds"])
+    faster_engine = "tie"
+    if lab_elapsed < python_elapsed:
+        faster_engine = "lab"
+    elif python_elapsed < lab_elapsed:
+        faster_engine = "python_re"
+
+    return {
+        "label": case.label,
+        "mode": case.mode,
+        "pattern": case.pattern,
+        "text": case.text,
+        "pattern_length": len(case.pattern),
+        "text_length": len(case.text),
+        "agreement": lab_result == python_result,
+        "lab_result": lab_result,
+        "python_result": python_result,
+        "lab": lab_metrics,
+        "python_re": python_metrics,
+        "faster_engine": faster_engine,
+        "lab_vs_python_elapsed_ratio": (lab_elapsed / python_elapsed) if python_elapsed else None,
+    }
+
+
+def run_benchmark_report(
+    cases: Iterable[BenchmarkCase],
+    *,
+    iterations: int,
+    warmup: int,
+    suite_label: str = "custom",
+) -> dict[str, object]:
+    case_results = [run_benchmark_case(case, iterations=iterations, warmup=warmup) for case in cases]
+    return {
+        "suite_label": suite_label,
+        "iterations": iterations,
+        "warmup": warmup,
+        "case_count": len(case_results),
+        "all_cases_agree": all(case["agreement"] for case in case_results),
+        "cases": case_results,
+    }
+
+
+def render_benchmark_markdown(report: dict[str, object]) -> str:
+    lines = [
+        "# Regex engine benchmark report",
+        "",
+        f"- suite: `{report['suite_label']}`",
+        f"- iterations per engine: `{report['iterations']}`",
+        f"- warmup iterations per engine: `{report['warmup']}`",
+        f"- agreement across all cases: `{report['all_cases_agree']}`",
+        "",
+        "| case | mode | agreement | lab ms | python re ms | lab ops/s | python ops/s | faster |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for case in report["cases"]:
+        lab_ops = case["lab"]["ops_per_second"]
+        python_ops = case["python_re"]["ops_per_second"]
+        lines.append(
+            "| {label} | {mode} | {agreement} | {lab_ms:.3f} | {python_ms:.3f} | {lab_ops} | {python_ops} | {faster} |".format(
+                label=case["label"],
+                mode=case["mode"],
+                agreement="yes" if case["agreement"] else "no",
+                lab_ms=float(case["lab"]["elapsed_seconds"]) * 1000.0,
+                python_ms=float(case["python_re"]["elapsed_seconds"]) * 1000.0,
+                lab_ops=f"{float(lab_ops):.1f}" if lab_ops is not None else "n/a",
+                python_ops=f"{float(python_ops):.1f}" if python_ops is not None else "n/a",
+                faster=case["faster_engine"],
+            )
+        )
+    lines.extend(["", "## Case notes", ""])
+    for case in report["cases"]:
+        lines.extend(
+            [
+                f"### {case['label']}",
+                f"- mode: `{case['mode']}`",
+                f"- pattern: `{case['pattern']}`",
+                f"- text: `{case['text']}`",
+                f"- agreement: `{case['agreement']}`",
+                f"- lab result: `{json.dumps(case['lab_result'], ensure_ascii=False)}`",
+                f"- python result: `{json.dumps(case['python_result'], ensure_ascii=False)}`",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_text(path_str: str, content: str) -> None:
+    path = Path(path_str)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Tiny Thompson-NFA regex engine lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -654,12 +820,58 @@ def build_parser() -> argparse.ArgumentParser:
         help="trace either fullmatch execution or search attempts",
     )
 
+    benchmark_parser = subparsers.add_parser(
+        "benchmark",
+        help="compare the lab against Python's re on one case or the built-in sample suite",
+    )
+    benchmark_parser.add_argument("pattern", nargs="?")
+    benchmark_parser.add_argument("text", nargs="?")
+    benchmark_parser.add_argument(
+        "--mode",
+        choices=("fullmatch", "search"),
+        default="fullmatch",
+        help="benchmark either fullmatch or search semantics for a custom case",
+    )
+    benchmark_parser.add_argument("--label", default="custom")
+    benchmark_parser.add_argument(
+        "--sample-suite",
+        action="store_true",
+        help="run the built-in ASCII-safe sample benchmark cases instead of a single custom case",
+    )
+    benchmark_parser.add_argument("--iterations", type=int, default=2000)
+    benchmark_parser.add_argument("--warmup", type=int, default=200)
+    benchmark_parser.add_argument("--json-out")
+    benchmark_parser.add_argument("--markdown-out")
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "benchmark":
+        if args.iterations < 1:
+            parser.error("--iterations must be >= 1")
+        if args.warmup < 0:
+            parser.error("--warmup must be >= 0")
+        if args.sample_suite:
+            if args.pattern is not None or args.text is not None:
+                parser.error("benchmark does not accept PATTERN/TEXT when --sample-suite is used")
+            cases = list(DEFAULT_BENCHMARK_CASES)
+            suite_label = "sample-suite"
+        else:
+            if args.pattern is None or args.text is None:
+                parser.error("benchmark requires PATTERN and TEXT unless --sample-suite is used")
+            cases = [BenchmarkCase(args.label, args.pattern, args.text, mode=args.mode)]
+            suite_label = args.label
+        report = run_benchmark_report(cases, iterations=args.iterations, warmup=args.warmup, suite_label=suite_label)
+        if args.json_out:
+            write_text(args.json_out, json.dumps(report, indent=2) + "\n")
+        if args.markdown_out:
+            write_text(args.markdown_out, render_benchmark_markdown(report))
+        print(json.dumps(report, indent=2))
+        return 0
 
     try:
         engine = RegexEngine(args.pattern)
