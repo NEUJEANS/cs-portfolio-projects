@@ -1,0 +1,119 @@
+{
+  "bundle_files": {
+    "bundle_zip": "facet-ranking-detail-bundle.zip",
+    "index_html": "index.html",
+    "manifest_json": "manifest.json"
+  },
+  "coverage_detail": "Window filter inactive",
+  "coverage_label": "full log span",
+  "facet_fields": "env, region",
+  "gallery_html": "../facet-ranking-gallery.html",
+  "related_links": [
+    {
+      "href": "../release-comparison-card.html",
+      "label": "Comparison card HTML"
+    },
+    {
+      "href": "../release-comparison-card-annotated.html",
+      "label": "Annotated comparison card HTML"
+    },
+    {
+      "href": "../top-ips-by-facet.csv",
+      "label": "Top IPs CSV"
+    },
+    {
+      "href": "../top-paths-by-facet.csv",
+      "label": "Top paths CSV"
+    },
+    {
+      "href": "../top-referrers-by-facet.csv",
+      "label": "Top referrers CSV"
+    },
+    {
+      "href": "../top-user-agents-by-facet.csv",
+      "label": "Top user agents CSV"
+    }
+  ],
+  "slices": [
+    {
+      "available_family_labels": [
+        "Top IPs",
+        "Top paths",
+        "Top referrers",
+        "Top user agents"
+      ],
+      "card_id": "facet-env-prod-region-us-east-1",
+      "detail_html": "slices/facet-env-prod-region-us-east-1.html",
+      "facet_label": "env=prod, region=us-east-1",
+      "facets": {
+        "env": "prod",
+        "region": "us-east-1"
+      },
+      "family_count": 4,
+      "gallery_focus_href": "../facet-ranking-gallery.html#facet-env-prod-region-us-east-1",
+      "rendered_row_count": 8,
+      "total_count": 3
+    },
+    {
+      "available_family_labels": [
+        "Top IPs",
+        "Top paths",
+        "Top referrers",
+        "Top user agents"
+      ],
+      "card_id": "facet-env-staging-region-us-west-2",
+      "detail_html": "slices/facet-env-staging-region-us-west-2.html",
+      "facet_label": "env=staging, region=us-west-2",
+      "facets": {
+        "env": "staging",
+        "region": "us-west-2"
+      },
+      "family_count": 4,
+      "gallery_focus_href": "../facet-ranking-gallery.html#facet-env-staging-region-us-west-2",
+      "rendered_row_count": 8,
+      "total_count": 3
+    },
+    {
+      "available_family_labels": [
+        "Top IPs",
+        "Top paths",
+        "Top referrers",
+        "Top user agents"
+      ],
+      "card_id": "facet-env-preview-region-missing",
+      "detail_html": "slices/facet-env-preview-region-missing.html",
+      "facet_label": "env=preview, region=(missing)",
+      "facets": {
+        "env": "preview",
+        "region": "(missing)"
+      },
+      "family_count": 4,
+      "gallery_focus_href": "../facet-ranking-gallery.html#facet-env-preview-region-missing",
+      "rendered_row_count": 4,
+      "total_count": 2
+    }
+  ],
+  "source_label": "facet-ranking-sample.log",
+  "summary_cards": [
+    {
+      "label": "facet slices",
+      "value": 3
+    },
+    {
+      "label": "ranking families with data",
+      "value": 4
+    },
+    {
+      "label": "rendered ranking rows",
+      "value": 20
+    },
+    {
+      "label": "largest slice requests",
+      "value": 3
+    },
+    {
+      "label": "related artifact links",
+      "value": 6
+    }
+  ]
+}

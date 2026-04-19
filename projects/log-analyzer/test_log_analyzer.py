@@ -5,6 +5,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from log_analyzer import (
     load_card_annotation_preset_definitions,
     normalize_card_annotations,
     parse_line,
+    write_facet_ranking_detail_bundle,
 )
 
 
@@ -2421,6 +2423,182 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('data-focus-card-id="facet-env-prod-region-us-east-1"', html)
             self.assertIn('try {', html)
             self.assertIn('clipboard permissions are unavailable', html)
+
+    def test_write_facet_ranking_detail_bundle_emits_index_manifest_slices_and_deterministic_zip(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                '10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2',
+                '10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2',
+            ],
+            top_n=2,
+            facet_fields=['env', 'region'],
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            artifact_dir = temp_root / 'docs' / 'artifacts' / 'log-analyzer'
+            artifact_dir.mkdir(parents=True)
+            gallery_path = artifact_dir / 'facet-ranking-gallery.html'
+            gallery_path.write_text('<!doctype html>', encoding='utf-8')
+            comparison_path = artifact_dir / 'release-comparison-card.html'
+            comparison_path.write_text('<!doctype html>', encoding='utf-8')
+            bundle_dir = artifact_dir / 'facet-ranking-detail-bundle'
+
+            write_facet_ranking_detail_bundle(
+                bundle_dir,
+                result,
+                source_label='facet-ranking-sample.log',
+                related_links=[
+                    {'label': 'Comparison card', 'target': str(comparison_path)},
+                ],
+                gallery_output_path=str(gallery_path),
+            )
+
+            index_path = bundle_dir / 'index.html'
+            manifest_path = bundle_dir / 'manifest.json'
+            zip_path = bundle_dir / 'facet-ranking-detail-bundle.zip'
+            self.assertTrue(index_path.exists())
+            self.assertTrue(manifest_path.exists())
+            self.assertTrue(zip_path.exists())
+
+            index_html = index_path.read_text(encoding='utf-8')
+            self.assertIn('Facet ranking detail bundle', index_html)
+            self.assertIn('href="../facet-ranking-gallery.html"', index_html)
+            self.assertIn('href="../release-comparison-card.html"', index_html)
+            self.assertIn('Download ZIP packet', index_html)
+
+            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+            self.assertEqual(manifest['bundle_files']['bundle_zip'], 'facet-ranking-detail-bundle.zip')
+            self.assertEqual(manifest['gallery_html'], '../facet-ranking-gallery.html')
+            self.assertEqual(len(manifest['slices']), 2)
+            first_slice_path = bundle_dir / manifest['slices'][0]['detail_html']
+            slice_html = first_slice_path.read_text(encoding='utf-8')
+            self.assertIn('Back to bundle index', slice_html)
+            self.assertIn('Open gallery focus', slice_html)
+            self.assertIn('../../facet-ranking-gallery.html#facet-env-prod-region-us-east-1', slice_html)
+            self.assertIn('href="../../release-comparison-card.html"', slice_html)
+
+            first_zip_bytes = zip_path.read_bytes()
+            with zipfile.ZipFile(zip_path) as archive:
+                self.assertEqual(
+                    archive.namelist(),
+                    [
+                        'index.html',
+                        'manifest.json',
+                        'slices/facet-env-prod-region-us-east-1.html',
+                        'slices/facet-env-staging-region-us-west-2.html',
+                    ],
+                )
+                self.assertTrue(
+                    all(info.date_time == (2020, 1, 1, 0, 0, 0) for info in archive.infolist())
+                )
+
+            write_facet_ranking_detail_bundle(
+                bundle_dir,
+                result,
+                source_label='facet-ranking-sample.log',
+                related_links=[
+                    {'label': 'Comparison card', 'target': str(comparison_path)},
+                ],
+                gallery_output_path=str(gallery_path),
+            )
+            self.assertEqual(zip_path.read_bytes(), first_zip_bytes)
+
+            single_slice_result = analyze_lines(
+                [
+                    '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                    '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                ],
+                top_n=2,
+                facet_fields=['env', 'region'],
+            )
+            write_facet_ranking_detail_bundle(
+                bundle_dir,
+                single_slice_result,
+                source_label='facet-ranking-sample.log',
+                related_links=[
+                    {'label': 'Comparison card', 'target': str(comparison_path)},
+                ],
+                gallery_output_path=str(gallery_path),
+            )
+            self.assertTrue((bundle_dir / 'slices' / 'facet-env-prod-region-us-east-1.html').exists())
+            self.assertFalse((bundle_dir / 'slices' / 'facet-env-staging-region-us-west-2.html').exists())
+
+    def test_cli_writes_facet_ranking_detail_bundle_with_gallery_backlinks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            log_path = temp_root / 'facet-ranking.log'
+            artifact_dir = temp_root / 'docs' / 'artifacts' / 'log-analyzer'
+            artifact_dir.mkdir(parents=True)
+            gallery_path = artifact_dir / 'facet-ranking-gallery.html'
+            bundle_dir = artifact_dir / 'facet-ranking-detail-bundle'
+            log_path.write_text(
+                '\n'.join(
+                    [
+                        '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                        '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2',
+                    ]
+                ) + '\n',
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent / 'log_analyzer.py'),
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--facet-field',
+                    'region',
+                    '--top',
+                    '2',
+                    '--facet-ranking-gallery-html',
+                    str(gallery_path),
+                    '--facet-ranking-detail-bundle-dir',
+                    str(bundle_dir),
+                    '--facet-ranking-gallery-link',
+                    'Comparison card=docs/artifacts/log-analyzer/release-comparison-card.html',
+                ],
+                cwd=temp_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue((bundle_dir / 'index.html').exists())
+            self.assertTrue((bundle_dir / 'manifest.json').exists())
+            self.assertTrue((bundle_dir / 'facet-ranking-detail-bundle.zip').exists())
+            manifest = json.loads((bundle_dir / 'manifest.json').read_text(encoding='utf-8'))
+            self.assertEqual(manifest['gallery_html'], '../facet-ranking-gallery.html')
+            self.assertEqual(manifest['slices'][0]['gallery_focus_href'], '../facet-ranking-gallery.html#facet-env-prod-region-us-east-1')
+            bundle_index_html = (bundle_dir / 'index.html').read_text(encoding='utf-8')
+            self.assertIn('href="../facet-ranking-gallery.html"', bundle_index_html)
+            self.assertIn('href="../release-comparison-card.html"', bundle_index_html)
+
+    def test_cli_rejects_facet_ranking_detail_bundle_without_facet_field(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            bundle_dir = Path(tmpdir) / 'exports' / 'facet-ranking-detail-bundle'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-ranking-detail-bundle-dir',
+                    str(bundle_dir),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('facet-specific export flags require at least one --facet-field', completed.stderr)
 
     def test_cli_rejects_preset_gallery_link_without_gallery_output(self):
         completed = subprocess.run(

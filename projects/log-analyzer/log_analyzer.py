@@ -7,6 +7,7 @@ import math
 import os
 import re
 import textwrap
+import zipfile
 from collections import Counter, defaultdict
 from html import escape
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
 STATUS_CODE_RE = re.compile(r'^\d{3}$')
 TIME_BUCKET_GRANULARITIES = ("minute", "hour")
 MISSING_FACET_VALUE = "(missing)"
+DETERMINISTIC_ZIP_DATE_TIME = (2020, 1, 1, 0, 0, 0)
 CARD_ANNOTATION_PRESET_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 CARD_ANNOTATION_THEME_PRIORITIES = ("incident", "rollback", "recovery", "deploy", "note")
 CARD_ANNOTATION_THEME_ALIASES = {
@@ -1102,10 +1104,17 @@ def parse_card_annotation_preset_gallery_link(
     return {"label": label, "target": target}
 
 
-def resolve_card_annotation_preset_gallery_href(
+def relative_output_path(target_path: str | Path, *, base_dir: str | Path) -> str:
+    return os.path.relpath(
+        Path(target_path).expanduser().resolve(),
+        start=Path(base_dir).expanduser().resolve(),
+    ).replace(os.sep, "/")
+
+
+def resolve_output_href(
     raw_target: str,
     *,
-    gallery_output_path: str | None = None,
+    output_path: str | None = None,
 ) -> str:
     cleaned_target = raw_target.strip()
     if not cleaned_target:
@@ -1114,10 +1123,10 @@ def resolve_card_annotation_preset_gallery_href(
         return cleaned_target
 
     target_path = Path(cleaned_target).expanduser()
-    if not gallery_output_path:
+    if not output_path:
         return target_path.as_posix()
 
-    output_dir = Path(gallery_output_path).expanduser().resolve().parent
+    output_dir = Path(output_path).expanduser().resolve().parent
     if target_path.is_absolute():
         candidate_path = target_path.resolve()
     elif "/" in cleaned_target or os.sep in cleaned_target:
@@ -1126,9 +1135,17 @@ def resolve_card_annotation_preset_gallery_href(
         return target_path.as_posix()
 
     try:
-        return os.path.relpath(candidate_path, start=output_dir).replace(os.sep, "/")
+        return relative_output_path(candidate_path, base_dir=output_dir)
     except OSError:
         return target_path.as_posix()
+
+
+def resolve_card_annotation_preset_gallery_href(
+    raw_target: str,
+    *,
+    gallery_output_path: str | None = None,
+) -> str:
+    return resolve_output_href(raw_target, output_path=gallery_output_path)
 
 
 def format_card_annotation_preset_gallery_html(
@@ -1328,18 +1345,8 @@ def slugify_gallery_fragment(value: str) -> str:
     return slug or "slice"
 
 
-def format_facet_ranking_gallery_html(
-    result: dict[str, object],
-    *,
-    source_label: str,
-    related_links: list[dict[str, str]] | None = None,
-    gallery_output_path: str | None = None,
-) -> str:
-    faceting = result.get("faceting")
-    if not faceting:
-        raise ValueError("facet ranking gallery requires faceting metadata")
-
-    category_specs = [
+def build_facet_ranking_category_specs(result: dict[str, object]) -> list[dict[str, object]]:
+    return [
         {
             "title": "Top IPs",
             "family_key": "top-ips",
@@ -1370,6 +1377,13 @@ def format_facet_ranking_gallery_html(
         },
     ]
 
+
+def build_facet_ranking_groups(result: dict[str, object]) -> dict[str, object]:
+    faceting = result.get("faceting")
+    if not faceting:
+        raise ValueError("facet ranking output requires faceting metadata")
+
+    category_specs = build_facet_ranking_category_specs(result)
     facet_groups: dict[str, dict[str, object]] = {}
     for spec in category_specs:
         for row in spec["rows"]:
@@ -1397,7 +1411,6 @@ def format_facet_ranking_gallery_html(
 
     seen_card_ids: set[str] = set()
     for group in facet_groups_sorted:
-        facets = dict(group["facets"])
         seed = str(group["facet_label"]) or "facet-slice"
         base_card_id = f"facet-{slugify_gallery_fragment(seed)}"
         card_id = base_card_id
@@ -1406,19 +1419,63 @@ def format_facet_ranking_gallery_html(
             card_id = f"{base_card_id}-{duplicate_index}"
             duplicate_index += 1
         seen_card_ids.add(card_id)
+        available_family_labels = [
+            str(spec["title"])
+            for spec in category_specs
+            if str(spec["family_key"]) in group["family_keys_with_data"]
+        ]
         group["card_id"] = card_id
+        group["available_family_labels"] = available_family_labels
+        group["available_family_keys"] = sorted(
+            str(key) for key in group["family_keys_with_data"]
+        )
+        group["rendered_row_count"] = sum(
+            len(group["categories"].get(str(spec["title"]), []))
+            for spec in category_specs
+        )
 
-    rendered_row_count = sum(len(spec["rows"]) for spec in category_specs)
-    populated_family_count = sum(1 for spec in category_specs if spec["rows"])
-    largest_slice_requests = max(
-        (int(group["total_count"]) for group in facet_groups_sorted),
-        default=0,
-    )
+    return {
+        "faceting": faceting,
+        "category_specs": category_specs,
+        "facet_groups": facet_groups_sorted,
+        "rendered_row_count": sum(len(spec["rows"]) for spec in category_specs),
+        "populated_family_count": sum(1 for spec in category_specs if spec["rows"]),
+        "largest_slice_requests": max(
+            (int(group["total_count"]) for group in facet_groups_sorted),
+            default=0,
+        ),
+    }
+
+
+def build_facet_ranking_detail_bundle_paths(
+    detail_output_dir: str | Path,
+) -> dict[str, Path]:
+    bundle_dir = Path(detail_output_dir)
+    return {
+        "bundle_dir": bundle_dir,
+        "index_html": bundle_dir / "index.html",
+        "manifest_json": bundle_dir / "manifest.json",
+        "slice_dir": bundle_dir / "slices",
+        "bundle_zip": bundle_dir / "facet-ranking-detail-bundle.zip",
+    }
+
+
+def format_facet_ranking_gallery_html(
+    result: dict[str, object],
+    *,
+    source_label: str,
+    related_links: list[dict[str, str]] | None = None,
+    gallery_output_path: str | None = None,
+) -> str:
+    gallery_data = build_facet_ranking_groups(result)
+    faceting = gallery_data["faceting"]
+    category_specs = gallery_data["category_specs"]
+    facet_groups_sorted = gallery_data["facet_groups"]
     summary_cards = [
         (len(facet_groups_sorted), "facet slices"),
-        (populated_family_count, "ranking families with data"),
-        (rendered_row_count, "rendered ranking rows"),
-        (largest_slice_requests, "largest slice requests"),
+        (gallery_data["populated_family_count"], "ranking families with data"),
+        (gallery_data["rendered_row_count"], "rendered ranking rows"),
+        (gallery_data["largest_slice_requests"], "largest slice requests"),
         (len(related_links or []), "related artifact links"),
     ]
     summary_cards_html = "".join(
@@ -1968,6 +2025,442 @@ def format_facet_ranking_gallery_html(
 </body>
 </html>
 """
+
+
+def write_facet_ranking_detail_bundle_zip(
+    paths: dict[str, Path],
+    *,
+    slice_paths: list[Path],
+) -> None:
+    bundle_dir = paths["bundle_dir"]
+    bundle_zip_path = paths["bundle_zip"]
+    bundle_zip_path.parent.mkdir(parents=True, exist_ok=True)
+    ordered_files = [
+        paths["index_html"],
+        paths["manifest_json"],
+        *sorted(slice_paths),
+    ]
+    with zipfile.ZipFile(bundle_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for file_path in ordered_files:
+            relative_name = file_path.relative_to(bundle_dir).as_posix()
+            zip_info = zipfile.ZipInfo(relative_name, date_time=DETERMINISTIC_ZIP_DATE_TIME)
+            zip_info.compress_type = zipfile.ZIP_DEFLATED
+            zip_info.create_system = 3
+            zip_info.external_attr = 0o100644 << 16
+            archive.writestr(zip_info, file_path.read_bytes())
+
+
+def format_facet_ranking_detail_bundle_index_html(
+    bundle_manifest: dict[str, object],
+) -> str:
+    summary_cards_html = "".join(
+        f'<div class="summary-card"><strong>{escape(str(card["value"]))}</strong><span>{escape(str(card["label"]))}</span></div>'
+        for card in bundle_manifest["summary_cards"]
+    )
+    nav_links = [
+        (str(bundle_manifest["bundle_files"]["bundle_zip"]), "Download ZIP packet"),
+        (str(bundle_manifest["bundle_files"]["manifest_json"]), "Open manifest JSON"),
+    ]
+    if bundle_manifest.get("gallery_html"):
+        nav_links.insert(
+            0,
+            (str(bundle_manifest["gallery_html"]), "Open facet gallery"),
+        )
+    nav_links_html = "".join(
+        f'<a class="nav-link" href="{escape(str(href), quote=True)}">{escape(str(label))}</a>'
+        for href, label in nav_links
+    )
+    related_links_html = ""
+    if bundle_manifest["related_links"]:
+        related_links_html = "".join(
+            [
+                '<section class="related-links">',
+                '  <h2>Related artifacts</h2>',
+                '  <ul>',
+                *[
+                    f'<li><a href="{escape(str(link["href"]), quote=True)}">{escape(str(link["label"]))}</a></li>'
+                    for link in bundle_manifest["related_links"]
+                ],
+                '  </ul>',
+                '</section>',
+            ]
+        )
+    slice_cards = []
+    for slice_entry in bundle_manifest["slices"]:
+        facet_pills = "".join(
+            (
+                '<span class="facet-pill">'
+                f'<strong>{escape(str(field_name))}</strong>{escape(str(field_value))}'
+                '</span>'
+            )
+            for field_name, field_value in slice_entry["facets"].items()
+        )
+        slice_cards.append(
+            "".join(
+                [
+                    '<article class="slice-card">',
+                    f'<h2>{escape(str(slice_entry["facet_label"]))}</h2>',
+                    f'<p class="caption">Focused slice ID: <code>{escape(str(slice_entry["card_id"]))}</code></p>',
+                    f'<div class="facet-pill-row">{facet_pills}</div>' if facet_pills else '',
+                    '<div class="stat-row">',
+                    f'<span class="stat-chip"><strong>{slice_entry["total_count"]}</strong><span>requests</span></span>',
+                    f'<span class="stat-chip"><strong>{slice_entry["family_count"]}</strong><span>ranking families</span></span>',
+                    f'<span class="stat-chip"><strong>{slice_entry["rendered_row_count"]}</strong><span>rendered rows</span></span>',
+                    '</div>',
+                    '<div class="detail-links">',
+                    f'<a href="{escape(str(slice_entry["detail_html"]), quote=True)}">Open detail page</a>',
+                    (
+                        f'<a href="{escape(str(slice_entry["gallery_focus_href"]), quote=True)}">Open gallery focus</a>'
+                        if slice_entry.get("gallery_focus_href")
+                        else ''
+                    ),
+                    '</div>',
+                    '</article>',
+                ]
+            )
+        )
+    if not slice_cards:
+        slice_cards.append(
+            '<article class="slice-card"><h2>No facet slices</h2><p class="caption">Re-run with a sample that produces facet-aware rankings if you want focused detail pages.</p></article>'
+        )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Facet detail bundle ({escape(str(bundle_manifest['source_label']))})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); color: #0f172a; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    .hero {{ background: linear-gradient(135deg, #1d4ed8, #7c3aed); color: #eff6ff; border-radius: 1.75rem; padding: 1.5rem; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); }}
+    .hero h1 {{ margin: 0 0 0.4rem; font-size: 2rem; }}
+    .hero p {{ margin: 0.35rem 0; max-width: 70rem; }}
+    .meta-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; list-style: none; padding: 0; margin: 1.15rem 0 0; }}
+    .meta-list li {{ background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(191, 219, 254, 0.28); border-radius: 1rem; padding: 0.85rem 0.95rem; }}
+    .meta-list strong {{ display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #dbeafe; margin-bottom: 0.25rem; }}
+    .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.9rem; margin: 1.2rem 0 0; }}
+    .summary-card {{ background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(191, 219, 254, 0.2); border-radius: 1rem; padding: 0.95rem 1rem; }}
+    .summary-card strong {{ display: block; font-size: 1.55rem; margin-bottom: 0.2rem; }}
+    .bundle-nav, .slice-card, .related-links {{ background: rgba(255, 255, 255, 0.92); border: 1px solid #dbeafe; border-radius: 1.25rem; padding: 1.15rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); margin-top: 1.1rem; }}
+    .bundle-nav {{ display: flex; flex-wrap: wrap; gap: 0.65rem; }}
+    .nav-link, .detail-links a, .related-links a {{ display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; text-decoration: none; font-weight: 700; padding: 0.52rem 0.8rem; }}
+    .slice-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.2rem; }}
+    .slice-card h2, .related-links h2 {{ margin: 0 0 0.35rem; font-size: 1.2rem; }}
+    .caption {{ color: #475569; margin: 0 0 0.7rem; }}
+    .facet-pill-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
+    .facet-pill {{ display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }}
+    .facet-pill strong {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }}
+    .stat-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
+    .stat-chip {{ display: inline-flex; flex-direction: column; gap: 0.12rem; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.55rem 0.72rem; min-width: 7.6rem; }}
+    .stat-chip strong {{ font-size: 1.02rem; }}
+    .stat-chip span {{ font-size: 0.8rem; color: #475569; }}
+    .detail-links {{ display: flex; flex-wrap: wrap; gap: 0.55rem; }}
+    .related-links ul {{ margin: 0.75rem 0 0; padding-left: 1.1rem; }}
+    .related-links li + li {{ margin-top: 0.45rem; }}
+    code {{ font-family: "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; word-break: break-word; }}
+    .footer-note {{ color: #475569; margin-top: 1rem; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Facet ranking detail bundle</h1>
+      <p>Use this bundle when you want one downloadable packet plus one focused HTML page per facet slice for demos, screenshots, and review handoffs.</p>
+      <ul class="meta-list">
+        <li><strong>Source</strong><span>{escape(str(bundle_manifest['source_label']))}</span></li>
+        <li><strong>Facet fields</strong><span>{escape(str(bundle_manifest['facet_fields']))}</span></li>
+        <li><strong>Coverage</strong><span>{escape(str(bundle_manifest['coverage_label']))}</span></li>
+        <li><strong>Window detail</strong><span>{escape(str(bundle_manifest['coverage_detail']))}</span></li>
+      </ul>
+      <div class="summary-grid">{summary_cards_html}</div>
+    </section>
+    <section class="bundle-nav">{nav_links_html}</section>
+    <section class="slice-grid">{''.join(slice_cards)}</section>
+    {related_links_html}
+    <p class="footer-note">Tip: pair this bundle with the facet gallery and CSV exports so screenshots, focused pages, and raw tables stay aligned.</p>
+  </main>
+</body>
+</html>
+"""
+
+
+def format_facet_ranking_detail_slice_html(
+    group: dict[str, object],
+    category_specs: list[dict[str, object]],
+    *,
+    source_label: str,
+    facet_fields_label: str,
+    coverage_label: str,
+    coverage_detail: str,
+    bundle_index_href: str,
+    manifest_href: str,
+    bundle_zip_href: str,
+    gallery_focus_href: str | None = None,
+    related_links: list[dict[str, str]] | None = None,
+) -> str:
+    facet_pills = "".join(
+        (
+            '<span class="facet-pill">'
+            f'<strong>{escape(str(field_name))}</strong>{escape(str(field_value))}'
+            '</span>'
+        )
+        for field_name, field_value in dict(group["facets"]).items()
+    )
+    ranking_sections: list[str] = []
+    for spec in category_specs:
+        rows = list(group["categories"].get(spec["title"], []))
+        if not rows:
+            ranking_sections.append(
+                "".join(
+                    [
+                        '<section class="ranking-block is-empty">',
+                        f'<h2>{escape(str(spec["title"]))}</h2>',
+                        f'<p class="caption">{escape(str(spec["description"]))}</p>',
+                        '<p class="caption">No ranking rows were produced for this slice.</p>',
+                        '</section>',
+                    ]
+                )
+            )
+            continue
+        table_rows = "".join(
+            "".join(
+                [
+                    '<tr>',
+                    f'<td>{row["rank"]}</td>',
+                    f'<td><code>{escape(str(row[spec["value_field"]]))}</code></td>',
+                    f'<td>{row["count"]}</td>',
+                    '</tr>',
+                ]
+            )
+            for row in rows
+        )
+        ranking_sections.append(
+            "".join(
+                [
+                    '<section class="ranking-block">',
+                    f'<h2>{escape(str(spec["title"]))}</h2>',
+                    f'<p class="caption">{escape(str(spec["description"]))}</p>',
+                    '<table>',
+                    '  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>',
+                    f'  <tbody>{table_rows}</tbody>',
+                    '</table>',
+                    '</section>',
+                ]
+            )
+        )
+    if not ranking_sections:
+        ranking_sections.append(
+            '<section class="ranking-block is-empty"><h2>No facet ranking rows</h2><p class="caption">Re-run with a richer sample if you want referrer or user-agent heavy sections to appear here.</p></section>'
+        )
+    nav_links = [
+        (bundle_index_href, 'Back to bundle index'),
+        (bundle_zip_href, 'Download ZIP packet'),
+        (manifest_href, 'Open manifest JSON'),
+    ]
+    if gallery_focus_href:
+        nav_links.insert(1, (gallery_focus_href, 'Open gallery focus'))
+    related_links_html = ""
+    if related_links:
+        related_links_html = "".join(
+            [
+                '<section class="related-links">',
+                '  <h2>Related artifacts</h2>',
+                '  <ul>',
+                *[
+                    f'<li><a href="{escape(str(link["href"]), quote=True)}">{escape(str(link["label"]))}</a></li>'
+                    for link in related_links
+                ],
+                '  </ul>',
+                '</section>',
+            ]
+        )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Facet slice detail ({escape(str(group['facet_label']))})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); color: #0f172a; }}
+    main {{ max-width: 980px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    .hero, .ranking-block, .nav-row, .related-links {{ background: rgba(255, 255, 255, 0.94); border: 1px solid #dbeafe; border-radius: 1.25rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }}
+    .hero {{ background: linear-gradient(135deg, #eff6ff, #eef2ff); }}
+    .hero h1 {{ margin: 0 0 0.35rem; font-size: 1.9rem; }}
+    .caption {{ color: #475569; margin: 0 0 0.7rem; }}
+    .meta-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; list-style: none; padding: 0; margin: 1rem 0 0; }}
+    .meta-list li {{ background: #ffffff; border: 1px solid #dbeafe; border-radius: 0.95rem; padding: 0.8rem 0.9rem; }}
+    .meta-list strong {{ display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #1d4ed8; margin-bottom: 0.22rem; }}
+    .nav-row {{ display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }}
+    .nav-row a, .related-links a {{ display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; text-decoration: none; font-weight: 700; padding: 0.5rem 0.8rem; }}
+    .stat-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 1rem 0; }}
+    .stat-chip {{ display: inline-flex; flex-direction: column; gap: 0.12rem; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.55rem 0.72rem; min-width: 7.6rem; }}
+    .stat-chip strong {{ font-size: 1.02rem; }}
+    .stat-chip span {{ font-size: 0.8rem; color: #475569; }}
+    .facet-pill-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
+    .facet-pill {{ display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }}
+    .facet-pill strong {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }}
+    .ranking-block + .ranking-block {{ margin-top: 1rem; }}
+    .ranking-block h2, .related-links h2 {{ margin: 0 0 0.25rem; font-size: 1.1rem; }}
+    table {{ width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 0.85rem; overflow: hidden; }}
+    th, td {{ text-align: left; padding: 0.62rem 0.72rem; border-bottom: 1px solid rgba(148, 163, 184, 0.18); vertical-align: top; }}
+    th {{ font-size: 0.82rem; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; }}
+    code {{ font-family: "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; word-break: break-word; }}
+    .related-links {{ margin-top: 1rem; }}
+    .related-links ul {{ margin: 0.75rem 0 0; padding-left: 1.1rem; }}
+    .related-links li + li {{ margin-top: 0.45rem; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>{escape(str(group['facet_label']))}</h1>
+      <p class="caption">Focused facet slice page for static screenshots, single-slice sharing, and quick raster captures.</p>
+      <div class="facet-pill-row">{facet_pills}</div>
+      <div class="stat-row">
+        <span class="stat-chip"><strong>{int(group['total_count'])}</strong><span>requests in slice</span></span>
+        <span class="stat-chip"><strong>{len(group['available_family_labels'])}</strong><span>ranking families with data</span></span>
+        <span class="stat-chip"><strong>{int(group['rendered_row_count'])}</strong><span>rendered rows</span></span>
+      </div>
+      <ul class="meta-list">
+        <li><strong>Source</strong><span>{escape(source_label)}</span></li>
+        <li><strong>Facet fields</strong><span>{escape(facet_fields_label)}</span></li>
+        <li><strong>Coverage</strong><span>{escape(coverage_label)}</span></li>
+        <li><strong>Window detail</strong><span>{escape(coverage_detail)}</span></li>
+      </ul>
+    </section>
+    <section class="nav-row">{''.join(f'<a href="{escape(str(href), quote=True)}">{escape(str(label))}</a>' for href, label in nav_links)}</section>
+    {''.join(ranking_sections)}
+    {related_links_html}
+  </main>
+</body>
+</html>
+"""
+
+
+def write_facet_ranking_detail_bundle(
+    detail_output_dir: str | Path,
+    result: dict[str, object],
+    *,
+    source_label: str,
+    related_links: list[dict[str, str]] | None = None,
+    gallery_output_path: str | None = None,
+) -> dict[str, object]:
+    bundle_data = build_facet_ranking_groups(result)
+    faceting = bundle_data["faceting"]
+    category_specs = bundle_data["category_specs"]
+    facet_groups_sorted = bundle_data["facet_groups"]
+    paths = build_facet_ranking_detail_bundle_paths(detail_output_dir)
+    paths["slice_dir"].mkdir(parents=True, exist_ok=True)
+    for stale_slice_path in paths["slice_dir"].glob("*.html"):
+        stale_slice_path.unlink()
+
+    time_window = result.get("time_window")
+    coverage_label = "full log span"
+    coverage_detail = "Window filter inactive"
+    if time_window:
+        coverage_label = f'{time_window["start"] or "(open)"} → {time_window["end"] or "(open)"}'
+        coverage_detail = (
+            f'{time_window["matched_requests"]} matched / '
+            f'{time_window["excluded_requests"]} excluded'
+        )
+    facet_fields_label = ", ".join(str(field) for field in faceting["fields"])
+    gallery_href = None
+    if gallery_output_path:
+        gallery_href = relative_output_path(gallery_output_path, base_dir=paths["bundle_dir"])
+
+    summary_cards = [
+        {"value": len(facet_groups_sorted), "label": "facet slices"},
+        {"value": bundle_data["populated_family_count"], "label": "ranking families with data"},
+        {"value": bundle_data["rendered_row_count"], "label": "rendered ranking rows"},
+        {"value": bundle_data["largest_slice_requests"], "label": "largest slice requests"},
+        {"value": len(related_links or []), "label": "related artifact links"},
+    ]
+
+    related_links_for_index = [
+        {
+            "label": str(link["label"]),
+            "href": resolve_output_href(str(link["target"]), output_path=str(paths["index_html"])),
+        }
+        for link in (related_links or [])
+    ]
+
+    slice_entries: list[dict[str, object]] = []
+    slice_paths: list[Path] = []
+    for group in facet_groups_sorted:
+        slice_path = paths["slice_dir"] / f'{group["card_id"]}.html'
+        slice_paths.append(slice_path)
+        gallery_focus_href = None
+        if gallery_output_path:
+            gallery_focus_href = (
+                f'{relative_output_path(gallery_output_path, base_dir=slice_path.parent)}'
+                f'#{group["card_id"]}'
+            )
+        related_links_for_slice = [
+            {
+                "label": str(link["label"]),
+                "href": resolve_output_href(str(link["target"]), output_path=str(slice_path)),
+            }
+            for link in (related_links or [])
+        ]
+        write_text_output(
+            slice_path,
+            format_facet_ranking_detail_slice_html(
+                group,
+                category_specs,
+                source_label=source_label,
+                facet_fields_label=facet_fields_label,
+                coverage_label=coverage_label,
+                coverage_detail=coverage_detail,
+                bundle_index_href=relative_output_path(paths["index_html"], base_dir=slice_path.parent),
+                manifest_href=relative_output_path(paths["manifest_json"], base_dir=slice_path.parent),
+                bundle_zip_href=relative_output_path(paths["bundle_zip"], base_dir=slice_path.parent),
+                gallery_focus_href=gallery_focus_href,
+                related_links=related_links_for_slice,
+            ),
+        )
+        slice_entries.append(
+            {
+                "facet_label": str(group["facet_label"]),
+                "card_id": str(group["card_id"]),
+                "detail_html": relative_output_path(slice_path, base_dir=paths["bundle_dir"]),
+                "gallery_focus_href": (
+                    f'{gallery_href}#{group["card_id"]}' if gallery_href else None
+                ),
+                "facets": dict(group["facets"]),
+                "total_count": int(group["total_count"]),
+                "family_count": len(group["available_family_labels"]),
+                "rendered_row_count": int(group["rendered_row_count"]),
+                "available_family_labels": list(group["available_family_labels"]),
+            }
+        )
+
+    bundle_manifest = {
+        "source_label": source_label,
+        "facet_fields": facet_fields_label,
+        "coverage_label": coverage_label,
+        "coverage_detail": coverage_detail,
+        "summary_cards": summary_cards,
+        "gallery_html": gallery_href,
+        "related_links": related_links_for_index,
+        "bundle_files": {
+            "index_html": "index.html",
+            "manifest_json": "manifest.json",
+            "bundle_zip": paths["bundle_zip"].name,
+        },
+        "slices": slice_entries,
+    }
+    write_text_output(
+        paths["index_html"],
+        format_facet_ranking_detail_bundle_index_html(bundle_manifest),
+    )
+    write_text_output(
+        paths["manifest_json"],
+        json.dumps(bundle_manifest, indent=2, sort_keys=True),
+    )
+    write_facet_ranking_detail_bundle_zip(paths, slice_paths=slice_paths)
+    return bundle_manifest
 
 
 def get_card_annotation_theme(theme_key: str | None) -> dict[str, str]:
@@ -4572,6 +5065,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--facet-ranking-detail-bundle-dir",
+        help=(
+            "Optional output directory for a self-contained facet detail bundle with "
+            "index, manifest, focused per-slice HTML pages, and a ZIP packet "
+            "(requires --facet-field)"
+        ),
+    )
+    parser.add_argument(
         "--upstream-path-latency-csv",
         help="Optional path for a per-path upstream-latency breakdown CSV export",
     )
@@ -4884,6 +5385,7 @@ def main(argv: list[str] | None = None) -> int:
         args.top_referrer_facet_csv,
         args.top_user_agent_facet_csv,
         args.facet_ranking_gallery_html,
+        args.facet_ranking_detail_bundle_dir,
         args.upstream_path_latency_facet_csv,
         args.time_bucket_facet_csv,
     ]
@@ -5082,6 +5584,14 @@ def main(argv: list[str] | None = None) -> int:
                 related_links=facet_ranking_gallery_links,
                 gallery_output_path=args.facet_ranking_gallery_html,
             ),
+        )
+    if args.facet_ranking_detail_bundle_dir:
+        write_facet_ranking_detail_bundle(
+            args.facet_ranking_detail_bundle_dir,
+            result,
+            source_label=Path(args.logfile).name,
+            related_links=facet_ranking_gallery_links,
+            gallery_output_path=args.facet_ranking_gallery_html,
         )
     if args.upstream_path_latency_csv:
         write_path_latency_csv(

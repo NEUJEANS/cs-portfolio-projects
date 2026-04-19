@@ -1,14 +1,16 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 04:12 UTC run)
+## Current slice (2026-04-19 20:21 UTC run)
 - [x] resume the next `log-analyzer` follow-up after confirming `main` still matches `origin/main`
-- [x] keep building on the facet-ranking gallery instead of starting a different project because deep links were the clearest queued gap
-- [x] do a brief URL-state research check plus a short browser refresh/self-test before coding
-- [x] mirror search/sort/filter/hide-empty state into the gallery URL without adding dependencies
-- [x] add per-slice focused deep links plus copy/clear affordances so committed artifacts can jump directly into one facet card
-- [x] refresh README/checklist/research/learning/review docs and regenerate the committed `docs/artifacts/log-analyzer/facet-ranking-gallery.html` sample
-- [x] run targeted tests, real CLI/export smoke checks, browser validation, and 3 review passes
-- [x] run secret scan, commit, push, and write the wrap-up
+- [x] keep building on the facet-ranking artifacts instead of switching projects because downloadable per-facet detail bundles were the clearest queued gap
+- [x] do a brief Python `zipfile` research check plus a short focused-page/self-test plan before coding
+- [x] add `--facet-ranking-detail-bundle-dir` on top of the existing facet-ranking/gallery pipeline without duplicating the analysis path
+- [x] emit a self-contained bundle index, manifest JSON, deterministic ZIP packet, and focused per-slice HTML pages with gallery back-links when a gallery export is present
+- [x] extend automated coverage for bundle generation, ZIP determinism, CLI success, and missing-`--facet-field` validation
+- [x] refresh README/checklist/research/learning/review docs and regenerate the committed `docs/artifacts/log-analyzer/facet-ranking-detail-bundle/` sample bundle alongside the gallery artifact
+- [x] run targeted tests, real CLI/export smoke checks, and 3 review passes
+- [x] run secret scan before push
+- [ ] commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] parse common and combined access-log formats
@@ -35,4 +37,4 @@
 ## Next follow-up ideas
 - [ ] consider facet-aware comparison cards or gallery views for referrer/user-agent heavy release reviews beyond the current ranking-focused page
 - [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
-- [ ] consider downloadable per-facet detail bundles or raster-ready focused-slice exports now that deep links are in place
+- [ ] consider raster-ready focused-slice exports or screenshot helpers now that downloadable per-facet detail bundles exist

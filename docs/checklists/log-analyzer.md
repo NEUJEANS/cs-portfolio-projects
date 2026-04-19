@@ -1,5 +1,20 @@
 # Log Analyzer Checklist
 
+## Facet ranking detail-bundle slice (2026-04-19 20:21 UTC run)
+- [x] confirm repo sync before editing and continue the queued log-analyzer facet-artifact follow-up instead of starting a different project
+- [x] do a brief Python `zipfile` research check because deterministic download packets were the next highest-value gallery follow-up
+- [x] do a short focused-page/self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--facet-ranking-detail-bundle-dir` without branching into a second analysis path
+- [x] emit a self-contained bundle index, manifest JSON, deterministic ZIP packet, and focused per-slice HTML pages with gallery back-links when available
+- [x] extend automated coverage for bundle generation, ZIP determinism, CLI success, and missing-`--facet-field` validation
+- [x] refresh the committed sample log/artifacts so the downloadable bundle is reproducible from repo state
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider raster-ready focused-slice exports or PNG helpers next
+
 ## Facet ranking gallery deep-link slice (2026-04-19 04:12 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer gallery follow-up instead of starting a different project
 - [x] do a brief URL-state research check because the previous wrap-up already scoped deep links as the next highest-value slice
@@ -13,7 +28,7 @@
 - [x] run at least 3 review passes and fix issues found
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider downloadable per-facet detail bundles or raster export helpers next
+- [x] consider downloadable per-facet detail bundles next
 
 ## Facet ranking gallery slice (2026-04-19 03:04 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer gallery follow-up instead of starting a different project

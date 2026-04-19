@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Facet slice detail (env=prod, region=us-east-1)</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); color: #0f172a; }
+    main { max-width: 980px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    .hero, .ranking-block, .nav-row, .related-links { background: rgba(255, 255, 255, 0.94); border: 1px solid #dbeafe; border-radius: 1.25rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }
+    .hero { background: linear-gradient(135deg, #eff6ff, #eef2ff); }
+    .hero h1 { margin: 0 0 0.35rem; font-size: 1.9rem; }
+    .caption { color: #475569; margin: 0 0 0.7rem; }
+    .meta-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; list-style: none; padding: 0; margin: 1rem 0 0; }
+    .meta-list li { background: #ffffff; border: 1px solid #dbeafe; border-radius: 0.95rem; padding: 0.8rem 0.9rem; }
+    .meta-list strong { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #1d4ed8; margin-bottom: 0.22rem; }
+    .nav-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }
+    .nav-row a, .related-links a { display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; text-decoration: none; font-weight: 700; padding: 0.5rem 0.8rem; }
+    .stat-row { display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 1rem 0; }
+    .stat-chip { display: inline-flex; flex-direction: column; gap: 0.12rem; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.55rem 0.72rem; min-width: 7.6rem; }
+    .stat-chip strong { font-size: 1.02rem; }
+    .stat-chip span { font-size: 0.8rem; color: #475569; }
+    .facet-pill-row { display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }
+    .facet-pill { display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }
+    .facet-pill strong { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }
+    .ranking-block + .ranking-block { margin-top: 1rem; }
+    .ranking-block h2, .related-links h2 { margin: 0 0 0.25rem; font-size: 1.1rem; }
+    table { width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 0.85rem; overflow: hidden; }
+    th, td { text-align: left; padding: 0.62rem 0.72rem; border-bottom: 1px solid rgba(148, 163, 184, 0.18); vertical-align: top; }
+    th { font-size: 0.82rem; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+    .related-links { margin-top: 1rem; }
+    .related-links ul { margin: 0.75rem 0 0; padding-left: 1.1rem; }
+    .related-links li + li { margin-top: 0.45rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>env=prod, region=us-east-1</h1>
+      <p class="caption">Focused facet slice page for static screenshots, single-slice sharing, and quick raster captures.</p>
+      <div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>prod</span><span class="facet-pill"><strong>region</strong>us-east-1</span></div>
+      <div class="stat-row">
+        <span class="stat-chip"><strong>3</strong><span>requests in slice</span></span>
+        <span class="stat-chip"><strong>4</strong><span>ranking families with data</span></span>
+        <span class="stat-chip"><strong>8</strong><span>rendered rows</span></span>
+      </div>
+      <ul class="meta-list">
+        <li><strong>Source</strong><span>facet-ranking-sample.log</span></li>
+        <li><strong>Facet fields</strong><span>env, region</span></li>
+        <li><strong>Coverage</strong><span>full log span</span></li>
+        <li><strong>Window detail</strong><span>Window filter inactive</span></li>
+      </ul>
+    </section>
+    <section class="nav-row"><a href="../index.html">Back to bundle index</a><a href="../../facet-ranking-gallery.html#facet-env-prod-region-us-east-1">Open gallery focus</a><a href="../facet-ranking-detail-bundle.zip">Download ZIP packet</a><a href="../manifest.json">Open manifest JSON</a></section>
+    <section class="ranking-block"><h2>Top IPs</h2><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.1.0.1</code></td><td>2</td></tr><tr><td>2</td><td><code>10.1.0.2</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h2>Top paths</h2><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/api/report</code></td><td>2</td></tr><tr><td>2</td><td><code>/health</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h2>Top referrers</h2><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://status.example.com/deploy</code></td><td>2</td></tr><tr><td>2</td><td><code>https://ops.example.com/dashboard</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h2>Top user agents</h2><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>Mozilla/5.0 (prod)</code></td><td>2</td></tr><tr><td>2</td><td><code>curl/8.7</code></td><td>1</td></tr></tbody></table></section>
+    <section class="related-links">  <h2>Related artifacts</h2>  <ul><li><a href="../../release-comparison-card.html">Comparison card HTML</a></li><li><a href="../../release-comparison-card-annotated.html">Annotated comparison card HTML</a></li><li><a href="../../top-ips-by-facet.csv">Top IPs CSV</a></li><li><a href="../../top-paths-by-facet.csv">Top paths CSV</a></li><li><a href="../../top-referrers-by-facet.csv">Top referrers CSV</a></li><li><a href="../../top-user-agents-by-facet.csv">Top user agents CSV</a></li>  </ul></section>
+  </main>
+</body>
+</html>
