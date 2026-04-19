@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Facet ranking gallery (facet-ranking-sample.log)</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); color: #0f172a; }
+    main { max-width: 1380px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    .hero { background: linear-gradient(135deg, #1d4ed8, #7c3aed); color: #eff6ff; border-radius: 1.75rem; padding: 1.5rem 1.5rem 1.2rem; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); }
+    .hero h1 { margin: 0 0 0.4rem; font-size: 2.1rem; }
+    .hero p { margin: 0.35rem 0; max-width: 72rem; }
+    .meta-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; list-style: none; padding: 0; margin: 1.2rem 0 0; }
+    .meta-list li { background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(191, 219, 254, 0.28); border-radius: 1rem; padding: 0.85rem 0.95rem; }
+    .meta-list strong { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #dbeafe; margin-bottom: 0.25rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.9rem; margin: 1.2rem 0 0; }
+    .summary-card { background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(191, 219, 254, 0.2); border-radius: 1rem; padding: 0.95rem 1rem; }
+    .summary-card strong { display: block; font-size: 1.6rem; margin-bottom: 0.2rem; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.35rem; }
+    .facet-card, .related-links { background: rgba(255, 255, 255, 0.92); border: 1px solid #dbeafe; border-radius: 1.3rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }
+    .facet-card h2, .related-links h2 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+    .facet-pill-row { display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }
+    .facet-pill { display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }
+    .facet-pill strong { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }
+    .ranking-block + .ranking-block { margin-top: 1rem; }
+    .ranking-block h3 { margin: 0 0 0.2rem; font-size: 1rem; }
+    .caption { color: #475569; margin: 0 0 0.65rem; }
+    table { width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 0.85rem; overflow: hidden; }
+    th, td { text-align: left; padding: 0.62rem 0.72rem; border-bottom: 1px solid rgba(148, 163, 184, 0.18); vertical-align: top; }
+    th { font-size: 0.82rem; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+    .related-links ul { margin: 0.8rem 0 0; padding-left: 1.15rem; }
+    .related-links li + li { margin-top: 0.45rem; }
+    .related-links a { color: #1d4ed8; text-decoration: none; font-weight: 600; }
+    .footer-note { color: #475569; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Facet ranking gallery</h1>
+      <p>Use this page as a portfolio-friendly landing spot for per-deployment, per-release, or per-environment top-IP, top-path, top-referrer, and top-user-agent rankings without opening spreadsheets first.</p>
+      <p>It is especially useful for referrer/user-agent heavy release reviews where you want browser-ready tables beside comparison-card artifacts and committed CSV exports.</p>
+      <ul class="meta-list">
+        <li><strong>Source</strong><span>facet-ranking-sample.log</span></li>
+        <li><strong>Facet fields</strong><span>env, region</span></li>
+        <li><strong>Coverage</strong><span>full log span</span></li>
+        <li><strong>Window detail</strong><span>Window filter inactive</span></li>
+      </ul>
+      <div class="summary-grid"><div class="summary-card"><strong>3</strong><span>facet slices</span></div><div class="summary-card"><strong>4</strong><span>ranking families with data</span></div><div class="summary-card"><strong>20</strong><span>rendered ranking rows</span></div><div class="summary-card"><strong>6</strong><span>related artifact links</span></div></div>
+    </section>
+    <section class="gallery-grid">
+      <article class="facet-card"><h2>env=prod, region=us-east-1</h2><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>prod</span><span class="facet-pill"><strong>region</strong>us-east-1</span></div><section class="ranking-block"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.1.0.1</code></td><td>2</td></tr><tr><td>2</td><td><code>10.1.0.2</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/api/report</code></td><td>2</td></tr><tr><td>2</td><td><code>/health</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://status.example.com/deploy</code></td><td>2</td></tr><tr><td>2</td><td><code>https://ops.example.com/dashboard</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>Mozilla/5.0 (prod)</code></td><td>2</td></tr><tr><td>2</td><td><code>curl/8.7</code></td><td>1</td></tr></tbody></table></section></article><article class="facet-card"><h2>env=staging, region=us-west-2</h2><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>staging</span><span class="facet-pill"><strong>region</strong>us-west-2</span></div><section class="ranking-block"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.2.0.3</code></td><td>2</td></tr><tr><td>2</td><td><code>10.2.0.4</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/api/export</code></td><td>2</td></tr><tr><td>2</td><td><code>/api/report</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://staging.example.com/replay</code></td><td>2</td></tr><tr><td>2</td><td><code>https://status.example.com/deploy</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>curl/8.7 staging</code></td><td>2</td></tr><tr><td>2</td><td><code>Mozilla/5.0 (staging)</code></td><td>1</td></tr></tbody></table></section></article><article class="facet-card"><h2>env=preview, region=(missing)</h2><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>preview</span><span class="facet-pill"><strong>region</strong>(missing)</span></div><section class="ranking-block"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.3.0.5</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/preview</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://preview.example.com/home</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>PreviewBot/1.0</code></td><td>2</td></tr></tbody></table></section></article>
+    </section>
+    <section class="related-links">  <h2>Related artifacts</h2>  <p>Use these links to jump from the gallery into committed CSV exports, comparison cards, or other portfolio-friendly review artifacts.</p>  <ul><li><a href="release-comparison-card.html">Comparison card HTML</a></li><li><a href="release-comparison-card-annotated.html">Annotated comparison card HTML</a></li><li><a href="top-ips-by-facet.csv">Top IPs CSV</a></li><li><a href="top-paths-by-facet.csv">Top paths CSV</a></li><li><a href="top-referrers-by-facet.csv">Top referrers CSV</a></li><li><a href="top-user-agents-by-facet.csv">Top user agents CSV</a></li></ul></section>
+    <p class="footer-note">Tip: regenerate this gallery alongside the facet CSV exports and any release comparison cards so screenshots, CSV downloads, and review notes stay aligned.</p>
+  </main>
+</body>
+</html>

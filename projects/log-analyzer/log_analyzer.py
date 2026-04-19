@@ -1312,6 +1312,242 @@ def format_card_annotation_preset_gallery_html(
 """
 
 
+def format_facet_ranking_gallery_html(
+    result: dict[str, object],
+    *,
+    source_label: str,
+    related_links: list[dict[str, str]] | None = None,
+    gallery_output_path: str | None = None,
+) -> str:
+    faceting = result.get("faceting")
+    if not faceting:
+        raise ValueError("facet ranking gallery requires faceting metadata")
+
+    category_specs = [
+        {
+            "title": "Top IPs",
+            "description": "Which source IPs dominate each deployment or environment slice.",
+            "rows": list(result.get("top_ips_by_facet", [])),
+            "value_field": "ip",
+        },
+        {
+            "title": "Top paths",
+            "description": "Which endpoints absorb the most traffic inside each facet slice.",
+            "rows": list(result.get("top_paths_by_facet", [])),
+            "value_field": "path",
+        },
+        {
+            "title": "Top referrers",
+            "description": "Which upstream pages or campaign links feed each slice when combined logs are available.",
+            "rows": list(result.get("top_referrers_by_facet", [])),
+            "value_field": "referrer",
+        },
+        {
+            "title": "Top user agents",
+            "description": "Which browser, bot, or client strings dominate each slice.",
+            "rows": list(result.get("top_user_agents_by_facet", [])),
+            "value_field": "user_agent",
+        },
+    ]
+
+    facet_groups: dict[str, dict[str, object]] = {}
+    facet_order: list[str] = []
+    for spec in category_specs:
+        for row in spec["rows"]:
+            facet_label = str(row["facet_label"])
+            if facet_label not in facet_groups:
+                facet_groups[facet_label] = {
+                    "facet_label": facet_label,
+                    "facets": dict(row["facets"]),
+                    "categories": {},
+                }
+                facet_order.append(facet_label)
+            facet_groups[facet_label]["categories"].setdefault(spec["title"], []).append(row)
+
+    rendered_row_count = sum(len(spec["rows"]) for spec in category_specs)
+    populated_family_count = sum(1 for spec in category_specs if spec["rows"])
+    summary_cards = [
+        (len(facet_order), "facet slices"),
+        (populated_family_count, "ranking families with data"),
+        (rendered_row_count, "rendered ranking rows"),
+        (len(related_links or []), "related artifact links"),
+    ]
+    summary_cards_html = "".join(
+        f'<div class="summary-card"><strong>{value}</strong><span>{escape(label)}</span></div>'
+        for value, label in summary_cards
+    )
+
+    time_window = result.get("time_window")
+    coverage_label = "full log span"
+    coverage_detail = "Window filter inactive"
+    if time_window:
+        coverage_label = f'{time_window["start"] or "(open)"} → {time_window["end"] or "(open)"}'
+        coverage_detail = (
+            f'{time_window["matched_requests"]} matched / '
+            f'{time_window["excluded_requests"]} excluded'
+        )
+    facet_fields = ", ".join(str(field) for field in faceting["fields"])
+
+    facet_cards: list[str] = []
+    for facet_label in facet_order:
+        group = facet_groups[facet_label]
+        facet_pills = "".join(
+            (
+                '<span class="facet-pill">'
+                f'<strong>{escape(str(field_name))}</strong>{escape(str(field_value))}'
+                '</span>'
+            )
+            for field_name, field_value in dict(group["facets"]).items()
+        )
+        ranking_sections: list[str] = []
+        for spec in category_specs:
+            rows = list(group["categories"].get(spec["title"], []))
+            if not rows:
+                ranking_sections.append(
+                    "".join(
+                        [
+                            '<section class="ranking-block">',
+                            f'<h3>{escape(str(spec["title"]))}</h3>',
+                            f'<p class="caption">{escape(str(spec["description"]))}</p>',
+                            '<p class="caption">No ranking rows were produced for this facet slice.</p>',
+                            '</section>',
+                        ]
+                    )
+                )
+                continue
+            table_rows = "".join(
+                "".join(
+                    [
+                        "<tr>",
+                        f'<td>{row["rank"]}</td>',
+                        f'<td><code>{escape(str(row[spec["value_field"]]))}</code></td>',
+                        f'<td>{row["count"]}</td>',
+                        "</tr>",
+                    ]
+                )
+                for row in rows
+            )
+            ranking_sections.append(
+                "".join(
+                    [
+                        '<section class="ranking-block">',
+                        f'<h3>{escape(str(spec["title"]))}</h3>',
+                        f'<p class="caption">{escape(str(spec["description"]))}</p>',
+                        '<table>',
+                        '  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>',
+                        f'  <tbody>{table_rows}</tbody>',
+                        '</table>',
+                        '</section>',
+                    ]
+                )
+            )
+        if not ranking_sections:
+            ranking_sections.append(
+                '<p class="caption">No facet-aware ranking rows were produced for this run.</p>'
+            )
+        facet_cards.append(
+            "".join(
+                [
+                    '<article class="facet-card">',
+                    f'<h2>{escape(str(group["facet_label"]))}</h2>',
+                    f'<div class="facet-pill-row">{facet_pills}</div>' if facet_pills else '',
+                    *ranking_sections,
+                    '</article>',
+                ]
+            )
+        )
+
+    if not facet_cards:
+        facet_cards.append(
+            '<article class="facet-card"><h2>No facet ranking rows</h2><p class="caption">Re-run with combined-log fields or a larger sample if you want referrer/user-agent heavy slices to appear here.</p></article>'
+        )
+
+    related_links_html = ""
+    if related_links:
+        related_link_items = []
+        for link in related_links:
+            href = resolve_card_annotation_preset_gallery_href(
+                str(link["target"]),
+                gallery_output_path=gallery_output_path,
+            )
+            related_link_items.append(
+                '<li>'
+                f'<a href="{escape(href, quote=True)}">{escape(str(link["label"]))}</a>'
+                '</li>'
+            )
+        related_links_html = "".join(
+            [
+                '<section class="related-links">',
+                '  <h2>Related artifacts</h2>',
+                '  <p>Use these links to jump from the gallery into committed CSV exports, comparison cards, or other portfolio-friendly review artifacts.</p>',
+                f'  <ul>{"".join(related_link_items)}</ul>',
+                '</section>',
+            ]
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Facet ranking gallery ({escape(source_label)})</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); color: #0f172a; }}
+    main {{ max-width: 1380px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    .hero {{ background: linear-gradient(135deg, #1d4ed8, #7c3aed); color: #eff6ff; border-radius: 1.75rem; padding: 1.5rem 1.5rem 1.2rem; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); }}
+    .hero h1 {{ margin: 0 0 0.4rem; font-size: 2.1rem; }}
+    .hero p {{ margin: 0.35rem 0; max-width: 72rem; }}
+    .meta-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; list-style: none; padding: 0; margin: 1.2rem 0 0; }}
+    .meta-list li {{ background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(191, 219, 254, 0.28); border-radius: 1rem; padding: 0.85rem 0.95rem; }}
+    .meta-list strong {{ display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #dbeafe; margin-bottom: 0.25rem; }}
+    .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.9rem; margin: 1.2rem 0 0; }}
+    .summary-card {{ background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(191, 219, 254, 0.2); border-radius: 1rem; padding: 0.95rem 1rem; }}
+    .summary-card strong {{ display: block; font-size: 1.6rem; margin-bottom: 0.2rem; }}
+    .gallery-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.35rem; }}
+    .facet-card, .related-links {{ background: rgba(255, 255, 255, 0.92); border: 1px solid #dbeafe; border-radius: 1.3rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }}
+    .facet-card h2, .related-links h2 {{ margin: 0 0 0.35rem; font-size: 1.25rem; }}
+    .facet-pill-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
+    .facet-pill {{ display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }}
+    .facet-pill strong {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }}
+    .ranking-block + .ranking-block {{ margin-top: 1rem; }}
+    .ranking-block h3 {{ margin: 0 0 0.2rem; font-size: 1rem; }}
+    .caption {{ color: #475569; margin: 0 0 0.65rem; }}
+    table {{ width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 0.85rem; overflow: hidden; }}
+    th, td {{ text-align: left; padding: 0.62rem 0.72rem; border-bottom: 1px solid rgba(148, 163, 184, 0.18); vertical-align: top; }}
+    th {{ font-size: 0.82rem; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; }}
+    code {{ font-family: "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; word-break: break-word; }}
+    .related-links ul {{ margin: 0.8rem 0 0; padding-left: 1.15rem; }}
+    .related-links li + li {{ margin-top: 0.45rem; }}
+    .related-links a {{ color: #1d4ed8; text-decoration: none; font-weight: 600; }}
+    .footer-note {{ color: #475569; margin-top: 1rem; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"hero\">
+      <h1>Facet ranking gallery</h1>
+      <p>Use this page as a portfolio-friendly landing spot for per-deployment, per-release, or per-environment top-IP, top-path, top-referrer, and top-user-agent rankings without opening spreadsheets first.</p>
+      <p>It is especially useful for referrer/user-agent heavy release reviews where you want browser-ready tables beside comparison-card artifacts and committed CSV exports.</p>
+      <ul class=\"meta-list\">
+        <li><strong>Source</strong><span>{escape(source_label)}</span></li>
+        <li><strong>Facet fields</strong><span>{escape(facet_fields)}</span></li>
+        <li><strong>Coverage</strong><span>{escape(coverage_label)}</span></li>
+        <li><strong>Window detail</strong><span>{escape(coverage_detail)}</span></li>
+      </ul>
+      <div class=\"summary-grid\">{summary_cards_html}</div>
+    </section>
+    <section class=\"gallery-grid\">
+      {''.join(facet_cards)}
+    </section>
+    {related_links_html}
+    <p class=\"footer-note\">Tip: regenerate this gallery alongside the facet CSV exports and any release comparison cards so screenshots, CSV downloads, and review notes stay aligned.</p>
+  </main>
+</body>
+</html>
+"""
+
+
 def get_card_annotation_theme(theme_key: str | None) -> dict[str, str]:
     if theme_key in CARD_ANNOTATION_THEMES:
         return CARD_ANNOTATION_THEMES[str(theme_key)]
@@ -3897,6 +4133,23 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--facet-ranking-gallery-html",
+        help=(
+            "Optional path for a self-contained HTML gallery that groups per-facet top-IP, "
+            "top-path, top-referrer, and top-user-agent rankings into one browser-friendly "
+            "artifact (requires --facet-field)"
+        ),
+    )
+    parser.add_argument(
+        "--facet-ranking-gallery-link",
+        action="append",
+        default=[],
+        help=(
+            "Optional LABEL=TARGET link appended to --facet-ranking-gallery-html "
+            "(repeatable; useful for related CSV exports or comparison-card artifacts)"
+        ),
+    )
+    parser.add_argument(
         "--upstream-path-latency-csv",
         help="Optional path for a per-path upstream-latency breakdown CSV export",
     )
@@ -4196,6 +4449,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             "--card-annotation-preset-gallery-link requires --card-annotation-preset-gallery-html"
         )
+    if args.facet_ranking_gallery_link and not args.facet_ranking_gallery_html:
+        parser.error(
+            "--facet-ranking-gallery-link requires --facet-ranking-gallery-html"
+        )
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
@@ -4204,6 +4461,7 @@ def main(argv: list[str] | None = None) -> int:
         args.top_path_facet_csv,
         args.top_referrer_facet_csv,
         args.top_user_agent_facet_csv,
+        args.facet_ranking_gallery_html,
         args.upstream_path_latency_facet_csv,
         args.time_bucket_facet_csv,
     ]
@@ -4232,6 +4490,13 @@ def main(argv: list[str] | None = None) -> int:
         preset_gallery_links = [
             parse_card_annotation_preset_gallery_link(raw_link)
             for raw_link in args.card_annotation_preset_gallery_link
+        ]
+        facet_ranking_gallery_links = [
+            parse_card_annotation_preset_gallery_link(
+                raw_link,
+                flag_name="--facet-ranking-gallery-link",
+            )
+            for raw_link in args.facet_ranking_gallery_link
         ]
     except ValueError as exc:
         parser.error(str(exc))
@@ -4385,6 +4650,16 @@ def main(argv: list[str] | None = None) -> int:
             normalized_facet_fields,
             value_field="user_agent",
             time_window=result["time_window"],
+        )
+    if args.facet_ranking_gallery_html:
+        write_text_output(
+            args.facet_ranking_gallery_html,
+            format_facet_ranking_gallery_html(
+                result,
+                source_label=Path(args.logfile).name,
+                related_links=facet_ranking_gallery_links,
+                gallery_output_path=args.facet_ranking_gallery_html,
+            ),
         )
     if args.upstream_path_latency_csv:
         write_path_latency_csv(

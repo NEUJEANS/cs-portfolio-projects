@@ -19,6 +19,7 @@ from log_analyzer import (
     expand_card_annotation_presets,
     format_card_annotation_preset_gallery_html,
     format_facet_comparison_card_html,
+    format_facet_ranking_gallery_html,
     format_facet_comparison_card_svg,
     format_text_report,
     format_time_bucket_card_html,
@@ -2121,6 +2122,50 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('Annotated trend card', html)
         self.assertIn('release-trend-card-annotated.html', html)
 
+    def test_format_facet_ranking_gallery_html_groups_rankings_and_links(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                '10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2',
+                '10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2',
+            ],
+            top_n=2,
+            facet_fields=['env', 'region'],
+        )
+        html = format_facet_ranking_gallery_html(
+            result,
+            source_label='facet-ranking-sample.log',
+            related_links=[
+                {'label': 'Comparison card', 'target': 'release-comparison-card.html'},
+                {'label': 'Top referrers CSV', 'target': 'top-referrers-by-facet.csv'},
+            ],
+            gallery_output_path='docs/artifacts/log-analyzer/facet-ranking-gallery.html',
+        )
+        self.assertIn('Facet ranking gallery', html)
+        self.assertIn('env=prod, region=us-east-1', html)
+        self.assertIn('Top referrers', html)
+        self.assertIn('curl/8.7 staging', html)
+        self.assertIn('Comparison card', html)
+        self.assertIn('top-referrers-by-facet.csv', html)
+
+    def test_format_facet_ranking_gallery_html_keeps_empty_sections_visible(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 request_time=0.060 env=prod',
+                '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 request_time=0.015 env=prod',
+            ],
+            top_n=2,
+            facet_fields=['env'],
+        )
+        html = format_facet_ranking_gallery_html(
+            result,
+            source_label='common-log-sample.log',
+        )
+        self.assertIn('Top referrers', html)
+        self.assertIn('Top user agents', html)
+        self.assertIn('No ranking rows were produced for this facet slice.', html)
+
     def test_cli_gallery_rewrites_nested_related_links_relative_to_output(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
@@ -2310,6 +2355,54 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Preset preview JSON', html)
             self.assertIn('Card annotation presets', completed.stdout)
 
+    def test_cli_writes_facet_ranking_gallery_and_rewrites_related_links(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            log_path = temp_root / 'facet-ranking.log'
+            gallery_dir = temp_root / 'docs' / 'artifacts' / 'log-analyzer'
+            gallery_dir.mkdir(parents=True)
+            html_path = gallery_dir / 'facet-ranking-gallery.html'
+            log_path.write_text(
+                '\n'.join(
+                    [
+                        '10.0.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1',
+                        '10.0.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2',
+                        '10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2',
+                    ]
+                ) + '\n',
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent / 'log_analyzer.py'),
+                    str(log_path),
+                    '--facet-field',
+                    'env',
+                    '--facet-field',
+                    'region',
+                    '--top',
+                    '2',
+                    '--facet-ranking-gallery-html',
+                    str(html_path),
+                    '--facet-ranking-gallery-link',
+                    'Comparison card=docs/artifacts/log-analyzer/release-comparison-card.html',
+                    '--facet-ranking-gallery-link',
+                    'Top referrers CSV=docs/artifacts/log-analyzer/top-referrers-by-facet.csv',
+                ],
+                cwd=temp_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(html_path.exists())
+            html = html_path.read_text(encoding='utf-8')
+            self.assertIn('Facet ranking gallery', html)
+            self.assertIn('Top referrers', html)
+            self.assertIn('href="release-comparison-card.html"', html)
+            self.assertIn('href="top-referrers-by-facet.csv"', html)
+
     def test_cli_rejects_preset_gallery_link_without_gallery_output(self):
         completed = subprocess.run(
             [
@@ -2325,6 +2418,24 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn(
             '--card-annotation-preset-gallery-link requires --card-annotation-preset-gallery-html',
+            completed.stderr,
+        )
+
+    def test_cli_rejects_facet_ranking_gallery_link_without_gallery_output(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                'log_analyzer.py',
+                '--facet-ranking-gallery-link',
+                'Comparison card=release-comparison-card.html',
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            '--facet-ranking-gallery-link requires --facet-ranking-gallery-html',
             completed.stderr,
         )
 
@@ -2476,6 +2587,29 @@ class LogAnalyzerTests(unittest.TestCase):
                     str(log_path),
                     '--path-latency-facet-csv',
                     str(facet_csv),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('facet-specific export flags require at least one --facet-field', completed.stderr)
+
+    def test_cli_rejects_facet_ranking_gallery_without_facet_field(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            gallery_path = Path(tmpdir) / 'exports' / 'facet-ranking-gallery.html'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 "https://example.com/start" "Mozilla/5.0" request_time=0.010 env=prod\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--facet-ranking-gallery-html',
+                    str(gallery_path),
                 ],
                 cwd=Path(__file__).parent,
                 capture_output=True,

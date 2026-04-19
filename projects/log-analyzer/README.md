@@ -12,6 +12,7 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - exports minute/hour trend buckets so students can turn raw logs into screenshot-ready latency and error-rate stories
 - renders standalone SVG and HTML mini trend cards directly from active time buckets so GitHub Pages / slides can show release or incident snapshots without spreadsheet cleanup
 - splits hotspot and trend views by named deployment/environment fields such as `env=prod`, `region=us-east-1`, or `release=2026.04` when richer log formats include them
+- turns facet-aware rankings into browser-friendly gallery pages so students can show per-slice IP/path/referrer/user-agent evidence beside release-review artifacts without opening CSV files
 - compares two facet values side by side (for example `prod` vs `staging`) with request/error/latency deltas plus aligned time-bucket rows for release reviews
 - handles malformed lines, missing byte counts, and optional latency fields safely
 
@@ -33,10 +34,11 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
 - supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
-- supports repeatable `--facet-field` selections so richer named log fields can drive per-facet top-IP/top-path/top-referrer/top-user-agent rankings, hotspot/trend breakdowns, and dedicated CSV exports
+- supports repeatable `--facet-field` selections so richer named log fields can drive per-facet top-IP/top-path/top-referrer/top-user-agent rankings, hotspot/trend breakdowns, dedicated CSV exports, and browser-friendly ranking galleries
+- supports `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` values so facet-heavy release reviews can bundle ranking tables with related comparison cards / CSV artifacts in one HTML page
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
 - supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--top-referrer-facet-csv`, `--top-user-agent-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--top-referrer-facet-csv`, `--top-user-agent-facet-csv`, `--facet-ranking-gallery-html`, `--facet-ranking-gallery-link`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -58,6 +60,7 @@ python3 log_analyzer.py --card-annotation-preset-file docs/artifacts/log-analyze
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
 python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
 python3 log_analyzer.py access.log --facet-field env --facet-field region --top-ip-facet-csv ip-facets.csv --top-path-facet-csv path-facets.csv --top-referrer-facet-csv referrer-facets.csv --top-user-agent-facet-csv user-agent-facets.csv
+python3 log_analyzer.py access.log --facet-field env --facet-field region --facet-ranking-gallery-link 'Comparison card HTML=release-comparison-card.html' --facet-ranking-gallery-link 'Top referrers CSV=top-referrers-by-facet.csv' --facet-ranking-gallery-html facet-ranking-gallery.html
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-csv release-compare.csv
 python3 log_analyzer.py access.log --time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html
@@ -171,6 +174,21 @@ Examples:
 - `--facet-field env --facet-field region --top-path-facet-csv path-facets.csv --top-referrer-facet-csv referrer-facets.csv --top-user-agent-facet-csv user-agent-facets.csv`
 - combine the ranking CSVs with `--time-bucket-facet-csv` or hotspot facet exports when you want both traffic-share and latency stories for the same deploy labels
 - committed sample artifacts now live under `docs/artifacts/log-analyzer/facet-ranking-sample.log`, `top-ips-by-facet.csv`, `top-paths-by-facet.csv`, `top-referrers-by-facet.csv`, and `top-user-agents-by-facet.csv`
+
+## Facet ranking gallery artifacts
+Use `--facet-ranking-gallery-html` when you want the facet-aware ranking tables bundled into one browser-friendly HTML page for demos, GitHub Pages, or README screenshots. Add repeatable `--facet-ranking-gallery-link LABEL=TARGET` values when the gallery should also point at related CSV downloads, release comparison cards, or other committed artifacts.
+
+Behavior:
+- the gallery requires at least one `--facet-field` and reuses the normal per-facet ranking output instead of creating a separate analysis path
+- it groups the rendered tables by facet label so each environment/release slice gets one card with top IPs, paths, referrers, and user agents together
+- it adds summary cards for facet-slice count, populated ranking families, rendered rows, and related artifact links so screenshots still explain the scope at a glance
+- related links are rewritten relative to the gallery output path when they point at local files, which makes committed artifact bundles portable inside `docs/` or other nested folders
+- referrer/user-agent sections stay visible but empty-state friendly, so the page still works when the source log lacks combined-log fields
+
+Examples:
+- `--facet-field env --facet-field region --facet-ranking-gallery-html facet-ranking-gallery.html`
+- `--facet-field env --facet-field region --facet-ranking-gallery-link 'Comparison card HTML=release-comparison-card.html' --facet-ranking-gallery-link 'Top referrers CSV=top-referrers-by-facet.csv' --facet-ranking-gallery-html docs/artifacts/log-analyzer/facet-ranking-gallery.html`
+- sample committed artifacts now live under `docs/artifacts/log-analyzer/facet-ranking-gallery.html` plus the existing `top-*-by-facet.csv` files and comparison-card bundle
 
 ## Facet comparisons for release reviews
 Use `--facet-compare-field FIELD --facet-compare-values LEFT RIGHT` when you want two deployment, release, or environment values compared side by side without losing the normal global summary. This is useful for portfolio screenshots and release-review notes such as `env=prod` vs `env=staging` or `release=2026.04` vs `release=2026.05`.

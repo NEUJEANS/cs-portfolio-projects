@@ -1,5 +1,18 @@
 # Log Analyzer Checklist
 
+## Facet ranking gallery slice (2026-04-19 03:04 UTC run)
+- [x] confirm repo sync before editing and continue the queued log-analyzer gallery follow-up instead of starting a different project
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` support on top of the existing per-facet ranking data
+- [x] keep gallery generation browser-friendly and portable by grouping tables per facet slice and rewriting local related links relative to the output path
+- [x] extend automated coverage for gallery formatting, CLI success paths, and validation errors
+- [x] refresh the committed sample log/artifacts so the gallery is reproducible from repo state
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [ ] run secret scan before push
+- [ ] commit, push, and add wrap-up
+- [ ] consider a follow-up slice for PNG export helpers or gallery filtering/grouping controls
+
 ## Referrer/user-agent facet ranking slice (2026-04-19 02:54 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer follow-up instead of starting a different project
 - [x] update checklist/docs so the slice is resumable
