@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import string
 from dataclasses import dataclass, field
 from typing import Iterable
+
+
+ASCII_DIGITS = frozenset(string.digits)
+ASCII_WORD = frozenset(string.ascii_letters + string.digits + "_")
+ASCII_WHITESPACE = frozenset(" \t\n\r\f\v")
 
 
 class RegexSyntaxError(ValueError):
@@ -21,8 +27,14 @@ class Dot:
 
 
 @dataclass(frozen=True)
-class CharacterClass:
+class CharacterClassTerm:
     chars: frozenset[str]
+    negated: bool = False
+
+
+@dataclass(frozen=True)
+class CharacterClass:
+    terms: tuple[CharacterClassTerm, ...]
     negated: bool = False
 
 
@@ -53,7 +65,7 @@ class State:
     out1: int | None = None
     out2: int | None = None
     char: str | None = None
-    chars: frozenset[str] | None = None
+    class_terms: tuple[CharacterClassTerm, ...] | None = None
     negated: bool = False
 
 
@@ -133,7 +145,10 @@ class Parser:
             return Anchor("end")
         if token == "\\":
             self.consume("\\")
-            return Literal(self.parse_escape(in_class=False))
+            shorthand = self.parse_shorthand_class_token()
+            if shorthand is not None:
+                return CharacterClass((shorthand,), negated=False)
+            return Literal(self.parse_escape_char(in_class=False))
         if token in {"*", "+", "?", ")", "|"}:
             raise RegexSyntaxError(f"unexpected token {token!r} at position {self.index}")
         self.index += 1
@@ -145,7 +160,8 @@ class Parser:
         if self.peek() == "^":
             negated = True
             self.consume("^")
-        chars: set[str] = set()
+
+        terms: list[CharacterClassTerm] = []
         first = True
         while True:
             token = self.peek()
@@ -155,38 +171,71 @@ class Parser:
                 self.consume("]")
                 break
             first = False
-            start = self.parse_class_char()
+
+            item = self.parse_class_item()
+            if isinstance(item, CharacterClassTerm):
+                terms.append(item)
+                continue
+
+            start = item
             if self.peek() == "-":
-                saved_index = self.index
                 self.consume("-")
                 if self.peek() in {None, "]"}:
-                    chars.add(start)
-                    chars.add("-")
+                    terms.append(CharacterClassTerm(frozenset({start})))
+                    terms.append(CharacterClassTerm(frozenset({"-"})))
                     if self.peek() == "]":
                         self.consume("]")
                         break
                     continue
-                end = self.parse_class_char()
-                if ord(start) > ord(end):
-                    raise RegexSyntaxError(f"invalid range {start}-{end}")
-                chars.update(chr(code) for code in range(ord(start), ord(end) + 1))
+                end_item = self.parse_class_item()
+                if isinstance(end_item, CharacterClassTerm):
+                    raise RegexSyntaxError("character class ranges must use literal endpoints")
+                if ord(start) > ord(end_item):
+                    raise RegexSyntaxError(f"invalid range {start}-{end_item}")
+                terms.append(
+                    CharacterClassTerm(
+                        frozenset(chr(code) for code in range(ord(start), ord(end_item) + 1))
+                    )
+                )
             else:
-                chars.add(start)
-        if not chars:
-            raise RegexSyntaxError("empty character class")
-        return CharacterClass(frozenset(chars), negated=negated)
+                terms.append(CharacterClassTerm(frozenset({start})))
 
-    def parse_class_char(self) -> str:
+        if not terms:
+            raise RegexSyntaxError("empty character class")
+        return CharacterClass(tuple(terms), negated=negated)
+
+    def parse_class_item(self) -> str | CharacterClassTerm:
         token = self.peek()
         if token is None:
             raise RegexSyntaxError("unexpected end of character class")
         if token == "\\":
             self.consume("\\")
-            return self.parse_escape(in_class=True)
+            shorthand = self.parse_shorthand_class_token()
+            if shorthand is not None:
+                return shorthand
+            return self.parse_escape_char(in_class=True)
         self.index += 1
         return token
 
-    def parse_escape(self, *, in_class: bool) -> str:
+    def parse_shorthand_class_token(self) -> CharacterClassTerm | None:
+        token = self.peek()
+        if token is None:
+            raise RegexSyntaxError("dangling escape")
+        lookup = {
+            "d": CharacterClassTerm(ASCII_DIGITS),
+            "D": CharacterClassTerm(ASCII_DIGITS, negated=True),
+            "w": CharacterClassTerm(ASCII_WORD),
+            "W": CharacterClassTerm(ASCII_WORD, negated=True),
+            "s": CharacterClassTerm(ASCII_WHITESPACE),
+            "S": CharacterClassTerm(ASCII_WHITESPACE, negated=True),
+        }
+        shorthand = lookup.get(token)
+        if shorthand is None:
+            return None
+        self.index += 1
+        return shorthand
+
+    def parse_escape_char(self, *, in_class: bool) -> str:
         token = self.peek()
         if token is None:
             raise RegexSyntaxError("dangling escape")
@@ -231,7 +280,7 @@ class Compiler:
             index = self.new_state(State("ANY"))
             return Fragment(index, [(index, "out1")])
         if isinstance(node, CharacterClass):
-            index = self.new_state(State("CLASS", chars=node.chars, negated=node.negated))
+            index = self.new_state(State("CLASS", class_terms=node.terms, negated=node.negated))
             return Fragment(index, [(index, "out1")])
         if isinstance(node, Anchor):
             kind = "BOL" if node.kind == "start" else "EOL"
@@ -289,7 +338,14 @@ def ast_to_dict(node: object) -> object:
     if isinstance(node, Dot):
         return {"type": "dot"}
     if isinstance(node, CharacterClass):
-        return {"type": "class", "chars": "".join(sorted(node.chars)), "negated": node.negated}
+        rendered_terms = [
+            {"chars": "".join(sorted(term.chars)), "negated": term.negated}
+            for term in node.terms
+        ]
+        payload: dict[str, object] = {"type": "class", "terms": rendered_terms, "negated": node.negated}
+        if len(node.terms) == 1 and not node.terms[0].negated:
+            payload["chars"] = "".join(sorted(node.terms[0].chars))
+        return payload
     if isinstance(node, Concat):
         return {"type": "concat", "parts": [ast_to_dict(part) for part in node.parts]}
     if isinstance(node, Alternate):
@@ -307,8 +363,13 @@ def states_to_dict(states: list[State]) -> list[dict[str, object]]:
         entry: dict[str, object] = {"index": index, "kind": state.kind}
         if state.char is not None:
             entry["char"] = state.char
-        if state.chars is not None:
-            entry["chars"] = "".join(sorted(state.chars))
+        if state.class_terms is not None:
+            entry["terms"] = [
+                {"chars": "".join(sorted(term.chars)), "negated": term.negated}
+                for term in state.class_terms
+            ]
+            if len(state.class_terms) == 1 and not state.class_terms[0].negated:
+                entry["chars"] = "".join(sorted(state.class_terms[0].chars))
             entry["negated"] = state.negated
         if state.out1 is not None:
             entry["out1"] = state.out1
@@ -360,8 +421,12 @@ class RegexEngine:
             elif state.kind == "ANY":
                 matched = True
             elif state.kind == "CLASS":
-                contains = char in (state.chars or frozenset())
-                matched = not contains if state.negated else contains
+                matched = any(
+                    (char not in term.chars) if term.negated else (char in term.chars)
+                    for term in (state.class_terms or ())
+                )
+                if state.negated:
+                    matched = not matched
             elif state.kind == "MATCH":
                 continue
             if matched:

@@ -14,7 +14,9 @@ A compact regular-expression engine that parses a small regex language, compiles
 - quantifiers `*`, `+`, `?`
 - grouping with `(...)`
 - wildcard `.`
-- character classes like `[abc]`, `[a-z]`, and `[^0-9]`
+- character classes like `[abc]`, `[a-z]`, `[^0-9]`, and mixed bracket forms such as `[A-F\d]`
+- shorthand escape classes `\d`, `\D`, `\w`, `\W`, `\s`, and `\S` using an explicit ASCII teaching subset
+- bracket-class ranges still require literal endpoints, so `[A-F\d]` is valid but `[A-\d]` is rejected as ambiguous
 - anchors `^` and `$`
 
 ## Project structure
@@ -36,6 +38,12 @@ python3 regex_engine_lab.py search '(cat|dog)s?' 'two dogs walked by'
 
 `search` returns the leftmost match and prefers the longest match for that start position.
 
+### Use shorthand classes for digits, words, and whitespace
+```bash
+python3 regex_engine_lab.py fullmatch '^ID-\d\d\d\d-\w+$' 'ID-2026-demo_user'
+python3 regex_engine_lab.py search '\d+\s\w+' 'build 2026 portfolio'
+```
+
 ### Inspect the AST and compiled NFA
 ```bash
 python3 regex_engine_lab.py explain 'ab|c*'
@@ -53,7 +61,7 @@ python3 -m unittest discover -s projects/regex-engine-lab -p 'test_*.py' -v
 - which modern regex features fall outside regular languages and were intentionally excluded here
 
 ## Future improvements
-- add escape classes such as `\d`, `\w`, and `\s`
 - expose step-by-step state tracing for debugging and teaching
 - compile to DFA for faster repeated matching on the same pattern
 - add a tiny benchmark comparing this engine with Python's `re` on safe regular-language patterns
+- add optional Unicode-aware shorthand classes as a follow-on contrast with the current ASCII teaching mode

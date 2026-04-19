@@ -41,23 +41,42 @@ class RegexEngineTests(unittest.TestCase):
         self.assertTrue(engine.fullmatch("abcz"))
         self.assertFalse(engine.search("xxabczxx"))
 
+    def test_escape_shorthand_classes_outside_brackets(self) -> None:
+        self.assertTrue(RegexEngine(r"\d+\w+\s\S").fullmatch("42code X"))
+        self.assertTrue(RegexEngine(r"\D+").fullmatch("code!"))
+        self.assertFalse(RegexEngine(r"\D+").fullmatch("code2"))
+        self.assertTrue(RegexEngine(r"\W+").fullmatch("?!"))
+
+    def test_escape_shorthand_classes_inside_brackets(self) -> None:
+        self.assertTrue(RegexEngine(r"[A-F\d]+").fullmatch("FACE2026"))
+        self.assertTrue(RegexEngine(r"[\d-]+").fullmatch("2026-04-19"))
+        self.assertTrue(RegexEngine(r"[^\s]+").fullmatch("tab-separated"))
+        self.assertFalse(RegexEngine(r"[^\s]+").fullmatch("has space"))
+
     def test_empty_pattern_matches_empty_string(self) -> None:
         engine = RegexEngine("")
         self.assertTrue(engine.fullmatch(""))
         self.assertEqual(engine.search("abc"), {"matched": True, "start": 0, "end": 0, "match": ""})
 
     def test_explain_contains_ast_and_states(self) -> None:
-        engine = RegexEngine("ab|cd")
+        engine = RegexEngine(r"\d+[A-Z]")
         payload = engine.explain()
-        self.assertEqual(payload["pattern"], "ab|cd")
+        self.assertEqual(payload["pattern"], r"\d+[A-Z]")
         self.assertIn("ast", payload)
         self.assertGreater(len(payload["states"]), 0)
+        first_repeat_node = payload["ast"]["parts"][0]
+        self.assertEqual(first_repeat_node["type"], "repeat")
+        self.assertEqual(first_repeat_node["node"]["type"], "class")
+        self.assertEqual(first_repeat_node["node"]["terms"][0]["chars"], "0123456789")
+        self.assertTrue(any(state.get("chars") == "0123456789" for state in payload["states"]))
 
     def test_invalid_patterns_raise_syntax_error(self) -> None:
         with self.assertRaises(RegexSyntaxError):
             RegexEngine("(")
         with self.assertRaises(RegexSyntaxError):
             RegexEngine("[z-a]")
+        with self.assertRaises(RegexSyntaxError):
+            RegexEngine(r"[a-\d]")
 
 
 class RegexEngineCliTests(unittest.TestCase):
@@ -81,6 +100,13 @@ class RegexEngineCliTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertTrue(payload["matched"])
         self.assertEqual(payload["match"], "abc")
+
+    def test_cli_shorthand_classes(self) -> None:
+        completed = self.run_cli("search", r"\d+\s\w+", "build 2026 portfolio")
+        self.assertEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["match"], "2026 portfolio")
 
     def test_cli_explain(self) -> None:
         completed = self.run_cli("explain", "a|b")
