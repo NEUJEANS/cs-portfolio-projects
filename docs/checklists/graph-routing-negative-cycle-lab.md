@@ -11,3 +11,4 @@
 - [x] run repo test suite, secret scan, commit, push, and wrap up the slice
 - [x] add Mermaid artifact export for Bellman-Ford shortest-path trees and reachable negative cycles
 - [x] add Graphviz DOT artifact export for Bellman-Ford shortest-path trees and reachable negative cycles
+- [x] add Markdown report export for unreachable-path explanations and Bellman-Ford iteration summaries

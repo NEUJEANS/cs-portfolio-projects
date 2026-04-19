@@ -1,0 +1,9 @@
+{
+  "name": "unreachable_demo",
+  "nodes": ["A", "B", "C", "D", "E"],
+  "edges": [
+    {"source": "A", "target": "B", "weight": 3},
+    {"source": "B", "target": "C", "weight": -1},
+    {"source": "C", "target": "D", "weight": 2}
+  ]
+}

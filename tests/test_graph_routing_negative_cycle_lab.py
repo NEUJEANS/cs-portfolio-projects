@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "graph_routing_lab.py"
 SAMPLE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "sample_graph.json"
 NEGATIVE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "negative_cycle_graph.json"
+UNREACHABLE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "unreachable_graph.json"
 
 spec = importlib.util.spec_from_file_location("graph_routing_negative_cycle_lab", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
@@ -23,6 +24,7 @@ bellman_ford = module.bellman_ford
 build_report = module.build_report
 build_shortest_path_results = module.build_shortest_path_results
 export_dot = module.export_dot
+export_markdown = module.export_markdown
 export_mermaid = module.export_mermaid
 johnson = module.johnson
 load_graph = module.load_graph
@@ -49,6 +51,15 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         self.assertEqual(paths["A"].path, ("A",))
         self.assertEqual(paths["D"].path, ("A", "C", "B", "D"))
         self.assertEqual(paths["D"].cost, 3)
+
+    def test_bellman_ford_marks_unreachable_nodes_in_path_results(self) -> None:
+        _, nodes, edges = load_graph(UNREACHABLE_PATH)
+        result = bellman_ford(nodes, edges, "A")
+        paths = build_shortest_path_results(result)
+        self.assertEqual(paths["D"].path, ("A", "B", "C", "D"))
+        self.assertEqual(paths["E"].path, tuple())
+        self.assertEqual(paths["E"].cost, float("inf"))
+        self.assertIsNone(result.predecessors["E"])
 
     def test_bellman_ford_detects_reachable_negative_cycle(self) -> None:
         _, nodes, edges = load_graph(NEGATIVE_PATH)
@@ -98,6 +109,12 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         self.assertIn("Bellman-Ford from A", output)
         self.assertIn("Iterations logged:", output)
 
+    def test_pretty_report_formats_unreachable_costs_consistently(self) -> None:
+        report = build_report(*load_graph(UNREACHABLE_PATH), source="A", mode="full")
+        output = render_pretty(report)
+        self.assertIn("- E: dist=∞ predecessor=—", output)
+        self.assertIn("  E: cost=∞ path=unreachable", output)
+
     def test_export_mermaid_writes_shortest_path_and_cycle_styles(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "routing.mmd"
@@ -139,6 +156,49 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn('fillcolor="#fee2e2"', rendered_negative)
             self.assertIn('A -> B [label="3", color="#dc2626"', rendered_negative)
             self.assertIn("// negative cycle:", rendered_negative)
+
+    def test_export_markdown_writes_unreachable_table_and_iteration_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "routing.md"
+            report = build_report(*load_graph(UNREACHABLE_PATH), source="A", mode="full")
+            export_markdown(report, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn("# unreachable_demo routing report", rendered)
+            self.assertIn("## Bellman-Ford from A", rendered)
+            self.assertIn("| E | ∞ | — | unreachable | unreachable |", rendered)
+            self.assertIn("### Iteration log", rendered)
+            self.assertIn("## Johnson all-pairs shortest paths", rendered)
+
+    def test_export_markdown_reports_negative_cycle_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "negative.md"
+            report = build_report(*load_graph(NEGATIVE_PATH), source="A", mode="bellman-ford")
+            export_markdown(report, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn("### Reachable negative cycle", rendered)
+            self.assertIn("A -> B -> C -> A", rendered)
+            self.assertIn("not well-defined", rendered)
+
+    def test_export_markdown_escapes_pipe_characters_in_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "pipe_graph.json"
+            graph_path.write_text(
+                json.dumps(
+                    {
+                        "name": "pipe_demo",
+                        "nodes": ["A|1", "B|2"],
+                        "edges": [{"source": "A|1", "target": "B|2", "weight": 7}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output_path = Path(tmpdir) / "pipe.md"
+            report = build_report(*load_graph(graph_path), source="A|1", mode="full")
+            export_markdown(report, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn("| A\\|1 | B\\|2 | 7 |", rendered)
+            self.assertIn("| A\\|1 | 0 | — | A\\|1 | reachable |", rendered)
+            self.assertIn("A\\|1 -> B\\|2", rendered)
 
     def test_cli_json_mode_emits_johnson_payload(self) -> None:
         completed = subprocess.run(
@@ -227,6 +287,28 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn("Bellman-Ford from A", completed.stdout)
             self.assertTrue(output_path.exists())
             self.assertIn("digraph routing_demo {", output_path.read_text(encoding="utf-8"))
+
+    def test_cli_can_export_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "cli-routing.md"
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    str(UNREACHABLE_PATH),
+                    "--source",
+                    "A",
+                    "--export-markdown",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("Bellman-Ford from A", completed.stdout)
+            self.assertTrue(output_path.exists())
+            self.assertIn("## Johnson all-pairs shortest paths", output_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

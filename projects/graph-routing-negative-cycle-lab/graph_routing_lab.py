@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import deque
 from dataclasses import dataclass
 from heapq import heappop, heappush
 from pathlib import Path
@@ -278,8 +279,8 @@ def render_pretty(report: RoutingReport) -> str:
         lines.append(f"Bellman-Ford from {report.bellman_ford.source}:")
         lines.append(f"Iterations logged: {len(report.bellman_ford.iterations)}")
         for node, distance in report.bellman_ford.distances.items():
-            predecessor = report.bellman_ford.predecessors[node]
-            lines.append(f"- {node}: dist={distance} predecessor={predecessor}")
+            predecessor = report.bellman_ford.predecessors[node] or "—"
+            lines.append(f"- {node}: dist={_format_cost(distance)} predecessor={predecessor}")
         if report.bellman_ford.negative_cycle:
             lines.append("Negative cycle: " + " -> ".join(report.bellman_ford.negative_cycle))
     if report.johnson:
@@ -289,8 +290,123 @@ def render_pretty(report: RoutingReport) -> str:
             lines.append(f"[{source}]")
             for target, result in sorted(targets.items()):
                 path_text = " -> ".join(result.path) if result.path else "unreachable"
-                lines.append(f"  {target}: cost={result.cost} path={path_text}")
+                lines.append(f"  {target}: cost={_format_cost(result.cost)} path={path_text}")
     return "\n".join(lines)
+
+
+def _escape_markdown_cell(value: object) -> str:
+    return str(value).replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
+
+
+def _markdown_table(lines: list[str], headers: list[str], rows: Iterable[Iterable[str]]) -> None:
+    lines.append("| " + " | ".join(_escape_markdown_cell(header) for header in headers) + " |")
+    lines.append("| " + " | ".join("---" for _ in headers) + " |")
+    for row in rows:
+        lines.append("| " + " | ".join(_escape_markdown_cell(cell) for cell in row) + " |")
+
+
+def _nodes_reachable_from_starts(edges: Iterable[Edge], starts: Iterable[str]) -> set[str]:
+    adjacency: dict[str, list[str]] = {}
+    for edge in edges:
+        adjacency.setdefault(edge.source, []).append(edge.target)
+    seen = {node for node in starts}
+    queue = deque(seen)
+    while queue:
+        node = queue.popleft()
+        for neighbor in adjacency.get(node, []):
+            if neighbor in seen:
+                continue
+            seen.add(neighbor)
+            queue.append(neighbor)
+    return seen
+
+
+def render_markdown(report: RoutingReport) -> str:
+    lines = [f"# {report.graph_name} routing report", ""]
+    lines.append(f"- Nodes: {len(report.nodes)}")
+    lines.append(f"- Edges: {len(report.edges)}")
+    lines.append("")
+    lines.append("## Edge list")
+    _markdown_table(
+        lines,
+        ["Source", "Target", "Weight"],
+        ([edge.source, edge.target, str(edge.weight)] for edge in report.edges),
+    )
+
+    if report.bellman_ford:
+        shortest_paths = build_shortest_path_results(report.bellman_ford)
+        unstable_nodes: set[str] = set()
+        if report.bellman_ford.negative_cycle:
+            unstable_nodes = _nodes_reachable_from_starts(
+                report.edges,
+                report.bellman_ford.negative_cycle[:-1],
+            )
+        lines.append("")
+        lines.append(f"## Bellman-Ford from {report.bellman_ford.source}")
+        _markdown_table(
+            lines,
+            ["Node", "Distance", "Predecessor", "Path", "Status"],
+            (
+                [
+                    node,
+                    _format_cost(result.cost),
+                    report.bellman_ford.predecessors[node] or "—",
+                    (
+                        "undefined (reachable negative cycle)"
+                        if node in unstable_nodes
+                        else (" -> ".join(result.path) if result.path else "unreachable")
+                    ),
+                    "cycle-reachable" if node in unstable_nodes else ("reachable" if result.path else "unreachable"),
+                ]
+                for node, result in shortest_paths.items()
+            ),
+        )
+        if report.bellman_ford.negative_cycle:
+            lines.append("")
+            lines.append("### Reachable negative cycle")
+            lines.append("- Cycle: " + " -> ".join(report.bellman_ford.negative_cycle))
+            cycle_nodes = set(report.bellman_ford.negative_cycle[:-1])
+            if cycle_nodes:
+                lines.append("- Cycle nodes: " + ", ".join(sorted(cycle_nodes)))
+            if unstable_nodes:
+                lines.append("- Unstable shortest-path nodes: " + ", ".join(sorted(unstable_nodes)))
+            lines.append(
+                "- Note: shortest-path costs that can keep traversing this cycle are not well-defined."
+            )
+        lines.append("")
+        lines.append("### Iteration log")
+        for iteration in report.bellman_ford.iterations:
+            relaxed_edges = iteration["relaxed_edges"]
+            if relaxed_edges:
+                relaxed_text = ", ".join(
+                    f"{edge['source']}->{edge['target']} ({edge['weight']})" for edge in relaxed_edges
+                )
+            else:
+                relaxed_text = "none"
+            changed_text = "changed" if iteration["changed"] else "stable"
+            lines.append(
+                f"- Iteration {iteration['iteration']}: {changed_text}; relaxed edges: {relaxed_text}"
+            )
+
+    if report.johnson:
+        lines.append("")
+        lines.append("## Johnson all-pairs shortest paths")
+        _markdown_table(
+            lines,
+            ["Source", "Target", "Cost", "Path"],
+            (
+                [
+                    source,
+                    target,
+                    _format_cost(result.cost),
+                    " -> ".join(result.path) if result.path else "unreachable",
+                ]
+                for source, targets in sorted(report.johnson.paths.items())
+                for target, result in sorted(targets.items())
+            ),
+        )
+
+    return "\n".join(lines) + "\n"
 
 
 def _sanitize_identifier(value: str) -> str:
@@ -374,6 +490,13 @@ def export_mermaid(report: RoutingReport, output_path: str | Path) -> Path:
             "    %% negative cycle: " + " -> ".join(report.bellman_ford.negative_cycle)
         )
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return output
+
+
+def export_markdown(report: RoutingReport, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_markdown(report), encoding="utf-8")
     return output
 
 
@@ -490,6 +613,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--format", choices=("json", "pretty"), default="pretty")
     parser.add_argument("--export-mermaid", help="Write a Mermaid flowchart artifact for the selected report")
     parser.add_argument("--export-dot", help="Write a Graphviz DOT artifact for the selected report")
+    parser.add_argument("--export-markdown", help="Write a Markdown routing report artifact for the selected report")
     return parser.parse_args()
 
 
@@ -501,6 +625,8 @@ def main() -> None:
         export_mermaid(report, args.export_mermaid)
     if args.export_dot:
         export_dot(report, args.export_dot)
+    if args.export_markdown:
+        export_markdown(report, args.export_markdown)
     if args.format == "json":
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return

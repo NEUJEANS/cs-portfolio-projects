@@ -16,6 +16,7 @@ A Python graph-routing lab that demonstrates Bellman-Ford single-source shortest
 - detect and reconstruct a reachable negative cycle
 - run Johnson's algorithm and emit all-pairs shortest-path routes
 - provide pretty or JSON CLI output for READMEs and automation
+- export Markdown routing reports that explain reachable vs unreachable nodes and Bellman-Ford iteration activity
 - export Mermaid and Graphviz DOT artifacts that highlight Bellman-Ford shortest-path trees and reachable negative cycles
 
 ## Usage
@@ -25,6 +26,7 @@ python3 graph_routing_lab.py sample_graph.json --source A
 python3 graph_routing_lab.py sample_graph.json --source A --format json
 python3 graph_routing_lab.py sample_graph.json --mode johnson --format json
 python3 graph_routing_lab.py negative_cycle_graph.json --source A --mode bellman-ford
+python3 graph_routing_lab.py unreachable_graph.json --source A --export-markdown ../../docs/artifacts/graph-routing-negative-cycle-unreachable-report.md
 python3 graph_routing_lab.py sample_graph.json --source A --mode bellman-ford --export-mermaid ../../docs/artifacts/graph-routing-negative-cycle-sample.mmd
 python3 graph_routing_lab.py sample_graph.json --source A --mode bellman-ford --export-dot ../../docs/artifacts/graph-routing-negative-cycle-sample.dot
 pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
@@ -49,10 +51,11 @@ pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
 - reachable negative-cycle detection and reporting
 - Johnson all-pairs correctness with negative edges but no negative cycles
 - CLI JSON/pretty output smoke tests
+- Markdown export coverage for unreachable nodes, iteration logs, and negative-cycle explanations
 - Mermaid and Graphviz DOT export artifact coverage
 - input validation for duplicate nodes and invalid edge endpoints
 
 ## Future improvements
 - compare Bellman-Ford vs DAG shortest-path performance on acyclic graphs
-- add unreachable-node examples and path explanation markdown artifacts
 - optionally render DOT exports to PNG/SVG when `dot` is installed locally
+- add route-table diff reports so multiple graph variants can be compared side by side
