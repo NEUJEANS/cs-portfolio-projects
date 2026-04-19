@@ -32,6 +32,11 @@
           "hits": 2,
           "hit_rate": 0.166667
         },
+        "wsclock": {
+          "page_faults": 10,
+          "hits": 2,
+          "hit_rate": 0.166667
+        },
         "lru": {
           "page_faults": 10,
           "hits": 2,
@@ -58,6 +63,11 @@
           "hit_rate": 0.166667
         },
         "aging": {
+          "page_faults": 8,
+          "hits": 4,
+          "hit_rate": 0.333333
+        },
+        "wsclock": {
           "page_faults": 8,
           "hits": 4,
           "hit_rate": 0.333333
@@ -92,6 +102,11 @@
           "hits": 7,
           "hit_rate": 0.583333
         },
+        "wsclock": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
         "lru": {
           "page_faults": 5,
           "hits": 7,
@@ -118,6 +133,11 @@
           "hit_rate": 0.583333
         },
         "aging": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "wsclock": {
           "page_faults": 5,
           "hits": 7,
           "hit_rate": 0.583333
@@ -152,6 +172,11 @@
           "hits": 7,
           "hit_rate": 0.583333
         },
+        "wsclock": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
         "lru": {
           "page_faults": 5,
           "hits": 7,
@@ -178,6 +203,11 @@
           "hit_rate": 0.583333
         },
         "aging": {
+          "page_faults": 5,
+          "hits": 7,
+          "hit_rate": 0.583333
+        },
+        "wsclock": {
           "page_faults": 5,
           "hits": 7,
           "hit_rate": 0.583333

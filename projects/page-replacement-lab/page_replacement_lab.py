@@ -86,8 +86,10 @@ TRACE_BENCHMARKS: dict[str, TraceBenchmark] = {
 
 AGE_COUNTER_BITS = 8
 AGE_COUNTER_TOP_BIT = 1 << (AGE_COUNTER_BITS - 1)
+WS_CLOCK_WINDOW_MULTIPLIER = 2
+WS_CLOCK_WINDOW_FLOOR = 4
 
-ALGORITHMS = ("fifo", "clock", "aging", "lru", "opt")
+ALGORITHMS = ("fifo", "clock", "aging", "wsclock", "lru", "opt")
 
 
 @dataclass(slots=True)
@@ -311,6 +313,90 @@ def simulate_aging(reference_string: Iterable[int], frame_count: int) -> Simulat
     )
 
 
+def wsclock_window(frame_count: int) -> int:
+    return max(WS_CLOCK_WINDOW_FLOOR, frame_count * WS_CLOCK_WINDOW_MULTIPLIER)
+
+
+def simulate_wsclock(reference_string: Iterable[int], frame_count: int) -> SimulationResult:
+    reference = validate_reference(reference_string, frame_count)
+    frames: list[int | None] = [None] * frame_count
+    reference_bits = [0] * frame_count
+    last_used = [-1] * frame_count
+    resident_slots: dict[int, int] = {}
+    hand = 0
+    faults = 0
+    steps: list[SimulationStep] = []
+    window = wsclock_window(frame_count)
+
+    for index, page in enumerate(reference):
+        evicted: int | None = None
+        hit = page in resident_slots
+        if hit:
+            slot = resident_slots[page]
+            reference_bits[slot] = 1
+            last_used[slot] = index
+        else:
+            faults += 1
+            slot: int | None = None
+            fallback_slot: int | None = None
+            scanned = 0
+            while scanned < frame_count:
+                current_page = frames[hand]
+                if current_page is None:
+                    slot = hand
+                    break
+                if reference_bits[hand] == 1:
+                    reference_bits[hand] = 0
+                else:
+                    age = index - last_used[hand]
+                    if age > window:
+                        slot = hand
+                        break
+                    if fallback_slot is None or (last_used[hand], hand) < (
+                        last_used[fallback_slot],
+                        fallback_slot,
+                    ):
+                        fallback_slot = hand
+                hand = (hand + 1) % frame_count
+                scanned += 1
+
+            if slot is None:
+                if fallback_slot is None:
+                    fallback_slot = min(range(frame_count), key=lambda candidate: (last_used[candidate], candidate))
+                slot = fallback_slot
+
+            evicted = frames[slot]
+            if evicted is not None:
+                resident_slots.pop(evicted, None)
+
+            frames[slot] = page
+            reference_bits[slot] = 1
+            last_used[slot] = index
+            resident_slots[page] = slot
+            hand = (slot + 1) % frame_count
+
+        steps.append(
+            SimulationStep(
+                index=index,
+                page=page,
+                hit=hit,
+                frames=[value for value in frames if value is not None],
+                evicted=evicted,
+            )
+        )
+
+    hits = len(reference) - faults
+    return SimulationResult(
+        algorithm="wsclock",
+        frame_count=frame_count,
+        reference_string=reference,
+        page_faults=faults,
+        hits=hits,
+        hit_rate=hits / len(reference),
+        steps=steps,
+    )
+
+
 def simulate_lru(reference_string: Iterable[int], frame_count: int) -> SimulationResult:
     reference = validate_reference(reference_string, frame_count)
     frames: list[int] = []
@@ -431,6 +517,7 @@ SIMULATORS = {
     "fifo": simulate_fifo,
     "clock": simulate_clock,
     "aging": simulate_aging,
+    "wsclock": simulate_wsclock,
     "lru": simulate_lru,
     "opt": simulate_opt,
 }
@@ -671,7 +758,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     compare_parser = subparsers.add_parser(
         "compare",
-        help="compare fifo/clock/aging/lru/opt on one workload",
+        help="compare all bundled policies on one workload",
     )
     compare_parser.add_argument("--frames", type=int, required=True)
     add_reference_arguments(compare_parser)
@@ -1177,6 +1264,7 @@ SVG_COLORS = {
     "fifo": "#ef4444",
     "clock": "#f59e0b",
     "aging": "#8b5cf6",
+    "wsclock": "#0f766e",
     "lru": "#2563eb",
     "opt": "#10b981",
 }
@@ -1185,6 +1273,7 @@ SVG_STROKE_PATTERNS = {
     "fifo": None,
     "clock": "10 8",
     "aging": "2 6",
+    "wsclock": "12 5 3 5",
     "lru": "4 7",
     "opt": None,
 }
@@ -3176,24 +3265,26 @@ def format_trace_compare_markdown(payload: dict) -> str:
             f"{format_percentage(entry['left_average_fault_rate'])} | {format_percentage(entry['right_average_fault_rate'])} |"
         )
 
+    frame_header_cells = ["Frames", "Left winner", "Right winner", *[f"{algorithm.upper()} L/R" for algorithm in ALGORITHMS]]
+    frame_separator_cells = ["---:", ":---", ":---", *[":---" for _ in ALGORITHMS]]
     lines.extend(
         [
             "",
             "## Frame-by-frame comparison",
             "",
-            "| Frames | Left winner | Right winner | FIFO L/R | CLOCK L/R | AGING L/R | LRU L/R | OPT L/R |",
-            "| ---: | :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
+            f"| {' | '.join(frame_header_cells)} |",
+            f"| {' | '.join(frame_separator_cells)} |",
         ]
     )
     for frame in payload["frame_comparisons"]:
+        frame_fault_pairs = [
+            f"{frame['algorithms'][algorithm]['left_faults']}/{frame['algorithms'][algorithm]['right_faults']}"
+            for algorithm in ALGORITHMS
+        ]
         lines.append(
             f"| {frame['frame_count']} | {'/'.join(algorithm.upper() for algorithm in frame['left_best_algorithms'])} | "
             f"{'/'.join(algorithm.upper() for algorithm in frame['right_best_algorithms'])} | "
-            f"{frame['algorithms']['fifo']['left_faults']}/{frame['algorithms']['fifo']['right_faults']} | "
-            f"{frame['algorithms']['clock']['left_faults']}/{frame['algorithms']['clock']['right_faults']} | "
-            f"{frame['algorithms']['aging']['left_faults']}/{frame['algorithms']['aging']['right_faults']} | "
-            f"{frame['algorithms']['lru']['left_faults']}/{frame['algorithms']['lru']['right_faults']} | "
-            f"{frame['algorithms']['opt']['left_faults']}/{frame['algorithms']['opt']['right_faults']} |"
+            f"{' | '.join(frame_fault_pairs)} |"
         )
 
     def add_trace_snapshot(label: str, trace_payload: dict) -> None:
@@ -3464,13 +3555,17 @@ def format_trace_compare_html(
         f'<td>{frame["frame_count"]}</td>'
         f'<td>{escape("/".join(algorithm.upper() for algorithm in frame["left_best_algorithms"]))}</td>'
         f'<td>{escape("/".join(algorithm.upper() for algorithm in frame["right_best_algorithms"]))}</td>'
-        f'<td>{frame["algorithms"]["fifo"]["left_faults"]}/{frame["algorithms"]["fifo"]["right_faults"]}</td>'
-        f'<td>{frame["algorithms"]["clock"]["left_faults"]}/{frame["algorithms"]["clock"]["right_faults"]}</td>'
-        f'<td>{frame["algorithms"]["aging"]["left_faults"]}/{frame["algorithms"]["aging"]["right_faults"]}</td>'
-        f'<td>{frame["algorithms"]["lru"]["left_faults"]}/{frame["algorithms"]["lru"]["right_faults"]}</td>'
-        f'<td>{frame["algorithms"]["opt"]["left_faults"]}/{frame["algorithms"]["opt"]["right_faults"]}</td>'
-        '</tr>'
+        + ''.join(
+            f'<td>{frame["algorithms"][algorithm]["left_faults"]}/{frame["algorithms"][algorithm]["right_faults"]}</td>'
+            for algorithm in ALGORITHMS
+        )
+        + '</tr>'
         for frame in payload['frame_comparisons']
+    )
+
+    frame_header_cells = ''.join(
+        f'<th>{escape(algorithm.upper())} L/R</th>'
+        for algorithm in ALGORITHMS
     )
 
     def render_trace_panel(title: str, trace_payload: dict) -> str:
@@ -3602,11 +3697,7 @@ def format_trace_compare_html(
               <th>Frames</th>
               <th>Left winner</th>
               <th>Right winner</th>
-              <th>FIFO L/R</th>
-              <th>CLOCK L/R</th>
-              <th>AGING L/R</th>
-              <th>LRU L/R</th>
-              <th>OPT L/R</th>
+              {frame_header_cells}
             </tr>
           </thead>
           <tbody>{frame_rows}</tbody>

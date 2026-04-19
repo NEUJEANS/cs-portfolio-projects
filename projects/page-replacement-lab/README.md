@@ -5,19 +5,19 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 ## Why this project matters
 - demonstrates operating-systems and memory-management fundamentals in runnable code
 - compares practical online heuristics against the theoretical optimal baseline
-- includes **Clock / second-chance** and **Aging**, showing two practical approximations that sit between pure FIFO and idealized recency tracking
+- includes **Clock / second-chance**, **Aging**, and a simplified **WSClock** policy, showing three practical approximations that sit between pure FIFO and idealized recency tracking
 - makes page-fault tradeoffs visible with deterministic step traces, reusable presets, and frame-range studies
 - gives strong interview material around locality, stack algorithms, and Belady's anomaly
 - includes a `trace-summary` workflow that surfaces reuse-distance buckets, sliding working-set sizes, and phase-boundary hints for imported workloads
 - includes an `aggregate` dashboard workflow that normalizes page-fault rates across presets, larger benchmark traces, and imported custom traces for one slide-ready comparison view
 - includes a `trace-compare` workflow that contrasts exactly two imported traces side by side with rate charts, frame tables, and locality snapshots
-- leaves room for future extensions like working-set replacement policies or richer narrative trace write-ups
+- leaves room for future extensions like dirty-page-aware WSClock refinements, tunable working-set windows, or richer narrative trace write-ups
 
 ## Features
-- simulate **FIFO**, **Clock / second-chance**, **Aging**, **LRU**, and **OPT** page replacement
+- simulate **FIFO**, **Clock / second-chance**, **Aging**, **WSClock** (clean-page approximation), **LRU**, and **OPT** page replacement
 - load a reference string from repeated `--page` flags, a file, a built-in preset, or a larger built-in trace benchmark bundle
 - print a step-by-step trace for one algorithm
-- compare all five algorithms on the same workload
+- compare all six bundled algorithms on the same workload
 - run a frame-range study to detect FIFO Belady anomalies and other fault regressions
 - list built-in workload presets for repeatable demos and screenshots
 - list larger built-in trace benchmarks that model phase shifts, hot-set scans, and streaming-window bursts
@@ -48,7 +48,7 @@ python3 projects/page-replacement-lab/page_replacement_lab.py simulate clock --f
 python3 projects/page-replacement-lab/page_replacement_lab.py list-benchmarks
 ```
 
-### Compare FIFO / Clock / Aging / LRU / OPT
+### Compare FIFO / Clock / Aging / WSClock / LRU / OPT
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py compare --frames 3 \
   --preset classic-belady
@@ -169,6 +169,7 @@ algorithm  faults  hits  hit-rate
 fifo       9       3      25.00%
 clock      9       3      25.00%
 aging      10      2      16.67%
+wsclock    10      2      16.67%
 lru        10      2      16.67%
 opt        7       5      41.67%
 best faults: 7 (opt)
@@ -206,14 +207,15 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - explain why **OPT** is the gold-standard benchmark even though it is not implementable online
 - describe how **Clock / second-chance** approximates recency using a reference bit and circular hand
 - describe how **Aging** uses a shifting reference-bit history to approximate LRU with lower bookkeeping pressure than exact recency stacks
+- explain how the simplified **WSClock** policy combines Clock hand scans with a virtual-time working-set window and an LRU-style fallback when every page still looks active
 - explain why **LRU** and **OPT** are stack algorithms while **FIFO** is not
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
-- discuss how locality of reference changes the ranking between FIFO, Clock, Aging, and LRU
+- discuss how locality of reference changes the ranking between FIFO, Clock, Aging, WSClock, and LRU
 - explain how reuse distance helps estimate locality pressure and why the trace-summary report flags scan-heavy phase changes
 - compare two imported traces by normalized average fault rate and explain why the lower-rate winner still needs the frame-by-frame table for nuance
-- suggest how this simulator could extend into real trace replay, working-set analysis, or richer report/gallery generation
+- suggest how this simulator could extend into dirty-page-aware WSClock replay, richer working-set analysis, or more narrative report/gallery generation
 
 ## Future improvements
-- add working-set or WSClock-style algorithms for richer policy comparisons
+- add dirty-page-aware WSClock scans or a tunable `tau` / working-set window for deeper systems realism
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
 - add narrative annotations or callout overlays that explain why one imported trace wins on specific frame counts

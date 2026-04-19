@@ -1,8 +1,8 @@
-type,workload,reference_length,best_average_fault_algorithms,best_average_fault_rate_algorithms,fifo_has_anomaly,non_fifo_regression_count,fifo_avg_faults,clock_avg_faults,aging_avg_faults,lru_avg_faults,opt_avg_faults,fifo_avg_fault_rate,clock_avg_fault_rate,aging_avg_fault_rate,lru_avg_fault_rate,opt_avg_fault_rate
-preset,classic-belady,12,opt,opt,yes,1,6.500000,6.500000,6.333333,6.333333,5.500000,0.541667,0.541667,0.527778,0.527778,0.458333
-preset,looping-hotset,12,opt,opt,no,0,5.000000,5.000000,4.666667,4.666667,4.333333,0.416667,0.416667,0.388889,0.388889,0.361111
-preset,scan-then-reuse,15,opt,opt,no,0,9.500000,9.500000,8.666667,8.666667,7.333333,0.633333,0.633333,0.577778,0.577778,0.488889
-preset,mixed-locality-bursts,18,opt,opt,no,0,9.000000,9.000000,7.666667,7.666667,6.500000,0.500000,0.500000,0.425926,0.425926,0.361111
-benchmark,compiler-phase-shift,72,opt,opt,no,0,48.333333,48.000000,45.000000,45.000000,36.000000,0.671296,0.666667,0.625000,0.625000,0.500000
-benchmark,db-hotset-scan,84,opt,opt,no,0,44.500000,43.666667,40.333333,40.333333,32.333333,0.529762,0.519841,0.480159,0.480159,0.384921
-benchmark,streaming-burst-window,96,opt,opt,no,0,58.000000,57.833333,55.333333,55.333333,37.500000,0.604167,0.602431,0.576389,0.576389,0.390625
+type,workload,reference_source,reference_length,best_average_fault_algorithms,best_average_fault_rate_algorithms,fifo_has_anomaly,non_fifo_regression_count,fifo_avg_faults,clock_avg_faults,aging_avg_faults,wsclock_avg_faults,lru_avg_faults,opt_avg_faults,fifo_avg_fault_rate,clock_avg_fault_rate,aging_avg_fault_rate,wsclock_avg_fault_rate,lru_avg_fault_rate,opt_avg_fault_rate
+preset,classic-belady,preset:classic-belady,12,opt,opt,yes,1,6.500000,6.500000,6.333333,6.333333,6.333333,5.500000,0.541667,0.541667,0.527778,0.527778,0.527778,0.458333
+preset,looping-hotset,preset:looping-hotset,12,opt,opt,no,0,5.000000,5.000000,4.666667,4.666667,4.666667,4.333333,0.416667,0.416667,0.388889,0.388889,0.388889,0.361111
+preset,scan-then-reuse,preset:scan-then-reuse,15,opt,opt,no,0,9.500000,9.500000,8.666667,8.666667,8.666667,7.333333,0.633333,0.633333,0.577778,0.577778,0.577778,0.488889
+preset,mixed-locality-bursts,preset:mixed-locality-bursts,18,opt,opt,no,0,9.000000,9.000000,7.666667,7.666667,7.666667,6.500000,0.500000,0.500000,0.425926,0.425926,0.425926,0.361111
+benchmark,compiler-phase-shift,benchmark:compiler-phase-shift,72,opt,opt,no,0,48.333333,48.000000,45.000000,45.000000,45.000000,36.000000,0.671296,0.666667,0.625000,0.625000,0.625000,0.500000
+benchmark,db-hotset-scan,benchmark:db-hotset-scan,84,opt,opt,no,0,44.500000,43.666667,40.333333,40.500000,40.333333,32.333333,0.529762,0.519841,0.480159,0.482143,0.480159,0.384921
+benchmark,streaming-burst-window,benchmark:streaming-burst-window,96,opt,opt,no,0,58.000000,57.833333,55.333333,55.333333,55.333333,37.500000,0.604167,0.602431,0.576389,0.576389,0.576389,0.390625

@@ -178,3 +178,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-19 WSClock slice
+- [x] verify git sync state before editing
+- [x] do brief WSClock / working-set research
+- [x] write a short WSClock refresh note
+- [x] update resumable project checklist state
+- [x] implement a simplified clean-page `wsclock` replacement policy
+- [x] thread WSClock through compare / study / gallery / aggregate / trace-compare outputs
+- [x] refresh README and committed page-replacement artifact references
+- [x] add regression tests for WSClock behavior and dynamic report outputs
+- [x] run tests and real smoke commands
+- [x] complete review pass 1
+- [x] complete review pass 2
+- [x] complete review pass 3
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

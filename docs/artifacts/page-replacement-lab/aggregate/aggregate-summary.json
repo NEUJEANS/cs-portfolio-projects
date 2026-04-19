@@ -5,13 +5,16 @@
   "html_path": "docs/artifacts/page-replacement-lab/aggregate/index.html",
   "summary": {
     "workload_count": 7,
+    "preset_count": 4,
     "benchmark_count": 3,
+    "custom_count": 0,
     "fifo_anomaly_count": 1,
     "non_fifo_regression_count": 1,
     "winner_counts": {
       "fifo": 0,
       "clock": 0,
       "aging": 0,
+      "wsclock": 0,
       "lru": 0,
       "opt": 7
     },
@@ -19,6 +22,7 @@
       "fifo": 0.556699,
       "clock": 0.554372,
       "aging": 0.51456,
+      "wsclock": 0.514843,
       "lru": 0.51456,
       "opt": 0.420713
     },
@@ -26,6 +30,7 @@
       "fifo": 25.833333,
       "clock": 25.642857,
       "aging": 24.0,
+      "wsclock": 24.02381,
       "lru": 24.0,
       "opt": 18.5
     },
@@ -54,6 +59,7 @@
         "fifo": 6.5,
         "clock": 6.5,
         "aging": 6.333333,
+        "wsclock": 6.333333,
         "lru": 6.333333,
         "opt": 5.5
       },
@@ -61,6 +67,7 @@
         "fifo": 0.541667,
         "clock": 0.541667,
         "aging": 0.527778,
+        "wsclock": 0.527778,
         "lru": 0.527778,
         "opt": 0.458333
       }
@@ -85,6 +92,7 @@
         "fifo": 5.0,
         "clock": 5.0,
         "aging": 4.666667,
+        "wsclock": 4.666667,
         "lru": 4.666667,
         "opt": 4.333333
       },
@@ -92,6 +100,7 @@
         "fifo": 0.416667,
         "clock": 0.416667,
         "aging": 0.388889,
+        "wsclock": 0.388889,
         "lru": 0.388889,
         "opt": 0.361111
       }
@@ -116,6 +125,7 @@
         "fifo": 9.5,
         "clock": 9.5,
         "aging": 8.666667,
+        "wsclock": 8.666667,
         "lru": 8.666667,
         "opt": 7.333333
       },
@@ -123,6 +133,7 @@
         "fifo": 0.633333,
         "clock": 0.633333,
         "aging": 0.577778,
+        "wsclock": 0.577778,
         "lru": 0.577778,
         "opt": 0.488889
       }
@@ -147,6 +158,7 @@
         "fifo": 9.0,
         "clock": 9.0,
         "aging": 7.666667,
+        "wsclock": 7.666667,
         "lru": 7.666667,
         "opt": 6.5
       },
@@ -154,6 +166,7 @@
         "fifo": 0.5,
         "clock": 0.5,
         "aging": 0.425926,
+        "wsclock": 0.425926,
         "lru": 0.425926,
         "opt": 0.361111
       }
@@ -178,6 +191,7 @@
         "fifo": 48.333333,
         "clock": 48.0,
         "aging": 45.0,
+        "wsclock": 45.0,
         "lru": 45.0,
         "opt": 36.0
       },
@@ -185,6 +199,7 @@
         "fifo": 0.671296,
         "clock": 0.666667,
         "aging": 0.625,
+        "wsclock": 0.625,
         "lru": 0.625,
         "opt": 0.5
       }
@@ -209,6 +224,7 @@
         "fifo": 44.5,
         "clock": 43.666667,
         "aging": 40.333333,
+        "wsclock": 40.5,
         "lru": 40.333333,
         "opt": 32.333333
       },
@@ -216,6 +232,7 @@
         "fifo": 0.529762,
         "clock": 0.519841,
         "aging": 0.480159,
+        "wsclock": 0.482143,
         "lru": 0.480159,
         "opt": 0.384921
       }
@@ -240,6 +257,7 @@
         "fifo": 58.0,
         "clock": 57.833333,
         "aging": 55.333333,
+        "wsclock": 55.333333,
         "lru": 55.333333,
         "opt": 37.5
       },
@@ -247,6 +265,7 @@
         "fifo": 0.604167,
         "clock": 0.602431,
         "aging": 0.576389,
+        "wsclock": 0.576389,
         "lru": 0.576389,
         "opt": 0.390625
       }

@@ -152,6 +152,11 @@
               "hits": 9,
               "hit_rate": 0.15
             },
+            "wsclock": {
+              "page_faults": 51,
+              "hits": 9,
+              "hit_rate": 0.15
+            },
             "lru": {
               "page_faults": 51,
               "hits": 9,
@@ -178,6 +183,11 @@
               "hit_rate": 0.166667
             },
             "aging": {
+              "page_faults": 48,
+              "hits": 12,
+              "hit_rate": 0.2
+            },
+            "wsclock": {
               "page_faults": 48,
               "hits": 12,
               "hit_rate": 0.2
@@ -212,6 +222,11 @@
               "hits": 22,
               "hit_rate": 0.366667
             },
+            "wsclock": {
+              "page_faults": 38,
+              "hits": 22,
+              "hit_rate": 0.366667
+            },
             "lru": {
               "page_faults": 38,
               "hits": 22,
@@ -238,6 +253,11 @@
               "hit_rate": 0.316667
             },
             "aging": {
+              "page_faults": 37,
+              "hits": 23,
+              "hit_rate": 0.383333
+            },
+            "wsclock": {
               "page_faults": 37,
               "hits": 23,
               "hit_rate": 0.383333
@@ -272,6 +292,11 @@
               "hits": 25,
               "hit_rate": 0.416667
             },
+            "wsclock": {
+              "page_faults": 35,
+              "hits": 25,
+              "hit_rate": 0.416667
+            },
             "lru": {
               "page_faults": 35,
               "hits": 25,
@@ -298,6 +323,11 @@
               "hit_rate": 0.416667
             },
             "aging": {
+              "page_faults": 35,
+              "hits": 25,
+              "hit_rate": 0.416667
+            },
+            "wsclock": {
               "page_faults": 35,
               "hits": 25,
               "hit_rate": 0.416667
@@ -678,6 +708,7 @@
       "fifo": 44.0,
       "clock": 44.0,
       "aging": 40.666667,
+      "wsclock": 40.666667,
       "lru": 40.666667,
       "opt": 31.833333
     },
@@ -685,6 +716,7 @@
       "fifo": 0.733333,
       "clock": 0.733333,
       "aging": 0.677778,
+      "wsclock": 0.677778,
       "lru": 0.677778,
       "opt": 0.530556
     },
@@ -772,6 +804,11 @@
               "hits": 0,
               "hit_rate": 0.0
             },
+            "wsclock": {
+              "page_faults": 24,
+              "hits": 0,
+              "hit_rate": 0.0
+            },
             "lru": {
               "page_faults": 24,
               "hits": 0,
@@ -798,6 +835,11 @@
               "hit_rate": 0.0
             },
             "aging": {
+              "page_faults": 24,
+              "hits": 0,
+              "hit_rate": 0.0
+            },
+            "wsclock": {
               "page_faults": 24,
               "hits": 0,
               "hit_rate": 0.0
@@ -832,6 +874,11 @@
               "hits": 0,
               "hit_rate": 0.0
             },
+            "wsclock": {
+              "page_faults": 24,
+              "hits": 0,
+              "hit_rate": 0.0
+            },
             "lru": {
               "page_faults": 24,
               "hits": 0,
@@ -858,6 +905,11 @@
               "hit_rate": 0.083333
             },
             "aging": {
+              "page_faults": 20,
+              "hits": 4,
+              "hit_rate": 0.166667
+            },
+            "wsclock": {
               "page_faults": 20,
               "hits": 4,
               "hit_rate": 0.166667
@@ -892,6 +944,11 @@
               "hits": 4,
               "hit_rate": 0.166667
             },
+            "wsclock": {
+              "page_faults": 20,
+              "hits": 4,
+              "hit_rate": 0.166667
+            },
             "lru": {
               "page_faults": 20,
               "hits": 4,
@@ -918,6 +975,11 @@
               "hit_rate": 0.166667
             },
             "aging": {
+              "page_faults": 18,
+              "hits": 6,
+              "hit_rate": 0.25
+            },
+            "wsclock": {
               "page_faults": 18,
               "hits": 6,
               "hit_rate": 0.25
@@ -1121,6 +1183,7 @@
       "fifo": 22.666667,
       "clock": 22.666667,
       "aging": 21.666667,
+      "wsclock": 21.666667,
       "lru": 21.666667,
       "opt": 18.0
     },
@@ -1128,6 +1191,7 @@
       "fifo": 0.944444,
       "clock": 0.944444,
       "aging": 0.902778,
+      "wsclock": 0.902778,
       "lru": 0.902778,
       "opt": 0.75
     },
@@ -1161,6 +1225,16 @@
     },
     {
       "algorithm": "aging",
+      "left_average_faults": 40.666667,
+      "right_average_faults": 21.666667,
+      "fault_delta_right_minus_left": -19.0,
+      "left_average_fault_rate": 0.677778,
+      "right_average_fault_rate": 0.902778,
+      "fault_rate_delta_right_minus_left": 0.225,
+      "better_average_faults": "right"
+    },
+    {
+      "algorithm": "wsclock",
       "left_average_faults": 40.666667,
       "right_average_faults": 21.666667,
       "fault_delta_right_minus_left": -19.0,
@@ -1224,6 +1298,14 @@
           "right_hit_rate": 0.0,
           "better": "right"
         },
+        "wsclock": {
+          "left_faults": 51,
+          "right_faults": 24,
+          "fault_delta_right_minus_left": -27,
+          "left_hit_rate": 0.15,
+          "right_hit_rate": 0.0,
+          "better": "right"
+        },
         "lru": {
           "left_faults": 51,
           "right_faults": 24,
@@ -1268,6 +1350,14 @@
           "better": "right"
         },
         "aging": {
+          "left_faults": 48,
+          "right_faults": 24,
+          "fault_delta_right_minus_left": -24,
+          "left_hit_rate": 0.2,
+          "right_hit_rate": 0.0,
+          "better": "right"
+        },
+        "wsclock": {
           "left_faults": 48,
           "right_faults": 24,
           "fault_delta_right_minus_left": -24,
@@ -1326,6 +1416,14 @@
           "right_hit_rate": 0.0,
           "better": "right"
         },
+        "wsclock": {
+          "left_faults": 38,
+          "right_faults": 24,
+          "fault_delta_right_minus_left": -14,
+          "left_hit_rate": 0.366667,
+          "right_hit_rate": 0.0,
+          "better": "right"
+        },
         "lru": {
           "left_faults": 38,
           "right_faults": 24,
@@ -1370,6 +1468,14 @@
           "better": "right"
         },
         "aging": {
+          "left_faults": 37,
+          "right_faults": 20,
+          "fault_delta_right_minus_left": -17,
+          "left_hit_rate": 0.383333,
+          "right_hit_rate": 0.166667,
+          "better": "right"
+        },
+        "wsclock": {
           "left_faults": 37,
           "right_faults": 20,
           "fault_delta_right_minus_left": -17,
@@ -1428,6 +1534,14 @@
           "right_hit_rate": 0.166667,
           "better": "right"
         },
+        "wsclock": {
+          "left_faults": 35,
+          "right_faults": 20,
+          "fault_delta_right_minus_left": -15,
+          "left_hit_rate": 0.416667,
+          "right_hit_rate": 0.166667,
+          "better": "right"
+        },
         "lru": {
           "left_faults": 35,
           "right_faults": 20,
@@ -1453,6 +1567,7 @@
       ],
       "right_best_algorithms": [
         "aging",
+        "wsclock",
         "lru",
         "opt"
       ],
@@ -1474,6 +1589,14 @@
           "better": "right"
         },
         "aging": {
+          "left_faults": 35,
+          "right_faults": 18,
+          "fault_delta_right_minus_left": -17,
+          "left_hit_rate": 0.416667,
+          "right_hit_rate": 0.25,
+          "better": "right"
+        },
+        "wsclock": {
           "left_faults": 35,
           "right_faults": 18,
           "fault_delta_right_minus_left": -17,
