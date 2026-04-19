@@ -1,0 +1,4 @@
+mode,kind,window_value,window_description,page_faults,hits,hit_rate,fault_rate,writebacks,weighted_score,frame_count,reference_source,segment_length,adaptive_average_window,adaptive_min_window,adaptive_max_window
+auto-fixed,fixed,6,"auto (max(4, frames * 2))",14,10,0.416667,0.583333,0,14.0,3,benchmark:adaptive-phase-turnover,8,3.666667,2,6
+tuned-fixed,fixed,1,fixed 1 references,14,10,0.416667,0.583333,0,14.0,3,benchmark:adaptive-phase-turnover,8,3.666667,2,6
+adaptive-heuristic,adaptive,,adaptive segments of 8 references using recent reuse p50,13,11,0.458333,0.541667,0,13.0,3,benchmark:adaptive-phase-turnover,8,3.666667,2,6

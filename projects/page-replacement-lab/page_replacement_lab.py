@@ -82,6 +82,11 @@ TRACE_BENCHMARKS: dict[str, TraceBenchmark] = {
         description="stream-processing sliding window with cold backfill bursts and shifting hotsets",
         filename="streaming-burst-window.txt",
     ),
+    "adaptive-phase-turnover": TraceBenchmark(
+        name="adaptive-phase-turnover",
+        description="three short overlapping hot-set phases crafted to show where an adaptive WSClock tau beats any single fixed window",
+        filename="adaptive-phase-turnover.txt",
+    ),
 }
 
 AGE_COUNTER_BITS = 8
@@ -806,6 +811,421 @@ def tune_wsclock_windows(
     }
 
 
+def build_adaptive_wsclock_schedule(
+    reference_string: Iterable[int],
+    frame_count: int,
+    *,
+    dirty_pages: Iterable[int] | None = None,
+    segment_length: int | None = None,
+    min_window: int = 1,
+    max_window: int | None = None,
+    reuse_percentile: float = 0.5,
+    dirty_window_bonus: int = 2,
+) -> dict:
+    reference = validate_reference(reference_string, frame_count)
+    if not 0 <= reuse_percentile <= 1:
+        raise InputError("reuse-percentile must be between 0 and 1")
+    if dirty_window_bonus < 0:
+        raise InputError("dirty-window-bonus must be non-negative")
+    resolved_segment_length = segment_length if segment_length is not None else max(8, frame_count * 2)
+    if resolved_segment_length <= 0:
+        raise InputError("segment-length must be positive")
+
+    auto_window = resolve_wsclock_window(frame_count, None)
+    resolved_max_window = max_window if max_window is not None else max(auto_window * 2, frame_count * 4)
+    if resolved_max_window <= 0:
+        raise InputError("max-window must be positive")
+    if min_window > resolved_max_window:
+        raise InputError("min-window must be less than or equal to max-window")
+    clamped_auto_window = max(min_window, min(resolved_max_window, auto_window))
+
+    resolved_dirty_pages = tuple(normalize_dirty_pages(dirty_pages))
+    dirty_page_set = set(resolved_dirty_pages)
+    effective_windows: list[int] = [clamped_auto_window] * len(reference)
+    segments: list[dict] = []
+
+    for start in range(0, len(reference), resolved_segment_length):
+        end = min(start + resolved_segment_length, len(reference))
+        window = clamped_auto_window
+        reason = "initial auto window"
+        if clamped_auto_window != auto_window:
+            reason = f"initial auto window clamped from {auto_window}"
+        history = reference[max(0, start - resolved_segment_length) : start]
+        reuse_value: float | None = None
+        p90_value: float | None = None
+        recent_unique_pages = len(set(history))
+        recent_dirty_ratio = 0.0
+        phase_overlap: float | None = None
+
+        if history:
+            reuse_distances = sorted(
+                distance
+                for distance in compute_reuse_distances(history)
+                if distance is not None
+            )
+            if reuse_distances:
+                reuse_value = percentile(reuse_distances, reuse_percentile)
+                p90_value = percentile(reuse_distances, 0.9)
+            base_window = ceil(reuse_value) if reuse_value is not None else auto_window
+            base_window = max(base_window, max(1, ceil(recent_unique_pages / 2)))
+            if dirty_page_set:
+                recent_dirty_ratio = sum(1 for page in history if page in dirty_page_set) / len(history)
+                if recent_dirty_ratio >= 0.2:
+                    base_window += dirty_window_bonus
+            if len(history) >= 4:
+                midpoint = len(history) // 2
+                left_pages = set(history[:midpoint])
+                right_pages = set(history[midpoint:])
+                union = left_pages | right_pages
+                phase_overlap = len(left_pages & right_pages) / len(union) if union else 1.0
+                if phase_overlap <= 0.35:
+                    base_window = min(base_window, max(frame_count, ceil((reuse_value or frame_count))))
+            window = max(min_window, min(resolved_max_window, base_window))
+            reason = (
+                f"recent reuse p{int(reuse_percentile * 100):02d}≈{reuse_value:.2f}" if reuse_value is not None else "recent history had no reuse"
+            )
+            reason += f", unique={recent_unique_pages}"
+            if dirty_page_set:
+                reason += f", dirty_ratio={recent_dirty_ratio:.2f}"
+            if phase_overlap is not None:
+                reason += f", phase_overlap={phase_overlap:.2f}"
+
+        for index in range(start, end):
+            effective_windows[index] = window
+
+        segments.append(
+            {
+                "segment_index": len(segments) + 1,
+                "start_reference": start + 1,
+                "end_reference": end,
+                "window": window,
+                "history_reference_count": len(history),
+                "history_unique_pages": recent_unique_pages,
+                "history_reuse_percentile": round(reuse_value, 4) if reuse_value is not None else None,
+                "history_reuse_p90": round(p90_value, 4) if p90_value is not None else None,
+                "recent_dirty_ratio": round(recent_dirty_ratio, 4),
+                "phase_overlap": round(phase_overlap, 4) if phase_overlap is not None else None,
+                "reason": reason,
+            }
+        )
+
+    return {
+        "frame_count": frame_count,
+        "reference_string": reference,
+        "reference_length": len(reference),
+        "segment_length": resolved_segment_length,
+        "segment_count": len(segments),
+        "auto_window": auto_window,
+        "min_window": min_window,
+        "max_window": resolved_max_window,
+        "reuse_percentile": round(reuse_percentile, 4),
+        "dirty_window_bonus": dirty_window_bonus,
+        "dirty_pages": list(resolved_dirty_pages),
+        "dirty_page_count": len(resolved_dirty_pages),
+        "dirty_page_description": describe_dirty_pages_setting(resolved_dirty_pages),
+        "segments": segments,
+        "effective_windows": effective_windows,
+        "average_window": round(sum(effective_windows) / len(effective_windows), 6),
+        "window_range": {
+            "min": min(effective_windows),
+            "max": max(effective_windows),
+        },
+    }
+
+
+def simulate_adaptive_wsclock(
+    reference_string: Iterable[int],
+    frame_count: int,
+    *,
+    dirty_pages: Iterable[int] | None = None,
+    segment_length: int | None = None,
+    min_window: int = 1,
+    max_window: int | None = None,
+    reuse_percentile: float = 0.5,
+    dirty_window_bonus: int = 2,
+) -> SimulationResult:
+    schedule = build_adaptive_wsclock_schedule(
+        reference_string,
+        frame_count,
+        dirty_pages=dirty_pages,
+        segment_length=segment_length,
+        min_window=min_window,
+        max_window=max_window,
+        reuse_percentile=reuse_percentile,
+        dirty_window_bonus=dirty_window_bonus,
+    )
+    reference = schedule["reference_string"]
+    dirty_page_set = set(schedule["dirty_pages"])
+    frames: list[int | None] = [None] * frame_count
+    reference_bits = [0] * frame_count
+    dirty_bits = [0] * frame_count
+    last_used = [-1] * frame_count
+    resident_slots: dict[int, int] = {}
+    hand = 0
+    faults = 0
+    writebacks = 0
+    steps: list[SimulationStep] = []
+
+    for index, page in enumerate(reference):
+        window = schedule["effective_windows"][index]
+        evicted: int | None = None
+        writebacks_scheduled: list[int] = []
+        hit = page in resident_slots
+        is_dirty_access = page in dirty_page_set
+        if hit:
+            slot = resident_slots[page]
+            reference_bits[slot] = 1
+            last_used[slot] = index
+            if is_dirty_access:
+                dirty_bits[slot] = 1
+        else:
+            faults += 1
+            slot: int | None = None
+            fallback_slot: int | None = None
+            cleaned_old_slot: int | None = None
+            scanned = 0
+            while scanned < frame_count:
+                current_page = frames[hand]
+                if current_page is None:
+                    slot = hand
+                    break
+                if reference_bits[hand] == 1:
+                    reference_bits[hand] = 0
+                else:
+                    age = index - last_used[hand]
+                    if age > window:
+                        if dirty_bits[hand] == 0:
+                            slot = hand
+                            break
+                        dirty_bits[hand] = 0
+                        writebacks += 1
+                        writebacks_scheduled.append(current_page)
+                        if cleaned_old_slot is None or (last_used[hand], hand) < (
+                            last_used[cleaned_old_slot],
+                            cleaned_old_slot,
+                        ):
+                            cleaned_old_slot = hand
+                    elif fallback_slot is None or (last_used[hand], hand) < (
+                        last_used[fallback_slot],
+                        fallback_slot,
+                    ):
+                        fallback_slot = hand
+                hand = (hand + 1) % frame_count
+                scanned += 1
+
+            if slot is None:
+                if cleaned_old_slot is not None:
+                    slot = cleaned_old_slot
+                else:
+                    if fallback_slot is None:
+                        fallback_slot = min(range(frame_count), key=lambda candidate: (last_used[candidate], candidate))
+                    slot = fallback_slot
+
+            evicted = frames[slot]
+            if evicted is not None:
+                resident_slots.pop(evicted, None)
+
+            frames[slot] = page
+            reference_bits[slot] = 1
+            dirty_bits[slot] = 1 if is_dirty_access else 0
+            last_used[slot] = index
+            resident_slots[page] = slot
+            hand = (slot + 1) % frame_count
+
+        steps.append(
+            SimulationStep(
+                index=index,
+                page=page,
+                hit=hit,
+                frames=[value for value in frames if value is not None],
+                evicted=evicted,
+                writebacks_scheduled=list(writebacks_scheduled),
+            )
+        )
+
+    hits = len(reference) - faults
+    return SimulationResult(
+        algorithm="adaptive-wsclock",
+        frame_count=frame_count,
+        reference_string=reference,
+        page_faults=faults,
+        hits=hits,
+        hit_rate=hits / len(reference),
+        steps=steps,
+        writebacks=writebacks,
+    )
+
+
+MODE_RESULT_PRIORITY = {
+    "tuned-fixed": 0,
+    "adaptive-heuristic": 1,
+    "auto-fixed": 2,
+}
+
+
+def wsclock_mode_sort_key(entry: dict) -> tuple[float, int, int]:
+    return (
+        entry["weighted_score"],
+        entry["page_faults"],
+        entry["writebacks"],
+    )
+
+
+def compare_mode_outcome(candidate: dict, baseline: dict) -> dict:
+    candidate_key = wsclock_mode_sort_key(candidate)
+    baseline_key = wsclock_mode_sort_key(baseline)
+    if candidate_key < baseline_key:
+        status = "better"
+    elif candidate_key > baseline_key:
+        status = "worse"
+    else:
+        status = "tied"
+    return {
+        "status": status,
+        "fault_delta": candidate["page_faults"] - baseline["page_faults"],
+        "writeback_delta": candidate["writebacks"] - baseline["writebacks"],
+        "score_delta": round(candidate["weighted_score"] - baseline["weighted_score"], 6),
+        "baseline_mode": baseline["mode"],
+        "candidate_mode": candidate["mode"],
+    }
+
+
+def compare_wsclock_modes(
+    reference_string: Iterable[int],
+    frame_count: int,
+    *,
+    min_window: int = 1,
+    max_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
+    writeback_penalty: float = 1.0,
+    segment_length: int | None = None,
+    reuse_percentile: float = 0.5,
+    dirty_window_bonus: int = 2,
+) -> dict:
+    reference = validate_reference(reference_string, frame_count)
+    tuning = tune_wsclock_windows(
+        reference,
+        frame_count,
+        min_window=min_window,
+        max_window=max_window,
+        dirty_pages=dirty_pages,
+        writeback_penalty=writeback_penalty,
+    )
+    adaptive_schedule = build_adaptive_wsclock_schedule(
+        reference,
+        frame_count,
+        dirty_pages=dirty_pages,
+        segment_length=segment_length,
+        min_window=min_window,
+        max_window=tuning["max_window"],
+        reuse_percentile=reuse_percentile,
+        dirty_window_bonus=dirty_window_bonus,
+    )
+
+    mode_results = [
+        {
+            "mode": "auto-fixed",
+            "kind": "fixed",
+            "window_description": describe_wsclock_window_setting(None),
+            "window_value": tuning["auto_window"],
+            "result": simulate_wsclock(reference, frame_count, dirty_pages=dirty_pages),
+        },
+        {
+            "mode": "tuned-fixed",
+            "kind": "fixed",
+            "window_description": f"fixed {tuning['recommended_window']} references",
+            "window_value": tuning["recommended_window"],
+            "result": simulate_wsclock(
+                reference,
+                frame_count,
+                wsclock_window=tuning["recommended_window"],
+                dirty_pages=dirty_pages,
+            ),
+        },
+        {
+            "mode": "adaptive-heuristic",
+            "kind": "adaptive",
+            "window_description": (
+                f"adaptive segments of {adaptive_schedule['segment_length']} references using recent reuse p"
+                f"{int(adaptive_schedule['reuse_percentile'] * 100):02d}"
+            ),
+            "window_value": None,
+            "result": simulate_adaptive_wsclock(
+                reference,
+                frame_count,
+                dirty_pages=dirty_pages,
+                segment_length=adaptive_schedule["segment_length"],
+                min_window=min_window,
+                max_window=adaptive_schedule["max_window"],
+                reuse_percentile=reuse_percentile,
+                dirty_window_bonus=dirty_window_bonus,
+            ),
+        },
+    ]
+
+    modes: list[dict] = []
+    for entry in mode_results:
+        result = entry["result"]
+        weighted_score = result.page_faults + (result.writebacks * writeback_penalty)
+        modes.append(
+            {
+                "mode": entry["mode"],
+                "kind": entry["kind"],
+                "window_description": entry["window_description"],
+                "window_value": entry["window_value"],
+                "page_faults": result.page_faults,
+                "hits": result.hits,
+                "hit_rate": round(result.hit_rate, 6),
+                "fault_rate": round(result.page_faults / len(reference), 6),
+                "writebacks": result.writebacks,
+                "weighted_score": round(weighted_score, 6),
+            }
+        )
+
+    auto_mode = next(entry for entry in modes if entry["mode"] == "auto-fixed")
+    tuned_mode = next(entry for entry in modes if entry["mode"] == "tuned-fixed")
+    adaptive_mode = next(entry for entry in modes if entry["mode"] == "adaptive-heuristic")
+    best_key = min(wsclock_mode_sort_key(entry) for entry in modes)
+    leaders = [entry for entry in modes if wsclock_mode_sort_key(entry) == best_key]
+    leader_modes = [entry["mode"] for entry in leaders]
+    winner = min(
+        leaders,
+        key=lambda entry: MODE_RESULT_PRIORITY.get(entry["mode"], 99),
+    )
+    best_fixed = min(
+        (auto_mode, tuned_mode),
+        key=lambda entry: (
+            wsclock_mode_sort_key(entry),
+            MODE_RESULT_PRIORITY.get(entry["mode"], 99),
+        ),
+    )
+    adaptive_vs_best_fixed = compare_mode_outcome(adaptive_mode, best_fixed)
+
+    return {
+        "frame_count": frame_count,
+        "reference_string": reference,
+        "reference_length": len(reference),
+        "writeback_penalty": round(writeback_penalty, 6),
+        "dirty_pages": tuning["dirty_pages"],
+        "dirty_page_count": tuning["dirty_page_count"],
+        "dirty_page_description": tuning["dirty_page_description"],
+        "fixed_window_sweep": tuning,
+        "adaptive_schedule": adaptive_schedule,
+        "modes": modes,
+        "winner": winner,
+        "leader_modes": leader_modes,
+        "best_fixed_mode": best_fixed["mode"],
+        "adaptive_vs_best_fixed": adaptive_vs_best_fixed,
+        "summary": {
+            "auto_minus_tuned_faults": auto_mode["page_faults"] - tuned_mode["page_faults"],
+            "adaptive_minus_tuned_faults": adaptive_mode["page_faults"] - tuned_mode["page_faults"],
+            "adaptive_minus_auto_faults": adaptive_mode["page_faults"] - auto_mode["page_faults"],
+            "adaptive_minus_tuned_writebacks": adaptive_mode["writebacks"] - tuned_mode["writebacks"],
+            "adaptive_minus_auto_writebacks": adaptive_mode["writebacks"] - auto_mode["writebacks"],
+        },
+    }
+
+
 def list_workload_presets() -> list[WorkloadPreset]:
     return list(WORKLOAD_PRESETS.values())
 
@@ -1197,6 +1617,51 @@ def build_parser() -> argparse.ArgumentParser:
     tune_wsclock_parser.add_argument("--markdown-out", type=Path, help="write a Markdown tuning report")
     tune_wsclock_parser.add_argument("--csv-out", type=Path, help="write a CSV tuning sweep export")
     tune_wsclock_parser.add_argument("--json", action="store_true")
+
+    compare_wsclock_modes_parser = subparsers.add_parser(
+        "compare-wsclock-modes",
+        help="compare auto, tuned-fixed, and adaptive WSClock window heuristics",
+    )
+    compare_wsclock_modes_parser.add_argument("--frames", type=int, required=True)
+    add_reference_arguments(compare_wsclock_modes_parser)
+    add_dirty_page_arguments(compare_wsclock_modes_parser)
+    compare_wsclock_modes_parser.add_argument(
+        "--min-window",
+        type=int,
+        default=1,
+        help="smallest tau / working-set window to evaluate for the fixed sweep",
+    )
+    compare_wsclock_modes_parser.add_argument(
+        "--max-window",
+        type=int,
+        help="largest tau / working-set window to evaluate for the fixed sweep and adaptive clamp",
+    )
+    compare_wsclock_modes_parser.add_argument(
+        "--writeback-penalty",
+        type=float,
+        default=1.0,
+        help="weight applied to each writeback in the comparison score",
+    )
+    compare_wsclock_modes_parser.add_argument(
+        "--segment-length",
+        type=int,
+        help="references per adaptive segment (default: max(8, frames * 2))",
+    )
+    compare_wsclock_modes_parser.add_argument(
+        "--reuse-percentile",
+        type=float,
+        default=0.5,
+        help="reuse-distance percentile used by the adaptive heuristic (0 to 1)",
+    )
+    compare_wsclock_modes_parser.add_argument(
+        "--dirty-window-bonus",
+        type=int,
+        default=2,
+        help="extra tau slack when recent dirty-page density is high",
+    )
+    compare_wsclock_modes_parser.add_argument("--markdown-out", type=Path, help="write a Markdown comparison report")
+    compare_wsclock_modes_parser.add_argument("--csv-out", type=Path, help="write a CSV comparison export")
+    compare_wsclock_modes_parser.add_argument("--json", action="store_true")
 
     trace_compare_parser = subparsers.add_parser(
         "trace-compare",
@@ -1616,6 +2081,177 @@ def format_wsclock_tuning_markdown(payload: dict, *, reference_source: str = "cu
         lines.append(
             f"- τ={entry['window']}: faults {entry['page_faults']}, writebacks {entry['writebacks']}, score {entry['weighted_score']:.2f}"
         )
+    return "\n".join(lines)
+
+
+def write_wsclock_mode_csv(path: Path, payload: dict, *, reference_source: str = "custom") -> None:
+    ensure_output_parent(path)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "mode",
+                "kind",
+                "window_value",
+                "window_description",
+                "page_faults",
+                "hits",
+                "hit_rate",
+                "fault_rate",
+                "writebacks",
+                "weighted_score",
+                "frame_count",
+                "reference_source",
+                "segment_length",
+                "adaptive_average_window",
+                "adaptive_min_window",
+                "adaptive_max_window",
+            ],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for entry in payload["modes"]:
+            writer.writerow(
+                {
+                    **entry,
+                    "frame_count": payload["frame_count"],
+                    "reference_source": reference_source,
+                    "segment_length": payload["adaptive_schedule"]["segment_length"],
+                    "adaptive_average_window": payload["adaptive_schedule"]["average_window"],
+                    "adaptive_min_window": payload["adaptive_schedule"]["window_range"]["min"],
+                    "adaptive_max_window": payload["adaptive_schedule"]["window_range"]["max"],
+                }
+            )
+
+
+def format_wsclock_mode_text(payload: dict, *, reference_source: str = "custom") -> str:
+    adaptive_vs_best_fixed = payload["adaptive_vs_best_fixed"]
+    lines = [
+        f"frames: {payload['frame_count']}",
+        format_reference_source(reference_source),
+        f"writeback penalty: {payload['writeback_penalty']:.2f}",
+        f"dirty pages: {payload['dirty_page_description']}",
+        (
+            f"adaptive heuristic: recent reuse p{int(payload['adaptive_schedule']['reuse_percentile'] * 100):02d} "
+            f"over {payload['adaptive_schedule']['segment_length']}-reference segments"
+        ),
+        "mode               faults  hits  writebacks  score   window",
+        "-----------------  ------  ----  ----------  ------  ---------------------------------------------",
+    ]
+    for entry in payload["modes"]:
+        lines.append(
+            f"{entry['mode']:<17}  {entry['page_faults']:<6}  {entry['hits']:<4}  {entry['writebacks']:<10}  {entry['weighted_score']:<6.2f}  {entry['window_description']}"
+        )
+    if len(payload["leader_modes"]) == 1:
+        lines.append(
+            f"best overall: {payload['winner']['mode']} (score={payload['winner']['weighted_score']:.2f})"
+        )
+    else:
+        lines.append(
+            "best overall: tie between "
+            f"{', '.join(payload['leader_modes'])} (score={payload['winner']['weighted_score']:.2f})"
+        )
+    lines.append(
+        f"best fixed mode: {payload['best_fixed_mode']}"
+    )
+    lines.append(
+        "adaptive vs best fixed: "
+        f"{adaptive_vs_best_fixed['status']} "
+        f"(Δfaults {adaptive_vs_best_fixed['fault_delta']:+d}, "
+        f"Δwritebacks {adaptive_vs_best_fixed['writeback_delta']:+d}, "
+        f"Δscore {adaptive_vs_best_fixed['score_delta']:+.2f})"
+    )
+    lines.append(
+        "adaptive schedule: "
+        f"avg τ={payload['adaptive_schedule']['average_window']:.2f}, "
+        f"range {payload['adaptive_schedule']['window_range']['min']}..{payload['adaptive_schedule']['window_range']['max']}"
+    )
+    lines.append("adaptive segments:")
+    for segment in payload["adaptive_schedule"]["segments"]:
+        lines.append(
+            f"  - refs {segment['start_reference']}..{segment['end_reference']}: τ={segment['window']} ({segment['reason']})"
+        )
+    return "\n".join(lines)
+
+
+def format_wsclock_mode_markdown(payload: dict, *, reference_source: str = "custom") -> str:
+    winner = payload["winner"]
+    adaptive_vs_best_fixed = payload["adaptive_vs_best_fixed"]
+    if len(payload["leader_modes"]) == 1:
+        leader_summary = (
+            f"best overall: `{winner['mode']}` "
+            f"(faults {winner['page_faults']}, writebacks {winner['writebacks']}, score {winner['weighted_score']:.2f})"
+        )
+    else:
+        leader_summary = (
+            "best overall: tie between `"
+            + "`, `".join(payload["leader_modes"])
+            + f"` (score {winner['weighted_score']:.2f})"
+        )
+    lines = [
+        "# WSClock Fixed vs Adaptive Comparison",
+        "",
+        f"- workload: {describe_reference_label(reference_source)}",
+        f"- frames: {payload['frame_count']}",
+        f"- writeback penalty: {payload['writeback_penalty']:.2f}",
+        f"- dirty pages: {payload['dirty_page_description']}",
+        f"- fixed sweep range: {payload['fixed_window_sweep']['min_window']} to {payload['fixed_window_sweep']['max_window']}",
+        (
+            f"- adaptive heuristic: recent reuse p{int(payload['adaptive_schedule']['reuse_percentile'] * 100):02d} "
+            f"over {payload['adaptive_schedule']['segment_length']}-reference segments"
+        ),
+        f"- adaptive window range: {payload['adaptive_schedule']['window_range']['min']} to {payload['adaptive_schedule']['window_range']['max']} (avg {payload['adaptive_schedule']['average_window']:.2f})",
+        f"- {leader_summary}",
+        f"- best fixed mode: `{payload['best_fixed_mode']}`",
+        (
+            "- adaptive vs best fixed: "
+            f"**{adaptive_vs_best_fixed['status']}** "
+            f"(Δfaults {adaptive_vs_best_fixed['fault_delta']:+d}, "
+            f"Δwritebacks {adaptive_vs_best_fixed['writeback_delta']:+d}, "
+            f"Δscore {adaptive_vs_best_fixed['score_delta']:+.2f})"
+        ),
+        "",
+        "## Mode comparison",
+        "",
+        "| Mode | Kind | Window | Faults | Hits | Hit rate | Writebacks | Weighted score |",
+        "| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for entry in payload["modes"]:
+        lines.append(
+            f"| {entry['mode']} | {entry['kind']} | {entry['window_description']} | {entry['page_faults']} | {entry['hits']} | {format_percentage(entry['hit_rate'])} | {entry['writebacks']} | {entry['weighted_score']:.2f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## What changed vs the best fixed window",
+            "",
+            f"- auto-fixed minus tuned-fixed faults: {payload['summary']['auto_minus_tuned_faults']}",
+            f"- adaptive minus tuned-fixed faults: {payload['summary']['adaptive_minus_tuned_faults']}",
+            f"- adaptive minus auto-fixed faults: {payload['summary']['adaptive_minus_auto_faults']}",
+            f"- adaptive minus tuned-fixed writebacks: {payload['summary']['adaptive_minus_tuned_writebacks']}",
+            f"- adaptive minus auto-fixed writebacks: {payload['summary']['adaptive_minus_auto_writebacks']}",
+            "",
+            "## Adaptive segment schedule",
+            "",
+            "| Segment | References | τ window | History refs | History unique pages | Reuse percentile | Reuse p90 | Dirty ratio | Phase overlap | Reason |",
+            "| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |",
+        ]
+    )
+    for segment in payload["adaptive_schedule"]["segments"]:
+        reuse_value = "—" if segment["history_reuse_percentile"] is None else f"{segment['history_reuse_percentile']:.2f}"
+        p90_value = "—" if segment["history_reuse_p90"] is None else f"{segment['history_reuse_p90']:.2f}"
+        phase_overlap = "—" if segment["phase_overlap"] is None else f"{segment['phase_overlap']:.2f}"
+        lines.append(
+            f"| {segment['segment_index']} | {segment['start_reference']}..{segment['end_reference']} | {segment['window']} | {segment['history_reference_count']} | {segment['history_unique_pages']} | {reuse_value} | {p90_value} | {segment['recent_dirty_ratio']:.2f} | {phase_overlap} | {segment['reason']} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Fixed-window sweep winner",
+            "",
+            f"The best fixed sweep window is τ={payload['fixed_window_sweep']['recommended_window']} with score {payload['fixed_window_sweep']['recommended']['weighted_score']:.2f}.",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -4706,6 +5342,44 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(
                     format_wsclock_tuning_text(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    )
+                )
+            return 0
+
+        if args.command == "compare-wsclock-modes":
+            payload = compare_wsclock_modes(
+                reference,
+                args.frames,
+                min_window=args.min_window,
+                max_window=args.max_window,
+                dirty_pages=dirty_pages,
+                writeback_penalty=args.writeback_penalty,
+                segment_length=args.segment_length,
+                reuse_percentile=args.reuse_percentile,
+                dirty_window_bonus=args.dirty_window_bonus,
+            )
+            payload["reference_source"] = parsed_reference.source
+            if args.csv_out:
+                write_wsclock_mode_csv(
+                    args.csv_out,
+                    payload,
+                    reference_source=parsed_reference.source,
+                )
+            if args.markdown_out:
+                write_text_output(
+                    args.markdown_out,
+                    format_wsclock_mode_markdown(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    ),
+                )
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(
+                    format_wsclock_mode_text(
                         payload,
                         reference_source=parsed_reference.source,
                     )

@@ -26,6 +26,7 @@
 - [x] compare FIFO / Clock / Aging / WSClock / LRU / OPT on either a compact preset or a larger benchmark trace
 - [x] mark dirty/write-heavy pages for WSClock sensitivity demos with explicit writeback counts
 - [x] tune a fixed WSClock `tau` with a weighted page-fault/writeback sweep for one workload and frame budget
+- [x] compare fixed-window and adaptive WSClock `tau` choices with tie-aware reporting for one workload/frame budget
 - [x] study multiple frame counts and call out FIFO anomalies or Clock regressions
 - [x] export JSON for downstream charts or frontend demos
 - [x] export Markdown / SVG / CSV study artifacts for screenshots and portfolio cards
@@ -39,8 +40,9 @@
 - [x] add working-set style policies for stronger systems realism
 - [x] add dirty-page-aware WSClock refinement with dirty-bit-aware cleaning and writeback tracking
 - [x] add a WSClock `tau` tuning / recommendation sweep for workload-specific analysis
+- [x] compare fixed-window WSClock recommendations against an adaptive `tau` heuristic
 - [x] add cross-workload aggregate comparison charts for slide-ready summaries
 - [x] add a trace-summary or reuse-distance helper for imported workloads
 - [x] add SVG/HTML trace-summary cards for portfolio slides
 - [x] add side-by-side imported-trace comparisons
-- [ ] compare fixed-window WSClock recommendations against an adaptive `tau` heuristic
+- [ ] export adaptive-vs-fixed WSClock comparisons across multiple frame budgets or gallery cards

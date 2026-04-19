@@ -1,0 +1,4 @@
+mode,kind,window_value,window_description,page_faults,hits,hit_rate,fault_rate,writebacks,weighted_score,frame_count,reference_source,segment_length,adaptive_average_window,adaptive_min_window,adaptive_max_window
+auto-fixed,fixed,10,"auto (max(4, frames * 2))",34,50,0.595238,0.404762,0,34.0,5,benchmark:db-hotset-scan,10,4.404762,3,10
+tuned-fixed,fixed,3,fixed 3 references,33,51,0.607143,0.392857,0,33.0,5,benchmark:db-hotset-scan,10,4.404762,3,10
+adaptive-heuristic,adaptive,,adaptive segments of 10 references using recent reuse p50,33,51,0.607143,0.392857,0,33.0,5,benchmark:db-hotset-scan,10,4.404762,3,10

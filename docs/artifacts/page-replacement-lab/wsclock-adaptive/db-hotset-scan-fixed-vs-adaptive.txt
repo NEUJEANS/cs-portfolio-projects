@@ -1,0 +1,24 @@
+frames: 5
+source: benchmark db-hotset-scan — dashboard-style hot pages interrupted by analytics scans and checkpoint bursts
+writeback penalty: 1.00
+dirty pages: none
+adaptive heuristic: recent reuse p50 over 10-reference segments
+mode               faults  hits  writebacks  score   window
+-----------------  ------  ----  ----------  ------  ---------------------------------------------
+auto-fixed         34      50    0           34.00   auto (max(4, frames * 2))
+tuned-fixed        33      51    0           33.00   fixed 3 references
+adaptive-heuristic  33      51    0           33.00   adaptive segments of 10 references using recent reuse p50
+best overall: tie between tuned-fixed, adaptive-heuristic (score=33.00)
+best fixed mode: tuned-fixed
+adaptive vs best fixed: tied (Δfaults +0, Δwritebacks +0, Δscore +0.00)
+adaptive schedule: avg τ=4.40, range 3..10
+adaptive segments:
+  - refs 1..10: τ=10 (initial auto window)
+  - refs 11..20: τ=3 (recent reuse p50≈2.00, unique=5, phase_overlap=0.40)
+  - refs 21..30: τ=3 (recent reuse p50≈2.00, unique=5, phase_overlap=0.40)
+  - refs 31..40: τ=3 (recent reuse p50≈2.00, unique=5, phase_overlap=0.60)
+  - refs 41..50: τ=4 (recent reuse p50≈2.00, unique=8, phase_overlap=0.00)
+  - refs 51..60: τ=5 (recent history had no reuse, unique=10, phase_overlap=0.00)
+  - refs 61..70: τ=4 (recent reuse p50≈3.00, unique=7, phase_overlap=0.43)
+  - refs 71..80: τ=3 (recent reuse p50≈3.00, unique=5, phase_overlap=0.60)
+  - refs 81..84: τ=5 (recent reuse p50≈3.00, unique=9, phase_overlap=0.00)

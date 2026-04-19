@@ -12,7 +12,8 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - includes an `aggregate` dashboard workflow that normalizes page-fault rates across presets, larger benchmark traces, and imported custom traces for one slide-ready comparison view
 - includes a `trace-compare` workflow that contrasts exactly two imported traces side by side with rate charts, frame tables, and locality snapshots
 - includes a `tune-wsclock` workflow that sweeps candidate `tau` windows and recommends a dirty-page-aware setting using weighted page-fault and writeback cost
-- leaves room for future extensions like adaptive working-set-window heuristics, richer narrative trace write-ups, or more detailed async-cleaner simulations
+- includes a `compare-wsclock-modes` workflow that honestly shows whether an adaptive `tau` beats, ties, or loses to the best fixed window on the same workload
+- leaves room for future extensions like adaptive-vs-fixed gallery cards, richer narrative trace write-ups, or more detailed async-cleaner simulations
 
 ## Features
 - simulate **FIFO**, **Clock / second-chance**, **Aging**, **WSClock** (dirty-page-aware with configurable `tau` / working-set window plus writeback counts), **LRU**, and **OPT** page replacement
@@ -20,6 +21,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - print a step-by-step trace for one algorithm
 - compare all six bundled algorithms on the same workload, including optional `--wsclock-window` overrides and `--dirty-page` / `--dirty-pages-file` inputs for WSClock sensitivity studies
 - sweep candidate WSClock `tau` windows with `tune-wsclock`, exporting Markdown / CSV / JSON reports that show the Pareto frontier between page faults and writebacks
+- compare auto-fixed, tuned-fixed, and adaptive WSClock `tau` choices with `compare-wsclock-modes`, including tie-aware reporting against the best fixed mode
 - run a frame-range study to detect FIFO Belady anomalies and other fault regressions
 - list built-in workload presets for repeatable demos and screenshots
 - list larger built-in trace benchmarks that model phase shifts, hot-set scans, and streaming-window bursts
@@ -126,6 +128,18 @@ Use `--dirty-page <page>` repeatedly or `--dirty-pages-file <path>` to mark writ
 
 Use `tune-wsclock` when you want the project to recommend a fixed `tau` for one workload and frame budget. The sweep reports the best weighted score, the Pareto frontier across page faults and writebacks, and whether the built-in auto window fell inside the evaluated search range.
 
+### Compare fixed and adaptive WSClock `tau` choices on one benchmark
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py compare-wsclock-modes --frames 3 \
+  --benchmark adaptive-phase-turnover \
+  --min-window 1 --max-window 9 --segment-length 8 \
+  --markdown-out docs/artifacts/page-replacement-lab/wsclock-adaptive/adaptive-phase-turnover-fixed-vs-adaptive.md \
+  --csv-out docs/artifacts/page-replacement-lab/wsclock-adaptive/adaptive-phase-turnover-fixed-vs-adaptive.csv \
+  --json > docs/artifacts/page-replacement-lab/wsclock-adaptive/adaptive-phase-turnover-fixed-vs-adaptive.json
+```
+
+Use `compare-wsclock-modes` when you want one portfolio-ready report that shows whether the built-in adaptive heuristic beats, ties, or loses to the best fixed `tau` for the same workload and frame budget.
+
 ### Summarize a heavier trace for reuse distance and phase hints
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py trace-summary \
@@ -190,6 +204,7 @@ These presets make demos reproducible and help explain how locality changes poli
 - `compiler-phase-shift` — larger compiler-style trace with a warm parser hot set, a code-generation scan, and optimizer bursts
 - `db-hotset-scan` — dashboard-style hot pages interrupted by a longer analytics scan plus checkpoint churn
 - `streaming-burst-window` — stream-processing working-set shifts with cold backfill bursts and rolling-window updates
+- `adaptive-phase-turnover` — three short overlapping hot-set phases crafted to expose where an adaptive WSClock `tau` can beat any single fixed window
 
 These benchmark bundles are longer than the compact presets and better for portfolio screenshots that need stronger separation between locality-friendly and scan-heavy workloads.
 Use exactly one of `--preset`, `--benchmark`, or explicit `--page` / `--pages-file` input for a single-workload run. The `aggregate` and `gallery` commands can intentionally mix repeated `--preset`, `--benchmark`, and `--pages-file` selections in one dashboard build or gallery export. The dedicated `trace-compare` command instead requires exactly two imported `--pages-file` arguments.
@@ -235,6 +250,8 @@ wsclock writebacks: 0
 - `docs/artifacts/page-replacement-lab/wsclock-window/compiler-phase-shift-window1-study.{md,svg,csv,json}` — committed WSClock sensitivity bundle that shows how a tighter `tau` window changes the compiler benchmark study
 - `docs/artifacts/page-replacement-lab/wsclock-dirty/compiler-phase-shift-write-heavy-study.{md,svg,csv,json}` — committed dirty-page-aware WSClock study bundle that exposes how write-heavy pages add background cleaning and writeback pressure
 - `docs/artifacts/page-replacement-lab/wsclock-tuning/compiler-phase-shift-write-heavy-tuning.{md,csv,json}` — committed WSClock tuning sweep that recommends a fixed `tau` by balancing page faults against dirty-page writebacks
+- `docs/artifacts/page-replacement-lab/wsclock-adaptive/adaptive-phase-turnover-fixed-vs-adaptive.{md,csv,json,txt}` — committed fixed-vs-adaptive comparison bundle for the benchmark designed to reward adaptive `tau` shifts
+- `docs/artifacts/page-replacement-lab/wsclock-adaptive/db-hotset-scan-fixed-vs-adaptive.{md,csv,json,txt}` — committed fixed-vs-adaptive comparison bundle that shows a realistic tie between tuned-fixed and adaptive WSClock
 - `docs/artifacts/page-replacement-lab/wsclock-dirty/compiler-phase-shift-write-heavy-compare.txt` — committed text compare snapshot for the same dirty-page benchmark scenario
 - `projects/page-replacement-lab/dirty-pages/compiler-phase-shift-write-heavy.json` — sample dirty-page list used for repeatable write-heavy WSClock demos
 - `projects/page-replacement-lab/custom-traces/mobile-app-session.txt` — sample imported trace file used to demonstrate custom aggregate, gallery, and trace-compare workflows without editing the source code
@@ -252,6 +269,7 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - explain how the simplified **WSClock** policy combines Clock hand scans with a virtual-time working-set window, dirty-bit-aware cleaning, and an LRU-style fallback when every page still looks active
 - explain how tightening or relaxing the WSClock `tau` / working-set window changes eviction aggressiveness on phase-shifted workloads
 - explain how a simple tuning sweep can recommend a fixed `tau` by balancing page faults against dirty-page writebacks and surfacing the Pareto frontier
+- explain why an adaptive `tau` heuristic can legitimately tie or beat the best fixed window on phase-changing traces, but should be reported honestly when it only matches the tuned baseline
 - explain how dirty/write-heavy pages can raise writebacks even when page-fault counts stay close, and why that matters for storage pressure
 - explain why **LRU** and **OPT** are stack algorithms while **FIFO** is not
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
@@ -261,6 +279,6 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - suggest how this simulator could extend into more detailed async-cleaner replay, richer working-set analysis, or more narrative report/gallery generation
 
 ## Future improvements
-- compare fixed-window recommendations against adaptive `tau` / workload-sensitive dirty-page heuristics for deeper systems realism
+- export adaptive-vs-fixed WSClock comparisons across multiple frame budgets or gallery cards so one run can summarize where the adaptive heuristic helps most
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
 - add narrative annotations or callout overlays that explain why one imported trace wins on specific frame counts
