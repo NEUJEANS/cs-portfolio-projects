@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import html
 import json
 import keyword
 import re
+import shlex
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -112,6 +114,57 @@ PRESET_CORPORA: dict[str, dict[str, str]] = {
         "use_engagement_metrics.ts": "export type EngagementPoint = { current: number; previous: number };\n\nexport function buildEngagementSummary(point: EngagementPoint) {\n  const delta = point.current - point.previous;\n  const direction = delta >= 0 ? 'up' : 'down';\n  const percent = point.previous === 0 ? 100 : Math.round((delta / point.previous) * 100);\n  return {\n    total: point.current.toLocaleString(),\n    changeText: `${percent}% vs last week`,\n    direction,\n  };\n}\n",
         "card-shell.css": ".cardShell {\n  border-radius: 16px;\n  padding: 16px;\n  background: linear-gradient(180deg, #111827, #1f2937);\n  color: #f9fafb;\n}\n\n.cardHeader {\n  display: flex;\n  justify-content: space-between;\n  align-items: baseline;\n}\n\n.metricValue {\n  display: block;\n  font-size: 2rem;\n}\n\n.metricCaption {\n  color: #cbd5e1;\n}\n",
         "different_domain.md": "# Different topic\n\nA CPU scheduler trace explains quantum expiration and context switches rather than duplicated dashboard components.\n",
+    },
+}
+
+PRESET_SCAN_CONFIGS: dict[str, dict[str, object]] = {
+    "mixed-markdown-code-notebook": {
+        "title": "Mixed Markdown, code, and notebook MinHash preset",
+        "story": "A graph-search study bundle that intentionally duplicates the BFS story across Markdown, Python, and notebook files.",
+        "glob_pattern": "*.md,*.py,*.ipynb",
+        "token_mode": "code",
+        "normalize_identifiers": True,
+        "normalize_literals": True,
+        "shingle_size": 4,
+        "num_hashes": 64,
+        "bands": 8,
+        "threshold": 0.2,
+    },
+    "data-science-feature-pipeline": {
+        "title": "Data-science feature pipeline MinHash preset",
+        "story": "A feature-engineering portfolio pack with cloned preprocessing logic spread across Python, Markdown, and notebook artifacts.",
+        "glob_pattern": "*.md,*.py,*.ipynb",
+        "token_mode": "code",
+        "normalize_identifiers": True,
+        "normalize_literals": False,
+        "shingle_size": 4,
+        "num_hashes": 64,
+        "bands": 8,
+        "threshold": 0.15,
+    },
+    "systems-churn-reconciliation": {
+        "title": "Systems reconciliation MinHash preset",
+        "story": "A replica-lag and WAL catch-up corpus with code, runbook, and incident-story near-duplicates for systems design demos.",
+        "glob_pattern": "*.md,*.py,*.json",
+        "token_mode": "code",
+        "normalize_identifiers": True,
+        "normalize_literals": False,
+        "shingle_size": 3,
+        "num_hashes": 64,
+        "bands": 8,
+        "threshold": 0.15,
+    },
+    "web-dev-component-clones": {
+        "title": "Web-dev component clone MinHash preset",
+        "story": "A frontend-heavy portfolio preset that highlights duplicated dashboard cards, hooks, notes, and CSS assets.",
+        "glob_pattern": "*.md,*.tsx,*.ts,*.css",
+        "token_mode": "code",
+        "normalize_identifiers": True,
+        "normalize_literals": True,
+        "shingle_size": 4,
+        "num_hashes": 64,
+        "bands": 8,
+        "threshold": 0.15,
     },
 }
 
@@ -488,6 +541,281 @@ def write_preset_corpus(preset_name: str, destination: Path, *, force: bool = Fa
         path.write_text(content, encoding="utf-8")
         written.append(path)
     return sorted(written)
+
+
+def _preset_scan_command(preset_name: str) -> str:
+    config = PRESET_SCAN_CONFIGS[preset_name]
+    command = [
+        "python3",
+        "projects/minhash-near-duplicate-lab/minhash_lab.py",
+        "corpus",
+        "<preset-root>",
+        "--glob",
+        str(config["glob_pattern"]),
+        "--token-mode",
+        str(config["token_mode"]),
+        "--shingle-size",
+        str(config["shingle_size"]),
+        "--num-hashes",
+        str(config["num_hashes"]),
+        "--bands",
+        str(config["bands"]),
+        "--threshold",
+        str(config["threshold"]),
+    ]
+    if config.get("normalize_identifiers"):
+        command.append("--normalize-identifiers")
+    if config.get("normalize_literals"):
+        command.append("--normalize-literals")
+    command.append("--json")
+    return " ".join(shlex.quote(part) for part in command)
+
+
+def _compact_preview(text: str) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= 120:
+        return compact
+    return compact[:117] + "..."
+
+
+def _preview_text_for_bundle(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    if path.suffix.lower() == ".ipynb":
+        try:
+            notebook = json.loads(text)
+            for cell in notebook.get("cells", []):
+                source = cell.get("source", [])
+                if isinstance(source, str):
+                    preview = _compact_preview(source.strip())
+                    if preview:
+                        return preview
+                if isinstance(source, list):
+                    preview = _compact_preview(" ".join(str(item).strip() for item in source if str(item).strip()))
+                    if preview:
+                        return preview
+        except json.JSONDecodeError:
+            pass
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return _compact_preview(stripped)
+    return "(empty file)"
+
+
+def _preset_file_cards(written: Iterable[Path], destination: Path) -> list[dict[str, object]]:
+    cards: list[dict[str, object]] = []
+    for path in sorted(written):
+        relative = path.relative_to(destination).as_posix()
+        cards.append(
+            {
+                "path": relative,
+                "suffix": path.suffix.lower() or "<none>",
+                "bytes": path.stat().st_size,
+                "preview": _preview_text_for_bundle(path),
+            }
+        )
+    return cards
+
+
+def _extension_counts(cards: Iterable[dict[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for card in cards:
+        suffix = str(card["suffix"])
+        counts[suffix] = counts.get(suffix, 0) + 1
+    return {suffix: counts[suffix] for suffix in sorted(counts)}
+
+
+def _select_bundle_scan_paths(written: Iterable[Path], destination: Path, glob_pattern: str) -> list[Path]:
+    patterns = _split_glob_patterns(glob_pattern)
+    selected: list[Path] = []
+    for path in sorted(written):
+        relative = path.relative_to(destination)
+        if any(relative.match(pattern) for pattern in patterns):
+            selected.append(path)
+    return selected
+
+
+def build_preset_artifact_bundle(preset_name: str, destination: Path, written: Iterable[Path]) -> dict[str, object]:
+    if preset_name not in PRESET_SCAN_CONFIGS:
+        raise ValueError(f"missing scan config for preset: {preset_name}")
+    config = PRESET_SCAN_CONFIGS[preset_name]
+    written_paths = sorted(written)
+    cards = _preset_file_cards(written_paths, destination)
+    scan_paths = _select_bundle_scan_paths(written_paths, destination, str(config["glob_pattern"]))
+    documents = {
+        path.relative_to(destination).as_posix(): path.read_text(encoding="utf-8")
+        for path in scan_paths
+    }
+    reports = find_candidate_pairs(
+        documents,
+        shingle_size=int(config["shingle_size"]),
+        num_hashes=int(config["num_hashes"]),
+        bands=int(config["bands"]),
+        threshold=float(config["threshold"]),
+        token_mode=str(config["token_mode"]),
+        normalize_identifiers=bool(config.get("normalize_identifiers", False)),
+        normalize_literals=bool(config.get("normalize_literals", False)),
+    )
+    top_pairs = [report.to_dict() for report in reports[:8]]
+    return {
+        "preset_name": preset_name,
+        "title": str(config["title"]),
+        "story": str(config["story"]),
+        "files_written": len(written_paths),
+        "pairs_detected": len(reports),
+        "extensions": _extension_counts(cards),
+        "recommended_scan": {
+            "glob_pattern": str(config["glob_pattern"]),
+            "token_mode": str(config["token_mode"]),
+            "normalize_identifiers": bool(config.get("normalize_identifiers", False)),
+            "normalize_literals": bool(config.get("normalize_literals", False)),
+            "shingle_size": int(config["shingle_size"]),
+            "num_hashes": int(config["num_hashes"]),
+            "bands": int(config["bands"]),
+            "threshold": float(config["threshold"]),
+            "command": _preset_scan_command(preset_name),
+        },
+        "files": cards,
+        "top_pairs": top_pairs,
+    }
+
+
+def _preset_bundle_markdown(payload: dict[str, object]) -> str:
+    scan = payload["recommended_scan"]
+    lines = [
+        f"# {payload['title']}",
+        "",
+        str(payload["story"]),
+        "",
+        f"- Preset key: `{payload['preset_name']}`",
+        f"- Files written: {payload['files_written']}",
+        f"- Extensions: {', '.join(f'{suffix}={count}' for suffix, count in payload['extensions'].items())}",
+        f"- Pairs detected at the recommended threshold: {payload['pairs_detected']}",
+        f"- Recommended glob: `{scan['glob_pattern']}`",
+        f"- Token mode: `{scan['token_mode']}`",
+        f"- Normalize identifiers: `{scan['normalize_identifiers']}`",
+        f"- Normalize literals: `{scan['normalize_literals']}`",
+        f"- Shingle size: `{scan['shingle_size']}` | Hashes: `{scan['num_hashes']}` | Bands: `{scan['bands']}` | Threshold: `{scan['threshold']}`",
+        "",
+        "## Suggested scan command",
+        "",
+        "```bash",
+        str(scan["command"]),
+        "```",
+        "",
+        "## File cards",
+        "",
+    ]
+    for card in payload["files"]:
+        lines.extend(
+            [
+                f"### `{card['path']}`",
+                f"- Type: `{card['suffix']}`",
+                f"- Bytes: `{card['bytes']}`",
+                f"- Preview: {card['preview']}",
+                "",
+            ]
+        )
+    lines.extend(["## Top near-duplicate pairs", ""])
+    pairs = payload["top_pairs"]
+    if pairs:
+        for pair in pairs:
+            lines.append(
+                f"- `{pair['left']}` <> `{pair['right']}` | exact={pair['exact_jaccard']:.4f} estimated={pair['estimated_jaccard']:.4f} shared_bands={pair['shared_bands']}"
+            )
+    else:
+        lines.append("- None above the recommended threshold yet.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _preset_bundle_html(payload: dict[str, object]) -> str:
+    scan = payload["recommended_scan"]
+    file_cards = "\n".join(
+        (
+            "<article class=\"card\">"
+            f"<h3>{html.escape(str(card['path']))}</h3>"
+            f"<p class=\"meta\">{html.escape(str(card['suffix']))} · {card['bytes']} bytes</p>"
+            f"<p>{html.escape(str(card['preview']))}</p>"
+            "</article>"
+        )
+        for card in payload["files"]
+    )
+    pairs = payload["top_pairs"]
+    pair_cards = "\n".join(
+        (
+            "<article class=\"card pair\">"
+            f"<h3>{html.escape(str(pair['left']))} ↔ {html.escape(str(pair['right']))}</h3>"
+            f"<p class=\"meta\">exact={pair['exact_jaccard']:.4f} · estimated={pair['estimated_jaccard']:.4f} · shared bands={pair['shared_bands']}</p>"
+            "</article>"
+        )
+        for pair in pairs
+    ) or "<article class=\"card pair\"><h3>No pairs yet</h3><p class=\"meta\">Nothing crossed the recommended threshold.</p></article>"
+    return f"""<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <title>{html.escape(str(payload['title']))}</title>
+  <style>
+    body {{ font-family: Inter, system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }}
+    main {{ max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }}
+    h1, h2, h3 {{ margin-top: 0; }}
+    .hero, .panel {{ background: #111827; border: 1px solid #334155; border-radius: 18px; padding: 20px; margin-bottom: 20px; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.28); }}
+    .grid {{ display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }}
+    .card {{ background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border-radius: 16px; padding: 16px; border: 1px solid #334155; min-height: 150px; }}
+    .meta {{ color: #93c5fd; font-size: 0.95rem; }}
+    pre {{ white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; padding: 14px; border-radius: 12px; border: 1px solid #1e293b; }}
+    ul {{ padding-left: 20px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"hero\">
+      <h1>{html.escape(str(payload['title']))}</h1>
+      <p>{html.escape(str(payload['story']))}</p>
+      <ul>
+        <li>Preset key: <code>{html.escape(str(payload['preset_name']))}</code></li>
+        <li>Files written: <strong>{payload['files_written']}</strong></li>
+        <li>Pairs detected at the recommended threshold: <strong>{payload['pairs_detected']}</strong></li>
+        <li>Extensions: {html.escape(', '.join(f'{suffix}={count}' for suffix, count in payload['extensions'].items()))}</li>
+      </ul>
+    </section>
+    <section class=\"panel\">
+      <h2>Suggested scan command</h2>
+      <pre>{html.escape(str(scan['command']))}</pre>
+    </section>
+    <section class=\"panel\">
+      <h2>Preset file cards</h2>
+      <div class=\"grid\">{file_cards}</div>
+    </section>
+    <section class=\"panel\">
+      <h2>Top near-duplicate pairs</h2>
+      <div class=\"grid\">{pair_cards}</div>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def write_preset_artifact_bundle(preset_name: str, destination: Path, bundle_dir: Path, written: Iterable[Path]) -> dict[str, object]:
+    payload = build_preset_artifact_bundle(preset_name, destination, written)
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    summary_json = bundle_dir / "preset-bundle-summary.json"
+    summary_md = bundle_dir / "preset-bundle-summary.md"
+    gallery_html = bundle_dir / "preset-gallery.html"
+    summary_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    summary_md.write_text(_preset_bundle_markdown(payload) + "\n", encoding="utf-8")
+    gallery_html.write_text(_preset_bundle_html(payload), encoding="utf-8")
+    return {
+        "directory": str(bundle_dir),
+        "summary_json": str(summary_json),
+        "summary_md": str(summary_md),
+        "gallery_html": str(gallery_html),
+        "pairs_detected": payload["pairs_detected"],
+        "files_written": payload["files_written"],
+        "recommended_command": payload["recommended_scan"]["command"],
+    }
 
 
 def _indexed_document_from_text(
@@ -884,6 +1212,7 @@ def build_parser() -> argparse.ArgumentParser:
     preset_parser.add_argument("preset_name", choices=sorted(PRESET_CORPORA))
     preset_parser.add_argument("destination")
     preset_parser.add_argument("--force", action="store_true", help="overwrite preset files if they already exist")
+    preset_parser.add_argument("--artifact-bundle-dir", help="optional directory for markdown/json/html portfolio bundle artifacts")
     preset_parser.add_argument("--json", action="store_true")
 
     for subparser in (compare_parser, corpus_parser, index_parser, benchmark_parser):
@@ -930,6 +1259,9 @@ def _emit(payload: dict[str, object], as_json: bool) -> int:
         return 0
     if command == "write-preset":
         print(f"Wrote preset {payload['preset_name']} with {payload['files_written']} files to {payload['destination']}")
+        artifact_bundle = payload.get("artifact_bundle")
+        if isinstance(artifact_bundle, dict) and artifact_bundle.get("directory"):
+            print(f"Saved artifact bundle: {artifact_bundle['directory']}")
         return 0
     if command == "benchmark":
         print(f"Documents scanned: {payload['documents_scanned']}")
@@ -1116,16 +1448,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "write-preset":
         destination = Path(args.destination)
         written = write_preset_corpus(args.preset_name, destination, force=args.force)
-        return _emit(
-            {
-                "command": "write-preset",
-                "preset_name": args.preset_name,
-                "destination": str(destination),
-                "files_written": len(written),
-                "files": [str(path) for path in written],
-            },
-            args.json,
-        )
+        payload = {
+            "command": "write-preset",
+            "preset_name": args.preset_name,
+            "destination": str(destination),
+            "files_written": len(written),
+            "files": [str(path) for path in written],
+        }
+        if args.artifact_bundle_dir:
+            payload["artifact_bundle"] = write_preset_artifact_bundle(
+                args.preset_name,
+                destination,
+                Path(args.artifact_bundle_dir),
+                written,
+            )
+        return _emit(payload, args.json)
 
     if args.command == "benchmark":
         root = Path(args.root)

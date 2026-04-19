@@ -1,0 +1,94 @@
+{
+  "extensions": {
+    ".css": 1,
+    ".md": 3,
+    ".ts": 2,
+    ".tsx": 2
+  },
+  "files": [
+    {
+      "bytes": 161,
+      "path": "README.md",
+      "preview": "# Dashboard component notes",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 316,
+      "path": "card-shell.css",
+      "preview": ".cardShell {",
+      "suffix": ".css"
+    },
+    {
+      "bytes": 164,
+      "path": "dashboard_story.md",
+      "preview": "# Dashboard refactor story",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 135,
+      "path": "different_domain.md",
+      "preview": "# Different topic",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 630,
+      "path": "engagement_summary_card.tsx",
+      "preview": "type SummaryCardProps = { heading: string; total: string; changeText: string; direction: 'up' | 'down' };",
+      "suffix": ".tsx"
+    },
+    {
+      "bytes": 442,
+      "path": "use_engagement_metrics.ts",
+      "preview": "export type EngagementPoint = { current: number; previous: number };",
+      "suffix": ".ts"
+    },
+    {
+      "bytes": 435,
+      "path": "use_user_metrics.ts",
+      "preview": "export type MetricPoint = { current: number; previous: number };",
+      "suffix": ".ts"
+    },
+    {
+      "bytes": 594,
+      "path": "user_stats_card.tsx",
+      "preview": "type MetricsCardProps = { title: string; value: string; deltaLabel: string; trend: 'up' | 'down' };",
+      "suffix": ".tsx"
+    }
+  ],
+  "files_written": 8,
+  "pairs_detected": 2,
+  "preset_name": "web-dev-component-clones",
+  "recommended_scan": {
+    "bands": 8,
+    "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.tsx,*.ts,*.css' --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --normalize-literals --json",
+    "glob_pattern": "*.md,*.tsx,*.ts,*.css",
+    "normalize_identifiers": true,
+    "normalize_literals": true,
+    "num_hashes": 64,
+    "shingle_size": 4,
+    "threshold": 0.15,
+    "token_mode": "code"
+  },
+  "story": "A frontend-heavy portfolio preset that highlights duplicated dashboard cards, hooks, notes, and CSS assets.",
+  "title": "Web-dev component clone MinHash preset",
+  "top_pairs": [
+    {
+      "estimated_jaccard": 1.0,
+      "exact_jaccard": 1.0,
+      "left": "engagement_summary_card.tsx",
+      "left_shingles": 80,
+      "right": "user_stats_card.tsx",
+      "right_shingles": 80,
+      "shared_bands": 8
+    },
+    {
+      "estimated_jaccard": 1.0,
+      "exact_jaccard": 1.0,
+      "left": "use_engagement_metrics.ts",
+      "left_shingles": 86,
+      "right": "use_user_metrics.ts",
+      "right_shingles": 86,
+      "shared_bands": 8
+    }
+  ]
+}

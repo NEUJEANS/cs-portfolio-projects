@@ -32,7 +32,10 @@ refresh_signature_index = module.refresh_signature_index
 summarize_index_refresh = module.summarize_index_refresh
 save_signature_index = module.save_signature_index
 benchmark_corpus = module.benchmark_corpus
+build_preset_artifact_bundle = module.build_preset_artifact_bundle
+write_preset_artifact_bundle = module.write_preset_artifact_bundle
 write_preset_corpus = module.write_preset_corpus
+_preview_text_for_bundle = module._preview_text_for_bundle
 _split_glob_patterns = module._split_glob_patterns
 
 
@@ -453,6 +456,72 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertTrue((destination / "engagement_summary_card.tsx").exists())
             self.assertTrue((destination / "card-shell.css").exists())
 
+    def test_build_preset_artifact_bundle_reports_file_cards_and_top_pairs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "web-dev"
+            written = write_preset_corpus("web-dev-component-clones", destination)
+
+            payload = build_preset_artifact_bundle("web-dev-component-clones", destination, written)
+
+            self.assertEqual(payload["preset_name"], "web-dev-component-clones")
+            self.assertEqual(payload["files_written"], 8)
+            self.assertEqual(payload["extensions"][".tsx"], 2)
+            self.assertEqual(payload["extensions"][".ts"], 2)
+            self.assertGreaterEqual(len(payload["top_pairs"]), 2)
+            self.assertIn("<preset-root>", payload["recommended_scan"]["command"])
+            self.assertIn("dashboard_story.md", {item["path"] for item in payload["files"]})
+
+    def test_build_preset_artifact_bundle_ignores_stray_matching_files_in_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "web-dev"
+            written = write_preset_corpus("web-dev-component-clones", destination)
+            stray = destination / "shadow_copy.ts"
+            stray.write_text((destination / "use_user_metrics.ts").read_text(encoding="utf-8"), encoding="utf-8")
+
+            payload = build_preset_artifact_bundle("web-dev-component-clones", destination, written)
+
+            self.assertEqual(payload["files_written"], 8)
+            self.assertEqual(payload["pairs_detected"], 2)
+            self.assertNotIn("shadow_copy.ts", {item["path"] for item in payload["files"]})
+            self.assertFalse(any("shadow_copy.ts" in pair["left"] or "shadow_copy.ts" in pair["right"] for pair in payload["top_pairs"]))
+
+    def test_preview_text_for_bundle_accepts_string_notebook_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            notebook = Path(tmpdir) / "preview.ipynb"
+            notebook.write_text(
+                json.dumps({"cells": [{"cell_type": "code", "source": "print('hello world')"}]}),
+                encoding="utf-8",
+            )
+
+            preview = _preview_text_for_bundle(notebook)
+
+            self.assertEqual(preview, "print('hello world')")
+
+    def test_write_preset_artifact_bundle_writes_json_markdown_and_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "web-dev"
+            bundle_dir = Path(tmpdir) / "bundle"
+            written = write_preset_corpus("web-dev-component-clones", destination)
+
+            outputs = write_preset_artifact_bundle("web-dev-component-clones", destination, bundle_dir, written)
+
+            summary_json = Path(outputs["summary_json"])
+            summary_md = Path(outputs["summary_md"])
+            gallery_html = Path(outputs["gallery_html"])
+            self.assertTrue(summary_json.exists())
+            self.assertTrue(summary_md.exists())
+            self.assertTrue(gallery_html.exists())
+
+            bundle_payload = json.loads(summary_json.read_text(encoding="utf-8"))
+            markdown = summary_md.read_text(encoding="utf-8")
+            html = gallery_html.read_text(encoding="utf-8")
+
+            self.assertEqual(bundle_payload["preset_name"], "web-dev-component-clones")
+            self.assertIn("## Top near-duplicate pairs", markdown)
+            self.assertIn("Suggested scan command", markdown)
+            self.assertIn("<html", html)
+            self.assertIn("Top near-duplicate pairs", html)
+
     def test_write_preset_corpus_requires_force_when_files_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             destination = Path(tmpdir) / "preset"
@@ -646,6 +715,35 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             corpus_payload = json.loads(corpus_completed.stdout)
             self.assertEqual(corpus_payload["documents_scanned"], payload["files_written"])
             self.assertGreaterEqual(len(corpus_payload["pairs"]), 2)
+
+    def test_cli_write_preset_can_emit_artifact_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            destination = Path(tmpdir) / "preset"
+            bundle_dir = Path(tmpdir) / "bundle"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "write-preset",
+                    "web-dev-component-clones",
+                    str(destination),
+                    "--artifact-bundle-dir",
+                    str(bundle_dir),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            artifact_bundle = payload["artifact_bundle"]
+            self.assertTrue(Path(artifact_bundle["summary_json"]).exists())
+            self.assertTrue(Path(artifact_bundle["summary_md"]).exists())
+            self.assertTrue(Path(artifact_bundle["gallery_html"]).exists())
+            summary_payload = json.loads(Path(artifact_bundle["summary_json"]).read_text(encoding="utf-8"))
+            self.assertEqual(summary_payload["preset_name"], "web-dev-component-clones")
+            self.assertGreaterEqual(len(summary_payload["top_pairs"]), 2)
 
     def test_cli_compare_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

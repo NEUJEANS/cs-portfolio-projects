@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Web-dev component clone MinHash preset</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }
+    h1, h2, h3 { margin-top: 0; }
+    .hero, .panel { background: #111827; border: 1px solid #334155; border-radius: 18px; padding: 20px; margin-bottom: 20px; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.28); }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .card { background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border-radius: 16px; padding: 16px; border: 1px solid #334155; min-height: 150px; }
+    .meta { color: #93c5fd; font-size: 0.95rem; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; padding: 14px; border-radius: 12px; border: 1px solid #1e293b; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Web-dev component clone MinHash preset</h1>
+      <p>A frontend-heavy portfolio preset that highlights duplicated dashboard cards, hooks, notes, and CSS assets.</p>
+      <ul>
+        <li>Preset key: <code>web-dev-component-clones</code></li>
+        <li>Files written: <strong>8</strong></li>
+        <li>Pairs detected at the recommended threshold: <strong>2</strong></li>
+        <li>Extensions: .css=1, .md=3, .ts=2, .tsx=2</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Suggested scan command</h2>
+      <pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus &#x27;&lt;preset-root&gt;&#x27; --glob &#x27;*.md,*.tsx,*.ts,*.css&#x27; --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --normalize-literals --json</pre>
+    </section>
+    <section class="panel">
+      <h2>Preset file cards</h2>
+      <div class="grid"><article class="card"><h3>README.md</h3><p class="meta">.md · 161 bytes</p><p># Dashboard component notes</p></article>
+<article class="card"><h3>card-shell.css</h3><p class="meta">.css · 316 bytes</p><p>.cardShell {</p></article>
+<article class="card"><h3>dashboard_story.md</h3><p class="meta">.md · 164 bytes</p><p># Dashboard refactor story</p></article>
+<article class="card"><h3>different_domain.md</h3><p class="meta">.md · 135 bytes</p><p># Different topic</p></article>
+<article class="card"><h3>engagement_summary_card.tsx</h3><p class="meta">.tsx · 630 bytes</p><p>type SummaryCardProps = { heading: string; total: string; changeText: string; direction: &#x27;up&#x27; | &#x27;down&#x27; };</p></article>
+<article class="card"><h3>use_engagement_metrics.ts</h3><p class="meta">.ts · 442 bytes</p><p>export type EngagementPoint = { current: number; previous: number };</p></article>
+<article class="card"><h3>use_user_metrics.ts</h3><p class="meta">.ts · 435 bytes</p><p>export type MetricPoint = { current: number; previous: number };</p></article>
+<article class="card"><h3>user_stats_card.tsx</h3><p class="meta">.tsx · 594 bytes</p><p>type MetricsCardProps = { title: string; value: string; deltaLabel: string; trend: &#x27;up&#x27; | &#x27;down&#x27; };</p></article></div>
+    </section>
+    <section class="panel">
+      <h2>Top near-duplicate pairs</h2>
+      <div class="grid"><article class="card pair"><h3>engagement_summary_card.tsx ↔ user_stats_card.tsx</h3><p class="meta">exact=1.0000 · estimated=1.0000 · shared bands=8</p></article>
+<article class="card pair"><h3>use_engagement_metrics.ts ↔ use_user_metrics.ts</h3><p class="meta">exact=1.0000 · estimated=1.0000 · shared bands=8</p></article></div>
+    </section>
+  </main>
+</body>
+</html>

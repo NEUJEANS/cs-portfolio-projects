@@ -1,0 +1,21 @@
+.cardShell {
+  border-radius: 16px;
+  padding: 16px;
+  background: linear-gradient(180deg, #111827, #1f2937);
+  color: #f9fafb;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.metricValue {
+  display: block;
+  font-size: 2rem;
+}
+
+.metricCaption {
+  color: #cbd5e1;
+}

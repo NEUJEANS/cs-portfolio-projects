@@ -24,6 +24,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - benchmark mode that compares LSH candidate generation against exact all-pairs scanning
 - benchmark export support for JSON, CSV, or Markdown portfolio summaries
 - curated demo corpus presets for mixed Markdown/code notebooks, data-science feature pipelines, systems reconciliation stories, and web-dev component clone portfolios
+- artifact-ready preset bundle export that writes JSON, Markdown, and HTML gallery cards alongside a generated preset corpus
 - comma-separated glob support so one run can scan `.md`, `.py`, `.ipynb`, `.tsx`, `.ts`, and other mixed corpus files together
 - CLI output in human-readable or JSON form
 - repository-level tests for API behavior and CLI workflows
@@ -139,6 +140,18 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus \
   --json
 ```
 
+Generate the same preset together with a screenshot-friendly Markdown/HTML artifact bundle:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-preset \
+  web-dev-component-clones \
+  tmp/minhash-web-dev-demo \
+  --artifact-bundle-dir docs/artifacts/minhash-near-duplicate-lab/web-dev-component-clones \
+  --json
+```
+
+The same `--artifact-bundle-dir` flag works with the mixed-markdown, data-science, and systems presets too, so every curated corpus can ship with portfolio-ready bundle files.
+
 Build a persistent signature index:
 
 ```bash
@@ -230,6 +243,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 - why a dry-run diff is useful before reindexing a large corpus or deleting stale paths from a saved signature index
 - how recall and candidate-reduction trade off as you change shingle size, signature length, and band count
 - how reusable JSON/CSV/Markdown exports make experimental results easier to paste into portfolio write-ups and charts
+- how preset bundle Markdown/HTML cards turn a synthetic corpus into something you can screenshot quickly for a portfolio case study
 
 ## Test
 
@@ -240,4 +254,4 @@ python3 -m unittest tests.test_minhash_near_duplicate
 ## Future improvements
 - add richer benchmark dataset packs with expected-recall scenarios across tiny, medium, and noisy corpora
 - add language-aware literal buckets for lists, dicts, template strings, and JSX-specific inline objects in code mode
-- add an artifact-ready preset bundle exporter that emits sample screenshots/markdown cards alongside the generated frontend corpus
+- add a cross-preset landing page that compares the mixed-language, data-science, systems, and web-dev demo bundles side by side
