@@ -1,12 +1,12 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 01:40 UTC run)
-- [x] resume the queued preset-gallery follow-up after confirming `main` matches `origin/main`
-- [x] add no-logfile `--card-annotation-preset-gallery-html` support so preset catalog/preview data can ship as a browser-friendly landing page
-- [x] add repeatable `--card-annotation-preset-gallery-link LABEL=TARGET` support so committed helper outputs and annotated card artifacts can be linked from one page
-- [x] keep gallery generation compatible with built-in presets, JSON-backed custom preset files, and optional preview expansions without requiring a logfile
-- [x] refresh README/checklist/review notes and commit the new gallery artifact plus refreshed preview JSON under `docs/artifacts/log-analyzer/`
-- [x] run targeted tests, real helper/gallery smoke checks, and 3 review passes
+## Current slice (2026-04-19 02:05 UTC run)
+- [x] resume the next `log-analyzer` faceting follow-up after confirming `main` matches `origin/main`
+- [x] add facet-aware ranking summaries for top IP and top path tables when `--facet-field` values are active
+- [x] add dedicated `--top-ip-facet-csv` and `--top-path-facet-csv` exports so deployment/release labels can ship spreadsheet-ready ranking tables
+- [x] keep the facet ranking summaries self-describing in text/JSON/CSV output, including missing facet values, per-facet ranks, and busiest-facet-first ordering
+- [x] refresh README/checklist/learning/review docs and commit sample facet-ranking artifacts under `docs/artifacts/log-analyzer/`
+- [x] run targeted tests, real CLI/export smoke checks, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
