@@ -17,6 +17,7 @@ from log_analyzer import (
     build_card_annotation_preset_catalog,
     build_card_annotation_preset_previews,
     expand_card_annotation_presets,
+    format_card_annotation_preset_gallery_html,
     format_facet_comparison_card_html,
     format_facet_comparison_card_svg,
     format_text_report,
@@ -1963,9 +1964,57 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn(
                 '--card-annotation-preset-file requires at least one --card-annotation-preset, '
-                '--preview-card-annotation-preset, or --list-card-annotation-presets',
+                '--preview-card-annotation-preset, --list-card-annotation-presets, or '
+                '--card-annotation-preset-gallery-html',
                 completed.stderr,
             )
+
+    def test_format_card_annotation_preset_gallery_html_includes_previews_and_links(self):
+        catalog = build_card_annotation_preset_catalog(None)
+        previews = build_card_annotation_preset_previews(
+            [
+                'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+            ]
+        )
+        html = format_card_annotation_preset_gallery_html(
+            preset_catalog=catalog,
+            preset_previews=previews,
+            related_links=[
+                {'label': 'Annotated trend card', 'target': 'release-trend-card-annotated.html'},
+                {'label': 'Preset preview JSON', 'target': 'card-annotation-preset-preview.json'},
+            ],
+            gallery_output_path='docs/artifacts/log-analyzer/card-annotation-preset-gallery.html',
+        )
+        self.assertIn('Log Analyzer preset gallery', html)
+        self.assertIn('deploy-rollback-recovery', html)
+        self.assertIn('Rollback started', html)
+        self.assertIn('Annotated trend card', html)
+        self.assertIn('release-trend-card-annotated.html', html)
+
+    def test_cli_gallery_rewrites_nested_related_links_relative_to_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            gallery_dir = temp_root / 'docs' / 'artifacts' / 'log-analyzer'
+            gallery_dir.mkdir(parents=True)
+            html_path = gallery_dir / 'preset-gallery.html'
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent / 'log_analyzer.py'),
+                    '--card-annotation-preset-gallery-html',
+                    str(html_path),
+                    '--card-annotation-preset-gallery-link',
+                    'Annotated trend card=docs/artifacts/log-analyzer/release-trend-card-annotated.html',
+                ],
+                cwd=temp_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(html_path.exists())
+            html = html_path.read_text(encoding='utf-8')
+            self.assertIn('href="release-trend-card-annotated.html"', html)
+            self.assertIn('Card annotation presets', completed.stdout)
 
     def test_cli_lists_card_annotation_presets_without_logfile(self):
         completed = subprocess.run(
@@ -2102,6 +2151,53 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(payload['card_annotation_preset_catalog'][0]['name'], 'deploy-incident-recovery')
         self.assertEqual(payload['card_annotation_preset_preview'][0]['annotations'][0]['theme'], 'deploy')
 
+    def test_cli_writes_card_annotation_preset_gallery_without_logfile(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            html_path = Path(tmpdir) / 'preset-gallery.html'
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    '--card-annotation-preset-gallery-html',
+                    str(html_path),
+                    '--card-annotation-preset-gallery-link',
+                    'Annotated trend card=release-trend-card-annotated.html',
+                    '--card-annotation-preset-gallery-link',
+                    'Preset preview JSON=card-annotation-preset-preview.json',
+                    '--preview-card-annotation-preset',
+                    'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(html_path.exists())
+            html = html_path.read_text(encoding='utf-8')
+            self.assertIn('deploy-rollback-recovery', html)
+            self.assertIn('Rollback started', html)
+            self.assertIn('Annotated trend card', html)
+            self.assertIn('Preset preview JSON', html)
+            self.assertIn('Card annotation presets', completed.stdout)
+
+    def test_cli_rejects_preset_gallery_link_without_gallery_output(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                'log_analyzer.py',
+                '--card-annotation-preset-gallery-link',
+                'Annotated trend card=release-trend-card-annotated.html',
+            ],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            '--card-annotation-preset-gallery-link requires --card-annotation-preset-gallery-html',
+            completed.stderr,
+        )
+
     def test_cli_requires_logfile_without_preset_utility_flags(self):
         completed = subprocess.run(
             [
@@ -2114,7 +2210,7 @@ class LogAnalyzerTests(unittest.TestCase):
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn(
-            'logfile is required unless --list-card-annotation-presets or --preview-card-annotation-preset is used',
+            'logfile is required unless --list-card-annotation-presets, --preview-card-annotation-preset, or --card-annotation-preset-gallery-html is used',
             completed.stderr,
         )
 

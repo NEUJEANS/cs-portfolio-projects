@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import re
 import textwrap
 from collections import Counter, defaultdict
@@ -1038,6 +1039,237 @@ def format_card_annotation_preset_utility_text(
     if preset_previews is not None:
         sections.append(format_card_annotation_preset_preview_text(preset_previews))
     return "\n\n".join(sections)
+
+
+def parse_card_annotation_preset_gallery_link(
+    raw_link: str,
+    *,
+    flag_name: str = "--card-annotation-preset-gallery-link",
+) -> dict[str, str]:
+    cleaned = raw_link.strip()
+    if not cleaned:
+        raise ValueError(f"{flag_name} values must not be blank")
+    if "=" not in cleaned:
+        raise ValueError(
+            f"{flag_name} must use LABEL=TARGET (for example Annotated trend card=release-trend-card-annotated.html)"
+        )
+    raw_label, raw_target = cleaned.split("=", 1)
+    label = raw_label.strip()
+    target = raw_target.strip()
+    if not label or not target:
+        raise ValueError(f"{flag_name} must include both a non-empty label and target path")
+    return {"label": label, "target": target}
+
+
+def resolve_card_annotation_preset_gallery_href(
+    raw_target: str,
+    *,
+    gallery_output_path: str | None = None,
+) -> str:
+    cleaned_target = raw_target.strip()
+    if not cleaned_target:
+        return cleaned_target
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", cleaned_target) or cleaned_target.startswith(("#", "//")):
+        return cleaned_target
+
+    target_path = Path(cleaned_target).expanduser()
+    if not gallery_output_path:
+        return target_path.as_posix()
+
+    output_dir = Path(gallery_output_path).expanduser().resolve().parent
+    if target_path.is_absolute():
+        candidate_path = target_path.resolve()
+    elif "/" in cleaned_target or os.sep in cleaned_target:
+        candidate_path = (Path.cwd() / target_path).resolve()
+    else:
+        return target_path.as_posix()
+
+    try:
+        return os.path.relpath(candidate_path, start=output_dir).replace(os.sep, "/")
+    except OSError:
+        return target_path.as_posix()
+
+
+def format_card_annotation_preset_gallery_html(
+    *,
+    preset_catalog: list[dict[str, object]],
+    preset_previews: list[dict[str, object]] | None = None,
+    related_links: list[dict[str, str]] | None = None,
+    gallery_output_path: str | None = None,
+) -> str:
+    preview_lookup = {
+        str(preview["preset"]): preview
+        for preview in (preset_previews or [])
+    }
+    preset_cards: list[str] = []
+    for entry in preset_catalog:
+        source_label = str(entry["source"])
+        step_count = int(entry["step_count"])
+        step_word = "step" if step_count == 1 else "steps"
+        preview = preview_lookup.get(str(entry["name"]))
+        step_items = []
+        for index, step in enumerate(entry["steps"], start=1):
+            theme_key = str(step["theme"])
+            theme = get_card_annotation_theme(theme_key)
+            step_items.append(
+                "".join(
+                    [
+                        '<li class="preset-step">',
+                        f'<span class="step-index">{index}</span>',
+                        '<span class="annotation-theme" '
+                        f'style="background: {theme["badge_background"]}; border-color: {theme["badge_border"]}; color: {theme["badge_text"]};">'
+                        f'{escape(theme["label"] if theme_key == "note" else theme_key.replace("-", " ").title())}</span>',
+                        f'<span class="step-label">{escape(str(step["label"]))}</span>',
+                        '</li>',
+                    ]
+                )
+            )
+
+        preview_html = '<p class="preview-empty">No preview invocation supplied for this preset in the current run.</p>'
+        if preview:
+            preview_items = []
+            for annotation in preview["annotations"]:
+                theme = get_card_annotation_theme(str(annotation["theme"]))
+                preview_items.append(
+                    "".join(
+                        [
+                            '<li class="preview-step">',
+                            '<span class="annotation-theme" '
+                            f'style="background: {theme["badge_background"]}; border-color: {theme["badge_border"]}; color: {theme["badge_text"]};">'
+                            f'{escape(theme["label"] if str(annotation["theme"]) == "note" else str(annotation["theme"]).replace("-", " ").title())}</span>',
+                            f'<strong>{escape(str(annotation["timestamp"]))}</strong><br>',
+                            f'<span>{escape(str(annotation["label"]))}</span><br>',
+                            f'<code>{escape(str(annotation["annotation"]))}</code>',
+                            '</li>',
+                        ]
+                    )
+                )
+            preview_html = ''.join(
+                [
+                    '<div class="preview-block">',
+                    '<h3>Preview expansion</h3>',
+                    '<ul class="preview-list">',
+                    *preview_items,
+                    '</ul>',
+                    '</div>',
+                ]
+            )
+
+        preset_cards.append(
+            "".join(
+                [
+                    '<article class="preset-card">',
+                    f'<p class="eyebrow">{escape(source_label)}</p>',
+                    f'<h2>{escape(str(entry["name"]))}</h2>',
+                    f'<p class="meta">{step_count} {step_word}</p>',
+                    '<h3>Story steps</h3>',
+                    '<ol class="step-list">',
+                    *step_items,
+                    '</ol>',
+                    preview_html,
+                    '</article>',
+                ]
+            )
+        )
+
+    related_links_html = ""
+    if related_links:
+        link_items = []
+        for link in related_links:
+            href = resolve_card_annotation_preset_gallery_href(
+                str(link["target"]),
+                gallery_output_path=gallery_output_path,
+            )
+            link_items.append(
+                "".join(
+                    [
+                        '<li>',
+                        f'<a href="{escape(href, quote=True)}">{escape(str(link["label"]))}</a>',
+                        f'<code>{escape(str(link["target"]))}</code>',
+                        '</li>',
+                    ]
+                )
+            )
+        related_links_html = ''.join(
+            [
+                '<section class="related-links">',
+                '<h2>Related artifacts</h2>',
+                '<p>Use these links to jump from the preset catalog/preview helpers into the committed annotated cards, helper outputs, and reusable preset files.</p>',
+                '<ul>',
+                *link_items,
+                '</ul>',
+                '</section>',
+            ]
+        )
+
+    preview_note = "This gallery includes inline preview expansions for the preset invocations supplied in the current run."
+    if not preview_lookup:
+        preview_note = "Add one or more --preview-card-annotation-preset values when you want this page to show expanded timestamp-to-annotation examples beside each preset."
+
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>Log Analyzer preset gallery</title>
+  <style>
+    :root {{ color-scheme: light; }}
+    body {{ margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 2.75rem 1.5rem 3.5rem; }}
+    .hero {{ background: linear-gradient(135deg, #0f172a, #1d4ed8); color: #eff6ff; border-radius: 1.5rem; padding: 2rem 2.1rem; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2); }}
+    .hero h1 {{ margin: 0 0 0.75rem; font-size: clamp(2rem, 3vw, 3rem); }}
+    .hero p {{ margin: 0.35rem 0; max-width: 70ch; line-height: 1.6; }}
+    .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.9rem; margin-top: 1.35rem; }}
+    .summary-card {{ background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(191, 219, 254, 0.2); border-radius: 1rem; padding: 0.95rem 1rem; }}
+    .summary-card strong {{ display: block; font-size: 1.6rem; margin-bottom: 0.25rem; }}
+    .annotation-theme {{ display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 999px; padding: 0.12rem 0.55rem; font-size: 0.78rem; font-weight: 700; margin-right: 0.45rem; vertical-align: middle; }}
+    .gallery-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 1rem; margin-top: 1.5rem; }}
+    .preset-card, .related-links {{ background: #ffffff; border: 1px solid #dbeafe; border-radius: 1.25rem; padding: 1.2rem 1.2rem 1.1rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }}
+    .preset-card h2, .related-links h2 {{ margin: 0.15rem 0 0.25rem; font-size: 1.2rem; }}
+    .preset-card h3 {{ margin: 1rem 0 0.55rem; font-size: 0.95rem; color: #334155; }}
+    .eyebrow {{ margin: 0; color: #475569; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; }}
+    .meta {{ margin: 0 0 0.85rem; color: #475569; font-size: 0.92rem; }}
+    .step-list, .preview-list, .related-links ul {{ margin: 0; padding: 0; list-style: none; }}
+    .preset-step, .preview-step {{ display: grid; grid-template-columns: auto 1fr; gap: 0.65rem; align-items: start; padding: 0.72rem 0; border-top: 1px solid #e2e8f0; }}
+    .preset-step:first-child, .preview-step:first-child {{ border-top: 0; padding-top: 0; }}
+    .step-index {{ width: 1.9rem; height: 1.9rem; border-radius: 999px; background: #dbeafe; color: #1d4ed8; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.88rem; }}
+    .step-label {{ display: inline-block; margin-top: 0.35rem; line-height: 1.5; }}
+    .preview-step code, .related-links code {{ display: inline-block; margin-top: 0.45rem; background: #eff6ff; border-radius: 0.55rem; padding: 0.2rem 0.45rem; color: #1e3a8a; font-size: 0.82rem; word-break: break-all; }}
+    .preview-empty {{ margin: 0.2rem 0 0; color: #64748b; line-height: 1.6; }}
+    .related-links {{ margin-top: 1.5rem; }}
+    .related-links li {{ padding: 0.7rem 0; border-top: 1px solid #e2e8f0; }}
+    .related-links li:first-child {{ border-top: 0; padding-top: 0; }}
+    .related-links a {{ color: #1d4ed8; font-weight: 700; text-decoration: none; }}
+    .related-links a:hover {{ text-decoration: underline; }}
+    .footer-note {{ margin-top: 1.5rem; color: #475569; font-size: 0.92rem; line-height: 1.6; }}
+    @media (max-width: 720px) {{
+      main {{ padding-inline: 1rem; }}
+      .hero {{ padding: 1.5rem 1.2rem; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"hero\">
+      <h1>Log Analyzer preset gallery</h1>
+      <p>Use this page as a portfolio-friendly landing spot for the card-annotation preset catalog, example expansions, and the annotated card artifacts they feed.</p>
+      <p>{escape(preview_note)}</p>
+      <div class=\"summary-grid\">
+        <div class=\"summary-card\"><strong>{len(preset_catalog)}</strong><span>presets</span></div>
+        <div class=\"summary-card\"><strong>{sum(int(entry['step_count']) for entry in preset_catalog)}</strong><span>total preset steps</span></div>
+        <div class=\"summary-card\"><strong>{len(preview_lookup)}</strong><span>previewed presets</span></div>
+        <div class=\"summary-card\"><strong>{len(related_links or [])}</strong><span>related artifact links</span></div>
+      </div>
+    </section>
+    <section class=\"gallery-grid\">
+      {''.join(preset_cards)}
+    </section>
+    {related_links_html}
+    <p class=\"footer-note\">Tip: regenerate this page alongside <code>--list-card-annotation-presets</code> and one or more <code>--preview-card-annotation-preset</code> calls whenever you add built-in stories or refresh the committed sample preset JSON.</p>
+  </main>
+</body>
+</html>
+"""
 
 
 def get_card_annotation_theme(theme_key: str | None) -> dict[str, str]:
@@ -3564,6 +3796,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--card-annotation-preset-gallery-html",
+        help=(
+            "Optional path for a self-contained HTML gallery that combines the preset catalog, "
+            "optional preview expansions, and related artifact links; works without a logfile"
+        ),
+    )
+    parser.add_argument(
+        "--card-annotation-preset-gallery-link",
+        action="append",
+        default=[],
+        help=(
+            "Optional LABEL=TARGET link appended to --card-annotation-preset-gallery-html "
+            "(repeatable; useful for annotated cards, helper outputs, or sample preset files)"
+        ),
+    )
+    parser.add_argument(
         "--hotspot-status",
         action="append",
         default=[],
@@ -3656,8 +3904,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    preset_utility_mode = args.list_card_annotation_presets or bool(
-        args.preview_card_annotation_preset
+    preset_utility_mode = bool(
+        args.list_card_annotation_presets
+        or args.preview_card_annotation_preset
+        or args.card_annotation_preset_gallery_html
     )
 
     if args.top <= 0:
@@ -3743,10 +3993,16 @@ def main(argv: list[str] | None = None) -> int:
         args.card_annotation_preset
         or args.preview_card_annotation_preset
         or args.list_card_annotation_presets
+        or args.card_annotation_preset_gallery_html
     ):
         parser.error(
             "--card-annotation-preset-file requires at least one --card-annotation-preset, "
-            "--preview-card-annotation-preset, or --list-card-annotation-presets"
+            "--preview-card-annotation-preset, --list-card-annotation-presets, or "
+            "--card-annotation-preset-gallery-html"
+        )
+    if args.card_annotation_preset_gallery_link and not args.card_annotation_preset_gallery_html:
+        parser.error(
+            "--card-annotation-preset-gallery-link requires --card-annotation-preset-gallery-html"
         )
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
@@ -3777,21 +4033,41 @@ def main(argv: list[str] | None = None) -> int:
                 args.preview_card_annotation_preset,
                 preset_definitions=preset_definitions,
             )
+        preset_gallery_links = [
+            parse_card_annotation_preset_gallery_link(raw_link)
+            for raw_link in args.card_annotation_preset_gallery_link
+        ]
     except ValueError as exc:
         parser.error(str(exc))
 
     if preset_utility_mode:
+        include_preset_catalog = bool(
+            args.list_card_annotation_presets or args.card_annotation_preset_gallery_html
+        )
         utility_payload: dict[str, object] = {}
-        if args.list_card_annotation_presets:
+        if include_preset_catalog:
             utility_payload["card_annotation_preset_catalog"] = preset_catalog
         if preset_previews is not None:
             utility_payload["card_annotation_preset_preview"] = preset_previews
+        if args.card_annotation_preset_gallery_html:
+            write_text_output(
+                args.card_annotation_preset_gallery_html,
+                format_card_annotation_preset_gallery_html(
+                    preset_catalog=preset_catalog,
+                    preset_previews=preset_previews,
+                    related_links=preset_gallery_links,
+                    gallery_output_path=args.card_annotation_preset_gallery_html,
+                ),
+            )
+            utility_payload["card_annotation_preset_gallery_html"] = str(
+                args.card_annotation_preset_gallery_html
+            )
         if args.format == "json":
             print(json.dumps(utility_payload, indent=2, sort_keys=True))
         else:
             print(
                 format_card_annotation_preset_utility_text(
-                    preset_catalog=preset_catalog if args.list_card_annotation_presets else None,
+                    preset_catalog=preset_catalog if include_preset_catalog else None,
                     preset_previews=preset_previews,
                 )
             )
@@ -3799,8 +4075,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.logfile is None:
         parser.error(
-            "logfile is required unless --list-card-annotation-presets or "
-            "--preview-card-annotation-preset is used"
+            "logfile is required unless --list-card-annotation-presets, "
+            "--preview-card-annotation-preset, or --card-annotation-preset-gallery-html is used"
         )
 
     window_start = None

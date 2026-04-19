@@ -1,12 +1,12 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 01:21 UTC run)
-- [x] resume the queued preset-utility follow-up after confirming `main` matches `origin/main`
-- [x] add no-logfile `--list-card-annotation-presets` support so built-in/custom story names can be inspected quickly
-- [x] add no-logfile `--preview-card-annotation-preset` support so preset expansions can be verified before card export runs
-- [x] keep preset list/preview flows compatible with JSON-backed custom preset files and the existing card export codepaths
-- [x] refresh README/checklist/review notes and commit sample preset catalog/preview helper artifacts under `docs/artifacts/log-analyzer/`
-- [x] run targeted tests, real helper/export smoke checks, and 3 review passes
+## Current slice (2026-04-19 01:40 UTC run)
+- [x] resume the queued preset-gallery follow-up after confirming `main` matches `origin/main`
+- [x] add no-logfile `--card-annotation-preset-gallery-html` support so preset catalog/preview data can ship as a browser-friendly landing page
+- [x] add repeatable `--card-annotation-preset-gallery-link LABEL=TARGET` support so committed helper outputs and annotated card artifacts can be linked from one page
+- [x] keep gallery generation compatible with built-in presets, JSON-backed custom preset files, and optional preview expansions without requiring a logfile
+- [x] refresh README/checklist/review notes and commit the new gallery artifact plus refreshed preview JSON under `docs/artifacts/log-analyzer/`
+- [x] run targeted tests, real helper/gallery smoke checks, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
@@ -32,5 +32,5 @@
 
 ## Next follow-up ideas
 - [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
-- [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster assets over SVG/HTML
-- [ ] optionally add a small preset-gallery HTML page that links the catalog/preview helpers to the committed annotated card artifacts
+- [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
+- [ ] optionally add gallery grouping/filter controls if the preset catalog grows beyond a small set of built-in + custom stories

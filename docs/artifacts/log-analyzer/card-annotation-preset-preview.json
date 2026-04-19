@@ -3,6 +3,30 @@
     {
       "annotations": [
         {
+          "annotation": "2026-04-18T09:00:20Z=deploy|Deploy started",
+          "label": "Deploy started",
+          "theme": "deploy",
+          "timestamp": "2026-04-18T09:00:20Z"
+        },
+        {
+          "annotation": "2026-04-18T09:01:40Z=rollback|Rollback started",
+          "label": "Rollback started",
+          "theme": "rollback",
+          "timestamp": "2026-04-18T09:01:40Z"
+        },
+        {
+          "annotation": "2026-04-18T09:03:10Z=recovery|Recovery confirmed",
+          "label": "Recovery confirmed",
+          "theme": "recovery",
+          "timestamp": "2026-04-18T09:03:10Z"
+        }
+      ],
+      "preset": "deploy-rollback-recovery",
+      "step_count": 3
+    },
+    {
+      "annotations": [
+        {
           "annotation": "2026-04-18T09:00:20Z=deploy|Canary deploy started",
           "label": "Canary deploy started",
           "theme": "deploy",

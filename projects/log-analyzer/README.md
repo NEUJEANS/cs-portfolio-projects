@@ -32,11 +32,11 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
 - supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
-- supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview helpers that work even without a logfile
+- supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet hotspot and trend breakdowns in text, JSON, and dedicated CSV exports
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
 - supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -54,6 +54,7 @@ python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg t
 python3 log_analyzer.py --list-card-annotation-presets
 python3 log_analyzer.py --format json --preview-card-annotation-preset 'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'
 python3 log_analyzer.py --list-card-annotation-presets --preview-card-annotation-preset 'release-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z' --card-annotation-preset-file docs/artifacts/log-analyzer/custom-card-annotation-presets.json
+python3 log_analyzer.py --card-annotation-preset-file docs/artifacts/log-analyzer/custom-card-annotation-presets.json --preview-card-annotation-preset 'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z' --preview-card-annotation-preset 'release-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z' --card-annotation-preset-gallery-link 'Preset catalog=card-annotation-preset-catalog.txt' --card-annotation-preset-gallery-link 'Preset preview JSON=card-annotation-preset-preview.json' --card-annotation-preset-gallery-link 'Annotated trend card HTML=release-trend-card-annotated.html' --card-annotation-preset-gallery-link 'Annotated comparison card HTML=release-comparison-card-annotated.html' --card-annotation-preset-gallery-html docs/artifacts/log-analyzer/card-annotation-preset-gallery.html
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
 python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
@@ -108,7 +109,8 @@ Helper workflow:
 - run `python3 log_analyzer.py --list-card-annotation-presets` to inspect the built-in story names without opening the source
 - add `--card-annotation-preset-file docs/artifacts/log-analyzer/custom-card-annotation-presets.json` when you also want the committed sample custom stories in the catalog
 - run `python3 log_analyzer.py --format json --preview-card-annotation-preset 'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'` to preview the exact expanded annotations before generating a card
-- committed sample helper outputs live under `docs/artifacts/log-analyzer/card-annotation-preset-catalog.txt` and `docs/artifacts/log-analyzer/card-annotation-preset-preview.json`
+- add `--card-annotation-preset-gallery-html docs/artifacts/log-analyzer/card-annotation-preset-gallery.html` plus repeatable `--card-annotation-preset-gallery-link LABEL=TARGET` values when you want one browser-friendly landing page that ties the preset catalog/preview helpers to the committed annotated card artifacts
+- committed sample helper outputs now live under `docs/artifacts/log-analyzer/card-annotation-preset-catalog.txt`, `docs/artifacts/log-analyzer/card-annotation-preset-preview.json`, and `docs/artifacts/log-analyzer/card-annotation-preset-gallery.html`
 
 ## Time-window filtering
 Use `--window-start` and/or `--window-end` when you want to isolate a particular incident window, deploy interval, or traffic burst before calculating totals, percentiles, and hotspot tables.
@@ -351,5 +353,5 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 
 ## Future Improvements
 - optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
-- consider PNG export helpers or a small gallery index page that links trend cards and comparison cards together
-- add a small preset/legend helper so repeated deploy-incident-recovery stories can be exported with less CLI repetition
+- consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
+- add richer gallery grouping/filtering if the preset catalog grows beyond a handful of built-in + custom stories

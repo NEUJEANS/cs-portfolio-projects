@@ -1,5 +1,19 @@
 # Log Analyzer Checklist
 
+## Preset gallery slice (2026-04-19 01:40 UTC run)
+- [x] confirm repo sync before editing and continue the queued log-analyzer follow-up instead of starting a different project
+- [x] update checklist/docs so the slice is resumable
+- [x] add `--card-annotation-preset-gallery-html` so preset helper output can become a browser-friendly static artifact without a logfile
+- [x] add repeatable `--card-annotation-preset-gallery-link LABEL=TARGET` support so the gallery can point at committed helper outputs, custom preset JSON, and annotated card artifacts
+- [x] keep gallery generation compatible with built-in presets, custom preset files, and optional preview expansions
+- [x] extend automated coverage for gallery formatting, CLI success paths, and validation errors
+- [x] regenerate committed sample helper artifacts including the new gallery HTML and refreshed multi-preview JSON
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider a follow-up slice for PNG export helpers or gallery grouping/filter controls
+
 ## Custom annotation preset-file slice (2026-04-19 00:31 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer follow-up instead of starting a different project
 - [x] update checklist/docs so the slice is resumable
