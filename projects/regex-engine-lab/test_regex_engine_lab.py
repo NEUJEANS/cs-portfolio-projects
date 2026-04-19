@@ -261,7 +261,9 @@ class RegexEngineTests(unittest.TestCase):
             showcase = build_showcase_report(html_out=html_out, artifact_dir=temp_path)
             self.assertEqual(showcase["trace_count"], 2)
             self.assertEqual(showcase["benchmark_count"], 3)
+            self.assertEqual(showcase["explainer_count"], 2)
             traces = {trace["title"]: trace for trace in showcase["traces"]}
+            explainers = {explainer["title"]: explainer for explainer in showcase["explainers"]}
             self.assertEqual(
                 [link["label"] for link in traces["Anchored ID fullmatch trace"]["related_dashboards"]],
                 ["sample-suite", "portfolio-workload"],
@@ -270,8 +272,14 @@ class RegexEngineTests(unittest.TestCase):
                 [link["label"] for link in traces["Pet search trace"]["related_dashboards"]],
                 ["sample-suite", "interview-demo"],
             )
+            self.assertEqual(explainers["Anchored ID fullmatch"]["ast_story"], "start anchor → 'I' → 'D' → '-' → one-or-more \\d → end anchor")
+            self.assertEqual(explainers["Pet search"]["nfa_metrics"]["branch_state_count"], 2)
             html = render_showcase_html(showcase)
             self.assertIn("Combined showcase: traces + benchmark dashboards", html)
+            self.assertIn("AST + NFA quick explainers", html)
+            self.assertIn("1 class", html)
+            self.assertNotIn("classs", html)
+            self.assertIn("accept #", html)
             self.assertIn("sample-suite dashboard", html)
             self.assertIn("interview-demo dashboard", html)
             self.assertIn("iframe", html)
@@ -668,9 +676,11 @@ class RegexEngineCliTests(unittest.TestCase):
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["command"], "showcase-demo")
             self.assertEqual(payload["trace_count"], 2)
+            self.assertEqual(payload["explainer_count"], 2)
             self.assertTrue(html_path.exists())
             html = html_path.read_text()
             self.assertIn("Combined showcase: traces + benchmark dashboards", html)
+            self.assertIn("AST + NFA quick explainers", html)
             self.assertIn("sample-suite dashboard", html)
             self.assertIn("interview-demo dashboard", html)
 

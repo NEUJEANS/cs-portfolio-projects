@@ -94,7 +94,7 @@ python3 regex_engine_lab.py showcase-demo \
   --artifact-dir ../../docs/artifacts/regex-engine-lab
 ```
 
-`showcase-demo` links the committed trace JSON artifacts to the benchmark dashboards that exercise the same patterns, so a reviewer can move from step-by-step NFA behavior into the broader performance story without digging through the repo tree.
+`showcase-demo` links the committed trace JSON artifacts to tiny AST/NFA explainer cards plus the benchmark dashboards that exercise the same patterns, so a reviewer can move from regex structure, to step-by-step NFA behavior, to the broader performance story without digging through the repo tree.
 
 ## Sample artifacts
 - `docs/artifacts/regex-engine-lab/trace-id-fullmatch.json` - fullmatch trace for a shorthand-heavy ID pattern
@@ -109,7 +109,7 @@ python3 regex_engine_lab.py showcase-demo \
 - `docs/artifacts/regex-engine-lab/benchmark-interview-demo.json` - filtered benchmark report generated from the same suite file with `--include-tag interview-demo`
 - `docs/artifacts/regex-engine-lab/benchmark-interview-demo.md` - reviewer-friendly Markdown summary of the smaller interview-demo subset
 - `docs/artifacts/regex-engine-lab/benchmark-interview-demo.html` - smaller dashboard view suited to recruiter or interview walkthroughs
-- `docs/artifacts/regex-engine-lab/showcase.html` - combined landing page that cross-links the trace walkthroughs and benchmark dashboards in one browser-friendly hub
+- `docs/artifacts/regex-engine-lab/showcase.html` - combined landing page that now adds AST/NFA explainer cards alongside the trace walkthroughs and benchmark dashboards in one browser-friendly hub
 
 ## Testing
 ```bash
@@ -123,11 +123,11 @@ python3 -m unittest discover -s projects/regex-engine-lab -p 'test_*.py' -v
 - how trace output turns a black-box matcher into a teachable state-machine walkthrough
 - how the new benchmark flow checks semantic agreement with Python's `re` while also giving a grounded performance story for a teaching-oriented engine
 - how the HTML dashboard turns JSON/Markdown benchmark payloads into recruiter-friendly static artifacts without introducing a frontend build step
-- how the combined showcase page ties low-level trace evidence to the higher-level benchmark story so the portfolio narrative flows in one click path
+- how the combined showcase page now layers AST/NFA explainers on top of low-level trace evidence and benchmark dashboards so the portfolio narrative flows in one click path
 - which modern regex features fall outside regular languages and were intentionally excluded here
 
 ## Future improvements
 - render trace output into a small HTML timeline or SVG teaching card
 - compile to DFA for faster repeated matching on the same pattern
 - add optional Unicode-aware shorthand classes as a follow-on contrast with the current ASCII teaching mode
-- add a tiny AST/NFA explainer card that sits beside the trace and benchmark showcase page
+- add a trace-to-explainer SVG or HTML timeline card if the current JSON-first walkthrough needs a more visual teaching aid

@@ -7,6 +7,7 @@ import os
 import re
 import string
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -1196,6 +1197,174 @@ def _relative_href(target: Path, *, html_out: Path) -> str:
     return Path(os.path.relpath(target, start=html_out.parent)).as_posix()
 
 
+def _format_count(value: int, singular: str, plural: str | None = None) -> str:
+    label = singular if value == 1 else (plural or singular + "s")
+    return f"{value} {label}"
+
+
+def _format_accept_state_label(value: object) -> str:
+    if isinstance(value, int):
+        return f"accept #{value}"
+    return "accept state unavailable"
+
+
+def _compress_story_parts(parts: list[str]) -> list[str]:
+    if not parts:
+        return []
+    compressed: list[str] = []
+    current = parts[0]
+    count = 1
+    for part in parts[1:]:
+        if part == current:
+            count += 1
+            continue
+        compressed.append(f"{current} × {count}" if count > 1 else current)
+        current = part
+        count = 1
+    compressed.append(f"{current} × {count}" if count > 1 else current)
+    return compressed
+
+
+def _format_character_class_label(node: dict[str, object]) -> str:
+    chars = node.get("chars")
+    negated = bool(node.get("negated", False))
+    if isinstance(chars, str) and chars:
+        if chars == "".join(sorted(ASCII_DIGITS)):
+            return "not \\d" if negated else "\\d"
+        if chars == "".join(sorted(ASCII_WORD)):
+            return "not \\w" if negated else "\\w"
+        if chars == "".join(sorted(ASCII_WHITESPACE)):
+            return "not \\s" if negated else "\\s"
+        clipped = chars if len(chars) <= 12 else chars[:12] + "…"
+        return f"[^{clipped}]" if negated else f"[{clipped}]"
+
+    terms = node.get("terms", [])
+    if isinstance(terms, list) and terms:
+        pieces: list[str] = []
+        for term in terms[:3]:
+            if not isinstance(term, dict):
+                continue
+            term_chars = term.get("chars")
+            if not isinstance(term_chars, str) or not term_chars:
+                continue
+            if term_chars == "".join(sorted(ASCII_DIGITS)):
+                pieces.append("\\d")
+            elif term_chars == "".join(sorted(ASCII_WORD)):
+                pieces.append("\\w")
+            elif term_chars == "".join(sorted(ASCII_WHITESPACE)):
+                pieces.append("\\s")
+            else:
+                pieces.append(term_chars if len(term_chars) <= 8 else term_chars[:8] + "…")
+        if not pieces:
+            return "character class"
+        joined = " ∪ ".join(pieces)
+        if len(terms) > 3:
+            joined += " + more"
+        return f"not ({joined})" if negated else f"class({joined})"
+    return "character class"
+
+
+def _describe_ast_story(node: object) -> str:
+    if not isinstance(node, dict):
+        return "unsupported AST node"
+    node_type = node.get("type")
+    if node_type == "literal":
+        return repr(str(node.get("value", "")))
+    if node_type == "dot":
+        return "any char"
+    if node_type == "class":
+        return _format_character_class_label(node)
+    if node_type == "anchor":
+        kind = node.get("kind")
+        return "start anchor" if kind == "start" else "end anchor"
+    if node_type == "repeat":
+        inner = _describe_ast_story(node.get("node"))
+        mode = node.get("mode")
+        if mode == "*":
+            return f"zero-or-more {inner}"
+        if mode == "+":
+            return f"one-or-more {inner}"
+        if mode == "?":
+            return f"optional {inner}"
+        return f"repeat {inner}"
+    if node_type == "alternate":
+        options = node.get("options", [])
+        if isinstance(options, list):
+            return " or ".join(_describe_ast_story(option) for option in options)
+        return "alternation"
+    if node_type == "concat":
+        parts = node.get("parts", [])
+        if isinstance(parts, list):
+            rendered = [part for part in (_describe_ast_story(part) for part in parts) if part]
+            return " → ".join(_compress_story_parts(rendered))
+        return "concatenation"
+    return str(node_type or "unknown")
+
+
+def _summarize_ast_metrics(node: object) -> dict[str, int]:
+    metrics = {
+        "node_count": 0,
+        "literal_count": 0,
+        "class_count": 0,
+        "alternation_count": 0,
+        "repeat_count": 0,
+        "anchor_count": 0,
+        "dot_count": 0,
+        "max_depth": 0,
+    }
+
+    def visit(current: object, depth: int) -> None:
+        if not isinstance(current, dict):
+            return
+        metrics["node_count"] += 1
+        metrics["max_depth"] = max(metrics["max_depth"], depth)
+        node_type = current.get("type")
+        if node_type == "literal":
+            metrics["literal_count"] += 1
+        elif node_type == "class":
+            metrics["class_count"] += 1
+        elif node_type == "alternate":
+            metrics["alternation_count"] += 1
+        elif node_type == "repeat":
+            metrics["repeat_count"] += 1
+        elif node_type == "anchor":
+            metrics["anchor_count"] += 1
+        elif node_type == "dot":
+            metrics["dot_count"] += 1
+
+        for child_key in ("parts", "options"):
+            children = current.get(child_key)
+            if isinstance(children, list):
+                for child in children:
+                    visit(child, depth + 1)
+        child = current.get("node")
+        if isinstance(child, dict):
+            visit(child, depth + 1)
+
+    visit(node, 1)
+    return metrics
+
+
+def _summarize_nfa_metrics(states: list[dict[str, object]]) -> dict[str, int | None]:
+    kinds = Counter(str(state.get("kind", "UNKNOWN")) for state in states if isinstance(state, dict))
+    accept_indexes = [
+        int(state["index"])
+        for state in states
+        if isinstance(state, dict) and state.get("kind") == "MATCH" and isinstance(state.get("index"), int)
+    ]
+    return {
+        "state_count": len(states),
+        "literal_state_count": kinds.get("CHAR", 0),
+        "any_state_count": kinds.get("ANY", 0),
+        "class_state_count": kinds.get("CLASS", 0),
+        "branch_state_count": kinds.get("SPLIT", 0),
+        "epsilon_state_count": kinds.get("EPSILON", 0),
+        "anchor_state_count": kinds.get("BOL", 0) + kinds.get("EOL", 0),
+        "consume_state_count": kinds.get("CHAR", 0) + kinds.get("ANY", 0) + kinds.get("CLASS", 0),
+        "accept_state_index": accept_indexes[0] if accept_indexes else None,
+    }
+
+
 def _load_json_object(path: Path, *, label: str) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -1267,6 +1436,7 @@ def build_showcase_report(*, html_out: str | Path, artifact_dir: str | Path | No
             )
 
     traces: list[dict[str, object]] = []
+    explainers: list[dict[str, object]] = []
     for stem, title in SHOWCASE_TRACE_ARTIFACTS:
         payload = trace_payloads[stem]
         json_path = paths[stem]
@@ -1274,6 +1444,7 @@ def build_showcase_report(*, html_out: str | Path, artifact_dir: str | Path | No
         pattern = str(payload.get("pattern", ""))
         text = str(payload.get("text", ""))
         matched = bool(payload.get("matched", False))
+        related_dashboards = benchmark_matches.get((pattern, mode), [])
         if mode == "search":
             attempts = payload.get("attempts", [])
             result = payload.get("result", {}) if isinstance(payload.get("result"), dict) else {}
@@ -1299,24 +1470,49 @@ def build_showcase_report(*, html_out: str | Path, artifact_dir: str | Path | No
             )
             stopped_early = bool(payload.get("stopped_early", False))
             detail_line = f"{steps} consume steps · {'stopped early' if stopped_early else 'ran to the final closure'}"
-        traces.append(
+        trace_entry = {
+            "title": title,
+            "mode": mode,
+            "pattern": pattern,
+            "text": text,
+            "matched": matched,
+            "detail_line": detail_line,
+            "json_href": _relative_href(json_path, html_out=output_path),
+            "related_dashboards": related_dashboards,
+        }
+        traces.append(trace_entry)
+
+        try:
+            explanation = RegexEngine(pattern).explain()
+        except RegexSyntaxError as error:
+            raise ShowcaseArtifactError(
+                f"showcase trace pattern from {title} is no longer valid for explain-mode rendering: {error}"
+            ) from error
+        ast_payload = explanation.get("ast", {})
+        states_payload = explanation.get("states", [])
+        if not isinstance(ast_payload, dict) or not isinstance(states_payload, list):
+            raise ShowcaseArtifactError(f"invalid explain payload generated for {title}")
+        explainers.append(
             {
-                "title": title,
+                "title": title.removesuffix(" trace"),
                 "mode": mode,
                 "pattern": pattern,
                 "text": text,
-                "matched": matched,
-                "detail_line": detail_line,
-                "json_href": _relative_href(json_path, html_out=output_path),
-                "related_dashboards": benchmark_matches.get((pattern, mode), []),
+                "trace_href": trace_entry["json_href"],
+                "ast_story": _describe_ast_story(ast_payload),
+                "ast_metrics": _summarize_ast_metrics(ast_payload),
+                "nfa_metrics": _summarize_nfa_metrics(states_payload),
+                "related_dashboards": related_dashboards,
             }
         )
 
     return {
         "trace_count": len(traces),
         "benchmark_count": len(benchmarks),
+        "explainer_count": len(explainers),
         "traces": traces,
         "benchmarks": benchmarks,
+        "explainers": explainers,
     }
 
 
@@ -1324,6 +1520,48 @@ def render_showcase_html(showcase: dict[str, object]) -> str:
     generated = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     traces = list(showcase["traces"])
     benchmarks = list(showcase["benchmarks"])
+    explainers = list(showcase.get("explainers", []))
+    explainer_cards = []
+    for explainer in explainers:
+        ast_metrics = explainer["ast_metrics"]
+        nfa_metrics = explainer["nfa_metrics"]
+        feature_parts = [
+            _format_count(int(ast_metrics["literal_count"]), "literal") if ast_metrics["literal_count"] else "",
+            _format_count(int(ast_metrics["class_count"]), "class", "classes") if ast_metrics["class_count"] else "",
+            _format_count(int(ast_metrics["alternation_count"]), "alternation") if ast_metrics["alternation_count"] else "",
+            _format_count(int(ast_metrics["repeat_count"]), "repeat") if ast_metrics["repeat_count"] else "",
+            _format_count(int(ast_metrics["anchor_count"]), "anchor") if ast_metrics["anchor_count"] else "",
+            _format_count(int(ast_metrics["dot_count"]), "wildcard") if ast_metrics["dot_count"] else "",
+        ]
+        feature_text = " · ".join(part for part in feature_parts if part) or "literal-only structure"
+        nfa_shape_text = (
+            f"{_format_count(int(nfa_metrics['state_count']), 'state')} · "
+            f"{_format_count(int(nfa_metrics['consume_state_count']), 'consuming state')} · "
+            f"{_format_count(int(nfa_metrics['branch_state_count']), 'split')} · "
+            f"{_format_accept_state_label(nfa_metrics['accept_state_index'])}"
+        )
+        related_dashboards = explainer.get("related_dashboards", [])
+        related_html = "".join(
+            f'<a class="chip" href="{_html_escape(link["href"])}">{_html_escape(link["label"])} dashboard</a>'
+            for link in related_dashboards
+        ) or '<span class="chip muted">No related dashboard link yet</span>'
+        explainer_cards.append(
+            f'''<article class="explainer-card">
+      <p class="eyebrow">AST + NFA explainer</p>
+      <h2>{_html_escape(explainer['title'])}</h2>
+      <p class="lede">Compact structure summary for the <strong>{_html_escape(explainer['mode'])}</strong> demo case.</p>
+      <dl class="metric-grid">
+        <div><dt>Pattern</dt><dd><code>{_html_escape(explainer['pattern'])}</code></dd></div>
+        <div><dt>Sample text</dt><dd><code>{_html_escape(explainer['text'])}</code></dd></div>
+        <div><dt>AST story</dt><dd>{_html_escape(explainer['ast_story'])}</dd></div>
+        <div><dt>AST shape</dt><dd>{_format_count(int(ast_metrics['node_count']), 'node')} · depth {ast_metrics['max_depth']}</dd></div>
+        <div><dt>Regex features</dt><dd>{_html_escape(feature_text)}</dd></div>
+        <div><dt>NFA shape</dt><dd>{_html_escape(nfa_shape_text)}</dd></div>
+      </dl>
+      <p class="subtle">Trace JSON: <a href="{_html_escape(explainer['trace_href'])}">{_html_escape(explainer['trace_href'])}</a></p>
+      <div class="chip-row">{related_html}</div>
+    </article>'''
+        )
     trace_cards = []
     for trace in traces:
         related_dashboards = trace.get("related_dashboards", [])
@@ -1380,7 +1618,7 @@ def render_showcase_html(showcase: dict[str, object]) -> str:
     h1, h2 {{ line-height: 1.12; }}
     p, dd {{ line-height: 1.55; }}
     code {{ font-family: "SFMono-Regular", ui-monospace, monospace; word-break: break-word; }}
-    .hero, .trace-card, .benchmark-card {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.35rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06); }}
+    .hero, .explainer-card, .trace-card, .benchmark-card {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.35rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06); }}
     .hero {{ padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.95), rgba(236, 253, 245, 0.95)); }}
     .hero-meta, .chip-row {{ display: flex; flex-wrap: wrap; gap: 0.7rem; }}
     .hero-meta {{ margin-top: 1rem; }}
@@ -1390,8 +1628,8 @@ def render_showcase_html(showcase: dict[str, object]) -> str:
     .chip {{ display: inline-flex; align-items: center; padding: 0.42rem 0.72rem; border-radius: 999px; background: rgba(224, 231, 255, 0.88); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; text-decoration: none; font-size: 0.93rem; }}
     .chip.muted {{ background: rgba(226, 232, 240, 0.78); border-color: rgba(148, 163, 184, 0.3); color: #475569; }}
     .section-title {{ margin: 1.8rem 0 0.85rem; }}
-    .trace-grid, .benchmark-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }}
-    .trace-card, .benchmark-card {{ padding: 1rem; }}
+    .explainer-grid, .trace-grid, .benchmark-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }}
+    .explainer-card, .trace-card, .benchmark-card {{ padding: 1rem; }}
     .metric-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem 1rem; margin: 0.95rem 0; }}
     .metric-grid dt {{ font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }}
     .metric-grid dd {{ margin: 0.15rem 0 0; }}
@@ -1412,9 +1650,14 @@ def render_showcase_html(showcase: dict[str, object]) -> str:
       <p>One browser-friendly landing page for the committed teaching artifacts in <code>regex-engine-lab</code>. Reviewers can start with the two step-by-step Thompson-NFA traces, then jump straight into the benchmark dashboards that use the same regex cases in interview-demo and broader portfolio workloads.</p>
       <div class="hero-meta">
         <span class="chip">Generated {generated}</span>
+        <span class="chip">{showcase['explainer_count']} explainer card(s)</span>
         <span class="chip">{showcase['trace_count']} trace artifact(s)</span>
         <span class="chip">{showcase['benchmark_count']} benchmark dashboard(s)</span>
       </div>
+    </section>
+    <h2 class="section-title">AST + NFA quick explainers</h2>
+    <section class="explainer-grid">
+      {''.join(explainer_cards)}
     </section>
     <h2 class="section-title">Trace walk-throughs</h2>
     <section class="trace-grid">
@@ -1597,6 +1840,7 @@ def main(argv: list[str] | None = None) -> int:
                     "html_output": args.html_out,
                     "trace_count": showcase["trace_count"],
                     "benchmark_count": showcase["benchmark_count"],
+                    "explainer_count": showcase["explainer_count"],
                 },
                 indent=2,
             )
