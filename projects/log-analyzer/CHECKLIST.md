@@ -1,11 +1,11 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-18 17:01 UTC run)
-- [x] resume the queued annotation/callout follow-up after confirming `main` matches `origin/main`
-- [x] ship repeatable `--card-annotation TIMESTAMP=LABEL` support across trend-card and comparison-card SVG/HTML exports
-- [x] add helper + CLI regression coverage for annotation grouping, HTML legends/tables, export success cases, and validation failures
-- [x] generate committed annotated artifact samples for README/portfolio screenshots
-- [x] run targeted tests, smoke checks, and 3 review passes
+## Current slice (2026-04-19 00:01 UTC run)
+- [x] resume the queued annotation-theme follow-up after confirming `main` matches `origin/main`
+- [x] ship `TIMESTAMP=THEME|LABEL` support so trend-card and comparison-card annotations render deploy/rollback/incident/recovery/note markers with distinct SVG/HTML styling
+- [x] fail fast on unknown theme names so mistyped CLI annotations do not silently degrade into plain notes
+- [x] refresh committed annotated artifact samples plus README usage/examples to demonstrate themed markers and badges
+- [x] run targeted tests, themed export smoke checks, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
@@ -29,5 +29,5 @@
 
 ## Next follow-up ideas
 - [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
-- [ ] add per-annotation color/severity themes so deploy, rollback, and incident markers read differently at a glance
 - [ ] consider PNG export helpers or a small gallery index page that links trend cards and comparison cards together
+- [ ] add a small preset/legend helper so repeated deploy-incident-recovery stories can be exported with less CLI repetition

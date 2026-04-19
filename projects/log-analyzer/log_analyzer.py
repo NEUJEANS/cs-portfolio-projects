@@ -28,6 +28,65 @@ NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
 STATUS_CODE_RE = re.compile(r'^\d{3}$')
 TIME_BUCKET_GRANULARITIES = ("minute", "hour")
 MISSING_FACET_VALUE = "(missing)"
+CARD_ANNOTATION_THEME_PRIORITIES = ("incident", "rollback", "recovery", "deploy", "note")
+CARD_ANNOTATION_THEME_ALIASES = {
+    "default": "note",
+    "info": "note",
+    "note": "note",
+    "deploy": "deploy",
+    "release": "deploy",
+    "ship": "deploy",
+    "rollback": "rollback",
+    "revert": "rollback",
+    "incident": "incident",
+    "alert": "incident",
+    "outage": "incident",
+    "recovery": "recovery",
+    "recover": "recovery",
+    "resolved": "recovery",
+}
+CARD_ANNOTATION_THEMES: dict[str, dict[str, str]] = {
+    "note": {
+        "label": "Note",
+        "marker_fill": "#334155",
+        "line_stroke": "#94a3b8",
+        "badge_background": "#e2e8f0",
+        "badge_border": "#cbd5e1",
+        "badge_text": "#0f172a",
+    },
+    "deploy": {
+        "label": "Deploy",
+        "marker_fill": "#2563eb",
+        "line_stroke": "#93c5fd",
+        "badge_background": "#dbeafe",
+        "badge_border": "#93c5fd",
+        "badge_text": "#1d4ed8",
+    },
+    "rollback": {
+        "label": "Rollback",
+        "marker_fill": "#ea580c",
+        "line_stroke": "#fdba74",
+        "badge_background": "#ffedd5",
+        "badge_border": "#fdba74",
+        "badge_text": "#c2410c",
+    },
+    "incident": {
+        "label": "Incident",
+        "marker_fill": "#dc2626",
+        "line_stroke": "#fca5a5",
+        "badge_background": "#fee2e2",
+        "badge_border": "#fca5a5",
+        "badge_text": "#b91c1c",
+    },
+    "recovery": {
+        "label": "Recovery",
+        "marker_fill": "#7c3aed",
+        "line_stroke": "#c4b5fd",
+        "badge_background": "#ede9fe",
+        "badge_border": "#c4b5fd",
+        "badge_text": "#6d28d9",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -685,6 +744,69 @@ def build_chart_x_positions(*, value_count: int, left: float, width: float) -> l
     return [left + (step * index) for index in range(value_count)]
 
 
+def normalize_card_annotation_theme(raw_theme: str) -> str | None:
+    cleaned = raw_theme.strip().lower().replace("_", "-").replace(" ", "-")
+    if not cleaned:
+        return None
+    return CARD_ANNOTATION_THEME_ALIASES.get(cleaned)
+
+
+def parse_card_annotation_label(raw_label: str) -> tuple[str, str]:
+    cleaned = raw_label.strip()
+    if not cleaned:
+        raise ValueError("--card-annotation labels cannot be empty")
+    if "|" in cleaned:
+        raw_theme, possible_label = cleaned.split("|", 1)
+        normalized_theme = normalize_card_annotation_theme(raw_theme)
+        if normalized_theme is None:
+            valid_themes = ", ".join(CARD_ANNOTATION_THEMES)
+            raise ValueError(
+                f"Unknown --card-annotation theme '{raw_theme.strip()}'; use one of: {valid_themes}"
+            )
+        label = possible_label.strip()
+        if not label:
+            raise ValueError("--card-annotation labels cannot be empty")
+        return normalized_theme, label
+    return "note", cleaned
+
+
+def get_card_annotation_theme(theme_key: str | None) -> dict[str, str]:
+    if theme_key in CARD_ANNOTATION_THEMES:
+        return CARD_ANNOTATION_THEMES[str(theme_key)]
+    return CARD_ANNOTATION_THEMES["note"]
+
+
+def choose_card_annotation_theme(theme_keys: Iterable[str]) -> tuple[str, list[str]]:
+    unique_keys = list(dict.fromkeys(theme_keys))
+    if not unique_keys:
+        return "note", ["note"]
+    priority_map = {name: index for index, name in enumerate(CARD_ANNOTATION_THEME_PRIORITIES)}
+    dominant = min(unique_keys, key=lambda key: priority_map.get(key, len(priority_map)))
+    return dominant, unique_keys
+
+
+def build_annotation_marker_chip_html(annotation: dict[str, object]) -> str:
+    theme = get_card_annotation_theme(str(annotation.get("theme", "note")))
+    return (
+        '<span class="annotation-chip" '
+        f'style="background: {theme["marker_fill"]};">{escape(str(annotation["marker"]))}</span>'
+    )
+
+
+def build_annotation_theme_badge_html(annotation: dict[str, object]) -> str:
+    theme = get_card_annotation_theme(str(annotation.get("theme", "note")))
+    theme_count = int(annotation.get("theme_count", 1))
+    label = str(annotation.get("theme_label", theme["label"]))
+    if theme_count > 1:
+        label = f"{label} +{theme_count - 1}"
+    title = "Themes: " + str(annotation.get("theme_summary", label))
+    return (
+        '<span class="annotation-theme" '
+        f'style="background: {theme["badge_background"]}; border-color: {theme["badge_border"]}; color: {theme["badge_text"]};" '
+        f'title="{escape(title, quote=True)}">{escape(label)}</span>'
+    )
+
+
 def normalize_card_annotations(
     raw_annotations: Iterable[str] | None,
     *,
@@ -712,11 +834,12 @@ def normalize_card_annotations(
 
     grouped_labels: dict[int, list[str]] = defaultdict(list)
     grouped_times: dict[int, list[datetime]] = defaultdict(list)
+    grouped_themes: dict[int, list[str]] = defaultdict(list)
     for raw_annotation in raw_items:
         if "=" not in raw_annotation:
             raise ValueError(
-                "--card-annotation must use TIMESTAMP=LABEL (for example "
-                "2026-04-18T09:00:30Z=Deploy started)"
+                "--card-annotation must use TIMESTAMP=LABEL (or TIMESTAMP=THEME|LABEL, for example "
+                "2026-04-18T09:00:30Z=deploy|Deploy started)"
             )
         raw_timestamp, raw_label = raw_annotation.split("=", 1)
         parsed_time = parse_cli_datetime(raw_timestamp.strip())
@@ -724,9 +847,7 @@ def normalize_card_annotations(
             raise ValueError(
                 "--card-annotation timestamps must be ISO-8601 or a common-log timestamp"
             )
-        label = raw_label.strip()
-        if not label:
-            raise ValueError("--card-annotation labels cannot be empty")
+        theme_key, label = parse_card_annotation_label(raw_label)
 
         annotation_time = parsed_time.astimezone(timezone.utc)
         matched_bucket_index: int | None = None
@@ -745,6 +866,7 @@ def normalize_card_annotations(
 
         grouped_labels[matched_bucket_index].append(label)
         grouped_times[matched_bucket_index].append(annotation_time)
+        grouped_themes[matched_bucket_index].append(theme_key)
 
     if len(grouped_labels) > 4:
         raise ValueError("--card-annotation supports at most 4 distinct bucket markers per export")
@@ -754,6 +876,11 @@ def normalize_card_annotations(
         bucket = time_buckets[bucket_index]
         event_times = sorted(grouped_times[bucket_index])
         label = " · ".join(grouped_labels[bucket_index])
+        dominant_theme, unique_themes = choose_card_annotation_theme(grouped_themes[bucket_index])
+        theme = get_card_annotation_theme(dominant_theme)
+        theme_summary = ", ".join(
+            CARD_ANNOTATION_THEMES[key]["label"] for key in unique_themes
+        )
         annotations.append(
             {
                 "marker": str(marker_index),
@@ -768,6 +895,10 @@ def normalize_card_annotations(
                 "event_time_label": ", ".join(dt.strftime("%H:%M:%S") for dt in event_times),
                 "label": label,
                 "short_label": textwrap.shorten(label, width=32, placeholder="…"),
+                "theme": dominant_theme,
+                "theme_label": theme["label"],
+                "theme_summary": theme_summary,
+                "theme_count": len(unique_themes),
             }
         )
     return annotations
@@ -786,7 +917,7 @@ def build_card_annotation_footer_lines(
     annotations: Iterable[dict[str, object]] | None,
 ) -> list[str]:
     items = [
-        f'{annotation["marker"]}. {annotation["axis_label"]} {annotation["short_label"]}'
+        f'{annotation["marker"]}. {annotation["axis_label"]} {annotation["short_label"]} [{annotation["theme_label"]}]'
         for annotation in (annotations or [])
     ]
     if not items:
@@ -820,12 +951,15 @@ def render_chart_annotations(
         bucket_index = int(annotation["bucket_index"])
         if bucket_index >= len(x_positions):
             continue
+        theme = get_card_annotation_theme(str(annotation.get("theme", "note")))
+        annotation_marker_fill = theme["marker_fill"] or marker_fill
+        annotation_line_stroke = theme["line_stroke"] or line_stroke
         x_position = x_positions[bucket_index]
         marker_cy = chart_top + 16
         parts.extend(
             [
-                f'<line x1="{x_position:.2f}" y1="{chart_top:.2f}" x2="{x_position:.2f}" y2="{chart_bottom:.2f}" stroke="{line_stroke}" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />',
-                f'<circle cx="{x_position:.2f}" cy="{marker_cy:.2f}" r="10" fill="{marker_fill}" stroke="#ffffff" stroke-width="1.6" />',
+                f'<line x1="{x_position:.2f}" y1="{chart_top:.2f}" x2="{x_position:.2f}" y2="{chart_bottom:.2f}" stroke="{annotation_line_stroke}" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />',
+                f'<circle cx="{x_position:.2f}" cy="{marker_cy:.2f}" r="10" fill="{annotation_marker_fill}" stroke="#ffffff" stroke-width="1.6" />',
                 f'<text x="{x_position:.2f}" y="{marker_cy + 4:.2f}" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">{escape(str(annotation["marker"]))}</text>',
             ]
         )
@@ -1313,7 +1447,8 @@ def format_time_bucket_card_html(
         annotation_cell = "—"
         if annotation:
             annotation_cell = (
-                f'<span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                f'{build_annotation_marker_chip_html(annotation)}'
+                f'{build_annotation_theme_badge_html(annotation)} '
                 f'{escape(str(annotation["label"]))}'
             )
         table_rows.append(
@@ -1377,7 +1512,9 @@ def format_time_bucket_card_html(
                 '  <ul class="annotation-list">',
                 *[
                     (
-                        f'    <li><span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                        '    <li>'
+                        f'{build_annotation_marker_chip_html(annotation)}'
+                        f'{build_annotation_theme_badge_html(annotation)} '
                         f'<strong>{escape(str(annotation["range_label"]))}</strong><br>'
                         f'<span>{escape(str(annotation["label"]))}</span><br>'
                         f'<span class="annotation-time">Events: {escape(str(annotation["event_time_label"]))}</span></li>'
@@ -1417,7 +1554,8 @@ def format_time_bucket_card_html(
     .caption {{ color: #475569; margin-top: 0.8rem; }}
     .annotation-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; list-style: none; padding: 0; margin: 1rem 0 0; }}
     .annotation-list li {{ border: 1px solid rgba(99, 102, 241, 0.22); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }}
-    .annotation-chip {{ display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.35rem; border-radius: 999px; background: #0f172a; color: #ffffff; font-size: 0.82rem; font-weight: 700; margin-right: 0.45rem; }}
+    .annotation-chip {{ display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.35rem; border-radius: 999px; color: #ffffff; font-size: 0.82rem; font-weight: 700; margin-right: 0.45rem; }}
+    .annotation-theme {{ display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 999px; padding: 0.12rem 0.5rem; font-size: 0.78rem; font-weight: 700; margin-right: 0.45rem; vertical-align: middle; }}
     .annotation-time {{ color: #64748b; font-size: 0.9rem; }}
   </style>
 </head>
@@ -1804,7 +1942,8 @@ def format_facet_comparison_card_html(
         annotation_cell = "—"
         if annotation:
             annotation_cell = (
-                f'<span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                f'{build_annotation_marker_chip_html(annotation)}'
+                f'{build_annotation_theme_badge_html(annotation)} '
                 f'{escape(str(annotation["label"]))}'
             )
         bucket_table_rows.append(
@@ -1844,7 +1983,9 @@ def format_facet_comparison_card_html(
                 '  <ul class="annotation-list">',
                 *[
                     (
-                        f'    <li><span class="annotation-chip">{escape(str(annotation["marker"]))}</span> '
+                        '    <li>'
+                        f'{build_annotation_marker_chip_html(annotation)}'
+                        f'{build_annotation_theme_badge_html(annotation)} '
                         f'<strong>{escape(str(annotation["range_label"]))}</strong><br>'
                         f'<span>{escape(str(annotation["label"]))}</span><br>'
                         f'<span class="annotation-time">Events: {escape(str(annotation["event_time_label"]))}</span></li>'
@@ -1885,7 +2026,8 @@ def format_facet_comparison_card_html(
     .caption {{ color: #475569; margin-top: 0.8rem; }}
     .annotation-list {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; list-style: none; padding: 0; margin: 1rem 0 0; }}
     .annotation-list li {{ border: 1px solid rgba(251, 146, 60, 0.28); border-radius: 1rem; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.82); }}
-    .annotation-chip {{ display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.35rem; border-radius: 999px; background: #9a3412; color: #ffffff; font-size: 0.82rem; font-weight: 700; margin-right: 0.45rem; }}
+    .annotation-chip {{ display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.35rem; border-radius: 999px; color: #ffffff; font-size: 0.82rem; font-weight: 700; margin-right: 0.45rem; }}
+    .annotation-theme {{ display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 999px; padding: 0.12rem 0.5rem; font-size: 0.78rem; font-weight: 700; margin-right: 0.45rem; vertical-align: middle; }}
     .annotation-time {{ color: #7c2d12; font-size: 0.9rem; }}
   </style>
 </head>
@@ -3105,8 +3247,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help=(
-            "Optional TIMESTAMP=LABEL callout pinned onto matching card-export buckets "
-            "(repeatable; requires --time-bucket and at least one card export flag)"
+            "Optional TIMESTAMP=LABEL or TIMESTAMP=THEME|LABEL callout pinned onto matching "
+            "card-export buckets (repeatable; themes include deploy, rollback, incident, "
+            "recovery, and note; requires --time-bucket and at least one card export flag)"
         ),
     )
     parser.add_argument(

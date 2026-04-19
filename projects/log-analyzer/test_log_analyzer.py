@@ -448,8 +448,48 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(annotations[0]['bucket_start'], '2026-04-18T09:00:00+00:00')
         self.assertEqual(annotations[0]['label'], 'Deploy started · Error budget burn')
         self.assertEqual(annotations[0]['event_time_label'], '09:00:10, 09:00:40')
+        self.assertEqual(annotations[0]['theme'], 'note')
+        self.assertEqual(annotations[0]['theme_label'], 'Note')
         self.assertEqual(annotations[1]['marker'], '2')
         self.assertEqual(annotations[1]['bucket_start'], '2026-04-18T09:01:00+00:00')
+
+    def test_normalize_card_annotations_supports_themes_and_dominant_bucket_severity(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050',
+                '10.0.0.2 - - [18/Apr/2026:09:01:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.060',
+            ],
+            top_n=2,
+            time_bucket_granularity='minute',
+        )
+        annotations = normalize_card_annotations(
+            [
+                '2026-04-18T09:00:10Z=deploy|Deploy started',
+                '2026-04-18T09:00:40Z=incident|Error budget burn',
+                '2026-04-18T09:01:10Z=rollback|Rollback verified',
+            ],
+            time_buckets=result['time_buckets'],
+        )
+        self.assertEqual(annotations[0]['theme'], 'incident')
+        self.assertEqual(annotations[0]['theme_label'], 'Incident')
+        self.assertEqual(annotations[0]['theme_count'], 2)
+        self.assertEqual(annotations[0]['theme_summary'], 'Deploy, Incident')
+        self.assertEqual(annotations[1]['theme'], 'rollback')
+        self.assertEqual(annotations[1]['theme_label'], 'Rollback')
+
+    def test_normalize_card_annotations_rejects_unknown_theme(self):
+        result = analyze_lines(
+            [
+                '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050',
+            ],
+            top_n=1,
+            time_bucket_granularity='minute',
+        )
+        with self.assertRaisesRegex(ValueError, "Unknown --card-annotation theme 'mystery'"):
+            normalize_card_annotations(
+                ['2026-04-18T09:00:10Z=mystery|Unknown theme'],
+                time_buckets=result['time_buckets'],
+            )
 
     def test_normalize_card_annotations_rejects_out_of_range_timestamp(self):
         result = analyze_lines(
@@ -475,13 +515,27 @@ class LogAnalyzerTests(unittest.TestCase):
             top_n=2,
             time_bucket_granularity='minute',
         )
-        svg = format_time_bucket_card_svg(result, source_label='access.log', id_prefix='test-card')
+        annotations = normalize_card_annotations(
+            [
+                '2026-04-18T09:00:20Z=deploy|Deploy started',
+                '2026-04-18T09:01:20Z=incident|Error budget burn',
+            ],
+            time_buckets=result['time_buckets'],
+        )
+        svg = format_time_bucket_card_svg(
+            result,
+            source_label='access.log',
+            id_prefix='test-card',
+            annotations=annotations,
+        )
         self.assertIn('<svg', svg)
         self.assertIn('Observability trend snapshot', svg)
         self.assertIn('Requests / bucket', svg)
         self.assertIn('Error rate / bucket', svg)
         self.assertIn('Avg latency / bucket', svg)
         self.assertIn('Coverage: 2026-04-18 09:00 → 09:02 UTC', svg)
+        self.assertIn('#2563eb', svg)
+        self.assertIn('#dc2626', svg)
 
     def test_format_time_bucket_card_html_renders_bucket_table_and_facet_meta(self):
         result = analyze_lines(
@@ -496,8 +550,8 @@ class LogAnalyzerTests(unittest.TestCase):
         )
         annotations = normalize_card_annotations(
             [
-                '2026-04-18T09:00:30Z=Deploy started',
-                '2026-04-18T09:01:10Z=Incident spike',
+                '2026-04-18T09:00:30Z=deploy|Deploy started',
+                '2026-04-18T09:01:10Z=incident|Incident spike',
             ],
             time_buckets=result['time_buckets'],
         )
@@ -512,6 +566,8 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('env, region', html)
         self.assertIn('Annotation markers', html)
         self.assertIn('Deploy started', html)
+        self.assertIn('Deploy', html)
+        self.assertIn('Incident', html)
         self.assertIn('Events: 09:00:30', html)
         self.assertIn('<th>Annotation</th>', html)
         self.assertIn('<table>', html)
@@ -560,8 +616,8 @@ class LogAnalyzerTests(unittest.TestCase):
         )
         annotations = normalize_card_annotations(
             [
-                '2026-04-18T09:00:20Z=Deploy started',
-                '2026-04-18T09:01:40Z=Rollback triggered',
+                '2026-04-18T09:00:20Z=deploy|Deploy started',
+                '2026-04-18T09:01:40Z=rollback|Rollback triggered',
             ],
             time_buckets=result['facet_comparison']['time_buckets'],
         )
@@ -577,6 +633,8 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('Aligned bucket rows', html)
         self.assertIn('Annotation markers', html)
         self.assertIn('Rollback triggered', html)
+        self.assertIn('Deploy', html)
+        self.assertIn('Rollback', html)
         self.assertIn('Events: 09:01:40', html)
         self.assertIn('env=prod', html)
         self.assertIn('env=staging', html)
@@ -1397,9 +1455,9 @@ class LogAnalyzerTests(unittest.TestCase):
                     '--time-bucket-card-html',
                     str(html_path),
                     '--card-annotation',
-                    '2026-04-18T09:00:20Z=Deploy started',
+                    '2026-04-18T09:00:20Z=deploy|Deploy started',
                     '--card-annotation',
-                    '2026-04-18T09:01:10Z=Rollback triggered',
+                    '2026-04-18T09:01:10Z=rollback|Rollback triggered',
                 ],
                 cwd=Path(__file__).parent,
                 check=True,
@@ -1516,9 +1574,9 @@ class LogAnalyzerTests(unittest.TestCase):
                     '--facet-compare-card-html',
                     str(html_path),
                     '--card-annotation',
-                    '2026-04-18T09:00:20Z=Deploy started',
+                    '2026-04-18T09:00:20Z=deploy|Deploy started',
                     '--card-annotation',
-                    '2026-04-18T09:01:40Z=Rollback triggered',
+                    '2026-04-18T09:01:40Z=rollback|Rollback triggered',
                 ],
                 cwd=Path(__file__).parent,
                 check=True,
@@ -1528,7 +1586,10 @@ class LogAnalyzerTests(unittest.TestCase):
             svg_text = svg_path.read_text(encoding='utf-8')
             html_text = html_path.read_text(encoding='utf-8')
             self.assertIn('Annotations: 1. 09:00 Deploy started', svg_text)
+            self.assertIn('[Deploy]', svg_text)
             self.assertIn('Annotation markers', html_text)
+            self.assertIn('Deploy', html_text)
+            self.assertIn('Rollback', html_text)
             self.assertIn('Events: 09:01:40', html_text)
             self.assertIn('Rollback triggered', html_text)
 

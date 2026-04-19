@@ -35,14 +35,14 @@
 <line x1="74" y1="434.00" x2="330" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
 <line x1="74" y1="482.00" x2="330" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
 <line x1="74" y1="482" x2="330" y2="482" stroke="#0f172a" stroke-width="1.5" />
-<line x1="74.00" y1="338.00" x2="74.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="74.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<line x1="74.00" y1="338.00" x2="74.00" y2="482.00" stroke="#93c5fd" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="74.00" cy="354.00" r="10" fill="#2563eb" stroke="#ffffff" stroke-width="1.6" />
 <text x="74.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
 <line x1="202.00" y1="338.00" x2="202.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="202.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<circle cx="202.00" cy="354.00" r="10" fill="#ea580c" stroke="#ffffff" stroke-width="1.6" />
 <text x="202.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
-<line x1="330.00" y1="338.00" x2="330.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="330.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<line x1="330.00" y1="338.00" x2="330.00" y2="482.00" stroke="#c4b5fd" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="330.00" cy="354.00" r="10" fill="#7c3aed" stroke="#ffffff" stroke-width="1.6" />
 <text x="330.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
 <polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="74.00,356.78 202.00,356.78 330.00,419.39" />
 <circle cx="74.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
@@ -70,14 +70,14 @@
 <line x1="398" y1="434.00" x2="654" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
 <line x1="398" y1="482.00" x2="654" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
 <line x1="398" y1="482" x2="654" y2="482" stroke="#0f172a" stroke-width="1.5" />
-<line x1="398.00" y1="338.00" x2="398.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="398.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<line x1="398.00" y1="338.00" x2="398.00" y2="482.00" stroke="#93c5fd" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="398.00" cy="354.00" r="10" fill="#2563eb" stroke="#ffffff" stroke-width="1.6" />
 <text x="398.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
 <line x1="526.00" y1="338.00" x2="526.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="526.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<circle cx="526.00" cy="354.00" r="10" fill="#ea580c" stroke="#ffffff" stroke-width="1.6" />
 <text x="526.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
-<line x1="654.00" y1="338.00" x2="654.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="654.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<line x1="654.00" y1="338.00" x2="654.00" y2="482.00" stroke="#c4b5fd" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="654.00" cy="354.00" r="10" fill="#7c3aed" stroke="#ffffff" stroke-width="1.6" />
 <text x="654.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
 <polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="398.00,356.78 526.00,482.00 654.00,482.00" />
 <circle cx="398.00" cy="356.78" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
@@ -105,14 +105,14 @@
 <line x1="722" y1="434.00" x2="978" y2="434.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
 <line x1="722" y1="482.00" x2="978" y2="482.00" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 5" />
 <line x1="722" y1="482" x2="978" y2="482" stroke="#0f172a" stroke-width="1.5" />
-<line x1="722.00" y1="338.00" x2="722.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="722.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<line x1="722.00" y1="338.00" x2="722.00" y2="482.00" stroke="#93c5fd" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="722.00" cy="354.00" r="10" fill="#2563eb" stroke="#ffffff" stroke-width="1.6" />
 <text x="722.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
 <line x1="850.00" y1="338.00" x2="850.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="850.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<circle cx="850.00" cy="354.00" r="10" fill="#ea580c" stroke="#ffffff" stroke-width="1.6" />
 <text x="850.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
-<line x1="978.00" y1="338.00" x2="978.00" y2="482.00" stroke="#fdba74" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
-<circle cx="978.00" cy="354.00" r="10" fill="#9a3412" stroke="#ffffff" stroke-width="1.6" />
+<line x1="978.00" y1="338.00" x2="978.00" y2="482.00" stroke="#c4b5fd" stroke-width="1.6" stroke-dasharray="6 6" opacity="0.9" />
+<circle cx="978.00" cy="354.00" r="10" fill="#7c3aed" stroke="#ffffff" stroke-width="1.6" />
 <text x="978.00" y="358.00" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
 <polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="722.00,372.72 850.00,425.08 978.00,472.89" />
 <circle cx="722.00" cy="372.72" r="4.2" fill="#1d4ed8" stroke="#ffffff" stroke-width="1.4" />
@@ -131,7 +131,7 @@
 <text x="78" y="610" font-size="14" fill="#334155">Coverage: 2026-04-18 09:00 → 09:03 UTC</text>
 <text x="78" y="632" font-size="14" fill="#334155">Window filter: full log span</text>
 <text x="78" y="654" font-size="14" fill="#334155">Aligned buckets: 3 (minute)</text>
-<text x="78" y="676" font-size="14" fill="#334155">Annotations: 1. 09:00 Deploy started · 2. 09:01 Rollback triggered</text>
-<text x="78" y="698" font-size="14" fill="#334155">Annotations: 3. 09:02 Recovery confirmed</text>
+<text x="78" y="676" font-size="14" fill="#334155">Annotations: 1. 09:00 Deploy started [Deploy] · 2. 09:01 Rollback triggered [Rollback]</text>
+<text x="78" y="698" font-size="14" fill="#334155">Annotations: 3. 09:02 Recovery confirmed [Recovery]</text>
   <text x="78" y="724" font-size="12" fill="#64748b">Use the HTML companion for a browser-friendly release-review table, annotation legend, and exact per-bucket deltas.</text>
 </svg>
