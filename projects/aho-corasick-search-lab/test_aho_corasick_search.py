@@ -6,7 +6,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from aho_corasick_search import AhoCorasickAutomaton, load_patterns, search_text
+from aho_corasick_search import AhoCorasickAutomaton, load_patterns, search_chunks, search_file, search_text
 
 
 HERE = Path(__file__).resolve().parent
@@ -22,11 +22,49 @@ class AhoCorasickSearchTests(unittest.TestCase):
             [("she", 1, 4), ("he", 2, 4), ("hers", 2, 6)],
         )
 
+    def test_find_matches_in_chunks_preserves_boundary_matches(self) -> None:
+        automaton = AhoCorasickAutomaton(["beta", "ta g", "gamma"])
+        matches = automaton.find_matches_in_chunks(["alpha be", "ta gam", "ma"])
+        self.assertEqual(
+            [(match.pattern, match.start, match.end, match.line, match.column) for match in matches],
+            [("beta", 6, 10, 1, 7), ("ta g", 8, 12, 1, 9), ("gamma", 11, 16, 1, 12)],
+        )
+
     def test_case_insensitive_counts_and_locations(self) -> None:
         result = search_text("Alpha\nbeta ALPHA", ["alpha", "beta"], case_sensitive=False)
         self.assertEqual(result["counts"], {"alpha": 2, "beta": 1})
         self.assertEqual(result["matches"][1]["line"], 2)
         self.assertEqual(result["matches"][1]["column"], 1)
+        self.assertEqual(result["input"]["mode"], "memory")
+
+    def test_search_chunks_tracks_stream_metadata(self) -> None:
+        result = search_chunks(["warn", "ing\ncri", "tical warning"], ["warning", "critical"], chunk_size=4)
+        self.assertEqual(result["match_count"], 3)
+        self.assertEqual(result["counts"], {"warning": 2, "critical": 1})
+        self.assertEqual(result["input"]["mode"], "stream")
+        self.assertEqual(result["input"]["chunk_count"], 3)
+        self.assertEqual(result["input"]["characters_processed"], len("warning\ncritical warning"))
+        self.assertEqual(result["matches"][1]["line"], 2)
+        self.assertEqual(result["matches"][1]["column"], 1)
+
+    def test_search_file_streaming_matches_whole_file_search(self) -> None:
+        tmp_dir = Path(self.id().replace(".", "_"))
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            input_file = tmp_dir / "sample.txt"
+            text = "alpha\nher beta\nhers again\n"
+            input_file.write_text(text, encoding="utf-8")
+            memory_text, memory_result = search_file(input_file, ["her", "hers"])
+            stream_text, stream_result = search_file(input_file, ["her", "hers"], chunk_size=3)
+            self.assertEqual(memory_text, text)
+            self.assertIsNone(stream_text)
+            self.assertEqual(memory_result["matches"], stream_result["matches"])
+            self.assertEqual(stream_result["input"]["chunk_size"], 3)
+        finally:
+            if tmp_dir.exists():
+                for path in tmp_dir.iterdir():
+                    path.unlink()
+                tmp_dir.rmdir()
 
     def test_pattern_file_loading_deduplicates(self) -> None:
         tmp_dir = Path(self.id().replace(".", "_"))
@@ -67,11 +105,65 @@ class AhoCorasickSearchTests(unittest.TestCase):
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["match_count"], 3)
             self.assertEqual(payload["counts"], {"fail": 2, "warn": 1})
+            self.assertEqual(payload["input"]["mode"], "memory")
         finally:
             if tmp_dir.exists():
                 for path in tmp_dir.iterdir():
                     path.unlink()
                 tmp_dir.rmdir()
+
+    def test_cli_chunked_json_output_reports_stream_metadata(self) -> None:
+        tmp_dir = Path(self.id().replace(".", "_"))
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            input_file = tmp_dir / "sample.txt"
+            input_file.write_text("error\nwarning\ncritical\n", encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "warning",
+                    "critical",
+                    "--input",
+                    str(input_file),
+                    "--chunk-size",
+                    "5",
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["counts"], {"warning": 1, "critical": 1})
+            self.assertEqual(payload["input"]["mode"], "stream")
+            self.assertEqual(payload["input"]["chunk_size"], 5)
+            self.assertEqual(payload["matches"][0]["line"], 2)
+            self.assertEqual(payload["matches"][1]["line"], 3)
+        finally:
+            if tmp_dir.exists():
+                for path in tmp_dir.iterdir():
+                    path.unlink()
+                tmp_dir.rmdir()
+
+    def test_cli_rejects_context_with_chunked_file_mode(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "warn",
+                "--input",
+                str(HERE / "sample_text.txt"),
+                "--chunk-size",
+                "4",
+                "--context",
+                "2",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--context is not supported with --chunk-size", completed.stderr)
 
     def test_rejects_missing_patterns(self) -> None:
         with self.assertRaises(ValueError):

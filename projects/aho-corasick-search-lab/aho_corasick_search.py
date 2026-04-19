@@ -5,7 +5,7 @@ import json
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, Iterator, List, Sequence
 
 
 @dataclass(slots=True)
@@ -31,6 +31,7 @@ class AhoCorasickAutomaton:
             raise ValueError("at least one non-empty pattern is required")
         self.case_sensitive = case_sensitive
         self.patterns = list(dict.fromkeys(self._normalize(pattern) for pattern in cleaned))
+        self.max_pattern_length = max(len(pattern) for pattern in self.patterns)
         self.nodes: List[Node] = [Node()]
         self._build_trie(self.patterns)
         self._build_failure_links()
@@ -70,28 +71,47 @@ class AhoCorasickAutomaton:
                     if pattern not in self.nodes[next_index].outputs:
                         self.nodes[next_index].outputs.append(pattern)
 
-    def find_matches(self, text: str) -> List[Match]:
-        haystack = self._normalize(text)
-        line_starts = compute_line_starts(text)
+    def scan_chunks(self, chunks: Iterable[str]) -> tuple[List[Match], int, int]:
+        line_starts = [0]
         matches: List[Match] = []
         state = 0
+        offset = 0
+        chunk_count = 0
 
-        for index, char in enumerate(haystack):
-            while state and char not in self.nodes[state].transitions:
-                state = self.nodes[state].failure
-            state = self.nodes[state].transitions.get(char, 0)
-            for pattern in self.nodes[state].outputs:
-                start = index - len(pattern) + 1
-                line, column = offset_to_line_column(line_starts, start)
-                matches.append(
-                    Match(
-                        pattern=pattern,
-                        start=start,
-                        end=index + 1,
-                        line=line,
-                        column=column,
+        for chunk in chunks:
+            if not chunk:
+                continue
+            chunk_count += 1
+            normalized_chunk = self._normalize(chunk)
+            for index, (raw_char, char) in enumerate(zip(chunk, normalized_chunk)):
+                while state and char not in self.nodes[state].transitions:
+                    state = self.nodes[state].failure
+                state = self.nodes[state].transitions.get(char, 0)
+                absolute_index = offset + index
+                for pattern in self.nodes[state].outputs:
+                    start = absolute_index - len(pattern) + 1
+                    line, column = offset_to_line_column(line_starts, start)
+                    matches.append(
+                        Match(
+                            pattern=pattern,
+                            start=start,
+                            end=absolute_index + 1,
+                            line=line,
+                            column=column,
+                        )
                     )
-                )
+                if raw_char == "\n":
+                    line_starts.append(absolute_index + 1)
+            offset += len(chunk)
+
+        return matches, offset, chunk_count
+
+    def find_matches(self, text: str) -> List[Match]:
+        matches, _, _ = self.scan_chunks([text])
+        return matches
+
+    def find_matches_in_chunks(self, chunks: Iterable[str]) -> List[Match]:
+        matches, _, _ = self.scan_chunks(chunks)
         return matches
 
 
@@ -129,19 +149,89 @@ def load_patterns(patterns: Sequence[str], pattern_file: str | None) -> List[str
     return unique
 
 
-def search_text(text: str, patterns: Sequence[str], *, case_sensitive: bool = True) -> dict:
-    automaton = AhoCorasickAutomaton(patterns, case_sensitive=case_sensitive)
-    matches = automaton.find_matches(text)
+def build_result(
+    automaton: AhoCorasickAutomaton,
+    matches: Sequence[Match],
+    *,
+    characters_processed: int,
+    chunk_count: int,
+    chunk_size: int | None,
+) -> dict:
     counts = {pattern: 0 for pattern in automaton.patterns}
     for match in matches:
         counts[match.pattern] += 1
+
+    input_meta = {
+        "mode": "stream" if chunk_size is not None else "memory",
+        "characters_processed": characters_processed,
+        "chunk_count": chunk_count,
+    }
+    if chunk_size is not None:
+        input_meta["chunk_size"] = chunk_size
+        input_meta["boundary_overlap"] = max(automaton.max_pattern_length - 1, 0)
+
     return {
         "pattern_count": len(automaton.patterns),
         "match_count": len(matches),
-        "case_sensitive": case_sensitive,
+        "case_sensitive": automaton.case_sensitive,
         "counts": counts,
         "matches": [asdict(match) for match in matches],
+        "input": input_meta,
     }
+
+
+def search_text(text: str, patterns: Sequence[str], *, case_sensitive: bool = True) -> dict:
+    automaton = AhoCorasickAutomaton(patterns, case_sensitive=case_sensitive)
+    matches, characters_processed, chunk_count = automaton.scan_chunks([text])
+    return build_result(
+        automaton,
+        matches,
+        characters_processed=characters_processed,
+        chunk_count=chunk_count,
+        chunk_size=None,
+    )
+
+
+def search_chunks(
+    chunks: Iterable[str],
+    patterns: Sequence[str],
+    *,
+    case_sensitive: bool = True,
+    chunk_size: int | None = None,
+) -> dict:
+    automaton = AhoCorasickAutomaton(patterns, case_sensitive=case_sensitive)
+    matches, characters_processed, chunk_count = automaton.scan_chunks(chunks)
+    return build_result(
+        automaton,
+        matches,
+        characters_processed=characters_processed,
+        chunk_count=chunk_count,
+        chunk_size=chunk_size,
+    )
+
+
+def iter_file_chunks(path: str | Path, chunk_size: int) -> Iterator[str]:
+    with Path(path).open("r", encoding="utf-8") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
+
+def search_file(path: str | Path, patterns: Sequence[str], *, case_sensitive: bool = True, chunk_size: int | None = None) -> tuple[str | None, dict]:
+    if chunk_size is None:
+        text = Path(path).read_text(encoding="utf-8")
+        return text, search_text(text, patterns, case_sensitive=case_sensitive)
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    result = search_chunks(
+        iter_file_chunks(path, chunk_size),
+        patterns,
+        case_sensitive=case_sensitive,
+        chunk_size=chunk_size,
+    )
+    return None, result
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -153,22 +243,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ignore-case", action="store_true", help="perform case-insensitive matching")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     parser.add_argument("--context", type=int, default=0, help="include N context chars around each match in text mode")
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        help="read file input in fixed-size character chunks while preserving cross-chunk matches",
+    )
     return parser
 
 
-def render_text_output(text: str, result: dict, *, context: int = 0) -> str:
+def render_text_output(text: str | None, result: dict, *, context: int = 0) -> str:
     lines = [
         f"patterns: {result['pattern_count']}",
         f"matches: {result['match_count']}",
-        "counts:",
     ]
+    input_meta = result.get("input") or {}
+    if input_meta.get("mode") == "stream":
+        lines.append(
+            "input mode: stream"
+            f" ({input_meta['chunk_count']} chunks @ {input_meta['chunk_size']} chars,"
+            f" boundary overlap {input_meta['boundary_overlap']})"
+        )
+    lines.append("counts:")
     for pattern, count in result["counts"].items():
         lines.append(f"  - {pattern}: {count}")
     if result["matches"]:
         lines.append("matches detail:")
         for item in result["matches"]:
             snippet = ""
-            if context > 0:
+            if context > 0 and text is not None:
                 start = max(0, item["start"] - context)
                 end = min(len(text), item["end"] + context)
                 snippet = f" | context={text[start:end]!r}"
@@ -188,9 +290,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("provide --text or --input")
     if args.text and args.input:
         parser.error("choose either --text or --input")
+    if args.chunk_size is not None and not args.input:
+        parser.error("--chunk-size requires --input")
+    if args.chunk_size is not None and args.chunk_size <= 0:
+        parser.error("--chunk-size must be positive")
+    if args.chunk_size is not None and args.context > 0:
+        parser.error("--context is not supported with --chunk-size; read the whole file or omit context")
 
-    text = args.text if args.text is not None else Path(args.input).read_text(encoding="utf-8")
-    result = search_text(text, patterns, case_sensitive=not args.ignore_case)
+    if args.input:
+        text, result = search_file(
+            args.input,
+            patterns,
+            case_sensitive=not args.ignore_case,
+            chunk_size=args.chunk_size,
+        )
+    else:
+        text = args.text
+        assert text is not None
+        result = search_text(text, patterns, case_sensitive=not args.ignore_case)
 
     if args.json:
         print(json.dumps(result, indent=2))
