@@ -1,0 +1,172 @@
+{
+  "suite_label": "portfolio-workload",
+  "iterations": 50,
+  "warmup": 5,
+  "case_count": 4,
+  "all_cases_agree": true,
+  "cases": [
+    {
+      "label": "anchored-id-fullmatch",
+      "mode": "fullmatch",
+      "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+      "text": "ID-2026-demo_user",
+      "pattern_length": 17,
+      "text_length": 17,
+      "agreement": true,
+      "lab_result": {
+        "matched": true
+      },
+      "python_result": {
+        "matched": true
+      },
+      "lab": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.0008838590001687407,
+        "avg_seconds": 1.7677180003374816e-05,
+        "ops_per_second": 56570.10902242814
+      },
+      "python_re": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 1.801399776013568e-05,
+        "avg_seconds": 3.602799552027136e-07,
+        "ops_per_second": 2775619.3081498086
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 49.06512213100684
+    },
+    {
+      "label": "pet-search",
+      "mode": "search",
+      "pattern": "(cat|dog)s?",
+      "text": "xxdogs walked by",
+      "pattern_length": 11,
+      "text_length": 16,
+      "agreement": true,
+      "lab_result": {
+        "matched": true,
+        "start": 2,
+        "end": 6,
+        "match": "dogs"
+      },
+      "python_result": {
+        "matched": true,
+        "start": 2,
+        "end": 6,
+        "match": "dogs"
+      },
+      "lab": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.0004971890011802316,
+        "avg_seconds": 9.943780023604631e-06,
+        "ops_per_second": 100565.37831953153
+      },
+      "python_re": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 1.2813998182537034e-05,
+        "avg_seconds": 2.5627996365074067e-07,
+        "ops_per_second": 3901982.7603955953
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 38.80045822527138
+    },
+    {
+      "label": "release-token-search",
+      "mode": "search",
+      "pattern": "\\d+\\s\\w+",
+      "text": "build 2026 portfolio",
+      "pattern_length": 8,
+      "text_length": 20,
+      "agreement": true,
+      "lab_result": {
+        "matched": true,
+        "start": 6,
+        "end": 20,
+        "match": "2026 portfolio"
+      },
+      "python_result": {
+        "matched": true,
+        "start": 6,
+        "end": 20,
+        "match": "2026 portfolio"
+      },
+      "lab": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.0017259769992961083,
+        "avg_seconds": 3.4519539985922167e-05,
+        "ops_per_second": 28969.099831800257
+      },
+      "python_re": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 2.1552001271629706e-05,
+        "avg_seconds": 4.3104002543259414e-07,
+        "ops_per_second": 2319970.167495222
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 80.08430296299785
+    },
+    {
+      "label": "whitespace-fullmatch",
+      "mode": "fullmatch",
+      "pattern": "^\\s+$",
+      "text": " \t",
+      "pattern_length": 5,
+      "text_length": 2,
+      "agreement": true,
+      "lab_result": {
+        "matched": true
+      },
+      "python_result": {
+        "matched": true
+      },
+      "lab": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.00020117399981245399,
+        "avg_seconds": 4.02347999624908e-06,
+        "ops_per_second": 248541.0641862909
+      },
+      "python_re": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 1.1431999155320227e-05,
+        "avg_seconds": 2.2863998310640455e-07,
+        "ops_per_second": 4373688.216791985
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 17.59744705009286
+    }
+  ],
+  "case_definitions": [
+    {
+      "label": "anchored-id-fullmatch",
+      "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+      "text": "ID-2026-demo_user",
+      "mode": "fullmatch"
+    },
+    {
+      "label": "pet-search",
+      "pattern": "(cat|dog)s?",
+      "text": "xxdogs walked by",
+      "mode": "search"
+    },
+    {
+      "label": "release-token-search",
+      "pattern": "\\d+\\s\\w+",
+      "text": "build 2026 portfolio",
+      "mode": "search"
+    },
+    {
+      "label": "whitespace-fullmatch",
+      "pattern": "^\\s+$",
+      "text": " \t",
+      "mode": "fullmatch"
+    }
+  ],
+  "suite_source": "docs/examples/regex-engine-benchmark-suite.json"
+}

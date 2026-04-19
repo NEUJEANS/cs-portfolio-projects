@@ -66,15 +66,24 @@ python3 regex_engine_lab.py benchmark --sample-suite \
   --iterations 3000 --warmup 200 \
   --json-out ../../docs/artifacts/regex-engine-lab/benchmark-sample-suite.json \
   --markdown-out ../../docs/artifacts/regex-engine-lab/benchmark-sample-suite.md
+
+python3 regex_engine_lab.py benchmark \
+  --suite-file ../../docs/examples/regex-engine-benchmark-suite.json \
+  --iterations 2500 --warmup 200 \
+  --json-out ../../docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.json \
+  --markdown-out ../../docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.md
 ```
 
-`benchmark` reuses one compiled lab engine and one compiled Python `re.Pattern`, measures both with `time.perf_counter()`, and reports whether the two engines agree on the chosen safe regular-language cases. The built-in suite stays intentionally ASCII-only so shorthand-class parity is about engine behavior, not Unicode-policy differences.
+`benchmark` reuses one compiled lab engine and one compiled Python `re.Pattern`, measures both with `time.perf_counter()`, and reports whether the two engines agree on the chosen safe regular-language cases. The built-in suite stays intentionally ASCII-only so shorthand-class parity is about engine behavior, not Unicode-policy differences. `--suite-file` accepts a JSON object with a `suite_label` plus a `cases` list of `{label, pattern, text, mode?}` entries, and those case labels must stay unique so reports remain unambiguous. That makes reproducible workload bundles easy to ship in the repo without editing Python code.
 
 ## Sample artifacts
 - `docs/artifacts/regex-engine-lab/trace-id-fullmatch.json` - fullmatch trace for a shorthand-heavy ID pattern
 - `docs/artifacts/regex-engine-lab/trace-dogs-search.json` - search trace showing how the engine advances start offsets before landing on `dogs`
 - `docs/artifacts/regex-engine-lab/benchmark-sample-suite.json` - JSON benchmark comparison report for the built-in safe sample suite
 - `docs/artifacts/regex-engine-lab/benchmark-sample-suite.md` - reviewer-friendly Markdown summary of the same benchmark suite
+- `docs/examples/regex-engine-benchmark-suite.json` - repo-committed JSON workload definition showing how to benchmark multiple named cases without editing code
+- `docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.json` - committed report generated from the JSON-defined workload bundle
+- `docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.md` - Markdown summary of the JSON-defined workload bundle for quick portfolio review
 
 ## Testing
 ```bash
@@ -92,5 +101,5 @@ python3 -m unittest discover -s projects/regex-engine-lab -p 'test_*.py' -v
 ## Future improvements
 - render trace output into a small HTML timeline or SVG teaching card
 - compile to DFA for faster repeated matching on the same pattern
-- add JSON-defined benchmark suites so larger reproducible case bundles can ship without editing code
+- add suite-level tags or filters so one JSON workload file can drive small interview demos and larger benchmark batches
 - add optional Unicode-aware shorthand classes as a follow-on contrast with the current ASCII teaching mode

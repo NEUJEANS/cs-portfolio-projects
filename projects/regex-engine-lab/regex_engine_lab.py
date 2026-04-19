@@ -19,6 +19,10 @@ class RegexSyntaxError(ValueError):
     """Raised when the simplified regex grammar is invalid."""
 
 
+class BenchmarkSuiteError(ValueError):
+    """Raised when a benchmark suite file is invalid."""
+
+
 @dataclass(frozen=True)
 class Literal:
     value: str
@@ -658,6 +662,68 @@ def normalize_search_result(match: re.Match[str] | None) -> dict[str, object]:
     }
 
 
+def benchmark_case_to_dict(case: BenchmarkCase) -> dict[str, str]:
+    return {
+        "label": case.label,
+        "pattern": case.pattern,
+        "text": case.text,
+        "mode": case.mode,
+    }
+
+
+def load_benchmark_suite(path_str: str) -> tuple[str, list[BenchmarkCase]]:
+    path = Path(path_str)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise BenchmarkSuiteError(f"benchmark suite file not found: {path}") from error
+    except json.JSONDecodeError as error:
+        raise BenchmarkSuiteError(
+            f"invalid benchmark suite JSON in {path}: {error.msg} at line {error.lineno} column {error.colno}"
+        ) from error
+
+    if not isinstance(payload, dict):
+        raise BenchmarkSuiteError("benchmark suite file must contain a top-level JSON object")
+
+    suite_label = payload.get("suite_label", path.stem)
+    if not isinstance(suite_label, str) or not suite_label.strip():
+        raise BenchmarkSuiteError("benchmark suite field 'suite_label' must be a non-empty string when provided")
+
+    raw_cases = payload.get("cases")
+    if not isinstance(raw_cases, list) or not raw_cases:
+        raise BenchmarkSuiteError("benchmark suite field 'cases' must be a non-empty list")
+
+    cases: list[BenchmarkCase] = []
+    seen_labels: set[str] = set()
+    for index, raw_case in enumerate(raw_cases, start=1):
+        if not isinstance(raw_case, dict):
+            raise BenchmarkSuiteError(f"benchmark suite case #{index} must be a JSON object")
+
+        label = raw_case.get("label")
+        pattern = raw_case.get("pattern")
+        text = raw_case.get("text")
+        mode = raw_case.get("mode", "fullmatch")
+
+        if not isinstance(label, str) or not label.strip():
+            raise BenchmarkSuiteError(f"benchmark suite case #{index} field 'label' must be a non-empty string")
+        normalized_label = label.strip()
+        if normalized_label in seen_labels:
+            raise BenchmarkSuiteError(f"benchmark suite case labels must be unique; found duplicate {normalized_label!r}")
+        if not isinstance(pattern, str):
+            raise BenchmarkSuiteError(f"benchmark suite case {normalized_label!r} field 'pattern' must be a string")
+        if not isinstance(text, str):
+            raise BenchmarkSuiteError(f"benchmark suite case {normalized_label!r} field 'text' must be a string")
+        if mode not in {"fullmatch", "search"}:
+            raise BenchmarkSuiteError(
+                f"benchmark suite case {normalized_label!r} field 'mode' must be 'fullmatch' or 'search'"
+            )
+
+        seen_labels.add(normalized_label)
+        cases.append(BenchmarkCase(normalized_label, pattern, text, mode=mode))
+
+    return suite_label.strip(), cases
+
+
 def benchmark_callable(runner, *, iterations: int, warmup: int) -> dict[str, float | int | None]:
     for _ in range(warmup):
         runner()
@@ -733,16 +799,22 @@ def run_benchmark_report(
     iterations: int,
     warmup: int,
     suite_label: str = "custom",
+    suite_source: str | None = None,
 ) -> dict[str, object]:
-    case_results = [run_benchmark_case(case, iterations=iterations, warmup=warmup) for case in cases]
-    return {
+    benchmark_cases = list(cases)
+    case_results = [run_benchmark_case(case, iterations=iterations, warmup=warmup) for case in benchmark_cases]
+    report = {
         "suite_label": suite_label,
         "iterations": iterations,
         "warmup": warmup,
         "case_count": len(case_results),
         "all_cases_agree": all(case["agreement"] for case in case_results),
         "cases": case_results,
+        "case_definitions": [benchmark_case_to_dict(case) for case in benchmark_cases],
     }
+    if suite_source is not None:
+        report["suite_source"] = suite_source
+    return report
 
 
 def render_benchmark_markdown(report: dict[str, object]) -> str:
@@ -753,10 +825,16 @@ def render_benchmark_markdown(report: dict[str, object]) -> str:
         f"- iterations per engine: `{report['iterations']}`",
         f"- warmup iterations per engine: `{report['warmup']}`",
         f"- agreement across all cases: `{report['all_cases_agree']}`",
-        "",
-        "| case | mode | agreement | lab ms | python re ms | lab ops/s | python ops/s | faster |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
     ]
+    if report.get("suite_source"):
+        lines.append(f"- suite source: `{report['suite_source']}`")
+    lines.extend(
+        [
+            "",
+            "| case | mode | agreement | lab ms | python re ms | lab ops/s | python ops/s | faster |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
     for case in report["cases"]:
         lab_ops = case["lab"]["ops_per_second"]
         python_ops = case["python_re"]["ops_per_second"]
@@ -838,6 +916,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run the built-in ASCII-safe sample benchmark cases instead of a single custom case",
     )
+    benchmark_parser.add_argument(
+        "--suite-file",
+        help="load a JSON benchmark suite file with one or more named cases",
+    )
     benchmark_parser.add_argument("--iterations", type=int, default=2000)
     benchmark_parser.add_argument("--warmup", type=int, default=200)
     benchmark_parser.add_argument("--json-out")
@@ -855,17 +937,44 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--iterations must be >= 1")
         if args.warmup < 0:
             parser.error("--warmup must be >= 0")
-        if args.sample_suite:
-            if args.pattern is not None or args.text is not None:
-                parser.error("benchmark does not accept PATTERN/TEXT when --sample-suite is used")
-            cases = list(DEFAULT_BENCHMARK_CASES)
-            suite_label = "sample-suite"
-        else:
-            if args.pattern is None or args.text is None:
-                parser.error("benchmark requires PATTERN and TEXT unless --sample-suite is used")
-            cases = [BenchmarkCase(args.label, args.pattern, args.text, mode=args.mode)]
-            suite_label = args.label
-        report = run_benchmark_report(cases, iterations=args.iterations, warmup=args.warmup, suite_label=suite_label)
+        if args.sample_suite and args.suite_file:
+            parser.error("benchmark cannot combine --sample-suite with --suite-file")
+
+        suite_source = None
+        try:
+            if args.sample_suite:
+                if args.pattern is not None or args.text is not None:
+                    parser.error("benchmark does not accept PATTERN/TEXT when --sample-suite is used")
+                cases = list(DEFAULT_BENCHMARK_CASES)
+                suite_label = "sample-suite"
+                suite_source = "built-in defaults"
+            elif args.suite_file:
+                if args.pattern is not None or args.text is not None:
+                    parser.error("benchmark does not accept PATTERN/TEXT when --suite-file is used")
+                suite_label, cases = load_benchmark_suite(args.suite_file)
+                if args.label != "custom":
+                    suite_label = args.label
+                suite_source = args.suite_file
+            else:
+                if args.pattern is None or args.text is None:
+                    parser.error("benchmark requires PATTERN and TEXT unless --sample-suite or --suite-file is used")
+                cases = [BenchmarkCase(args.label, args.pattern, args.text, mode=args.mode)]
+                suite_label = args.label
+        except BenchmarkSuiteError as error:
+            print(json.dumps({"error": str(error)}))
+            return 2
+
+        try:
+            report = run_benchmark_report(
+                cases,
+                iterations=args.iterations,
+                warmup=args.warmup,
+                suite_label=suite_label,
+                suite_source=suite_source,
+            )
+        except RegexSyntaxError as error:
+            print(json.dumps({"error": str(error)}))
+            return 2
         if args.json_out:
             write_text(args.json_out, json.dumps(report, indent=2) + "\n")
         if args.markdown_out:

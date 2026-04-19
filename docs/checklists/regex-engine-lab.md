@@ -62,3 +62,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-19 JSON benchmark suite slice
+- [x] inspect the current regex engine lab and choose JSON-defined benchmark suites as the next portfolio-friendly upgrade
+- [x] capture a brief research note on why repo-committed workload bundles make benchmark stories more reproducible and reviewable
+- [x] do a short argparse / JSON validation refresh and self-test for suite-file loading edge cases
+- [x] add a resumable slice checklist entry for this upgrade
+- [x] implement `benchmark --suite-file` with validation, suite metadata, and reusable case loading helpers
+- [x] add a committed example suite file plus generated benchmark artifacts from that suite
+- [x] add regression coverage for suite loading, CLI artifact writing, invalid suite errors, and duplicate labels
+- [x] run tests and smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

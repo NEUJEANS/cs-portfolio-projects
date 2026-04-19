@@ -1,0 +1,29 @@
+{
+  "suite_label": "portfolio-workload",
+  "cases": [
+    {
+      "label": "anchored-id-fullmatch",
+      "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+      "text": "ID-2026-demo_user",
+      "mode": "fullmatch"
+    },
+    {
+      "label": "pet-search",
+      "pattern": "(cat|dog)s?",
+      "text": "xxdogs walked by",
+      "mode": "search"
+    },
+    {
+      "label": "release-token-search",
+      "pattern": "\\d+\\s\\w+",
+      "text": "build 2026 portfolio",
+      "mode": "search"
+    },
+    {
+      "label": "whitespace-fullmatch",
+      "pattern": "^\\s+$",
+      "text": " \t",
+      "mode": "fullmatch"
+    }
+  ]
+}

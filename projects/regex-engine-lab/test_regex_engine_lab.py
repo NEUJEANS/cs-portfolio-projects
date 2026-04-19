@@ -7,7 +7,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from regex_engine_lab import BenchmarkCase, RegexEngine, RegexSyntaxError, render_benchmark_markdown, run_benchmark_report
+from regex_engine_lab import (
+    BenchmarkCase,
+    BenchmarkSuiteError,
+    RegexEngine,
+    RegexSyntaxError,
+    load_benchmark_suite,
+    render_benchmark_markdown,
+    run_benchmark_report,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -140,6 +148,80 @@ class RegexEngineTests(unittest.TestCase):
         self.assertIn("### dogs", markdown)
         self.assertIn("`search`", markdown)
 
+    def test_load_benchmark_suite_reads_named_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "suite.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "suite_label": "portfolio-workload",
+                        "cases": [
+                            {
+                                "label": "anchored-id",
+                                "pattern": r"^ID-\d\d\d\d-\w+$",
+                                "text": "ID-2026-demo_user",
+                            },
+                            {
+                                "label": "pet-search",
+                                "pattern": "(cat|dog)s?",
+                                "text": "xxdogs walked by",
+                                "mode": "search",
+                            },
+                        ],
+                    },
+                    indent=2,
+                )
+            )
+            suite_label, cases = load_benchmark_suite(str(suite_path))
+
+        self.assertEqual(suite_label, "portfolio-workload")
+        self.assertEqual([case.label for case in cases], ["anchored-id", "pet-search"])
+        self.assertEqual(cases[1].mode, "search")
+
+    def test_load_benchmark_suite_rejects_invalid_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "suite.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "label": "bad-case",
+                                "pattern": "abc",
+                                "text": "abc",
+                                "mode": "contains",
+                            }
+                        ]
+                    }
+                )
+            )
+            with self.assertRaises(BenchmarkSuiteError):
+                load_benchmark_suite(str(suite_path))
+
+    def test_load_benchmark_suite_rejects_duplicate_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "suite.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "label": "repeat-case",
+                                "pattern": "abc",
+                                "text": "abc",
+                            },
+                            {
+                                "label": "repeat-case",
+                                "pattern": "def",
+                                "text": "def",
+                            },
+                        ]
+                    }
+                )
+            )
+            with self.assertRaises(BenchmarkSuiteError):
+                load_benchmark_suite(str(suite_path))
+
 
 class RegexEngineCliTests(unittest.TestCase):
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
@@ -232,11 +314,78 @@ class RegexEngineCliTests(unittest.TestCase):
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["suite_label"], "sample-suite")
             self.assertEqual(payload["case_count"], 3)
+            self.assertEqual(payload["suite_source"], "built-in defaults")
             self.assertTrue(markdown_path.exists())
             self.assertTrue(json_path.exists())
             self.assertIn("Regex engine benchmark report", markdown_path.read_text())
             written_json = json.loads(json_path.read_text())
             self.assertEqual(written_json["case_count"], 3)
+
+    def test_cli_benchmark_suite_file_writes_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "suite.json"
+            markdown_path = Path(temp_dir) / "suite-report.md"
+            json_path = Path(temp_dir) / "suite-report.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "suite_label": "portfolio-workload",
+                        "cases": [
+                            {
+                                "label": "anchored-id",
+                                "pattern": r"^ID-\d\d\d\d-\w+$",
+                                "text": "ID-2026-demo_user",
+                            },
+                            {
+                                "label": "pet-search",
+                                "pattern": "(cat|dog)s?",
+                                "text": "xxdogs walked by",
+                                "mode": "search",
+                            },
+                        ],
+                    },
+                    indent=2,
+                )
+            )
+            completed = self.run_cli(
+                "benchmark",
+                "--suite-file",
+                str(suite_path),
+                "--iterations",
+                "1",
+                "--warmup",
+                "0",
+                "--markdown-out",
+                str(markdown_path),
+                "--json-out",
+                str(json_path),
+            )
+            self.assertEqual(completed.returncode, 0)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["suite_label"], "portfolio-workload")
+            self.assertEqual(payload["case_count"], 2)
+            self.assertEqual(payload["suite_source"], str(suite_path))
+            self.assertEqual(payload["case_definitions"][1]["mode"], "search")
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(json_path.exists())
+            self.assertIn("suite source", markdown_path.read_text())
+            written_json = json.loads(json_path.read_text())
+            self.assertEqual(written_json["case_count"], 2)
+
+    def test_cli_reports_invalid_benchmark_suite_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "broken.json"
+            suite_path.write_text('{"cases": [{"label": "oops", "pattern": "abc", "text": 5}]}')
+            completed = self.run_cli("benchmark", "--suite-file", str(suite_path), "--iterations", "1", "--warmup", "0")
+            self.assertEqual(completed.returncode, 2)
+            payload = json.loads(completed.stdout)
+            self.assertIn("error", payload)
+
+    def test_cli_reports_invalid_benchmark_pattern_errors(self) -> None:
+        completed = self.run_cli("benchmark", "[abc", "a", "--iterations", "1", "--warmup", "0")
+        self.assertEqual(completed.returncode, 2)
+        payload = json.loads(completed.stdout)
+        self.assertIn("error", payload)
 
     def test_cli_reports_syntax_errors(self) -> None:
         completed = self.run_cli("fullmatch", "[abc", "a")
