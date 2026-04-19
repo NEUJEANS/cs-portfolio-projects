@@ -1,3 +1,4 @@
+import csv
 import json
 import subprocess
 import sys
@@ -14,6 +15,8 @@ from tarjan_scc_lab import (
     kosaraju_strongly_connected_components,
     load_graph,
     main,
+    render_compare_csv,
+    render_compare_markdown,
     summarize_components,
     tarjan_strongly_connected_components,
     transpose_graph,
@@ -211,6 +214,31 @@ def test_compare_algorithms_reports_matching_components_and_average_timings():
     assert comparison['average_ms']['tarjan'] >= 0
     assert comparison['average_ms']['kosaraju'] >= 0
     assert comparison['faster_algorithm'] in {'tarjan', 'kosaraju', 'tie'}
+
+
+def test_render_compare_csv_outputs_one_row_per_timing_run():
+    graph = load_graph(FIXTURE_PATH)
+    comparison = compare_algorithms(graph, repeat=3)
+    rows = list(csv.DictReader(render_compare_csv(comparison).splitlines()))
+    assert len(rows) == 3
+    assert rows[0]['trial'] == '1'
+    assert rows[0]['algorithms_match'] == 'True'
+    assert rows[0]['node_count'] == '8'
+    assert rows[0]['component_count'] == '4'
+    assert rows[0]['winner'] in {'tarjan', 'kosaraju', 'tie'}
+
+
+def test_render_compare_markdown_includes_tables_and_component_roster():
+    graph = load_graph(FIXTURE_PATH)
+    comparison = compare_algorithms(graph, repeat=2)
+    report = render_compare_markdown(FIXTURE_PATH, comparison)
+    assert '# Tarjan vs Kosaraju benchmark report' in report
+    assert '| metric | value |' in report
+    assert '`sample_graph.json`' in report
+    assert '## Per-run timings (ms)' in report
+    assert '| trial | tarjan_ms | kosaraju_ms | delta_ms | winner |' in report
+    assert '- C0: A, B, C' in report
+    assert '## Interview talking points' in report
 
 
 def test_condensation_mermaid_groups_components_by_topology_level():
@@ -467,6 +495,38 @@ def test_cli_compare_outputs_matching_algorithms_and_timings():
     assert payload['repeat'] == 2
     assert len(payload['timings_ms']['tarjan']) == 2
     assert len(payload['timings_ms']['kosaraju']) == 2
+
+
+def test_cli_compare_can_write_csv_and_markdown_artifacts(tmp_path: Path):
+    csv_path = tmp_path / 'benchmark.csv'
+    markdown_path = tmp_path / 'benchmark.md'
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).with_name('tarjan_scc_lab.py')),
+            str(FIXTURE_PATH),
+            'compare',
+            '--repeat',
+            '2',
+            '--csv-output',
+            str(csv_path),
+            '--markdown-output',
+            str(markdown_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload['repeat'] == 2
+    assert csv_path.exists()
+    assert markdown_path.exists()
+    csv_rows = list(csv.DictReader(csv_path.read_text().splitlines()))
+    assert len(csv_rows) == 2
+    assert csv_rows[0]['trial'] == '1'
+    markdown_text = markdown_path.read_text()
+    assert '# Tarjan vs Kosaraju benchmark report' in markdown_text
+    assert '## Component roster' in markdown_text
 
 
 def test_cli_dot_outputs_graphviz_condensation_graph():

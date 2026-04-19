@@ -1,6 +1,8 @@
 import argparse
+import csv
 import json
 import sys
+from io import StringIO
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -408,6 +410,115 @@ def summarize_components(graph: DirectedGraph, components: list[list[str]]) -> d
     }
 
 
+def _display_graph_path(path: str | Path) -> str:
+    candidate = Path(path)
+    return candidate.as_posix() if not candidate.is_absolute() else candidate.name
+
+
+def _comparison_trial_rows(comparison: dict[str, object]) -> list[dict[str, object]]:
+    tarjan_timings = [float(value) for value in comparison['timings_ms']['tarjan']]
+    kosaraju_timings = [float(value) for value in comparison['timings_ms']['kosaraju']]
+    rows: list[dict[str, object]] = []
+    for trial, (tarjan_ms, kosaraju_ms) in enumerate(zip(tarjan_timings, kosaraju_timings), start=1):
+        winner = (
+            'tie'
+            if round(tarjan_ms, 12) == round(kosaraju_ms, 12)
+            else ('tarjan' if tarjan_ms < kosaraju_ms else 'kosaraju')
+        )
+        rows.append(
+            {
+                'trial': trial,
+                'tarjan_ms': round(tarjan_ms, 6),
+                'kosaraju_ms': round(kosaraju_ms, 6),
+                'delta_ms': round(abs(tarjan_ms - kosaraju_ms), 6),
+                'winner': winner,
+                'algorithms_match': bool(comparison['algorithms_match']),
+                'node_count': int(comparison['node_count']),
+                'edge_count': int(comparison['edge_count']),
+                'component_count': int(comparison['component_count']),
+            }
+        )
+    return rows
+
+
+def render_compare_csv(comparison: dict[str, object]) -> str:
+    rows = _comparison_trial_rows(comparison)
+    fieldnames = [
+        'trial',
+        'tarjan_ms',
+        'kosaraju_ms',
+        'delta_ms',
+        'winner',
+        'algorithms_match',
+        'node_count',
+        'edge_count',
+        'component_count',
+    ]
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
+
+
+def _markdown_escape(value: object) -> str:
+    return str(value).replace('|', r'\|').replace('\n', '<br/>')
+
+
+def render_compare_markdown(graph_path: str | Path, comparison: dict[str, object]) -> str:
+    trial_rows = _comparison_trial_rows(comparison)
+    component_preview = [', '.join(component) for component in comparison['components']]
+    lines = [
+        '# Tarjan vs Kosaraju benchmark report',
+        '',
+        '## Graph summary',
+        '| metric | value |',
+        '| --- | --- |',
+        f"| graph file | `{_markdown_escape(_display_graph_path(graph_path))}` |",
+        f"| node count | {comparison['node_count']} |",
+        f"| edge count | {comparison['edge_count']} |",
+        f"| strongly connected components | {comparison['component_count']} |",
+        f"| repeated timing runs | {comparison['repeat']} |",
+        f"| algorithms match | {'yes' if comparison['algorithms_match'] else 'no'} |",
+        f"| faster algorithm | {comparison['faster_algorithm']} |",
+        '',
+        '## Average timings (ms)',
+        '| algorithm | average_ms |',
+        '| --- | ---: |',
+        f"| tarjan | {comparison['average_ms']['tarjan']:.6f} |",
+        f"| kosaraju | {comparison['average_ms']['kosaraju']:.6f} |",
+        '',
+        '## Per-run timings (ms)',
+        '| trial | tarjan_ms | kosaraju_ms | delta_ms | winner |',
+        '| --- | ---: | ---: | ---: | --- |',
+    ]
+    for row in trial_rows:
+        lines.append(
+            f"| {row['trial']} | {row['tarjan_ms']:.6f} | {row['kosaraju_ms']:.6f} | {row['delta_ms']:.6f} | {row['winner']} |"
+        )
+    lines.extend(['', '## Component roster'])
+    for index, component in enumerate(component_preview):
+        lines.append(f'- C{index}: {component}')
+    lines.extend(
+        [
+            '',
+            '## Interview talking points',
+            f"- Both algorithms {'agree' if comparison['algorithms_match'] else 'do not agree'} on the deterministic SCC grouping used by this lab.",
+            f"- Tarjan averaged {comparison['average_ms']['tarjan']:.6f} ms while Kosaraju averaged {comparison['average_ms']['kosaraju']:.6f} ms on this graph.",
+            '- The CSV export keeps one row per timing run so you can chart trial-by-trial variance in a spreadsheet or static portfolio page.',
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def maybe_write_text(path: Path | None, content: str) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding='utf-8')
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze strongly connected components with Tarjan and Kosaraju workflows.")
     parser.add_argument('graph_path', help='Path to a JSON adjacency list or {nodes, edges} graph file')
@@ -418,6 +529,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser('mermaid', help='Print the condensation DAG as Mermaid flowchart markup')
     compare = subparsers.add_parser('compare', help='Compare Tarjan and Kosaraju SCC results and timings')
     compare.add_argument('--repeat', type=int, default=5, help='Number of timing runs to average per algorithm')
+    compare.add_argument('--csv-output', type=Path, help='Optional CSV export path for per-run timing rows')
+    compare.add_argument('--markdown-output', type=Path, help='Optional Markdown report path for a portfolio-ready summary')
     explain = subparsers.add_parser('explain', help='Print a concise text explanation')
     explain.add_argument('--limit', type=int, default=5, help='Maximum number of components to describe')
     return parser
@@ -429,7 +542,10 @@ def main(argv: list[str] | None = None) -> int:
     graph = load_graph(args.graph_path)
 
     if args.command == 'compare':
-        print(json.dumps(compare_algorithms(graph, repeat=args.repeat), indent=2))
+        comparison = compare_algorithms(graph, repeat=args.repeat)
+        maybe_write_text(args.csv_output, render_compare_csv(comparison))
+        maybe_write_text(args.markdown_output, render_compare_markdown(args.graph_path, comparison))
+        print(json.dumps(comparison, indent=2))
         return 0
 
     components = tarjan_strongly_connected_components(graph)

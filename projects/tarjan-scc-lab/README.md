@@ -8,6 +8,7 @@ A graph-algorithms portfolio project that finds strongly connected components in
 - condensation DAG generation for reasoning about cycles at the component level
 - deterministic JSON/text CLI output suitable for demos, scripting, and interviews
 - side-by-side Tarjan vs. Kosaraju comparison with repeatable timing output
+- CSV and Markdown benchmark-report exports for portfolio screenshots or static-site embeds
 - focused automated tests for algorithm correctness, input validation, and CLI behavior
 
 ## Files
@@ -23,6 +24,11 @@ python3 tarjan_scc_lab.py sample_graph.json condensation
 python3 tarjan_scc_lab.py sample_graph.json dot > condensation.dot
 python3 tarjan_scc_lab.py sample_graph.json mermaid > condensation.mmd
 python3 tarjan_scc_lab.py sample_graph.json compare --repeat 10
+mkdir -p ../../docs/artifacts/tarjan-scc-lab
+python3 tarjan_scc_lab.py sample_graph.json compare --repeat 10 \
+  --csv-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.csv \
+  --markdown-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.md \
+  > ../../docs/artifacts/tarjan-scc-lab/sample-compare.json
 python3 tarjan_scc_lab.py sample_graph.json explain --limit 4
 ../../.venv/bin/python -m pytest -q test_tarjan_scc_lab.py
 ```
@@ -185,7 +191,30 @@ Example output excerpt:
 
 This gives the project a stronger "theory plus evaluation" story: one implementation is enough to solve the problem, but comparing both shows awareness of alternative SCC strategies and the trade-off of Kosaraju's transpose/pass structure.
 
+The comparison flow can now also write portfolio-ready artifacts directly:
+- `--csv-output` writes one row per timing run so you can chart variance in a spreadsheet or static site
+- `--markdown-output` writes a report with graph metadata, average timings, per-run timing rows, a component roster, and ready-made interview talking points
+- the repo includes a checked-in sample bundle under `docs/artifacts/tarjan-scc-lab/` for screenshot-friendly demos
+
+Example Markdown report excerpt:
+```md
+# Tarjan vs Kosaraju benchmark report
+
+## Graph summary
+| metric | value |
+| --- | --- |
+| graph file | `sample_graph.json` |
+| node count | 8 |
+| edge count | 10 |
+| strongly connected components | 4 |
+
+## Per-run timings (ms)
+| trial | tarjan_ms | kosaraju_ms | delta_ms | winner |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 0.031251 | 0.040812 | 0.009561 | tarjan |
+```
+
 ## Future improvements
 - stream very large graphs from edge lists instead of loading everything into memory first
-- export benchmark comparisons as CSV/markdown artifacts for portfolio screenshots
+- add a small HTML report template that consumes the compare JSON/CSV bundle directly for layered SCC benchmark cards
 - add a small HTML/markdown report template that consumes `topology_groups` directly for layered SCC portfolio cards

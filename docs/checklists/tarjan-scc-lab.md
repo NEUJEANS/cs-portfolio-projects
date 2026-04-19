@@ -74,13 +74,32 @@
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
 
+
+## Benchmark artifact export slice (2026-04-19 15:56 UTC run)
+- [x] confirm repo sync before editing
+- [x] inspect the current Tarjan SCC lab for the weakest unfinished portfolio gap
+- [x] skip web research because benchmark artifact export is already the clearest unfinished follow-up in the README/checklist
+- [x] skip extra language refresh because the slice stays inside existing Python CLI/report-generation patterns already used across this repo
+- [x] update/add checklist docs so the slice is resumable
+- [x] add CSV export for per-run Tarjan vs Kosaraju timing rows
+- [x] add Markdown benchmark-report export with graph summary, averages, trial rows, and component roster
+- [x] expose the new compare export workflow in the README
+- [x] extend automated coverage for render helpers and CLI artifact writing
+- [x] run tests locally
+- [x] perform review pass 1 and fix issues
+- [x] perform review pass 2 and fix issues
+- [x] perform review pass 3 and fix issues
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+
 ## Next slice candidates
 - [x] export the condensation DAG as Graphviz for portfolio screenshots
 - [x] export the condensation DAG as Mermaid for markdown-native demos
 - [x] compare Tarjan and Kosaraju implementations with the same fixtures and benchmark output
 - [x] add in-degree/out-degree bottleneck summaries per SCC in the condensation graph
 - [x] support topological ordering groups directly in JSON for downstream tooling
-- [ ] export benchmark comparisons as CSV/markdown artifacts for portfolio screenshots
+- [x] export benchmark comparisons as CSV/markdown artifacts for portfolio screenshots
+- [ ] add a small HTML benchmark card/gallery that reuses the compare JSON/CSV artifact bundle
 
 ## Bottleneck summary slice (2026-04-16 02:11 UTC run)
 - [x] confirm repo sync before editing
