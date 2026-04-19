@@ -11,8 +11,8 @@
 - [x] update README usage/examples, sample-artifact notes, and resumability docs for the showcase flow
 - [x] extend regression coverage for showcase path resolution, related-dashboard matching, HTML rendering, and CLI writing
 - [x] run targeted tests, smoke checks, and 3 review passes
-- [ ] run secret scan
-- [ ] commit, push, and write the wrap-up
+- [x] run secret scan
+- [x] commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] initial Thompson-NFA regex engine with fullmatch/search/explain CLI flows

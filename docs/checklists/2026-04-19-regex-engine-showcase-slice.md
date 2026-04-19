@@ -10,5 +10,5 @@
 - [x] update README + checklist docs so the flow is reproducible later
 - [x] add regression coverage for showcase rendering and CLI writing
 - [x] run tests, smoke checks, and 3 review passes
-- [ ] run secret scan
-- [ ] commit, push, and append wrap-up
+- [x] run secret scan
+- [x] commit, push, and append wrap-up
