@@ -1,0 +1,6 @@
+frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,best_algorithms,reference_source
+4,60,60,52,52,52,42,1,opt,benchmark:compiler-phase-shift
+5,60,58,52,54,52,35,1,opt,benchmark:compiler-phase-shift
+6,34,34,32,32,32,30,1,opt,benchmark:compiler-phase-shift
+7,34,34,32,34,32,30,1,opt,benchmark:compiler-phase-shift
+8,30,30,30,30,30,30,1,fifo/clock/aging/wsclock/lru/opt,benchmark:compiler-phase-shift

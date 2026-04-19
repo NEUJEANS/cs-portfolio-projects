@@ -1,7 +1,7 @@
-frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,best_algorithms,reference_source
-3,53,53,51,51,51,37,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
-4,50,50,48,48,48,33,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
-5,44,44,38,38,38,31,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
-6,41,41,37,37,37,30,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
-7,41,41,35,35,35,30,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
-8,35,35,35,35,35,30,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
+frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,best_algorithms,reference_source
+3,53,53,51,51,51,37,6,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
+4,50,50,48,48,48,33,8,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
+5,44,44,38,38,38,31,10,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
+6,41,41,37,37,37,30,12,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
+7,41,41,35,35,35,30,14,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt
+8,35,35,35,35,35,30,16,opt,pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt

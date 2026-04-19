@@ -16,6 +16,7 @@ from page_replacement_lab import (  # noqa: E402
     TRACE_BENCHMARKS,
     WORKLOAD_PRESETS,
     compare_algorithms,
+    load_trace_benchmark_reference,
     parse_reference_args,
     simulate,
     study_frame_counts,
@@ -41,6 +42,12 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(simulate("wsclock", REFERENCE, 4).page_faults, 8)
         self.assertEqual(simulate("aging", REFERENCE, 4).page_faults, simulate("lru", REFERENCE, 4).page_faults)
         self.assertEqual(simulate("wsclock", REFERENCE, 4).page_faults, simulate("lru", REFERENCE, 4).page_faults)
+
+    def test_wsclock_window_override_changes_faults_on_compiler_benchmark(self) -> None:
+        benchmark_reference = load_trace_benchmark_reference(TRACE_BENCHMARKS["compiler-phase-shift"])
+        self.assertEqual(simulate("wsclock", benchmark_reference, 5, wsclock_window=1).page_faults, 54)
+        self.assertEqual(simulate("wsclock", benchmark_reference, 5, wsclock_window=5).page_faults, 52)
+        self.assertEqual(simulate("wsclock", benchmark_reference, 5).page_faults, 52)
 
     def test_compare_algorithms_orders_all_strategies(self) -> None:
         results = compare_algorithms(REFERENCE, 4)
@@ -71,6 +78,13 @@ class PageReplacementSimulationTests(unittest.TestCase):
             },
             study["monotonicity_violations"],
         )
+
+    def test_study_records_wsclock_window_metadata(self) -> None:
+        study = study_frame_counts(REFERENCE, 2, 4, wsclock_window=3)
+        self.assertEqual(study["wsclock_window_mode"], "fixed")
+        self.assertEqual(study["wsclock_window_override"], 3)
+        self.assertEqual(study["wsclock_window_description"], "fixed 3 references")
+        self.assertEqual([row["wsclock_window"] for row in study["frame_results"]], [3, 3, 3])
 
     def test_parse_reference_accepts_presets(self) -> None:
         parsed = parse_reference_args([], None, "classic-belady")
@@ -168,6 +182,32 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(payload["results"][2]["algorithm"], "aging")
         self.assertEqual(len(payload["results"]), len(ALGORITHMS))
 
+    def test_cli_compare_json_supports_wsclock_window_override_on_benchmark(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "compare",
+                "--frames",
+                "5",
+                "--benchmark",
+                "compiler-phase-shift",
+                "--wsclock-window",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        wsclock_result = next(result for result in payload["results"] if result["algorithm"] == "wsclock")
+        self.assertEqual(payload["wsclock_window_mode"], "fixed")
+        self.assertEqual(payload["wsclock_window_override"], 1)
+        self.assertEqual(payload["effective_wsclock_window"], 1)
+        self.assertEqual(payload["wsclock_window_description"], "fixed 1 reference")
+        self.assertEqual(wsclock_result["page_faults"], 54)
+
     def test_cli_list_presets_json_includes_known_workloads(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(SCRIPT), "list-presets", "--json"],
@@ -229,17 +269,18 @@ class PageReplacementSimulationTests(unittest.TestCase):
             csv_output = csv_path.read_text(encoding="utf-8")
 
             self.assertIn("# Page Replacement Study Report", markdown)
-            self.assertIn("| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | Winner |", markdown)
+            self.assertIn("| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |", markdown)
+            self.assertIn("- WSClock window: auto (max(4, frames * 2))", markdown)
             self.assertIn("frames 3 -> 4", markdown)
             self.assertIn("<svg", svg)
             self.assertIn("Page faults vs frame count", svg)
             self.assertIn("classic-belady", svg)
             self.assertIn("WSCLOCK", svg)
             self.assertIn(
-                "frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,best_algorithms,reference_source",
+                "frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,best_algorithms,reference_source",
                 csv_output,
             )
-            self.assertIn("3,9,9,10,10,10,7,opt,preset:classic-belady", csv_output)
+            self.assertIn("3,9,9,10,10,10,7,6,opt,preset:classic-belady", csv_output)
 
     def test_cli_gallery_writes_html_and_companion_artifacts_for_presets_and_benchmarks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -491,7 +532,7 @@ class PageReplacementSimulationTests(unittest.TestCase):
             self.assertIn("<svg", svg)
             self.assertIn("Imported trace comparison card", svg)
             self.assertIn(
-                "frame_count,algorithm,left_workload,right_workload,left_faults,right_faults",
+                "frame_count,wsclock_window,algorithm,left_workload,right_workload,left_faults,right_faults",
                 csv_output,
             )
             self.assertIn("Page Replacement Imported Trace Comparison", html)

@@ -3,6 +3,7 @@
 - workload: preset looping-hotset — small hot working set with a short burst page that rewards recency-aware policies
 - frame range: 3 to 8
 - reference length: 12
+- WSClock window: auto (max(4, frames * 2))
 - best average faults: opt (4.33)
 
 ## Reference string
@@ -19,14 +20,14 @@
 
 ## Faults by frame count
 
-| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | Winner |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 10 | 10 | 8 | 8 | 8 | 6 | opt |
-| 4 | 4 | 4 | 4 | 4 | 4 | 4 | fifo/clock/aging/wsclock/lru/opt |
-| 5 | 4 | 4 | 4 | 4 | 4 | 4 | fifo/clock/aging/wsclock/lru/opt |
-| 6 | 4 | 4 | 4 | 4 | 4 | 4 | fifo/clock/aging/wsclock/lru/opt |
-| 7 | 4 | 4 | 4 | 4 | 4 | 4 | fifo/clock/aging/wsclock/lru/opt |
-| 8 | 4 | 4 | 4 | 4 | 4 | 4 | fifo/clock/aging/wsclock/lru/opt |
+| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| 3 | 10 | 10 | 8 | 8 | 8 | 6 | 6 | opt |
+| 4 | 4 | 4 | 4 | 4 | 4 | 4 | 8 | fifo/clock/aging/wsclock/lru/opt |
+| 5 | 4 | 4 | 4 | 4 | 4 | 4 | 10 | fifo/clock/aging/wsclock/lru/opt |
+| 6 | 4 | 4 | 4 | 4 | 4 | 4 | 12 | fifo/clock/aging/wsclock/lru/opt |
+| 7 | 4 | 4 | 4 | 4 | 4 | 4 | 14 | fifo/clock/aging/wsclock/lru/opt |
+| 8 | 4 | 4 | 4 | 4 | 4 | 4 | 16 | fifo/clock/aging/wsclock/lru/opt |
 
 ## Regression callouts
 

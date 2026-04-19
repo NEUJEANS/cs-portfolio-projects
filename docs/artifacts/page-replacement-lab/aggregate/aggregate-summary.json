@@ -3,6 +3,9 @@
   "max_frames": 8,
   "artifact_dir": "docs/artifacts/page-replacement-lab/aggregate",
   "html_path": "docs/artifacts/page-replacement-lab/aggregate/index.html",
+  "wsclock_window_mode": "auto",
+  "wsclock_window_override": null,
+  "wsclock_window_description": "auto (max(4, frames * 2))",
   "summary": {
     "workload_count": 7,
     "preset_count": 4,

@@ -3,6 +3,9 @@
   "max_frames": 8,
   "window_size": 8,
   "phase_threshold": 0.45,
+  "wsclock_window_mode": "auto",
+  "wsclock_window_override": null,
+  "wsclock_window_description": "auto (max(4, frames * 2))",
   "left": {
     "workload": "mobile-app-session",
     "description": "custom imported trace from projects/page-replacement-lab/custom-traces/mobile-app-session.txt",
@@ -136,6 +139,7 @@
       "frame_results": [
         {
           "frame_count": 3,
+          "wsclock_window": 6,
           "algorithms": {
             "fifo": {
               "page_faults": 53,
@@ -171,6 +175,7 @@
         },
         {
           "frame_count": 4,
+          "wsclock_window": 8,
           "algorithms": {
             "fifo": {
               "page_faults": 50,
@@ -206,6 +211,7 @@
         },
         {
           "frame_count": 5,
+          "wsclock_window": 10,
           "algorithms": {
             "fifo": {
               "page_faults": 44,
@@ -241,6 +247,7 @@
         },
         {
           "frame_count": 6,
+          "wsclock_window": 12,
           "algorithms": {
             "fifo": {
               "page_faults": 41,
@@ -276,6 +283,7 @@
         },
         {
           "frame_count": 7,
+          "wsclock_window": 14,
           "algorithms": {
             "fifo": {
               "page_faults": 41,
@@ -311,6 +319,7 @@
         },
         {
           "frame_count": 8,
+          "wsclock_window": 16,
           "algorithms": {
             "fifo": {
               "page_faults": 35,
@@ -347,6 +356,9 @@
       ],
       "fifo_belady_anomalies": [],
       "monotonicity_violations": [],
+      "wsclock_window_mode": "auto",
+      "wsclock_window_override": null,
+      "wsclock_window_description": "auto (max(4, frames * 2))",
       "reference_source": "pages-file:projects/page-replacement-lab/custom-traces/mobile-app-session.txt"
     },
     "trace_summary": {
@@ -788,6 +800,7 @@
       "frame_results": [
         {
           "frame_count": 3,
+          "wsclock_window": 6,
           "algorithms": {
             "fifo": {
               "page_faults": 24,
@@ -823,6 +836,7 @@
         },
         {
           "frame_count": 4,
+          "wsclock_window": 8,
           "algorithms": {
             "fifo": {
               "page_faults": 24,
@@ -858,6 +872,7 @@
         },
         {
           "frame_count": 5,
+          "wsclock_window": 10,
           "algorithms": {
             "fifo": {
               "page_faults": 24,
@@ -893,6 +908,7 @@
         },
         {
           "frame_count": 6,
+          "wsclock_window": 12,
           "algorithms": {
             "fifo": {
               "page_faults": 22,
@@ -928,6 +944,7 @@
         },
         {
           "frame_count": 7,
+          "wsclock_window": 14,
           "algorithms": {
             "fifo": {
               "page_faults": 22,
@@ -963,6 +980,7 @@
         },
         {
           "frame_count": 8,
+          "wsclock_window": 16,
           "algorithms": {
             "fifo": {
               "page_faults": 20,
@@ -999,6 +1017,9 @@
       ],
       "fifo_belady_anomalies": [],
       "monotonicity_violations": [],
+      "wsclock_window_mode": "auto",
+      "wsclock_window_override": null,
+      "wsclock_window_description": "auto (max(4, frames * 2))",
       "reference_source": "pages-file:projects/page-replacement-lab/custom-traces/reporting-scan-session.txt"
     },
     "trace_summary": {
@@ -1267,6 +1288,7 @@
   "frame_comparisons": [
     {
       "frame_count": 3,
+      "wsclock_window": 6,
       "left_best_algorithms": [
         "opt"
       ],
@@ -1326,6 +1348,7 @@
     },
     {
       "frame_count": 4,
+      "wsclock_window": 8,
       "left_best_algorithms": [
         "opt"
       ],
@@ -1385,6 +1408,7 @@
     },
     {
       "frame_count": 5,
+      "wsclock_window": 10,
       "left_best_algorithms": [
         "opt"
       ],
@@ -1444,6 +1468,7 @@
     },
     {
       "frame_count": 6,
+      "wsclock_window": 12,
       "left_best_algorithms": [
         "opt"
       ],
@@ -1503,6 +1528,7 @@
     },
     {
       "frame_count": 7,
+      "wsclock_window": 14,
       "left_best_algorithms": [
         "opt"
       ],
@@ -1562,6 +1588,7 @@
     },
     {
       "frame_count": 8,
+      "wsclock_window": 16,
       "left_best_algorithms": [
         "opt"
       ],

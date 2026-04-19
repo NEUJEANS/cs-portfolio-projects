@@ -1,7 +1,7 @@
-frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,best_algorithms,reference_source
-3,13,13,11,11,11,9,opt,preset:scan-then-reuse
-4,10,10,10,10,10,7,opt,preset:scan-then-reuse
-5,10,10,10,10,10,7,opt,preset:scan-then-reuse
-6,10,10,7,7,7,7,aging/wsclock/lru/opt,preset:scan-then-reuse
-7,7,7,7,7,7,7,fifo/clock/aging/wsclock/lru/opt,preset:scan-then-reuse
-8,7,7,7,7,7,7,fifo/clock/aging/wsclock/lru/opt,preset:scan-then-reuse
+frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,best_algorithms,reference_source
+3,13,13,11,11,11,9,6,opt,preset:scan-then-reuse
+4,10,10,10,10,10,7,8,opt,preset:scan-then-reuse
+5,10,10,10,10,10,7,10,opt,preset:scan-then-reuse
+6,10,10,7,7,7,7,12,aging/wsclock/lru/opt,preset:scan-then-reuse
+7,7,7,7,7,7,7,14,fifo/clock/aging/wsclock/lru/opt,preset:scan-then-reuse
+8,7,7,7,7,7,7,16,fifo/clock/aging/wsclock/lru/opt,preset:scan-then-reuse

@@ -16,6 +16,7 @@
 - [x] gallery support for imported custom traces with per-workload trace-summary drill-down cards
 - [x] regression coverage for imported gallery workloads and trace-summary bundle paths
 - [x] simplified clean-page WSClock policy threaded through compare / study / gallery / aggregate / trace-compare outputs
+- [x] tunable WSClock working-set window (`--wsclock-window`) propagated through CLI output and exported artifacts
 
 ## Current demo-ready flow
 - [x] list built-in workloads and larger trace benchmarks for an interview or portfolio walkthrough
@@ -32,7 +33,7 @@
 ## Next vertical slices
 - [x] add aging-style page replacement for stronger systems realism
 - [x] add working-set style policies for stronger systems realism
-- [ ] add dirty-page-aware WSClock refinement or a tunable working-set window
+- [ ] add dirty-page-aware WSClock refinement with dirty-bit-aware cleaning or adaptive tau heuristics
 - [x] add cross-workload aggregate comparison charts for slide-ready summaries
 - [x] add a trace-summary or reuse-distance helper for imported workloads
 - [x] add SVG/HTML trace-summary cards for portfolio slides

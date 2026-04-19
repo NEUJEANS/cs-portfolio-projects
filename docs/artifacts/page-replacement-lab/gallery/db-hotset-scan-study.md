@@ -3,6 +3,7 @@
 - workload: benchmark db-hotset-scan — dashboard-style hot pages interrupted by analytics scans and checkpoint bursts
 - frame range: 3 to 8
 - reference length: 84
+- WSClock window: auto (max(4, frames * 2))
 - best average faults: opt (32.33)
 
 ## Reference string
@@ -19,14 +20,14 @@
 
 ## Faults by frame count
 
-| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | Winner |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 72 | 72 | 62 | 62 | 62 | 48 | opt |
-| 4 | 59 | 54 | 47 | 47 | 47 | 37 | opt |
-| 5 | 34 | 34 | 34 | 34 | 34 | 28 | opt |
-| 6 | 34 | 34 | 34 | 34 | 34 | 27 | opt |
-| 7 | 34 | 34 | 34 | 34 | 34 | 27 | opt |
-| 8 | 34 | 34 | 31 | 32 | 31 | 27 | opt |
+| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| 3 | 72 | 72 | 62 | 62 | 62 | 48 | 6 | opt |
+| 4 | 59 | 54 | 47 | 47 | 47 | 37 | 8 | opt |
+| 5 | 34 | 34 | 34 | 34 | 34 | 28 | 10 | opt |
+| 6 | 34 | 34 | 34 | 34 | 34 | 27 | 12 | opt |
+| 7 | 34 | 34 | 34 | 34 | 34 | 27 | 14 | opt |
+| 8 | 34 | 34 | 31 | 32 | 31 | 27 | 16 | opt |
 
 ## Regression callouts
 

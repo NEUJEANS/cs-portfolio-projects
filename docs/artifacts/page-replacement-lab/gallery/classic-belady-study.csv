@@ -1,7 +1,7 @@
-frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,best_algorithms,reference_source
-3,9,9,10,10,10,7,opt,preset:classic-belady
-4,10,10,8,8,8,6,opt,preset:classic-belady
-5,5,5,5,5,5,5,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady
-6,5,5,5,5,5,5,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady
-7,5,5,5,5,5,5,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady
-8,5,5,5,5,5,5,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady
+frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,best_algorithms,reference_source
+3,9,9,10,10,10,7,6,opt,preset:classic-belady
+4,10,10,8,8,8,6,8,opt,preset:classic-belady
+5,5,5,5,5,5,5,10,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady
+6,5,5,5,5,5,5,12,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady
+7,5,5,5,5,5,5,14,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady
+8,5,5,5,5,5,5,16,fifo/clock/aging/wsclock/lru/opt,preset:classic-belady

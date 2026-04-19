@@ -125,7 +125,8 @@
 <text x="804.00" y="344.50" font-size="11" text-anchor="middle" fill="#10b981">27</text>
   <rect x="64" y="514" width="952" height="142" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
 <text x="84" y="545" font-size="18" fill="#0f172a">workload: benchmark db-hotset-scan — dashboard-style hot pages interrupted by analytics scans and checkpoint bursts</text>
-<text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | best average faults: OPT (32.33)</text>
-<text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
-<text x="84" y="629" font-size="18" fill="#0f172a">Other regressions: none detected</text>
+<text x="84" y="573" font-size="18" fill="#0f172a">frame range: 3 to 8 frames | WSClock τ auto (max(4, frames * 2))</text>
+<text x="84" y="601" font-size="18" fill="#0f172a">best average faults: OPT (32.33)</text>
+<text x="84" y="629" font-size="18" fill="#0f172a">FIFO anomaly: none in this frame range</text>
+<text x="84" y="657" font-size="18" fill="#0f172a">Other regressions: none detected</text>
 </svg>

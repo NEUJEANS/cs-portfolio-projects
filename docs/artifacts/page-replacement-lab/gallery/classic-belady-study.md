@@ -3,6 +3,7 @@
 - workload: preset classic-belady — classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames
 - frame range: 3 to 8
 - reference length: 12
+- WSClock window: auto (max(4, frames * 2))
 - best average faults: opt (5.50)
 
 ## Reference string
@@ -19,14 +20,14 @@
 
 ## Faults by frame count
 
-| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | Winner |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 9 | 9 | 10 | 10 | 10 | 7 | opt |
-| 4 | 10 | 10 | 8 | 8 | 8 | 6 | opt |
-| 5 | 5 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/wsclock/lru/opt |
-| 6 | 5 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/wsclock/lru/opt |
-| 7 | 5 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/wsclock/lru/opt |
-| 8 | 5 | 5 | 5 | 5 | 5 | 5 | fifo/clock/aging/wsclock/lru/opt |
+| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| 3 | 9 | 9 | 10 | 10 | 10 | 7 | 6 | opt |
+| 4 | 10 | 10 | 8 | 8 | 8 | 6 | 8 | opt |
+| 5 | 5 | 5 | 5 | 5 | 5 | 5 | 10 | fifo/clock/aging/wsclock/lru/opt |
+| 6 | 5 | 5 | 5 | 5 | 5 | 5 | 12 | fifo/clock/aging/wsclock/lru/opt |
+| 7 | 5 | 5 | 5 | 5 | 5 | 5 | 14 | fifo/clock/aging/wsclock/lru/opt |
+| 8 | 5 | 5 | 5 | 5 | 5 | 5 | 16 | fifo/clock/aging/wsclock/lru/opt |
 
 ## Regression callouts
 

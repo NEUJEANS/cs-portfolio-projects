@@ -88,6 +88,7 @@
   "frame_results": [
     {
       "frame_count": 3,
+      "wsclock_window": 6,
       "algorithms": {
         "fifo": {
           "page_faults": 72,
@@ -123,6 +124,7 @@
     },
     {
       "frame_count": 4,
+      "wsclock_window": 8,
       "algorithms": {
         "fifo": {
           "page_faults": 59,
@@ -158,6 +160,7 @@
     },
     {
       "frame_count": 5,
+      "wsclock_window": 10,
       "algorithms": {
         "fifo": {
           "page_faults": 34,
@@ -193,6 +196,7 @@
     },
     {
       "frame_count": 6,
+      "wsclock_window": 12,
       "algorithms": {
         "fifo": {
           "page_faults": 34,
@@ -228,6 +232,7 @@
     },
     {
       "frame_count": 7,
+      "wsclock_window": 14,
       "algorithms": {
         "fifo": {
           "page_faults": 34,
@@ -263,6 +268,7 @@
     },
     {
       "frame_count": 8,
+      "wsclock_window": 16,
       "algorithms": {
         "fifo": {
           "page_faults": 34,
@@ -299,5 +305,8 @@
   ],
   "fifo_belady_anomalies": [],
   "monotonicity_violations": [],
+  "wsclock_window_mode": "auto",
+  "wsclock_window_override": null,
+  "wsclock_window_description": "auto (max(4, frames * 2))",
   "reference_source": "benchmark:db-hotset-scan"
 }

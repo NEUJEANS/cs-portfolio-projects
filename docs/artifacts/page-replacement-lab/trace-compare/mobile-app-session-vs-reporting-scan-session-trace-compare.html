@@ -53,6 +53,7 @@
           <li><strong>8</strong> window size</li>
           <li><strong>6</strong> left phase hints</li>
           <li><strong>2</strong> right phase hints</li>
+          <li><strong>auto (max(4, frames * 2))</strong> WSClock τ</li>
         </ul>
         <p class="muted">Downloads: <a href="mobile-app-session-vs-reporting-scan-session-trace-compare.md">Markdown</a> · <a href="mobile-app-session-vs-reporting-scan-session-trace-compare.svg">SVG</a> · <a href="mobile-app-session-vs-reporting-scan-session-trace-compare.csv">CSV</a> · <a href="mobile-app-session-vs-reporting-scan-session-trace-compare.json">JSON</a></p>
       </section>
@@ -183,12 +184,13 @@
           <thead>
             <tr>
               <th>Frames</th>
+              <th>WSClock τ</th>
               <th>Left winner</th>
               <th>Right winner</th>
               <th>FIFO L/R</th><th>CLOCK L/R</th><th>AGING L/R</th><th>WSCLOCK L/R</th><th>LRU L/R</th><th>OPT L/R</th>
             </tr>
           </thead>
-          <tbody><tr><td>3</td><td>OPT</td><td>OPT</td><td>53/24</td><td>53/24</td><td>51/24</td><td>51/24</td><td>51/24</td><td>37/18</td></tr><tr><td>4</td><td>OPT</td><td>OPT</td><td>50/24</td><td>50/24</td><td>48/24</td><td>48/24</td><td>48/24</td><td>33/18</td></tr><tr><td>5</td><td>OPT</td><td>OPT</td><td>44/24</td><td>44/24</td><td>38/24</td><td>38/24</td><td>38/24</td><td>31/18</td></tr><tr><td>6</td><td>OPT</td><td>OPT</td><td>41/22</td><td>41/22</td><td>37/20</td><td>37/20</td><td>37/20</td><td>30/18</td></tr><tr><td>7</td><td>OPT</td><td>OPT</td><td>41/22</td><td>41/22</td><td>35/20</td><td>35/20</td><td>35/20</td><td>30/18</td></tr><tr><td>8</td><td>OPT</td><td>AGING/WSCLOCK/LRU/OPT</td><td>35/20</td><td>35/20</td><td>35/18</td><td>35/18</td><td>35/18</td><td>30/18</td></tr></tbody>
+          <tbody><tr><td>3</td><td>6</td><td>OPT</td><td>OPT</td><td>53/24</td><td>53/24</td><td>51/24</td><td>51/24</td><td>51/24</td><td>37/18</td></tr><tr><td>4</td><td>8</td><td>OPT</td><td>OPT</td><td>50/24</td><td>50/24</td><td>48/24</td><td>48/24</td><td>48/24</td><td>33/18</td></tr><tr><td>5</td><td>10</td><td>OPT</td><td>OPT</td><td>44/24</td><td>44/24</td><td>38/24</td><td>38/24</td><td>38/24</td><td>31/18</td></tr><tr><td>6</td><td>12</td><td>OPT</td><td>OPT</td><td>41/22</td><td>41/22</td><td>37/20</td><td>37/20</td><td>37/20</td><td>30/18</td></tr><tr><td>7</td><td>14</td><td>OPT</td><td>OPT</td><td>41/22</td><td>41/22</td><td>35/20</td><td>35/20</td><td>35/20</td><td>30/18</td></tr><tr><td>8</td><td>16</td><td>OPT</td><td>AGING/WSCLOCK/LRU/OPT</td><td>35/20</td><td>35/20</td><td>35/18</td><td>35/18</td><td>35/18</td><td>30/18</td></tr></tbody>
         </table>
       </section>
       <div class="two-up">

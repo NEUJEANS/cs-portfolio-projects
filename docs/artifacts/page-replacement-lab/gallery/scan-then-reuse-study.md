@@ -3,6 +3,7 @@
 - workload: preset scan-then-reuse — large sequential scan followed by a tighter reuse window to show cache pollution pressure
 - frame range: 3 to 8
 - reference length: 15
+- WSClock window: auto (max(4, frames * 2))
 - best average faults: opt (7.33)
 
 ## Reference string
@@ -19,14 +20,14 @@
 
 ## Faults by frame count
 
-| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | Winner |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 13 | 13 | 11 | 11 | 11 | 9 | opt |
-| 4 | 10 | 10 | 10 | 10 | 10 | 7 | opt |
-| 5 | 10 | 10 | 10 | 10 | 10 | 7 | opt |
-| 6 | 10 | 10 | 7 | 7 | 7 | 7 | aging/wsclock/lru/opt |
-| 7 | 7 | 7 | 7 | 7 | 7 | 7 | fifo/clock/aging/wsclock/lru/opt |
-| 8 | 7 | 7 | 7 | 7 | 7 | 7 | fifo/clock/aging/wsclock/lru/opt |
+| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| 3 | 13 | 13 | 11 | 11 | 11 | 9 | 6 | opt |
+| 4 | 10 | 10 | 10 | 10 | 10 | 7 | 8 | opt |
+| 5 | 10 | 10 | 10 | 10 | 10 | 7 | 10 | opt |
+| 6 | 10 | 10 | 7 | 7 | 7 | 7 | 12 | aging/wsclock/lru/opt |
+| 7 | 7 | 7 | 7 | 7 | 7 | 7 | 14 | fifo/clock/aging/wsclock/lru/opt |
+| 8 | 7 | 7 | 7 | 7 | 7 | 7 | 16 | fifo/clock/aging/wsclock/lru/opt |
 
 ## Regression callouts
 

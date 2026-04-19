@@ -5,6 +5,7 @@
 - frame range: 3 to 8
 - window size: 8
 - phase threshold: 0.45
+- WSClock window: auto (max(4, frames * 2))
 
 ## Trace overview
 
@@ -26,14 +27,14 @@
 
 ## Frame-by-frame comparison
 
-| Frames | Left winner | Right winner | FIFO L/R | CLOCK L/R | AGING L/R | WSCLOCK L/R | LRU L/R | OPT L/R |
-| ---: | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 3 | OPT | OPT | 53/24 | 53/24 | 51/24 | 51/24 | 51/24 | 37/18 |
-| 4 | OPT | OPT | 50/24 | 50/24 | 48/24 | 48/24 | 48/24 | 33/18 |
-| 5 | OPT | OPT | 44/24 | 44/24 | 38/24 | 38/24 | 38/24 | 31/18 |
-| 6 | OPT | OPT | 41/22 | 41/22 | 37/20 | 37/20 | 37/20 | 30/18 |
-| 7 | OPT | OPT | 41/22 | 41/22 | 35/20 | 35/20 | 35/20 | 30/18 |
-| 8 | OPT | AGING/WSCLOCK/LRU/OPT | 35/20 | 35/20 | 35/18 | 35/18 | 35/18 | 30/18 |
+| Frames | WSClock τ | Left winner | Right winner | FIFO L/R | CLOCK L/R | AGING L/R | WSCLOCK L/R | LRU L/R | OPT L/R |
+| ---: | ---: | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 3 | 6 | OPT | OPT | 53/24 | 53/24 | 51/24 | 51/24 | 51/24 | 37/18 |
+| 4 | 8 | OPT | OPT | 50/24 | 50/24 | 48/24 | 48/24 | 48/24 | 33/18 |
+| 5 | 10 | OPT | OPT | 44/24 | 44/24 | 38/24 | 38/24 | 38/24 | 31/18 |
+| 6 | 12 | OPT | OPT | 41/22 | 41/22 | 37/20 | 37/20 | 37/20 | 30/18 |
+| 7 | 14 | OPT | OPT | 41/22 | 41/22 | 35/20 | 35/20 | 35/20 | 30/18 |
+| 8 | 16 | OPT | AGING/WSCLOCK/LRU/OPT | 35/20 | 35/20 | 35/18 | 35/18 | 35/18 | 30/18 |
 
 ## mobile-app-session locality snapshot
 

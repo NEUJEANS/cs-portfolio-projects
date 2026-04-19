@@ -108,7 +108,8 @@
 <text x="804.00" y="316.00" font-size="11" text-anchor="middle" fill="#10b981">5</text>
   <rect x="64" y="514" width="952" height="142" rx="20" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
 <text x="84" y="545" font-size="18" fill="#0f172a">workload: preset classic-belady — classic Belady anomaly reference string that makes FIFO regress from 3 to 4 frames</text>
-<text x="84" y="573" font-size="18" fill="#0f172a">frame range: 2 to 6 frames | best average faults: OPT (6.40)</text>
-<text x="84" y="601" font-size="18" fill="#0f172a">FIFO anomaly: 3 -&gt; 4 frames, 9 -&gt; 10 faults</text>
-<text x="84" y="629" font-size="18" fill="#0f172a">Other regression: CLOCK 3 -&gt; 4 frames, 9 -&gt; 10 faults</text>
+<text x="84" y="573" font-size="18" fill="#0f172a">frame range: 2 to 6 frames | WSClock τ auto (max(4, frames * 2))</text>
+<text x="84" y="601" font-size="18" fill="#0f172a">best average faults: OPT (6.40)</text>
+<text x="84" y="629" font-size="18" fill="#0f172a">FIFO anomaly: 3 -&gt; 4 frames, 9 -&gt; 10 faults</text>
+<text x="84" y="657" font-size="18" fill="#0f172a">Other regression: CLOCK 3 -&gt; 4 frames, 9 -&gt; 10 faults</text>
 </svg>

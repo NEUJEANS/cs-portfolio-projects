@@ -1,10 +1,10 @@
 # Page Replacement Study Report
 
 - workload: benchmark compiler-phase-shift — larger compiler-style trace with parser hot loops, a code-generation scan, and optimizer table bursts
-- frame range: 3 to 8
+- frame range: 4 to 8
 - reference length: 72
-- WSClock window: auto (max(4, frames * 2))
-- best average faults: opt (36.00)
+- WSClock window: fixed 1 reference
+- best average faults: opt (33.40)
 
 ## Reference string
 
@@ -15,22 +15,24 @@
 ## Key takeaways
 
 - FIFO stays monotonic across this frame range.
-- No non-FIFO regressions appear in this frame range.
+- wsclock also regresses at frames 4 -> 5 (52 -> 54).
 - opt has the lowest average page-fault count across the full frame sweep.
 
 ## Faults by frame count
 
 | Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 72 | 72 | 72 | 72 | 72 | 49 | 6 | opt |
-| 4 | 60 | 60 | 52 | 52 | 52 | 42 | 8 | opt |
-| 5 | 60 | 58 | 52 | 52 | 52 | 35 | 10 | opt |
-| 6 | 34 | 34 | 32 | 32 | 32 | 30 | 12 | opt |
-| 7 | 34 | 34 | 32 | 32 | 32 | 30 | 14 | opt |
-| 8 | 30 | 30 | 30 | 30 | 30 | 30 | 16 | fifo/clock/aging/wsclock/lru/opt |
+| 4 | 60 | 60 | 52 | 52 | 52 | 42 | 1 | opt |
+| 5 | 60 | 58 | 52 | 54 | 52 | 35 | 1 | opt |
+| 6 | 34 | 34 | 32 | 32 | 32 | 30 | 1 | opt |
+| 7 | 34 | 34 | 32 | 34 | 32 | 30 | 1 | opt |
+| 8 | 30 | 30 | 30 | 30 | 30 | 30 | 1 | fifo/clock/aging/wsclock/lru/opt |
 
 ## Regression callouts
 
 - FIFO Belady anomalies: none in this study.
 
-- Other fault regressions: none in this study.
+### Other fault regressions
+
+- wsclock: frames 4 -> 5 52 -> 54 (+2)
+- wsclock: frames 6 -> 7 32 -> 34 (+2)

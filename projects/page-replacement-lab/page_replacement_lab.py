@@ -92,6 +92,29 @@ WS_CLOCK_WINDOW_FLOOR = 4
 ALGORITHMS = ("fifo", "clock", "aging", "wsclock", "lru", "opt")
 
 
+def wsclock_window_mode(wsclock_window: int | None) -> str:
+    return "fixed" if wsclock_window is not None else "auto"
+
+
+def describe_wsclock_window_setting(wsclock_window: int | None) -> str:
+    if wsclock_window is None:
+        return (
+            "auto (max("
+            f"{WS_CLOCK_WINDOW_FLOOR}, frames * {WS_CLOCK_WINDOW_MULTIPLIER})"
+            ")"
+        )
+    unit = "reference" if wsclock_window == 1 else "references"
+    return f"fixed {wsclock_window} {unit}"
+
+
+def resolve_wsclock_window(frame_count: int, wsclock_window: int | None = None) -> int:
+    if wsclock_window is not None:
+        if wsclock_window <= 0:
+            raise InputError("wsclock window must be positive")
+        return wsclock_window
+    return max(WS_CLOCK_WINDOW_FLOOR, frame_count * WS_CLOCK_WINDOW_MULTIPLIER)
+
+
 @dataclass(slots=True)
 class SimulationStep:
     index: int
@@ -313,11 +336,11 @@ def simulate_aging(reference_string: Iterable[int], frame_count: int) -> Simulat
     )
 
 
-def wsclock_window(frame_count: int) -> int:
-    return max(WS_CLOCK_WINDOW_FLOOR, frame_count * WS_CLOCK_WINDOW_MULTIPLIER)
-
-
-def simulate_wsclock(reference_string: Iterable[int], frame_count: int) -> SimulationResult:
+def simulate_wsclock(
+    reference_string: Iterable[int],
+    frame_count: int,
+    wsclock_window: int | None = None,
+) -> SimulationResult:
     reference = validate_reference(reference_string, frame_count)
     frames: list[int | None] = [None] * frame_count
     reference_bits = [0] * frame_count
@@ -326,7 +349,7 @@ def simulate_wsclock(reference_string: Iterable[int], frame_count: int) -> Simul
     hand = 0
     faults = 0
     steps: list[SimulationStep] = []
-    window = wsclock_window(frame_count)
+    window = resolve_wsclock_window(frame_count, wsclock_window)
 
     for index, page in enumerate(reference):
         evicted: int | None = None
@@ -523,19 +546,36 @@ SIMULATORS = {
 }
 
 
-def simulate(algorithm: str, reference_string: Iterable[int], frame_count: int) -> SimulationResult:
+def simulate(
+    algorithm: str,
+    reference_string: Iterable[int],
+    frame_count: int,
+    *,
+    wsclock_window: int | None = None,
+) -> SimulationResult:
     if algorithm not in SIMULATORS:
         raise InputError(f"unsupported algorithm: {algorithm}")
+    if algorithm == "wsclock":
+        return simulate_wsclock(reference_string, frame_count, wsclock_window=wsclock_window)
     return SIMULATORS[algorithm](reference_string, frame_count)
 
 
-def compare_algorithms(reference_string: Iterable[int], frame_count: int) -> list[SimulationResult]:
+def compare_algorithms(
+    reference_string: Iterable[int],
+    frame_count: int,
+    *,
+    wsclock_window: int | None = None,
+) -> list[SimulationResult]:
     reference = validate_reference(reference_string, frame_count)
-    return [simulate(name, reference, frame_count) for name in ALGORITHMS]
+    return [simulate(name, reference, frame_count, wsclock_window=wsclock_window) for name in ALGORITHMS]
 
 
 def study_frame_counts(
-    reference_string: Iterable[int], min_frames: int, max_frames: int
+    reference_string: Iterable[int],
+    min_frames: int,
+    max_frames: int,
+    *,
+    wsclock_window: int | None = None,
 ) -> dict:
     reference = list(reference_string)
     if min_frames <= 0 or max_frames <= 0:
@@ -550,10 +590,19 @@ def study_frame_counts(
     monotonicity_violations: list[dict] = []
 
     for frame_count in range(min_frames, max_frames + 1):
-        run = {algorithm: simulate(algorithm, reference, frame_count) for algorithm in ALGORITHMS}
+        run = {
+            algorithm: simulate(
+                algorithm,
+                reference,
+                frame_count,
+                wsclock_window=wsclock_window,
+            )
+            for algorithm in ALGORITHMS
+        }
         frame_results.append(
             {
                 "frame_count": frame_count,
+                "wsclock_window": resolve_wsclock_window(frame_count, wsclock_window),
                 "algorithms": {
                     name: {
                         "page_faults": result.page_faults,
@@ -590,6 +639,9 @@ def study_frame_counts(
         "frame_results": frame_results,
         "fifo_belady_anomalies": fifo_anomalies,
         "monotonicity_violations": monotonicity_violations,
+        "wsclock_window_mode": wsclock_window_mode(wsclock_window),
+        "wsclock_window_override": wsclock_window,
+        "wsclock_window_description": describe_wsclock_window_setting(wsclock_window),
     }
 
 
@@ -724,6 +776,17 @@ def parse_reference_args(
     return ParsedReference(reference_string=raw_pages, source="custom")
 
 
+def add_wsclock_window_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--wsclock-window",
+        type=int,
+        help=(
+            "override WSClock tau / working-set age window in references; "
+            "default is auto max(4, frames * 2)"
+        ),
+    )
+
+
 def add_reference_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--page", action="append", default=[])
     parser.add_argument("--pages-file")
@@ -749,6 +812,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate_parser.add_argument("algorithm", choices=ALGORITHMS)
     simulate_parser.add_argument("--frames", type=int, required=True)
     add_reference_arguments(simulate_parser)
+    add_wsclock_window_argument(simulate_parser)
     simulate_parser.add_argument("--json", action="store_true")
     simulate_parser.add_argument(
         "--show-steps",
@@ -762,6 +826,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare_parser.add_argument("--frames", type=int, required=True)
     add_reference_arguments(compare_parser)
+    add_wsclock_window_argument(compare_parser)
     compare_parser.add_argument("--json", action="store_true")
 
     study_parser = subparsers.add_parser(
@@ -771,6 +836,7 @@ def build_parser() -> argparse.ArgumentParser:
     study_parser.add_argument("--min-frames", type=int, required=True)
     study_parser.add_argument("--max-frames", type=int, required=True)
     add_reference_arguments(study_parser)
+    add_wsclock_window_argument(study_parser)
     study_parser.add_argument("--json", action="store_true")
     study_parser.add_argument("--markdown-out", type=Path, help="write a Markdown study report")
     study_parser.add_argument("--svg-out", type=Path, help="write a self-contained SVG study chart")
@@ -782,6 +848,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gallery_parser.add_argument("--min-frames", type=int, required=True)
     gallery_parser.add_argument("--max-frames", type=int, required=True)
+    add_wsclock_window_argument(gallery_parser)
     gallery_parser.add_argument(
         "--preset",
         dest="gallery_presets",
@@ -828,6 +895,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     aggregate_parser.add_argument("--min-frames", type=int, required=True)
     aggregate_parser.add_argument("--max-frames", type=int, required=True)
+    add_wsclock_window_argument(aggregate_parser)
     aggregate_parser.add_argument(
         "--preset",
         dest="aggregate_presets",
@@ -908,6 +976,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trace_compare_parser.add_argument("--min-frames", type=int, required=True)
     trace_compare_parser.add_argument("--max-frames", type=int, required=True)
+    add_wsclock_window_argument(trace_compare_parser)
     trace_compare_parser.add_argument(
         "--pages-file",
         dest="trace_compare_pages_files",
@@ -963,6 +1032,7 @@ def format_simulation_text(
     *,
     show_steps: bool = False,
     reference_source: str = "custom",
+    wsclock_window: int | None = None,
 ) -> str:
     lines = [
         f"algorithm: {result.algorithm}",
@@ -970,6 +1040,11 @@ def format_simulation_text(
         format_reference_source(reference_source),
         "reference: " + " ".join(str(page) for page in result.reference_string),
     ]
+    if result.algorithm == "wsclock":
+        lines.append(
+            f"wsclock window: {describe_wsclock_window_setting(wsclock_window)} "
+            f"(effective {resolve_wsclock_window(result.frame_count, wsclock_window)})"
+        )
     if show_steps:
         lines.append("steps:")
         for step in result.steps:
@@ -990,12 +1065,14 @@ def format_compare_text(
     reference: list[int],
     *,
     reference_source: str = "custom",
+    wsclock_window: int | None = None,
 ) -> str:
     algorithm_width = max(len("algorithm"), *(len(result.algorithm) for result in results))
     lines = [
         f"frames: {frame_count}",
         format_reference_source(reference_source),
         "reference: " + " ".join(str(page) for page in reference),
+        f"wsclock window: {describe_wsclock_window_setting(wsclock_window)} (effective {resolve_wsclock_window(frame_count, wsclock_window)})",
         f"{'algorithm':<{algorithm_width}}  faults  hits  hit-rate",
     ]
     for result in results:
@@ -1016,6 +1093,7 @@ def format_study_text(payload: dict, *, reference_source: str = "custom") -> str
     lines = [
         format_reference_source(reference_source),
         "reference: " + " ".join(str(page) for page in payload["reference_string"]),
+        f"wsclock window: {payload['wsclock_window_description']}",
         " ".join(
             [f"{'frames':<{column_width}}"]
             + [f"{algorithm:<{column_width}}" for algorithm in algorithms]
@@ -1073,6 +1151,7 @@ def build_study_rows(payload: dict) -> list[dict[str, str | int]]:
         )
         summary_row: dict[str, str | int] = {
             "frame_count": row["frame_count"],
+            "wsclock_window": row["wsclock_window"],
             "best_algorithms": winners,
         }
         for algorithm in ALGORITHMS:
@@ -1131,6 +1210,7 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
             fieldnames=[
                 "frames",
                 *fault_fieldnames,
+                "wsclock_window",
                 "best_algorithms",
                 "reference_source",
             ],
@@ -1140,6 +1220,7 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
         for row in rows:
             payload_row = {
                 "frames": row["frame_count"],
+                "wsclock_window": row["wsclock_window"],
                 "best_algorithms": row["best_algorithms"],
                 "reference_source": reference_source,
             }
@@ -1165,6 +1246,7 @@ def format_study_markdown(payload: dict, *, reference_source: str = "custom") ->
         f"- workload: {describe_reference_label(reference_source)}",
         f"- frame range: {rows[0]['frame_count']} to {rows[-1]['frame_count']}",
         f"- reference length: {len(payload['reference_string'])}",
+        f"- WSClock window: {payload['wsclock_window_description']}",
         f"- best average faults: {average_winners} ({best_average:.2f})",
         "",
         "## Reference string",
@@ -1202,8 +1284,8 @@ def format_study_markdown(payload: dict, *, reference_source: str = "custom") ->
     lines.append(
         f"- {average_winners} has the lowest average page-fault count across the full frame sweep."
     )
-    header_cells = ["Frames", *[algorithm.upper() for algorithm in ALGORITHMS], "Winner"]
-    separator_cells = ["---:", *["---:" for _ in ALGORITHMS], ":---"]
+    header_cells = ["Frames", *[algorithm.upper() for algorithm in ALGORITHMS], "WSClock τ", "Winner"]
+    separator_cells = ["---:", *["---:" for _ in ALGORITHMS], "---:", ":---"]
     lines.extend(
         [
             "",
@@ -1219,6 +1301,7 @@ def format_study_markdown(payload: dict, *, reference_source: str = "custom") ->
             + " | ".join(
                 [str(row["frame_count"])]
                 + [str(row[f"{algorithm}_faults"]) for algorithm in ALGORITHMS]
+                + [str(row["wsclock_window"])]
                 + [str(row["best_algorithms"])]
             )
             + " |"
@@ -1371,7 +1454,8 @@ def format_study_svg(
     )
     summary_lines = [
         f"workload: {describe_reference_label(reference_source)}",
-        f"frame range: {frame_counts[0]} to {frame_counts[-1]} frames | best average faults: {average_winners} ({best_average:.2f})",
+        f"frame range: {frame_counts[0]} to {frame_counts[-1]} frames | WSClock τ {payload['wsclock_window_description']}",
+        f"best average faults: {average_winners} ({best_average:.2f})",
     ]
     fifo_anomalies = payload["fifo_belady_anomalies"]
     if fifo_anomalies:
@@ -1542,11 +1626,17 @@ def build_gallery_run(
     *,
     min_frames: int,
     max_frames: int,
+    wsclock_window: int | None,
     artifact_dir: Path,
     html_dir: Path,
 ) -> dict:
     reference_source = workload.reference_source
-    payload = study_frame_counts(workload.reference_string, min_frames, max_frames)
+    payload = study_frame_counts(
+        workload.reference_string,
+        min_frames,
+        max_frames,
+        wsclock_window=wsclock_window,
+    )
     payload["reference_source"] = reference_source
     stem = f"{workload.name}-study"
     markdown_path = artifact_dir / f"{stem}.md"
@@ -1614,6 +1704,7 @@ def format_gallery_text(gallery_runs: list[dict], *, html_path: Path) -> str:
     lines = [
         f"gallery workloads: {len(gallery_runs)}",
         f"html report: {html_path}",
+        f"wsclock window: {gallery_runs[0]['payload']['wsclock_window_description']}" if gallery_runs else "wsclock window: n/a",
     ]
     for run in gallery_runs:
         winners = "/".join(algorithm.upper() for algorithm in run["best_average_winners"])
@@ -1892,8 +1983,14 @@ def build_aggregate_run(
     *,
     min_frames: int,
     max_frames: int,
+    wsclock_window: int | None,
 ) -> dict:
-    payload = study_frame_counts(workload.reference_string, min_frames, max_frames)
+    payload = study_frame_counts(
+        workload.reference_string,
+        min_frames,
+        max_frames,
+        wsclock_window=wsclock_window,
+    )
     payload["reference_source"] = workload.reference_source
     average_faults = summarize_fault_averages(payload)
     reference_length = len(workload.reference_string)
@@ -2019,6 +2116,9 @@ def build_aggregate_payload(
         "max_frames": max_frames,
         "artifact_dir": str(artifact_dir),
         "html_path": str(html_path),
+        "wsclock_window_mode": aggregate_runs[0]["payload"]["wsclock_window_mode"],
+        "wsclock_window_override": aggregate_runs[0]["payload"]["wsclock_window_override"],
+        "wsclock_window_description": aggregate_runs[0]["payload"]["wsclock_window_description"],
         "summary": {
             **summary,
             "overall_average_fault_rates": {
@@ -2199,6 +2299,7 @@ def format_aggregate_text(aggregate_runs: list[dict], *, html_path: Path, svg_pa
         f"aggregate workloads: {summary['workload_count']}",
         f"html report: {html_path}",
         f"svg chart: {svg_path}",
+        f"wsclock window: {aggregate_runs[0]['payload']['wsclock_window_description']}" if aggregate_runs else "wsclock window: n/a",
         f"overall best normalized average fault rate: {overall_winners}",
     ]
     for run in aggregate_runs:
@@ -2300,6 +2401,7 @@ def format_aggregate_html(
           <li><strong>{min_frames}–{max_frames}</strong> frame range</li>
           <li><strong>{'/'.join(algorithm.upper() for algorithm in summary['overall_best_rate_winners'])}</strong> overall normalized winner</li>
           <li><strong>{summary['fifo_anomaly_count']}</strong> FIFO anomaly workloads</li>
+          <li><strong>{escape(aggregate_runs[0]['payload']['wsclock_window_description']) if aggregate_runs else 'n/a'}</strong> WSClock τ</li>
           <li><strong>Winner tally</strong>{escape(winner_summary)}</li>
         </ul>
         <p class="downloads">Downloads: <a href="{escape(svg_filename)}">SVG chart</a> · <a href="{escape(csv_filename)}">CSV table</a> · <a href="{escape(json_filename)}">JSON payload</a></p>
@@ -2983,10 +3085,21 @@ def build_trace_compare_payload(
     max_frames: int,
     window_size: int,
     phase_threshold: float,
+    wsclock_window: int | None,
 ) -> dict:
-    left_study = study_frame_counts(left_workload.reference_string, min_frames, max_frames)
+    left_study = study_frame_counts(
+        left_workload.reference_string,
+        min_frames,
+        max_frames,
+        wsclock_window=wsclock_window,
+    )
     left_study["reference_source"] = left_workload.reference_source
-    right_study = study_frame_counts(right_workload.reference_string, min_frames, max_frames)
+    right_study = study_frame_counts(
+        right_workload.reference_string,
+        min_frames,
+        max_frames,
+        wsclock_window=wsclock_window,
+    )
     right_study["reference_source"] = right_workload.reference_source
 
     left_trace_summary = summarize_trace(
@@ -3081,6 +3194,7 @@ def build_trace_compare_payload(
         frame_comparisons.append(
             {
                 "frame_count": left_row["frame_count"],
+                "wsclock_window": left_row["wsclock_window"],
                 "left_best_algorithms": select_lowest_keys(left_faults),
                 "right_best_algorithms": select_lowest_keys(right_faults),
                 "algorithms": algorithm_rows,
@@ -3106,6 +3220,9 @@ def build_trace_compare_payload(
         "max_frames": max_frames,
         "window_size": window_size,
         "phase_threshold": round(phase_threshold, 4),
+        "wsclock_window_mode": left_study["wsclock_window_mode"],
+        "wsclock_window_override": left_study["wsclock_window_override"],
+        "wsclock_window_description": left_study["wsclock_window_description"],
         "left": {
             "workload": left_workload.name,
             "description": left_workload.description,
@@ -3192,6 +3309,7 @@ def write_trace_compare_csv(path: Path, payload: dict) -> None:
             handle,
             fieldnames=[
                 "frame_count",
+                "wsclock_window",
                 "algorithm",
                 "left_workload",
                 "right_workload",
@@ -3211,6 +3329,7 @@ def write_trace_compare_csv(path: Path, payload: dict) -> None:
                 writer.writerow(
                     {
                         "frame_count": frame["frame_count"],
+                        "wsclock_window": frame["wsclock_window"],
                         "algorithm": algorithm,
                         "left_workload": payload["left"]["workload"],
                         "right_workload": payload["right"]["workload"],
@@ -3237,6 +3356,7 @@ def format_trace_compare_markdown(payload: dict) -> str:
         f"- frame range: {payload['min_frames']} to {payload['max_frames']}",
         f"- window size: {payload['window_size']}",
         f"- phase threshold: {payload['phase_threshold']:.2f}",
+        f"- WSClock window: {payload['wsclock_window_description']}",
         "",
         "## Trace overview",
         "",
@@ -3265,8 +3385,8 @@ def format_trace_compare_markdown(payload: dict) -> str:
             f"{format_percentage(entry['left_average_fault_rate'])} | {format_percentage(entry['right_average_fault_rate'])} |"
         )
 
-    frame_header_cells = ["Frames", "Left winner", "Right winner", *[f"{algorithm.upper()} L/R" for algorithm in ALGORITHMS]]
-    frame_separator_cells = ["---:", ":---", ":---", *[":---" for _ in ALGORITHMS]]
+    frame_header_cells = ["Frames", "WSClock τ", "Left winner", "Right winner", *[f"{algorithm.upper()} L/R" for algorithm in ALGORITHMS]]
+    frame_separator_cells = ["---:", "---:", ":---", ":---", *[":---" for _ in ALGORITHMS]]
     lines.extend(
         [
             "",
@@ -3282,7 +3402,7 @@ def format_trace_compare_markdown(payload: dict) -> str:
             for algorithm in ALGORITHMS
         ]
         lines.append(
-            f"| {frame['frame_count']} | {'/'.join(algorithm.upper() for algorithm in frame['left_best_algorithms'])} | "
+            f"| {frame['frame_count']} | {frame['wsclock_window']} | {'/'.join(algorithm.upper() for algorithm in frame['left_best_algorithms'])} | "
             f"{'/'.join(algorithm.upper() for algorithm in frame['right_best_algorithms'])} | "
             f"{' | '.join(frame_fault_pairs)} |"
         )
@@ -3553,6 +3673,7 @@ def format_trace_compare_html(
     frame_rows = ''.join(
         '<tr>'
         f'<td>{frame["frame_count"]}</td>'
+        f'<td>{frame["wsclock_window"]}</td>'
         f'<td>{escape("/".join(algorithm.upper() for algorithm in frame["left_best_algorithms"]))}</td>'
         f'<td>{escape("/".join(algorithm.upper() for algorithm in frame["right_best_algorithms"]))}</td>'
         + ''.join(
@@ -3665,6 +3786,7 @@ def format_trace_compare_html(
           <li><strong>{payload['window_size']}</strong> window size</li>
           <li><strong>{payload['summary']['left_phase_hint_count']}</strong> left phase hints</li>
           <li><strong>{payload['summary']['right_phase_hint_count']}</strong> right phase hints</li>
+          <li><strong>{escape(payload['wsclock_window_description'])}</strong> WSClock τ</li>
         </ul>
         <p class="muted">Downloads: {download_links}</p>
       </section>
@@ -3695,6 +3817,7 @@ def format_trace_compare_html(
           <thead>
             <tr>
               <th>Frames</th>
+              <th>WSClock τ</th>
               <th>Left winner</th>
               <th>Right winner</th>
               {frame_header_cells}
@@ -3734,6 +3857,7 @@ def format_trace_compare_text(payload: dict, *, html_path: Path, svg_path: Path)
         f"trace comparison: {left['workload']} vs {right['workload']}",
         f"html report: {html_path}",
         f"svg card: {svg_path}",
+        f"wsclock window: {payload['wsclock_window_description']}",
         f"lower normalized overall average fault rate: {overall_label}",
         (
             f"largest average fault gap: {largest_gap['algorithm'].upper()} → "
@@ -3837,6 +3961,7 @@ def main(argv: list[str] | None = None) -> int:
                     workload,
                     min_frames=args.min_frames,
                     max_frames=args.max_frames,
+                    wsclock_window=args.wsclock_window,
                     artifact_dir=args.artifact_dir,
                     html_dir=html_path.parent,
                 )
@@ -3858,6 +3983,9 @@ def main(argv: list[str] | None = None) -> int:
                             "max_frames": args.max_frames,
                             "html_path": str(html_path),
                             "artifact_dir": str(args.artifact_dir),
+                            "wsclock_window_mode": wsclock_window_mode(args.wsclock_window),
+                            "wsclock_window_override": args.wsclock_window,
+                            "wsclock_window_description": describe_wsclock_window_setting(args.wsclock_window),
                             "workloads": [
                                 {
                                     "type": run["workload"].source_kind,
@@ -3907,6 +4035,7 @@ def main(argv: list[str] | None = None) -> int:
                     workload,
                     min_frames=args.min_frames,
                     max_frames=args.max_frames,
+                    wsclock_window=args.wsclock_window,
                 )
                 for workload in workloads
             ]
@@ -3964,6 +4093,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_frames=args.max_frames,
                 window_size=args.window_size,
                 phase_threshold=args.phase_threshold,
+                wsclock_window=args.wsclock_window,
             )
             stem = f"{left_workload.name}-vs-{right_workload.name}-trace-compare"
             markdown_path = args.artifact_dir / f"{stem}.md"
@@ -4079,13 +4209,26 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "simulate":
-            result = simulate(args.algorithm, reference, args.frames)
+            result = simulate(
+                args.algorithm,
+                reference,
+                args.frames,
+                wsclock_window=args.wsclock_window,
+            )
             if args.json:
                 print(
                     json.dumps(
                         {
                             **result.to_dict(include_steps=True),
                             "reference_source": parsed_reference.source,
+                            "wsclock_window_mode": wsclock_window_mode(args.wsclock_window),
+                            "wsclock_window_override": args.wsclock_window,
+                            "wsclock_window_description": describe_wsclock_window_setting(args.wsclock_window),
+                            "effective_wsclock_window": (
+                                resolve_wsclock_window(args.frames, args.wsclock_window)
+                                if result.algorithm == "wsclock"
+                                else None
+                            ),
                         },
                         indent=2,
                     )
@@ -4096,12 +4239,17 @@ def main(argv: list[str] | None = None) -> int:
                         result,
                         show_steps=args.show_steps,
                         reference_source=parsed_reference.source,
+                        wsclock_window=args.wsclock_window,
                     )
                 )
             return 0
 
         if args.command == "compare":
-            results = compare_algorithms(reference, args.frames)
+            results = compare_algorithms(
+                reference,
+                args.frames,
+                wsclock_window=args.wsclock_window,
+            )
             if args.json:
                 print(
                     json.dumps(
@@ -4109,6 +4257,10 @@ def main(argv: list[str] | None = None) -> int:
                             "frame_count": args.frames,
                             "reference_string": reference,
                             "reference_source": parsed_reference.source,
+                            "wsclock_window_mode": wsclock_window_mode(args.wsclock_window),
+                            "wsclock_window_override": args.wsclock_window,
+                            "wsclock_window_description": describe_wsclock_window_setting(args.wsclock_window),
+                            "effective_wsclock_window": resolve_wsclock_window(args.frames, args.wsclock_window),
                             "results": [result.to_dict(include_steps=False) for result in results],
                         },
                         indent=2,
@@ -4121,12 +4273,18 @@ def main(argv: list[str] | None = None) -> int:
                         args.frames,
                         reference,
                         reference_source=parsed_reference.source,
+                        wsclock_window=args.wsclock_window,
                     )
                 )
             return 0
 
         if args.command == "study":
-            payload = study_frame_counts(reference, args.min_frames, args.max_frames)
+            payload = study_frame_counts(
+                reference,
+                args.min_frames,
+                args.max_frames,
+                wsclock_window=args.wsclock_window,
+            )
             payload["reference_source"] = parsed_reference.source
             if args.csv_out:
                 write_study_csv(args.csv_out, payload, reference_source=parsed_reference.source)

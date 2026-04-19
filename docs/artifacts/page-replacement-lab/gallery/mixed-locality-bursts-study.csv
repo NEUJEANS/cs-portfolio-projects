@@ -1,7 +1,7 @@
-frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,best_algorithms,reference_source
-3,14,14,12,12,12,8,opt,preset:mixed-locality-bursts
-4,12,12,8,8,8,7,opt,preset:mixed-locality-bursts
-5,10,10,8,8,8,6,opt,preset:mixed-locality-bursts
-6,6,6,6,6,6,6,fifo/clock/aging/wsclock/lru/opt,preset:mixed-locality-bursts
-7,6,6,6,6,6,6,fifo/clock/aging/wsclock/lru/opt,preset:mixed-locality-bursts
-8,6,6,6,6,6,6,fifo/clock/aging/wsclock/lru/opt,preset:mixed-locality-bursts
+frames,fifo_faults,clock_faults,aging_faults,wsclock_faults,lru_faults,opt_faults,wsclock_window,best_algorithms,reference_source
+3,14,14,12,12,12,8,6,opt,preset:mixed-locality-bursts
+4,12,12,8,8,8,7,8,opt,preset:mixed-locality-bursts
+5,10,10,8,8,8,6,10,opt,preset:mixed-locality-bursts
+6,6,6,6,6,6,6,12,fifo/clock/aging/wsclock/lru/opt,preset:mixed-locality-bursts
+7,6,6,6,6,6,6,14,fifo/clock/aging/wsclock/lru/opt,preset:mixed-locality-bursts
+8,6,6,6,6,6,6,16,fifo/clock/aging/wsclock/lru/opt,preset:mixed-locality-bursts

@@ -75,44 +75,8 @@
   ],
   "frame_results": [
     {
-      "frame_count": 3,
-      "wsclock_window": 6,
-      "algorithms": {
-        "fifo": {
-          "page_faults": 72,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "clock": {
-          "page_faults": 72,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "aging": {
-          "page_faults": 72,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "wsclock": {
-          "page_faults": 72,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "lru": {
-          "page_faults": 72,
-          "hits": 0,
-          "hit_rate": 0.0
-        },
-        "opt": {
-          "page_faults": 49,
-          "hits": 23,
-          "hit_rate": 0.319444
-        }
-      }
-    },
-    {
       "frame_count": 4,
-      "wsclock_window": 8,
+      "wsclock_window": 1,
       "algorithms": {
         "fifo": {
           "page_faults": 60,
@@ -148,7 +112,7 @@
     },
     {
       "frame_count": 5,
-      "wsclock_window": 10,
+      "wsclock_window": 1,
       "algorithms": {
         "fifo": {
           "page_faults": 60,
@@ -166,9 +130,9 @@
           "hit_rate": 0.277778
         },
         "wsclock": {
-          "page_faults": 52,
-          "hits": 20,
-          "hit_rate": 0.277778
+          "page_faults": 54,
+          "hits": 18,
+          "hit_rate": 0.25
         },
         "lru": {
           "page_faults": 52,
@@ -184,7 +148,7 @@
     },
     {
       "frame_count": 6,
-      "wsclock_window": 12,
+      "wsclock_window": 1,
       "algorithms": {
         "fifo": {
           "page_faults": 34,
@@ -220,7 +184,7 @@
     },
     {
       "frame_count": 7,
-      "wsclock_window": 14,
+      "wsclock_window": 1,
       "algorithms": {
         "fifo": {
           "page_faults": 34,
@@ -238,9 +202,9 @@
           "hit_rate": 0.555556
         },
         "wsclock": {
-          "page_faults": 32,
-          "hits": 40,
-          "hit_rate": 0.555556
+          "page_faults": 34,
+          "hits": 38,
+          "hit_rate": 0.527778
         },
         "lru": {
           "page_faults": 32,
@@ -256,7 +220,7 @@
     },
     {
       "frame_count": 8,
-      "wsclock_window": 16,
+      "wsclock_window": 1,
       "algorithms": {
         "fifo": {
           "page_faults": 30,
@@ -292,9 +256,26 @@
     }
   ],
   "fifo_belady_anomalies": [],
-  "monotonicity_violations": [],
-  "wsclock_window_mode": "auto",
-  "wsclock_window_override": null,
-  "wsclock_window_description": "auto (max(4, frames * 2))",
+  "monotonicity_violations": [
+    {
+      "algorithm": "wsclock",
+      "from_frames": 4,
+      "to_frames": 5,
+      "faults_before": 52,
+      "faults_after": 54,
+      "fault_delta": 2
+    },
+    {
+      "algorithm": "wsclock",
+      "from_frames": 6,
+      "to_frames": 7,
+      "faults_before": 32,
+      "faults_after": 34,
+      "fault_delta": 2
+    }
+  ],
+  "wsclock_window_mode": "fixed",
+  "wsclock_window_override": 1,
+  "wsclock_window_description": "fixed 1 reference",
   "reference_source": "benchmark:compiler-phase-shift"
 }

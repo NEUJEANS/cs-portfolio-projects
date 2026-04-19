@@ -3,6 +3,7 @@
 - workload: benchmark streaming-burst-window — stream-processing sliding window with cold backfill bursts and shifting hotsets
 - frame range: 3 to 8
 - reference length: 96
+- WSClock window: auto (max(4, frames * 2))
 - best average faults: opt (37.50)
 
 ## Reference string
@@ -19,14 +20,14 @@
 
 ## Faults by frame count
 
-| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | Winner |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 96 | 96 | 96 | 96 | 96 | 59 | opt |
-| 4 | 72 | 72 | 64 | 64 | 64 | 46 | opt |
-| 5 | 72 | 71 | 64 | 64 | 64 | 36 | opt |
-| 6 | 36 | 36 | 36 | 36 | 36 | 28 | opt |
-| 7 | 36 | 36 | 36 | 36 | 36 | 28 | opt |
-| 8 | 36 | 36 | 36 | 36 | 36 | 28 | opt |
+| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| 3 | 96 | 96 | 96 | 96 | 96 | 59 | 6 | opt |
+| 4 | 72 | 72 | 64 | 64 | 64 | 46 | 8 | opt |
+| 5 | 72 | 71 | 64 | 64 | 64 | 36 | 10 | opt |
+| 6 | 36 | 36 | 36 | 36 | 36 | 28 | 12 | opt |
+| 7 | 36 | 36 | 36 | 36 | 36 | 28 | 14 | opt |
+| 8 | 36 | 36 | 36 | 36 | 36 | 28 | 16 | opt |
 
 ## Regression callouts
 

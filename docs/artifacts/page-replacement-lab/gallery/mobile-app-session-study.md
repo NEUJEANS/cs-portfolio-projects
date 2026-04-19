@@ -3,6 +3,7 @@
 - workload: imported trace mobile-app-session — projects/page-replacement-lab/custom-traces/mobile-app-session.txt
 - frame range: 3 to 8
 - reference length: 60
+- WSClock window: auto (max(4, frames * 2))
 - best average faults: opt (31.83)
 
 ## Reference string
@@ -19,14 +20,14 @@
 
 ## Faults by frame count
 
-| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | Winner |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 3 | 53 | 53 | 51 | 51 | 51 | 37 | opt |
-| 4 | 50 | 50 | 48 | 48 | 48 | 33 | opt |
-| 5 | 44 | 44 | 38 | 38 | 38 | 31 | opt |
-| 6 | 41 | 41 | 37 | 37 | 37 | 30 | opt |
-| 7 | 41 | 41 | 35 | 35 | 35 | 30 | opt |
-| 8 | 35 | 35 | 35 | 35 | 35 | 30 | opt |
+| Frames | FIFO | CLOCK | AGING | WSCLOCK | LRU | OPT | WSClock τ | Winner |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| 3 | 53 | 53 | 51 | 51 | 51 | 37 | 6 | opt |
+| 4 | 50 | 50 | 48 | 48 | 48 | 33 | 8 | opt |
+| 5 | 44 | 44 | 38 | 38 | 38 | 31 | 10 | opt |
+| 6 | 41 | 41 | 37 | 37 | 37 | 30 | 12 | opt |
+| 7 | 41 | 41 | 35 | 35 | 35 | 30 | 14 | opt |
+| 8 | 35 | 35 | 35 | 35 | 35 | 30 | 16 | opt |
 
 ## Regression callouts
 
