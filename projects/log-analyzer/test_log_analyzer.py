@@ -2148,6 +2148,12 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('curl/8.7 staging', html)
         self.assertIn('Comparison card', html)
         self.assertIn('top-referrers-by-facet.csv', html)
+        self.assertIn('id="facet-env-prod-region-us-east-1"', html)
+        self.assertIn('href="#facet-env-prod-region-us-east-1"', html)
+        self.assertIn('data-query-param="facet-env"', html)
+        self.assertIn('id="facet-gallery-copy-link"', html)
+        self.assertIn('focusCardId = \'\';', html)
+        self.assertIn('window.prompt(\'Copy this gallery view link:\', shareUrl);', html)
 
     def test_format_facet_ranking_gallery_html_keeps_empty_sections_visible(self):
         result = analyze_lines(
@@ -2405,9 +2411,16 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('largest slice requests', html)
             self.assertIn('id="facet-gallery-sort"', html)
             self.assertIn('id="facet-gallery-visible-count"', html)
+            self.assertIn('id="facet-gallery-copy-link"', html)
+            self.assertIn('id="facet-gallery-clear-focus"', html)
             self.assertIn('data-field-name="env"', html)
+            self.assertIn('data-query-param="facet-env"', html)
             self.assertIn('data-field-name="region"', html)
+            self.assertIn('data-query-param="facet-region"', html)
             self.assertIn('data-facet-total-count="2"', html)
+            self.assertIn('data-focus-card-id="facet-env-prod-region-us-east-1"', html)
+            self.assertIn('try {', html)
+            self.assertIn('clipboard permissions are unavailable', html)
 
     def test_cli_rejects_preset_gallery_link_without_gallery_output(self):
         completed = subprocess.run(

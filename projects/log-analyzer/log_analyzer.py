@@ -1313,6 +1313,21 @@ def format_card_annotation_preset_gallery_html(
 """
 
 
+def slugify_gallery_fragment(value: str) -> str:
+    pieces: list[str] = []
+    previous_was_separator = False
+    for character in value.lower():
+        if character.isalnum():
+            pieces.append(character)
+            previous_was_separator = False
+            continue
+        if not previous_was_separator:
+            pieces.append("-")
+            previous_was_separator = True
+    slug = "".join(pieces).strip("-")
+    return slug or "slice"
+
+
 def format_facet_ranking_gallery_html(
     result: dict[str, object],
     *,
@@ -1380,6 +1395,19 @@ def format_facet_ranking_gallery_html(
         key=lambda group: (-int(group["total_count"]), str(group["facet_label"])),
     )
 
+    seen_card_ids: set[str] = set()
+    for group in facet_groups_sorted:
+        facets = dict(group["facets"])
+        seed = str(group["facet_label"]) or "facet-slice"
+        base_card_id = f"facet-{slugify_gallery_fragment(seed)}"
+        card_id = base_card_id
+        duplicate_index = 2
+        while card_id in seen_card_ids:
+            card_id = f"{base_card_id}-{duplicate_index}"
+            duplicate_index += 1
+        seen_card_ids.add(card_id)
+        group["card_id"] = card_id
+
     rendered_row_count = sum(len(spec["rows"]) for spec in category_specs)
     populated_family_count = sum(1 for spec in category_specs if spec["rows"])
     largest_slice_requests = max(
@@ -1431,7 +1459,8 @@ def format_facet_ranking_gallery_html(
                     f'<span>Filter {escape(str(field_name))}</span>',
                     (
                         '<select class="facet-gallery-filter" '
-                        f'data-field-name="{escape(str(field_name), quote=True)}">'
+                        f'data-field-name="{escape(str(field_name), quote=True)}" '
+                        f'data-query-param="facet-{escape(str(field_name), quote=True)}">'
                         f'{"".join(option_tags)}</select>'
                     ),
                     '</label>',
@@ -1462,6 +1491,13 @@ def format_facet_ranking_gallery_html(
                 '      <span>Presentation cleanup</span>',
                 '      <label class="checkbox-line"><input id="facet-gallery-hide-empty" type="checkbox"> Hide empty ranking families</label>',
                 '    </div>',
+                '    <div class="control-field control-actions">',
+                '      <span>Shareable views</span>',
+                '      <div class="button-row">',
+                '        <button id="facet-gallery-copy-link" class="action-button" type="button">Copy current view link</button>',
+                '        <button id="facet-gallery-clear-focus" class="secondary-button" type="button" hidden>Show all slices</button>',
+                '      </div>',
+                '    </div>',
                 '  </div>',
                 (
                     '  <div class="control-grid field-filter-grid">'
@@ -1472,7 +1508,9 @@ def format_facet_ranking_gallery_html(
                 (
                     '  <p class="control-note"><strong id="facet-gallery-visible-count">'
                     f'{len(facet_groups_sorted)}</strong> of <strong>{len(facet_groups_sorted)}</strong> '
-                    'slices visible. Filters work entirely in-browser, so the exported file stays self-contained.</p>'
+                    'slices visible. Filters work entirely in-browser, the address bar mirrors the current view, '
+                    'and focused deep links stay portable in committed artifacts. '
+                    '<span id="facet-gallery-state-note">Search, filters, and focused-slice state are mirrored into the URL.</span></p>'
                 ),
                 '</section>',
             ]
@@ -1482,6 +1520,7 @@ def format_facet_ranking_gallery_html(
     for group in facet_groups_sorted:
         facets = dict(group["facets"])
         facet_label = str(group["facet_label"])
+        card_id = str(group["card_id"])
         total_count = int(group["total_count"])
         family_keys_with_data = {
             str(key) for key in group["family_keys_with_data"]
@@ -1578,11 +1617,18 @@ def format_facet_ranking_gallery_html(
             "".join(
                 [
                     '<article class="facet-card" data-facet-card="true" '
+                    f'id="{escape(card_id, quote=True)}" '
+                    f'data-facet-card-id="{escape(card_id, quote=True)}" '
                     f'data-facet-label="{escape(facet_label, quote=True)}" '
                     f'data-facet-total-count="{total_count}" '
                     f'data-search-text="{escape(search_text, quote=True)}" '
                     f'data-facet-map="{escape(json.dumps(facets, sort_keys=True), quote=True)}">',
-                    f'<h2>{escape(facet_label)}</h2>',
+                    '<div class="facet-card-header">',
+                    f'  <div><h2>{escape(facet_label)}</h2><p class="caption">Shareable focused view: <a class="inline-anchor" href="#{escape(card_id, quote=True)}">#{escape(card_id)}</a></p></div>',
+                    '  <div class="facet-card-actions">',
+                    f'    <a class="facet-deep-link" href="#{escape(card_id, quote=True)}" data-focus-card-id="{escape(card_id, quote=True)}">Focus slice</a>',
+                    '  </div>',
+                    '</div>',
                     facet_stats,
                     f'<div class="facet-pill-row">{facet_pills}</div>' if facet_pills else '',
                     *ranking_sections,
@@ -1637,6 +1683,10 @@ def format_facet_ranking_gallery_html(
       const hideEmptyToggle = document.getElementById('facet-gallery-hide-empty');
       const fieldSelects = Array.from(document.querySelectorAll('.facet-gallery-filter'));
       const visibleCount = document.getElementById('facet-gallery-visible-count');
+      const stateNote = document.getElementById('facet-gallery-state-note');
+      const copyLinkButton = document.getElementById('facet-gallery-copy-link');
+      const clearFocusButton = document.getElementById('facet-gallery-clear-focus');
+      let focusCardId = '';
 
       const compareCards = (left, right, mode) => {
         const leftLabel = left.dataset.facetLabel || '';
@@ -1663,17 +1713,96 @@ def format_facet_ranking_gallery_html(
         }
       };
 
-      const applyControls = () => {
+      const cardById = (cardId) => cards.find((card) => (card.dataset.facetCardId || '') === cardId) || null;
+
+      const buildViewUrl = () => {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.search = '';
+        nextUrl.hash = '';
+        const params = nextUrl.searchParams;
+        const trimmedQuery = (searchInput?.value || '').trim();
+        if (trimmedQuery) {
+          params.set('q', trimmedQuery);
+        }
+        const sortMode = sortSelect?.value || 'traffic-desc';
+        if (sortMode !== 'traffic-desc') {
+          params.set('sort', sortMode);
+        }
+        if (hideEmptyToggle?.checked) {
+          params.set('hide-empty', '1');
+        }
+        for (const select of fieldSelects) {
+          const value = select.value || '';
+          const queryParam = select.dataset.queryParam || '';
+          if (queryParam && value) {
+            params.set(queryParam, value);
+          }
+        }
+        if (focusCardId) {
+          params.set('focus', focusCardId);
+          nextUrl.hash = focusCardId;
+        }
+        return nextUrl;
+      };
+
+      const syncUrl = () => {
+        const nextUrl = buildViewUrl();
+        window.history.replaceState({}, '', nextUrl);
+      };
+
+      const loadStateFromUrl = () => {
+        const currentUrl = new URL(window.location.href);
+        if (searchInput) {
+          searchInput.value = currentUrl.searchParams.get('q') || '';
+        }
+        if (sortSelect) {
+          sortSelect.value = currentUrl.searchParams.get('sort') || 'traffic-desc';
+        }
+        if (hideEmptyToggle) {
+          hideEmptyToggle.checked = currentUrl.searchParams.get('hide-empty') === '1';
+        }
+        for (const select of fieldSelects) {
+          const queryParam = select.dataset.queryParam || '';
+          select.value = queryParam ? (currentUrl.searchParams.get(queryParam) || '') : '';
+        }
+        const hashFocus = (currentUrl.hash || '').replace(/^#/, '');
+        focusCardId = currentUrl.searchParams.get('focus') || hashFocus || '';
+      };
+
+      const setStateNote = (shown) => {
+        if (!stateNote) {
+          return;
+        }
+        if (focusCardId) {
+          const focusedCard = cardById(focusCardId);
+          if (focusedCard) {
+            stateNote.textContent = `Focused view: ${focusedCard.dataset.facetLabel || focusCardId}. Use “Show all slices” to clear the deep link.`;
+            return;
+          }
+        }
+        if (shown === 0) {
+          stateNote.textContent = 'No slices match the current search/filter state yet.';
+          return;
+        }
+        stateNote.textContent = 'Search, filters, and focused-slice state are mirrored into the URL.';
+      };
+
+      const applyControls = ({ sync = true, scrollToFocus = false } = {}) => {
         const query = (searchInput?.value || '').trim().toLowerCase();
         const activeFilters = fieldSelects
           .filter((select) => select.value)
           .map((select) => [select.dataset.fieldName || '', select.value]);
         const sortMode = sortSelect?.value || 'traffic-desc';
+        const focusCard = focusCardId ? cardById(focusCardId) : null;
+        if (focusCardId && !focusCard) {
+          focusCardId = '';
+        }
         let shown = 0;
         const sortedCards = [...cards].sort((left, right) => compareCards(left, right, sortMode));
         for (const card of sortedCards) {
           const searchText = (card.dataset.searchText || '').toLowerCase();
           const facetMap = parseFacetMap(card);
+          const matchesFocus = !focusCardId || (card.dataset.facetCardId || '') === focusCardId;
           let visible = !query || searchText.includes(query);
           if (visible) {
             for (const [field, value] of activeFilters) {
@@ -1683,7 +1812,9 @@ def format_facet_ranking_gallery_html(
               }
             }
           }
+          visible = visible && matchesFocus;
           card.hidden = !visible;
+          card.classList.toggle('is-focused', Boolean(focusCardId) && matchesFocus);
           if (visible) {
             shown += 1;
           }
@@ -1692,16 +1823,60 @@ def format_facet_ranking_gallery_html(
         if (visibleCount) {
           visibleCount.textContent = String(shown);
         }
+        if (clearFocusButton) {
+          clearFocusButton.hidden = !focusCardId;
+        }
         document.body.classList.toggle('hide-empty-ranking-blocks', Boolean(hideEmptyToggle?.checked));
+        setStateNote(shown);
+        if (sync) {
+          syncUrl();
+        }
+        if (scrollToFocus && focusCardId) {
+          cardById(focusCardId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       };
 
-      searchInput?.addEventListener('input', applyControls);
-      sortSelect?.addEventListener('change', applyControls);
-      hideEmptyToggle?.addEventListener('change', applyControls);
+      searchInput?.addEventListener('input', () => applyControls());
+      sortSelect?.addEventListener('change', () => applyControls());
+      hideEmptyToggle?.addEventListener('change', () => applyControls());
       for (const select of fieldSelects) {
-        select.addEventListener('change', applyControls);
+        select.addEventListener('change', () => applyControls());
       }
-      applyControls();
+      clearFocusButton?.addEventListener('click', () => {
+        focusCardId = '';
+        applyControls({ scrollToFocus: false });
+      });
+      copyLinkButton?.addEventListener('click', async () => {
+        const shareUrl = buildViewUrl().toString();
+        if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+            if (stateNote) {
+              stateNote.textContent = 'Copied the current gallery view link to the clipboard.';
+            }
+            return;
+          } catch (error) {
+            // Fall back to a manual copy prompt when clipboard permissions are unavailable.
+          }
+        }
+        window.prompt('Copy this gallery view link:', shareUrl);
+      });
+      window.addEventListener('popstate', () => {
+        loadStateFromUrl();
+        applyControls({ sync: false, scrollToFocus: false });
+      });
+      window.addEventListener('hashchange', () => {
+        const hashFocus = (window.location.hash || '').replace(/^#/, '');
+        if (!hashFocus) {
+          focusCardId = '';
+          applyControls({ scrollToFocus: false });
+          return;
+        }
+        focusCardId = hashFocus;
+        applyControls({ scrollToFocus: false });
+      });
+      loadStateFromUrl();
+      applyControls({ sync: false, scrollToFocus: Boolean(focusCardId) });
     })();
   </script>"""
 
@@ -1730,12 +1905,23 @@ def format_facet_ranking_gallery_html(
     .field-filter-grid {{ margin-top: 0.85rem; }}
     .control-field {{ display: flex; flex-direction: column; gap: 0.45rem; }}
     .control-field span {{ font-size: 0.82rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #475569; }}
-    .control-field input, .control-field select {{ border: 1px solid #cbd5f5; border-radius: 0.85rem; padding: 0.72rem 0.8rem; font: inherit; background: #ffffff; color: #0f172a; }}
+    .control-field input, .control-field select, .action-button, .secondary-button {{ border: 1px solid #cbd5f5; border-radius: 0.85rem; padding: 0.72rem 0.8rem; font: inherit; background: #ffffff; color: #0f172a; }}
     .control-toggle {{ justify-content: flex-end; }}
+    .control-actions {{ justify-content: flex-end; }}
+    .button-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; }}
+    .action-button, .secondary-button {{ cursor: pointer; font-weight: 600; }}
+    .action-button {{ background: #2563eb; border-color: #2563eb; color: #eff6ff; }}
+    .secondary-button {{ background: #eef2ff; color: #312e81; border-color: #c7d2fe; }}
     .checkbox-line {{ display: inline-flex; align-items: center; gap: 0.55rem; color: #1e293b; font-weight: 600; }}
     .control-note {{ color: #475569; margin: 0.9rem 0 0; }}
     .gallery-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.35rem; }}
+    .facet-card {{ scroll-margin-top: 1.2rem; }}
+    .facet-card.is-focused {{ border-color: #2563eb; box-shadow: 0 24px 60px rgba(37, 99, 235, 0.18); }}
+    .facet-card-header {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 0.9rem; }}
     .facet-card h2, .related-links h2 {{ margin: 0 0 0.35rem; font-size: 1.25rem; }}
+    .facet-card-actions {{ display: flex; flex-wrap: wrap; gap: 0.55rem; }}
+    .facet-deep-link, .inline-anchor {{ color: #1d4ed8; text-decoration: none; font-weight: 700; }}
+    .facet-deep-link {{ display: inline-flex; align-items: center; border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 999px; padding: 0.5rem 0.8rem; white-space: nowrap; }}
     .facet-stats {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
     .stat-chip {{ display: inline-flex; flex-direction: column; gap: 0.12rem; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.55rem 0.72rem; min-width: 8.2rem; }}
     .stat-chip strong {{ font-size: 1.05rem; }}
@@ -1763,7 +1949,7 @@ def format_facet_ranking_gallery_html(
     <section class="hero">
       <h1>Facet ranking gallery</h1>
       <p>Use this page as a portfolio-friendly landing spot for per-deployment, per-release, or per-environment top-IP, top-path, top-referrer, and top-user-agent rankings without opening spreadsheets first.</p>
-      <p>It is especially useful for referrer/user-agent heavy release reviews where you want browser-ready tables beside comparison-card artifacts and committed CSV exports.</p>
+      <p>It is especially useful for referrer/user-agent heavy release reviews where you want browser-ready tables beside comparison-card artifacts, committed CSV exports, and shareable deep links into a single slice.</p>
       <ul class="meta-list">
         <li><strong>Source</strong><span>{escape(source_label)}</span></li>
         <li><strong>Facet fields</strong><span>{escape(facet_fields)}</span></li>
@@ -1777,7 +1963,7 @@ def format_facet_ranking_gallery_html(
       {''.join(facet_cards)}
     </section>
     {related_links_html}
-    <p class="footer-note">Tip: regenerate this gallery alongside the facet CSV exports and any release comparison cards so screenshots, CSV downloads, and review notes stay aligned.</p>
+    <p class="footer-note">Tip: regenerate this gallery alongside the facet CSV exports and any release comparison cards so screenshots, CSV downloads, review notes, and deep-linkable slices stay aligned.</p>
   </main>{gallery_script}
 </body>
 </html>

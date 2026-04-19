@@ -1,5 +1,20 @@
 # Log Analyzer Checklist
 
+## Facet ranking gallery deep-link slice (2026-04-19 04:12 UTC run)
+- [x] confirm repo sync before editing and continue the queued log-analyzer gallery follow-up instead of starting a different project
+- [x] do a brief URL-state research check because the previous wrap-up already scoped deep links as the next highest-value slice
+- [x] do a short browser URL-state refresh and self-test plan before coding
+- [x] update checklist/docs so the slice is resumable
+- [x] mirror search/sort/filter/hide-empty state into the gallery URL so committed artifacts can share exact views
+- [x] add per-slice focused deep links plus copy/clear affordances so reviewers can jump directly to one facet card
+- [x] extend automated coverage for gallery deep-link hooks and shareable-view controls
+- [x] refresh the committed sample log/artifacts so the deep-linkable gallery is reproducible from repo state
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider downloadable per-facet detail bundles or raster export helpers next
+
 ## Facet ranking gallery slice (2026-04-19 03:04 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer gallery follow-up instead of starting a different project
 - [x] update checklist/docs so the slice is resumable

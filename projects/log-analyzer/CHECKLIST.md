@@ -1,10 +1,11 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 03:53 UTC run)
+## Current slice (2026-04-19 04:12 UTC run)
 - [x] resume the next `log-analyzer` follow-up after confirming `main` still matches `origin/main`
-- [x] keep building on the unpublished facet-ranking gallery work already present in the repo instead of starting a different project
-- [x] stamp facet-ranking rows with per-slice request-volume metadata so gallery cards can sort and summarize by actual traffic
-- [x] add self-contained gallery controls for search, exact per-field filtering, sort presets, and hide-empty presentation cleanup without adding dependencies
+- [x] keep building on the facet-ranking gallery instead of starting a different project because deep links were the clearest queued gap
+- [x] do a brief URL-state research check plus a short browser refresh/self-test before coding
+- [x] mirror search/sort/filter/hide-empty state into the gallery URL without adding dependencies
+- [x] add per-slice focused deep links plus copy/clear affordances so committed artifacts can jump directly into one facet card
 - [x] refresh README/checklist/research/learning/review docs and regenerate the committed `docs/artifacts/log-analyzer/facet-ranking-gallery.html` sample
 - [x] run targeted tests, real CLI/export smoke checks, browser validation, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
@@ -34,4 +35,4 @@
 ## Next follow-up ideas
 - [ ] consider facet-aware comparison cards or gallery views for referrer/user-agent heavy release reviews beyond the current ranking-focused page
 - [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
-- [ ] consider downloadable per-facet detail bundles or deep links once the gallery controls settle
+- [ ] consider downloadable per-facet detail bundles or raster-ready focused-slice exports now that deep links are in place
