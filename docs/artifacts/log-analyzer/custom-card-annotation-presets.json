@@ -1,0 +1,14 @@
+{
+  "presets": {
+    "release-watch": [
+      {"theme": "deploy", "label": "Canary deploy started"},
+      {"theme": "incident", "label": "Error budget burn noticed"},
+      {"theme": "recovery", "label": "Traffic stabilized"}
+    ],
+    "rollback-watch": [
+      {"theme": "deploy", "label": "Release opened"},
+      {"theme": "rollback", "label": "Rollback triggered"},
+      {"theme": "recovery", "label": "Recovery confirmed"}
+    ]
+  }
+}

@@ -28,6 +28,7 @@ NAMED_TIMING_SPLIT_RE = re.compile(r'\s*[,:]\s*')
 STATUS_CODE_RE = re.compile(r'^\d{3}$')
 TIME_BUCKET_GRANULARITIES = ("minute", "hour")
 MISSING_FACET_VALUE = "(missing)"
+CARD_ANNOTATION_PRESET_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 CARD_ANNOTATION_THEME_PRIORITIES = ("incident", "rollback", "recovery", "deploy", "note")
 CARD_ANNOTATION_THEME_ALIASES = {
     "default": "note",
@@ -782,7 +783,107 @@ def parse_card_annotation_label(raw_label: str) -> tuple[str, str]:
     return "note", cleaned
 
 
-def expand_card_annotation_presets(raw_presets: Iterable[str] | None) -> list[str]:
+def normalize_card_annotation_preset_name(raw_name: str) -> str:
+    cleaned = raw_name.strip().lower().replace("_", "-").replace(" ", "-")
+    cleaned = re.sub(r"-+", "-", cleaned)
+    if not cleaned:
+        raise ValueError("card annotation preset names must not be blank")
+    if not CARD_ANNOTATION_PRESET_NAME_RE.match(cleaned):
+        raise ValueError(
+            "card annotation preset names must use lowercase letters, numbers, and dashes "
+            f"(received: {raw_name!r})"
+        )
+    return cleaned
+
+
+def parse_card_annotation_preset_step(raw_step: object) -> tuple[str, str]:
+    if isinstance(raw_step, str):
+        return parse_card_annotation_label(raw_step)
+    if not isinstance(raw_step, dict):
+        raise ValueError("steps must be strings or objects with 'theme'/'label' keys")
+
+    raw_label = raw_step.get("label")
+    if not isinstance(raw_label, str):
+        raise ValueError("step labels must be strings")
+    label = raw_label.strip()
+    if not label:
+        raise ValueError("step labels must not be blank")
+
+    raw_theme = raw_step.get("theme", "note")
+    if not isinstance(raw_theme, str):
+        raise ValueError("step themes must be strings")
+    normalized_theme = normalize_card_annotation_theme(raw_theme)
+    if normalized_theme is None:
+        valid_themes = ", ".join(CARD_ANNOTATION_THEMES)
+        raise ValueError(
+            f"unknown theme '{raw_theme}'; use one of: {valid_themes}"
+        )
+    return normalized_theme, label
+
+
+def load_card_annotation_preset_definitions(
+    raw_paths: Iterable[str] | None,
+) -> dict[str, list[tuple[str, str]]]:
+    preset_definitions = dict(CARD_ANNOTATION_PRESETS)
+    for raw_path in raw_paths or []:
+        cleaned_path = raw_path.strip()
+        if not cleaned_path:
+            raise ValueError("--card-annotation-preset-file values must not be blank")
+        path = Path(cleaned_path)
+        source_label = f"--card-annotation-preset-file {path}"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise ValueError(f"Unable to read {source_label}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"{source_label} must contain valid JSON ({exc.msg} at line {exc.lineno} column {exc.colno})"
+            ) from exc
+
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"{source_label} must contain an object mapping preset names to step arrays "
+                "or an object with a 'presets' mapping"
+            )
+        preset_map = payload.get("presets", payload)
+        if not isinstance(preset_map, dict):
+            raise ValueError(f"{source_label} must contain a 'presets' object when present")
+
+        for raw_name, raw_steps in preset_map.items():
+            if not isinstance(raw_name, str):
+                raise ValueError(f"{source_label} preset names must be strings")
+            preset_name = normalize_card_annotation_preset_name(raw_name)
+            if preset_name in preset_definitions:
+                raise ValueError(
+                    f"{source_label} preset '{preset_name}' duplicates an existing preset name"
+                )
+            if not isinstance(raw_steps, list) or not raw_steps:
+                raise ValueError(
+                    f"{source_label} preset '{preset_name}' must contain a non-empty step list"
+                )
+            if len(raw_steps) > 4:
+                raise ValueError(
+                    f"{source_label} preset '{preset_name}' cannot contain more than 4 steps"
+                )
+
+            steps: list[tuple[str, str]] = []
+            for index, raw_step in enumerate(raw_steps, start=1):
+                try:
+                    steps.append(parse_card_annotation_preset_step(raw_step))
+                except ValueError as exc:
+                    raise ValueError(
+                        f"{source_label} preset '{preset_name}' step {index}: {exc}"
+                    ) from exc
+            preset_definitions[preset_name] = steps
+    return preset_definitions
+
+
+def expand_card_annotation_presets(
+    raw_presets: Iterable[str] | None,
+    *,
+    preset_definitions: dict[str, list[tuple[str, str]]] | None = None,
+) -> list[str]:
+    available_presets = preset_definitions or CARD_ANNOTATION_PRESETS
     expanded: list[str] = []
     for raw_preset in raw_presets or []:
         cleaned = raw_preset.strip()
@@ -794,14 +895,14 @@ def expand_card_annotation_presets(raw_presets: Iterable[str] | None) -> list[st
                 "(for example deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z)"
             )
         raw_name, raw_timestamps = cleaned.split("=", 1)
-        preset_name = raw_name.strip().lower()
-        if preset_name not in CARD_ANNOTATION_PRESETS:
-            valid_presets = ", ".join(CARD_ANNOTATION_PRESETS)
+        preset_name = normalize_card_annotation_preset_name(raw_name)
+        if preset_name not in available_presets:
+            valid_presets = ", ".join(sorted(available_presets))
             raise ValueError(
                 f"Unknown --card-annotation-preset '{raw_name.strip()}'; use one of: {valid_presets}"
             )
         timestamps = [item.strip() for item in raw_timestamps.split(",") if item.strip()]
-        preset_steps = CARD_ANNOTATION_PRESETS[preset_name]
+        preset_steps = available_presets[preset_name]
         if len(timestamps) != len(preset_steps):
             raise ValueError(
                 f"--card-annotation-preset {preset_name} expects {len(preset_steps)} timestamps "
@@ -3301,10 +3402,19 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help=(
-            "Optional built-in story preset that expands into themed annotations using "
-            "PRESET=TIMESTAMP[,TIMESTAMP...] syntax (for example "
+            "Optional built-in or custom story preset that expands into themed annotations "
+            "using PRESET=TIMESTAMP[,TIMESTAMP...] syntax (for example "
             "deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z; "
             "requires --time-bucket and at least one card export flag)"
+        ),
+    )
+    parser.add_argument(
+        "--card-annotation-preset-file",
+        action="append",
+        default=[],
+        help=(
+            "Optional JSON file that defines custom card-annotation presets; combines with "
+            "the built-ins and requires at least one --card-annotation-preset"
         ),
     )
     parser.add_argument(
@@ -3480,6 +3590,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--card-annotation-preset requires --time-bucket")
     if args.card_annotation_preset and not has_card_exports:
         parser.error("--card-annotation-preset requires at least one card export flag")
+    if args.card_annotation_preset_file and not args.card_annotation_preset:
+        parser.error("--card-annotation-preset-file requires at least one --card-annotation-preset")
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
@@ -3531,9 +3643,15 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     try:
+        preset_definitions = load_card_annotation_preset_definitions(
+            args.card_annotation_preset_file
+        )
         all_card_annotations = [
             *args.card_annotation,
-            *expand_card_annotation_presets(args.card_annotation_preset),
+            *expand_card_annotation_presets(
+                args.card_annotation_preset,
+                preset_definitions=preset_definitions,
+            ),
         ]
 
         trend_card_annotations = None

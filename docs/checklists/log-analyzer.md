@@ -1,17 +1,17 @@
 # Log Analyzer Checklist
 
-## Annotation preset slice (2026-04-19 00:12 UTC run)
+## Custom annotation preset-file slice (2026-04-19 00:31 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer follow-up instead of starting a different project
 - [x] update checklist/docs so the slice is resumable
-- [x] add a built-in `--card-annotation-preset` helper for the common deploy/incident/recovery and deploy/rollback/recovery stories
-- [x] keep the preset expansion compatible with existing trend-card and comparison-card annotation rendering/output
-- [x] extend automated coverage for preset expansion, CLI success paths, and validation errors
-- [x] regenerate committed annotated sample artifacts plus README examples using preset-powered commands
+- [x] add `--card-annotation-preset-file` support so custom JSON-defined stories can extend the built-in preset set
+- [x] keep custom preset expansion compatible with existing trend-card and comparison-card annotation rendering/output
+- [x] extend automated coverage for preset-file loading, CLI success paths, and validation errors
+- [x] regenerate committed annotated sample artifacts plus README examples using a committed custom preset file
 - [x] run targeted tests and smoke checks
 - [x] run at least 3 review passes and fix issues found
 - [x] run secret scan before push
 - [x] commit, push, and add wrap-up
-- [ ] consider a follow-up slice for gallery index pages, PNG export helpers, or user-defined preset aliases/files
+- [ ] consider a follow-up slice for gallery index pages, PNG export helpers, or preset-listing helpers
 
 ## Facet comparison card slice (2026-04-18 15:55 UTC run)
 - [x] confirm repo sync before editing and preserve the existing unfinished local comparison-card work

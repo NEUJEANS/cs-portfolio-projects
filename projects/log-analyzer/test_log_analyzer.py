@@ -20,6 +20,7 @@ from log_analyzer import (
     format_text_report,
     format_time_bucket_card_html,
     format_time_bucket_card_svg,
+    load_card_annotation_preset_definitions,
     normalize_card_annotations,
     parse_line,
 )
@@ -501,6 +502,75 @@ class LogAnalyzerTests(unittest.TestCase):
             expand_card_annotation_presets(
                 ['deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z']
             )
+
+    def test_load_card_annotation_preset_definitions_supports_custom_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_path = Path(tmpdir) / 'presets.json'
+            preset_path.write_text(
+                json.dumps(
+                    {
+                        'presets': {
+                            'canary-watch': [
+                                {'theme': 'deploy', 'label': 'Canary enabled'},
+                                {'theme': 'incident', 'label': '5xx spike noticed'},
+                                {'theme': 'recovery', 'label': 'Traffic stabilized'},
+                            ]
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+            presets = load_card_annotation_preset_definitions([str(preset_path)])
+            self.assertIn('deploy-incident-recovery', presets)
+            self.assertEqual(
+                presets['canary-watch'],
+                [
+                    ('deploy', 'Canary enabled'),
+                    ('incident', '5xx spike noticed'),
+                    ('recovery', 'Traffic stabilized'),
+                ],
+            )
+
+    def test_load_card_annotation_preset_definitions_rejects_duplicate_builtin_name(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_path = Path(tmpdir) / 'presets.json'
+            preset_path.write_text(
+                json.dumps(
+                    {
+                        'presets': {
+                            'deploy-incident-recovery': [
+                                {'theme': 'deploy', 'label': 'Shadowed'},
+                            ]
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+            with self.assertRaisesRegex(ValueError, 'duplicates an existing preset name'):
+                load_card_annotation_preset_definitions([str(preset_path)])
+
+    def test_expand_card_annotation_presets_supports_custom_definitions(self):
+        custom_presets = {
+            'canary-watch': [
+                ('deploy', 'Canary enabled'),
+                ('incident', '5xx spike noticed'),
+                ('recovery', 'Traffic stabilized'),
+            ]
+        }
+        expanded = expand_card_annotation_presets(
+            [
+                'canary-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+            ],
+            preset_definitions=custom_presets,
+        )
+        self.assertEqual(
+            expanded,
+            [
+                '2026-04-18T09:00:20Z=deploy|Canary enabled',
+                '2026-04-18T09:01:40Z=incident|5xx spike noticed',
+                '2026-04-18T09:03:10Z=recovery|Traffic stabilized',
+            ],
+        )
 
     def test_normalize_card_annotations_rejects_unknown_theme(self):
         result = analyze_lines(
@@ -1538,6 +1608,64 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Recovery confirmed', html_text)
             self.assertIn('Incident detected', html_text)
 
+    def test_cli_time_bucket_card_custom_preset_file_expands_into_annotations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            preset_path = Path(tmpdir) / 'custom-presets.json'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            html_path = Path(tmpdir) / 'exports' / 'trend-card.html'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030
+                    10.0.0.2 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250
+                    10.0.0.3 - - [18/Apr/2026:09:02:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            preset_path.write_text(
+                json.dumps(
+                    {
+                        'presets': {
+                            'canary-watch': [
+                                {'theme': 'deploy', 'label': 'Canary enabled'},
+                                {'theme': 'incident', 'label': '5xx spike noticed'},
+                                {'theme': 'recovery', 'label': 'Traffic stabilized'},
+                            ]
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                    '--time-bucket-card-html',
+                    str(html_path),
+                    '--card-annotation-preset-file',
+                    str(preset_path),
+                    '--card-annotation-preset',
+                    'canary-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:20Z,2026-04-18T09:02:20Z',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            svg_text = svg_path.read_text(encoding='utf-8')
+            html_text = html_path.read_text(encoding='utf-8')
+            self.assertIn('Canary enabled', svg_text)
+            self.assertIn('[Incident]', svg_text)
+            self.assertIn('5xx spike noticed', html_text)
+            self.assertIn('Traffic stabilized', html_text)
+
     def test_cli_rejects_time_bucket_card_export_without_granularity(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -1756,6 +1884,38 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('--card-annotation-preset deploy-rollback-recovery expects 3 timestamps but received 2', completed.stderr)
+
+    def test_cli_rejects_preset_file_without_preset_usage(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            preset_path = Path(tmpdir) / 'custom-presets.json'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            preset_path.write_text(
+                json.dumps({'presets': {'canary-watch': [{'theme': 'deploy', 'label': 'Canary enabled'}]}}),
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                    '--card-annotation-preset-file',
+                    str(preset_path),
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--card-annotation-preset-file requires at least one --card-annotation-preset', completed.stderr)
 
     def test_cli_rejects_card_annotation_outside_bucket_range(self):
         with tempfile.TemporaryDirectory() as tmpdir:

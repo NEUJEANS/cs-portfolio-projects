@@ -1,10 +1,11 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 00:12 UTC run)
-- [x] resume the queued annotation-preset follow-up after confirming `main` matches `origin/main`
-- [x] add built-in `--card-annotation-preset` recipes so common deploy/incident/recovery and deploy/rollback/recovery stories need fewer repeated CLI flags
-- [x] keep preset output compatible with the existing themed annotation rendering path for both trend cards and comparison cards
-- [x] refresh README/checklists/review notes and regenerate the committed annotated sample bundle using preset-powered commands
+## Current slice (2026-04-19 00:31 UTC run)
+- [x] resume the queued custom-annotation-preset follow-up after confirming `main` matches `origin/main`
+- [x] add `--card-annotation-preset-file` support so built-in presets can be extended with reusable JSON-defined story recipes
+- [x] keep custom preset expansion compatible with the existing trend-card and comparison-card annotation rendering/output paths
+- [x] validate custom preset files clearly (JSON shape, duplicate names, supported themes, step counts)
+- [x] refresh README/checklists/review notes and commit a reusable sample preset file plus regenerated annotated sample artifacts
 - [x] run targeted tests, real export smoke checks, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
 
@@ -22,13 +23,14 @@
 - [x] add `--facet-compare-card-svg` / `--facet-compare-card-html` release-review artifacts plus a committed sample bundle under `docs/artifacts/log-analyzer/`
 - [x] add repeatable `--card-annotation` callouts so trend cards and comparison cards can pin deploy/incident markers onto selected buckets
 - [x] add built-in `--card-annotation-preset` story recipes for deploy/incident/recovery and deploy/rollback/recovery card exports
+- [x] add JSON-backed `--card-annotation-preset-file` support for reusable custom preset aliases/files beyond the built-in stories
 
 ## Current quality checks
-- [x] README reflects the shipped facet flags, side-by-side comparison helpers, hotspot/time-bucket workflows, trend-card exports, comparison-card exports, annotation controls, and export metadata
-- [x] unittest coverage includes named-field parsing, facet comparison summaries/CSV exports, comparison-card rendering, annotation-aware card rendering, file exports, and CLI validation errors
+- [x] README reflects the shipped facet flags, side-by-side comparison helpers, hotspot/time-bucket workflows, trend-card exports, comparison-card exports, annotation controls, and custom preset-file schema
+- [x] unittest coverage includes named-field parsing, facet comparison summaries/CSV exports, comparison-card rendering, annotation-aware card rendering, preset-file loading, file exports, and CLI validation errors
 - [x] project is resumable via review logs, committed artifacts, and wrap-up notes in `docs/`
 
 ## Next follow-up ideas
 - [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
 - [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster assets over SVG/HTML
-- [ ] optionally support user-defined annotation preset files or reusable preset aliases beyond the built-in three-step stories
+- [ ] optionally add preset-listing or preset-preview helpers so README/gallery pages can show available built-in + custom story names without opening JSON by hand

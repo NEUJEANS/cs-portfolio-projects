@@ -32,11 +32,11 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - surfaces per-path upstream latency hotspots when `upstream_response_time=` data is present, so slow dependencies stand out by endpoint
 - supports incident-style hotspot filters via `--hotspot-status` and `--hotspot-method` without changing the global summary metrics inside the selected time window
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
-- supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, and built-in preset stories for common deploy/incident/recovery narratives
+- supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, and JSON-backed custom preset files for reusable team/project stories
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet hotspot and trend breakdowns in text, JSON, and dedicated CSV exports
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
 - supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
-- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
+- supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
 
 ## Usage
 ```bash
@@ -50,6 +50,7 @@ python3 log_analyzer.py access.log --time-bucket minute --time-bucket-csv minute
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --time-bucket-card-html trend-card.html
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --card-annotation '2026-04-18T09:00:20Z=deploy|Deploy started' --card-annotation '2026-04-18T09:01:40Z=rollback|Rollback triggered'
 python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --time-bucket-card-html trend-card.html --card-annotation-preset 'deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'
+python3 log_analyzer.py access.log --time-bucket minute --time-bucket-card-svg trend-card.svg --time-bucket-card-html trend-card.html --card-annotation-preset-file docs/artifacts/log-analyzer/custom-card-annotation-presets.json --card-annotation-preset 'release-watch=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'
 python3 log_analyzer.py access.log --hotspot-status 500 --hotspot-status 502 --hotspot-method POST --format json
 python3 log_analyzer.py access.log --window-start 2026-04-18T09:00:00Z --window-end 2026-04-18T10:00:00Z --time-bucket hour --format json
 python3 log_analyzer.py access.log --facet-field env --facet-field region --time-bucket minute --time-bucket-facet-csv bucket-facets.csv --path-latency-facet-csv hotspot-facets.csv
@@ -69,6 +70,36 @@ The parser accepts:
   - `upstream_response_time=0.201` feeds the upstream latency summary
   - multi-attempt upstream values such as `upstream_response_time=0.050, 0.125:0.075` are summed per request so retries stay visible in totals
 - additional named `key=value` fields such as `env=prod`, `region=us-east-1`, or `release=2026.04` are preserved and can be surfaced with repeatable `--facet-field` flags
+
+## Custom annotation preset files
+Use `--card-annotation-preset-file path/to/presets.json` when built-in stories are too generic and you want reusable labels/themes for a particular service, release ritual, or incident playbook.
+
+Supported JSON shapes:
+- a top-level `{ "presets": { ... } }` object
+- or a direct `{ "preset-name": [...] }` mapping
+
+Each preset step can be either:
+- an object like `{ "theme": "incident", "label": "5xx spike noticed" }`
+- or a string like `"incident|5xx spike noticed"`
+
+Rules:
+- preset names are normalized to lowercase dash-case
+- custom names cannot duplicate built-in names
+- each preset must contain 1-4 steps because card exports support at most 4 distinct bucket markers
+
+Example:
+
+```json
+{
+  "presets": {
+    "release-watch": [
+      {"theme": "deploy", "label": "Canary deploy started"},
+      {"theme": "incident", "label": "Error budget burn noticed"},
+      {"theme": "recovery", "label": "Traffic stabilized"}
+    ]
+  }
+}
+```
 
 ## Time-window filtering
 Use `--window-start` and/or `--window-end` when you want to isolate a particular incident window, deploy interval, or traffic burst before calculating totals, percentiles, and hotspot tables.
@@ -136,7 +167,7 @@ Behavior:
 - the SVG card highlights request/error/latency deltas plus three side-by-side bucket charts (requests, error rate, average latency)
 - the HTML companion repeats the card and adds exact summary + per-bucket tables for verification, captions, and copy/paste into docs
 - add repeatable `--card-annotation TIMESTAMP=LABEL` or `TIMESTAMP=THEME|LABEL` flags (with `--time-bucket`) to pin numbered deploy/incident markers onto shared bucket rows in both the SVG footer and HTML annotation/table views
-- use `--card-annotation-preset PRESET=TIMESTAMP[,TIMESTAMP...]` when you want built-in stories such as `deploy-incident-recovery` or `deploy-rollback-recovery` without repeating three separate annotation labels/themes on the CLI
+- use `--card-annotation-preset PRESET=TIMESTAMP[,TIMESTAMP...]` when you want built-in stories such as `deploy-incident-recovery` or `deploy-rollback-recovery`, or combine it with `--card-annotation-preset-file custom-presets.json` to load reusable JSON-defined stories without repeating labels/themes on the CLI
 - explicit themes currently include `note`, `deploy`, `rollback`, `incident`, and `recovery`, each with distinct marker colors and badges in SVG/HTML exports
 - when `--time-bucket` is omitted, the card still renders a summary-only comparison and the HTML table explains that no aligned bucket rows were produced
 
@@ -145,7 +176,7 @@ Examples:
 - `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --facet-compare-card-html release-compare-card.html`
 - `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --card-annotation '2026-04-18T09:00:20Z=deploy|Deploy started' --card-annotation '2026-04-18T09:01:40Z=rollback|Rollback triggered'`
 - `--time-bucket minute --facet-compare-field env --facet-compare-values prod staging --facet-compare-card-svg release-compare-card.svg --card-annotation-preset 'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z'`
-- sample committed artifacts live under `docs/artifacts/log-analyzer/`, including annotated trend/comparison card bundles
+- sample committed artifacts live under `docs/artifacts/log-analyzer/`, including annotated trend/comparison card bundles plus `custom-card-annotation-presets.json` for reusable story recipes
 
 ## Trend card artifacts
 Use `--time-bucket-card-svg` when you want one standalone visual card for slides, README screenshots, or portfolio thumbnails. Use `--time-bucket-card-html` when you also want a browser-friendly artifact page with the same inline SVG plus a bucket summary table.
@@ -155,7 +186,7 @@ Behavior:
 - the SVG card highlights matched requests, overall error rate, weighted average latency, and the busiest / noisiest / slowest buckets
 - the HTML companion repeats the card and adds a tabular per-bucket breakdown with explicit bucket start/end boundaries for copy/paste-friendly captions or verification
 - add repeatable `--card-annotation TIMESTAMP=LABEL` or `TIMESTAMP=THEME|LABEL` flags to pin numbered deploy/incident markers onto matching buckets in both the SVG footer and HTML legend/table
-- use `--card-annotation-preset PRESET=TIMESTAMP[,TIMESTAMP...]` to expand common three-step stories such as `deploy-incident-recovery` without retyping the built-in labels/themes every run
+- use `--card-annotation-preset PRESET=TIMESTAMP[,TIMESTAMP...]` to expand common three-step stories such as `deploy-incident-recovery`, or add `--card-annotation-preset-file custom-presets.json` when you want reusable JSON-defined labels/themes for a specific app or incident style
 - explicit themes currently include `note`, `deploy`, `rollback`, `incident`, and `recovery`; unknown theme names fail fast so screenshots do not silently lose severity cues
 - when `--facet-field` is active, the HTML page also surfaces the selected facet names plus how many facet trend rows were exported alongside the card
 
