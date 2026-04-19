@@ -1,0 +1,12 @@
+{
+  "name": "routing_shift_demo",
+  "nodes": ["A", "B", "C", "D"],
+  "edges": [
+    {"source": "A", "target": "B", "weight": 4},
+    {"source": "A", "target": "C", "weight": 2},
+    {"source": "C", "target": "B", "weight": 3},
+    {"source": "B", "target": "D", "weight": 2},
+    {"source": "C", "target": "D", "weight": 1},
+    {"source": "D", "target": "A", "weight": 1}
+  ]
+}

@@ -12,3 +12,4 @@
 - [x] add Mermaid artifact export for Bellman-Ford shortest-path trees and reachable negative cycles
 - [x] add Graphviz DOT artifact export for Bellman-Ford shortest-path trees and reachable negative cycles
 - [x] add Markdown report export for unreachable-path explanations and Bellman-Ford iteration summaries
+- [x] add route-table diff reporting so two graph variants can be compared side by side from the same source

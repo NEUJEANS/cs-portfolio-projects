@@ -92,6 +92,86 @@ class RoutingReport:
         }
 
 
+@dataclass(frozen=True)
+class RouteTableEntry:
+    node: str
+    cost: float
+    predecessor: str | None
+    path: tuple[str, ...]
+    status: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "node": self.node,
+            "cost": self.cost,
+            "predecessor": self.predecessor,
+            "path": list(self.path),
+            "status": self.status,
+        }
+
+
+@dataclass(frozen=True)
+class EdgeChange:
+    source: str
+    target: str
+    baseline_weight: int | None
+    candidate_weight: int | None
+    change: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "source": self.source,
+            "target": self.target,
+            "baseline_weight": self.baseline_weight,
+            "candidate_weight": self.candidate_weight,
+            "change": self.change,
+        }
+
+
+@dataclass(frozen=True)
+class RouteDiff:
+    node: str
+    baseline: RouteTableEntry | None
+    candidate: RouteTableEntry | None
+    changed_fields: tuple[str, ...]
+    summary: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "node": self.node,
+            "baseline": self.baseline.to_dict() if self.baseline else None,
+            "candidate": self.candidate.to_dict() if self.candidate else None,
+            "changed_fields": list(self.changed_fields),
+            "summary": self.summary,
+        }
+
+
+@dataclass(frozen=True)
+class RoutingComparison:
+    baseline_graph: str
+    candidate_graph: str
+    source: str
+    baseline_negative_cycle: tuple[str, ...] | None
+    candidate_negative_cycle: tuple[str, ...] | None
+    edge_changes: tuple[EdgeChange, ...]
+    route_diffs: tuple[RouteDiff, ...]
+    changed_route_count: int
+    unchanged_route_count: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "baseline_graph": self.baseline_graph,
+            "candidate_graph": self.candidate_graph,
+            "source": self.source,
+            "baseline_negative_cycle": list(self.baseline_negative_cycle) if self.baseline_negative_cycle else None,
+            "candidate_negative_cycle": list(self.candidate_negative_cycle) if self.candidate_negative_cycle else None,
+            "edge_changes": [change.to_dict() for change in self.edge_changes],
+            "route_diffs": [diff.to_dict() for diff in self.route_diffs],
+            "changed_route_count": self.changed_route_count,
+            "unchanged_route_count": self.unchanged_route_count,
+        }
+
+
 def load_graph(path: str | Path) -> tuple[str, tuple[str, ...], tuple[Edge, ...]]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     graph_name = str(payload.get("name", Path(path).stem))
@@ -579,6 +659,282 @@ def build_shortest_path_results(result: BellmanFordResult) -> dict[str, PathResu
     return paths
 
 
+def build_route_table(report: RoutingReport) -> dict[str, RouteTableEntry]:
+    if report.bellman_ford is None:
+        raise ValueError('route-table export requires Bellman-Ford data')
+    shortest_paths = build_shortest_path_results(report.bellman_ford)
+    unstable_nodes: set[str] = set()
+    if report.bellman_ford.negative_cycle:
+        unstable_nodes = _nodes_reachable_from_starts(report.edges, report.bellman_ford.negative_cycle[:-1])
+    return {
+        node: RouteTableEntry(
+            node=node,
+            cost=result.cost,
+            predecessor=report.bellman_ford.predecessors[node],
+            path=result.path,
+            status=(
+                'cycle-reachable'
+                if node in unstable_nodes
+                else ('reachable' if result.path else 'unreachable')
+            ),
+        )
+        for node, result in shortest_paths.items()
+    }
+
+
+def _format_route_entry_path(entry: RouteTableEntry | None) -> str:
+    if entry is None:
+        return 'absent'
+    return ' -> '.join(entry.path) if entry.path else 'unreachable'
+
+
+def _format_route_entry_cost(entry: RouteTableEntry | None) -> str:
+    if entry is None:
+        return '—'
+    return _format_cost(entry.cost)
+
+
+def _format_route_entry_predecessor(entry: RouteTableEntry | None) -> str:
+    if entry is None:
+        return '—'
+    return entry.predecessor or '—'
+
+
+def _format_route_entry_status(entry: RouteTableEntry | None) -> str:
+    if entry is None:
+        return 'absent'
+    return entry.status
+
+
+def _summarize_route_diff(baseline: RouteTableEntry | None, candidate: RouteTableEntry | None, changed_fields: tuple[str, ...]) -> str:
+    if baseline is None and candidate is None:
+        return 'absent in both graphs'
+    if baseline is None:
+        return 'node added in candidate graph'
+    if candidate is None:
+        return 'node removed from candidate graph'
+    if not changed_fields:
+        return 'unchanged'
+
+    parts: list[str] = []
+    if 'status' in changed_fields:
+        parts.append(f'status {baseline.status} -> {candidate.status}')
+    if 'cost' in changed_fields:
+        parts.append(f'cost {_format_cost(baseline.cost)} -> {_format_cost(candidate.cost)}')
+    if 'predecessor' in changed_fields:
+        parts.append(
+            'predecessor '
+            + f'{baseline.predecessor or "—"} -> {candidate.predecessor or "—"}'
+        )
+    if 'path' in changed_fields:
+        prefix = 'path changed at same cost' if baseline.cost == candidate.cost else 'path'
+        parts.append(
+            f'{prefix}: [{_format_route_entry_path(baseline)}] => [{_format_route_entry_path(candidate)}]'
+        )
+    if 'presence' in changed_fields:
+        parts.append('node presence changed')
+    return '; '.join(parts)
+
+
+def compare_reports(baseline_report: RoutingReport, candidate_report: RoutingReport) -> RoutingComparison:
+    if baseline_report.bellman_ford is None or candidate_report.bellman_ford is None:
+        raise ValueError('route comparison requires Bellman-Ford data in both reports')
+    if baseline_report.bellman_ford.source != candidate_report.bellman_ford.source:
+        raise ValueError('route comparison requires the same Bellman-Ford source in both reports')
+
+    baseline_edges = {(edge.source, edge.target): edge.weight for edge in baseline_report.edges}
+    candidate_edges = {(edge.source, edge.target): edge.weight for edge in candidate_report.edges}
+    edge_changes: list[EdgeChange] = []
+    for source, target in sorted(set(baseline_edges) | set(candidate_edges)):
+        baseline_weight = baseline_edges.get((source, target))
+        candidate_weight = candidate_edges.get((source, target))
+        if baseline_weight == candidate_weight:
+            continue
+        if baseline_weight is None:
+            change = 'added'
+        elif candidate_weight is None:
+            change = 'removed'
+        else:
+            change = 'weight-changed'
+        edge_changes.append(
+            EdgeChange(
+                source=source,
+                target=target,
+                baseline_weight=baseline_weight,
+                candidate_weight=candidate_weight,
+                change=change,
+            )
+        )
+
+    baseline_table = build_route_table(baseline_report)
+    candidate_table = build_route_table(candidate_report)
+    route_diffs: list[RouteDiff] = []
+    changed_route_count = 0
+    unchanged_route_count = 0
+    for node in sorted(set(baseline_table) | set(candidate_table)):
+        baseline = baseline_table.get(node)
+        candidate = candidate_table.get(node)
+        changed_fields: list[str] = []
+        if baseline is None or candidate is None:
+            changed_fields.append('presence')
+        else:
+            if baseline.status != candidate.status:
+                changed_fields.append('status')
+            if baseline.cost != candidate.cost:
+                changed_fields.append('cost')
+            if baseline.predecessor != candidate.predecessor:
+                changed_fields.append('predecessor')
+            if baseline.path != candidate.path:
+                changed_fields.append('path')
+        if changed_fields:
+            changed_route_count += 1
+        else:
+            unchanged_route_count += 1
+        route_diffs.append(
+            RouteDiff(
+                node=node,
+                baseline=baseline,
+                candidate=candidate,
+                changed_fields=tuple(changed_fields),
+                summary=_summarize_route_diff(baseline, candidate, tuple(changed_fields)),
+            )
+        )
+
+    return RoutingComparison(
+        baseline_graph=baseline_report.graph_name,
+        candidate_graph=candidate_report.graph_name,
+        source=baseline_report.bellman_ford.source,
+        baseline_negative_cycle=baseline_report.bellman_ford.negative_cycle,
+        candidate_negative_cycle=candidate_report.bellman_ford.negative_cycle,
+        edge_changes=tuple(edge_changes),
+        route_diffs=tuple(route_diffs),
+        changed_route_count=changed_route_count,
+        unchanged_route_count=unchanged_route_count,
+    )
+
+
+def render_pretty_comparison(comparison: RoutingComparison) -> str:
+    lines = [
+        f'Route-table comparison: {comparison.baseline_graph} vs {comparison.candidate_graph}',
+        f'Source: {comparison.source}',
+        f'Changed edges: {len(comparison.edge_changes)}',
+        f'Changed route entries: {comparison.changed_route_count}',
+        f'Unchanged route entries: {comparison.unchanged_route_count}',
+        'Baseline negative cycle: '
+        + (' -> '.join(comparison.baseline_negative_cycle) if comparison.baseline_negative_cycle else 'none'),
+        'Candidate negative cycle: '
+        + (' -> '.join(comparison.candidate_negative_cycle) if comparison.candidate_negative_cycle else 'none'),
+    ]
+
+    lines.append('')
+    lines.append('Edge changes:')
+    if comparison.edge_changes:
+        for change in comparison.edge_changes:
+            lines.append(
+                '- '
+                + f'{change.source} -> {change.target}: '
+                + f'{change.baseline_weight if change.baseline_weight is not None else "absent"} '
+                + f'-> {change.candidate_weight if change.candidate_weight is not None else "absent"} '
+                + f'({change.change})'
+            )
+    else:
+        lines.append('- none')
+
+    lines.append('')
+    lines.append('Route diffs:')
+    changed_diffs = [diff for diff in comparison.route_diffs if diff.changed_fields]
+    if changed_diffs:
+        for diff in changed_diffs:
+            lines.append(
+                '- '
+                + f'{diff.node}: {diff.summary}'
+            )
+    else:
+        lines.append('- none')
+    return "\n".join(lines)
+
+
+def render_markdown_comparison(comparison: RoutingComparison) -> str:
+    lines = [
+        f'# {comparison.baseline_graph} vs {comparison.candidate_graph} route diff report',
+        '',
+        f'- Source: {comparison.source}',
+        f'- Changed edges: {len(comparison.edge_changes)}',
+        f'- Changed route entries: {comparison.changed_route_count}',
+        f'- Unchanged route entries: {comparison.unchanged_route_count}',
+        '- Baseline negative cycle: '
+        + (' -> '.join(comparison.baseline_negative_cycle) if comparison.baseline_negative_cycle else 'none'),
+        '- Candidate negative cycle: '
+        + (' -> '.join(comparison.candidate_negative_cycle) if comparison.candidate_negative_cycle else 'none'),
+        '',
+        '## Edge changes',
+    ]
+    if comparison.edge_changes:
+        _markdown_table(
+            lines,
+            ['Source', 'Target', 'Baseline weight', 'Candidate weight', 'Change'],
+            (
+                [
+                    change.source,
+                    change.target,
+                    str(change.baseline_weight) if change.baseline_weight is not None else 'absent',
+                    str(change.candidate_weight) if change.candidate_weight is not None else 'absent',
+                    change.change,
+                ]
+                for change in comparison.edge_changes
+            ),
+        )
+    else:
+        lines.append('- No edge changes.')
+
+    lines.append('')
+    lines.append('## Route-table diff')
+    changed_diffs = [diff for diff in comparison.route_diffs if diff.changed_fields]
+    if changed_diffs:
+        _markdown_table(
+            lines,
+            [
+                'Node',
+                'Baseline cost',
+                'Baseline predecessor',
+                'Baseline path',
+                'Baseline status',
+                'Candidate cost',
+                'Candidate predecessor',
+                'Candidate path',
+                'Candidate status',
+                'Changed fields',
+                'Summary',
+            ],
+            (
+                [
+                    diff.node,
+                    _format_route_entry_cost(diff.baseline),
+                    _format_route_entry_predecessor(diff.baseline),
+                    _format_route_entry_path(diff.baseline),
+                    _format_route_entry_status(diff.baseline),
+                    _format_route_entry_cost(diff.candidate),
+                    _format_route_entry_predecessor(diff.candidate),
+                    _format_route_entry_path(diff.candidate),
+                    _format_route_entry_status(diff.candidate),
+                    ', '.join(diff.changed_fields),
+                    diff.summary,
+                ]
+                for diff in changed_diffs
+            ),
+        )
+    else:
+        lines.append('- No route-table changes.')
+    return "\n".join(lines) + "\n"
+
+
+def export_compare_markdown(comparison: RoutingComparison, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_markdown_comparison(comparison), encoding='utf-8')
+    return output
+
+
 def build_report(
     graph_name: str,
     nodes: Iterable[str],
@@ -611,9 +967,14 @@ def parse_args() -> argparse.Namespace:
         help="Which analysis to run",
     )
     parser.add_argument("--format", choices=("json", "pretty"), default="pretty")
+    parser.add_argument("--compare-graph", help="Path to a second graph JSON file for route-table comparison")
     parser.add_argument("--export-mermaid", help="Write a Mermaid flowchart artifact for the selected report")
     parser.add_argument("--export-dot", help="Write a Graphviz DOT artifact for the selected report")
     parser.add_argument("--export-markdown", help="Write a Markdown routing report artifact for the selected report")
+    parser.add_argument(
+        "--export-compare-markdown",
+        help="Write a Markdown route-table diff artifact comparing the main graph to --compare-graph",
+    )
     return parser.parse_args()
 
 
@@ -627,6 +988,37 @@ def main() -> None:
         export_dot(report, args.export_dot)
     if args.export_markdown:
         export_markdown(report, args.export_markdown)
+    if args.export_compare_markdown and not args.compare_graph:
+        raise ValueError('--export-compare-markdown requires --compare-graph')
+    if args.compare_graph:
+        if args.mode not in {'bellman-ford', 'full'} or not args.source:
+            raise ValueError('--compare-graph requires --mode bellman-ford/full with --source')
+        candidate_graph_name, candidate_nodes, candidate_edges = load_graph(args.compare_graph)
+        candidate_report = build_report(
+            candidate_graph_name,
+            candidate_nodes,
+            candidate_edges,
+            source=args.source,
+            mode=args.mode,
+        )
+        comparison = compare_reports(report, candidate_report)
+        if args.export_compare_markdown:
+            export_compare_markdown(comparison, args.export_compare_markdown)
+        if args.format == 'json':
+            print(
+                json.dumps(
+                    {
+                        'baseline': report.to_dict(),
+                        'candidate': candidate_report.to_dict(),
+                        'comparison': comparison.to_dict(),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
+        print(render_pretty_comparison(comparison))
+        return
     if args.format == "json":
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return

@@ -13,6 +13,7 @@ MODULE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "
 SAMPLE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "sample_graph.json"
 NEGATIVE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "negative_cycle_graph.json"
 UNREACHABLE_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "unreachable_graph.json"
+ROUTE_SHIFT_PATH = PROJECT_ROOT / "projects" / "graph-routing-negative-cycle-lab" / "route_shift_graph.json"
 
 spec = importlib.util.spec_from_file_location("graph_routing_negative_cycle_lab", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
@@ -22,12 +23,16 @@ spec.loader.exec_module(module)
 
 bellman_ford = module.bellman_ford
 build_report = module.build_report
+build_route_table = module.build_route_table
 build_shortest_path_results = module.build_shortest_path_results
+compare_reports = module.compare_reports
+export_compare_markdown = module.export_compare_markdown
 export_dot = module.export_dot
 export_markdown = module.export_markdown
 export_mermaid = module.export_mermaid
 johnson = module.johnson
 load_graph = module.load_graph
+render_markdown_comparison = module.render_markdown_comparison
 render_pretty = module.render_pretty
 
 
@@ -199,6 +204,141 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn("| A\\|1 | B\\|2 | 7 |", rendered)
             self.assertIn("| A\\|1 | 0 | — | A\\|1 | reachable |", rendered)
             self.assertIn("A\\|1 -> B\\|2", rendered)
+
+    def test_compare_reports_highlights_cost_and_path_changes(self) -> None:
+        baseline = build_report(*load_graph(SAMPLE_PATH), source="A", mode="bellman-ford")
+        candidate = build_report(*load_graph(ROUTE_SHIFT_PATH), source="A", mode="bellman-ford")
+        comparison = compare_reports(baseline, candidate)
+
+        self.assertEqual(len(comparison.edge_changes), 2)
+        edge_changes = {(change.source, change.target): change for change in comparison.edge_changes}
+        self.assertEqual(edge_changes[("C", "B")].baseline_weight, -1)
+        self.assertEqual(edge_changes[("C", "B")].candidate_weight, 3)
+        self.assertEqual(edge_changes[("C", "D")].candidate_weight, 1)
+
+        diffs = {diff.node: diff for diff in comparison.route_diffs}
+        self.assertEqual(diffs["B"].changed_fields, ("cost", "predecessor", "path"))
+        self.assertIn("cost 1 -> 4", diffs["B"].summary)
+        self.assertIn("path: [A -> C -> B] => [A -> B]", diffs["B"].summary)
+        self.assertEqual(diffs["D"].changed_fields, ("predecessor", "path"))
+        self.assertIn("path changed at same cost: [A -> C -> B -> D] => [A -> C -> D]", diffs["D"].summary)
+        self.assertEqual(comparison.changed_route_count, 2)
+        self.assertEqual(comparison.unchanged_route_count, 2)
+
+    def test_compare_reports_marks_presence_changes_when_candidate_adds_node(self) -> None:
+        baseline = build_report(
+            "baseline_graph",
+            ("A", "B"),
+            (module.Edge("A", "B", 1),),
+            source="A",
+            mode="bellman-ford",
+        )
+        candidate = build_report(
+            "candidate_graph",
+            ("A", "B", "C"),
+            (module.Edge("A", "B", 1), module.Edge("B", "C", 1)),
+            source="A",
+            mode="bellman-ford",
+        )
+        comparison = compare_reports(baseline, candidate)
+        diffs = {diff.node: diff for diff in comparison.route_diffs}
+        self.assertEqual(diffs["C"].changed_fields, ("presence",))
+        self.assertEqual(diffs["C"].summary, "node added in candidate graph")
+        self.assertEqual(comparison.changed_route_count, 1)
+
+    def test_build_route_table_marks_cycle_reachable_nodes(self) -> None:
+        report = build_report(*load_graph(NEGATIVE_PATH), source="A", mode="bellman-ford")
+        table = build_route_table(report)
+        self.assertEqual(table["A"].status, "cycle-reachable")
+        self.assertEqual(table["D"].status, "cycle-reachable")
+
+    def test_export_compare_markdown_writes_changed_route_table(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "route-diff.md"
+            baseline = build_report(*load_graph(SAMPLE_PATH), source="A", mode="bellman-ford")
+            candidate = build_report(*load_graph(ROUTE_SHIFT_PATH), source="A", mode="bellman-ford")
+            comparison = compare_reports(baseline, candidate)
+            export_compare_markdown(comparison, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn("# routing_demo vs routing_shift_demo route diff report", rendered)
+            self.assertIn("| C | B | -1 | 3 | weight-changed |", rendered)
+            self.assertIn("| B | 1 | C | A -> C -> B | reachable | 4 | A | A -> B | reachable | cost, predecessor, path |", rendered)
+            self.assertIn("path: [A -> C -> B] => [A -> B]", rendered)
+            self.assertIn("path changed at same cost: [A -> C -> B -> D] => [A -> C -> D]", rendered)
+            self.assertIn("## Route-table diff", render_markdown_comparison(comparison))
+
+    def test_cli_json_mode_with_compare_graph_emits_comparison_payload(self) -> None:
+        completed = subprocess.run(
+            [
+                str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                str(MODULE_PATH),
+                str(SAMPLE_PATH),
+                "--source",
+                "A",
+                "--mode",
+                "bellman-ford",
+                "--compare-graph",
+                str(ROUTE_SHIFT_PATH),
+                "--format",
+                "json",
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["comparison"]["baseline_graph"], "routing_demo")
+        self.assertEqual(payload["comparison"]["candidate_graph"], "routing_shift_demo")
+        diffs = {diff["node"]: diff for diff in payload["comparison"]["route_diffs"]}
+        self.assertEqual(diffs["B"]["changed_fields"], ["cost", "predecessor", "path"])
+
+    def test_cli_can_export_compare_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "cli-route-diff.md"
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    str(SAMPLE_PATH),
+                    "--source",
+                    "A",
+                    "--mode",
+                    "bellman-ford",
+                    "--compare-graph",
+                    str(ROUTE_SHIFT_PATH),
+                    "--export-compare-markdown",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("Route-table comparison:", completed.stdout)
+            self.assertTrue(output_path.exists())
+            self.assertIn("## Route-table diff", output_path.read_text(encoding="utf-8"))
+
+    def test_cli_compare_markdown_requires_compare_graph(self) -> None:
+        completed = subprocess.run(
+            [
+                str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                str(MODULE_PATH),
+                str(SAMPLE_PATH),
+                "--source",
+                "A",
+                "--mode",
+                "bellman-ford",
+                "--export-compare-markdown",
+                str(PROJECT_ROOT / "docs" / "artifacts" / "should-not-exist.md"),
+            ],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--export-compare-markdown requires --compare-graph", completed.stderr)
 
     def test_cli_json_mode_emits_johnson_payload(self) -> None:
         completed = subprocess.run(
