@@ -7,7 +7,7 @@
 - [x] keep preset list/preview flows compatible with JSON-backed custom preset files and the existing card export codepaths
 - [x] refresh README/checklist/review notes and commit sample preset catalog/preview helper artifacts under `docs/artifacts/log-analyzer/`
 - [x] run targeted tests, real helper/export smoke checks, and 3 review passes
-- [ ] run secret scan, commit, push, and write the wrap-up
+- [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] parse common and combined access-log formats
