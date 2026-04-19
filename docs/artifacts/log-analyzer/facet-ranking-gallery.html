@@ -17,9 +17,22 @@
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.9rem; margin: 1.2rem 0 0; }
     .summary-card { background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(191, 219, 254, 0.2); border-radius: 1rem; padding: 0.95rem 1rem; }
     .summary-card strong { display: block; font-size: 1.6rem; margin-bottom: 0.2rem; }
+    .gallery-controls, .facet-card, .related-links { background: rgba(255, 255, 255, 0.92); border: 1px solid #dbeafe; border-radius: 1.3rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }
+    .gallery-controls { margin-top: 1.2rem; }
+    .control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; }
+    .field-filter-grid { margin-top: 0.85rem; }
+    .control-field { display: flex; flex-direction: column; gap: 0.45rem; }
+    .control-field span { font-size: 0.82rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #475569; }
+    .control-field input, .control-field select { border: 1px solid #cbd5f5; border-radius: 0.85rem; padding: 0.72rem 0.8rem; font: inherit; background: #ffffff; color: #0f172a; }
+    .control-toggle { justify-content: flex-end; }
+    .checkbox-line { display: inline-flex; align-items: center; gap: 0.55rem; color: #1e293b; font-weight: 600; }
+    .control-note { color: #475569; margin: 0.9rem 0 0; }
     .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.35rem; }
-    .facet-card, .related-links { background: rgba(255, 255, 255, 0.92); border: 1px solid #dbeafe; border-radius: 1.3rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }
     .facet-card h2, .related-links h2 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+    .facet-stats { display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }
+    .stat-chip { display: inline-flex; flex-direction: column; gap: 0.12rem; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.55rem 0.72rem; min-width: 8.2rem; }
+    .stat-chip strong { font-size: 1.05rem; }
+    .stat-chip span { font-size: 0.8rem; color: #475569; }
     .facet-pill-row { display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }
     .facet-pill { display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }
     .facet-pill strong { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }
@@ -34,6 +47,8 @@
     .related-links li + li { margin-top: 0.45rem; }
     .related-links a { color: #1d4ed8; text-decoration: none; font-weight: 600; }
     .footer-note { color: #475569; margin-top: 1rem; }
+    .hide-empty-ranking-blocks .ranking-block.is-empty { display: none; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
@@ -48,13 +63,96 @@
         <li><strong>Coverage</strong><span>full log span</span></li>
         <li><strong>Window detail</strong><span>Window filter inactive</span></li>
       </ul>
-      <div class="summary-grid"><div class="summary-card"><strong>3</strong><span>facet slices</span></div><div class="summary-card"><strong>4</strong><span>ranking families with data</span></div><div class="summary-card"><strong>20</strong><span>rendered ranking rows</span></div><div class="summary-card"><strong>6</strong><span>related artifact links</span></div></div>
+      <div class="summary-grid"><div class="summary-card"><strong>3</strong><span>facet slices</span></div><div class="summary-card"><strong>4</strong><span>ranking families with data</span></div><div class="summary-card"><strong>20</strong><span>rendered ranking rows</span></div><div class="summary-card"><strong>3</strong><span>largest slice requests</span></div><div class="summary-card"><strong>6</strong><span>related artifact links</span></div></div>
     </section>
-    <section class="gallery-grid">
-      <article class="facet-card"><h2>env=prod, region=us-east-1</h2><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>prod</span><span class="facet-pill"><strong>region</strong>us-east-1</span></div><section class="ranking-block"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.1.0.1</code></td><td>2</td></tr><tr><td>2</td><td><code>10.1.0.2</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/api/report</code></td><td>2</td></tr><tr><td>2</td><td><code>/health</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://status.example.com/deploy</code></td><td>2</td></tr><tr><td>2</td><td><code>https://ops.example.com/dashboard</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>Mozilla/5.0 (prod)</code></td><td>2</td></tr><tr><td>2</td><td><code>curl/8.7</code></td><td>1</td></tr></tbody></table></section></article><article class="facet-card"><h2>env=staging, region=us-west-2</h2><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>staging</span><span class="facet-pill"><strong>region</strong>us-west-2</span></div><section class="ranking-block"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.2.0.3</code></td><td>2</td></tr><tr><td>2</td><td><code>10.2.0.4</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/api/export</code></td><td>2</td></tr><tr><td>2</td><td><code>/api/report</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://staging.example.com/replay</code></td><td>2</td></tr><tr><td>2</td><td><code>https://status.example.com/deploy</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>curl/8.7 staging</code></td><td>2</td></tr><tr><td>2</td><td><code>Mozilla/5.0 (staging)</code></td><td>1</td></tr></tbody></table></section></article><article class="facet-card"><h2>env=preview, region=(missing)</h2><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>preview</span><span class="facet-pill"><strong>region</strong>(missing)</span></div><section class="ranking-block"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.3.0.5</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/preview</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://preview.example.com/home</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>PreviewBot/1.0</code></td><td>2</td></tr></tbody></table></section></article>
+    <section class="gallery-controls">  <div class="control-grid">    <label class="control-field">      <span>Search slices</span>      <input id="facet-gallery-search" type="search" placeholder="prod, region, release tag, referrer family...">    </label>    <label class="control-field">      <span>Sort slices</span>      <select id="facet-gallery-sort">        <option value="traffic-desc">Highest traffic first</option>        <option value="traffic-asc">Lowest traffic first</option>        <option value="label-asc">Facet label A → Z</option>        <option value="label-desc">Facet label Z → A</option>      </select>    </label>    <div class="control-field control-toggle">      <span>Presentation cleanup</span>      <label class="checkbox-line"><input id="facet-gallery-hide-empty" type="checkbox"> Hide empty ranking families</label>    </div>  </div>  <div class="control-grid field-filter-grid"><label class="control-field"><span>Filter env</span><select class="facet-gallery-filter" data-field-name="env"><option value="">All env values</option><option value="preview">preview</option><option value="prod">prod</option><option value="staging">staging</option></select></label><label class="control-field"><span>Filter region</span><select class="facet-gallery-filter" data-field-name="region"><option value="">All region values</option><option value="(missing)">(missing)</option><option value="us-east-1">us-east-1</option><option value="us-west-2">us-west-2</option></select></label></div>  <p class="control-note"><strong id="facet-gallery-visible-count">3</strong> of <strong>3</strong> slices visible. Filters work entirely in-browser, so the exported file stays self-contained.</p></section>
+    <section class="gallery-grid" id="facet-gallery-grid">
+      <article class="facet-card" data-facet-card="true" data-facet-label="env=prod, region=us-east-1" data-facet-total-count="3" data-search-text="env=prod, region=us-east-1 env prod region us-east-1 top ips top paths top referrers top user agents" data-facet-map="{&quot;env&quot;: &quot;prod&quot;, &quot;region&quot;: &quot;us-east-1&quot;}"><h2>env=prod, region=us-east-1</h2><div class="facet-stats"><span class="stat-chip"><strong>3</strong><span>requests in slice</span></span><span class="stat-chip"><strong>4</strong><span>ranking families with data</span></span><span class="stat-chip"><strong>8</strong><span>rendered rows</span></span></div><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>prod</span><span class="facet-pill"><strong>region</strong>us-east-1</span></div><section class="ranking-block" data-family-key="top-ips"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.1.0.1</code></td><td>2</td></tr><tr><td>2</td><td><code>10.1.0.2</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-paths"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/api/report</code></td><td>2</td></tr><tr><td>2</td><td><code>/health</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-referrers"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://status.example.com/deploy</code></td><td>2</td></tr><tr><td>2</td><td><code>https://ops.example.com/dashboard</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-user-agents"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>Mozilla/5.0 (prod)</code></td><td>2</td></tr><tr><td>2</td><td><code>curl/8.7</code></td><td>1</td></tr></tbody></table></section></article><article class="facet-card" data-facet-card="true" data-facet-label="env=staging, region=us-west-2" data-facet-total-count="3" data-search-text="env=staging, region=us-west-2 env staging region us-west-2 top ips top paths top referrers top user agents" data-facet-map="{&quot;env&quot;: &quot;staging&quot;, &quot;region&quot;: &quot;us-west-2&quot;}"><h2>env=staging, region=us-west-2</h2><div class="facet-stats"><span class="stat-chip"><strong>3</strong><span>requests in slice</span></span><span class="stat-chip"><strong>4</strong><span>ranking families with data</span></span><span class="stat-chip"><strong>8</strong><span>rendered rows</span></span></div><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>staging</span><span class="facet-pill"><strong>region</strong>us-west-2</span></div><section class="ranking-block" data-family-key="top-ips"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.2.0.3</code></td><td>2</td></tr><tr><td>2</td><td><code>10.2.0.4</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-paths"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/api/export</code></td><td>2</td></tr><tr><td>2</td><td><code>/api/report</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-referrers"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://staging.example.com/replay</code></td><td>2</td></tr><tr><td>2</td><td><code>https://status.example.com/deploy</code></td><td>1</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-user-agents"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>curl/8.7 staging</code></td><td>2</td></tr><tr><td>2</td><td><code>Mozilla/5.0 (staging)</code></td><td>1</td></tr></tbody></table></section></article><article class="facet-card" data-facet-card="true" data-facet-label="env=preview, region=(missing)" data-facet-total-count="2" data-search-text="env=preview, region=(missing) env preview region (missing) top ips top paths top referrers top user agents" data-facet-map="{&quot;env&quot;: &quot;preview&quot;, &quot;region&quot;: &quot;(missing)&quot;}"><h2>env=preview, region=(missing)</h2><div class="facet-stats"><span class="stat-chip"><strong>2</strong><span>requests in slice</span></span><span class="stat-chip"><strong>4</strong><span>ranking families with data</span></span><span class="stat-chip"><strong>4</strong><span>rendered rows</span></span></div><div class="facet-pill-row"><span class="facet-pill"><strong>env</strong>preview</span><span class="facet-pill"><strong>region</strong>(missing)</span></div><section class="ranking-block" data-family-key="top-ips"><h3>Top IPs</h3><p class="caption">Which source IPs dominate each deployment or environment slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>10.3.0.5</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-paths"><h3>Top paths</h3><p class="caption">Which endpoints absorb the most traffic inside each facet slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>/preview</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-referrers"><h3>Top referrers</h3><p class="caption">Which upstream pages or campaign links feed each slice when combined logs are available.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>https://preview.example.com/home</code></td><td>2</td></tr></tbody></table></section><section class="ranking-block" data-family-key="top-user-agents"><h3>Top user agents</h3><p class="caption">Which browser, bot, or client strings dominate each slice.</p><table>  <thead><tr><th>Rank</th><th>Value</th><th>Count</th></tr></thead>  <tbody><tr><td>1</td><td><code>PreviewBot/1.0</code></td><td>2</td></tr></tbody></table></section></article>
     </section>
     <section class="related-links">  <h2>Related artifacts</h2>  <p>Use these links to jump from the gallery into committed CSV exports, comparison cards, or other portfolio-friendly review artifacts.</p>  <ul><li><a href="release-comparison-card.html">Comparison card HTML</a></li><li><a href="release-comparison-card-annotated.html">Annotated comparison card HTML</a></li><li><a href="top-ips-by-facet.csv">Top IPs CSV</a></li><li><a href="top-paths-by-facet.csv">Top paths CSV</a></li><li><a href="top-referrers-by-facet.csv">Top referrers CSV</a></li><li><a href="top-user-agents-by-facet.csv">Top user agents CSV</a></li></ul></section>
     <p class="footer-note">Tip: regenerate this gallery alongside the facet CSV exports and any release comparison cards so screenshots, CSV downloads, and review notes stay aligned.</p>
   </main>
+  <script>
+    (() => {
+      const grid = document.getElementById('facet-gallery-grid');
+      if (!grid) {
+        return;
+      }
+      const cards = Array.from(grid.querySelectorAll('[data-facet-card="true"]'));
+      if (!cards.length) {
+        return;
+      }
+      const searchInput = document.getElementById('facet-gallery-search');
+      const sortSelect = document.getElementById('facet-gallery-sort');
+      const hideEmptyToggle = document.getElementById('facet-gallery-hide-empty');
+      const fieldSelects = Array.from(document.querySelectorAll('.facet-gallery-filter'));
+      const visibleCount = document.getElementById('facet-gallery-visible-count');
+
+      const compareCards = (left, right, mode) => {
+        const leftLabel = left.dataset.facetLabel || '';
+        const rightLabel = right.dataset.facetLabel || '';
+        const leftTraffic = Number.parseInt(left.dataset.facetTotalCount || '0', 10) || 0;
+        const rightTraffic = Number.parseInt(right.dataset.facetTotalCount || '0', 10) || 0;
+        if (mode === 'traffic-asc') {
+          return (leftTraffic - rightTraffic) || leftLabel.localeCompare(rightLabel);
+        }
+        if (mode === 'label-asc') {
+          return leftLabel.localeCompare(rightLabel) || (rightTraffic - leftTraffic);
+        }
+        if (mode === 'label-desc') {
+          return rightLabel.localeCompare(leftLabel) || (rightTraffic - leftTraffic);
+        }
+        return (rightTraffic - leftTraffic) || leftLabel.localeCompare(rightLabel);
+      };
+
+      const parseFacetMap = (card) => {
+        try {
+          return JSON.parse(card.dataset.facetMap || '{}');
+        } catch (error) {
+          return {};
+        }
+      };
+
+      const applyControls = () => {
+        const query = (searchInput?.value || '').trim().toLowerCase();
+        const activeFilters = fieldSelects
+          .filter((select) => select.value)
+          .map((select) => [select.dataset.fieldName || '', select.value]);
+        const sortMode = sortSelect?.value || 'traffic-desc';
+        let shown = 0;
+        const sortedCards = [...cards].sort((left, right) => compareCards(left, right, sortMode));
+        for (const card of sortedCards) {
+          const searchText = (card.dataset.searchText || '').toLowerCase();
+          const facetMap = parseFacetMap(card);
+          let visible = !query || searchText.includes(query);
+          if (visible) {
+            for (const [field, value] of activeFilters) {
+              if ((facetMap[field] || '') !== value) {
+                visible = false;
+                break;
+              }
+            }
+          }
+          card.hidden = !visible;
+          if (visible) {
+            shown += 1;
+          }
+          grid.appendChild(card);
+        }
+        if (visibleCount) {
+          visibleCount.textContent = String(shown);
+        }
+        document.body.classList.toggle('hide-empty-ranking-blocks', Boolean(hideEmptyToggle?.checked));
+      };
+
+      searchInput?.addEventListener('input', applyControls);
+      sortSelect?.addEventListener('change', applyControls);
+      hideEmptyToggle?.addEventListener('change', applyControls);
+      for (const select of fieldSelects) {
+        select.addEventListener('change', applyControls);
+      }
+      applyControls();
+    })();
+  </script>
 </body>
 </html>

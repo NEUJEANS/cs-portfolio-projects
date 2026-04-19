@@ -641,7 +641,7 @@ def summarize_top_counts_by_facet(
         sorted_facet_groups.append((facet_values, facet_label, facets, total_count))
 
     rows = []
-    for facet_values, facet_label, facets, _ in sorted(
+    for facet_values, facet_label, facets, total_count in sorted(
         sorted_facet_groups,
         key=lambda item: (-item[3], item[1]),
     ):
@@ -655,6 +655,7 @@ def summarize_top_counts_by_facet(
                     value_key: value,
                     "facets": facets,
                     "facet_label": facet_label,
+                    "facet_total_count": total_count,
                     "rank": rank,
                     "count": count,
                 }
@@ -1326,24 +1327,28 @@ def format_facet_ranking_gallery_html(
     category_specs = [
         {
             "title": "Top IPs",
+            "family_key": "top-ips",
             "description": "Which source IPs dominate each deployment or environment slice.",
             "rows": list(result.get("top_ips_by_facet", [])),
             "value_field": "ip",
         },
         {
             "title": "Top paths",
+            "family_key": "top-paths",
             "description": "Which endpoints absorb the most traffic inside each facet slice.",
             "rows": list(result.get("top_paths_by_facet", [])),
             "value_field": "path",
         },
         {
             "title": "Top referrers",
+            "family_key": "top-referrers",
             "description": "Which upstream pages or campaign links feed each slice when combined logs are available.",
             "rows": list(result.get("top_referrers_by_facet", [])),
             "value_field": "referrer",
         },
         {
             "title": "Top user agents",
+            "family_key": "top-user-agents",
             "description": "Which browser, bot, or client strings dominate each slice.",
             "rows": list(result.get("top_user_agents_by_facet", [])),
             "value_field": "user_agent",
@@ -1351,7 +1356,6 @@ def format_facet_ranking_gallery_html(
     ]
 
     facet_groups: dict[str, dict[str, object]] = {}
-    facet_order: list[str] = []
     for spec in category_specs:
         for row in spec["rows"]:
             facet_label = str(row["facet_label"])
@@ -1360,16 +1364,33 @@ def format_facet_ranking_gallery_html(
                     "facet_label": facet_label,
                     "facets": dict(row["facets"]),
                     "categories": {},
+                    "family_keys_with_data": set(),
+                    "total_count": 0,
                 }
-                facet_order.append(facet_label)
-            facet_groups[facet_label]["categories"].setdefault(spec["title"], []).append(row)
+            group = facet_groups[facet_label]
+            group["categories"].setdefault(spec["title"], []).append(row)
+            group["family_keys_with_data"].add(spec["family_key"])
+            group["total_count"] = max(
+                int(group["total_count"]),
+                int(row.get("facet_total_count", 0)),
+            )
+
+    facet_groups_sorted = sorted(
+        facet_groups.values(),
+        key=lambda group: (-int(group["total_count"]), str(group["facet_label"])),
+    )
 
     rendered_row_count = sum(len(spec["rows"]) for spec in category_specs)
     populated_family_count = sum(1 for spec in category_specs if spec["rows"])
+    largest_slice_requests = max(
+        (int(group["total_count"]) for group in facet_groups_sorted),
+        default=0,
+    )
     summary_cards = [
-        (len(facet_order), "facet slices"),
+        (len(facet_groups_sorted), "facet slices"),
         (populated_family_count, "ranking families with data"),
         (rendered_row_count, "rendered ranking rows"),
+        (largest_slice_requests, "largest slice requests"),
         (len(related_links or []), "related artifact links"),
     ]
     summary_cards_html = "".join(
@@ -1388,25 +1409,125 @@ def format_facet_ranking_gallery_html(
         )
     facet_fields = ", ".join(str(field) for field in faceting["fields"])
 
+    field_filter_controls: list[str] = []
+    for field_name in faceting["fields"]:
+        option_values = sorted(
+            {
+                str(dict(group["facets"]).get(str(field_name), MISSING_FACET_VALUE))
+                for group in facet_groups_sorted
+            }
+        )
+        option_tags = [
+            f'<option value="">All {escape(str(field_name))} values</option>'
+        ]
+        option_tags.extend(
+            f'<option value="{escape(value, quote=True)}">{escape(value)}</option>'
+            for value in option_values
+        )
+        field_filter_controls.append(
+            "".join(
+                [
+                    '<label class="control-field">',
+                    f'<span>Filter {escape(str(field_name))}</span>',
+                    (
+                        '<select class="facet-gallery-filter" '
+                        f'data-field-name="{escape(str(field_name), quote=True)}">'
+                        f'{"".join(option_tags)}</select>'
+                    ),
+                    '</label>',
+                ]
+            )
+        )
+
+    controls_html = ""
+    if facet_groups_sorted:
+        controls_html = "".join(
+            [
+                '<section class="gallery-controls">',
+                '  <div class="control-grid">',
+                '    <label class="control-field">',
+                '      <span>Search slices</span>',
+                '      <input id="facet-gallery-search" type="search" placeholder="prod, region, release tag, referrer family...">',
+                '    </label>',
+                '    <label class="control-field">',
+                '      <span>Sort slices</span>',
+                '      <select id="facet-gallery-sort">',
+                '        <option value="traffic-desc">Highest traffic first</option>',
+                '        <option value="traffic-asc">Lowest traffic first</option>',
+                '        <option value="label-asc">Facet label A → Z</option>',
+                '        <option value="label-desc">Facet label Z → A</option>',
+                '      </select>',
+                '    </label>',
+                '    <div class="control-field control-toggle">',
+                '      <span>Presentation cleanup</span>',
+                '      <label class="checkbox-line"><input id="facet-gallery-hide-empty" type="checkbox"> Hide empty ranking families</label>',
+                '    </div>',
+                '  </div>',
+                (
+                    '  <div class="control-grid field-filter-grid">'
+                    f'{"".join(field_filter_controls)}</div>'
+                    if field_filter_controls
+                    else ''
+                ),
+                (
+                    '  <p class="control-note"><strong id="facet-gallery-visible-count">'
+                    f'{len(facet_groups_sorted)}</strong> of <strong>{len(facet_groups_sorted)}</strong> '
+                    'slices visible. Filters work entirely in-browser, so the exported file stays self-contained.</p>'
+                ),
+                '</section>',
+            ]
+        )
+
     facet_cards: list[str] = []
-    for facet_label in facet_order:
-        group = facet_groups[facet_label]
+    for group in facet_groups_sorted:
+        facets = dict(group["facets"])
+        facet_label = str(group["facet_label"])
+        total_count = int(group["total_count"])
+        family_keys_with_data = {
+            str(key) for key in group["family_keys_with_data"]
+        }
+        available_family_labels = [
+            str(spec["title"])
+            for spec in category_specs
+            if str(spec["family_key"]) in family_keys_with_data
+        ]
         facet_pills = "".join(
             (
                 '<span class="facet-pill">'
                 f'<strong>{escape(str(field_name))}</strong>{escape(str(field_value))}'
                 '</span>'
             )
-            for field_name, field_value in dict(group["facets"]).items()
+            for field_name, field_value in facets.items()
+        )
+        facet_stats = "".join(
+            [
+                '<div class="facet-stats">',
+                (
+                    '<span class="stat-chip"><strong>'
+                    f'{total_count}</strong><span>requests in slice</span></span>'
+                ),
+                (
+                    '<span class="stat-chip"><strong>'
+                    f'{len(available_family_labels)}</strong><span>ranking families with data</span></span>'
+                ),
+                (
+                    '<span class="stat-chip"><strong>'
+                    f'{sum(len(group["categories"].get(str(spec["title"]), [])) for spec in category_specs)}</strong>'
+                    '<span>rendered rows</span></span>'
+                ),
+                '</div>',
+            ]
         )
         ranking_sections: list[str] = []
         for spec in category_specs:
             rows = list(group["categories"].get(spec["title"], []))
+            family_key = str(spec["family_key"])
             if not rows:
                 ranking_sections.append(
                     "".join(
                         [
-                            '<section class="ranking-block">',
+                            '<section class="ranking-block is-empty" '
+                            f'data-family-key="{escape(family_key, quote=True)}">',
                             f'<h3>{escape(str(spec["title"]))}</h3>',
                             f'<p class="caption">{escape(str(spec["description"]))}</p>',
                             '<p class="caption">No ranking rows were produced for this facet slice.</p>',
@@ -1430,7 +1551,8 @@ def format_facet_ranking_gallery_html(
             ranking_sections.append(
                 "".join(
                     [
-                        '<section class="ranking-block">',
+                        '<section class="ranking-block" '
+                        f'data-family-key="{escape(family_key, quote=True)}">',
                         f'<h3>{escape(str(spec["title"]))}</h3>',
                         f'<p class="caption">{escape(str(spec["description"]))}</p>',
                         '<table>',
@@ -1445,11 +1567,23 @@ def format_facet_ranking_gallery_html(
             ranking_sections.append(
                 '<p class="caption">No facet-aware ranking rows were produced for this run.</p>'
             )
+        search_text = " ".join(
+            [
+                facet_label,
+                *[f'{field_name} {field_value}' for field_name, field_value in facets.items()],
+                *available_family_labels,
+            ]
+        ).lower()
         facet_cards.append(
             "".join(
                 [
-                    '<article class="facet-card">',
-                    f'<h2>{escape(str(group["facet_label"]))}</h2>',
+                    '<article class="facet-card" data-facet-card="true" '
+                    f'data-facet-label="{escape(facet_label, quote=True)}" '
+                    f'data-facet-total-count="{total_count}" '
+                    f'data-search-text="{escape(search_text, quote=True)}" '
+                    f'data-facet-map="{escape(json.dumps(facets, sort_keys=True), quote=True)}">',
+                    f'<h2>{escape(facet_label)}</h2>',
+                    facet_stats,
                     f'<div class="facet-pill-row">{facet_pills}</div>' if facet_pills else '',
                     *ranking_sections,
                     '</article>',
@@ -1485,11 +1619,97 @@ def format_facet_ranking_gallery_html(
             ]
         )
 
+    gallery_script = ""
+    if facet_groups_sorted:
+        gallery_script = """
+  <script>
+    (() => {
+      const grid = document.getElementById('facet-gallery-grid');
+      if (!grid) {
+        return;
+      }
+      const cards = Array.from(grid.querySelectorAll('[data-facet-card="true"]'));
+      if (!cards.length) {
+        return;
+      }
+      const searchInput = document.getElementById('facet-gallery-search');
+      const sortSelect = document.getElementById('facet-gallery-sort');
+      const hideEmptyToggle = document.getElementById('facet-gallery-hide-empty');
+      const fieldSelects = Array.from(document.querySelectorAll('.facet-gallery-filter'));
+      const visibleCount = document.getElementById('facet-gallery-visible-count');
+
+      const compareCards = (left, right, mode) => {
+        const leftLabel = left.dataset.facetLabel || '';
+        const rightLabel = right.dataset.facetLabel || '';
+        const leftTraffic = Number.parseInt(left.dataset.facetTotalCount || '0', 10) || 0;
+        const rightTraffic = Number.parseInt(right.dataset.facetTotalCount || '0', 10) || 0;
+        if (mode === 'traffic-asc') {
+          return (leftTraffic - rightTraffic) || leftLabel.localeCompare(rightLabel);
+        }
+        if (mode === 'label-asc') {
+          return leftLabel.localeCompare(rightLabel) || (rightTraffic - leftTraffic);
+        }
+        if (mode === 'label-desc') {
+          return rightLabel.localeCompare(leftLabel) || (rightTraffic - leftTraffic);
+        }
+        return (rightTraffic - leftTraffic) || leftLabel.localeCompare(rightLabel);
+      };
+
+      const parseFacetMap = (card) => {
+        try {
+          return JSON.parse(card.dataset.facetMap || '{}');
+        } catch (error) {
+          return {};
+        }
+      };
+
+      const applyControls = () => {
+        const query = (searchInput?.value || '').trim().toLowerCase();
+        const activeFilters = fieldSelects
+          .filter((select) => select.value)
+          .map((select) => [select.dataset.fieldName || '', select.value]);
+        const sortMode = sortSelect?.value || 'traffic-desc';
+        let shown = 0;
+        const sortedCards = [...cards].sort((left, right) => compareCards(left, right, sortMode));
+        for (const card of sortedCards) {
+          const searchText = (card.dataset.searchText || '').toLowerCase();
+          const facetMap = parseFacetMap(card);
+          let visible = !query || searchText.includes(query);
+          if (visible) {
+            for (const [field, value] of activeFilters) {
+              if ((facetMap[field] || '') !== value) {
+                visible = false;
+                break;
+              }
+            }
+          }
+          card.hidden = !visible;
+          if (visible) {
+            shown += 1;
+          }
+          grid.appendChild(card);
+        }
+        if (visibleCount) {
+          visibleCount.textContent = String(shown);
+        }
+        document.body.classList.toggle('hide-empty-ranking-blocks', Boolean(hideEmptyToggle?.checked));
+      };
+
+      searchInput?.addEventListener('input', applyControls);
+      sortSelect?.addEventListener('change', applyControls);
+      hideEmptyToggle?.addEventListener('change', applyControls);
+      for (const select of fieldSelects) {
+        select.addEventListener('change', applyControls);
+      }
+      applyControls();
+    })();
+  </script>"""
+
     return f"""<!DOCTYPE html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-  <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Facet ranking gallery ({escape(source_label)})</title>
   <style>
     :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
@@ -1504,9 +1724,22 @@ def format_facet_ranking_gallery_html(
     .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.9rem; margin: 1.2rem 0 0; }}
     .summary-card {{ background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(191, 219, 254, 0.2); border-radius: 1rem; padding: 0.95rem 1rem; }}
     .summary-card strong {{ display: block; font-size: 1.6rem; margin-bottom: 0.2rem; }}
+    .gallery-controls, .facet-card, .related-links {{ background: rgba(255, 255, 255, 0.92); border: 1px solid #dbeafe; border-radius: 1.3rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }}
+    .gallery-controls {{ margin-top: 1.2rem; }}
+    .control-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; }}
+    .field-filter-grid {{ margin-top: 0.85rem; }}
+    .control-field {{ display: flex; flex-direction: column; gap: 0.45rem; }}
+    .control-field span {{ font-size: 0.82rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #475569; }}
+    .control-field input, .control-field select {{ border: 1px solid #cbd5f5; border-radius: 0.85rem; padding: 0.72rem 0.8rem; font: inherit; background: #ffffff; color: #0f172a; }}
+    .control-toggle {{ justify-content: flex-end; }}
+    .checkbox-line {{ display: inline-flex; align-items: center; gap: 0.55rem; color: #1e293b; font-weight: 600; }}
+    .control-note {{ color: #475569; margin: 0.9rem 0 0; }}
     .gallery-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.35rem; }}
-    .facet-card, .related-links {{ background: rgba(255, 255, 255, 0.92); border: 1px solid #dbeafe; border-radius: 1.3rem; padding: 1.2rem; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }}
     .facet-card h2, .related-links h2 {{ margin: 0 0 0.35rem; font-size: 1.25rem; }}
+    .facet-stats {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
+    .stat-chip {{ display: inline-flex; flex-direction: column; gap: 0.12rem; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 0.9rem; padding: 0.55rem 0.72rem; min-width: 8.2rem; }}
+    .stat-chip strong {{ font-size: 1.05rem; }}
+    .stat-chip span {{ font-size: 0.8rem; color: #475569; }}
     .facet-pill-row {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 0.95rem; }}
     .facet-pill {{ display: inline-flex; align-items: center; gap: 0.35rem; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.9rem; }}
     .facet-pill strong {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #4338ca; }}
@@ -1521,28 +1754,31 @@ def format_facet_ranking_gallery_html(
     .related-links li + li {{ margin-top: 0.45rem; }}
     .related-links a {{ color: #1d4ed8; text-decoration: none; font-weight: 600; }}
     .footer-note {{ color: #475569; margin-top: 1rem; }}
+    .hide-empty-ranking-blocks .ranking-block.is-empty {{ display: none; }}
+    [hidden] {{ display: none !important; }}
   </style>
 </head>
 <body>
   <main>
-    <section class=\"hero\">
+    <section class="hero">
       <h1>Facet ranking gallery</h1>
       <p>Use this page as a portfolio-friendly landing spot for per-deployment, per-release, or per-environment top-IP, top-path, top-referrer, and top-user-agent rankings without opening spreadsheets first.</p>
       <p>It is especially useful for referrer/user-agent heavy release reviews where you want browser-ready tables beside comparison-card artifacts and committed CSV exports.</p>
-      <ul class=\"meta-list\">
+      <ul class="meta-list">
         <li><strong>Source</strong><span>{escape(source_label)}</span></li>
         <li><strong>Facet fields</strong><span>{escape(facet_fields)}</span></li>
         <li><strong>Coverage</strong><span>{escape(coverage_label)}</span></li>
         <li><strong>Window detail</strong><span>{escape(coverage_detail)}</span></li>
       </ul>
-      <div class=\"summary-grid\">{summary_cards_html}</div>
+      <div class="summary-grid">{summary_cards_html}</div>
     </section>
-    <section class=\"gallery-grid\">
+    {controls_html}
+    <section class="gallery-grid" id="facet-gallery-grid">
       {''.join(facet_cards)}
     </section>
     {related_links_html}
-    <p class=\"footer-note\">Tip: regenerate this gallery alongside the facet CSV exports and any release comparison cards so screenshots, CSV downloads, and review notes stay aligned.</p>
-  </main>
+    <p class="footer-note">Tip: regenerate this gallery alongside the facet CSV exports and any release comparison cards so screenshots, CSV downloads, and review notes stay aligned.</p>
+  </main>{gallery_script}
 </body>
 </html>
 """

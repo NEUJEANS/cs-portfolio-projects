@@ -2402,6 +2402,12 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Top referrers', html)
             self.assertIn('href="release-comparison-card.html"', html)
             self.assertIn('href="top-referrers-by-facet.csv"', html)
+            self.assertIn('largest slice requests', html)
+            self.assertIn('id="facet-gallery-sort"', html)
+            self.assertIn('id="facet-gallery-visible-count"', html)
+            self.assertIn('data-field-name="env"', html)
+            self.assertIn('data-field-name="region"', html)
+            self.assertIn('data-facet-total-count="2"', html)
 
     def test_cli_rejects_preset_gallery_link_without_gallery_output(self):
         completed = subprocess.run(

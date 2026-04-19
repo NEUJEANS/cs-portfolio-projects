@@ -35,7 +35,7 @@ Analyze common, combined, and latency-augmented web access logs from the command
 - supports minute/hour trend bucketing via `--time-bucket` plus chart-friendly `--time-bucket-csv` exports
 - supports standalone `--time-bucket-card-svg` and `--time-bucket-card-html` exports for presentation-ready mini trend cards, browser-friendly artifact pages, optional timeline annotations with note/deploy/rollback/incident/recovery themes, built-in preset stories for common deploy/incident/recovery narratives, JSON-backed custom preset files for reusable team/project stories, and preset list/preview/gallery helpers that work even without a logfile
 - supports repeatable `--facet-field` selections so richer named log fields can drive per-facet top-IP/top-path/top-referrer/top-user-agent rankings, hotspot/trend breakdowns, dedicated CSV exports, and browser-friendly ranking galleries
-- supports `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` values so facet-heavy release reviews can bundle ranking tables with related comparison cards / CSV artifacts in one HTML page
+- supports `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` values so facet-heavy release reviews can bundle ranking tables with related comparison cards / CSV artifacts in one HTML page, then explore the exported gallery with built-in search, per-field filters, sort presets, and hide-empty controls
 - supports `--facet-compare-field`, `--facet-compare-values`, and `--facet-compare-csv` so two named-field values can be diffed side by side for release-review write-ups and spreadsheet exports
 - supports standalone `--facet-compare-card-svg` and `--facet-compare-card-html` exports for release-review screenshots, browser-friendly comparison pages, and optional deploy/incident callouts
 - supports `--top`, `--latency-paths`, `--summary-csv`, `--path-latency-csv`, `--path-latency-facet-csv`, `--top-ip-facet-csv`, `--top-path-facet-csv`, `--top-referrer-facet-csv`, `--top-user-agent-facet-csv`, `--facet-ranking-gallery-html`, `--facet-ranking-gallery-link`, `--upstream-path-latency-csv`, `--upstream-path-latency-facet-csv`, `--time-bucket`, `--time-bucket-csv`, `--time-bucket-facet-csv`, `--time-bucket-card-svg`, `--time-bucket-card-html`, `--card-annotation`, `--card-annotation-preset`, `--card-annotation-preset-file`, `--list-card-annotation-presets`, `--preview-card-annotation-preset`, `--card-annotation-preset-gallery-html`, `--card-annotation-preset-gallery-link`, `--facet-field`, `--facet-compare-field`, `--facet-compare-values`, `--facet-compare-csv`, `--facet-compare-card-svg`, `--facet-compare-card-html`, `--hotspot-status`, `--hotspot-method`, `--window-start`, `--window-end`, and `--format text|json`
@@ -181,7 +181,8 @@ Use `--facet-ranking-gallery-html` when you want the facet-aware ranking tables 
 Behavior:
 - the gallery requires at least one `--facet-field` and reuses the normal per-facet ranking output instead of creating a separate analysis path
 - it groups the rendered tables by facet label so each environment/release slice gets one card with top IPs, paths, referrers, and user agents together
-- it adds summary cards for facet-slice count, populated ranking families, rendered rows, and related artifact links so screenshots still explain the scope at a glance
+- it adds summary cards for facet-slice count, populated ranking families, rendered rows, largest-slice request volume, and related artifact links so screenshots still explain the scope at a glance
+- the exported page includes built-in search, exact per-field filters, traffic/label sort presets, and a hide-empty toggle so the committed artifact remains useful even when many facet slices exist
 - related links are rewritten relative to the gallery output path when they point at local files, which makes committed artifact bundles portable inside `docs/` or other nested folders
 - referrer/user-agent sections stay visible but empty-state friendly, so the page still works when the source log lacks combined-log fields
 
@@ -398,5 +399,5 @@ python3 -m unittest discover -s projects/log-analyzer -p "test_*.py"
 
 ## Future Improvements
 - consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
-- add richer gallery grouping/filtering if the preset catalog grows beyond a handful of built-in + custom stories
-- optionally add facet-aware referrer/user-agent rankings if a future dataset needs marketer- or bot-heavy drill-downs
+- consider downloadable per-facet detail bundles or deep links once the gallery controls settle
+- consider facet-aware comparison-card/gallery views that go beyond ranking tables for heavier release-review narratives
