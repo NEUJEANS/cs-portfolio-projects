@@ -263,9 +263,9 @@ class LogAnalyzerTests(unittest.TestCase):
 
     def test_analyze_lines_builds_facet_breakdowns(self):
         lines = [
-            '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.400 upstream_response_time=0.250 env=prod region=us-east-1',
-            '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.500 upstream_response_time=0.300 env=prod region=us-east-1',
-            '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 request_time=0.200 upstream_response_time=0.120 env=staging region=us-west-2',
+            '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.400 upstream_response_time=0.250 env=prod region=us-east-1',
+            '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.500 upstream_response_time=0.300 env=prod region=us-east-1',
+            '10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.200 upstream_response_time=0.120 env=staging region=us-west-2',
         ]
         result = analyze_lines(
             lines,
@@ -286,6 +286,11 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(result['top_paths_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
         self.assertEqual(result['top_paths_by_facet'][0]['path'], '/api/report')
         self.assertEqual(result['top_paths_by_facet'][0]['count'], 2)
+        self.assertEqual(result['top_referrers_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+        self.assertEqual(result['top_referrers_by_facet'][0]['referrer'], 'https://status.example.com/deploy')
+        self.assertEqual(result['top_referrers_by_facet'][0]['count'], 2)
+        self.assertEqual(result['top_user_agents_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+        self.assertEqual(result['top_user_agents_by_facet'][0]['user_agent'], 'Mozilla/5.0 (prod)')
         self.assertEqual(result['path_latency_facet_breakdown'][0]['path'], '/api/report')
         self.assertEqual(result['path_latency_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
         self.assertEqual(result['path_latency_facet_breakdown'][0]['average_ms'], 450.0)
@@ -423,8 +428,8 @@ class LogAnalyzerTests(unittest.TestCase):
         report = format_text_report(
             analyze_lines(
                 [
-                    '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.450 upstream_response_time=0.300 env=prod region=us-east-1',
-                    '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.500 upstream_response_time=0.320 env=prod region=us-east-1',
+                    '10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.450 upstream_response_time=0.300 env=prod region=us-east-1',
+                    '10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.500 upstream_response_time=0.320 env=prod region=us-east-1',
                 ],
                 top_n=1,
                 hotspot_statuses=['500', '502'],
@@ -437,6 +442,10 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertIn('env=prod, region=us-east-1 | #1 10.0.0.1: 1', report)
         self.assertIn('Top paths by facet: (facets: env, region)', report)
         self.assertIn('env=prod, region=us-east-1 | #1 /api/report: 2', report)
+        self.assertIn('Top referrers by facet: (facets: env, region)', report)
+        self.assertIn('env=prod, region=us-east-1 | #1 https://status.example.com/deploy: 2', report)
+        self.assertIn('Top user agents by facet: (facets: env, region)', report)
+        self.assertIn('env=prod, region=us-east-1 | #1 Mozilla/5.0 (prod): 2', report)
         self.assertIn('Time bucket facet breakdowns: (facets: env, region)', report)
         self.assertIn('2026-04-18T09:00:00+00:00 | env=prod, region=us-east-1 -> requests=2, errors=2 (100.0%), top_path=/api/report (2)', report)
         self.assertIn('Per-path latency hotspots by facet (ms): (filters: status=500,502; method=POST) (facets: env, region)', report)
@@ -988,9 +997,9 @@ class LogAnalyzerTests(unittest.TestCase):
             log_path.write_text(
                 textwrap.dedent(
                     '''\
-                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 request_time=0.400 upstream_response_time=0.250 env=prod region=us-east-1
-                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 request_time=0.500 upstream_response_time=0.300 env=prod region=us-east-1
-                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 request_time=0.200 upstream_response_time=0.120 env=staging region=us-west-2
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "POST /api/report HTTP/1.1" 500 10 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.400 upstream_response_time=0.250 env=prod region=us-east-1
+                    10.0.0.2 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 502 12 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.500 upstream_response_time=0.300 env=prod region=us-east-1
+                    10.0.0.3 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 13 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.200 upstream_response_time=0.120 env=staging region=us-west-2
                     '''
                 ),
                 encoding='utf-8',
@@ -1026,6 +1035,10 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertEqual(payload['top_ips_by_facet'][0]['ip'], '10.0.0.1')
             self.assertEqual(payload['top_paths_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
             self.assertEqual(payload['top_paths_by_facet'][0]['path'], '/api/report')
+            self.assertEqual(payload['top_referrers_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+            self.assertEqual(payload['top_referrers_by_facet'][0]['referrer'], 'https://status.example.com/deploy')
+            self.assertEqual(payload['top_user_agents_by_facet'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
+            self.assertEqual(payload['top_user_agents_by_facet'][0]['user_agent'], 'Mozilla/5.0 (prod)')
             self.assertEqual(payload['path_latency_facet_breakdown'][0]['facets'], {'env': 'prod', 'region': 'us-east-1'})
             self.assertEqual(payload['path_latency_facet_breakdown'][1]['facets'], {'env': 'staging', 'region': 'us-west-2'})
             self.assertEqual(payload['time_bucket_facet_breakdown'][0]['request_count'], 2)
@@ -1037,14 +1050,16 @@ class LogAnalyzerTests(unittest.TestCase):
             log_path = Path(tmpdir) / 'access.log'
             top_ip_csv = Path(tmpdir) / 'exports' / 'top-ips-by-facet.csv'
             top_path_csv = Path(tmpdir) / 'exports' / 'top-paths-by-facet.csv'
+            top_referrer_csv = Path(tmpdir) / 'exports' / 'top-referrers-by-facet.csv'
+            top_user_agent_csv = Path(tmpdir) / 'exports' / 'top-user-agents-by-facet.csv'
             log_path.write_text(
                 textwrap.dedent(
                     '''\
-                    10.0.0.9 - - [18/Apr/2026:08:59:50 +0000] "GET /ignored HTTP/1.1" 200 9 request_time=0.010 env=preview
-                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 env=prod region=us-east-1
-                    10.0.0.1 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 env=prod region=us-east-1
-                    10.0.0.3 - - [18/Apr/2026:09:00:50 +0000] "GET /health HTTP/1.1" 200 11 request_time=0.040 env=prod region=us-east-1
-                    10.0.0.2 - - [18/Apr/2026:09:01:10 +0000] "GET /health HTTP/1.1" 200 13 request_time=0.020 env=staging region=us-west-2
+                    10.0.0.9 - - [18/Apr/2026:08:59:50 +0000] "GET /ignored HTTP/1.1" 200 9 "https://preview.example.com" "PreviewBot/1.0" request_time=0.010 env=preview
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.050 env=prod region=us-east-1
+                    10.0.0.1 - - [18/Apr/2026:09:00:40 +0000] "POST /api/report HTTP/1.1" 500 12 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.400 env=prod region=us-east-1
+                    10.0.0.3 - - [18/Apr/2026:09:00:50 +0000] "GET /health HTTP/1.1" 200 11 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.040 env=prod region=us-east-1
+                    10.0.0.2 - - [18/Apr/2026:09:01:10 +0000] "GET /health HTTP/1.1" 200 13 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.020 env=staging region=us-west-2
                     '''
                 ),
                 encoding='utf-8',
@@ -1066,6 +1081,10 @@ class LogAnalyzerTests(unittest.TestCase):
                     str(top_ip_csv),
                     '--top-path-facet-csv',
                     str(top_path_csv),
+                    '--top-referrer-facet-csv',
+                    str(top_referrer_csv),
+                    '--top-user-agent-facet-csv',
+                    str(top_user_agent_csv),
                 ],
                 cwd=Path(__file__).parent,
                 check=True,
@@ -1086,6 +1105,26 @@ class LogAnalyzerTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
             self.assertEqual(rows[0]['path'], '/api/report')
             self.assertEqual(rows[0]['facet_label'], 'env=prod, region=us-east-1')
+            self.assertEqual(rows[0]['rank'], '1')
+            self.assertEqual(rows[0]['count'], '2')
+            self.assertEqual(rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(rows[0]['window_end'], '2026-04-18T09:02:00+00:00')
+            with top_referrer_csv.open(encoding='utf-8', newline='') as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]['referrer'], 'https://status.example.com/deploy')
+            self.assertEqual(rows[0]['facet_label'], 'env=prod, region=us-east-1')
+            self.assertEqual(rows[0]['facet_env'], 'prod')
+            self.assertEqual(rows[0]['facet_region'], 'us-east-1')
+            self.assertEqual(rows[0]['rank'], '1')
+            self.assertEqual(rows[0]['count'], '2')
+            self.assertEqual(rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
+            self.assertEqual(rows[0]['window_end'], '2026-04-18T09:02:00+00:00')
+            with top_user_agent_csv.open(encoding='utf-8', newline='') as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]['user_agent'], 'Mozilla/5.0 (prod)')
+            self.assertEqual(rows[0]['facet_label'], 'env=prod, region=us-east-1')
+            self.assertEqual(rows[0]['facet_env'], 'prod')
+            self.assertEqual(rows[0]['facet_region'], 'us-east-1')
             self.assertEqual(rows[0]['rank'], '1')
             self.assertEqual(rows[0]['count'], '2')
             self.assertEqual(rows[0]['window_start'], '2026-04-18T09:00:00+00:00')
@@ -1565,6 +1604,8 @@ class LogAnalyzerTests(unittest.TestCase):
                 summary_rows = list(csv.DictReader(handle))
             self.assertTrue(any(row['metric'] == 'facet_fields' and row['value'] == 'env|region' for row in summary_rows))
             self.assertTrue(any(row['metric'] == 'missing_facet_value' and row['value'] == '(missing)' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'top_referrer_facet_row_count' and row['value'] == '0' for row in summary_rows))
+            self.assertTrue(any(row['metric'] == 'top_user_agent_facet_row_count' and row['value'] == '0' for row in summary_rows))
             self.assertTrue(any(row['metric'] == 'path_latency_facet_row_count' and row['value'] == '2' for row in summary_rows))
             self.assertTrue(any(row['metric'] == 'time_bucket_facet_row_count' and row['value'] == '2' for row in summary_rows))
 

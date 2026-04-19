@@ -1,0 +1,6 @@
+user_agent,facet_label,facet_env,facet_region,rank,count,window_start,window_end
+Mozilla/5.0 (prod),"env=prod, region=us-east-1",prod,us-east-1,1,2,,
+curl/8.7,"env=prod, region=us-east-1",prod,us-east-1,2,1,,
+curl/8.7 staging,"env=staging, region=us-west-2",staging,us-west-2,1,2,,
+Mozilla/5.0 (staging),"env=staging, region=us-west-2",staging,us-west-2,2,1,,
+PreviewBot/1.0,"env=preview, region=(missing)",preview,(missing),1,2,,

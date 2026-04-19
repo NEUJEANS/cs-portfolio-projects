@@ -1,0 +1,6 @@
+referrer,facet_label,facet_env,facet_region,rank,count,window_start,window_end
+https://status.example.com/deploy,"env=prod, region=us-east-1",prod,us-east-1,1,2,,
+https://ops.example.com/dashboard,"env=prod, region=us-east-1",prod,us-east-1,2,1,,
+https://staging.example.com/replay,"env=staging, region=us-west-2",staging,us-west-2,1,2,,
+https://status.example.com/deploy,"env=staging, region=us-west-2",staging,us-west-2,2,1,,
+https://preview.example.com/home,"env=preview, region=(missing)",preview,(missing),1,2,,

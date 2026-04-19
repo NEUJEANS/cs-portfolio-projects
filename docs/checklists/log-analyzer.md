@@ -1,5 +1,17 @@
 # Log Analyzer Checklist
 
+## Referrer/user-agent facet ranking slice (2026-04-19 02:54 UTC run)
+- [x] confirm repo sync before editing and continue the queued log-analyzer follow-up instead of starting a different project
+- [x] update checklist/docs so the slice is resumable
+- [x] extend facet-aware ranking outputs to referrer and user-agent fields that are already parsed from combined logs
+- [x] add `--top-referrer-facet-csv` and `--top-user-agent-facet-csv` exports using the existing facet ranking schema
+- [x] refresh the committed sample log/artifacts so the new CSVs are reproducible from repo state
+- [x] run targeted tests and smoke checks
+- [x] run at least 3 review passes and fix issues found
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
+- [ ] consider a follow-up slice for referrer/user-agent comparison cards or PNG exports
+
 ## Preset gallery slice (2026-04-19 01:40 UTC run)
 - [x] confirm repo sync before editing and continue the queued log-analyzer follow-up instead of starting a different project
 - [x] update checklist/docs so the slice is resumable

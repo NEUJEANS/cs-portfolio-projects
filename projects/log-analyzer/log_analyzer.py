@@ -2683,6 +2683,8 @@ def analyze_parsed_lines(
     upstream_path_latencies: dict[str, list[float]] = defaultdict(list)
     ip_counts_by_facet: Counter[tuple[str, tuple[str, ...]]] = Counter()
     path_counts_by_facet: Counter[tuple[str, tuple[str, ...]]] = Counter()
+    referrer_counts_by_facet: Counter[tuple[str, tuple[str, ...]]] = Counter()
+    user_agent_counts_by_facet: Counter[tuple[str, tuple[str, ...]]] = Counter()
     path_latencies_by_facet: dict[tuple[str, tuple[str, ...]], list[float]] = defaultdict(list)
     upstream_path_latencies_by_facet: dict[tuple[str, tuple[str, ...]], list[float]] = defaultdict(list)
     time_bucket_rows: dict[datetime, dict[str, object]] = {}
@@ -2706,8 +2708,12 @@ def analyze_parsed_lines(
         method_counts[parsed.method] += 1
         if parsed.referrer:
             referrer_counts[parsed.referrer] += 1
+            if facet_values is not None:
+                referrer_counts_by_facet[(parsed.referrer, facet_values)] += 1
         if parsed.user_agent:
             user_agent_counts[parsed.user_agent] += 1
+            if facet_values is not None:
+                user_agent_counts_by_facet[(parsed.user_agent, facet_values)] += 1
         if parsed.latency_ms is not None:
             latencies_ms.append(parsed.latency_ms)
             if matches_hotspot_filters(parsed, hotspot_filters):
@@ -2788,7 +2794,19 @@ def analyze_parsed_lines(
             value_key="path",
         ),
         "top_referrers": referrer_counts.most_common(top_n),
+        "top_referrers_by_facet": summarize_top_counts_by_facet(
+            referrer_counts_by_facet,
+            normalized_facet_fields,
+            top_n,
+            value_key="referrer",
+        ),
         "top_user_agents": user_agent_counts.most_common(top_n),
+        "top_user_agents_by_facet": summarize_top_counts_by_facet(
+            user_agent_counts_by_facet,
+            normalized_facet_fields,
+            top_n,
+            value_key="user_agent",
+        ),
         "latency_summary": summarize_latencies(latencies_ms),
         "upstream_latency_summary": summarize_latencies(upstream_latencies_ms),
         "hotspot_filters": hotspot_filters,
@@ -3192,12 +3210,32 @@ def format_text_report(result: dict) -> str:
     else:
         lines.append("  (none)")
 
+    if result["faceting"]:
+        lines.append(format_faceting_heading("Top referrers by facet:", result["faceting"]))
+        if result["top_referrers_by_facet"]:
+            for row in result["top_referrers_by_facet"]:
+                lines.append(
+                    f"  {row['facet_label']} | #{row['rank']} {row['referrer']}: {row['count']}"
+                )
+        else:
+            lines.append("  (none)")
+
     lines.append("Top user agents:")
     if result["top_user_agents"]:
         for user_agent, count in result["top_user_agents"]:
             lines.append(f"  {user_agent}: {count}")
     else:
         lines.append("  (none)")
+
+    if result["faceting"]:
+        lines.append(format_faceting_heading("Top user agents by facet:", result["faceting"]))
+        if result["top_user_agents_by_facet"]:
+            for row in result["top_user_agents_by_facet"]:
+                lines.append(
+                    f"  {row['facet_label']} | #{row['rank']} {row['user_agent']}: {row['count']}"
+                )
+        else:
+            lines.append("  (none)")
 
     lines.append("Latency summary (ms):")
     latency_summary = result["latency_summary"]
@@ -3360,6 +3398,16 @@ def write_summary_csv(destination: str | Path, result: dict) -> None:
                     "section": "summary",
                     "metric": "missing_facet_value",
                     "value": result["faceting"]["missing_value"],
+                },
+                {
+                    "section": "summary",
+                    "metric": "top_referrer_facet_row_count",
+                    "value": len(result["top_referrers_by_facet"]),
+                },
+                {
+                    "section": "summary",
+                    "metric": "top_user_agent_facet_row_count",
+                    "value": len(result["top_user_agents_by_facet"]),
                 },
                 {
                     "section": "summary",
@@ -3835,6 +3883,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--top-referrer-facet-csv",
+        help=(
+            "Optional path for a top-referrer ranking CSV split by selected --facet-field "
+            "values"
+        ),
+    )
+    parser.add_argument(
+        "--top-user-agent-facet-csv",
+        help=(
+            "Optional path for a top-user-agent ranking CSV split by selected --facet-field "
+            "values"
+        ),
+    )
+    parser.add_argument(
         "--upstream-path-latency-csv",
         help="Optional path for a per-path upstream-latency breakdown CSV export",
     )
@@ -4140,6 +4202,8 @@ def main(argv: list[str] | None = None) -> int:
         args.path_latency_facet_csv,
         args.top_ip_facet_csv,
         args.top_path_facet_csv,
+        args.top_referrer_facet_csv,
+        args.top_user_agent_facet_csv,
         args.upstream_path_latency_facet_csv,
         args.time_bucket_facet_csv,
     ]
@@ -4304,6 +4368,22 @@ def main(argv: list[str] | None = None) -> int:
             result["top_paths_by_facet"],
             normalized_facet_fields,
             value_field="path",
+            time_window=result["time_window"],
+        )
+    if args.top_referrer_facet_csv:
+        write_top_counts_by_facet_csv(
+            args.top_referrer_facet_csv,
+            result["top_referrers_by_facet"],
+            normalized_facet_fields,
+            value_field="referrer",
+            time_window=result["time_window"],
+        )
+    if args.top_user_agent_facet_csv:
+        write_top_counts_by_facet_csv(
+            args.top_user_agent_facet_csv,
+            result["top_user_agents_by_facet"],
+            normalized_facet_fields,
+            value_field="user_agent",
             time_window=result["time_window"],
         )
     if args.upstream_path_latency_csv:

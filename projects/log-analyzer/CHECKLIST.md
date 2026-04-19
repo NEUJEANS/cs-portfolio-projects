@@ -1,11 +1,11 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 02:05 UTC run)
-- [x] resume the next `log-analyzer` faceting follow-up after confirming `main` matches `origin/main`
-- [x] add facet-aware ranking summaries for top IP and top path tables when `--facet-field` values are active
-- [x] add dedicated `--top-ip-facet-csv` and `--top-path-facet-csv` exports so deployment/release labels can ship spreadsheet-ready ranking tables
-- [x] keep the facet ranking summaries self-describing in text/JSON/CSV output, including missing facet values, per-facet ranks, and busiest-facet-first ordering
-- [x] refresh README/checklist/learning/review docs and commit sample facet-ranking artifacts under `docs/artifacts/log-analyzer/`
+## Current slice (2026-04-19 02:33 UTC run)
+- [x] resume the next `log-analyzer` faceting follow-up after confirming `main` still matches `origin/main`
+- [x] extend the existing facet-aware ranking work to cover top referrers and top user agents, not just IP/path tables
+- [x] add dedicated `--top-referrer-facet-csv` and `--top-user-agent-facet-csv` exports so combined-log marketing/bot slices can ship spreadsheet-ready ranking tables
+- [x] keep the new rankings self-describing in text/JSON/CSV output, including missing facet values, per-facet ranks, and busiest-facet-first ordering
+- [x] refresh README/checklist/learning/review docs and commit sample combined-log facet-ranking artifacts under `docs/artifacts/log-analyzer/`
 - [x] run targeted tests, real CLI/export smoke checks, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
 
@@ -31,6 +31,6 @@
 - [x] project is resumable via review logs, committed artifacts, and wrap-up notes in `docs/`
 
 ## Next follow-up ideas
-- [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
+- [ ] consider facet-aware comparison cards or gallery views for referrer/user-agent heavy release reviews
 - [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster artifacts over SVG/HTML
 - [ ] optionally add gallery grouping/filter controls if the preset catalog grows beyond a small set of built-in + custom stories

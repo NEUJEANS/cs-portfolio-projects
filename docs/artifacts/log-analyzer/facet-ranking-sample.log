@@ -1,8 +1,8 @@
-10.1.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 request_time=0.060 env=prod region=us-east-1
-10.1.0.1 - - [18/Apr/2026:11:00:25 +0000] "GET /api/report HTTP/1.1" 200 122 request_time=0.070 env=prod region=us-east-1
-10.1.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 request_time=0.015 env=prod region=us-east-1
-10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 request_time=0.180 env=staging region=us-west-2
-10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 request_time=0.410 env=staging region=us-west-2
-10.2.0.4 - - [18/Apr/2026:11:01:41 +0000] "GET /api/report HTTP/1.1" 200 119 request_time=0.140 env=staging region=us-west-2
-10.3.0.5 - - [18/Apr/2026:11:02:03 +0000] "GET /preview HTTP/1.1" 200 64 request_time=0.050 env=preview
-10.3.0.5 - - [18/Apr/2026:11:02:20 +0000] "GET /preview HTTP/1.1" 200 64 request_time=0.045 env=preview
+10.1.0.1 - - [18/Apr/2026:11:00:05 +0000] "GET /api/report HTTP/1.1" 200 120 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.060 env=prod region=us-east-1
+10.1.0.1 - - [18/Apr/2026:11:00:25 +0000] "GET /api/report HTTP/1.1" 200 122 "https://status.example.com/deploy" "Mozilla/5.0 (prod)" request_time=0.070 env=prod region=us-east-1
+10.1.0.2 - - [18/Apr/2026:11:00:45 +0000] "GET /health HTTP/1.1" 200 24 "https://ops.example.com/dashboard" "curl/8.7" request_time=0.015 env=prod region=us-east-1
+10.2.0.3 - - [18/Apr/2026:11:01:05 +0000] "POST /api/export HTTP/1.1" 200 101 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.180 env=staging region=us-west-2
+10.2.0.3 - - [18/Apr/2026:11:01:22 +0000] "POST /api/export HTTP/1.1" 502 99 "https://staging.example.com/replay" "curl/8.7 staging" request_time=0.410 env=staging region=us-west-2
+10.2.0.4 - - [18/Apr/2026:11:01:41 +0000] "GET /api/report HTTP/1.1" 200 119 "https://status.example.com/deploy" "Mozilla/5.0 (staging)" request_time=0.140 env=staging region=us-west-2
+10.3.0.5 - - [18/Apr/2026:11:02:03 +0000] "GET /preview HTTP/1.1" 200 64 "https://preview.example.com/home" "PreviewBot/1.0" request_time=0.050 env=preview
+10.3.0.5 - - [18/Apr/2026:11:02:20 +0000] "GET /preview HTTP/1.1" 200 64 "https://preview.example.com/home" "PreviewBot/1.0" request_time=0.045 env=preview
