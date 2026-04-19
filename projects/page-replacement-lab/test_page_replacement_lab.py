@@ -22,6 +22,7 @@ from page_replacement_lab import (  # noqa: E402
     simulate,
     study_frame_counts,
     summarize_trace,
+    tune_wsclock_windows,
 )
 
 
@@ -120,6 +121,22 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(result.page_faults, 55)
         self.assertEqual(result.writebacks, 15)
         self.assertTrue(any(step.writebacks_scheduled for step in result.steps))
+
+    def test_tune_wsclock_windows_prefers_frontier_window_when_writebacks_cost(self) -> None:
+        benchmark_reference = load_trace_benchmark_reference(TRACE_BENCHMARKS["compiler-phase-shift"])
+        payload = tune_wsclock_windows(
+            benchmark_reference,
+            5,
+            min_window=1,
+            max_window=7,
+            dirty_pages=[1, 2, 3, 4, 5, 6],
+            writeback_penalty=1.0,
+        )
+        self.assertEqual(payload["recommended_window"], 7)
+        self.assertEqual(payload["recommended"]["page_faults"], 52)
+        self.assertEqual(payload["recommended"]["writebacks"], 0)
+        self.assertEqual([entry["window"] for entry in payload["pareto_frontier"]], [7])
+        self.assertIsNone(payload["auto_window_result"])
 
     def test_trace_summary_detects_phase_boundary_hints(self) -> None:
         payload = summarize_trace([1, 2, 1, 2, 1, 2, 7, 8, 7, 8, 7, 8], window_size=6)
@@ -269,6 +286,101 @@ class PageReplacementSimulationTests(unittest.TestCase):
         self.assertEqual(payload["dirty_page_description"], "1, 2, 3, 4, 5, 6")
         self.assertEqual(wsclock_result["writebacks"], 15)
         self.assertEqual(wsclock_result["page_faults"], 55)
+
+    def test_cli_tune_wsclock_json_recommends_window_for_dirty_workload(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "tune-wsclock",
+                "--frames",
+                "5",
+                "--benchmark",
+                "compiler-phase-shift",
+                "--min-window",
+                "1",
+                "--max-window",
+                "7",
+                "--writeback-penalty",
+                "1",
+                "--dirty-page",
+                "1",
+                "--dirty-page",
+                "2",
+                "--dirty-page",
+                "3",
+                "--dirty-page",
+                "4",
+                "--dirty-page",
+                "5",
+                "--dirty-page",
+                "6",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["reference_source"], "benchmark:compiler-phase-shift")
+        self.assertEqual(payload["recommended_window"], 7)
+        self.assertEqual(payload["recommended"]["writebacks"], 0)
+        self.assertEqual(payload["candidate_window_count"], 7)
+        self.assertEqual([entry["window"] for entry in payload["pareto_frontier"]], [7])
+
+    def test_cli_tune_wsclock_writes_markdown_and_csv_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markdown_path = Path(tmpdir) / "wsclock-tuning.md"
+            csv_path = Path(tmpdir) / "wsclock-tuning.csv"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "tune-wsclock",
+                    "--frames",
+                    "5",
+                    "--benchmark",
+                    "compiler-phase-shift",
+                    "--min-window",
+                    "1",
+                    "--max-window",
+                    "7",
+                    "--writeback-penalty",
+                    "1",
+                    "--dirty-page",
+                    "1",
+                    "--dirty-page",
+                    "2",
+                    "--dirty-page",
+                    "3",
+                    "--dirty-page",
+                    "4",
+                    "--dirty-page",
+                    "5",
+                    "--dirty-page",
+                    "6",
+                    "--markdown-out",
+                    str(markdown_path),
+                    "--csv-out",
+                    str(csv_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            markdown = markdown_path.read_text(encoding="utf-8")
+            csv_output = csv_path.read_text(encoding="utf-8")
+
+            self.assertIn("recommended window: 7", completed.stdout)
+            self.assertIn("auto window result: not evaluated", completed.stdout)
+            self.assertIn("# WSClock Window Tuning Report", markdown)
+            self.assertIn("The built-in auto window `10` is outside this sweep", markdown)
+            self.assertIn("| τ window | Faults | Hits | Hit rate | Writebacks | Weighted score |", markdown)
+            self.assertIn(
+                "window,page_faults,hits,hit_rate,fault_rate,writebacks,weighted_score,frame_count,reference_source",
+                csv_output,
+            )
+            self.assertIn("7,52,20,0.277778,0.722222,0,52.0,5,benchmark:compiler-phase-shift", csv_output)
 
     def test_cli_list_presets_json_includes_known_workloads(self) -> None:
         completed = subprocess.run(

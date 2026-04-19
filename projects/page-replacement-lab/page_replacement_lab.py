@@ -706,6 +706,106 @@ def study_frame_counts(
     }
 
 
+def tune_wsclock_windows(
+    reference_string: Iterable[int],
+    frame_count: int,
+    *,
+    min_window: int = 1,
+    max_window: int | None = None,
+    dirty_pages: Iterable[int] | None = None,
+    writeback_penalty: float = 1.0,
+) -> dict:
+    reference = validate_reference(reference_string, frame_count)
+    if min_window <= 0:
+        raise InputError("min-window must be positive")
+    auto_window = resolve_wsclock_window(frame_count, None)
+    resolved_max_window = max_window if max_window is not None else max(auto_window, frame_count * 3)
+    if resolved_max_window <= 0:
+        raise InputError("max-window must be positive")
+    if min_window > resolved_max_window:
+        raise InputError("min-window must be less than or equal to max-window")
+    if writeback_penalty < 0:
+        raise InputError("writeback-penalty must be non-negative")
+
+    resolved_dirty_pages = list(normalize_dirty_pages(dirty_pages))
+    evaluations: list[dict] = []
+    for window in range(min_window, resolved_max_window + 1):
+        result = simulate_wsclock(
+            reference,
+            frame_count,
+            wsclock_window=window,
+            dirty_pages=resolved_dirty_pages,
+        )
+        weighted_score = result.page_faults + (result.writebacks * writeback_penalty)
+        evaluations.append(
+            {
+                "window": window,
+                "page_faults": result.page_faults,
+                "hits": result.hits,
+                "hit_rate": round(result.hit_rate, 6),
+                "writebacks": result.writebacks,
+                "fault_rate": round(result.page_faults / len(reference), 6),
+                "weighted_score": round(weighted_score, 6),
+            }
+        )
+
+    recommended = min(
+        evaluations,
+        key=lambda entry: (
+            entry["weighted_score"],
+            entry["page_faults"],
+            entry["writebacks"],
+            entry["window"],
+        ),
+    )
+    best_faults = min(entry["page_faults"] for entry in evaluations)
+    best_writebacks = min(entry["writebacks"] for entry in evaluations)
+    pareto_frontier = [
+        candidate
+        for candidate in evaluations
+        if not any(
+            (
+                other["page_faults"] <= candidate["page_faults"]
+                and other["writebacks"] <= candidate["writebacks"]
+                and (
+                    other["page_faults"] < candidate["page_faults"]
+                    or other["writebacks"] < candidate["writebacks"]
+                )
+            )
+            for other in evaluations
+        )
+    ]
+    auto_window_result = next(
+        (entry for entry in evaluations if entry["window"] == auto_window),
+        None,
+    )
+
+    return {
+        "frame_count": frame_count,
+        "reference_string": reference,
+        "min_window": min_window,
+        "max_window": resolved_max_window,
+        "candidate_window_count": len(evaluations),
+        "auto_window": auto_window,
+        "auto_window_in_range": auto_window_result is not None,
+        "auto_window_result": auto_window_result,
+        "writeback_penalty": round(writeback_penalty, 6),
+        "dirty_pages": resolved_dirty_pages,
+        "dirty_page_count": len(resolved_dirty_pages),
+        "dirty_page_description": describe_dirty_pages_setting(resolved_dirty_pages),
+        "evaluations": evaluations,
+        "recommended_window": recommended["window"],
+        "recommended": recommended,
+        "best_fault_windows": [
+            entry["window"] for entry in evaluations if entry["page_faults"] == best_faults
+        ],
+        "best_writeback_windows": [
+            entry["window"] for entry in evaluations if entry["writebacks"] == best_writebacks
+        ],
+        "pareto_frontier": pareto_frontier,
+    }
+
+
 def list_workload_presets() -> list[WorkloadPreset]:
     return list(WORKLOAD_PRESETS.values())
 
@@ -1070,6 +1170,34 @@ def build_parser() -> argparse.ArgumentParser:
     trace_summary_parser.add_argument("--html-out", type=Path, help="write a browsable HTML trace-summary card")
     trace_summary_parser.add_argument("--json", action="store_true")
 
+    tune_wsclock_parser = subparsers.add_parser(
+        "tune-wsclock",
+        help="sweep WSClock tau windows and recommend a dirty-page-aware setting",
+    )
+    tune_wsclock_parser.add_argument("--frames", type=int, required=True)
+    add_reference_arguments(tune_wsclock_parser)
+    add_dirty_page_arguments(tune_wsclock_parser)
+    tune_wsclock_parser.add_argument(
+        "--min-window",
+        type=int,
+        default=1,
+        help="smallest tau / working-set window to evaluate",
+    )
+    tune_wsclock_parser.add_argument(
+        "--max-window",
+        type=int,
+        help="largest tau / working-set window to evaluate (default: max(auto, frames * 3))",
+    )
+    tune_wsclock_parser.add_argument(
+        "--writeback-penalty",
+        type=float,
+        default=1.0,
+        help="weight applied to each writeback in the recommendation score",
+    )
+    tune_wsclock_parser.add_argument("--markdown-out", type=Path, help="write a Markdown tuning report")
+    tune_wsclock_parser.add_argument("--csv-out", type=Path, help="write a CSV tuning sweep export")
+    tune_wsclock_parser.add_argument("--json", action="store_true")
+
     trace_compare_parser = subparsers.add_parser(
         "trace-compare",
         help="compare exactly two imported trace files side by side",
@@ -1360,6 +1488,135 @@ def write_study_csv(path: Path, payload: dict, *, reference_source: str = "custo
 
 def write_study_json(path: Path, payload: dict) -> None:
     write_text_output(path, json.dumps(payload, indent=2) + "\n")
+
+
+def write_wsclock_tuning_csv(path: Path, payload: dict, *, reference_source: str = "custom") -> None:
+    ensure_output_parent(path)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "window",
+                "page_faults",
+                "hits",
+                "hit_rate",
+                "fault_rate",
+                "writebacks",
+                "weighted_score",
+                "frame_count",
+                "reference_source",
+            ],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for entry in payload["evaluations"]:
+            writer.writerow(
+                {
+                    **entry,
+                    "frame_count": payload["frame_count"],
+                    "reference_source": reference_source,
+                }
+            )
+
+
+def format_wsclock_tuning_text(payload: dict, *, reference_source: str = "custom") -> str:
+    recommended = payload["recommended"]
+    lines = [
+        f"frames: {payload['frame_count']}",
+        format_reference_source(reference_source),
+        f"candidate windows: {payload['min_window']} to {payload['max_window']} ({payload['candidate_window_count']} total)",
+        f"writeback penalty: {payload['writeback_penalty']:.2f}",
+        f"auto window: {payload['auto_window']}",
+        f"dirty pages: {payload['dirty_page_description']}",
+        (
+            "recommended window: "
+            f"{recommended['window']} (faults={recommended['page_faults']}, "
+            f"writebacks={recommended['writebacks']}, score={recommended['weighted_score']:.2f})"
+        ),
+        "pareto frontier: "
+        + ", ".join(
+            f"τ={entry['window']} (faults={entry['page_faults']}, writes={entry['writebacks']})"
+            for entry in payload["pareto_frontier"]
+        ),
+    ]
+    if payload["auto_window_result"] is not None:
+        auto_result = payload["auto_window_result"]
+        lines.append(
+            "auto window result: "
+            f"faults={auto_result['page_faults']}, writebacks={auto_result['writebacks']}, score={auto_result['weighted_score']:.2f}"
+        )
+    else:
+        lines.append("auto window result: not evaluated (outside the candidate window range)")
+    lines.extend(
+        [
+            "window  faults  hits  writebacks  score",
+            "------  ------  ----  ----------  -----",
+        ]
+    )
+    for entry in payload["evaluations"]:
+        lines.append(
+            f"{entry['window']:<6}  {entry['page_faults']:<6}  {entry['hits']:<4}  {entry['writebacks']:<10}  {entry['weighted_score']:.2f}"
+        )
+    return "\n".join(lines)
+
+
+def format_wsclock_tuning_markdown(payload: dict, *, reference_source: str = "custom") -> str:
+    recommended = payload["recommended"]
+    lines = [
+        "# WSClock Window Tuning Report",
+        "",
+        f"- workload: {describe_reference_label(reference_source)}",
+        f"- frames: {payload['frame_count']}",
+        f"- candidate windows: {payload['min_window']} to {payload['max_window']}",
+        f"- writeback penalty: {payload['writeback_penalty']:.2f}",
+        f"- auto window: {payload['auto_window']}",
+        f"- dirty pages: {payload['dirty_page_description']}",
+        f"- recommended window: {recommended['window']} (faults {recommended['page_faults']}, writebacks {recommended['writebacks']}, score {recommended['weighted_score']:.2f})",
+        f"- Pareto frontier windows: {', '.join(str(entry['window']) for entry in payload['pareto_frontier'])}",
+        "",
+        "## Why this recommendation",
+        "",
+        (
+            f"Window {recommended['window']} minimizes the weighted score `faults + {payload['writeback_penalty']:.2f} × writebacks` "
+            "for this workload and frame budget."
+        ),
+    ]
+    if payload["auto_window_result"] is not None:
+        auto_result = payload["auto_window_result"]
+        lines.append(
+            f"The built-in auto window `{payload['auto_window']}` lands at faults {auto_result['page_faults']}, writebacks {auto_result['writebacks']}, score {auto_result['weighted_score']:.2f}."
+        )
+    else:
+        lines.append(
+            f"The built-in auto window `{payload['auto_window']}` is outside this sweep, so it is listed for comparison only and was not evaluated directly."
+        )
+    lines.extend(
+        [
+            "",
+            "## Candidate windows",
+            "",
+            "| τ window | Faults | Hits | Hit rate | Writebacks | Weighted score |",
+            "| ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for entry in payload["evaluations"]:
+        lines.append(
+            f"| {entry['window']} | {entry['page_faults']} | {entry['hits']} | {format_percentage(entry['hit_rate'])} | {entry['writebacks']} | {entry['weighted_score']:.2f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Pareto frontier",
+            "",
+            "These windows are not strictly dominated on both page faults and writebacks:",
+            "",
+        ]
+    )
+    for entry in payload["pareto_frontier"]:
+        lines.append(
+            f"- τ={entry['window']}: faults {entry['page_faults']}, writebacks {entry['writebacks']}, score {entry['weighted_score']:.2f}"
+        )
+    return "\n".join(lines)
 
 
 def format_study_markdown(payload: dict, *, reference_source: str = "custom") -> str:
@@ -4414,6 +4671,41 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(
                     format_trace_summary_text(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    )
+                )
+            return 0
+
+        if args.command == "tune-wsclock":
+            payload = tune_wsclock_windows(
+                reference,
+                args.frames,
+                min_window=args.min_window,
+                max_window=args.max_window,
+                dirty_pages=dirty_pages,
+                writeback_penalty=args.writeback_penalty,
+            )
+            payload["reference_source"] = parsed_reference.source
+            if args.csv_out:
+                write_wsclock_tuning_csv(
+                    args.csv_out,
+                    payload,
+                    reference_source=parsed_reference.source,
+                )
+            if args.markdown_out:
+                write_text_output(
+                    args.markdown_out,
+                    format_wsclock_tuning_markdown(
+                        payload,
+                        reference_source=parsed_reference.source,
+                    ),
+                )
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(
+                    format_wsclock_tuning_text(
                         payload,
                         reference_source=parsed_reference.source,
                     )

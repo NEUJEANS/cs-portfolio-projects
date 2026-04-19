@@ -1,0 +1,8 @@
+window,page_faults,hits,hit_rate,fault_rate,writebacks,weighted_score,frame_count,reference_source
+1,55,17,0.236111,0.763889,15,70.0,5,benchmark:compiler-phase-shift
+2,54,18,0.25,0.75,14,68.0,5,benchmark:compiler-phase-shift
+3,52,20,0.277778,0.722222,13,65.0,5,benchmark:compiler-phase-shift
+4,53,19,0.263889,0.736111,13,66.0,5,benchmark:compiler-phase-shift
+5,52,20,0.277778,0.722222,4,56.0,5,benchmark:compiler-phase-shift
+6,52,20,0.277778,0.722222,4,56.0,5,benchmark:compiler-phase-shift
+7,52,20,0.277778,0.722222,0,52.0,5,benchmark:compiler-phase-shift

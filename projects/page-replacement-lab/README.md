@@ -11,6 +11,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - includes a `trace-summary` workflow that surfaces reuse-distance buckets, sliding working-set sizes, and phase-boundary hints for imported workloads
 - includes an `aggregate` dashboard workflow that normalizes page-fault rates across presets, larger benchmark traces, and imported custom traces for one slide-ready comparison view
 - includes a `trace-compare` workflow that contrasts exactly two imported traces side by side with rate charts, frame tables, and locality snapshots
+- includes a `tune-wsclock` workflow that sweeps candidate `tau` windows and recommends a dirty-page-aware setting using weighted page-fault and writeback cost
 - leaves room for future extensions like adaptive working-set-window heuristics, richer narrative trace write-ups, or more detailed async-cleaner simulations
 
 ## Features
@@ -18,6 +19,7 @@ A virtual-memory simulator for comparing classic page replacement strategies on 
 - load a reference string from repeated `--page` flags, a file, a built-in preset, or a larger built-in trace benchmark bundle
 - print a step-by-step trace for one algorithm
 - compare all six bundled algorithms on the same workload, including optional `--wsclock-window` overrides and `--dirty-page` / `--dirty-pages-file` inputs for WSClock sensitivity studies
+- sweep candidate WSClock `tau` windows with `tune-wsclock`, exporting Markdown / CSV / JSON reports that show the Pareto frontier between page faults and writebacks
 - run a frame-range study to detect FIFO Belady anomalies and other fault regressions
 - list built-in workload presets for repeatable demos and screenshots
 - list larger built-in trace benchmarks that model phase shifts, hot-set scans, and streaming-window bursts
@@ -81,6 +83,17 @@ python3 projects/page-replacement-lab/page_replacement_lab.py study --min-frames
   --preset classic-belady
 ```
 
+### Sweep dirty-page-aware WSClock windows and recommend a `tau`
+```bash
+python3 projects/page-replacement-lab/page_replacement_lab.py tune-wsclock --frames 5 \
+  --benchmark compiler-phase-shift \
+  --min-window 1 --max-window 7 --writeback-penalty 1 \
+  --dirty-pages-file projects/page-replacement-lab/dirty-pages/compiler-phase-shift-write-heavy.json \
+  --markdown-out docs/artifacts/page-replacement-lab/wsclock-tuning/compiler-phase-shift-write-heavy-tuning.md \
+  --csv-out docs/artifacts/page-replacement-lab/wsclock-tuning/compiler-phase-shift-write-heavy-tuning.csv \
+  --json > docs/artifacts/page-replacement-lab/wsclock-tuning/compiler-phase-shift-write-heavy-tuning.json
+```
+
 ### Export screenshot-ready study artifacts
 ```bash
 python3 projects/page-replacement-lab/page_replacement_lab.py study --min-frames 2 --max-frames 6 \
@@ -110,6 +123,8 @@ Repeat `--pages-file` to add more imported traces, each with its own study bundl
 Use `--wsclock-window <references>` with `simulate`, `compare`, `study`, `gallery`, `aggregate`, or `trace-compare` to override WSClock's `tau` value instead of using the default `max(4, frames * 2)` heuristic. The exported Markdown / CSV / JSON / SVG / HTML artifacts record both the chosen mode and each frame's effective WSClock window.
 
 Use `--dirty-page <page>` repeatedly or `--dirty-pages-file <path>` to mark write-heavy pages for WSClock. When a dirty page ages out of the working set, WSClock schedules a writeback before reclaiming it, and the CLI plus exported artifacts report those writeback counts alongside page faults.
+
+Use `tune-wsclock` when you want the project to recommend a fixed `tau` for one workload and frame budget. The sweep reports the best weighted score, the Pareto frontier across page faults and writebacks, and whether the built-in auto window fell inside the evaluated search range.
 
 ### Summarize a heavier trace for reuse distance and phase hints
 ```bash
@@ -219,6 +234,7 @@ wsclock writebacks: 0
 - `docs/artifacts/page-replacement-lab/trace-compare/mobile-app-session-vs-reporting-scan-session-trace-compare.{md,svg,csv,json,html}` — committed side-by-side imported-trace bundle that contrasts a locality-friendly mobile session against a scan-heavy reporting session
 - `docs/artifacts/page-replacement-lab/wsclock-window/compiler-phase-shift-window1-study.{md,svg,csv,json}` — committed WSClock sensitivity bundle that shows how a tighter `tau` window changes the compiler benchmark study
 - `docs/artifacts/page-replacement-lab/wsclock-dirty/compiler-phase-shift-write-heavy-study.{md,svg,csv,json}` — committed dirty-page-aware WSClock study bundle that exposes how write-heavy pages add background cleaning and writeback pressure
+- `docs/artifacts/page-replacement-lab/wsclock-tuning/compiler-phase-shift-write-heavy-tuning.{md,csv,json}` — committed WSClock tuning sweep that recommends a fixed `tau` by balancing page faults against dirty-page writebacks
 - `docs/artifacts/page-replacement-lab/wsclock-dirty/compiler-phase-shift-write-heavy-compare.txt` — committed text compare snapshot for the same dirty-page benchmark scenario
 - `projects/page-replacement-lab/dirty-pages/compiler-phase-shift-write-heavy.json` — sample dirty-page list used for repeatable write-heavy WSClock demos
 - `projects/page-replacement-lab/custom-traces/mobile-app-session.txt` — sample imported trace file used to demonstrate custom aggregate, gallery, and trace-compare workflows without editing the source code
@@ -235,6 +251,7 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - describe how **Aging** uses a shifting reference-bit history to approximate LRU with lower bookkeeping pressure than exact recency stacks
 - explain how the simplified **WSClock** policy combines Clock hand scans with a virtual-time working-set window, dirty-bit-aware cleaning, and an LRU-style fallback when every page still looks active
 - explain how tightening or relaxing the WSClock `tau` / working-set window changes eviction aggressiveness on phase-shifted workloads
+- explain how a simple tuning sweep can recommend a fixed `tau` by balancing page faults against dirty-page writebacks and surfacing the Pareto frontier
 - explain how dirty/write-heavy pages can raise writebacks even when page-fault counts stay close, and why that matters for storage pressure
 - explain why **LRU** and **OPT** are stack algorithms while **FIFO** is not
 - walk through why FIFO can show Belady's anomaly and why Clock can still regress on some workloads even though it often behaves better in practice
@@ -244,6 +261,6 @@ python3 -m unittest discover -s projects/page-replacement-lab -p "test_*.py"
 - suggest how this simulator could extend into more detailed async-cleaner replay, richer working-set analysis, or more narrative report/gallery generation
 
 ## Future improvements
-- add adaptive `tau` / workload-sensitive dirty-page heuristics for deeper systems realism
+- compare fixed-window recommendations against adaptive `tau` / workload-sensitive dirty-page heuristics for deeper systems realism
 - generate richer HTML gallery drill-down pages for custom traces or side-by-side policy narratives
 - add narrative annotations or callout overlays that explain why one imported trace wins on specific frame counts
