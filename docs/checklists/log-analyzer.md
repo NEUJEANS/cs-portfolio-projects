@@ -9,8 +9,8 @@
 - [x] refresh the committed sample log/artifacts so the gallery is reproducible from repo state
 - [x] run targeted tests and smoke checks
 - [x] run at least 3 review passes and fix issues found
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 - [ ] consider a follow-up slice for PNG export helpers or gallery filtering/grouping controls
 
 ## Referrer/user-agent facet ranking slice (2026-04-19 02:54 UTC run)

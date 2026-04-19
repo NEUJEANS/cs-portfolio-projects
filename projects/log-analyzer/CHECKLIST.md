@@ -4,11 +4,11 @@
 - [x] resume the next `log-analyzer` faceting follow-up after confirming `main` still matches `origin/main`
 - [x] choose the queued gallery-view follow-up for referrer/user-agent heavy release reviews instead of starting a different project
 - [x] add `--facet-ranking-gallery-html` plus repeatable `--facet-ranking-gallery-link` support so the existing per-facet rankings can ship as one browser-friendly artifact
-- [x] keep the gallery grounded in the normal per-facet ranking output, with grouped slice cards, summary metadata, and portable relative links to related artifacts
+- [x] keep the gallery grounded in the normal per-facet ranking output, with grouped slice cards, summary metadata, portable relative links to related artifacts, and empty-state sections for missing ranking families
 - [x] extend automated coverage for gallery rendering, CLI export success paths, and validation errors
 - [x] refresh README/checklist/research/learning/review docs and commit a reproducible facet-ranking gallery artifact under `docs/artifacts/log-analyzer/`
 - [x] run targeted tests, real CLI/export smoke checks, and 3 review passes
-- [ ] run secret scan, commit, push, and write the wrap-up
+- [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] parse common and combined access-log formats
