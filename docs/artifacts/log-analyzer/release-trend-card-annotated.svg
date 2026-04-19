@@ -100,7 +100,7 @@
 <text x="78" y="574" font-size="14" fill="#334155">Coverage: 2026-04-18 09:00 → 09:03 UTC</text>
 <text x="78" y="596" font-size="14" fill="#334155">Window filter: full log span</text>
 <text x="78" y="618" font-size="14" fill="#334155">Facet fields: none selected for this run</text>
-<text x="78" y="640" font-size="14" fill="#334155">Annotations: 1. 09:00 Deploy started [Deploy] · 2. 09:01 Error budget burn [Incident]</text>
+<text x="78" y="640" font-size="14" fill="#334155">Annotations: 1. 09:00 Deploy started [Deploy] · 2. 09:01 Incident detected [Incident]</text>
 <text x="78" y="662" font-size="14" fill="#334155">Annotations: 3. 09:02 Recovery confirmed [Recovery]</text>
   <text x="78" y="688" font-size="12" fill="#64748b">Use the standalone HTML companion for a browser-friendly summary table, annotation legend, and quick portfolio caption copy.</text>
 </svg>

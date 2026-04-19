@@ -1,11 +1,11 @@
 # log-analyzer checklist
 
-## Current slice (2026-04-19 00:01 UTC run)
-- [x] resume the queued annotation-theme follow-up after confirming `main` matches `origin/main`
-- [x] ship `TIMESTAMP=THEME|LABEL` support so trend-card and comparison-card annotations render deploy/rollback/incident/recovery/note markers with distinct SVG/HTML styling
-- [x] fail fast on unknown theme names so mistyped CLI annotations do not silently degrade into plain notes
-- [x] refresh committed annotated artifact samples plus README usage/examples to demonstrate themed markers and badges
-- [x] run targeted tests, themed export smoke checks, and 3 review passes
+## Current slice (2026-04-19 00:12 UTC run)
+- [x] resume the queued annotation-preset follow-up after confirming `main` matches `origin/main`
+- [x] add built-in `--card-annotation-preset` recipes so common deploy/incident/recovery and deploy/rollback/recovery stories need fewer repeated CLI flags
+- [x] keep preset output compatible with the existing themed annotation rendering path for both trend cards and comparison cards
+- [x] refresh README/checklists/review notes and regenerate the committed annotated sample bundle using preset-powered commands
+- [x] run targeted tests, real export smoke checks, and 3 review passes
 - [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
@@ -21,6 +21,7 @@
 - [x] add `--facet-compare-field` / `--facet-compare-values` release-review helpers with side-by-side JSON/text summaries and dedicated comparison CSV exports
 - [x] add `--facet-compare-card-svg` / `--facet-compare-card-html` release-review artifacts plus a committed sample bundle under `docs/artifacts/log-analyzer/`
 - [x] add repeatable `--card-annotation` callouts so trend cards and comparison cards can pin deploy/incident markers onto selected buckets
+- [x] add built-in `--card-annotation-preset` story recipes for deploy/incident/recovery and deploy/rollback/recovery card exports
 
 ## Current quality checks
 - [x] README reflects the shipped facet flags, side-by-side comparison helpers, hotspot/time-bucket workflows, trend-card exports, comparison-card exports, annotation controls, and export metadata
@@ -29,5 +30,5 @@
 
 ## Next follow-up ideas
 - [ ] optionally support facet-aware ranking summaries for top IP/path tables when richer custom log formats include deployment labels
-- [ ] consider PNG export helpers or a small gallery index page that links trend cards and comparison cards together
-- [ ] add a small preset/legend helper so repeated deploy-incident-recovery stories can be exported with less CLI repetition
+- [ ] consider PNG export helpers for cases where slide decks or chat uploads prefer raster assets over SVG/HTML
+- [ ] optionally support user-defined annotation preset files or reusable preset aliases beyond the built-in three-step stories

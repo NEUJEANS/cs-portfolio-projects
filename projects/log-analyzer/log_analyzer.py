@@ -87,6 +87,18 @@ CARD_ANNOTATION_THEMES: dict[str, dict[str, str]] = {
         "badge_text": "#6d28d9",
     },
 }
+CARD_ANNOTATION_PRESETS: dict[str, list[tuple[str, str]]] = {
+    "deploy-incident-recovery": [
+        ("deploy", "Deploy started"),
+        ("incident", "Incident detected"),
+        ("recovery", "Recovery confirmed"),
+    ],
+    "deploy-rollback-recovery": [
+        ("deploy", "Deploy started"),
+        ("rollback", "Rollback started"),
+        ("recovery", "Recovery confirmed"),
+    ],
+}
 
 
 @dataclass(frozen=True)
@@ -768,6 +780,38 @@ def parse_card_annotation_label(raw_label: str) -> tuple[str, str]:
             raise ValueError("--card-annotation labels cannot be empty")
         return normalized_theme, label
     return "note", cleaned
+
+
+def expand_card_annotation_presets(raw_presets: Iterable[str] | None) -> list[str]:
+    expanded: list[str] = []
+    for raw_preset in raw_presets or []:
+        cleaned = raw_preset.strip()
+        if not cleaned:
+            raise ValueError("--card-annotation-preset values must not be blank")
+        if "=" not in cleaned:
+            raise ValueError(
+                "--card-annotation-preset must use PRESET=TIMESTAMP[,TIMESTAMP...] "
+                "(for example deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z)"
+            )
+        raw_name, raw_timestamps = cleaned.split("=", 1)
+        preset_name = raw_name.strip().lower()
+        if preset_name not in CARD_ANNOTATION_PRESETS:
+            valid_presets = ", ".join(CARD_ANNOTATION_PRESETS)
+            raise ValueError(
+                f"Unknown --card-annotation-preset '{raw_name.strip()}'; use one of: {valid_presets}"
+            )
+        timestamps = [item.strip() for item in raw_timestamps.split(",") if item.strip()]
+        preset_steps = CARD_ANNOTATION_PRESETS[preset_name]
+        if len(timestamps) != len(preset_steps):
+            raise ValueError(
+                f"--card-annotation-preset {preset_name} expects {len(preset_steps)} timestamps "
+                f"but received {len(timestamps)}"
+            )
+        expanded.extend(
+            f"{timestamp}={theme}|{label}"
+            for timestamp, (theme, label) in zip(timestamps, preset_steps)
+        )
+    return expanded
 
 
 def get_card_annotation_theme(theme_key: str | None) -> dict[str, str]:
@@ -3253,6 +3297,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--card-annotation-preset",
+        action="append",
+        default=[],
+        help=(
+            "Optional built-in story preset that expands into themed annotations using "
+            "PRESET=TIMESTAMP[,TIMESTAMP...] syntax (for example "
+            "deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z; "
+            "requires --time-bucket and at least one card export flag)"
+        ),
+    )
+    parser.add_argument(
         "--hotspot-status",
         action="append",
         default=[],
@@ -3421,6 +3476,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--card-annotation requires --time-bucket")
     if args.card_annotation and not has_card_exports:
         parser.error("--card-annotation requires at least one card export flag")
+    if args.card_annotation_preset and not args.time_bucket:
+        parser.error("--card-annotation-preset requires --time-bucket")
+    if args.card_annotation_preset and not has_card_exports:
+        parser.error("--card-annotation-preset requires at least one card export flag")
 
     normalized_facet_fields = normalize_facet_fields(args.facet_field)
     facet_export_flags = [
@@ -3471,18 +3530,26 @@ def main(argv: list[str] | None = None) -> int:
             facet_compare_values=normalized_facet_compare_values,
         )
 
-    trend_card_annotations = None
-    comparison_card_annotations = None
-    if args.card_annotation and (args.time_bucket_card_svg or args.time_bucket_card_html):
-        trend_card_annotations = normalize_card_annotations(
-            args.card_annotation,
-            time_buckets=result["time_buckets"],
-        )
-    if args.card_annotation and (args.facet_compare_card_svg or args.facet_compare_card_html):
-        comparison_card_annotations = normalize_card_annotations(
-            args.card_annotation,
-            time_buckets=result["facet_comparison"]["time_buckets"],
-        )
+    try:
+        all_card_annotations = [
+            *args.card_annotation,
+            *expand_card_annotation_presets(args.card_annotation_preset),
+        ]
+
+        trend_card_annotations = None
+        comparison_card_annotations = None
+        if all_card_annotations and (args.time_bucket_card_svg or args.time_bucket_card_html):
+            trend_card_annotations = normalize_card_annotations(
+                all_card_annotations,
+                time_buckets=result["time_buckets"],
+            )
+        if all_card_annotations and (args.facet_compare_card_svg or args.facet_compare_card_html):
+            comparison_card_annotations = normalize_card_annotations(
+                all_card_annotations,
+                time_buckets=result["facet_comparison"]["time_buckets"],
+            )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.summary_csv:
         write_summary_csv(args.summary_csv, result)

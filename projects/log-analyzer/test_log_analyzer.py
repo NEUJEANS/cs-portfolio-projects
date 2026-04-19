@@ -14,6 +14,7 @@ if str(PROJECT_DIR) not in sys.path:
 
 from log_analyzer import (
     analyze_lines,
+    expand_card_annotation_presets,
     format_facet_comparison_card_html,
     format_facet_comparison_card_svg,
     format_text_report,
@@ -476,6 +477,30 @@ class LogAnalyzerTests(unittest.TestCase):
         self.assertEqual(annotations[0]['theme_summary'], 'Deploy, Incident')
         self.assertEqual(annotations[1]['theme'], 'rollback')
         self.assertEqual(annotations[1]['theme_label'], 'Rollback')
+
+    def test_expand_card_annotation_presets_creates_themed_annotations(self):
+        expanded = expand_card_annotation_presets(
+            [
+                'deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z,2026-04-18T09:03:10Z',
+            ]
+        )
+        self.assertEqual(
+            expanded,
+            [
+                '2026-04-18T09:00:20Z=deploy|Deploy started',
+                '2026-04-18T09:01:40Z=incident|Incident detected',
+                '2026-04-18T09:03:10Z=recovery|Recovery confirmed',
+            ],
+        )
+
+    def test_expand_card_annotation_presets_rejects_wrong_timestamp_count(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            '--card-annotation-preset deploy-rollback-recovery expects 3 timestamps but received 2',
+        ):
+            expand_card_annotation_presets(
+                ['deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:40Z']
+            )
 
     def test_normalize_card_annotations_rejects_unknown_theme(self):
         result = analyze_lines(
@@ -1472,6 +1497,47 @@ class LogAnalyzerTests(unittest.TestCase):
             self.assertIn('Events: 09:00:20', html_text)
             self.assertIn('Rollback triggered', html_text)
 
+    def test_cli_time_bucket_card_presets_expand_into_annotations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            html_path = Path(tmpdir) / 'exports' / 'trend-card.html'
+            log_path.write_text(
+                textwrap.dedent(
+                    '''\
+                    10.0.0.1 - - [18/Apr/2026:09:00:05 +0000] "GET /api/report HTTP/1.1" 200 10 request_time=0.050 upstream_response_time=0.030
+                    10.0.0.2 - - [18/Apr/2026:09:01:10 +0000] "POST /api/report HTTP/1.1" 500 12 request_time=0.400 upstream_response_time=0.250
+                    10.0.0.3 - - [18/Apr/2026:09:02:10 +0000] "POST /slow HTTP/1.1" 502 13 request_time=0.600 upstream_response_time=0.350
+                    '''
+                ),
+                encoding='utf-8',
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                    '--time-bucket-card-html',
+                    str(html_path),
+                    '--card-annotation-preset',
+                    'deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:20Z,2026-04-18T09:02:20Z',
+                ],
+                cwd=Path(__file__).parent,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            svg_text = svg_path.read_text(encoding='utf-8')
+            html_text = html_path.read_text(encoding='utf-8')
+            self.assertIn('Annotations: 1. 09:00 Deploy started', svg_text)
+            self.assertIn('[Incident]', svg_text)
+            self.assertIn('Recovery confirmed', html_text)
+            self.assertIn('Incident detected', html_text)
+
     def test_cli_rejects_time_bucket_card_export_without_granularity(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / 'access.log'
@@ -1639,6 +1705,57 @@ class LogAnalyzerTests(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn('--card-annotation requires at least one card export flag', completed.stderr)
+
+    def test_cli_rejects_card_annotation_preset_without_card_export(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--card-annotation-preset',
+                    'deploy-incident-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:20Z,2026-04-18T09:02:20Z',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--card-annotation-preset requires at least one card export flag', completed.stderr)
+
+    def test_cli_rejects_card_annotation_preset_with_wrong_timestamp_count(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / 'access.log'
+            svg_path = Path(tmpdir) / 'exports' / 'trend-card.svg'
+            log_path.write_text(
+                '10.0.0.1 - - [18/Apr/2026:09:00:00 +0000] "GET /slow HTTP/1.1" 200 10 request_time=0.010\n',
+                encoding='utf-8',
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    'log_analyzer.py',
+                    str(log_path),
+                    '--time-bucket',
+                    'minute',
+                    '--time-bucket-card-svg',
+                    str(svg_path),
+                    '--card-annotation-preset',
+                    'deploy-rollback-recovery=2026-04-18T09:00:20Z,2026-04-18T09:01:20Z',
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn('--card-annotation-preset deploy-rollback-recovery expects 3 timestamps but received 2', completed.stderr)
 
     def test_cli_rejects_card_annotation_outside_bucket_range(self):
         with tempfile.TemporaryDirectory() as tmpdir:
