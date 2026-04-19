@@ -88,12 +88,30 @@ class BenchmarkCase:
     pattern: str
     text: str
     mode: str = "fullmatch"
+    tags: tuple[str, ...] = ()
 
 
 DEFAULT_BENCHMARK_CASES: tuple[BenchmarkCase, ...] = (
-    BenchmarkCase("anchored_id_fullmatch", r"^ID-\d\d\d\d-\w+$", "ID-2026-demo_user"),
-    BenchmarkCase("pet_search", "(cat|dog)s?", "xxdogs walked by", mode="search"),
-    BenchmarkCase("release_token_search", r"\d+\s\w+", "build 2026 portfolio", mode="search"),
+    BenchmarkCase(
+        "anchored_id_fullmatch",
+        r"^ID-\d\d\d\d-\w+$",
+        "ID-2026-demo_user",
+        tags=("interview-demo", "anchored", "shorthand"),
+    ),
+    BenchmarkCase(
+        "pet_search",
+        "(cat|dog)s?",
+        "xxdogs walked by",
+        mode="search",
+        tags=("interview-demo", "search", "alternation"),
+    ),
+    BenchmarkCase(
+        "release_token_search",
+        r"\d+\s\w+",
+        "build 2026 portfolio",
+        mode="search",
+        tags=("portfolio-batch", "search", "shorthand"),
+    ),
 )
 
 
@@ -662,12 +680,67 @@ def normalize_search_result(match: re.Match[str] | None) -> dict[str, object]:
     }
 
 
-def benchmark_case_to_dict(case: BenchmarkCase) -> dict[str, str]:
+def benchmark_case_to_dict(case: BenchmarkCase) -> dict[str, object]:
     return {
         "label": case.label,
         "pattern": case.pattern,
         "text": case.text,
         "mode": case.mode,
+        "tags": list(case.tags),
+    }
+
+
+def normalize_benchmark_tag(raw_tag: object, *, context: str) -> str:
+    if not isinstance(raw_tag, str) or not raw_tag.strip():
+        raise BenchmarkSuiteError(f"{context} must be a non-empty string")
+    return raw_tag.strip().lower()
+
+
+def normalize_benchmark_tags(raw_tags: object, *, context: str) -> tuple[str, ...]:
+    if raw_tags is None:
+        return ()
+    if not isinstance(raw_tags, list):
+        raise BenchmarkSuiteError(f"{context} must be a list of non-empty strings when provided")
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for index, raw_tag in enumerate(raw_tags, start=1):
+        tag = normalize_benchmark_tag(raw_tag, context=f"{context} entry #{index}")
+        if tag in seen:
+            raise BenchmarkSuiteError(f"{context} must not contain duplicate tags; found {tag!r}")
+        seen.add(tag)
+        normalized.append(tag)
+    return tuple(normalized)
+
+
+def filter_benchmark_cases(
+    cases: Iterable[BenchmarkCase],
+    *,
+    include_tags: Iterable[str] = (),
+    exclude_tags: Iterable[str] = (),
+) -> tuple[list[BenchmarkCase], dict[str, list[str]] | None]:
+    normalized_include = normalize_benchmark_tags(list(include_tags), context="--include-tag")
+    normalized_exclude = normalize_benchmark_tags(list(exclude_tags), context="--exclude-tag")
+    overlapping = sorted(set(normalized_include) & set(normalized_exclude))
+    if overlapping:
+        raise BenchmarkSuiteError(
+            "benchmark filters cannot both include and exclude the same tag(s): " + ", ".join(overlapping)
+        )
+
+    selected = [
+        case
+        for case in cases
+        if (not normalized_include or set(normalized_include).issubset(case.tags))
+        and not (set(normalized_exclude) & set(case.tags))
+    ]
+    if (normalized_include or normalized_exclude) and not selected:
+        raise BenchmarkSuiteError("benchmark filters removed all cases; adjust the requested tag filters")
+
+    if not normalized_include and not normalized_exclude:
+        return selected, None
+    return selected, {
+        "include_tags": list(normalized_include),
+        "exclude_tags": list(normalized_exclude),
     }
 
 
@@ -717,9 +790,10 @@ def load_benchmark_suite(path_str: str) -> tuple[str, list[BenchmarkCase]]:
             raise BenchmarkSuiteError(
                 f"benchmark suite case {normalized_label!r} field 'mode' must be 'fullmatch' or 'search'"
             )
+        tags = normalize_benchmark_tags(raw_case.get("tags"), context=f"benchmark suite case {normalized_label!r} field 'tags'")
 
         seen_labels.add(normalized_label)
-        cases.append(BenchmarkCase(normalized_label, pattern, text, mode=mode))
+        cases.append(BenchmarkCase(normalized_label, pattern, text, mode=mode, tags=tags))
 
     return suite_label.strip(), cases
 
@@ -781,6 +855,7 @@ def run_benchmark_case(case: BenchmarkCase, *, iterations: int, warmup: int) -> 
         "mode": case.mode,
         "pattern": case.pattern,
         "text": case.text,
+        "tags": list(case.tags),
         "pattern_length": len(case.pattern),
         "text_length": len(case.text),
         "agreement": lab_result == python_result,
@@ -800,6 +875,7 @@ def run_benchmark_report(
     warmup: int,
     suite_label: str = "custom",
     suite_source: str | None = None,
+    applied_filters: dict[str, list[str]] | None = None,
 ) -> dict[str, object]:
     benchmark_cases = list(cases)
     case_results = [run_benchmark_case(case, iterations=iterations, warmup=warmup) for case in benchmark_cases]
@@ -811,9 +887,12 @@ def run_benchmark_report(
         "all_cases_agree": all(case["agreement"] for case in case_results),
         "cases": case_results,
         "case_definitions": [benchmark_case_to_dict(case) for case in benchmark_cases],
+        "suite_tags": sorted({tag for case in benchmark_cases for tag in case.tags}),
     }
     if suite_source is not None:
         report["suite_source"] = suite_source
+    if applied_filters is not None:
+        report["applied_filters"] = applied_filters
     return report
 
 
@@ -825,23 +904,31 @@ def render_benchmark_markdown(report: dict[str, object]) -> str:
         f"- iterations per engine: `{report['iterations']}`",
         f"- warmup iterations per engine: `{report['warmup']}`",
         f"- agreement across all cases: `{report['all_cases_agree']}`",
+        f"- suite tags present: `{', '.join(report['suite_tags']) if report['suite_tags'] else 'none'}`",
     ]
     if report.get("suite_source"):
         lines.append(f"- suite source: `{report['suite_source']}`")
+    if report.get("applied_filters"):
+        filters = report["applied_filters"]
+        lines.append(
+            f"- applied filters: include `{', '.join(filters['include_tags']) if filters['include_tags'] else 'none'}`; "
+            f"exclude `{', '.join(filters['exclude_tags']) if filters['exclude_tags'] else 'none'}`"
+        )
     lines.extend(
         [
             "",
-            "| case | mode | agreement | lab ms | python re ms | lab ops/s | python ops/s | faster |",
-            "| --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
+            "| case | mode | tags | agreement | lab ms | python re ms | lab ops/s | python ops/s | faster |",
+            "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
         ]
     )
     for case in report["cases"]:
         lab_ops = case["lab"]["ops_per_second"]
         python_ops = case["python_re"]["ops_per_second"]
         lines.append(
-            "| {label} | {mode} | {agreement} | {lab_ms:.3f} | {python_ms:.3f} | {lab_ops} | {python_ops} | {faster} |".format(
+            "| {label} | {mode} | {tags} | {agreement} | {lab_ms:.3f} | {python_ms:.3f} | {lab_ops} | {python_ops} | {faster} |".format(
                 label=case["label"],
                 mode=case["mode"],
+                tags=", ".join(case.get("tags", [])) or "—",
                 agreement="yes" if case["agreement"] else "no",
                 lab_ms=float(case["lab"]["elapsed_seconds"]) * 1000.0,
                 python_ms=float(case["python_re"]["elapsed_seconds"]) * 1000.0,
@@ -856,6 +943,7 @@ def render_benchmark_markdown(report: dict[str, object]) -> str:
             [
                 f"### {case['label']}",
                 f"- mode: `{case['mode']}`",
+                f"- tags: `{', '.join(case.get('tags', [])) if case.get('tags') else 'none'}`",
                 f"- pattern: `{case['pattern']}`",
                 f"- text: `{case['text']}`",
                 f"- agreement: `{case['agreement']}`",
@@ -920,6 +1008,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--suite-file",
         help="load a JSON benchmark suite file with one or more named cases",
     )
+    benchmark_parser.add_argument(
+        "--include-tag",
+        action="append",
+        default=[],
+        help="keep only suite cases whose tags include every requested tag (repeatable; suite modes only)",
+    )
+    benchmark_parser.add_argument(
+        "--exclude-tag",
+        action="append",
+        default=[],
+        help="drop suite cases whose tags include any requested tag (repeatable; suite modes only)",
+    )
     benchmark_parser.add_argument("--iterations", type=int, default=2000)
     benchmark_parser.add_argument("--warmup", type=int, default=200)
     benchmark_parser.add_argument("--json-out")
@@ -941,21 +1041,33 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("benchmark cannot combine --sample-suite with --suite-file")
 
         suite_source = None
+        applied_filters = None
         try:
             if args.sample_suite:
                 if args.pattern is not None or args.text is not None:
                     parser.error("benchmark does not accept PATTERN/TEXT when --sample-suite is used")
-                cases = list(DEFAULT_BENCHMARK_CASES)
+                cases, applied_filters = filter_benchmark_cases(
+                    DEFAULT_BENCHMARK_CASES,
+                    include_tags=args.include_tag,
+                    exclude_tags=args.exclude_tag,
+                )
                 suite_label = "sample-suite"
                 suite_source = "built-in defaults"
             elif args.suite_file:
                 if args.pattern is not None or args.text is not None:
                     parser.error("benchmark does not accept PATTERN/TEXT when --suite-file is used")
-                suite_label, cases = load_benchmark_suite(args.suite_file)
+                suite_label, loaded_cases = load_benchmark_suite(args.suite_file)
+                cases, applied_filters = filter_benchmark_cases(
+                    loaded_cases,
+                    include_tags=args.include_tag,
+                    exclude_tags=args.exclude_tag,
+                )
                 if args.label != "custom":
                     suite_label = args.label
                 suite_source = args.suite_file
             else:
+                if args.include_tag or args.exclude_tag:
+                    parser.error("benchmark tag filters require --sample-suite or --suite-file")
                 if args.pattern is None or args.text is None:
                     parser.error("benchmark requires PATTERN and TEXT unless --sample-suite or --suite-file is used")
                 cases = [BenchmarkCase(args.label, args.pattern, args.text, mode=args.mode)]
@@ -971,6 +1083,7 @@ def main(argv: list[str] | None = None) -> int:
                 warmup=args.warmup,
                 suite_label=suite_label,
                 suite_source=suite_source,
+                applied_filters=applied_filters,
             )
         except RegexSyntaxError as error:
             print(json.dumps({"error": str(error)}))

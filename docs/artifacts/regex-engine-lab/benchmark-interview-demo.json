@@ -1,0 +1,125 @@
+{
+  "suite_label": "interview-demo",
+  "iterations": 50,
+  "warmup": 5,
+  "case_count": 2,
+  "all_cases_agree": true,
+  "cases": [
+    {
+      "label": "anchored-id-fullmatch",
+      "mode": "fullmatch",
+      "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+      "text": "ID-2026-demo_user",
+      "tags": [
+        "interview-demo",
+        "anchored",
+        "shorthand"
+      ],
+      "pattern_length": 17,
+      "text_length": 17,
+      "agreement": true,
+      "lab_result": {
+        "matched": true
+      },
+      "python_result": {
+        "matched": true
+      },
+      "lab": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.0009200329986924771,
+        "avg_seconds": 1.8400659973849544e-05,
+        "ops_per_second": 54345.87680122178
+      },
+      "python_re": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 1.7344998923363164e-05,
+        "avg_seconds": 3.468999784672633e-07,
+        "ops_per_second": 2882675.301446781
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 53.043128036936444
+    },
+    {
+      "label": "pet-search",
+      "mode": "search",
+      "pattern": "(cat|dog)s?",
+      "text": "xxdogs walked by",
+      "tags": [
+        "interview-demo",
+        "search",
+        "alternation"
+      ],
+      "pattern_length": 11,
+      "text_length": 16,
+      "agreement": true,
+      "lab_result": {
+        "matched": true,
+        "start": 2,
+        "end": 6,
+        "match": "dogs"
+      },
+      "python_result": {
+        "matched": true,
+        "start": 2,
+        "end": 6,
+        "match": "dogs"
+      },
+      "lab": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.000497518998599844,
+        "avg_seconds": 9.950379971996881e-06,
+        "ops_per_second": 100498.67470531541
+      },
+      "python_re": {
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 1.2645999959204346e-05,
+        "avg_seconds": 2.529199991840869e-07,
+        "ops_per_second": 3953819.4022852005
+      },
+      "faster_engine": "python_re",
+      "lab_vs_python_elapsed_ratio": 39.34200539339134
+    }
+  ],
+  "case_definitions": [
+    {
+      "label": "anchored-id-fullmatch",
+      "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+      "text": "ID-2026-demo_user",
+      "mode": "fullmatch",
+      "tags": [
+        "interview-demo",
+        "anchored",
+        "shorthand"
+      ]
+    },
+    {
+      "label": "pet-search",
+      "pattern": "(cat|dog)s?",
+      "text": "xxdogs walked by",
+      "mode": "search",
+      "tags": [
+        "interview-demo",
+        "search",
+        "alternation"
+      ]
+    }
+  ],
+  "suite_tags": [
+    "alternation",
+    "anchored",
+    "interview-demo",
+    "search",
+    "shorthand"
+  ],
+  "suite_source": "docs/examples/regex-engine-benchmark-suite.json",
+  "applied_filters": {
+    "include_tags": [
+      "interview-demo"
+    ],
+    "exclude_tags": []
+  }
+}

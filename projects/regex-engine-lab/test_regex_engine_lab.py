@@ -12,6 +12,7 @@ from regex_engine_lab import (
     BenchmarkSuiteError,
     RegexEngine,
     RegexSyntaxError,
+    filter_benchmark_cases,
     load_benchmark_suite,
     render_benchmark_markdown,
     run_benchmark_report,
@@ -121,7 +122,7 @@ class RegexEngineTests(unittest.TestCase):
 
     def test_benchmark_report_agrees_with_python_re(self) -> None:
         report = run_benchmark_report(
-            [BenchmarkCase("id", r"^ID-\d\d\d\d-\w+$", "ID-2026-demo_user")],
+            [BenchmarkCase("id", r"^ID-\d\d\d\d-\w+$", "ID-2026-demo_user", tags=("demo", "anchored"))],
             iterations=3,
             warmup=0,
             suite_label="unit",
@@ -129,6 +130,7 @@ class RegexEngineTests(unittest.TestCase):
         self.assertEqual(report["suite_label"], "unit")
         self.assertTrue(report["all_cases_agree"])
         self.assertEqual(report["case_count"], 1)
+        self.assertEqual(report["suite_tags"], ["anchored", "demo"])
         case = report["cases"][0]
         self.assertTrue(case["agreement"])
         self.assertEqual(case["lab_result"], {"matched": True})
@@ -137,16 +139,19 @@ class RegexEngineTests(unittest.TestCase):
 
     def test_render_benchmark_markdown_includes_case_table(self) -> None:
         report = run_benchmark_report(
-            [BenchmarkCase("dogs", "(cat|dog)s?", "xxdogs", mode="search")],
+            [BenchmarkCase("dogs", "(cat|dog)s?", "xxdogs", mode="search", tags=("demo", "search"))],
             iterations=2,
             warmup=0,
             suite_label="unit",
+            applied_filters={"include_tags": ["demo"], "exclude_tags": []},
         )
         markdown = render_benchmark_markdown(report)
         self.assertIn("# Regex engine benchmark report", markdown)
-        self.assertIn("| case | mode | agreement |", markdown)
+        self.assertIn("| case | mode | tags | agreement |", markdown)
+        self.assertIn("applied filters", markdown)
         self.assertIn("### dogs", markdown)
         self.assertIn("`search`", markdown)
+        self.assertIn("demo, search", markdown)
 
     def test_load_benchmark_suite_reads_named_cases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -160,12 +165,14 @@ class RegexEngineTests(unittest.TestCase):
                                 "label": "anchored-id",
                                 "pattern": r"^ID-\d\d\d\d-\w+$",
                                 "text": "ID-2026-demo_user",
+                                "tags": ["interview-demo", "anchored"],
                             },
                             {
                                 "label": "pet-search",
                                 "pattern": "(cat|dog)s?",
                                 "text": "xxdogs walked by",
                                 "mode": "search",
+                                "tags": ["interview-demo", "search"],
                             },
                         ],
                     },
@@ -176,6 +183,7 @@ class RegexEngineTests(unittest.TestCase):
 
         self.assertEqual(suite_label, "portfolio-workload")
         self.assertEqual([case.label for case in cases], ["anchored-id", "pet-search"])
+        self.assertEqual(cases[0].tags, ("interview-demo", "anchored"))
         self.assertEqual(cases[1].mode, "search")
 
     def test_load_benchmark_suite_rejects_invalid_mode(self) -> None:
@@ -221,6 +229,51 @@ class RegexEngineTests(unittest.TestCase):
             )
             with self.assertRaises(BenchmarkSuiteError):
                 load_benchmark_suite(str(suite_path))
+
+    def test_load_benchmark_suite_rejects_duplicate_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "suite.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "label": "repeat-tag-case",
+                                "pattern": "abc",
+                                "text": "abc",
+                                "tags": ["demo", "demo"],
+                            }
+                        ]
+                    }
+                )
+            )
+            with self.assertRaises(BenchmarkSuiteError):
+                load_benchmark_suite(str(suite_path))
+
+    def test_filter_benchmark_cases_selects_tagged_subset(self) -> None:
+        cases, filters = filter_benchmark_cases(
+            [
+                BenchmarkCase("id", r"^ID-\d+$", "ID-42", tags=("interview-demo", "anchored")),
+                BenchmarkCase("search", "dog", "hotdog", mode="search", tags=("portfolio-batch", "search")),
+                BenchmarkCase("spaces", r"^\s+$", " ", tags=("portfolio-batch", "whitespace")),
+            ],
+            include_tags=["portfolio-batch"],
+            exclude_tags=["whitespace"],
+        )
+        self.assertEqual([case.label for case in cases], ["search"])
+        self.assertEqual(filters, {"include_tags": ["portfolio-batch"], "exclude_tags": ["whitespace"]})
+
+    def test_filter_benchmark_cases_normalizes_requested_tag_whitespace_and_case(self) -> None:
+        cases, filters = filter_benchmark_cases(
+            [
+                BenchmarkCase("id", r"^ID-\d+$", "ID-42", tags=("interview-demo", "anchored")),
+                BenchmarkCase("spaces", r"^\s+$", " ", tags=("portfolio-batch", "whitespace")),
+            ],
+            include_tags=[" Interview-Demo "],
+            exclude_tags=[" whitespace "],
+        )
+        self.assertEqual([case.label for case in cases], ["id"])
+        self.assertEqual(filters, {"include_tags": ["interview-demo"], "exclude_tags": ["whitespace"]})
 
 
 class RegexEngineCliTests(unittest.TestCase):
@@ -335,12 +388,14 @@ class RegexEngineCliTests(unittest.TestCase):
                                 "label": "anchored-id",
                                 "pattern": r"^ID-\d\d\d\d-\w+$",
                                 "text": "ID-2026-demo_user",
+                                "tags": ["interview-demo", "anchored"],
                             },
                             {
                                 "label": "pet-search",
                                 "pattern": "(cat|dog)s?",
                                 "text": "xxdogs walked by",
                                 "mode": "search",
+                                "tags": ["interview-demo", "search"],
                             },
                         ],
                     },
@@ -365,12 +420,65 @@ class RegexEngineCliTests(unittest.TestCase):
             self.assertEqual(payload["suite_label"], "portfolio-workload")
             self.assertEqual(payload["case_count"], 2)
             self.assertEqual(payload["suite_source"], str(suite_path))
+            self.assertEqual(payload["suite_tags"], ["anchored", "interview-demo", "search"])
             self.assertEqual(payload["case_definitions"][1]["mode"], "search")
+            self.assertEqual(payload["case_definitions"][1]["tags"], ["interview-demo", "search"])
             self.assertTrue(markdown_path.exists())
             self.assertTrue(json_path.exists())
             self.assertIn("suite source", markdown_path.read_text())
             written_json = json.loads(json_path.read_text())
             self.assertEqual(written_json["case_count"], 2)
+
+    def test_cli_benchmark_suite_file_filters_by_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "suite.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "suite_label": "portfolio-workload",
+                        "cases": [
+                            {
+                                "label": "anchored-id",
+                                "pattern": r"^ID-\d\d\d\d-\w+$",
+                                "text": "ID-2026-demo_user",
+                                "tags": ["interview-demo", "anchored"],
+                            },
+                            {
+                                "label": "pet-search",
+                                "pattern": "(cat|dog)s?",
+                                "text": "xxdogs walked by",
+                                "mode": "search",
+                                "tags": ["interview-demo", "search"],
+                            },
+                            {
+                                "label": "whitespace-fullmatch",
+                                "pattern": r"^\s+$",
+                                "text": " \t",
+                                "tags": ["portfolio-batch", "whitespace"],
+                            },
+                        ],
+                    },
+                    indent=2,
+                )
+            )
+            completed = self.run_cli(
+                "benchmark",
+                "--suite-file",
+                str(suite_path),
+                "--include-tag",
+                "interview-demo",
+                "--exclude-tag",
+                "search",
+                "--iterations",
+                "1",
+                "--warmup",
+                "0",
+            )
+            self.assertEqual(completed.returncode, 0)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["case_count"], 1)
+            self.assertEqual([case["label"] for case in payload["cases"]], ["anchored-id"])
+            self.assertEqual(payload["applied_filters"], {"include_tags": ["interview-demo"], "exclude_tags": ["search"]})
 
     def test_cli_reports_invalid_benchmark_suite_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -380,6 +488,55 @@ class RegexEngineCliTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 2)
             payload = json.loads(completed.stdout)
             self.assertIn("error", payload)
+
+    def test_cli_reports_empty_tag_selection_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = Path(temp_dir) / "suite.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "label": "anchored-id",
+                                "pattern": r"^ID-\d+$",
+                                "text": "ID-42",
+                                "tags": ["interview-demo"]
+                            }
+                        ]
+                    }
+                )
+            )
+            completed = self.run_cli(
+                "benchmark",
+                "--suite-file",
+                str(suite_path),
+                "--include-tag",
+                "portfolio-batch",
+                "--iterations",
+                "1",
+                "--warmup",
+                "0",
+            )
+            self.assertEqual(completed.returncode, 2)
+            payload = json.loads(completed.stdout)
+            self.assertIn("error", payload)
+
+    def test_cli_reports_invalid_benchmark_tag_filters(self) -> None:
+        completed = self.run_cli(
+            "benchmark",
+            "--sample-suite",
+            "--include-tag",
+            "interview-demo",
+            "--exclude-tag",
+            "interview-demo",
+            "--iterations",
+            "1",
+            "--warmup",
+            "0",
+        )
+        self.assertEqual(completed.returncode, 2)
+        payload = json.loads(completed.stdout)
+        self.assertIn("error", payload)
 
     def test_cli_reports_invalid_benchmark_pattern_errors(self) -> None:
         completed = self.run_cli("benchmark", "[abc", "a", "--iterations", "1", "--warmup", "0")

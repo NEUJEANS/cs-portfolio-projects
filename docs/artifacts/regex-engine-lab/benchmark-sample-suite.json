@@ -1,7 +1,7 @@
 {
   "suite_label": "sample-suite",
-  "iterations": 3000,
-  "warmup": 200,
+  "iterations": 50,
+  "warmup": 5,
   "case_count": 3,
   "all_cases_agree": true,
   "cases": [
@@ -10,6 +10,11 @@
       "mode": "fullmatch",
       "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
       "text": "ID-2026-demo_user",
+      "tags": [
+        "interview-demo",
+        "anchored",
+        "shorthand"
+      ],
       "pattern_length": 17,
       "text_length": 17,
       "agreement": true,
@@ -20,27 +25,32 @@
         "matched": true
       },
       "lab": {
-        "iterations": 3000,
-        "warmup": 200,
-        "elapsed_seconds": 0.05251248499916983,
-        "avg_seconds": 1.750416166638994e-05,
-        "ops_per_second": 57129.27125896684
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.0011251330033701379,
+        "avg_seconds": 2.2502660067402756e-05,
+        "ops_per_second": 44439.19061145109
       },
       "python_re": {
-        "iterations": 3000,
-        "warmup": 200,
-        "elapsed_seconds": 0.0009837679972406477,
-        "avg_seconds": 3.2792266574688254e-07,
-        "ops_per_second": 3049499.484039574
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 1.72849977388978e-05,
+        "avg_seconds": 3.45699954777956e-07,
+        "ops_per_second": 2892681.8941654265
       },
       "faster_engine": "python_re",
-      "lab_vs_python_elapsed_ratio": 53.37893197020142
+      "lab_vs_python_elapsed_ratio": 65.09303734753532
     },
     {
       "label": "pet_search",
       "mode": "search",
       "pattern": "(cat|dog)s?",
       "text": "xxdogs walked by",
+      "tags": [
+        "interview-demo",
+        "search",
+        "alternation"
+      ],
       "pattern_length": 11,
       "text_length": 16,
       "agreement": true,
@@ -57,27 +67,32 @@
         "match": "dogs"
       },
       "lab": {
-        "iterations": 3000,
-        "warmup": 200,
-        "elapsed_seconds": 0.029648627998540178,
-        "avg_seconds": 9.882875999513392e-06,
-        "ops_per_second": 101185.12061157475
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.0006665639994025696,
+        "avg_seconds": 1.3331279988051392e-05,
+        "ops_per_second": 75011.55184620559
       },
       "python_re": {
-        "iterations": 3000,
-        "warmup": 200,
-        "elapsed_seconds": 0.0007297720003407449,
-        "avg_seconds": 2.4325733344691495e-07,
-        "ops_per_second": 4110872.9830676448
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 1.282700031879358e-05,
+        "avg_seconds": 2.5654000637587157e-07,
+        "ops_per_second": 3898027.501156456
       },
       "faster_engine": "python_re",
-      "lab_vs_python_elapsed_ratio": 40.62724794140725
+      "lab_vs_python_elapsed_ratio": 51.96569601904103
     },
     {
       "label": "release_token_search",
       "mode": "search",
       "pattern": "\\d+\\s\\w+",
       "text": "build 2026 portfolio",
+      "tags": [
+        "portfolio-batch",
+        "search",
+        "shorthand"
+      ],
       "pattern_length": 8,
       "text_length": 20,
       "agreement": true,
@@ -94,21 +109,65 @@
         "match": "2026 portfolio"
       },
       "lab": {
-        "iterations": 3000,
-        "warmup": 200,
-        "elapsed_seconds": 0.10480290800114744,
-        "avg_seconds": 3.4934302667049146e-05,
-        "ops_per_second": 28625.159904600685
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 0.0023795119996066205,
+        "avg_seconds": 4.759023999213241e-05,
+        "ops_per_second": 21012.711853634682
       },
       "python_re": {
-        "iterations": 3000,
-        "warmup": 200,
-        "elapsed_seconds": 0.0012477729978854768,
-        "avg_seconds": 4.159243326284923e-07,
-        "ops_per_second": 2404283.475507094
+        "iterations": 50,
+        "warmup": 5,
+        "elapsed_seconds": 2.1153002307983115e-05,
+        "avg_seconds": 4.230600461596623e-07,
+        "ops_per_second": 2363730.6549685416
       },
       "faster_engine": "python_re",
-      "lab_vs_python_elapsed_ratio": 83.99196663074967
+      "lab_vs_python_elapsed_ratio": 112.49050914671322
     }
-  ]
+  ],
+  "case_definitions": [
+    {
+      "label": "anchored_id_fullmatch",
+      "pattern": "^ID-\\d\\d\\d\\d-\\w+$",
+      "text": "ID-2026-demo_user",
+      "mode": "fullmatch",
+      "tags": [
+        "interview-demo",
+        "anchored",
+        "shorthand"
+      ]
+    },
+    {
+      "label": "pet_search",
+      "pattern": "(cat|dog)s?",
+      "text": "xxdogs walked by",
+      "mode": "search",
+      "tags": [
+        "interview-demo",
+        "search",
+        "alternation"
+      ]
+    },
+    {
+      "label": "release_token_search",
+      "pattern": "\\d+\\s\\w+",
+      "text": "build 2026 portfolio",
+      "mode": "search",
+      "tags": [
+        "portfolio-batch",
+        "search",
+        "shorthand"
+      ]
+    }
+  ],
+  "suite_tags": [
+    "alternation",
+    "anchored",
+    "interview-demo",
+    "portfolio-batch",
+    "search",
+    "shorthand"
+  ],
+  "suite_source": "built-in defaults"
 }

@@ -72,18 +72,28 @@ python3 regex_engine_lab.py benchmark \
   --iterations 2500 --warmup 200 \
   --json-out ../../docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.json \
   --markdown-out ../../docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.md
+
+python3 regex_engine_lab.py benchmark \
+  --suite-file ../../docs/examples/regex-engine-benchmark-suite.json \
+  --label interview-demo \
+  --include-tag interview-demo \
+  --iterations 2500 --warmup 200 \
+  --json-out ../../docs/artifacts/regex-engine-lab/benchmark-interview-demo.json \
+  --markdown-out ../../docs/artifacts/regex-engine-lab/benchmark-interview-demo.md
 ```
 
-`benchmark` reuses one compiled lab engine and one compiled Python `re.Pattern`, measures both with `time.perf_counter()`, and reports whether the two engines agree on the chosen safe regular-language cases. The built-in suite stays intentionally ASCII-only so shorthand-class parity is about engine behavior, not Unicode-policy differences. `--suite-file` accepts a JSON object with a `suite_label` plus a `cases` list of `{label, pattern, text, mode?}` entries, and those case labels must stay unique so reports remain unambiguous. That makes reproducible workload bundles easy to ship in the repo without editing Python code.
+`benchmark` reuses one compiled lab engine and one compiled Python `re.Pattern`, measures both with `time.perf_counter()`, and reports whether the two engines agree on the chosen safe regular-language cases. The built-in suite stays intentionally ASCII-only so shorthand-class parity is about engine behavior, not Unicode-policy differences. `--suite-file` accepts a JSON object with a `suite_label` plus a `cases` list of `{label, pattern, text, mode?, tags?}` entries, and those case labels must stay unique so reports remain unambiguous. Optional lowercase tags let one workload bundle drive both tiny interview-demo runs and broader portfolio batches via repeatable `--include-tag` / `--exclude-tag` filters.
 
 ## Sample artifacts
 - `docs/artifacts/regex-engine-lab/trace-id-fullmatch.json` - fullmatch trace for a shorthand-heavy ID pattern
 - `docs/artifacts/regex-engine-lab/trace-dogs-search.json` - search trace showing how the engine advances start offsets before landing on `dogs`
 - `docs/artifacts/regex-engine-lab/benchmark-sample-suite.json` - JSON benchmark comparison report for the built-in safe sample suite
 - `docs/artifacts/regex-engine-lab/benchmark-sample-suite.md` - reviewer-friendly Markdown summary of the same benchmark suite
-- `docs/examples/regex-engine-benchmark-suite.json` - repo-committed JSON workload definition showing how to benchmark multiple named cases without editing code
-- `docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.json` - committed report generated from the JSON-defined workload bundle
-- `docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.md` - Markdown summary of the JSON-defined workload bundle for quick portfolio review
+- `docs/examples/regex-engine-benchmark-suite.json` - repo-committed JSON workload definition showing how to benchmark multiple named cases and tag them for different demo sizes
+- `docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.json` - committed report generated from the full JSON-defined workload bundle
+- `docs/artifacts/regex-engine-lab/benchmark-portfolio-workload.md` - Markdown summary of the full JSON-defined workload bundle for quick portfolio review
+- `docs/artifacts/regex-engine-lab/benchmark-interview-demo.json` - filtered benchmark report generated from the same suite file with `--include-tag interview-demo`
+- `docs/artifacts/regex-engine-lab/benchmark-interview-demo.md` - reviewer-friendly Markdown summary of the smaller interview-demo subset
 
 ## Testing
 ```bash
@@ -101,5 +111,5 @@ python3 -m unittest discover -s projects/regex-engine-lab -p 'test_*.py' -v
 ## Future improvements
 - render trace output into a small HTML timeline or SVG teaching card
 - compile to DFA for faster repeated matching on the same pattern
-- add suite-level tags or filters so one JSON workload file can drive small interview demos and larger benchmark batches
+- render benchmark suites into a small HTML summary card or comparison dashboard
 - add optional Unicode-aware shorthand classes as a follow-on contrast with the current ASCII teaching mode
