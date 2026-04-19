@@ -7,7 +7,7 @@
 - [x] add self-contained gallery controls for search, exact per-field filtering, sort presets, and hide-empty presentation cleanup without adding dependencies
 - [x] refresh README/checklist/research/learning/review docs and regenerate the committed `docs/artifacts/log-analyzer/facet-ranking-gallery.html` sample
 - [x] run targeted tests, real CLI/export smoke checks, browser validation, and 3 review passes
-- [ ] run secret scan, commit, push, and write the wrap-up
+- [x] run secret scan, commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] parse common and combined access-log formats
