@@ -80,3 +80,13 @@
 - [x] expand tests for summary helpers and dry-run CLI JSON output
 - [x] update README usage, feature notes, and interview framing
 - [x] complete at least 3 review passes and fix issues found
+
+## Cross-preset landing page slice (2026-04-19 16:41 UTC run)
+- [x] confirm repo sync before editing
+- [x] resume the queued MinHash follow-up around a cross-preset landing page
+- [x] skip external research because the slice stays inside the existing preset bundle/export architecture
+- [x] self-test the planned bundle-summary aggregation path with new repo-level unit and CLI coverage
+- [x] add `write-preset-landing` so checked-in bundle summaries can produce a shared Markdown/HTML comparison page
+- [x] generate and check in bundle artifacts for the mixed-markdown, data-science, systems, and web-dev presets
+- [x] update README usage, interview framing, and future-follow-up notes
+- [x] complete at least 3 review passes and fix issues found

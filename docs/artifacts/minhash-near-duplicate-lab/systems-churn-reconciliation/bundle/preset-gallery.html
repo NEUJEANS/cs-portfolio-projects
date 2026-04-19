@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Systems reconciliation MinHash preset</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }
+    h1, h2, h3 { margin-top: 0; }
+    .hero, .panel { background: #111827; border: 1px solid #334155; border-radius: 18px; padding: 20px; margin-bottom: 20px; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.28); }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .card { background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border-radius: 16px; padding: 16px; border: 1px solid #334155; min-height: 150px; }
+    .meta { color: #93c5fd; font-size: 0.95rem; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; padding: 14px; border-radius: 12px; border: 1px solid #1e293b; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Systems reconciliation MinHash preset</h1>
+      <p>A replica-lag and WAL catch-up corpus with code, runbook, and incident-story near-duplicates for systems design demos.</p>
+      <ul>
+        <li>Preset key: <code>systems-churn-reconciliation</code></li>
+        <li>Files written: <strong>7</strong></li>
+        <li>Pairs detected at the recommended threshold: <strong>1</strong></li>
+        <li>Extensions: .json=1, .md=4, .py=2</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Suggested scan command</h2>
+      <pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus &#x27;&lt;preset-root&gt;&#x27; --glob &#x27;*.md,*.py,*.json&#x27; --token-mode code --shingle-size 3 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --json</pre>
+    </section>
+    <section class="panel">
+      <h2>Preset file cards</h2>
+      <div class="grid"><article class="card"><h3>README.md</h3><p class="meta">.md · 129 bytes</p><p># Replica reconciliation notes</p></article>
+<article class="card"><h3>different_domain.md</h3><p class="meta">.md · 104 bytes</p><p># Different topic</p></article>
+<article class="card"><h3>incident_timeline.md</h3><p class="meta">.md · 110 bytes</p><p># Incident timeline</p></article>
+<article class="card"><h3>lag_demo.json</h3><p class="meta">.json · 206 bytes</p><p>{</p></article>
+<article class="card"><h3>replica_sync.py</h3><p class="meta">.py · 387 bytes</p><p>def reconciliation_plan(status_rows):</p></article>
+<article class="card"><h3>replica_sync_variant.py</h3><p class="meta">.py · 362 bytes</p><p>def catchup_actions(nodes):</p></article>
+<article class="card"><h3>runbook.md</h3><p class="meta">.md · 150 bytes</p><p># Replica lag runbook</p></article></div>
+    </section>
+    <section class="panel">
+      <h2>Top near-duplicate pairs</h2>
+      <div class="grid"><article class="card pair"><h3>replica_sync.py ↔ replica_sync_variant.py</h3><p class="meta">exact=1.0000 · estimated=1.0000 · shared bands=8</p></article></div>
+    </section>
+  </main>
+</body>
+</html>

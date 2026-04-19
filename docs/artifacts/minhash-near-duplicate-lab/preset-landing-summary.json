@@ -1,0 +1,155 @@
+{
+  "generated_at": "2026-04-19T17:02:53.576026+00:00",
+  "preset_count": 4,
+  "preset_names": [
+    "mixed-markdown-code-notebook",
+    "data-science-feature-pipeline",
+    "systems-churn-reconciliation",
+    "web-dev-component-clones"
+  ],
+  "presets": [
+    {
+      "extensions": {
+        ".ipynb": 1,
+        ".md": 3,
+        ".py": 2
+      },
+      "files_written": 6,
+      "gallery_html": "mixed-markdown-code-notebook/bundle/preset-gallery.html",
+      "pairs_detected": 1,
+      "preset_name": "mixed-markdown-code-notebook",
+      "recommended_scan": {
+        "bands": 8,
+        "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.py,*.ipynb' --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.2 --normalize-identifiers --normalize-literals --json",
+        "glob_pattern": "*.md,*.py,*.ipynb",
+        "normalize_identifiers": true,
+        "normalize_literals": true,
+        "num_hashes": 64,
+        "shingle_size": 4,
+        "threshold": 0.2,
+        "token_mode": "code"
+      },
+      "story": "A graph-search study bundle that intentionally duplicates the BFS story across Markdown, Python, and notebook files.",
+      "summary_json": "mixed-markdown-code-notebook/bundle/preset-bundle-summary.json",
+      "summary_md": "mixed-markdown-code-notebook/bundle/preset-bundle-summary.md",
+      "title": "Mixed Markdown, code, and notebook MinHash preset",
+      "top_pair": {
+        "estimated_jaccard": 1.0,
+        "exact_jaccard": 1.0,
+        "left": "bfs_queue.py",
+        "left_shingles": 78,
+        "right": "bfs_variant.py",
+        "right_shingles": 78,
+        "shared_bands": 8
+      }
+    },
+    {
+      "extensions": {
+        ".ipynb": 1,
+        ".md": 3,
+        ".py": 2
+      },
+      "files_written": 6,
+      "gallery_html": "data-science-feature-pipeline/bundle/preset-gallery.html",
+      "pairs_detected": 1,
+      "preset_name": "data-science-feature-pipeline",
+      "recommended_scan": {
+        "bands": 8,
+        "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.py,*.ipynb' --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --json",
+        "glob_pattern": "*.md,*.py,*.ipynb",
+        "normalize_identifiers": true,
+        "normalize_literals": false,
+        "num_hashes": 64,
+        "shingle_size": 4,
+        "threshold": 0.15,
+        "token_mode": "code"
+      },
+      "story": "A feature-engineering portfolio pack with cloned preprocessing logic spread across Python, Markdown, and notebook artifacts.",
+      "summary_json": "data-science-feature-pipeline/bundle/preset-bundle-summary.json",
+      "summary_md": "data-science-feature-pipeline/bundle/preset-bundle-summary.md",
+      "title": "Data-science feature pipeline MinHash preset",
+      "top_pair": {
+        "estimated_jaccard": 1.0,
+        "exact_jaccard": 1.0,
+        "left": "feature_pipeline.py",
+        "left_shingles": 58,
+        "right": "feature_pipeline_variant.py",
+        "right_shingles": 58,
+        "shared_bands": 8
+      }
+    },
+    {
+      "extensions": {
+        ".json": 1,
+        ".md": 4,
+        ".py": 2
+      },
+      "files_written": 7,
+      "gallery_html": "systems-churn-reconciliation/bundle/preset-gallery.html",
+      "pairs_detected": 1,
+      "preset_name": "systems-churn-reconciliation",
+      "recommended_scan": {
+        "bands": 8,
+        "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.py,*.json' --token-mode code --shingle-size 3 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --json",
+        "glob_pattern": "*.md,*.py,*.json",
+        "normalize_identifiers": true,
+        "normalize_literals": false,
+        "num_hashes": 64,
+        "shingle_size": 3,
+        "threshold": 0.15,
+        "token_mode": "code"
+      },
+      "story": "A replica-lag and WAL catch-up corpus with code, runbook, and incident-story near-duplicates for systems design demos.",
+      "summary_json": "systems-churn-reconciliation/bundle/preset-bundle-summary.json",
+      "summary_md": "systems-churn-reconciliation/bundle/preset-bundle-summary.md",
+      "title": "Systems reconciliation MinHash preset",
+      "top_pair": {
+        "estimated_jaccard": 1.0,
+        "exact_jaccard": 1.0,
+        "left": "replica_sync.py",
+        "left_shingles": 61,
+        "right": "replica_sync_variant.py",
+        "right_shingles": 61,
+        "shared_bands": 8
+      }
+    },
+    {
+      "extensions": {
+        ".css": 1,
+        ".md": 3,
+        ".ts": 2,
+        ".tsx": 2
+      },
+      "files_written": 8,
+      "gallery_html": "web-dev-component-clones/bundle/preset-gallery.html",
+      "pairs_detected": 2,
+      "preset_name": "web-dev-component-clones",
+      "recommended_scan": {
+        "bands": 8,
+        "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.tsx,*.ts,*.css' --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --normalize-literals --json",
+        "glob_pattern": "*.md,*.tsx,*.ts,*.css",
+        "normalize_identifiers": true,
+        "normalize_literals": true,
+        "num_hashes": 64,
+        "shingle_size": 4,
+        "threshold": 0.15,
+        "token_mode": "code"
+      },
+      "story": "A frontend-heavy portfolio preset that highlights duplicated dashboard cards, hooks, notes, and CSS assets.",
+      "summary_json": "web-dev-component-clones/bundle/preset-bundle-summary.json",
+      "summary_md": "web-dev-component-clones/bundle/preset-bundle-summary.md",
+      "title": "Web-dev component clone MinHash preset",
+      "top_pair": {
+        "estimated_jaccard": 1.0,
+        "exact_jaccard": 1.0,
+        "left": "engagement_summary_card.tsx",
+        "left_shingles": 80,
+        "right": "user_stats_card.tsx",
+        "right_shingles": 80,
+        "shared_bands": 8
+      }
+    }
+  ],
+  "total_files_written": 27,
+  "total_pairs_detected": 5
+}

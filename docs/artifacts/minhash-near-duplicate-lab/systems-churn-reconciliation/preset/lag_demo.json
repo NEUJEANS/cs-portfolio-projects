@@ -1,0 +1,14 @@
+{
+  "nodes": [
+    {
+      "node": "blue",
+      "leader_offset": 1024,
+      "replica_offset": 1001
+    },
+    {
+      "node": "green",
+      "leader_offset": 1024,
+      "replica_offset": 740
+    }
+  ]
+}

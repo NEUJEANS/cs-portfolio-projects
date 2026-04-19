@@ -1,0 +1,72 @@
+{
+  "extensions": {
+    ".ipynb": 1,
+    ".md": 3,
+    ".py": 2
+  },
+  "files": [
+    {
+      "bytes": 96,
+      "path": "README.md",
+      "preview": "# Graph search notes",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 1154,
+      "path": "bfs_demo.ipynb",
+      "preview": "# BFS notebook demo Breadth-first search expands the frontier level by level with a queue.",
+      "suffix": ".ipynb"
+    },
+    {
+      "bytes": 405,
+      "path": "bfs_queue.py",
+      "preview": "from collections import deque",
+      "suffix": ".py"
+    },
+    {
+      "bytes": 417,
+      "path": "bfs_variant.py",
+      "preview": "from collections import deque",
+      "suffix": ".py"
+    },
+    {
+      "bytes": 116,
+      "path": "distant_topic.md",
+      "preview": "# Different topic",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 138,
+      "path": "portfolio_reflection.md",
+      "preview": "# BFS study guide",
+      "suffix": ".md"
+    }
+  ],
+  "files_written": 6,
+  "pairs_detected": 1,
+  "preset_name": "mixed-markdown-code-notebook",
+  "recommended_scan": {
+    "bands": 8,
+    "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.py,*.ipynb' --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.2 --normalize-identifiers --normalize-literals --json",
+    "glob_pattern": "*.md,*.py,*.ipynb",
+    "normalize_identifiers": true,
+    "normalize_literals": true,
+    "num_hashes": 64,
+    "shingle_size": 4,
+    "threshold": 0.2,
+    "token_mode": "code"
+  },
+  "story": "A graph-search study bundle that intentionally duplicates the BFS story across Markdown, Python, and notebook files.",
+  "title": "Mixed Markdown, code, and notebook MinHash preset",
+  "top_pairs": [
+    {
+      "estimated_jaccard": 1.0,
+      "exact_jaccard": 1.0,
+      "left": "bfs_queue.py",
+      "left_shingles": 78,
+      "right": "bfs_variant.py",
+      "right_shingles": 78,
+      "shared_bands": 8
+    }
+  ]
+}

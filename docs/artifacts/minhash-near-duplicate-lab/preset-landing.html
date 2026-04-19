@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MinHash preset bundle landing page</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; margin: 0; background: #020617; color: #e2e8f0; }
+    main { max-width: 1280px; margin: 0 auto; padding: 32px 20px 56px; }
+    .hero, .card { background: #0f172a; border: 1px solid #334155; border-radius: 18px; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.32); }
+    .hero { padding: 24px; margin-bottom: 24px; }
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .card { padding: 20px; }
+    h1, h2 { margin-top: 0; }
+    .meta, .links { color: #93c5fd; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; padding: 14px; border-radius: 12px; border: 1px solid #1e293b; }
+    ul { padding-left: 20px; }
+    a { color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>MinHash preset bundle landing page</h1>
+      <p>A side-by-side comparison of the curated mixed-language, data-science, systems, and web-dev demo bundles.</p>
+      <ul>
+        <li>Generated at: <code>2026-04-19T17:02:53.576026+00:00</code></li>
+        <li>Presets compared: <strong>4</strong></li>
+        <li>Total files across bundles: <strong>27</strong></li>
+        <li>Total near-duplicate pairs across bundles: <strong>5</strong></li>
+      </ul>
+    </section>
+    <section class="grid"><article class="card"><h2>Mixed Markdown, code, and notebook MinHash preset</h2><p>A graph-search study bundle that intentionally duplicates the BFS story across Markdown, Python, and notebook files.</p><ul><li>Preset key: <code>mixed-markdown-code-notebook</code></li><li>Files written: <strong>6</strong></li><li>Pairs detected: <strong>1</strong></li><li>Extensions: .ipynb=1, .md=3, .py=2</li><li>Recommended glob: <code>*.md,*.py,*.ipynb</code></li></ul><pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus &#x27;&lt;preset-root&gt;&#x27; --glob &#x27;*.md,*.py,*.ipynb&#x27; --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.2 --normalize-identifiers --normalize-literals --json</pre><p class="meta">Top pair: bfs_queue.py ↔ bfs_variant.py</p><p>exact=1.0000 · estimated=1.0000</p><p class="links"><a href="mixed-markdown-code-notebook/bundle/preset-bundle-summary.json">summary json</a> · <a href="mixed-markdown-code-notebook/bundle/preset-bundle-summary.md">summary md</a> · <a href="mixed-markdown-code-notebook/bundle/preset-gallery.html">gallery html</a></p></article><article class="card"><h2>Data-science feature pipeline MinHash preset</h2><p>A feature-engineering portfolio pack with cloned preprocessing logic spread across Python, Markdown, and notebook artifacts.</p><ul><li>Preset key: <code>data-science-feature-pipeline</code></li><li>Files written: <strong>6</strong></li><li>Pairs detected: <strong>1</strong></li><li>Extensions: .ipynb=1, .md=3, .py=2</li><li>Recommended glob: <code>*.md,*.py,*.ipynb</code></li></ul><pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus &#x27;&lt;preset-root&gt;&#x27; --glob &#x27;*.md,*.py,*.ipynb&#x27; --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --json</pre><p class="meta">Top pair: feature_pipeline.py ↔ feature_pipeline_variant.py</p><p>exact=1.0000 · estimated=1.0000</p><p class="links"><a href="data-science-feature-pipeline/bundle/preset-bundle-summary.json">summary json</a> · <a href="data-science-feature-pipeline/bundle/preset-bundle-summary.md">summary md</a> · <a href="data-science-feature-pipeline/bundle/preset-gallery.html">gallery html</a></p></article><article class="card"><h2>Systems reconciliation MinHash preset</h2><p>A replica-lag and WAL catch-up corpus with code, runbook, and incident-story near-duplicates for systems design demos.</p><ul><li>Preset key: <code>systems-churn-reconciliation</code></li><li>Files written: <strong>7</strong></li><li>Pairs detected: <strong>1</strong></li><li>Extensions: .json=1, .md=4, .py=2</li><li>Recommended glob: <code>*.md,*.py,*.json</code></li></ul><pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus &#x27;&lt;preset-root&gt;&#x27; --glob &#x27;*.md,*.py,*.json&#x27; --token-mode code --shingle-size 3 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --json</pre><p class="meta">Top pair: replica_sync.py ↔ replica_sync_variant.py</p><p>exact=1.0000 · estimated=1.0000</p><p class="links"><a href="systems-churn-reconciliation/bundle/preset-bundle-summary.json">summary json</a> · <a href="systems-churn-reconciliation/bundle/preset-bundle-summary.md">summary md</a> · <a href="systems-churn-reconciliation/bundle/preset-gallery.html">gallery html</a></p></article><article class="card"><h2>Web-dev component clone MinHash preset</h2><p>A frontend-heavy portfolio preset that highlights duplicated dashboard cards, hooks, notes, and CSS assets.</p><ul><li>Preset key: <code>web-dev-component-clones</code></li><li>Files written: <strong>8</strong></li><li>Pairs detected: <strong>2</strong></li><li>Extensions: .css=1, .md=3, .ts=2, .tsx=2</li><li>Recommended glob: <code>*.md,*.tsx,*.ts,*.css</code></li></ul><pre>python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus &#x27;&lt;preset-root&gt;&#x27; --glob &#x27;*.md,*.tsx,*.ts,*.css&#x27; --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --normalize-literals --json</pre><p class="meta">Top pair: engagement_summary_card.tsx ↔ user_stats_card.tsx</p><p>exact=1.0000 · estimated=1.0000</p><p class="links"><a href="web-dev-component-clones/bundle/preset-bundle-summary.json">summary json</a> · <a href="web-dev-component-clones/bundle/preset-bundle-summary.md">summary md</a> · <a href="web-dev-component-clones/bundle/preset-gallery.html">gallery html</a></p></article></section>
+  </main>
+</body>
+</html>

@@ -25,6 +25,7 @@ A portfolio-ready Python lab for finding near-duplicate text documents with shin
 - benchmark export support for JSON, CSV, or Markdown portfolio summaries
 - curated demo corpus presets for mixed Markdown/code notebooks, data-science feature pipelines, systems reconciliation stories, and web-dev component clone portfolios
 - artifact-ready preset bundle export that writes JSON, Markdown, and HTML gallery cards alongside a generated preset corpus
+- cross-preset landing-page export that compares all curated demo bundles side by side with links to each preset gallery
 - comma-separated glob support so one run can scan `.md`, `.py`, `.ipynb`, `.tsx`, `.ts`, and other mixed corpus files together
 - CLI output in human-readable or JSON form
 - repository-level tests for API behavior and CLI workflows
@@ -152,6 +153,17 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-preset \
 
 The same `--artifact-bundle-dir` flag works with the mixed-markdown, data-science, and systems presets too, so every curated corpus can ship with portfolio-ready bundle files.
 
+Build a cross-preset landing page after generating the individual bundles:
+
+```bash
+python3 projects/minhash-near-duplicate-lab/minhash_lab.py write-preset-landing \
+  docs/artifacts/minhash-near-duplicate-lab \
+  docs/artifacts/minhash-near-duplicate-lab \
+  --json
+```
+
+That command discovers every checked-in `preset-bundle-summary.json` file under the bundle root and writes a shared Markdown/HTML landing page for the mixed-language, data-science, systems, and web-dev demos.
+
 Build a persistent signature index:
 
 ```bash
@@ -244,6 +256,7 @@ python3 projects/minhash-near-duplicate-lab/minhash_lab.py benchmark \
 - how recall and candidate-reduction trade off as you change shingle size, signature length, and band count
 - how reusable JSON/CSV/Markdown exports make experimental results easier to paste into portfolio write-ups and charts
 - how preset bundle Markdown/HTML cards turn a synthetic corpus into something you can screenshot quickly for a portfolio case study
+- how a cross-preset landing page helps you frame one MinHash project for multiple audiences (algorithms, data, systems, and frontend)
 
 ## Test
 
@@ -254,4 +267,4 @@ python3 -m unittest tests.test_minhash_near_duplicate
 ## Future improvements
 - add richer benchmark dataset packs with expected-recall scenarios across tiny, medium, and noisy corpora
 - add language-aware literal buckets for lists, dicts, template strings, and JSX-specific inline objects in code mode
-- add a cross-preset landing page that compares the mixed-language, data-science, systems, and web-dev demo bundles side by side
+- add portfolio screenshots or thumbnail assets that can be embedded directly into the landing page cards

@@ -1,0 +1,72 @@
+{
+  "extensions": {
+    ".ipynb": 1,
+    ".md": 3,
+    ".py": 2
+  },
+  "files": [
+    {
+      "bytes": 129,
+      "path": "README.md",
+      "preview": "# Feature engineering notes",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 129,
+      "path": "experiment_notes.md",
+      "preview": "# Experiment notes",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 1018,
+      "path": "feature_demo.ipynb",
+      "preview": "# Feature pipeline demo Notebook version of the same preprocessing steps for portfolio screenshots.",
+      "suffix": ".ipynb"
+    },
+    {
+      "bytes": 282,
+      "path": "feature_pipeline.py",
+      "preview": "def normalize_rows(rows):",
+      "suffix": ".py"
+    },
+    {
+      "bytes": 329,
+      "path": "feature_pipeline_variant.py",
+      "preview": "def build_features(events):",
+      "suffix": ".py"
+    },
+    {
+      "bytes": 119,
+      "path": "outlier_memo.md",
+      "preview": "# Different topic",
+      "suffix": ".md"
+    }
+  ],
+  "files_written": 6,
+  "pairs_detected": 1,
+  "preset_name": "data-science-feature-pipeline",
+  "recommended_scan": {
+    "bands": 8,
+    "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.py,*.ipynb' --token-mode code --shingle-size 4 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --json",
+    "glob_pattern": "*.md,*.py,*.ipynb",
+    "normalize_identifiers": true,
+    "normalize_literals": false,
+    "num_hashes": 64,
+    "shingle_size": 4,
+    "threshold": 0.15,
+    "token_mode": "code"
+  },
+  "story": "A feature-engineering portfolio pack with cloned preprocessing logic spread across Python, Markdown, and notebook artifacts.",
+  "title": "Data-science feature pipeline MinHash preset",
+  "top_pairs": [
+    {
+      "estimated_jaccard": 1.0,
+      "exact_jaccard": 1.0,
+      "left": "feature_pipeline.py",
+      "left_shingles": 58,
+      "right": "feature_pipeline_variant.py",
+      "right_shingles": 58,
+      "shared_bands": 8
+    }
+  ]
+}

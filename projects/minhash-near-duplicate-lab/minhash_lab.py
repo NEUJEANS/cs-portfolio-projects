@@ -6,6 +6,7 @@ import hashlib
 import html
 import json
 import keyword
+import os
 import re
 import shlex
 import time
@@ -167,6 +168,9 @@ PRESET_SCAN_CONFIGS: dict[str, dict[str, object]] = {
         "threshold": 0.15,
     },
 }
+
+PRESET_DISPLAY_ORDER = list(PRESET_CORPORA)
+PRESET_ORDER_INDEX = {name: index for index, name in enumerate(PRESET_DISPLAY_ORDER)}
 
 
 @dataclass(frozen=True)
@@ -818,6 +822,199 @@ def write_preset_artifact_bundle(preset_name: str, destination: Path, bundle_dir
     }
 
 
+def _landing_relative_path(target: Path, base_dir: Path) -> str:
+    return Path(os.path.relpath(target.resolve(), start=base_dir.resolve())).as_posix()
+
+
+def _load_bundle_summary(summary_path: Path) -> dict[str, object]:
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"bundle summary must contain an object: {summary_path}")
+    if "preset_name" not in payload:
+        raise ValueError(f"bundle summary missing preset_name: {summary_path}")
+    return payload
+
+
+def build_preset_bundle_landing(summary_paths: Iterable[Path], output_dir: Path) -> dict[str, object]:
+    entries: list[dict[str, object]] = []
+    for summary_path in sorted(summary_paths):
+        payload = _load_bundle_summary(summary_path)
+        preset_name = str(payload["preset_name"])
+        bundle_dir = summary_path.parent
+        summary_md = bundle_dir / "preset-bundle-summary.md"
+        gallery_html = bundle_dir / "preset-gallery.html"
+        top_pairs = payload.get("top_pairs", [])
+        top_pair = top_pairs[0] if isinstance(top_pairs, list) and top_pairs else None
+        recommended_scan = payload.get("recommended_scan", {})
+        if not isinstance(recommended_scan, dict):
+            raise ValueError(f"recommended_scan must be an object: {summary_path}")
+        entries.append(
+            {
+                "preset_name": preset_name,
+                "title": str(payload.get("title", preset_name)),
+                "story": str(payload.get("story", "")),
+                "files_written": int(payload.get("files_written", 0)),
+                "pairs_detected": int(payload.get("pairs_detected", 0)),
+                "extensions": payload.get("extensions", {}),
+                "recommended_scan": recommended_scan,
+                "summary_json": _landing_relative_path(summary_path, output_dir),
+                "summary_md": _landing_relative_path(summary_md, output_dir),
+                "gallery_html": _landing_relative_path(gallery_html, output_dir),
+                "top_pair": top_pair,
+            }
+        )
+    if not entries:
+        raise ValueError("no preset bundle summaries found")
+    entries.sort(key=lambda entry: (PRESET_ORDER_INDEX.get(str(entry["preset_name"]), len(PRESET_ORDER_INDEX)), str(entry["preset_name"])))
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "preset_count": len(entries),
+        "preset_names": [entry["preset_name"] for entry in entries],
+        "total_files_written": sum(int(entry["files_written"]) for entry in entries),
+        "total_pairs_detected": sum(int(entry["pairs_detected"]) for entry in entries),
+        "presets": entries,
+    }
+
+
+def _preset_landing_markdown(payload: dict[str, object]) -> str:
+    lines = [
+        "# MinHash preset bundle landing page",
+        "",
+        "A side-by-side landing page for the curated mixed-language, data-science, systems, and web-dev MinHash demo bundles.",
+        "",
+        f"- Generated at: `{payload['generated_at']}`",
+        f"- Presets compared: {payload['preset_count']}",
+        f"- Total files across bundles: {payload['total_files_written']}",
+        f"- Total near-duplicate pairs across bundles: {payload['total_pairs_detected']}",
+        "",
+        "## Preset comparison cards",
+        "",
+    ]
+    for entry in payload["presets"]:
+        scan = entry["recommended_scan"]
+        extensions = entry["extensions"]
+        extension_summary = ", ".join(f"{suffix}={count}" for suffix, count in sorted(extensions.items())) if isinstance(extensions, dict) else "n/a"
+        lines.extend(
+            [
+                f"### {entry['title']}",
+                "",
+                str(entry["story"]),
+                "",
+                f"- Preset key: `{entry['preset_name']}`",
+                f"- Files written: {entry['files_written']}",
+                f"- Pairs detected: {entry['pairs_detected']}",
+                f"- Extensions: {extension_summary}",
+                f"- Recommended glob: `{scan.get('glob_pattern', 'n/a')}`",
+                f"- Token mode: `{scan.get('token_mode', 'n/a')}` | normalize identifiers: `{scan.get('normalize_identifiers', False)}` | normalize literals: `{scan.get('normalize_literals', False)}`",
+                f"- Suggested command: `{scan.get('command', 'n/a')}`",
+                f"- Bundle links: [summary json]({entry['summary_json']}), [summary md]({entry['summary_md']}), [gallery html]({entry['gallery_html']})",
+            ]
+        )
+        top_pair = entry.get("top_pair")
+        if isinstance(top_pair, dict):
+            lines.append(
+                f"- Top pair: `{top_pair['left']}` <> `{top_pair['right']}` | exact={top_pair['exact_jaccard']:.4f} estimated={top_pair['estimated_jaccard']:.4f}"
+            )
+        else:
+            lines.append("- Top pair: none above the recommended threshold yet")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _preset_landing_html(payload: dict[str, object]) -> str:
+    cards = []
+    for entry in payload["presets"]:
+        scan = entry["recommended_scan"]
+        extensions = entry["extensions"]
+        extension_summary = ", ".join(f"{suffix}={count}" for suffix, count in sorted(extensions.items())) if isinstance(extensions, dict) else "n/a"
+        top_pair = entry.get("top_pair")
+        if isinstance(top_pair, dict):
+            top_pair_html = (
+                f"<p class=\"meta\">Top pair: {html.escape(str(top_pair['left']))} ↔ {html.escape(str(top_pair['right']))}</p>"
+                f"<p>exact={top_pair['exact_jaccard']:.4f} · estimated={top_pair['estimated_jaccard']:.4f}</p>"
+            )
+        else:
+            top_pair_html = "<p class=\"meta\">Top pair: none above the recommended threshold yet</p>"
+        cards.append(
+            "<article class=\"card\">"
+            f"<h2>{html.escape(str(entry['title']))}</h2>"
+            f"<p>{html.escape(str(entry['story']))}</p>"
+            "<ul>"
+            f"<li>Preset key: <code>{html.escape(str(entry['preset_name']))}</code></li>"
+            f"<li>Files written: <strong>{entry['files_written']}</strong></li>"
+            f"<li>Pairs detected: <strong>{entry['pairs_detected']}</strong></li>"
+            f"<li>Extensions: {html.escape(extension_summary)}</li>"
+            f"<li>Recommended glob: <code>{html.escape(str(scan.get('glob_pattern', 'n/a')))}</code></li>"
+            "</ul>"
+            f"<pre>{html.escape(str(scan.get('command', 'n/a')))}</pre>"
+            f"{top_pair_html}"
+            "<p class=\"links\">"
+            f"<a href=\"{html.escape(str(entry['summary_json']))}\">summary json</a> · "
+            f"<a href=\"{html.escape(str(entry['summary_md']))}\">summary md</a> · "
+            f"<a href=\"{html.escape(str(entry['gallery_html']))}\">gallery html</a>"
+            "</p>"
+            "</article>"
+        )
+    return f"""<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <title>MinHash preset bundle landing page</title>
+  <style>
+    body {{ font-family: Inter, system-ui, sans-serif; margin: 0; background: #020617; color: #e2e8f0; }}
+    main {{ max-width: 1280px; margin: 0 auto; padding: 32px 20px 56px; }}
+    .hero, .card {{ background: #0f172a; border: 1px solid #334155; border-radius: 18px; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.32); }}
+    .hero {{ padding: 24px; margin-bottom: 24px; }}
+    .grid {{ display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }}
+    .card {{ padding: 20px; }}
+    h1, h2 {{ margin-top: 0; }}
+    .meta, .links {{ color: #93c5fd; }}
+    pre {{ white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; padding: 14px; border-radius: 12px; border: 1px solid #1e293b; }}
+    ul {{ padding-left: 20px; }}
+    a {{ color: #38bdf8; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class=\"hero\">
+      <h1>MinHash preset bundle landing page</h1>
+      <p>A side-by-side comparison of the curated mixed-language, data-science, systems, and web-dev demo bundles.</p>
+      <ul>
+        <li>Generated at: <code>{html.escape(str(payload['generated_at']))}</code></li>
+        <li>Presets compared: <strong>{payload['preset_count']}</strong></li>
+        <li>Total files across bundles: <strong>{payload['total_files_written']}</strong></li>
+        <li>Total near-duplicate pairs across bundles: <strong>{payload['total_pairs_detected']}</strong></li>
+      </ul>
+    </section>
+    <section class=\"grid\">{''.join(cards)}</section>
+  </main>
+</body>
+</html>
+"""
+
+
+def write_preset_bundle_landing(bundle_root: Path, output_dir: Path) -> dict[str, object]:
+    summary_paths = sorted(bundle_root.rglob("preset-bundle-summary.json"))
+    payload = build_preset_bundle_landing(summary_paths, output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary_json = output_dir / "preset-landing-summary.json"
+    summary_md = output_dir / "preset-landing.md"
+    landing_html = output_dir / "preset-landing.html"
+    summary_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    summary_md.write_text(_preset_landing_markdown(payload) + "\n", encoding="utf-8")
+    landing_html.write_text(_preset_landing_html(payload), encoding="utf-8")
+    return {
+        "directory": str(output_dir),
+        "summary_json": str(summary_json),
+        "summary_md": str(summary_md),
+        "landing_html": str(landing_html),
+        "preset_count": payload["preset_count"],
+        "preset_names": payload["preset_names"],
+        "total_files_written": payload["total_files_written"],
+        "total_pairs_detected": payload["total_pairs_detected"],
+    }
+
+
 def _indexed_document_from_text(
     path: Path,
     text: str,
@@ -1215,6 +1412,14 @@ def build_parser() -> argparse.ArgumentParser:
     preset_parser.add_argument("--artifact-bundle-dir", help="optional directory for markdown/json/html portfolio bundle artifacts")
     preset_parser.add_argument("--json", action="store_true")
 
+    preset_landing_parser = subparsers.add_parser(
+        "write-preset-landing",
+        help="build a cross-preset landing page from existing preset bundle summaries",
+    )
+    preset_landing_parser.add_argument("bundle_root")
+    preset_landing_parser.add_argument("output_dir")
+    preset_landing_parser.add_argument("--json", action="store_true")
+
     for subparser in (compare_parser, corpus_parser, index_parser, benchmark_parser):
         subparser.add_argument("--shingle-size", type=int, default=3)
         subparser.add_argument("--token-mode", choices=["word", "code", "char"], default="word")
@@ -1262,6 +1467,13 @@ def _emit(payload: dict[str, object], as_json: bool) -> int:
         artifact_bundle = payload.get("artifact_bundle")
         if isinstance(artifact_bundle, dict) and artifact_bundle.get("directory"):
             print(f"Saved artifact bundle: {artifact_bundle['directory']}")
+        return 0
+    if command == "write-preset-landing":
+        print(
+            f"Wrote preset landing page for {payload['preset_count']} presets to {payload['directory']} "
+            f"(files={payload['total_files_written']}, pairs={payload['total_pairs_detected']})"
+        )
+        print(f"Landing HTML: {payload['landing_html']}")
         return 0
     if command == "benchmark":
         print(f"Documents scanned: {payload['documents_scanned']}")
@@ -1462,6 +1674,13 @@ def main(argv: list[str] | None = None) -> int:
                 Path(args.artifact_bundle_dir),
                 written,
             )
+        return _emit(payload, args.json)
+
+    if args.command == "write-preset-landing":
+        payload = {
+            "command": "write-preset-landing",
+            **write_preset_bundle_landing(Path(args.bundle_root), Path(args.output_dir)),
+        }
         return _emit(payload, args.json)
 
     if args.command == "benchmark":

@@ -1,0 +1,78 @@
+{
+  "extensions": {
+    ".json": 1,
+    ".md": 4,
+    ".py": 2
+  },
+  "files": [
+    {
+      "bytes": 129,
+      "path": "README.md",
+      "preview": "# Replica reconciliation notes",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 104,
+      "path": "different_domain.md",
+      "preview": "# Different topic",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 110,
+      "path": "incident_timeline.md",
+      "preview": "# Incident timeline",
+      "suffix": ".md"
+    },
+    {
+      "bytes": 206,
+      "path": "lag_demo.json",
+      "preview": "{",
+      "suffix": ".json"
+    },
+    {
+      "bytes": 387,
+      "path": "replica_sync.py",
+      "preview": "def reconciliation_plan(status_rows):",
+      "suffix": ".py"
+    },
+    {
+      "bytes": 362,
+      "path": "replica_sync_variant.py",
+      "preview": "def catchup_actions(nodes):",
+      "suffix": ".py"
+    },
+    {
+      "bytes": 150,
+      "path": "runbook.md",
+      "preview": "# Replica lag runbook",
+      "suffix": ".md"
+    }
+  ],
+  "files_written": 7,
+  "pairs_detected": 1,
+  "preset_name": "systems-churn-reconciliation",
+  "recommended_scan": {
+    "bands": 8,
+    "command": "python3 projects/minhash-near-duplicate-lab/minhash_lab.py corpus '<preset-root>' --glob '*.md,*.py,*.json' --token-mode code --shingle-size 3 --num-hashes 64 --bands 8 --threshold 0.15 --normalize-identifiers --json",
+    "glob_pattern": "*.md,*.py,*.json",
+    "normalize_identifiers": true,
+    "normalize_literals": false,
+    "num_hashes": 64,
+    "shingle_size": 3,
+    "threshold": 0.15,
+    "token_mode": "code"
+  },
+  "story": "A replica-lag and WAL catch-up corpus with code, runbook, and incident-story near-duplicates for systems design demos.",
+  "title": "Systems reconciliation MinHash preset",
+  "top_pairs": [
+    {
+      "estimated_jaccard": 1.0,
+      "exact_jaccard": 1.0,
+      "left": "replica_sync.py",
+      "left_shingles": 61,
+      "right": "replica_sync_variant.py",
+      "right_shingles": 61,
+      "shared_bands": 8
+    }
+  ]
+}

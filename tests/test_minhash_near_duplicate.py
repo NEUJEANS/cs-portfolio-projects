@@ -33,7 +33,9 @@ summarize_index_refresh = module.summarize_index_refresh
 save_signature_index = module.save_signature_index
 benchmark_corpus = module.benchmark_corpus
 build_preset_artifact_bundle = module.build_preset_artifact_bundle
+build_preset_bundle_landing = module.build_preset_bundle_landing
 write_preset_artifact_bundle = module.write_preset_artifact_bundle
+write_preset_bundle_landing = module.write_preset_bundle_landing
 write_preset_corpus = module.write_preset_corpus
 _preview_text_for_bundle = module._preview_text_for_bundle
 _split_glob_patterns = module._split_glob_patterns
@@ -522,6 +524,57 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             self.assertIn("<html", html)
             self.assertIn("Top near-duplicate pairs", html)
 
+    def test_build_preset_bundle_landing_summarizes_multiple_bundles_in_display_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bundle_paths = []
+            for preset_name in ("web-dev-component-clones", "mixed-markdown-code-notebook", "systems-churn-reconciliation"):
+                destination = root / preset_name / "preset"
+                bundle_dir = root / preset_name / "bundle"
+                written = write_preset_corpus(preset_name, destination)
+                outputs = write_preset_artifact_bundle(preset_name, destination, bundle_dir, written)
+                bundle_paths.append(Path(outputs["summary_json"]))
+
+            payload = build_preset_bundle_landing(bundle_paths, root)
+
+            self.assertEqual(payload["preset_count"], 3)
+            self.assertEqual(
+                payload["preset_names"],
+                ["mixed-markdown-code-notebook", "systems-churn-reconciliation", "web-dev-component-clones"],
+            )
+            self.assertGreater(payload["total_pairs_detected"], 0)
+            self.assertTrue(all(entry["gallery_html"].endswith("preset-gallery.html") for entry in payload["presets"]))
+
+    def test_write_preset_bundle_landing_writes_json_markdown_and_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            for preset_name in ("mixed-markdown-code-notebook", "data-science-feature-pipeline"):
+                destination = root / preset_name / "preset"
+                bundle_dir = root / preset_name / "bundle"
+                written = write_preset_corpus(preset_name, destination)
+                write_preset_artifact_bundle(preset_name, destination, bundle_dir, written)
+
+            outputs = write_preset_bundle_landing(root, root)
+            summary_json = Path(outputs["summary_json"])
+            summary_md = Path(outputs["summary_md"])
+            landing_html = Path(outputs["landing_html"])
+
+            self.assertTrue(summary_json.exists())
+            self.assertTrue(summary_md.exists())
+            self.assertTrue(landing_html.exists())
+
+            landing_payload = json.loads(summary_json.read_text(encoding="utf-8"))
+            markdown = summary_md.read_text(encoding="utf-8")
+            html = landing_html.read_text(encoding="utf-8")
+
+            self.assertEqual(landing_payload["preset_count"], 2)
+            self.assertEqual(outputs["total_files_written"], landing_payload["total_files_written"])
+            self.assertEqual(outputs["total_pairs_detected"], landing_payload["total_pairs_detected"])
+            self.assertIn("Preset comparison cards", markdown)
+            self.assertIn("summary md", markdown)
+            self.assertIn("MinHash preset bundle landing page", html)
+            self.assertIn("gallery html", html)
+
     def test_write_preset_corpus_requires_force_when_files_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             destination = Path(tmpdir) / "preset"
@@ -744,6 +797,52 @@ class MinhashNearDuplicateRepoTests(unittest.TestCase):
             summary_payload = json.loads(Path(artifact_bundle["summary_json"]).read_text(encoding="utf-8"))
             self.assertEqual(summary_payload["preset_name"], "web-dev-component-clones")
             self.assertGreaterEqual(len(summary_payload["top_pairs"]), 2)
+
+    def test_cli_write_preset_landing_discovers_bundle_summaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            for preset_name in ("mixed-markdown-code-notebook", "web-dev-component-clones"):
+                destination = root / preset_name / "preset"
+                bundle_dir = root / preset_name / "bundle"
+                subprocess.run(
+                    [
+                        "python3",
+                        str(MODULE_PATH),
+                        "write-preset",
+                        preset_name,
+                        str(destination),
+                        "--artifact-bundle-dir",
+                        str(bundle_dir),
+                        "--json",
+                    ],
+                    cwd=PROJECT_ROOT,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "write-preset-landing",
+                    str(root),
+                    str(root),
+                    "--json",
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["command"], "write-preset-landing")
+            self.assertEqual(payload["preset_count"], 2)
+            self.assertGreater(payload["total_files_written"], 0)
+            self.assertGreater(payload["total_pairs_detected"], 0)
+            self.assertTrue(Path(payload["landing_html"]).exists())
+            landing_payload = json.loads(Path(payload["summary_json"]).read_text(encoding="utf-8"))
+            self.assertEqual(landing_payload["preset_names"], ["mixed-markdown-code-notebook", "web-dev-component-clones"])
 
     def test_cli_compare_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

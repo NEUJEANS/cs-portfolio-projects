@@ -10,8 +10,9 @@
 - [x] Expand test coverage for preset generation and mixed-extension frontend corpus scans
 - [x] Emit artifact-ready JSON/Markdown/HTML preset bundles next to generated preset corpora for easier portfolio screenshots
 - [x] Harden preset bundle generation so reused destinations ignore stray files and notebook previews stay readable for both list- and string-based cell sources
+- [x] Add a cross-preset landing page generator that compares the mixed-language, data-science, systems, and web-dev demo bundles side by side
 
 ## Next candidate slices
 - [ ] Add richer benchmark dataset packs with expected-recall scenarios across tiny, medium, and noisy corpora
 - [ ] Add language-aware literal buckets for lists, dicts, template strings, and JSX inline objects in code mode
-- [ ] Add a cross-preset landing page that compares the mixed-language, data-science, systems, and web-dev demo bundles side by side
+- [ ] Add portfolio screenshots or thumbnail assets that can be embedded directly into the landing-page cards
