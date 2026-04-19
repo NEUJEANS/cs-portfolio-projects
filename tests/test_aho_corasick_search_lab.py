@@ -19,6 +19,8 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 AhoCorasickAutomaton = module.AhoCorasickAutomaton
+render_report_html = module.render_report_html
+render_report_markdown = module.render_report_markdown
 search_chunks = module.search_chunks
 search_file = module.search_file
 search_text = module.search_text
@@ -144,6 +146,69 @@ class AhoCorasickSearchLabTests(unittest.TestCase):
         )
         self.assertIn("context chars: 2", completed.stdout)
         self.assertIn("context='e ⟦warning⟧ a'", completed.stdout)
+
+    def test_report_renderers_include_stream_context_metadata(self) -> None:
+        result = search_chunks(
+            ["error wa", "rning\ncr", "itical"],
+            ["warning", "critical"],
+            chunk_size=8,
+            context_chars=2,
+        )
+        markdown = render_report_markdown(
+            result,
+            patterns=["warning", "critical"],
+            source_label="sample.log",
+            title="Chunked demo",
+        )
+        html = render_report_html(
+            result,
+            patterns=["warning", "critical"],
+            source_label="sample.log",
+            title="Chunked demo",
+        )
+        self.assertIn("# Chunked demo", markdown)
+        self.assertIn("stream (3 chunks @ 8 chars, boundary overlap 7)", markdown)
+        self.assertIn("```text\nr ⟦warning⟧\nc\n```", markdown)
+        self.assertIn("<title>Chunked demo</title>", html)
+        self.assertIn("sample.log", html)
+        self.assertIn("r ⟦warning⟧\nc", html)
+
+    def test_cli_report_exports_write_deterministic_markdown_and_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "sample.txt"
+            path.write_text("alpha <warn> omega\n", encoding="utf-8")
+            markdown_out = Path(tmpdir) / "report.md"
+            html_out = Path(tmpdir) / "report.html"
+            command = [
+                sys.executable,
+                str(SCRIPT_PATH),
+                "warn",
+                "--input",
+                str(path),
+                "--chunk-size",
+                "4",
+                "--context",
+                "2",
+                "--json",
+                "--report-title",
+                "Escaped report",
+                "--report-markdown-out",
+                str(markdown_out),
+                "--report-html-out",
+                str(html_out),
+            ]
+            first_run = subprocess.run(command, check=True, capture_output=True, text=True)
+            first_markdown = markdown_out.read_text(encoding="utf-8")
+            first_html = html_out.read_text(encoding="utf-8")
+            first_json = json.loads(first_run.stdout)
+            second_run = subprocess.run(command, check=True, capture_output=True, text=True)
+            self.assertEqual(markdown_out.read_text(encoding="utf-8"), first_markdown)
+            self.assertEqual(html_out.read_text(encoding="utf-8"), first_html)
+            self.assertEqual(json.loads(second_run.stdout), first_json)
+            self.assertEqual(first_json["match_count"], 1)
+            self.assertIn("# Escaped report", first_markdown)
+            self.assertIn("sample.txt", first_markdown)
+            self.assertIn("&lt;⟦warn⟧&gt;", first_html)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Streaming incident keyword report</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    h1, h2, h3 { line-height: 1.15; }
+    p, li, dd { line-height: 1.55; }
+    code, pre { font-family: "SFMono-Regular", ui-monospace, monospace; }
+    .hero { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.96), rgba(240, 253, 250, 0.96)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }
+    .hero p { max-width: 74ch; }
+    .eyebrow { margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }
+    .hero-meta, .chip-row { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+    .hero-meta { margin-top: 1rem; }
+    .chip, .pill { display: inline-flex; align-items: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: 0.92rem; }
+    .chip { background: rgba(224, 231, 255, 0.85); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; }
+    .pill { background: rgba(219, 234, 254, 0.95); color: #1d4ed8; font-weight: 700; }
+    .summary-grid, .match-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.4rem; }
+    .summary-card, .match-card { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.2rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }
+    .summary-card { padding: 1rem; }
+    .summary-card strong { display: block; margin-top: 0.3rem; font-size: 1.18rem; }
+    .section-title { margin: 1.8rem 0 0.8rem; }
+    .match-card { padding: 1rem; }
+    .match-header { display: flex; gap: 0.75rem; align-items: start; justify-content: space-between; }
+    .match-header h3 { margin: 0.15rem 0 0; }
+    .offsets { margin: 0.8rem 0 0; color: #475569; }
+    pre { margin: 0.8rem 0 0; padding: 0.9rem; border-radius: 0.9rem; background: #0f172a; color: #e2e8f0; white-space: pre-wrap; word-break: break-word; }
+    dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; margin: 1rem 0 0; }
+    dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+    dd { margin: 0.2rem 0 0; }
+    .empty { display: block; }
+    @media (max-width: 760px) {
+      main { padding: 1rem 0.75rem 2rem; }
+      dl { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Aho-Corasick search lab</p>
+      <h1>Streaming incident keyword report</h1>
+      <p>Portfolio-friendly match report for the multi-pattern automaton. This view keeps the stream-vs-memory scan story, per-pattern counts, and sampled match excerpts together in one browser-friendly artifact.</p>
+      <div class="hero-meta">
+        <span class="chip">Source projects/aho-corasick-search-lab/sample_text.txt</span>
+        <span class="chip">Characters 124</span>
+        <span class="chip">Case sensitive yes</span>
+      </div>
+      <div class="chip-row"><span class="chip">error · 1</span><span class="chip">warn · 1</span><span class="chip">panic · 1</span></div>
+    </section>
+    <section class="summary-grid">
+<article class="summary-card">
+      <p class="eyebrow">Patterns</p>
+      <strong>3</strong>
+      <p>Unique keywords loaded into the automaton.</p>
+    </article>
+<article class="summary-card">
+      <p class="eyebrow">Matches</p>
+      <strong>3</strong>
+      <p>Total emitted matches across the scan.</p>
+    </article>
+<article class="summary-card">
+      <p class="eyebrow">Input mode</p>
+      <strong>stream (16 chunks @ 8 chars, boundary overlap 4)</strong>
+      <p>Memory mode scans the whole text once; stream mode preserves matches across chunk boundaries.</p>
+    </article>
+<article class="summary-card">
+      <p class="eyebrow">Context</p>
+      <strong>6 chars (sampled around matches)</strong>
+      <p>Sampled streaming contexts stay bounded instead of loading the full file.</p>
+    </article>
+    </section>
+    <h2 class="section-title">Match excerpts</h2>
+    <section class="match-grid">
+<article class="match-card">
+      <div class="match-header">
+        <div>
+          <p class="eyebrow">Match 1</p>
+          <h3><code>warn</code></h3>
+        </div>
+        <span class="pill">line 2, col 2</span>
+      </div>
+      <p class="offsets">Offsets <code>28:32</code></p>
+      <pre>tart
+[⟦warn⟧] cach</pre>
+      <dl>
+        <div><dt>Before</dt><dd><code>tart
+[</code></dd></div>
+        <div><dt>Match</dt><dd><code>warn</code></dd></div>
+        <div><dt>After</dt><dd><code>] cach</code></dd></div>
+      </dl>
+    </article><article class="match-card">
+      <div class="match-header">
+        <div>
+          <p class="eyebrow">Match 2</p>
+          <h3><code>error</code></h3>
+        </div>
+        <span class="pill">line 3, col 2</span>
+      </div>
+      <p class="offsets">Offsets <code>59:64</code></p>
+      <pre>lete
+[⟦error⟧] fail</pre>
+      <dl>
+        <div><dt>Before</dt><dd><code>lete
+[</code></dd></div>
+        <div><dt>Match</dt><dd><code>error</code></dd></div>
+        <div><dt>After</dt><dd><code>] fail</code></dd></div>
+      </dl>
+    </article><article class="match-card">
+      <div class="match-header">
+        <div>
+          <p class="eyebrow">Match 3</p>
+          <h3><code>panic</code></h3>
+        </div>
+        <span class="pill">line 4, col 2</span>
+      </div>
+      <p class="offsets">Offsets <code>89:94</code></p>
+      <pre>nfig
+[⟦panic⟧] unre</pre>
+      <dl>
+        <div><dt>Before</dt><dd><code>nfig
+[</code></dd></div>
+        <div><dt>Match</dt><dd><code>panic</code></dd></div>
+        <div><dt>After</dt><dd><code>] unre</code></dd></div>
+      </dl>
+    </article>
+    </section>
+  </main>
+</body>
+</html>

@@ -10,6 +10,7 @@ A portfolio-friendly algorithms project that implements the Aho-Corasick multi-p
 - keeps pattern counts and detailed match listings in one pass through the input text
 - supports chunked file scanning so large inputs can be streamed without losing matches that cross chunk boundaries
 - supports sampled context windows in chunked mode so streamed searches can still show small excerpts without loading the entire file
+- exports portfolio-friendly Markdown and HTML match reports for screenshot/demo use
 
 ## Why it is interesting
 - demonstrates trie construction, BFS failure-link building, and suffix-output propagation
@@ -25,6 +26,7 @@ python3 projects/aho-corasick-search-lab/aho_corasick_search.py --pattern-file p
 python3 projects/aho-corasick-search-lab/aho_corasick_search.py alpha beta --text "Alpha beta" --ignore-case --context 4
 python3 projects/aho-corasick-search-lab/aho_corasick_search.py warning critical --input logs/app.log --chunk-size 4096 --context 12
 python3 projects/aho-corasick-search-lab/aho_corasick_search.py warning critical --input logs/app.log --chunk-size 4096 --context 12 --json
+python3 projects/aho-corasick-search-lab/aho_corasick_search.py --pattern-file projects/aho-corasick-search-lab/sample_patterns.txt --input projects/aho-corasick-search-lab/sample_text.txt --chunk-size 8 --context 6 --json --report-title "Streaming incident keyword report" --report-markdown-out docs/artifacts/aho-corasick-search-lab/streaming-sample-report.md --report-html-out docs/artifacts/aho-corasick-search-lab/streaming-sample-report.html > docs/artifacts/aho-corasick-search-lab/streaming-sample-report.json
 ```
 
 ## Example output
@@ -46,7 +48,13 @@ matches detail:
 - chunked mode preserves cross-boundary matches by carrying the automaton state across chunks
 - `--context` now works in both memory and chunked modes
 - in chunked mode, context is emitted as a sampled window around each match instead of requiring the full file contents in memory
+- `--report-markdown-out` and `--report-html-out` write screenshot-friendly artifacts while stdout can still stay machine-readable with `--json`
 - JSON output includes `input.mode`, `input.chunk_count`, `input.chunk_size`, `input.boundary_overlap`, and optional per-match `context` payloads when `--context` is requested
+
+## Committed demo artifacts
+- `docs/artifacts/aho-corasick-search-lab/streaming-sample-report.json`
+- `docs/artifacts/aho-corasick-search-lab/streaming-sample-report.md`
+- `docs/artifacts/aho-corasick-search-lab/streaming-sample-report.html`
 
 ## Tests
 ```bash
@@ -57,4 +65,4 @@ python3 -m unittest tests.test_aho_corasick_search_lab
 ## Future improvements
 - support whole-word mode and pattern metadata tags
 - expose automaton visualization data for teaching demos
-- export sampled contexts into a small HTML or Markdown report for portfolio screenshots
+- add grouped incident/category presets so one report can summarize related keyword packs

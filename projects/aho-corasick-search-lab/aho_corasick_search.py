@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Sequence
+
+
+def write_text(path: str | Path, content: str) -> Path:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(content, encoding="utf-8")
+    return output
 
 
 @dataclass(slots=True)
@@ -127,7 +135,7 @@ class AhoCorasickAutomaton:
         chunk_count = 0
         history: deque[str] = deque()
         history_start = 0
-        max_history = self.max_pattern_length + max(context_chars, 0)
+        max_history = self.max_pattern_length + context_chars
         pending_contexts: List[PendingContext] = []
 
         for chunk in chunks:
@@ -367,6 +375,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="read file input in fixed-size character chunks while preserving cross-chunk matches",
     )
+    parser.add_argument("--report-title", help="optional title to use for Markdown/HTML report exports")
+    parser.add_argument("--report-markdown-out", help="write a Markdown match report artifact")
+    parser.add_argument("--report-html-out", help="write a static HTML match report artifact")
     return parser
 
 
@@ -404,6 +415,233 @@ def render_text_output(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _html_escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _markdown_code(value: object) -> str:
+    return f"`{str(value).replace('`', '\\`')}`"
+
+
+def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
+    if explicit_title:
+        return explicit_title
+    return f"Aho-Corasick match report — {Path(source_label).name}"
+
+
+def describe_input_mode(input_meta: dict) -> str:
+    if input_meta.get("mode") == "stream":
+        return (
+            f"stream ({input_meta['chunk_count']} chunks @ {input_meta['chunk_size']} chars, "
+            f"boundary overlap {input_meta['boundary_overlap']})"
+        )
+    return "memory"
+
+
+def describe_context_mode(input_meta: dict) -> str:
+    context_chars = input_meta.get("context_chars", 0)
+    if context_chars <= 0:
+        return "not requested"
+    if input_meta.get("context_mode") == "sampled":
+        return f"{context_chars} chars (sampled around matches)"
+    return f"{context_chars} chars"
+
+
+def render_report_markdown(
+    result: dict,
+    *,
+    patterns: Sequence[str],
+    source_label: str,
+    title: str | None = None,
+) -> str:
+    input_meta = result.get("input") or {}
+    resolved_title = build_report_title(source_label=source_label, explicit_title=title)
+    lines = [f"# {resolved_title}", ""]
+    lines.extend(
+        [
+            f"- Source: {_markdown_code(source_label)}",
+            f"- Input mode: {_markdown_code(describe_input_mode(input_meta))}",
+            f"- Case sensitive: {_markdown_code('yes' if result['case_sensitive'] else 'no')}",
+            f"- Characters processed: {_markdown_code(input_meta.get('characters_processed', 0))}",
+            f"- Pattern count: {_markdown_code(result['pattern_count'])}",
+            f"- Match count: {_markdown_code(result['match_count'])}",
+            f"- Context mode: {_markdown_code(describe_context_mode(input_meta))}",
+            f"- Patterns: {', '.join(_markdown_code(pattern) for pattern in patterns)}",
+            "",
+            "## Pattern counts",
+            "",
+            "| Pattern | Count |",
+            "| --- | ---: |",
+        ]
+    )
+    for pattern, count in result["counts"].items():
+        lines.append(f"| {pattern.replace('|', '\\|')} | {count} |")
+
+    lines.extend(["", "## Match excerpts", ""])
+    if not result["matches"]:
+        lines.append("No matches found.")
+        return "\n".join(lines) + "\n"
+
+    for index, item in enumerate(result["matches"], start=1):
+        context = item.get("context")
+        lines.extend(
+            [
+                f"### Match {index} — {_markdown_code(item['pattern'])}",
+                f"- Location: line {item['line']}, column {item['column']}",
+                f"- Offsets: {_markdown_code(f'{item['start']}:{item['end']}')}",
+            ]
+        )
+        if context:
+            lines.append("- Excerpt:")
+            lines.append("```text")
+            lines.append(context["excerpt"])
+            lines.append("```")
+            lines.append(
+                "- Before / match / after: "
+                f"{_markdown_code(json.dumps(context['before'], ensure_ascii=False))} · "
+                f"{_markdown_code(json.dumps(context['match'], ensure_ascii=False))} · "
+                f"{_markdown_code(json.dumps(context['after'], ensure_ascii=False))}"
+            )
+        else:
+            lines.append("- Excerpt: context not requested")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_report_html(
+    result: dict,
+    *,
+    patterns: Sequence[str],
+    source_label: str,
+    title: str | None = None,
+) -> str:
+    input_meta = result.get("input") or {}
+    resolved_title = build_report_title(source_label=source_label, explicit_title=title)
+    summary_cards = [
+        ("Patterns", str(result["pattern_count"]), "Unique keywords loaded into the automaton."),
+        ("Matches", str(result["match_count"]), "Total emitted matches across the scan."),
+        (
+            "Input mode",
+            describe_input_mode(input_meta),
+            "Memory mode scans the whole text once; stream mode preserves matches across chunk boundaries.",
+        ),
+        (
+            "Context",
+            describe_context_mode(input_meta),
+            "Sampled streaming contexts stay bounded instead of loading the full file.",
+        ),
+    ]
+    summary_cards_html = "\n".join(
+        f'''<article class="summary-card">
+      <p class="eyebrow">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description in summary_cards
+    )
+    pattern_chip_html = "".join(
+        f'<span class="chip">{_html_escape(pattern)} · {result["counts"][pattern]}</span>'
+        for pattern in patterns
+    )
+
+    match_cards: list[str] = []
+    for index, item in enumerate(result["matches"], start=1):
+        context = item.get("context")
+        excerpt = context["excerpt"] if context else "context not requested"
+        before = context["before"] if context else ""
+        matched = context["match"] if context else item["pattern"]
+        after = context["after"] if context else ""
+        match_cards.append(
+            f'''<article class="match-card">
+      <div class="match-header">
+        <div>
+          <p class="eyebrow">Match {index}</p>
+          <h3><code>{_html_escape(item["pattern"])}</code></h3>
+        </div>
+        <span class="pill">line {item["line"]}, col {item["column"]}</span>
+      </div>
+      <p class="offsets">Offsets <code>{item["start"]}:{item["end"]}</code></p>
+      <pre>{_html_escape(excerpt)}</pre>
+      <dl>
+        <div><dt>Before</dt><dd><code>{_html_escape(before)}</code></dd></div>
+        <div><dt>Match</dt><dd><code>{_html_escape(matched)}</code></dd></div>
+        <div><dt>After</dt><dd><code>{_html_escape(after)}</code></dd></div>
+      </dl>
+    </article>'''
+        )
+    if not match_cards:
+        match_cards.append(
+            '<article class="match-card empty"><h3>No matches found</h3>'
+            '<p>This report still captures the scan configuration and counts summary.</p></article>'
+        )
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{_html_escape(resolved_title)}</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2, h3 {{ line-height: 1.15; }}
+    p, li, dd {{ line-height: 1.55; }}
+    code, pre {{ font-family: "SFMono-Regular", ui-monospace, monospace; }}
+    .hero {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.96), rgba(240, 253, 250, 0.96)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
+    .hero p {{ max-width: 74ch; }}
+    .eyebrow {{ margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }}
+    .hero-meta, .chip-row {{ display: flex; flex-wrap: wrap; gap: 0.65rem; }}
+    .hero-meta {{ margin-top: 1rem; }}
+    .chip, .pill {{ display: inline-flex; align-items: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: 0.92rem; }}
+    .chip {{ background: rgba(224, 231, 255, 0.85); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; }}
+    .pill {{ background: rgba(219, 234, 254, 0.95); color: #1d4ed8; font-weight: 700; }}
+    .summary-grid, .match-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.4rem; }}
+    .summary-card, .match-card {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.2rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }}
+    .summary-card {{ padding: 1rem; }}
+    .summary-card strong {{ display: block; margin-top: 0.3rem; font-size: 1.18rem; }}
+    .section-title {{ margin: 1.8rem 0 0.8rem; }}
+    .match-card {{ padding: 1rem; }}
+    .match-header {{ display: flex; gap: 0.75rem; align-items: start; justify-content: space-between; }}
+    .match-header h3 {{ margin: 0.15rem 0 0; }}
+    .offsets {{ margin: 0.8rem 0 0; color: #475569; }}
+    pre {{ margin: 0.8rem 0 0; padding: 0.9rem; border-radius: 0.9rem; background: #0f172a; color: #e2e8f0; white-space: pre-wrap; word-break: break-word; }}
+    dl {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; margin: 1rem 0 0; }}
+    dt {{ font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }}
+    dd {{ margin: 0.2rem 0 0; }}
+    .empty {{ display: block; }}
+    @media (max-width: 760px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+      dl {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Aho-Corasick search lab</p>
+      <h1>{_html_escape(resolved_title)}</h1>
+      <p>Portfolio-friendly match report for the multi-pattern automaton. This view keeps the stream-vs-memory scan story, per-pattern counts, and sampled match excerpts together in one browser-friendly artifact.</p>
+      <div class="hero-meta">
+        <span class="chip">Source {_html_escape(source_label)}</span>
+        <span class="chip">Characters {_html_escape(input_meta.get("characters_processed", 0))}</span>
+        <span class="chip">Case sensitive {_html_escape('yes' if result['case_sensitive'] else 'no')}</span>
+      </div>
+      <div class="chip-row">{pattern_chip_html}</div>
+    </section>
+    <section class="summary-grid">
+{summary_cards_html}
+    </section>
+    <h2 class="section-title">Match excerpts</h2>
+    <section class="match-grid">
+{''.join(match_cards)}
+    </section>
+  </main>
+</body>
+</html>
+'''
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -428,6 +666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             chunk_size=args.chunk_size,
             context_chars=args.context,
         )
+        source_label = args.input
     else:
         text = args.text
         assert text is not None
@@ -436,6 +675,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             patterns,
             case_sensitive=not args.ignore_case,
             context_chars=args.context,
+        )
+        source_label = "inline text"
+
+    if args.report_markdown_out:
+        write_text(
+            args.report_markdown_out,
+            render_report_markdown(result, patterns=patterns, source_label=source_label, title=args.report_title),
+        )
+    if args.report_html_out:
+        write_text(
+            args.report_html_out,
+            render_report_html(result, patterns=patterns, source_label=source_label, title=args.report_title),
         )
 
     if args.json:

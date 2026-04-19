@@ -1,0 +1,60 @@
+{
+  "pattern_count": 3,
+  "match_count": 3,
+  "case_sensitive": true,
+  "counts": {
+    "error": 1,
+    "warn": 1,
+    "panic": 1
+  },
+  "matches": [
+    {
+      "pattern": "warn",
+      "start": 28,
+      "end": 32,
+      "line": 2,
+      "column": 2,
+      "context": {
+        "before": "tart\n[",
+        "match": "warn",
+        "after": "] cach",
+        "excerpt": "tart\n[\u27e6warn\u27e7] cach"
+      }
+    },
+    {
+      "pattern": "error",
+      "start": 59,
+      "end": 64,
+      "line": 3,
+      "column": 2,
+      "context": {
+        "before": "lete\n[",
+        "match": "error",
+        "after": "] fail",
+        "excerpt": "lete\n[\u27e6error\u27e7] fail"
+      }
+    },
+    {
+      "pattern": "panic",
+      "start": 89,
+      "end": 94,
+      "line": 4,
+      "column": 2,
+      "context": {
+        "before": "nfig\n[",
+        "match": "panic",
+        "after": "] unre",
+        "excerpt": "nfig\n[\u27e6panic\u27e7] unre"
+      }
+    }
+  ],
+  "input": {
+    "mode": "stream",
+    "characters_processed": 124,
+    "chunk_count": 16,
+    "chunk_size": 8,
+    "boundary_overlap": 4,
+    "context_chars": 6,
+    "context_mode": "sampled"
+  }
+}
