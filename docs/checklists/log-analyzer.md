@@ -12,7 +12,7 @@
 - [x] run targeted tests and smoke checks
 - [x] run at least 3 review passes and fix issues found
 - [x] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] commit, push, and add wrap-up
 - [ ] consider raster-ready focused-slice exports or PNG helpers next
 
 ## Facet ranking gallery deep-link slice (2026-04-19 04:12 UTC run)

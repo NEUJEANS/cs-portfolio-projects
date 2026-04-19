@@ -10,7 +10,7 @@
 - [x] refresh README/checklist/research/learning/review docs and regenerate the committed `docs/artifacts/log-analyzer/facet-ranking-detail-bundle/` sample bundle alongside the gallery artifact
 - [x] run targeted tests, real CLI/export smoke checks, and 3 review passes
 - [x] run secret scan before push
-- [ ] commit, push, and write the wrap-up
+- [x] commit, push, and write the wrap-up
 
 ## Completed slices
 - [x] parse common and combined access-log formats
