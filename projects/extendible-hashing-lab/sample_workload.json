@@ -1,0 +1,12 @@
+{
+  "bucket_capacity": 2,
+  "operations": [
+    {"op": "put", "key": "user:1001", "value": "Ada"},
+    {"op": "put", "key": "user:1009", "value": "Grace"},
+    {"op": "put", "key": "user:1017", "value": "Linus"},
+    {"op": "put", "key": "user:1025", "value": "Barbara"},
+    {"op": "get", "key": "user:1009"},
+    {"op": "delete", "key": "user:1017"},
+    {"op": "put", "key": "user:1041", "value": "Margaret"}
+  ]
+}
