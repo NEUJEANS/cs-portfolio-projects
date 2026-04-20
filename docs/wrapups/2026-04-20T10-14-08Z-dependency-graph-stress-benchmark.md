@@ -1,7 +1,7 @@
 # Dependency graph planner stress benchmark wrap-up
 
 - Timestamp: `2026-04-20T10:14:08Z`
-- Feature commit: `4100031` (`feat(dependency-graph-planner): add seeded stress benchmarks`)
+- Feature commit: `b6a1740` (`feat(dependency-graph-planner): add seeded stress benchmarks`)
 
 ## What changed
 - added a seeded `stress` synthetic manifest generator so the scheduler can showcase deterministic randomized DAGs with a fragile critical chain, competing bulk work, and follow-up fan-in validation
