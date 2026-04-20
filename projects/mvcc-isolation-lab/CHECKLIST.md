@@ -7,6 +7,6 @@
 - [x] add recruiter-friendly comparison export in Markdown under `docs/artifacts/mvcc-isolation-lab/`
 - [x] add automated tests for validation, isolation semantics, and CLI output
 - [x] document the model, limits, and usage in the project README
-- [ ] add timeline/SVG schedule exports for version visibility and commit ordering
+- [x] add timeline/SVG schedule exports for version visibility and commit ordering
 - [ ] add predicate/range-query phantom scenarios beyond key-based read/write validation
 - [ ] add lock-based serializable comparison for contrast with optimistic validation

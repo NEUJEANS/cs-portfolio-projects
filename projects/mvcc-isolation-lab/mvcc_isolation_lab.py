@@ -11,12 +11,22 @@ import argparse
 import ast
 import json
 from dataclasses import dataclass, field
+from html import escape
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 
 SUPPORTED_ISOLATION_LEVELS = ("read-committed", "snapshot", "serializable")
 SUPPORTED_STEP_OPS = {"read", "assert", "write"}
+EVENT_COLORS = {
+    "begin": "#dbe4ff",
+    "read": "#d1fae5",
+    "write": "#fde68a",
+    "assert-ok": "#ddd6fe",
+    "assert-failed": "#fecaca",
+    "commit": "#bfdbfe",
+    "aborted": "#fecaca",
+}
 
 
 class ScenarioError(ValueError):
@@ -577,6 +587,181 @@ def render_compare_markdown(results: Dict[str, SimulationResult]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def truncate_text(value: Any, limit: int = 42) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def svg_text_block(x: float, y: float, lines: List[str], css_class: str = "event-text") -> str:
+    tspans = [
+        f'<tspan x="{x:.1f}" dy="{14 if index else 0}">{escape(line)}</tspan>'
+        for index, line in enumerate(lines)
+    ]
+    return f'<text x="{x:.1f}" y="{y:.1f}" class="{css_class}">' + "".join(tspans) + "</text>"
+
+
+def event_card_lines(event: Dict[str, Any]) -> tuple[str, List[str], str]:
+    event_type = event["event"]
+    if event_type == "begin":
+        return "begin", [f"snapshot v{event['start_version']}"], EVENT_COLORS["begin"]
+    if event_type == "step":
+        op = event["op"]
+        if op == "read":
+            return (
+                f"read {event['key']}",
+                [f"{event['alias']} = {truncate_text(event['value'], 26)}"],
+                EVENT_COLORS["read"],
+            )
+        if op == "write":
+            return (
+                f"write {event['key']}",
+                [truncate_text(event['value'], 28)],
+                EVENT_COLORS["write"],
+            )
+        if op == "assert":
+            passed = bool(event["result"])
+            label = "assert ✓" if passed else "assert ✕"
+            detail = truncate_text(event["expr"], 28)
+            color = EVENT_COLORS["assert-ok" if passed else "assert-failed"]
+            return label, [detail], color
+    if event_type == "commit":
+        if event["status"] == "committed":
+            detail = f"v{event['version']}"
+            if event.get("writes"):
+                detail += " · " + truncate_text(event["writes"], 22)
+            return "commit ✓", [detail], EVENT_COLORS["commit"]
+        return "abort", [truncate_text(event["reason"], 30)], EVENT_COLORS["aborted"]
+    return event_type, [], "#e5e7eb"
+
+
+def render_timeline_svg(result: SimulationResult) -> str:
+    transactions = [item["name"] for item in result.transactions]
+    trace = result.trace
+    max_tick = max((item.get("tick", 0) for item in trace), default=0)
+    tick_width = 176
+    left_margin = 180
+    right_margin = 48
+    top_margin = 88
+    row_height = 106
+    event_width = 132
+    event_height = 30
+    event_gap = 8
+    lane_map = {name: index for index, name in enumerate(transactions)}
+    slot_counts: Dict[tuple[str, int], int] = {}
+    for item in trace:
+        key = (item["transaction"], item["tick"])
+        slot_counts[key] = slot_counts.get(key, 0) + 1
+    slot_offsets = {key: 0 for key in slot_counts}
+    version_events = [
+        item
+        for item in trace
+        if item["event"] == "commit" and item.get("status") == "committed" and item.get("writes")
+    ]
+    version_row_y = top_margin + len(transactions) * row_height + 18
+    summary_y = version_row_y + 88
+    summary_lines = [
+        f"Final state: {json.dumps(result.final_state, sort_keys=True)}",
+        "Invariants: "
+        + (
+            "; ".join(
+                f"{item['name']}={'ok' if item['ok'] else 'FAILED'}" for item in result.invariants
+            )
+            if result.invariants
+            else "none"
+        ),
+    ]
+    width = left_margin + max(max_tick, 1) * tick_width + right_margin
+    height = summary_y + 76 + max(0, len(summary_lines) - 1) * 16
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="timeline-title timeline-desc">',
+        f"<title id=\"timeline-title\">{escape(result.title)} timeline</title>",
+        f"<desc id=\"timeline-desc\">{escape(result.description or 'Transaction schedule timeline')}</desc>",
+        "<style>"
+        "text { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #0f172a; }"
+        ".title { font-size: 24px; font-weight: 700; }"
+        ".subtitle { font-size: 13px; fill: #475569; }"
+        ".lane-label { font-size: 13px; font-weight: 600; }"
+        ".tick-label { font-size: 12px; fill: #64748b; }"
+        ".event-text { font-size: 10.5px; font-weight: 600; }"
+        ".summary-text { font-size: 12px; fill: #334155; }"
+        ".grid { stroke: #e2e8f0; stroke-width: 1; }"
+        ".lane { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1; }"
+        ".connector { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }"
+        ".event-card { stroke: #475569; stroke-width: 1; }"
+        ".version-band { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1; }"
+        "</style>",
+        f'<text x="24" y="36" class="title">{escape(result.title)}</text>',
+        f'<text x="24" y="58" class="subtitle">Isolation: {escape(result.isolation_level)} · ticks: {max_tick} · final version: {result.final_version}</text>',
+    ]
+
+    for tick in range(1, max(max_tick, 1) + 1):
+        x = left_margin + (tick - 1) * tick_width + tick_width / 2
+        parts.append(f'<line x1="{x:.1f}" y1="72" x2="{x:.1f}" y2="{summary_y - 16:.1f}" class="grid" />')
+        parts.append(f'<text x="{x - 12:.1f}" y="82" class="tick-label">t{tick}</text>')
+
+    for index, name in enumerate(transactions):
+        y = top_margin + index * row_height
+        parts.append(
+            f'<rect x="16" y="{y:.1f}" width="{width - 32}" height="{row_height - 10}" class="lane" />'
+        )
+        parts.append(f'<text x="28" y="{y + 34:.1f}" class="lane-label">{escape(name)}</text>')
+
+    connector_points: Dict[str, List[str]] = {name: [] for name in transactions}
+    card_parts: List[str] = []
+    for item in trace:
+        tx_name = item["transaction"]
+        lane_index = lane_map[tx_name]
+        key = (tx_name, item["tick"])
+        slot_index = slot_offsets[key]
+        slot_offsets[key] += 1
+        slot_base = top_margin + lane_index * row_height + 10
+        box_x = left_margin + (item["tick"] - 1) * tick_width + (tick_width - event_width) / 2
+        box_y = slot_base + slot_index * (event_height + event_gap)
+        center_x = box_x + event_width / 2
+        center_y = box_y + event_height / 2
+        connector_points[tx_name].append(f"{center_x:.1f},{center_y:.1f}")
+        header, details, color = event_card_lines(item)
+        card_parts.append(
+            f'<rect x="{box_x:.1f}" y="{box_y:.1f}" width="{event_width}" height="{event_height}" rx="10" ry="10" fill="{color}" class="event-card" />'
+        )
+        card_parts.append(svg_text_block(box_x + 8, box_y + 11, [header, *details]))
+
+    for points in connector_points.values():
+        if len(points) >= 2:
+            parts.append(f'<polyline points="{" ".join(points)}" class="connector" />')
+    parts.extend(card_parts)
+
+    parts.append(
+        f'<rect x="16" y="{version_row_y:.1f}" width="{width - 32}" height="56" rx="10" ry="10" class="version-band" />'
+    )
+    parts.append(f'<text x="28" y="{version_row_y + 24:.1f}" class="lane-label">Committed versions</text>')
+    if version_events:
+        for item in version_events:
+            box_x = left_margin + (item["tick"] - 1) * tick_width + (tick_width - event_width) / 2
+            parts.append(
+                f'<rect x="{box_x:.1f}" y="{version_row_y + 7:.1f}" width="{event_width}" height="34" rx="10" ry="10" fill="#dbeafe" class="event-card" />'
+            )
+            version_lines = [f"v{item['version']}", truncate_text(item['writes'], 24)]
+            parts.append(svg_text_block(box_x + 10, version_row_y + 20, version_lines))
+    else:
+        parts.append(f'<text x="200" y="{version_row_y + 28:.1f}" class="summary-text">No committed writes recorded.</text>')
+
+    parts.append(f'<text x="24" y="{summary_y:.1f}" class="lane-label">Summary</text>')
+    parts.append(svg_text_block(24, summary_y + 22, summary_lines, css_class="summary-text"))
+    parts.append("</svg>")
+    return "\n".join(parts) + "\n"
+
+
+def write_text_output(path: str | Path, contents: str) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(contents)
+    return output_path
+
+
 def command_validate(args: argparse.Namespace) -> int:
     scenario = load_scenario(args.scenario)
     print(
@@ -598,10 +783,16 @@ def command_run(args: argparse.Namespace) -> int:
     scenario = load_scenario(args.scenario)
     result = run_simulation(scenario, args.isolation)
     payload = result.to_dict()
+    timeline_output: Optional[Path] = None
+    if args.timeline_svg_out:
+        timeline_output = write_text_output(args.timeline_svg_out, render_timeline_svg(result))
+        payload["_meta"] = {"timeline_svg_output": str(timeline_output)}
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(render_run_text(result))
+        if timeline_output:
+            print(f"Timeline SVG: {timeline_output}")
     return 0
 
 
@@ -609,14 +800,27 @@ def command_compare(args: argparse.Namespace) -> int:
     scenario = load_scenario(args.scenario)
     results = compare_scenario(scenario)
     if args.markdown_out:
-        output_path = Path(args.markdown_out)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(render_compare_markdown(results))
+        write_text_output(args.markdown_out, render_compare_markdown(results))
+    timeline_outputs: Dict[str, str] = {}
+    if args.timeline_svg_dir:
+        output_dir = Path(args.timeline_svg_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        scenario_stem = Path(args.scenario).stem
+        for level, result in results.items():
+            filename = f"{scenario_stem}_{level.replace('-', '_')}_timeline.svg"
+            output_path = write_text_output(output_dir / filename, render_timeline_svg(result))
+            timeline_outputs[level] = str(output_path)
     payload = {level: result.to_dict() for level, result in results.items()}
+    if timeline_outputs:
+        payload["_meta"] = {"timeline_svg_outputs": timeline_outputs}
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(render_compare_text(results))
+        if timeline_outputs:
+            print("Timeline SVGs:")
+            for level in SUPPORTED_ISOLATION_LEVELS:
+                print(f"- {level}: {timeline_outputs[level]}")
     return 0
 
 
@@ -637,6 +841,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="isolation level to simulate",
     )
     run_parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
+    run_parser.add_argument(
+        "--timeline-svg-out",
+        help="optional path for a self-contained SVG schedule export",
+    )
     run_parser.set_defaults(func=command_run)
 
     compare_parser = subparsers.add_parser(
@@ -647,6 +855,10 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument(
         "--markdown-out",
         help="optional path for a Markdown comparison report",
+    )
+    compare_parser.add_argument(
+        "--timeline-svg-dir",
+        help="optional directory for per-isolation SVG schedule exports",
     )
     compare_parser.set_defaults(func=command_compare)
 

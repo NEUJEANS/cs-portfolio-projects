@@ -9,6 +9,6 @@
 - [x] add automated tests for validation, simulation semantics, and CLI export output
 - [x] complete at least 3 review passes and fix issues found
 - [x] run tests, secret scan, commit, push, and wrap up the slice
-- [ ] add timeline/SVG artifacts for transaction windows and version changes
+- [x] add timeline/SVG artifacts for transaction windows and version changes
 - [ ] add predicate/range-query phantom examples
 - [ ] add lock-based serialization mode for contrast with optimistic validation

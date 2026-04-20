@@ -22,6 +22,7 @@ ScenarioError = MODULE.ScenarioError
 compare_scenario = MODULE.compare_scenario
 load_scenario = MODULE.load_scenario
 run_simulation = MODULE.run_simulation
+render_timeline_svg = MODULE.render_timeline_svg
 validate_scenario = MODULE.validate_scenario
 
 
@@ -130,6 +131,113 @@ class MvccIsolationLabTests(unittest.TestCase):
         self.assertEqual(payload["isolation_level"], "snapshot")
         self.assertGreater(len(payload["trace"]), 0)
         self.assertEqual(payload["invariants"][0]["name"], "at_least_one_doctor_on_call")
+
+    def test_render_timeline_svg_mentions_versions_and_transactions(self) -> None:
+        svg = render_timeline_svg(run_simulation(load_scenario(DOCTOR_SCENARIO), "serializable"))
+        self.assertIn("Doctor on-call write skew", svg)
+        self.assertIn("Committed versions", svg)
+        self.assertIn("alice_on_call", svg)
+        self.assertIn("final version: 1", svg)
+        self.assertIn('aria-labelledby="timeline-title timeline-desc"', svg)
+        self.assertIn('title id="timeline-title"', svg)
+        self.assertIn('desc id="timeline-desc"', svg)
+
+    def test_run_cli_writes_timeline_svg(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "snapshot_timeline.svg"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "run",
+                    str(REPEATABLE_SCENARIO),
+                    "--isolation",
+                    "snapshot",
+                    "--timeline-svg-out",
+                    str(output_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn("Timeline SVG:", completed.stdout)
+            report = output_path.read_text()
+            self.assertIn("Repeatable read window", report)
+            self.assertIn("Committed versions", report)
+
+    def test_run_json_output_includes_timeline_meta_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "snapshot_timeline.svg"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "run",
+                    str(REPEATABLE_SCENARIO),
+                    "--isolation",
+                    "snapshot",
+                    "--timeline-svg-out",
+                    str(output_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["_meta"]["timeline_svg_output"], str(output_path))
+
+    def test_compare_cli_can_emit_all_timeline_svgs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "compare",
+                    str(DOCTOR_SCENARIO),
+                    "--timeline-svg-dir",
+                    temp_dir,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn("Timeline SVGs:", completed.stdout)
+            created = sorted(path.name for path in Path(temp_dir).glob("*.svg"))
+            self.assertEqual(
+                created,
+                [
+                    "doctor_on_call_read_committed_timeline.svg",
+                    "doctor_on_call_serializable_timeline.svg",
+                    "doctor_on_call_snapshot_timeline.svg",
+                ],
+            )
+
+    def test_compare_json_output_includes_timeline_meta_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "compare",
+                    str(DOCTOR_SCENARIO),
+                    "--timeline-svg-dir",
+                    temp_dir,
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(
+                payload["_meta"]["timeline_svg_outputs"]["serializable"],
+                str(Path(temp_dir) / "doctor_on_call_serializable_timeline.svg"),
+            )
 
 
 if __name__ == "__main__":
