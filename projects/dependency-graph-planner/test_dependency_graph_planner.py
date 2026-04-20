@@ -647,6 +647,42 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             expected_label = Path(suite_path).relative_to(Path.cwd()).as_posix()
             self.assertEqual(payload["source_label"], expected_label)
             self.assertIn(f"- Suite source: `{expected_label}`", payload["benchmark_markdown"])
+            self.assertEqual(
+                payload["scenarios"][0]["graph_path"],
+                Path(suite_path).parent.joinpath("sample_graph.json").relative_to(Path.cwd()).as_posix(),
+            )
+
+    def test_run_command_benchmark_writes_json_and_csv_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            suite_path = self._write_benchmark_suite_files(tmpdir)
+            json_path = Path(tmpdir) / "reports" / "benchmark_suite_report.json"
+            aggregate_csv_path = Path(tmpdir) / "reports" / "benchmark_suite_aggregates.csv"
+            strategy_csv_path = Path(tmpdir) / "reports" / "benchmark_suite_strategies.csv"
+            payload = json.loads(
+                run_command(
+                    "benchmark",
+                    str(suite_path),
+                    as_json=True,
+                    benchmark_json_out=str(json_path),
+                    benchmark_aggregate_csv_out=str(aggregate_csv_path),
+                    benchmark_strategy_csv_out=str(strategy_csv_path),
+                )
+            )
+
+            self.assertTrue(json_path.exists())
+            self.assertTrue(aggregate_csv_path.exists())
+            self.assertTrue(strategy_csv_path.exists())
+            written_payload = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual(written_payload["scenario_count"], 5)
+            self.assertEqual(written_payload["benchmark_strategy_csv_out"], str(strategy_csv_path))
+            self.assertIn("strategy,scenario_count,rank_1_finishes", aggregate_csv_path.read_text(encoding="utf-8"))
+            strategy_csv = strategy_csv_path.read_text(encoding="utf-8")
+            self.assertIn("scenario_label,graph_label,graph_path,worker_limit", strategy_csv)
+            self.assertIn("strategy-2-workers", strategy_csv)
+            self.assertIn("multi-resource-browser-bump", strategy_csv)
+            self.assertEqual(payload["artifacts"]["benchmark_json"], str(json_path))
+            self.assertEqual(payload["artifacts"]["benchmark_aggregate_csv"], str(aggregate_csv_path))
+            self.assertEqual(payload["artifacts"]["benchmark_strategy_csv"], str(strategy_csv_path))
 
     def test_run_command_generate_ci_manifest_writes_file_and_scales_shards(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -816,6 +852,27 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("report-specific flags require the report command", result.stderr)
+
+    def test_cli_plan_rejects_benchmark_export_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            output_path = Path(tmpdir) / "bad.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "plan",
+                    str(graph_path),
+                    "--benchmark-json-out",
+                    str(output_path),
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("benchmark-specific flags require the benchmark command", result.stderr)
 
     def test_cli_compare_worker_limit_requires_report_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

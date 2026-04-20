@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import heapq
+import io
 import json
 import os
 from dataclasses import dataclass, field
@@ -2343,7 +2345,7 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
             {
                 "label": scenario.label,
                 "graph_label": scenario.graph_label,
-                "graph_path": scenario.graph_path,
+                "graph_path": _display_path_label(scenario.graph_path),
                 "worker_limit": scenario.worker_limit,
                 "task_count": scenario.task_count,
                 "unlimited_makespan": scenario.unlimited_makespan,
@@ -2385,6 +2387,114 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
             for item in result.aggregates
         ],
     }
+
+
+def _render_csv_rows(rows: Sequence[dict[str, Any]], *, fieldnames: Sequence[str]) -> str:
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=list(fieldnames), lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({name: row.get(name, "") for name in fieldnames})
+    return buffer.getvalue()
+
+
+def benchmark_aggregate_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]]:
+    return [
+        {
+            "strategy": item.strategy,
+            "scenario_count": item.scenario_count,
+            "rank_1_finishes": item.rank_1_finishes,
+            "best_makespan_finishes": item.best_makespan_finishes,
+            "average_makespan": round(item.average_makespan, 6),
+            "average_delta_vs_best": round(item.average_delta_vs_best, 6),
+            "average_total_queue_delay": round(item.average_total_queue_delay, 6),
+            "average_max_queue_delay": round(item.average_max_queue_delay, 6),
+            "average_utilization": round(item.average_utilization, 6),
+        }
+        for item in result.aggregates
+    ]
+
+
+def benchmark_strategy_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for scenario in result.scenarios:
+        for item in scenario.strategy_results:
+            rows.append(
+                {
+                    "suite_title": result.title,
+                    "suite_source": result.source_label,
+                    "scenario_label": scenario.label,
+                    "graph_label": scenario.graph_label,
+                    "graph_path": _display_path_label(scenario.graph_path),
+                    "worker_limit": scenario.worker_limit,
+                    "task_count": scenario.task_count,
+                    "unlimited_makespan": scenario.unlimited_makespan,
+                    "best_makespan": scenario.best_makespan,
+                    "rank_1_strategies": ",".join(scenario.rank_1_strategies),
+                    "best_makespan_strategies": ",".join(scenario.best_makespan_strategies),
+                    "resource_capacities": json.dumps(scenario.resource_capacities, sort_keys=True),
+                    "strategy": item.strategy,
+                    "rank": item.rank,
+                    "makespan": item.makespan,
+                    "delta_vs_unlimited": item.delta_vs_unlimited,
+                    "delta_vs_best": item.delta_vs_best,
+                    "total_queue_delay": item.total_queue_delay,
+                    "max_queue_delay": item.max_queue_delay,
+                    "idle_capacity": item.idle_capacity,
+                    "utilization": round(item.utilization, 6),
+                    "tied_best_makespan": item.tied_best_makespan,
+                    "dispatch_order": ",".join(item.dispatch_order),
+                }
+            )
+    return rows
+
+
+def render_benchmark_aggregate_csv(result: BenchmarkSuiteResult) -> str:
+    return _render_csv_rows(
+        benchmark_aggregate_rows(result),
+        fieldnames=(
+            "strategy",
+            "scenario_count",
+            "rank_1_finishes",
+            "best_makespan_finishes",
+            "average_makespan",
+            "average_delta_vs_best",
+            "average_total_queue_delay",
+            "average_max_queue_delay",
+            "average_utilization",
+        ),
+    )
+
+
+def render_benchmark_strategy_csv(result: BenchmarkSuiteResult) -> str:
+    return _render_csv_rows(
+        benchmark_strategy_rows(result),
+        fieldnames=(
+            "suite_title",
+            "suite_source",
+            "scenario_label",
+            "graph_label",
+            "graph_path",
+            "worker_limit",
+            "task_count",
+            "unlimited_makespan",
+            "best_makespan",
+            "rank_1_strategies",
+            "best_makespan_strategies",
+            "resource_capacities",
+            "strategy",
+            "rank",
+            "makespan",
+            "delta_vs_unlimited",
+            "delta_vs_best",
+            "total_queue_delay",
+            "max_queue_delay",
+            "idle_capacity",
+            "utilization",
+            "tied_best_makespan",
+            "dispatch_order",
+        ),
+    )
 
 
 def render_benchmark_suite_markdown(result: BenchmarkSuiteResult) -> str:
@@ -2839,6 +2949,9 @@ def _ensure_command_flags_are_valid(
     compare_strategies: Sequence[str] | None,
     resource_capacity_overrides: Sequence[str] | None,
     benchmark_markdown_out: str | None,
+    benchmark_json_out: str | None,
+    benchmark_aggregate_csv_out: str | None,
+    benchmark_strategy_csv_out: str | None,
     benchmark_title: str | None,
     generated_manifest_out: str | None,
     generator_width: int | None,
@@ -2856,6 +2969,9 @@ def _ensure_command_flags_are_valid(
             compare_strategies,
             resource_capacity_overrides,
             benchmark_markdown_out,
+            benchmark_json_out,
+            benchmark_aggregate_csv_out,
+            benchmark_strategy_csv_out,
             benchmark_title,
         )
     ):
@@ -2877,7 +2993,16 @@ def _ensure_command_flags_are_valid(
         raise ValueError("schedule/report flags are not valid on the benchmark command")
     if command != "report" and any(value is not None for value in (report_markdown_out, report_html_out, report_title, diagram_output_dir)):
         raise ValueError("report-specific flags require the report command")
-    if command != "benchmark" and any(value is not None for value in (benchmark_markdown_out, benchmark_title)):
+    if command != "benchmark" and any(
+        value is not None
+        for value in (
+            benchmark_markdown_out,
+            benchmark_json_out,
+            benchmark_aggregate_csv_out,
+            benchmark_strategy_csv_out,
+            benchmark_title,
+        )
+    ):
         raise ValueError("benchmark-specific flags require the benchmark command")
     if command != "generate" and any(value is not None for value in (generated_manifest_out, generator_width)):
         raise ValueError("generator-specific flags require the generate command")
@@ -2934,6 +3059,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional directory where the report command should emit Mermaid and DOT companion artifacts",
     )
     parser.add_argument("--benchmark-markdown-out", help="write a Markdown summary for the benchmark command")
+    parser.add_argument("--benchmark-json-out", help="write the full benchmark JSON snapshot to a file")
+    parser.add_argument("--benchmark-aggregate-csv-out", help="write aggregate strategy leaderboard rows as CSV")
+    parser.add_argument("--benchmark-strategy-csv-out", help="write per-scenario strategy rows as CSV for plotting/notebooks")
     parser.add_argument("--benchmark-title", help="optional title for the benchmark command")
     parser.add_argument("--generated-manifest-out", help="write generated manifest JSON to a file for the generate command")
     parser.add_argument(
@@ -2989,6 +3117,9 @@ def run_command(
     compare_strategies: Sequence[str] | None = None,
     resource_capacity_overrides: Sequence[str] | None = None,
     benchmark_markdown_out: str | None = None,
+    benchmark_json_out: str | None = None,
+    benchmark_aggregate_csv_out: str | None = None,
+    benchmark_strategy_csv_out: str | None = None,
     benchmark_title: str | None = None,
     generated_manifest_out: str | None = None,
     generator_width: int | None = None,
@@ -3005,6 +3136,9 @@ def run_command(
         compare_strategies=compare_strategies,
         resource_capacity_overrides=resource_capacity_overrides,
         benchmark_markdown_out=benchmark_markdown_out,
+        benchmark_json_out=benchmark_json_out,
+        benchmark_aggregate_csv_out=benchmark_aggregate_csv_out,
+        benchmark_strategy_csv_out=benchmark_strategy_csv_out,
         benchmark_title=benchmark_title,
         generated_manifest_out=generated_manifest_out,
         generator_width=generator_width,
@@ -3019,12 +3153,30 @@ def run_command(
     if command == "benchmark":
         result = build_benchmark_suite_result(graph_path, title=benchmark_title)
         report = render_benchmark_suite_markdown(result)
+        payload = benchmark_suite_to_dict(result)
+        artifacts: dict[str, str] = {}
         if benchmark_markdown_out:
             _write_text(benchmark_markdown_out, report)
+            artifacts["benchmark_markdown"] = benchmark_markdown_out
+        if benchmark_json_out:
+            artifacts["benchmark_json"] = benchmark_json_out
+        if benchmark_aggregate_csv_out:
+            aggregate_csv = render_benchmark_aggregate_csv(result)
+            _write_text(benchmark_aggregate_csv_out, aggregate_csv)
+            artifacts["benchmark_aggregate_csv"] = benchmark_aggregate_csv_out
+        if benchmark_strategy_csv_out:
+            strategy_csv = render_benchmark_strategy_csv(result)
+            _write_text(benchmark_strategy_csv_out, strategy_csv)
+            artifacts["benchmark_strategy_csv"] = benchmark_strategy_csv_out
+        payload["benchmark_markdown"] = report
+        payload["benchmark_markdown_out"] = benchmark_markdown_out
+        payload["benchmark_json_out"] = benchmark_json_out
+        payload["benchmark_aggregate_csv_out"] = benchmark_aggregate_csv_out
+        payload["benchmark_strategy_csv_out"] = benchmark_strategy_csv_out
+        payload["artifacts"] = artifacts
+        if benchmark_json_out:
+            _write_text(benchmark_json_out, json.dumps(payload, indent=2) + "\n")
         if as_json:
-            payload = benchmark_suite_to_dict(result)
-            payload["benchmark_markdown"] = report
-            payload["benchmark_markdown_out"] = benchmark_markdown_out
             return json.dumps(payload, indent=2)
         return report
 
@@ -3196,6 +3348,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             compare_strategies=args.compare_strategies,
             resource_capacity_overrides=args.resource_capacity_overrides,
             benchmark_markdown_out=args.benchmark_markdown_out,
+            benchmark_json_out=args.benchmark_json_out,
+            benchmark_aggregate_csv_out=args.benchmark_aggregate_csv_out,
+            benchmark_strategy_csv_out=args.benchmark_strategy_csv_out,
             benchmark_title=args.benchmark_title,
             generated_manifest_out=args.generated_manifest_out,
             generator_width=args.generator_width,

@@ -1,0 +1,787 @@
+{
+  "title": "Dependency graph strategy benchmark suite",
+  "source_label": "projects/dependency-graph-planner/portfolio_benchmark_suite.json",
+  "scenario_count": 8,
+  "scenarios": [
+    {
+      "label": "sample-2-workers",
+      "graph_label": "sample_graph.json",
+      "graph_path": "projects/dependency-graph-planner/sample_graph.json",
+      "worker_limit": 2,
+      "task_count": 5,
+      "unlimited_makespan": 8,
+      "resource_capacities": {},
+      "best_makespan": 8,
+      "best_makespan_strategies": [
+        "critical-first",
+        "fifo",
+        "longest-processing-time"
+      ],
+      "rank_1_strategies": [
+        "critical-first",
+        "fifo",
+        "longest-processing-time"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "critical-first",
+          "rank": 1,
+          "makespan": 8,
+          "delta_vs_unlimited": 0,
+          "delta_vs_best": 0,
+          "total_queue_delay": 0,
+          "max_queue_delay": 0,
+          "utilization": 0.5625,
+          "idle_capacity": 7,
+          "dispatch_order": [
+            "lint",
+            "compile",
+            "unit",
+            "package",
+            "publish"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "fifo",
+          "rank": 1,
+          "makespan": 8,
+          "delta_vs_unlimited": 0,
+          "delta_vs_best": 0,
+          "total_queue_delay": 0,
+          "max_queue_delay": 0,
+          "utilization": 0.5625,
+          "idle_capacity": 7,
+          "dispatch_order": [
+            "lint",
+            "compile",
+            "package",
+            "unit",
+            "publish"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "longest-processing-time",
+          "rank": 1,
+          "makespan": 8,
+          "delta_vs_unlimited": 0,
+          "delta_vs_best": 0,
+          "total_queue_delay": 0,
+          "max_queue_delay": 0,
+          "utilization": 0.5625,
+          "idle_capacity": 7,
+          "dispatch_order": [
+            "lint",
+            "compile",
+            "unit",
+            "package",
+            "publish"
+          ],
+          "tied_best_makespan": true
+        }
+      ]
+    },
+    {
+      "label": "strategy-2-workers",
+      "graph_label": "strategy_graph.json",
+      "graph_path": "projects/dependency-graph-planner/strategy_graph.json",
+      "worker_limit": 2,
+      "task_count": 6,
+      "unlimited_makespan": 10,
+      "resource_capacities": {},
+      "best_makespan": 13,
+      "best_makespan_strategies": [
+        "critical-first"
+      ],
+      "rank_1_strategies": [
+        "critical-first"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "critical-first",
+          "rank": 1,
+          "makespan": 13,
+          "delta_vs_unlimited": 3,
+          "delta_vs_best": 0,
+          "total_queue_delay": 6,
+          "max_queue_delay": 6,
+          "utilization": 0.846154,
+          "idle_capacity": 4,
+          "dispatch_order": [
+            "core-seed",
+            "alpha-long",
+            "core-stage-1",
+            "core-stage-2",
+            "beta-long",
+            "ship"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "fifo",
+          "rank": 2,
+          "makespan": 16,
+          "delta_vs_unlimited": 6,
+          "delta_vs_best": 3,
+          "total_queue_delay": 6,
+          "max_queue_delay": 6,
+          "utilization": 0.6875,
+          "idle_capacity": 10,
+          "dispatch_order": [
+            "alpha-long",
+            "beta-long",
+            "core-seed",
+            "core-stage-1",
+            "core-stage-2",
+            "ship"
+          ],
+          "tied_best_makespan": false
+        },
+        {
+          "strategy": "longest-processing-time",
+          "rank": 2,
+          "makespan": 16,
+          "delta_vs_unlimited": 6,
+          "delta_vs_best": 3,
+          "total_queue_delay": 6,
+          "max_queue_delay": 6,
+          "utilization": 0.6875,
+          "idle_capacity": 10,
+          "dispatch_order": [
+            "alpha-long",
+            "beta-long",
+            "core-seed",
+            "core-stage-1",
+            "core-stage-2",
+            "ship"
+          ],
+          "tied_best_makespan": false
+        }
+      ]
+    },
+    {
+      "label": "resource-3-workers",
+      "graph_label": "resource_graph.json",
+      "graph_path": "projects/dependency-graph-planner/resource_graph.json",
+      "worker_limit": 3,
+      "task_count": 5,
+      "unlimited_makespan": 6,
+      "resource_capacities": {
+        "gpu": 1
+      },
+      "best_makespan": 8,
+      "best_makespan_strategies": [
+        "fifo",
+        "critical-first",
+        "longest-processing-time"
+      ],
+      "rank_1_strategies": [
+        "fifo"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "fifo",
+          "rank": 1,
+          "makespan": 8,
+          "delta_vs_unlimited": 2,
+          "delta_vs_best": 0,
+          "total_queue_delay": 2,
+          "max_queue_delay": 2,
+          "utilization": 0.458333,
+          "idle_capacity": 13,
+          "dispatch_order": [
+            "prep",
+            "docs",
+            "gpu-eval",
+            "gpu-train",
+            "package"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "critical-first",
+          "rank": 2,
+          "makespan": 8,
+          "delta_vs_unlimited": 2,
+          "delta_vs_best": 0,
+          "total_queue_delay": 4,
+          "max_queue_delay": 4,
+          "utilization": 0.458333,
+          "idle_capacity": 13,
+          "dispatch_order": [
+            "prep",
+            "gpu-train",
+            "docs",
+            "gpu-eval",
+            "package"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "longest-processing-time",
+          "rank": 2,
+          "makespan": 8,
+          "delta_vs_unlimited": 2,
+          "delta_vs_best": 0,
+          "total_queue_delay": 4,
+          "max_queue_delay": 4,
+          "utilization": 0.458333,
+          "idle_capacity": 13,
+          "dispatch_order": [
+            "prep",
+            "gpu-train",
+            "docs",
+            "gpu-eval",
+            "package"
+          ],
+          "tied_best_makespan": true
+        }
+      ]
+    },
+    {
+      "label": "multi-resource-3-workers",
+      "graph_label": "multi_resource_graph.json",
+      "graph_path": "projects/dependency-graph-planner/multi_resource_graph.json",
+      "worker_limit": 3,
+      "task_count": 6,
+      "unlimited_makespan": 7,
+      "resource_capacities": {
+        "browser-lab": 2,
+        "gpu": 1,
+        "signing": 1
+      },
+      "best_makespan": 10,
+      "best_makespan_strategies": [
+        "critical-first",
+        "fifo",
+        "longest-processing-time"
+      ],
+      "rank_1_strategies": [
+        "critical-first",
+        "fifo",
+        "longest-processing-time"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "critical-first",
+          "rank": 1,
+          "makespan": 10,
+          "delta_vs_unlimited": 3,
+          "delta_vs_best": 0,
+          "total_queue_delay": 5,
+          "max_queue_delay": 5,
+          "utilization": 0.466667,
+          "idle_capacity": 16,
+          "dispatch_order": [
+            "prep",
+            "browser-matrix",
+            "gpu-train",
+            "cross-platform-cert",
+            "sign",
+            "package"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "fifo",
+          "rank": 1,
+          "makespan": 10,
+          "delta_vs_unlimited": 3,
+          "delta_vs_best": 0,
+          "total_queue_delay": 5,
+          "max_queue_delay": 5,
+          "utilization": 0.466667,
+          "idle_capacity": 16,
+          "dispatch_order": [
+            "prep",
+            "browser-matrix",
+            "gpu-train",
+            "cross-platform-cert",
+            "sign",
+            "package"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "longest-processing-time",
+          "rank": 1,
+          "makespan": 10,
+          "delta_vs_unlimited": 3,
+          "delta_vs_best": 0,
+          "total_queue_delay": 5,
+          "max_queue_delay": 5,
+          "utilization": 0.466667,
+          "idle_capacity": 16,
+          "dispatch_order": [
+            "prep",
+            "browser-matrix",
+            "gpu-train",
+            "cross-platform-cert",
+            "sign",
+            "package"
+          ],
+          "tied_best_makespan": true
+        }
+      ]
+    },
+    {
+      "label": "multi-resource-browser-bump",
+      "graph_label": "multi_resource_graph.json",
+      "graph_path": "projects/dependency-graph-planner/multi_resource_graph.json",
+      "worker_limit": 3,
+      "task_count": 6,
+      "unlimited_makespan": 7,
+      "resource_capacities": {
+        "browser-lab": 3,
+        "gpu": 1,
+        "signing": 1
+      },
+      "best_makespan": 8,
+      "best_makespan_strategies": [
+        "fifo"
+      ],
+      "rank_1_strategies": [
+        "fifo"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "fifo",
+          "rank": 1,
+          "makespan": 8,
+          "delta_vs_unlimited": 1,
+          "delta_vs_best": 0,
+          "total_queue_delay": 2,
+          "max_queue_delay": 2,
+          "utilization": 0.583333,
+          "idle_capacity": 10,
+          "dispatch_order": [
+            "prep",
+            "browser-matrix",
+            "cross-platform-cert",
+            "gpu-train",
+            "sign",
+            "package"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "critical-first",
+          "rank": 2,
+          "makespan": 9,
+          "delta_vs_unlimited": 2,
+          "delta_vs_best": 1,
+          "total_queue_delay": 4,
+          "max_queue_delay": 4,
+          "utilization": 0.518519,
+          "idle_capacity": 13,
+          "dispatch_order": [
+            "prep",
+            "browser-matrix",
+            "gpu-train",
+            "cross-platform-cert",
+            "sign",
+            "package"
+          ],
+          "tied_best_makespan": false
+        }
+      ]
+    },
+    {
+      "label": "generated-ci-4-workers",
+      "graph_label": "generated_ci_pipeline.json",
+      "graph_path": "projects/dependency-graph-planner/generated_ci_pipeline.json",
+      "worker_limit": 4,
+      "task_count": 16,
+      "unlimited_makespan": 16,
+      "resource_capacities": {
+        "browser-lab": 1,
+        "docker-builder": 1
+      },
+      "best_makespan": 16,
+      "best_makespan_strategies": [
+        "critical-first",
+        "fifo",
+        "longest-processing-time"
+      ],
+      "rank_1_strategies": [
+        "critical-first",
+        "fifo",
+        "longest-processing-time"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "critical-first",
+          "rank": 1,
+          "makespan": 16,
+          "delta_vs_unlimited": 0,
+          "delta_vs_best": 0,
+          "total_queue_delay": 0,
+          "max_queue_delay": 0,
+          "utilization": 0.421875,
+          "idle_capacity": 37,
+          "dispatch_order": [
+            "checkout",
+            "install-deps",
+            "build-app",
+            "lint",
+            "typecheck",
+            "unit-shard-01",
+            "unit-shard-03",
+            "unit-shard-02",
+            "unit-shard-04",
+            "package-artifact",
+            "build-container",
+            "publish-preview-image",
+            "security-scan",
+            "deploy-preview",
+            "smoke-preview",
+            "promote-mainline"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "fifo",
+          "rank": 1,
+          "makespan": 16,
+          "delta_vs_unlimited": 0,
+          "delta_vs_best": 0,
+          "total_queue_delay": 0,
+          "max_queue_delay": 0,
+          "utilization": 0.421875,
+          "idle_capacity": 37,
+          "dispatch_order": [
+            "checkout",
+            "install-deps",
+            "build-app",
+            "lint",
+            "typecheck",
+            "unit-shard-01",
+            "unit-shard-02",
+            "unit-shard-03",
+            "unit-shard-04",
+            "package-artifact",
+            "build-container",
+            "publish-preview-image",
+            "security-scan",
+            "deploy-preview",
+            "smoke-preview",
+            "promote-mainline"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "longest-processing-time",
+          "rank": 1,
+          "makespan": 16,
+          "delta_vs_unlimited": 0,
+          "delta_vs_best": 0,
+          "total_queue_delay": 0,
+          "max_queue_delay": 0,
+          "utilization": 0.421875,
+          "idle_capacity": 37,
+          "dispatch_order": [
+            "checkout",
+            "install-deps",
+            "build-app",
+            "lint",
+            "typecheck",
+            "unit-shard-01",
+            "unit-shard-03",
+            "unit-shard-02",
+            "unit-shard-04",
+            "package-artifact",
+            "build-container",
+            "security-scan",
+            "publish-preview-image",
+            "deploy-preview",
+            "smoke-preview",
+            "promote-mainline"
+          ],
+          "tied_best_makespan": true
+        }
+      ]
+    },
+    {
+      "label": "generated-release-3-workers",
+      "graph_label": "generated_release_pipeline.json",
+      "graph_path": "projects/dependency-graph-planner/generated_release_pipeline.json",
+      "worker_limit": 3,
+      "task_count": 19,
+      "unlimited_makespan": 21,
+      "resource_capacities": {
+        "prod-slot": 1,
+        "signing": 1
+      },
+      "best_makespan": 24,
+      "best_makespan_strategies": [
+        "fifo",
+        "longest-processing-time",
+        "critical-first"
+      ],
+      "rank_1_strategies": [
+        "fifo"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "fifo",
+          "rank": 1,
+          "makespan": 24,
+          "delta_vs_unlimited": 3,
+          "delta_vs_best": 0,
+          "total_queue_delay": 5,
+          "max_queue_delay": 3,
+          "utilization": 0.416667,
+          "idle_capacity": 42,
+          "dispatch_order": [
+            "freeze-release-branch",
+            "assemble-release-notes",
+            "build-linux",
+            "build-macos",
+            "build-windows",
+            "sign-linux",
+            "sign-macos",
+            "sign-windows",
+            "publish-candidates",
+            "deploy-staging",
+            "verify-staging",
+            "canary-10pct",
+            "verify-canary-01",
+            "canary-50pct",
+            "verify-canary-02",
+            "canary-90pct",
+            "verify-canary-03",
+            "full-rollout",
+            "announce-release"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "longest-processing-time",
+          "rank": 2,
+          "makespan": 24,
+          "delta_vs_unlimited": 3,
+          "delta_vs_best": 0,
+          "total_queue_delay": 7,
+          "max_queue_delay": 3,
+          "utilization": 0.416667,
+          "idle_capacity": 42,
+          "dispatch_order": [
+            "freeze-release-branch",
+            "build-macos",
+            "build-linux",
+            "build-windows",
+            "sign-linux",
+            "assemble-release-notes",
+            "sign-windows",
+            "sign-macos",
+            "publish-candidates",
+            "deploy-staging",
+            "verify-staging",
+            "canary-10pct",
+            "verify-canary-01",
+            "canary-50pct",
+            "verify-canary-02",
+            "canary-90pct",
+            "verify-canary-03",
+            "full-rollout",
+            "announce-release"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "critical-first",
+          "rank": 3,
+          "makespan": 24,
+          "delta_vs_unlimited": 3,
+          "delta_vs_best": 0,
+          "total_queue_delay": 7,
+          "max_queue_delay": 4,
+          "utilization": 0.416667,
+          "idle_capacity": 42,
+          "dispatch_order": [
+            "freeze-release-branch",
+            "build-macos",
+            "build-linux",
+            "build-windows",
+            "sign-linux",
+            "assemble-release-notes",
+            "sign-macos",
+            "sign-windows",
+            "publish-candidates",
+            "deploy-staging",
+            "verify-staging",
+            "canary-10pct",
+            "verify-canary-01",
+            "canary-50pct",
+            "verify-canary-02",
+            "canary-90pct",
+            "verify-canary-03",
+            "full-rollout",
+            "announce-release"
+          ],
+          "tied_best_makespan": true
+        }
+      ]
+    },
+    {
+      "label": "generated-data-pipeline-4-workers",
+      "graph_label": "generated_data_pipeline.json",
+      "graph_path": "projects/dependency-graph-planner/generated_data_pipeline.json",
+      "worker_limit": 4,
+      "task_count": 16,
+      "unlimited_makespan": 15,
+      "resource_capacities": {
+        "gpu": 1,
+        "warehouse": 2
+      },
+      "best_makespan": 20,
+      "best_makespan_strategies": [
+        "fifo",
+        "critical-first",
+        "longest-processing-time"
+      ],
+      "rank_1_strategies": [
+        "fifo"
+      ],
+      "strategy_results": [
+        {
+          "strategy": "fifo",
+          "rank": 1,
+          "makespan": 20,
+          "delta_vs_unlimited": 5,
+          "delta_vs_best": 0,
+          "total_queue_delay": 12,
+          "max_queue_delay": 5,
+          "utilization": 0.4375,
+          "idle_capacity": 45,
+          "dispatch_order": [
+            "ingest-events",
+            "ingest-orders",
+            "ingest-payments",
+            "quality-profile",
+            "schema-validate",
+            "transform-partition-01",
+            "transform-partition-02",
+            "transform-partition-03",
+            "transform-partition-04",
+            "transform-partition-05",
+            "build-features",
+            "backfill-marts",
+            "train-model",
+            "publish-dashboard",
+            "publish-model",
+            "notify-ops"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "critical-first",
+          "rank": 2,
+          "makespan": 20,
+          "delta_vs_unlimited": 5,
+          "delta_vs_best": 0,
+          "total_queue_delay": 14,
+          "max_queue_delay": 6,
+          "utilization": 0.4375,
+          "idle_capacity": 45,
+          "dispatch_order": [
+            "ingest-events",
+            "ingest-orders",
+            "ingest-payments",
+            "schema-validate",
+            "quality-profile",
+            "transform-partition-01",
+            "transform-partition-03",
+            "transform-partition-05",
+            "transform-partition-02",
+            "transform-partition-04",
+            "build-features",
+            "train-model",
+            "backfill-marts",
+            "publish-dashboard",
+            "publish-model",
+            "notify-ops"
+          ],
+          "tied_best_makespan": true
+        },
+        {
+          "strategy": "longest-processing-time",
+          "rank": 2,
+          "makespan": 20,
+          "delta_vs_unlimited": 5,
+          "delta_vs_best": 0,
+          "total_queue_delay": 14,
+          "max_queue_delay": 6,
+          "utilization": 0.4375,
+          "idle_capacity": 45,
+          "dispatch_order": [
+            "ingest-events",
+            "ingest-orders",
+            "ingest-payments",
+            "quality-profile",
+            "schema-validate",
+            "transform-partition-01",
+            "transform-partition-03",
+            "transform-partition-05",
+            "transform-partition-02",
+            "transform-partition-04",
+            "build-features",
+            "train-model",
+            "backfill-marts",
+            "publish-dashboard",
+            "publish-model",
+            "notify-ops"
+          ],
+          "tied_best_makespan": true
+        }
+      ]
+    }
+  ],
+  "aggregates": [
+    {
+      "strategy": "fifo",
+      "scenario_count": 8,
+      "rank_1_finishes": 7,
+      "best_makespan_finishes": 7,
+      "average_makespan": 13.75,
+      "average_delta_vs_best": 0.375,
+      "average_total_queue_delay": 4.0,
+      "average_max_queue_delay": 2.875,
+      "average_utilization": 0.504297
+    },
+    {
+      "strategy": "critical-first",
+      "scenario_count": 8,
+      "rank_1_finishes": 4,
+      "best_makespan_finishes": 7,
+      "average_makespan": 13.5,
+      "average_delta_vs_best": 0.125,
+      "average_total_queue_delay": 5.0,
+      "average_max_queue_delay": 3.625,
+      "average_utilization": 0.516027
+    },
+    {
+      "strategy": "longest-processing-time",
+      "scenario_count": 7,
+      "rank_1_finishes": 3,
+      "best_makespan_finishes": 6,
+      "average_makespan": 14.571429,
+      "average_delta_vs_best": 0.428571,
+      "average_total_queue_delay": 5.142857,
+      "average_max_queue_delay": 3.428571,
+      "average_utilization": 0.493006
+    }
+  ],
+  "benchmark_markdown": "# Dependency graph strategy benchmark suite\n\n- Suite source: `projects/dependency-graph-planner/portfolio_benchmark_suite.json`\n- Scenario count: `8`\n- Strategies covered: `fifo, critical-first, longest-processing-time`\n\n## Aggregate strategy scoreboard\n\n| Strategy | Scenarios | Rank-1 finishes | Best-makespan finishes | Avg makespan | Avg \u0394 vs best | Avg total queue delay | Avg max queue delay | Avg utilization |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| fifo | 8 | 7 | 7 | 13.75 | 0.38 | 4.00 | 2.88 | 50.4% |\n| critical-first | 8 | 4 | 7 | 13.50 | 0.12 | 5.00 | 3.62 | 51.6% |\n| longest-processing-time | 7 | 3 | 6 | 14.57 | 0.43 | 5.14 | 3.43 | 49.3% |\n\n## Scenario \u2014 sample-2-workers\n\n- Manifest: `sample_graph.json`\n- Worker limit: `2 workers`\n- Task count: `5`\n- Unlimited makespan: `8`\n- Best scenario makespan: `8` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 8 | 0 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, unit, package, publish |\n| 1 | fifo | 8 | 0 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, package, unit, publish |\n| 1 | longest-processing-time | 8 | 0 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, unit, package, publish |\n\n## Scenario \u2014 strategy-2-workers\n\n- Manifest: `strategy_graph.json`\n- Worker limit: `2 workers`\n- Task count: `6`\n- Unlimited makespan: `10`\n- Best scenario makespan: `13` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 13 | 3 | 0 | 6 | 6 | 4 | 84.6% | core-seed, alpha-long, core-stage-1, core-stage-2, beta-long, ship |\n| 2 | fifo | 16 | 6 | 3 | 6 | 6 | 10 | 68.8% | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |\n| 2 | longest-processing-time | 16 | 6 | 3 | 6 | 6 | 10 | 68.8% | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |\n\n## Scenario \u2014 resource-3-workers\n\n- Manifest: `resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `5`\n- Unlimited makespan: `6`\n- Best scenario makespan: `8` via `fifo, critical-first, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `gpu=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 8 | 2 | 0 | 2 | 2 | 13 | 45.8% | prep, docs, gpu-eval, gpu-train, package |\n| 2 | critical-first | 8 | 2 | 0 | 4 | 4 | 13 | 45.8% | prep, gpu-train, docs, gpu-eval, package |\n| 2 | longest-processing-time | 8 | 2 | 0 | 4 | 4 | 13 | 45.8% | prep, gpu-train, docs, gpu-eval, package |\n\n## Scenario \u2014 multi-resource-3-workers\n\n- Manifest: `multi_resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `6`\n- Unlimited makespan: `7`\n- Best scenario makespan: `10` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n- Resource capacities: `browser-lab=2, gpu=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 10 | 3 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n| 1 | fifo | 10 | 3 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n| 1 | longest-processing-time | 10 | 3 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n\n## Scenario \u2014 multi-resource-browser-bump\n\n- Manifest: `multi_resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `6`\n- Unlimited makespan: `7`\n- Best scenario makespan: `8` via `fifo`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `browser-lab=3, gpu=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 8 | 1 | 0 | 2 | 2 | 10 | 58.3% | prep, browser-matrix, cross-platform-cert, gpu-train, sign, package |\n| 2 | critical-first | 9 | 2 | 1 | 4 | 4 | 13 | 51.9% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n\n## Scenario \u2014 generated-ci-4-workers\n\n- Manifest: `generated_ci_pipeline.json`\n- Worker limit: `4 workers`\n- Task count: `16`\n- Unlimited makespan: `16`\n- Best scenario makespan: `16` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n- Resource capacities: `browser-lab=1, docker-builder=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 16 | 0 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |\n| 1 | fifo | 16 | 0 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-02, unit-shard-03, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |\n| 1 | longest-processing-time | 16 | 0 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, security-scan, publish-preview-image, deploy-preview, smoke-preview, promote-mainline |\n\n## Scenario \u2014 generated-release-3-workers\n\n- Manifest: `generated_release_pipeline.json`\n- Worker limit: `3 workers`\n- Task count: `19`\n- Unlimited makespan: `21`\n- Best scenario makespan: `24` via `fifo, longest-processing-time, critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `prod-slot=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 24 | 3 | 0 | 5 | 3 | 42 | 41.7% | freeze-release-branch, assemble-release-notes, build-linux, build-macos, build-windows, sign-linux, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n| 2 | longest-processing-time | 24 | 3 | 0 | 7 | 3 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-windows, sign-macos, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n| 3 | critical-first | 24 | 3 | 0 | 7 | 4 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n\n## Scenario \u2014 generated-data-pipeline-4-workers\n\n- Manifest: `generated_data_pipeline.json`\n- Worker limit: `4 workers`\n- Task count: `16`\n- Unlimited makespan: `15`\n- Best scenario makespan: `20` via `fifo, critical-first, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `gpu=1, warehouse=2`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 20 | 5 | 0 | 12 | 5 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-02, transform-partition-03, transform-partition-04, transform-partition-05, build-features, backfill-marts, train-model, publish-dashboard, publish-model, notify-ops |\n| 2 | critical-first | 20 | 5 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, schema-validate, quality-profile, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |\n| 2 | longest-processing-time | 20 | 5 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |\n",
+  "benchmark_markdown_out": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md",
+  "benchmark_json_out": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.json",
+  "benchmark_aggregate_csv_out": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_aggregates.csv",
+  "benchmark_strategy_csv_out": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_strategies.csv",
+  "artifacts": {
+    "benchmark_markdown": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md",
+    "benchmark_json": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.json",
+    "benchmark_aggregate_csv": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_aggregates.csv",
+    "benchmark_strategy_csv": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_strategies.csv"
+  }
+}

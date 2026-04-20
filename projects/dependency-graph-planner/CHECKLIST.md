@@ -17,5 +17,6 @@
 
 ## Next candidate slices
 - [ ] Add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
-- [ ] Export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis
+- [x] Export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis
 - [ ] Add metadata-aware default report titles/descriptions so generated manifests render even more recruiter-friendly headings automatically
+- [ ] Add optional benchmark dashboard artifacts so suite scoreboards are browsable without opening Markdown/CSV files first

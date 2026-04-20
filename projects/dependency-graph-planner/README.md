@@ -97,6 +97,12 @@ Suite fields:
 - `title` - optional report title override for the `benchmark` command
 - `scenarios` - required non-empty list of benchmark cases
 
+The `benchmark` command can emit four complementary outputs from the same suite run:
+- Markdown scoreboard (`--benchmark-markdown-out`) for recruiter-friendly summaries
+- full JSON snapshot (`--benchmark-json-out`) for programmatic ingestion
+- aggregate CSV leaderboard (`--benchmark-aggregate-csv-out`) for one row per strategy
+- per-scenario strategy CSV (`--benchmark-strategy-csv-out`) for plotting/notebooks
+
 Scenario fields:
 - `label` - required unique scenario name used in the Markdown report
 - `graph` - required relative or absolute path to a dependency-graph manifest
@@ -259,9 +265,12 @@ This emits the linked strategy-comparison report plus JSON and SVG schedule snap
 ```bash
 python3 projects/dependency-graph-planner/dependency_graph_planner.py benchmark \
   projects/dependency-graph-planner/portfolio_benchmark_suite.json \
-  --benchmark-markdown-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md
+  --benchmark-markdown-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md \
+  --benchmark-json-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.json \
+  --benchmark-aggregate-csv-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_aggregates.csv \
+  --benchmark-strategy-csv-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_strategies.csv
 ```
-This emits a scoreboard-style Markdown report that compares scheduling strategies across the committed sample, strategy, resource, multi-resource, and generated showcase manifests in one batch.
+This emits a scoreboard-style Markdown report plus JSON and CSV leaderboard snapshots that compare scheduling strategies across the committed sample, strategy, resource, multi-resource, and generated showcase manifests in one batch.
 
 ### Generate a synthetic CI / release / data-pipeline manifest
 ```bash
@@ -345,6 +354,9 @@ Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/generated_data_pipeline_4_workers_schedule.json`
 - `docs/artifacts/dependency-graph-planner/generated_data_pipeline_4_workers_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md`
+- `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.json`
+- `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_aggregates.csv`
+- `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_strategies.csv`
 
 ## Testing
 ```bash
@@ -365,5 +377,5 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 ## Future improvements
 - simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
 - add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
-- export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis
+- add a lightweight benchmark dashboard so suite results are browsable without opening Markdown or CSV files first
 - use manifest metadata automatically for default report/dashboard titles and richer artifact subtitles
