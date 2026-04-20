@@ -19,6 +19,6 @@
   - review 3: git diff review of README, simulator logic, tests, and regenerated artifact files
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → passed with 0 verified and 0 unverified secrets
-- Commit: `f99b3a3`
+- Commit: `84b9103`
 - Next step:
   - add a lock-wait/deadlock-focused scenario or a side-by-side visualization that explicitly contrasts optimistic validation aborts with lock-conflict aborts
