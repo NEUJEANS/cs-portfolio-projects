@@ -69,5 +69,5 @@
 - [x] complete review pass 2 and fix issues
 - [x] complete review pass 3 and fix issues
 - [x] run secret scan
-- [ ] commit and push
-- [ ] append wrap-up
+- [x] commit and push
+- [x] append wrap-up
