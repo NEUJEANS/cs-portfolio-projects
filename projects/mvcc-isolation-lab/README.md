@@ -12,17 +12,19 @@ A compact Python simulator that compares `read-committed`, `snapshot`, and optim
 - JSON scenario loader with validation for records, transactions, schedules, and invariants
 - step-by-step simulation for `read-committed`, `snapshot`, and optimistic `serializable` validation
 - buffered writes plus per-transaction snapshots so traces explain what each transaction could actually see
-- safe expression evaluator for scenario `assert` and `write` steps using booleans, arithmetic, and comparisons
+- safe expression evaluator for scenario `assert` and `write` steps using booleans, arithmetic, comparisons, and a tiny `count_prefix(...)` helper for invariant checks
+- predicate/range-style `scan` steps that count matching rows by key prefix so the lab can model phantom anomalies alongside simple point reads
 - invariant checks that make schedule-level correctness visible in the final output
 - comparison mode that replays the same scenario across all supported isolation levels
 - Markdown comparison export for recruiter-friendly artifact snapshots in `docs/artifacts/`
 - self-contained SVG schedule exports that show begin/read/write/commit ordering plus committed version changes without needing a browser app or external assets
-- committed sample scenarios for write skew and repeatable-read behavior
+- committed sample scenarios for write skew, repeatable-read drift, and predicate/range-query phantom behavior
 
 ## Project structure
 - `mvcc_isolation_lab.py` - scenario validation, simulator, trace generation, Markdown/SVG rendering, and CLI entrypoint
 - `doctor_on_call.json` - classic write-skew scenario where two doctors each sign off based on the same stale snapshot
 - `repeatable_read_window.json` - compact scenario that shows a long-running reader under a concurrent writer
+- `conference_room_booking_phantom.json` - booking-slot scan scenario where predicate conflicts matter more than key-based overlap
 - `CHECKLIST.md` - resumable project checklist for future slices
 - `tests/test_mvcc_isolation_lab.py` - regression tests for validation, isolation semantics, and CLI exports
 - `docs/artifacts/mvcc-isolation-lab/` - committed Markdown comparison artifacts plus SVG schedule timelines generated from the sample scenarios
@@ -49,13 +51,16 @@ A compact Python simulator that compares `read-committed`, `snapshot`, and optim
 
 ### Supported step types
 - `read` - reads a key from the transaction's visible view and stores it under `as` (defaults to the key name)
+- `scan` - counts keys visible under a `key_prefix` (optionally filtered by `value_equals`) and stores the count under `as`
 - `assert` - evaluates an expression against the visible state plus prior local aliases; aborts the transaction when false
 - `write` - buffers a literal `value` or computed `expr` until commit time
+
+Expressions used by `assert`, `write`, and final invariants can also call `count_prefix(prefix, value?)` to count visible matching rows in the current state snapshot.
 
 ### Isolation model used in the lab
 - `read-committed` - each read sees the latest committed state at that step, plus the transaction's own buffered writes
 - `snapshot` - each transaction reads from the committed snapshot captured when it began; commit aborts only on write-write conflicts that happened after the snapshot
-- `serializable` - uses the same read snapshot as `snapshot`, but commit validation aborts when any key in the transaction's read or write set changed since its snapshot
+- `serializable` - uses the same read snapshot as `snapshot`, but commit validation aborts when any key in the transaction's read or write set changed since its snapshot, or when a previously scanned predicate/range result changed before commit
 
 This `serializable` mode is intentionally a small optimistic validation model for teaching, not a vendor-exact implementation of PostgreSQL SSI or every serializable database.
 
@@ -121,6 +126,11 @@ python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
   - `snapshot` keeps the reader on a stable snapshot so the reader commits cleanly
   - `serializable` also gives the reader a stable snapshot, but the final optimistic validation can still abort the transaction because its read set changed before commit
   - the SVG timelines make the mid-schedule writer commit easy to spot without reading raw JSON traces
+- `conference_room_booking_phantom.json`
+  - both booking transactions scan the same `booking_room101_...` predicate and each sees zero rows before inserting a different reservation row
+  - `read-committed` and `snapshot` both allow the double-booking because there is no direct key overlap to abort on
+  - `serializable` now detects that the scanned predicate changed between snapshot and commit, so one booking aborts with a predicate-conflict explanation
+  - the committed compare report and SVG timelines make the phantom anomaly visible without needing a database server
 
 ## Testing
 ```bash
@@ -128,6 +138,6 @@ python3 -m unittest tests.test_mvcc_isolation_lab -v
 ```
 
 ## Future ideas
-- add predicate-based phantom demos for range queries instead of only key-based conflicts
-- add lock-based strict two-phase locking as another comparison mode
+- add lock-based strict two-phase locking as another comparison mode for contrast with the optimistic validator
+- add richer scan payloads (for example exposing matched key previews directly to expressions) while keeping the DSL compact
 - add a browser-friendly HTML gallery page that embeds the committed Markdown and SVG artifacts together

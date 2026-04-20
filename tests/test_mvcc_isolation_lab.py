@@ -12,6 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCTOR_SCENARIO = REPO_ROOT / "projects/mvcc-isolation-lab/doctor_on_call.json"
 REPEATABLE_SCENARIO = REPO_ROOT / "projects/mvcc-isolation-lab/repeatable_read_window.json"
+PHANTOM_SCENARIO = REPO_ROOT / "projects/mvcc-isolation-lab/conference_room_booking_phantom.json"
 SCRIPT = REPO_ROOT / "projects/mvcc-isolation-lab/mvcc_isolation_lab.py"
 SPEC = importlib.util.spec_from_file_location("mvcc_isolation_lab", SCRIPT)
 assert SPEC and SPEC.loader
@@ -44,6 +45,20 @@ class MvccIsolationLabTests(unittest.TestCase):
             "records": {"x": 1},
             "transactions": [{"name": "T1", "steps": [{"op": "read", "key": "x"}]}],
             "schedule": ["T2"],
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
+    def test_validate_rejects_scan_without_alias(self) -> None:
+        scenario = {
+            "records": {"capacity": 1},
+            "transactions": [
+                {
+                    "name": "T1",
+                    "steps": [{"op": "scan", "key_prefix": "booking_"}],
+                }
+            ],
+            "schedule": ["T1"],
         }
         with self.assertRaises(ScenarioError):
             validate_scenario(scenario)
@@ -84,6 +99,34 @@ class MvccIsolationLabTests(unittest.TestCase):
         self.assertEqual(writer["status"], "committed")
         self.assertEqual(result.final_state, {"inventory": 8})
 
+    def test_read_committed_allows_predicate_phantom_double_booking(self) -> None:
+        result = run_simulation(load_scenario(PHANTOM_SCENARIO), "read-committed")
+        self.assertEqual([item["status"] for item in result.transactions], ["committed", "committed"])
+        self.assertFalse(result.invariants[0]["ok"])
+        self.assertEqual(
+            result.final_state,
+            {
+                "booking_room101_2026-04-20T09:00_alice": "reserved",
+                "booking_room101_2026-04-20T09:00_bob": "reserved",
+                "room101_capacity": 1,
+            },
+        )
+
+    def test_snapshot_allows_predicate_phantom_double_booking(self) -> None:
+        result = run_simulation(load_scenario(PHANTOM_SCENARIO), "snapshot")
+        self.assertEqual([item["status"] for item in result.transactions], ["committed", "committed"])
+        self.assertFalse(result.invariants[0]["ok"])
+
+    def test_serializable_aborts_second_booking_on_predicate_conflict(self) -> None:
+        result = run_simulation(load_scenario(PHANTOM_SCENARIO), "serializable")
+        self.assertEqual([item["status"] for item in result.transactions], ["committed", "aborted"])
+        self.assertTrue(result.invariants[0]["ok"])
+        self.assertIn("predicate conflict", result.transactions[1]["abort_reason"])
+        self.assertEqual(
+            result.transactions[0]["predicate_reads"],
+            ['prefix=booking_room101_2026-04-20T09:00_, value="reserved"'],
+        )
+
     def test_compare_runs_all_supported_modes(self) -> None:
         results = compare_scenario(load_scenario(DOCTOR_SCENARIO))
         self.assertEqual(set(results), {"read-committed", "snapshot", "serializable"})
@@ -109,6 +152,7 @@ class MvccIsolationLabTests(unittest.TestCase):
             self.assertIn("MVCC isolation comparison", completed.stdout)
             report = output_path.read_text()
             self.assertIn("Doctor on-call write skew", report)
+            self.assertIn("Two doctors each see coverage in their snapshot", report)
             self.assertIn("serializable", report)
 
     def test_run_json_output_contains_trace_and_invariants(self) -> None:
@@ -131,6 +175,31 @@ class MvccIsolationLabTests(unittest.TestCase):
         self.assertEqual(payload["isolation_level"], "snapshot")
         self.assertGreater(len(payload["trace"]), 0)
         self.assertEqual(payload["invariants"][0]["name"], "at_least_one_doctor_on_call")
+
+    def test_run_json_output_includes_scan_trace_and_predicate_reads(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(SCRIPT),
+                "run",
+                str(PHANTOM_SCENARIO),
+                "--isolation",
+                "serializable",
+                "--json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        payload = json.loads(completed.stdout)
+        scan_steps = [item for item in payload["trace"] if item.get("op") == "scan"]
+        self.assertEqual(len(scan_steps), 2)
+        self.assertEqual(scan_steps[0]["count"], 0)
+        self.assertEqual(
+            payload["transactions"][0]["predicate_reads"],
+            ['prefix=booking_room101_2026-04-20T09:00_, value="reserved"'],
+        )
 
     def test_render_timeline_svg_mentions_versions_and_transactions(self) -> None:
         svg = render_timeline_svg(run_simulation(load_scenario(DOCTOR_SCENARIO), "serializable"))

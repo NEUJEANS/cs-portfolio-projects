@@ -1,5 +1,7 @@
 # Doctor on-call write skew — isolation comparison
 
+Two doctors each see coverage in their snapshot and independently sign off, illustrating write skew under snapshot isolation.
+
 | Isolation | Final version | Aborted txs | Invariant status | Final state |
 | --- | ---: | ---: | --- | --- |
 | read-committed | 2 | 0 | at_least_one_doctor_on_call | `{"alice_on_call": false, "bob_on_call": false}` |

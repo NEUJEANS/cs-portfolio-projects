@@ -8,5 +8,5 @@
 - [x] add automated tests for validation, isolation semantics, and CLI output
 - [x] document the model, limits, and usage in the project README
 - [x] add timeline/SVG schedule exports for version visibility and commit ordering
-- [ ] add predicate/range-query phantom scenarios beyond key-based read/write validation
+- [x] add predicate/range-query phantom scenarios beyond key-based read/write validation
 - [ ] add lock-based serializable comparison for contrast with optimistic validation

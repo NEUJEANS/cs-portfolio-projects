@@ -1,5 +1,7 @@
 # Repeatable read window — isolation comparison
 
+A long-running reader observes a value twice while a concurrent writer increments it in the middle of the schedule.
+
 | Isolation | Final version | Aborted txs | Invariant status | Final state |
 | --- | ---: | ---: | --- | --- |
 | read-committed | 1 | 1 | all pass | `{"inventory": 8}` |

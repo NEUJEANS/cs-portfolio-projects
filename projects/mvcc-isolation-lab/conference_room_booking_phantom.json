@@ -1,0 +1,68 @@
+{
+  "metadata": {
+    "title": "Conference room booking phantom",
+    "description": "Two coordinators each scan for an open room slot before inserting a separate reservation row. Key-based conflicts miss the shared predicate, so only serializable predicate validation should stop the double-booking anomaly."
+  },
+  "records": {
+    "room101_capacity": 1
+  },
+  "transactions": [
+    {
+      "name": "AliceBooking",
+      "steps": [
+        {
+          "op": "scan",
+          "key_prefix": "booking_room101_2026-04-20T09:00_",
+          "value_equals": "reserved",
+          "as": "existing_bookings"
+        },
+        {
+          "op": "assert",
+          "expr": "existing_bookings < room101_capacity",
+          "message": "room already reserved for this slot"
+        },
+        {
+          "op": "write",
+          "key": "booking_room101_2026-04-20T09:00_alice",
+          "value": "reserved"
+        }
+      ]
+    },
+    {
+      "name": "BobBooking",
+      "steps": [
+        {
+          "op": "scan",
+          "key_prefix": "booking_room101_2026-04-20T09:00_",
+          "value_equals": "reserved",
+          "as": "existing_bookings"
+        },
+        {
+          "op": "assert",
+          "expr": "existing_bookings < room101_capacity",
+          "message": "room already reserved for this slot"
+        },
+        {
+          "op": "write",
+          "key": "booking_room101_2026-04-20T09:00_bob",
+          "value": "reserved"
+        }
+      ]
+    }
+  ],
+  "schedule": [
+    "AliceBooking",
+    "BobBooking",
+    "AliceBooking",
+    "BobBooking",
+    "AliceBooking",
+    "BobBooking"
+  ],
+  "invariants": [
+    {
+      "name": "at_most_one_room101_booking",
+      "expr": "count_prefix('booking_room101_2026-04-20T09:00_', 'reserved') <= room101_capacity",
+      "message": "room capacity should cap concurrent reservations at one"
+    }
+  ]
+}

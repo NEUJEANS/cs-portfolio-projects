@@ -17,16 +17,18 @@ from typing import Any, Dict, Iterable, List, Optional
 
 
 SUPPORTED_ISOLATION_LEVELS = ("read-committed", "snapshot", "serializable")
-SUPPORTED_STEP_OPS = {"read", "assert", "write"}
+SUPPORTED_STEP_OPS = {"read", "scan", "assert", "write"}
 EVENT_COLORS = {
     "begin": "#dbe4ff",
     "read": "#d1fae5",
+    "scan": "#fae8ff",
     "write": "#fde68a",
     "assert-ok": "#ddd6fe",
     "assert-failed": "#fecaca",
     "commit": "#bfdbfe",
     "aborted": "#fecaca",
 }
+MISSING = object()
 
 
 class ScenarioError(ValueError):
@@ -48,6 +50,7 @@ class TransactionRuntime:
     read_set: set[str] = field(default_factory=set)
     write_set: set[str] = field(default_factory=set)
     writes: Dict[str, Any] = field(default_factory=dict)
+    predicate_reads: List[Dict[str, Any]] = field(default_factory=list)
     status: str = "active"
     abort_reason: Optional[str] = None
 
@@ -104,6 +107,17 @@ class SafeEvaluator:
             if node.id not in self.env:
                 raise EvaluationError(f"unknown name {node.id!r}")
             return self.env[node.id]
+        if isinstance(node, ast.Call):
+            if node.keywords:
+                raise EvaluationError("keyword arguments are not supported")
+            function = self._eval(node.func)
+            if not callable(function):
+                raise EvaluationError("attempted to call a non-callable value")
+            arguments = [self._eval(argument) for argument in node.args]
+            try:
+                return function(*arguments)
+            except TypeError as exc:
+                raise EvaluationError(str(exc)) from exc
         if isinstance(node, ast.BoolOp):
             values = [self._eval(value) for value in node.values]
             if isinstance(node.op, ast.And):
@@ -217,6 +231,16 @@ def validate_scenario(scenario: Dict[str, Any]) -> None:
                     raise ScenarioError(
                         f"transaction {name!r} step {index} read alias must be a non-empty string"
                     )
+            elif op == "scan":
+                if not isinstance(step.get("key_prefix"), str) or not step["key_prefix"]:
+                    raise ScenarioError(
+                        f"transaction {name!r} step {index} scan needs key_prefix"
+                    )
+                alias = step.get("as")
+                if not isinstance(alias, str) or not alias.strip():
+                    raise ScenarioError(
+                        f"transaction {name!r} step {index} scan needs a non-empty as alias"
+                    )
             elif op == "assert":
                 if not isinstance(step.get("expr"), str) or not step["expr"].strip():
                     raise ScenarioError(
@@ -263,6 +287,106 @@ def visible_state(
     return base
 
 
+def scan_value_equals(step: Dict[str, Any]) -> Any:
+    return step["value_equals"] if "value_equals" in step else MISSING
+
+
+def matches_scan_filter(key: str, value: Any, key_prefix: str, value_equals: Any = MISSING) -> bool:
+    return key.startswith(key_prefix) and (value_equals is MISSING or value == value_equals)
+
+
+def collect_scan_matches(
+    state: Dict[str, Any],
+    key_prefix: str,
+    value_equals: Any = MISSING,
+) -> List[tuple[str, Any]]:
+    return [
+        (key, state[key])
+        for key in sorted(state)
+        if matches_scan_filter(key, state[key], key_prefix, value_equals)
+    ]
+
+
+def count_prefix_matches(state: Dict[str, Any], prefix: Any, value: Any = MISSING) -> int:
+    if not isinstance(prefix, str) or not prefix:
+        raise EvaluationError("count_prefix expects a non-empty string prefix")
+    return len(collect_scan_matches(state, prefix, value))
+
+
+def build_evaluation_env(
+    state: Dict[str, Any],
+    local_values: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    env = dict(state)
+    if local_values:
+        env.update(local_values)
+    env["count_prefix"] = lambda prefix, value=MISSING: count_prefix_matches(state, prefix, value)
+    return env
+
+
+def format_predicate_label(key_prefix: str, value_equals: Any = MISSING) -> str:
+    if value_equals is MISSING:
+        return f"prefix={key_prefix}"
+    return f"prefix={key_prefix}, value={json.dumps(value_equals, sort_keys=True)}"
+
+
+def summarize_match_set(matches: List[tuple[str, Any]]) -> str:
+    if not matches:
+        return "0 matches"
+    keys = [key for key, _ in matches]
+    if len(keys) <= 2:
+        return ", ".join(keys)
+    return f"{keys[0]}, {keys[1]}, +{len(keys) - 2} more"
+
+
+def summarize_predicate_reads(predicate_reads: List[Dict[str, Any]]) -> List[str]:
+    labels: List[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    for predicate in predicate_reads:
+        value_equals = predicate["value_equals"] if predicate["has_value_equals"] else MISSING
+        label = format_predicate_label(predicate["key_prefix"], value_equals)
+        marker = (
+            predicate["key_prefix"],
+            str(predicate["has_value_equals"]),
+            json.dumps(predicate.get("value_equals"), sort_keys=True),
+        )
+        if marker in seen:
+            continue
+        seen.add(marker)
+        labels.append(label)
+    return labels
+
+
+def collect_predicate_conflicts(
+    predicate_reads: List[Dict[str, Any]],
+    snapshot_state: Dict[str, Any],
+    committed_state: Dict[str, Any],
+) -> List[str]:
+    conflicts: List[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    for predicate in predicate_reads:
+        marker = (
+            predicate["key_prefix"],
+            str(predicate["has_value_equals"]),
+            json.dumps(predicate.get("value_equals"), sort_keys=True),
+        )
+        if marker in seen:
+            continue
+        seen.add(marker)
+        value_equals = predicate["value_equals"] if predicate["has_value_equals"] else MISSING
+        before_matches = collect_scan_matches(snapshot_state, predicate["key_prefix"], value_equals)
+        after_matches = collect_scan_matches(committed_state, predicate["key_prefix"], value_equals)
+        if before_matches != after_matches:
+            conflicts.append(
+                "{label} ({before} -> {after})".format(
+                    label=format_predicate_label(predicate["key_prefix"], value_equals),
+                    before=summarize_match_set(before_matches),
+                    after=summarize_match_set(after_matches),
+                )
+            )
+    return conflicts
+
+
 def commit_transaction(
     transaction: TransactionRuntime,
     committed_state: Dict[str, Any],
@@ -275,18 +399,24 @@ def commit_transaction(
     if isolation_level == "snapshot":
         conflicting_keys = sorted(transaction.write_set & changed_keys)
         if conflicting_keys:
-            reason = (
-                "snapshot write-write conflict on " + ", ".join(conflicting_keys)
-            )
+            reason = "snapshot write-write conflict on " + ", ".join(conflicting_keys)
             transaction.status = "aborted"
             transaction.abort_reason = reason
             return False, reason, current_version
     elif isolation_level == "serializable":
         conflicting_keys = sorted((transaction.read_set | transaction.write_set) & changed_keys)
-        if conflicting_keys:
-            reason = (
-                "serializable validation conflict on " + ", ".join(conflicting_keys)
-            )
+        predicate_conflicts = collect_predicate_conflicts(
+            transaction.predicate_reads,
+            transaction.snapshot,
+            committed_state,
+        )
+        if conflicting_keys or predicate_conflicts:
+            parts: List[str] = []
+            if conflicting_keys:
+                parts.append("serializable validation conflict on " + ", ".join(conflicting_keys))
+            if predicate_conflicts:
+                parts.append("predicate conflict on " + "; ".join(predicate_conflicts))
+            reason = " | ".join(parts)
             transaction.status = "aborted"
             transaction.abort_reason = reason
             return False, reason, current_version
@@ -368,9 +498,36 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
                     "value": value,
                 }
             )
+        elif op == "scan":
+            alias = step["as"]
+            value_equals = scan_value_equals(step)
+            matches = collect_scan_matches(state_view, step["key_prefix"], value_equals)
+            count = len(matches)
+            runtime.locals[alias] = count
+            runtime.read_set.update(key for key, _ in matches)
+            runtime.predicate_reads.append(
+                {
+                    "key_prefix": step["key_prefix"],
+                    "has_value_equals": "value_equals" in step,
+                    "value_equals": step.get("value_equals"),
+                }
+            )
+            trace.append(
+                {
+                    "event": "step",
+                    "tick": tick,
+                    "transaction": transaction_name,
+                    "step": step_number,
+                    "op": op,
+                    "key_prefix": step["key_prefix"],
+                    "alias": alias,
+                    "count": count,
+                    "matched_keys": [key for key, _ in matches],
+                    **({"value_equals": step["value_equals"]} if "value_equals" in step else {}),
+                }
+            )
         elif op == "assert":
-            env = dict(state_view)
-            env.update(runtime.locals)
+            env = build_evaluation_env(state_view, runtime.locals)
             result = bool(evaluate_expression(step["expr"], env))
             trace.append(
                 {
@@ -399,8 +556,7 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
                 )
         elif op == "write":
             key = step["key"]
-            env = dict(state_view)
-            env.update(runtime.locals)
+            env = build_evaluation_env(state_view, runtime.locals)
             value = step.get("value")
             if "expr" in step:
                 value = evaluate_expression(step["expr"], env)
@@ -464,6 +620,7 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
                 "status": runtime.status,
                 "abort_reason": runtime.abort_reason,
                 "reads": sorted(runtime.read_set),
+                "predicate_reads": summarize_predicate_reads(runtime.predicate_reads),
                 "writes": dict(runtime.writes),
                 "start_version": runtime.start_version,
             }
@@ -471,7 +628,7 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
 
     invariants: List[Dict[str, Any]] = []
     for invariant in scenario.get("invariants", []):
-        ok = bool(evaluate_expression(invariant["expr"], dict(committed_state)))
+        ok = bool(evaluate_expression(invariant["expr"], build_evaluation_env(dict(committed_state))))
         invariants.append(
             {
                 "name": invariant["name"],
@@ -508,6 +665,8 @@ def render_run_text(result: SimulationResult) -> str:
         line = f"  - {transaction['name']}: {transaction['status']}"
         if transaction["abort_reason"]:
             line += f" ({transaction['abort_reason']})"
+        if transaction["predicate_reads"]:
+            line += f" predicate_reads={json.dumps(transaction['predicate_reads'])}"
         if transaction["writes"]:
             write_label = "writes" if transaction["status"] == "committed" else "buffered_writes"
             line += f" {write_label}={json.dumps(transaction['writes'], sort_keys=True)}"
@@ -542,8 +701,11 @@ def render_compare_text(results: Dict[str, SimulationResult]) -> str:
 
 
 def render_compare_markdown(results: Dict[str, SimulationResult]) -> str:
-    scenario_title = next(iter(results.values())).title
-    lines = [f"# {scenario_title} — isolation comparison", ""]
+    scenario = next(iter(results.values()))
+    lines = [f"# {scenario.title} — isolation comparison", ""]
+    if scenario.description:
+        lines.append(scenario.description)
+        lines.append("")
     lines.append("| Isolation | Final version | Aborted txs | Invariant status | Final state |")
     lines.append("| --- | ---: | ---: | --- | --- |")
     for level in SUPPORTED_ISOLATION_LEVELS:
@@ -572,6 +734,8 @@ def render_compare_markdown(results: Dict[str, SimulationResult]) -> str:
             summary = f"- `{transaction['name']}` → **{transaction['status']}**"
             if transaction["abort_reason"]:
                 summary += f" — {transaction['abort_reason']}"
+            if transaction["predicate_reads"]:
+                summary += f"; predicate reads `{json.dumps(transaction['predicate_reads'])}`"
             if transaction["writes"]:
                 write_label = "writes" if transaction["status"] == "committed" else "buffered writes"
                 summary += f"; {write_label} `{json.dumps(transaction['writes'], sort_keys=True)}`"
@@ -613,6 +777,12 @@ def event_card_lines(event: Dict[str, Any]) -> tuple[str, List[str], str]:
                 f"read {event['key']}",
                 [f"{event['alias']} = {truncate_text(event['value'], 26)}"],
                 EVENT_COLORS["read"],
+            )
+        if op == "scan":
+            return (
+                f"scan {truncate_text(event['key_prefix'], 18)}",
+                [f"{event['alias']} = {event['count']}"],
+                EVENT_COLORS["scan"],
             )
         if op == "write":
             return (
