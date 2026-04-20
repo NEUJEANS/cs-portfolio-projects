@@ -13,5 +13,6 @@
 - [x] add a 2PC-vs-saga comparison mode with committed Markdown/JSON artifacts and clear peer-visible decision snapshots for blocked-after-decision cases
 - [x] simulate the peer-to-peer termination protocol end-to-end so blocked participants either resolve from decisive peers or stay visibly stuck
 - [x] add a durable-ABORT crash scenario so peer termination resolution also shows the safe rollback path when a reachable peer never reached PREPARED
+- [x] add a compact static HTML dashboard for protocol comparison artifacts so the 2PC-vs-saga story is screenshot-friendly on GitHub Pages or in recruiter walkthroughs
 - [x] run at least 3 review passes and fix issues found
 - [x] run tests, secret-scan, commit, push, and add a wrap-up note for the slice

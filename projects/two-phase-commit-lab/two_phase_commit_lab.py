@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import sys
@@ -820,6 +821,286 @@ def render_comparison_markdown(result: ComparisonResult) -> str:
     return "\n".join(lines)
 
 
+def render_comparison_html(result: ComparisonResult) -> str:
+    snapshot = result.scenario_snapshot
+    saga_outcome = next(
+        (comparison.outcome for comparison in result.comparisons if comparison.protocol.startswith('Saga')),
+        'n/a',
+    )
+    if snapshot['acked_decision_participants']:
+        acked_description = (
+            f"{_format_name_list(snapshot['acked_decision_participants'])} "
+            f"{_verb_for_count(snapshot['acked_decision_count'], 'already knows', 'already know')} the final 2PC outcome."
+        )
+    else:
+        acked_description = 'No participant has learned the final 2PC outcome yet.'
+
+    summary_cards = [
+        (
+            '2PC baseline',
+            snapshot['two_phase_outcome'],
+            'The coordinator-owned durable decision plus PREPARED participants determine whether the system commits, aborts, or blocks.',
+            _comparison_outcome_tone(snapshot['two_phase_outcome']),
+        ),
+        (
+            'Saga contrast',
+            saga_outcome,
+            'The orchestrated workflow stays off a global PREPARE barrier, so failures become pauses or compensations instead of prepared-lock blocking.',
+            _comparison_outcome_tone(saga_outcome),
+        ),
+        (
+            'Participant mix',
+            f"{snapshot['participant_count']} total",
+            f"{snapshot['commit_voters']} commit / {snapshot['abort_voters']} abort / {snapshot['timeout_voters']} timeout",
+            'accent',
+        ),
+        (
+            'Peers with the decision',
+            str(snapshot['acked_decision_count']),
+            acked_description,
+            'accent',
+        ),
+    ]
+    if snapshot['termination_hint_summary']:
+        summary_cards.append(
+            (
+                'Termination hint',
+                snapshot['termination_hint_summary'],
+                'What a blocked PREPARED participant can safely ask peers or recovery for next.',
+                'accent' if not snapshot['termination_hint_summary'].startswith('wait:') else 'warning',
+            )
+        )
+
+    summary_cards_html = ''.join(
+        f'''<article class="summary-card summary-card--{_html_escape(tone)}">
+      <p class="summary-label">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description, tone in summary_cards
+    )
+
+    successful_delivery_text = (
+        str(snapshot['successful_decision_deliveries_before_crash'])
+        if snapshot['coordinator_crash'] == 'after-decision-log'
+        else 'n/a (no post-log crash)'
+    )
+    snapshot_rows = [
+        ('Transaction id', result.transaction_id),
+        ('Coordinator crash point', snapshot['coordinator_crash']),
+        ('Coordinator recovery', 'yes' if snapshot['recover_after_crash'] else 'no'),
+        ('Commit voters', _format_name_list(snapshot['commit_participants']) or 'none'),
+        ('Abort voters', _format_name_list(snapshot['abort_participants']) or 'none'),
+        ('Timeout voters', _format_name_list(snapshot['timeout_participants']) or 'none'),
+        ('Prepared participants', _format_name_list(snapshot['prepared_participants']) or 'none'),
+        (
+            'Participants that learned the final 2PC decision',
+            _format_name_list(snapshot['acked_decision_participants']) or 'none yet',
+        ),
+        (
+            'Configured missed second-phase deliveries',
+            f"{snapshot['missed_second_phase_participants']} ({_format_name_list(snapshot['missed_second_phase_names']) or 'none'})",
+        ),
+        (
+            'Successful pre-crash decision deliveries',
+            successful_delivery_text,
+        ),
+    ]
+    snapshot_rows_html = ''.join(
+        f'''<div class="snapshot-row">
+      <dt>{_html_escape(label)}</dt>
+      <dd>{_html_escape(value)}</dd>
+    </div>'''
+        for label, value in snapshot_rows
+    )
+
+    protocol_cards_html = ''.join(
+        _render_protocol_comparison_card_html(comparison)
+        for comparison in result.comparisons
+    )
+    takeaways_html = ''.join(
+        f'<li>{_html_escape(item)}</li>' for item in result.interview_takeaways
+    )
+
+    two_phase_chip_tone = _comparison_outcome_tone(snapshot['two_phase_outcome'])
+    crash_chip_tone = 'warning' if snapshot['coordinator_crash'] != 'none' else 'accent'
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_html_escape(result.title)} protocol comparison dashboard</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --panel: #ffffff;
+        --border: #d6dfeb;
+        --text: #132238;
+        --muted: #526277;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --success: #047857;
+        --success-soft: #d1fae5;
+        --warn: #b45309;
+        --warn-soft: #fef3c7;
+        --danger: #b91c1c;
+        --danger-soft: #fee2e2;
+        --shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(180deg, #ecf4ff 0%, var(--bg) 18rem); color: var(--text); }}
+      main {{ max-width: 1180px; margin: 0 auto; padding: 32px 20px 56px; }}
+      .hero, .panel, .protocol-card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow); }}
+      .hero {{ padding: 28px; margin-bottom: 20px; }}
+      .eyebrow {{ margin: 0 0 8px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }}
+      h1, h2, h3 {{ margin: 0; }}
+      .lede {{ margin: 14px 0 0; max-width: 76ch; color: var(--muted); line-height: 1.6; }}
+      .meta {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }}
+      .chip {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); }}
+      .chip--warning {{ background: var(--warn-soft); color: var(--warn); }}
+      .chip--danger {{ background: var(--danger-soft); color: var(--danger); }}
+      .chip--success {{ background: var(--success-soft); color: var(--success); }}
+      .summary-grid, .protocol-grid {{ display: grid; gap: 16px; }}
+      .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 20px; }}
+      .summary-card {{ border-radius: 18px; border: 1px solid var(--border); padding: 18px; background: #fdfefe; }}
+      .summary-card strong {{ display: block; margin-top: 8px; font-size: 1.5rem; line-height: 1.25; }}
+      .summary-label {{ margin: 0; color: var(--muted); font-size: 0.92rem; }}
+      .summary-card p:last-child {{ margin-bottom: 0; color: var(--muted); line-height: 1.5; }}
+      .summary-card--success {{ background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%); border-color: #bbf7d0; }}
+      .summary-card--warning {{ background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%); border-color: #fed7aa; }}
+      .summary-card--danger {{ background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%); border-color: #fecaca; }}
+      .summary-card--accent {{ background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #bfdbfe; }}
+      .panel {{ padding: 24px; margin-bottom: 20px; }}
+      .panel-header p {{ margin: 10px 0 0; color: var(--muted); line-height: 1.55; }}
+      .snapshot-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 18px; }}
+      .snapshot-row {{ padding: 14px 16px; border-radius: 16px; background: #f8fbff; border: 1px solid #dbe7f5; }}
+      .snapshot-row dt {{ margin: 0 0 6px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
+      .snapshot-row dd {{ margin: 0; font-size: 1rem; line-height: 1.5; }}
+      .protocol-grid {{ grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+      .protocol-card {{ padding: 22px; }}
+      .protocol-card--primary {{ background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #bfdbfe; }}
+      .protocol-card--secondary {{ background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }}
+      .protocol-card-header {{ display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 16px; }}
+      .outcome-pill {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 12px; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.02em; }}
+      .outcome-pill--success {{ background: var(--success-soft); color: var(--success); }}
+      .outcome-pill--warning {{ background: var(--warn-soft); color: var(--warn); }}
+      .outcome-pill--danger {{ background: var(--danger-soft); color: var(--danger); }}
+      .outcome-pill--accent {{ background: var(--accent-soft); color: var(--accent); }}
+      .protocol-blurb {{ margin: 0 0 18px; color: var(--muted); line-height: 1.6; }}
+      .metric-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }}
+      .metric-grid div {{ padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.78); border: 1px solid rgba(148, 163, 184, 0.28); }}
+      .metric-grid dt {{ margin: 0 0 6px; font-size: 0.77rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
+      .metric-grid dd {{ margin: 0; line-height: 1.5; }}
+      .callout {{ border-radius: 16px; padding: 16px 18px; margin: 0 0 16px; border: 1px solid #dbe7f5; background: #f8fbff; }}
+      .callout h3 {{ margin-bottom: 8px; font-size: 1rem; }}
+      .callout p {{ margin: 0; color: var(--muted); line-height: 1.55; }}
+      ul {{ margin: 0; padding-left: 1.2rem; }}
+      li + li {{ margin-top: 8px; }}
+      .takeaway-list li {{ line-height: 1.6; }}
+      @media (max-width: 820px) {{
+        main {{ padding-inline: 14px; }}
+        .hero, .panel, .protocol-card {{ border-radius: 16px; }}
+        .protocol-card-header {{ flex-direction: column; align-items: start; }}
+        .metric-grid {{ grid-template-columns: 1fr; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Protocol comparison dashboard</p>
+        <h1>{_html_escape(result.title)}</h1>
+        <p class="lede">{_html_escape(result.description)} This static dashboard makes the 2PC-versus-saga trade-off browsable in one recruiter-friendly artifact: what the coordinator logged, who got stuck in PREPARED, what a saga would do instead, and whether any peer already knows the durable decision.</p>
+        <div class="meta">
+          <span class="chip">transaction {_html_escape(result.transaction_id)}</span>
+          <span class="chip chip--{_html_escape(two_phase_chip_tone)}">2PC {_html_escape(snapshot['two_phase_outcome'])}</span>
+          <span class="chip chip--warning">saga {_html_escape(saga_outcome)}</span>
+          <span class="chip chip--{_html_escape(crash_chip_tone)}">crash {_html_escape(snapshot['coordinator_crash'])}</span>
+        </div>
+      </section>
+
+      <section class="summary-grid">
+        {summary_cards_html}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Scenario snapshot</h2>
+          <p>Keep the scenario facts separate from the protocol story: participant mix, crash point, informed peers, and missed second-phase deliveries all shape what the comparison means.</p>
+        </div>
+        <dl class="snapshot-grid">
+          {snapshot_rows_html}
+        </dl>
+      </section>
+
+      <section class="protocol-grid">
+        {protocol_cards_html}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Interview takeaways</h2>
+          <p>Use these bullets when explaining why the same business incident feels coordinator-blocking under 2PC but resumable or compensatable under saga orchestration.</p>
+        </div>
+        <ul class="takeaway-list">
+          {takeaways_html}
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
+def _render_protocol_comparison_card_html(comparison: ProtocolComparison) -> str:
+    tone = _comparison_outcome_tone(comparison.outcome)
+    protocol_variant = 'primary' if comparison.protocol == '2PC' else 'secondary'
+    tradeoffs_html = ''.join(f'<li>{_html_escape(item)}</li>' for item in comparison.tradeoffs)
+    return f'''<article class="protocol-card protocol-card--{protocol_variant}">
+      <div class="protocol-card-header">
+        <div>
+          <p class="eyebrow">{_html_escape(comparison.protocol)}</p>
+          <h2>{_html_escape(comparison.protocol)}</h2>
+        </div>
+        <span class="outcome-pill outcome-pill--{_html_escape(tone)}">{_html_escape(comparison.outcome)}</span>
+      </div>
+      <p class="protocol-blurb">{_html_escape(comparison.coordination_model)}</p>
+      <dl class="metric-grid">
+        <div><dt>Consistency model</dt><dd>{_html_escape(comparison.consistency_model)}</dd></div>
+        <div><dt>Atomicity</dt><dd>{_html_escape(comparison.atomicity)}</dd></div>
+        <div><dt>Blocking behavior</dt><dd>{_html_escape(comparison.blocking_behavior)}</dd></div>
+        <div><dt>Recovery story</dt><dd>{_html_escape(comparison.recovery_story)}</dd></div>
+      </dl>
+      <section class="callout">
+        <h3>Participant story</h3>
+        <p>{_html_escape(comparison.participant_story)}</p>
+      </section>
+      <section class="callout">
+        <h3>Interview hook</h3>
+        <p>{_html_escape(comparison.interview_hook)}</p>
+      </section>
+      <section>
+        <h3>Tradeoffs</h3>
+        <ul>
+          {tradeoffs_html}
+        </ul>
+      </section>
+    </article>'''
+
+
+def _comparison_outcome_tone(outcome: str) -> str:
+    lowered = outcome.lower()
+    if 'blocked' in lowered or 'paused' in lowered:
+        return 'warning'
+    if 'abort' in lowered or 'compensated' in lowered:
+        return 'danger'
+    if 'commit' in lowered:
+        return 'success'
+    return 'accent'
+
+
 def render_termination_resolution_markdown(result: TerminationResolutionResult) -> str:
     participant_lines = [
         "| Participant | Role | Initial state | Peer query | Evidence | Final state | Resolved |",
@@ -1002,6 +1283,12 @@ def write_comparison_markdown(path: str | Path, result: ComparisonResult) -> Non
     output_path.write_text(render_comparison_markdown(result))
 
 
+def write_comparison_html(path: str | Path, result: ComparisonResult) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_comparison_html(result))
+
+
 def write_termination_resolution_markdown(
     path: str | Path,
     result: TerminationResolutionResult,
@@ -1092,6 +1379,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         help="optional path for a Markdown comparison artifact",
     )
+    compare_parser.add_argument(
+        "--html-out",
+        type=Path,
+        help="optional path for a static HTML comparison dashboard",
+    )
 
     terminate_parser = subparsers.add_parser(
         "terminate",
@@ -1160,10 +1452,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "compare":
         result = build_protocol_comparison(load_scenario(args.scenario))
+        stream = sys.stderr if args.json else sys.stdout
         if args.markdown_out:
             write_comparison_markdown(args.markdown_out, result)
-            stream = sys.stderr if args.json else sys.stdout
             print(f"wrote Markdown comparison to {args.markdown_out}", file=stream)
+        if args.html_out:
+            write_comparison_html(args.html_out, result)
+            print(f"wrote HTML comparison dashboard to {args.html_out}", file=stream)
         if args.json:
             print(json.dumps(result.to_dict(), indent=2))
         else:
@@ -1583,6 +1878,10 @@ def _primary_takeaway(result: SimulationResult) -> str:
         if entry.startswith("2PC "):
             return entry
     return result.takeaways[-1]
+
+
+def _html_escape(value: Any) -> str:
+    return html.escape(str(value), quote=True)
 
 
 def _count_phrase(count: int, singular: str, plural: str | None = None) -> str:

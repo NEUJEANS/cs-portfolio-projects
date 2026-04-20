@@ -8,8 +8,9 @@
 - [x] Add a 2PC-vs-saga comparison mode with committed Markdown/JSON artifacts, plus peer-visible decision snapshots for the partial-delivery blocked case
 - [x] Simulate full peer-to-peer termination resolution for blocked runs, including one scenario that resolves via an informed peer and one that still stays blocked
 - [x] Add a blocked-after-ABORT sample so peer termination resolution demonstrates both decisive COMMIT witnesses and safe ABORT proofs via a non-prepared peer
+- [x] Add a compact static HTML dashboard for protocol comparison artifacts so recruiters can browse 2PC-vs-saga tradeoffs without reading Markdown first
 
 ## Next candidate slices
 - [ ] add scenario tags or thematic grouping controls if the sample set grows beyond the current seven cases
-- [ ] consider a compact HTML comparison dashboard if the protocol-comparison artifact set grows beyond Markdown/JSON
 - [ ] add a sequence-diagram or timeline export for the termination-resolution flow
+- [ ] optionally cross-link the scenario catalog to the new HTML comparison dashboards

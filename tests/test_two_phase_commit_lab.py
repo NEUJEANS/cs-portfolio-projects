@@ -33,6 +33,7 @@ build_protocol_comparison = MODULE.build_protocol_comparison
 collect_scenario_paths = MODULE.collect_scenario_paths
 load_scenario = MODULE.load_scenario
 render_catalog_markdown = MODULE.render_catalog_markdown
+render_comparison_html = MODULE.render_comparison_html
 render_comparison_markdown = MODULE.render_comparison_markdown
 render_markdown_report = MODULE.render_markdown_report
 render_termination_resolution_markdown = MODULE.render_termination_resolution_markdown
@@ -436,6 +437,16 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertIn("termination hint in the 2PC baseline: COMMIT visible via inventory", report)
         self.assertIn("ask an informed peer instead of inventing a local outcome", report)
 
+    def test_comparison_html_dashboard_surfaces_snapshot_and_takeaways(self) -> None:
+        comparison = build_protocol_comparison(load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO))
+        report = render_comparison_html(comparison)
+        self.assertIn('<!doctype html>', report.lower())
+        self.assertIn('Protocol comparison dashboard', report)
+        self.assertIn('COMMIT visible via inventory', report)
+        self.assertIn('inventory already knows the final 2PC outcome.', report)
+        self.assertIn('paused-not-blocked', report)
+        self.assertIn('peer-assisted incident-response story rather than pure blind waiting', report)
+
     def test_termination_resolution_markdown_tracks_peer_actions(self) -> None:
         resolution = build_peer_termination_resolution(
             load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO)
@@ -472,6 +483,36 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             report = report_path.read_text()
             self.assertIn("## Interview takeaways", report)
             self.assertIn("Saga (orchestrated)", report)
+
+    def test_compare_command_writes_markdown_html_and_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / 'comparison.md'
+            html_path = Path(temp_dir) / 'comparison.html'
+            completed = subprocess.run(
+                [
+                    'python3',
+                    str(SCRIPT),
+                    'compare',
+                    str(PARTIAL_DELIVERY_BLOCKED_SCENARIO),
+                    '--markdown-out',
+                    str(report_path),
+                    '--html-out',
+                    str(html_path),
+                    '--json',
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload['scenario_snapshot']['termination_hint_summary'], 'COMMIT visible via inventory')
+            html = html_path.read_text()
+            self.assertIn('Protocol comparison dashboard', html)
+            self.assertIn('Coordinator crash after one COMMIT delivery', html)
+            self.assertIn('COMMIT visible via inventory', html)
+            self.assertIn('inventory already knows the final 2PC outcome.', html)
+            self.assertTrue(report_path.exists())
 
     def test_terminate_command_writes_markdown_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

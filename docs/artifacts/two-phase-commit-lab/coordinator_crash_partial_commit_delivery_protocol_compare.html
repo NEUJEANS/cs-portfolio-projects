@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coordinator crash after one COMMIT delivery protocol comparison dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --panel: #ffffff;
+        --border: #d6dfeb;
+        --text: #132238;
+        --muted: #526277;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --success: #047857;
+        --success-soft: #d1fae5;
+        --warn: #b45309;
+        --warn-soft: #fef3c7;
+        --danger: #b91c1c;
+        --danger-soft: #fee2e2;
+        --shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(180deg, #ecf4ff 0%, var(--bg) 18rem); color: var(--text); }
+      main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 56px; }
+      .hero, .panel, .protocol-card { background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow); }
+      .hero { padding: 28px; margin-bottom: 20px; }
+      .eyebrow { margin: 0 0 8px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+      h1, h2, h3 { margin: 0; }
+      .lede { margin: 14px 0 0; max-width: 76ch; color: var(--muted); line-height: 1.6; }
+      .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+      .chip { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
+      .chip--warning { background: var(--warn-soft); color: var(--warn); }
+      .chip--danger { background: var(--danger-soft); color: var(--danger); }
+      .chip--success { background: var(--success-soft); color: var(--success); }
+      .summary-grid, .protocol-grid { display: grid; gap: 16px; }
+      .summary-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 20px; }
+      .summary-card { border-radius: 18px; border: 1px solid var(--border); padding: 18px; background: #fdfefe; }
+      .summary-card strong { display: block; margin-top: 8px; font-size: 1.5rem; line-height: 1.25; }
+      .summary-label { margin: 0; color: var(--muted); font-size: 0.92rem; }
+      .summary-card p:last-child { margin-bottom: 0; color: var(--muted); line-height: 1.5; }
+      .summary-card--success { background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%); border-color: #bbf7d0; }
+      .summary-card--warning { background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%); border-color: #fed7aa; }
+      .summary-card--danger { background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%); border-color: #fecaca; }
+      .summary-card--accent { background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #bfdbfe; }
+      .panel { padding: 24px; margin-bottom: 20px; }
+      .panel-header p { margin: 10px 0 0; color: var(--muted); line-height: 1.55; }
+      .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 18px; }
+      .snapshot-row { padding: 14px 16px; border-radius: 16px; background: #f8fbff; border: 1px solid #dbe7f5; }
+      .snapshot-row dt { margin: 0 0 6px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+      .snapshot-row dd { margin: 0; font-size: 1rem; line-height: 1.5; }
+      .protocol-grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+      .protocol-card { padding: 22px; }
+      .protocol-card--primary { background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #bfdbfe; }
+      .protocol-card--secondary { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }
+      .protocol-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 16px; }
+      .outcome-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 12px; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.02em; }
+      .outcome-pill--success { background: var(--success-soft); color: var(--success); }
+      .outcome-pill--warning { background: var(--warn-soft); color: var(--warn); }
+      .outcome-pill--danger { background: var(--danger-soft); color: var(--danger); }
+      .outcome-pill--accent { background: var(--accent-soft); color: var(--accent); }
+      .protocol-blurb { margin: 0 0 18px; color: var(--muted); line-height: 1.6; }
+      .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+      .metric-grid div { padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.78); border: 1px solid rgba(148, 163, 184, 0.28); }
+      .metric-grid dt { margin: 0 0 6px; font-size: 0.77rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+      .metric-grid dd { margin: 0; line-height: 1.5; }
+      .callout { border-radius: 16px; padding: 16px 18px; margin: 0 0 16px; border: 1px solid #dbe7f5; background: #f8fbff; }
+      .callout h3 { margin-bottom: 8px; font-size: 1rem; }
+      .callout p { margin: 0; color: var(--muted); line-height: 1.55; }
+      ul { margin: 0; padding-left: 1.2rem; }
+      li + li { margin-top: 8px; }
+      .takeaway-list li { line-height: 1.6; }
+      @media (max-width: 820px) {
+        main { padding-inline: 14px; }
+        .hero, .panel, .protocol-card { border-radius: 16px; }
+        .protocol-card-header { flex-direction: column; align-items: start; }
+        .metric-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Protocol comparison dashboard</p>
+        <h1>Coordinator crash after one COMMIT delivery</h1>
+        <p class="lede">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery. This static dashboard makes the 2PC-versus-saga trade-off browsable in one recruiter-friendly artifact: what the coordinator logged, who got stuck in PREPARED, what a saga would do instead, and whether any peer already knows the durable decision.</p>
+        <div class="meta">
+          <span class="chip">transaction order-5120</span>
+          <span class="chip chip--warning">2PC blocked</span>
+          <span class="chip chip--warning">saga paused-not-blocked</span>
+          <span class="chip chip--warning">crash after-decision-log</span>
+        </div>
+      </section>
+
+      <section class="summary-grid">
+        <article class="summary-card summary-card--warning">
+      <p class="summary-label">2PC baseline</p>
+      <strong>blocked</strong>
+      <p>The coordinator-owned durable decision plus PREPARED participants determine whether the system commits, aborts, or blocks.</p>
+    </article><article class="summary-card summary-card--warning">
+      <p class="summary-label">Saga contrast</p>
+      <strong>paused-not-blocked</strong>
+      <p>The orchestrated workflow stays off a global PREPARE barrier, so failures become pauses or compensations instead of prepared-lock blocking.</p>
+    </article><article class="summary-card summary-card--accent">
+      <p class="summary-label">Participant mix</p>
+      <strong>3 total</strong>
+      <p>3 commit / 0 abort / 0 timeout</p>
+    </article><article class="summary-card summary-card--accent">
+      <p class="summary-label">Peers with the decision</p>
+      <strong>1</strong>
+      <p>inventory already knows the final 2PC outcome.</p>
+    </article><article class="summary-card summary-card--accent">
+      <p class="summary-label">Termination hint</p>
+      <strong>COMMIT visible via inventory</strong>
+      <p>What a blocked PREPARED participant can safely ask peers or recovery for next.</p>
+    </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Scenario snapshot</h2>
+          <p>Keep the scenario facts separate from the protocol story: participant mix, crash point, informed peers, and missed second-phase deliveries all shape what the comparison means.</p>
+        </div>
+        <dl class="snapshot-grid">
+          <div class="snapshot-row">
+      <dt>Transaction id</dt>
+      <dd>order-5120</dd>
+    </div><div class="snapshot-row">
+      <dt>Coordinator crash point</dt>
+      <dd>after-decision-log</dd>
+    </div><div class="snapshot-row">
+      <dt>Coordinator recovery</dt>
+      <dd>no</dd>
+    </div><div class="snapshot-row">
+      <dt>Commit voters</dt>
+      <dd>inventory, billing, and shipping</dd>
+    </div><div class="snapshot-row">
+      <dt>Abort voters</dt>
+      <dd>none</dd>
+    </div><div class="snapshot-row">
+      <dt>Timeout voters</dt>
+      <dd>none</dd>
+    </div><div class="snapshot-row">
+      <dt>Prepared participants</dt>
+      <dd>inventory, billing, and shipping</dd>
+    </div><div class="snapshot-row">
+      <dt>Participants that learned the final 2PC decision</dt>
+      <dd>inventory</dd>
+    </div><div class="snapshot-row">
+      <dt>Configured missed second-phase deliveries</dt>
+      <dd>0 (none)</dd>
+    </div><div class="snapshot-row">
+      <dt>Successful pre-crash decision deliveries</dt>
+      <dd>1</dd>
+    </div>
+        </dl>
+      </section>
+
+      <section class="protocol-grid">
+        <article class="protocol-card protocol-card--primary">
+      <div class="protocol-card-header">
+        <div>
+          <p class="eyebrow">2PC</p>
+          <h2>2PC</h2>
+        </div>
+        <span class="outcome-pill outcome-pill--warning">blocked</span>
+      </div>
+      <p class="protocol-blurb">single coordinator with PREPARE and COMMIT/ABORT phases over durable decision logging</p>
+      <dl class="metric-grid">
+        <div><dt>Consistency model</dt><dd>strong atomic commit when the decision completes; every participant follows the same global outcome</dd></div>
+        <div><dt>Atomicity</dt><dd>global all-or-nothing across participants once the coordinator&#x27;s durable decision is known</dd></div>
+        <div><dt>Blocking behavior</dt><dd>blocking once PREPARED participants cannot prove the coordinator&#x27;s final decision</dd></div>
+        <div><dt>Recovery story</dt><dd>needs coordinator recovery or a safe termination-protocol answer from an authoritative peer</dd></div>
+      </dl>
+      <section class="callout">
+        <h3>Participant story</h3>
+        <p>3/3 participants reached PREPARED and 1/3 learned the final decision in this run</p>
+      </section>
+      <section class="callout">
+        <h3>Interview hook</h3>
+        <p>2PC buys atomic all-or-nothing semantics, but the price is visible coordinator-centered blocking in outage scenarios.</p>
+      </section>
+      <section>
+        <h3>Tradeoffs</h3>
+        <ul>
+          <li>easy to explain when interviewers ask how a durable decision log enforces atomic commit</li><li>participants may hold PREPARED state while waiting on the coordinator or an authoritative replay</li><li>fits tightly coupled all-or-nothing workflows better than high-availability microservice traffic</li>
+        </ul>
+      </section>
+    </article><article class="protocol-card protocol-card--secondary">
+      <div class="protocol-card-header">
+        <div>
+          <p class="eyebrow">Saga (orchestrated)</p>
+          <h2>Saga (orchestrated)</h2>
+        </div>
+        <span class="outcome-pill outcome-pill--warning">paused-not-blocked</span>
+      </div>
+      <p class="protocol-blurb">ordered local transactions plus compensating actions, typically driven by an orchestrator or event flow</p>
+      <dl class="metric-grid">
+        <div><dt>Consistency model</dt><dd>eventual consistency across services, with explicit compensations when later steps fail</dd></div>
+        <div><dt>Atomicity</dt><dd>no single global atomic commit; earlier local success is repaired by compensation instead of a shared PREPARE/COMMIT barrier</dd></div>
+        <div><dt>Blocking behavior</dt><dd>non-blocking for participant resources; the workflow can pause, but services do not sit on PREPARED locks waiting for a global decision</dd></div>
+        <div><dt>Recovery story</dt><dd>resume from the last durable saga step or compensate the already-finished steps; no global prepare barrier needs to be unblocked</dd></div>
+      </dl>
+      <section class="callout">
+        <h3>Participant story</h3>
+        <p>already-finished local transactions stay committed, unfinished steps pause for orchestrator recovery or operator action, and peers continue serving other work</p>
+      </section>
+      <section class="callout">
+        <h3>Interview hook</h3>
+        <p>A saga can still stall operationally, but it stalls as resumable workflow state instead of coordinator-driven prepared-lock blocking.</p>
+      </section>
+      <section>
+        <h3>Tradeoffs</h3>
+        <ul>
+          <li>fits database-per-service architectures because each step owns only its local database transaction</li><li>developers must design idempotent retries and compensating actions instead of relying on automatic rollback</li><li>availability is usually better than plain 2PC, but isolation is weaker and temporary anomalies are possible</li>
+        </ul>
+      </section>
+    </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Interview takeaways</h2>
+          <p>Use these bullets when explaining why the same business incident feels coordinator-blocking under 2PC but resumable or compensatable under saga orchestration.</p>
+        </div>
+        <ul class="takeaway-list">
+          <li>In this scenario, plain 2PC resolves as `blocked`, which is driven by one coordinator-owned durable decision and the PREPARED states around it.</li><li>An orchestrated saga would avoid PREPARED lock blocking by committing local work independently and using retries/compensations instead of a global commit barrier.</li><li>Use this comparison to explain why high-availability microservice systems often choose sagas when temporary inconsistency is acceptable but indefinite coordinator blocking is not.</li><li>Here, 1 participant already heard the durable COMMIT before the crash, so the blocked 2PC case becomes a peer-assisted incident-response story rather than pure blind waiting.</li><li>The simulator&#x27;s termination hint (`COMMIT visible via inventory`) makes that concrete: a prepared participant can ask an informed peer instead of inventing a local outcome.</li><li>The configured crash point (`after-decision-log`) is the teaching lever here: it shows that the same business transaction can become either coordinator-blocked (2PC) or resumable/compensatable (saga).</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
