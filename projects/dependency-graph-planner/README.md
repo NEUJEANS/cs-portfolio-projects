@@ -14,9 +14,10 @@ A compact Python project that models a build or delivery workflow as a directed 
 - cycle detection with a human-readable cycle trace
 - parallel layer generation for "what can run together" views
 - critical-path and slack calculation using task durations
+- deterministic worker-limited list scheduling with queue-delay tracking for realistic single-worker or small-runner scenarios
 - CLI output in text or JSON form for scripting
 - Mermaid and Graphviz DOT diagram export with per-layer grouping and critical-path highlighting
-- recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, and relative links to companion diagram artifacts
+- recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, and optional worker-limited comparisons with relative links to companion diagram artifacts plus committed schedule JSON snapshots
 
 ## Project structure
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, CLI, diagram export helpers, and walkthrough-report generation
@@ -69,6 +70,13 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py layers \
   projects/dependency-graph-planner/sample_graph.json
 ```
 
+### Simulate a worker-limited schedule
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py schedule \
+  projects/dependency-graph-planner/sample_graph.json \
+  --worker-limit 1
+```
+
 ### Export a Mermaid dependency diagram
 ```bash
 python3 projects/dependency-graph-planner/dependency_graph_planner.py diagram \
@@ -93,11 +101,23 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
   --diagram-output-dir docs/artifacts/dependency-graph-planner
 ```
 
+### Compare unlimited execution against a constrained single-worker run
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
+  projects/dependency-graph-planner/sample_graph.json \
+  --worker-limit 1 \
+  --report-markdown-out docs/artifacts/dependency-graph-planner/sample_graph_single_worker_report.md \
+  --diagram-output-dir docs/artifacts/dependency-graph-planner
+```
+This emits the linked report plus `sample_graph_single_worker_schedule.json` in the same artifact directory.
+
 Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/sample_graph.mmd`
 - `docs/artifacts/dependency-graph-planner/sample_graph_mermaid.md`
 - `docs/artifacts/dependency-graph-planner/sample_graph.dot`
 - `docs/artifacts/dependency-graph-planner/sample_graph_report.md`
+- `docs/artifacts/dependency-graph-planner/sample_graph_single_worker_report.md`
+- `docs/artifacts/dependency-graph-planner/sample_graph_single_worker_schedule.json`
 
 ## Testing
 ```bash
@@ -110,10 +130,11 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - why the critical path, not total task count, often dominates end-to-end completion time
 - why Mermaid and DOT are useful complementary export targets for README-friendly diagrams versus richer offline rendering
 - how a recruiter-friendly report can reuse deterministic plan/timing data without requiring terminal screenshots
+- how worker caps expose queue delay even on a valid DAG and why that matters for CI runners or deployment gates
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
-- add resource constraints so plans can respect limited workers, cores, or environments
 - support weighted heuristics such as longest-processing-time-first within ready queues
 - simulate execution traces and compare heuristic schedulers on the same DAG
-- add constrained-schedule reports that compare unlimited-layer timing versus worker-limited execution
+- compare multiple worker limits in one report for small/medium/large runner pools
+- add environment-tag or resource-class constraints so plans can respect specialized runners, deploy lanes, or approval gates

@@ -10,6 +10,7 @@ from pathlib import Path
 from dependency_graph_planner import (
     CycleError,
     build_plan,
+    build_worker_limited_schedule,
     parse_tasks,
     render_dependency_diagram,
     render_report_markdown,
@@ -41,6 +42,18 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         timings = {item.name: item for item in plan.timings}
         self.assertTrue(timings["unit"].critical)
         self.assertEqual(timings["package"].slack, 1)
+
+    def test_worker_limited_schedule_is_deterministic_and_tracks_queue_delay(self) -> None:
+        tasks = parse_tasks(self.graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(tasks, plan, worker_limit=1)
+        self.assertEqual(schedule.makespan, 9)
+        self.assertEqual(schedule.theoretical_lower_bound, 9)
+        self.assertEqual(schedule.dispatch_order, ["lint", "compile", "unit", "package", "publish"])
+        package_assignment = next(item for item in schedule.assignments if item.name == "package")
+        self.assertEqual(package_assignment.ready_at, 5)
+        self.assertEqual(package_assignment.start, 7)
+        self.assertEqual(package_assignment.queue_delay, 2)
 
     def test_render_dependency_mermaid_groups_layers_and_marks_critical_path(self) -> None:
         tasks = parse_tasks(self.graph)
@@ -75,9 +88,10 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertIn('task_1["deploy &quot;prod&quot;<br/>d=2, slack=0"]', mermaid)
         self.assertIn('task_0 --> task_1', mermaid)
 
-    def test_render_report_markdown_includes_links_and_timing_table(self) -> None:
+    def test_render_report_markdown_includes_links_timing_table_and_worker_section(self) -> None:
         tasks = parse_tasks(self.graph)
         plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(tasks, plan, worker_limit=1)
         report = render_report_markdown(
             tasks,
             plan,
@@ -86,10 +100,15 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 ("GitHub-friendly Mermaid preview", "sample_graph_mermaid.md"),
                 ("Graphviz DOT source", "sample_graph.dot"),
             ],
+            worker_limited_schedule=schedule,
         )
         self.assertIn('# Dependency graph walkthrough — Sample Graph', report)
         self.assertIn('## Linked artifacts', report)
         self.assertIn('[GitHub-friendly Mermaid preview](sample_graph_mermaid.md)', report)
+        self.assertIn('- Worker-limited makespan (1 worker): `9`', report)
+        self.assertIn('across `1 worker`', report)
+        self.assertIn('## Worker-limited comparison', report)
+        self.assertIn('| package | 1 | 5 | 7 | 8 | 2 | no |', report)
         self.assertIn('| lint | 0 | — | 1 | 0 | 1 | 0 | 1 | 0 | yes | ruff check . |', report)
         self.assertIn('1. `lint`', report)
         self.assertIn('- Window: `0 → 1`', report)
@@ -130,6 +149,16 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertEqual(payload["format"], "dot")
         self.assertIn('digraph DependencyGraph', payload["diagram"])
 
+    def test_run_command_schedule_json_returns_assignments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            payload = json.loads(run_command("schedule", str(graph_path), as_json=True, worker_limit=1))
+        self.assertEqual(payload["worker_limit"], 1)
+        self.assertEqual(payload["makespan"], 9)
+        self.assertEqual(payload["dispatch_order"], ["lint", "compile", "unit", "package", "publish"])
+        self.assertEqual(payload["assignments"][3]["queue_delay"], 2)
+
     def test_run_command_report_json_writes_report_and_companion_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             graph_path = Path(tmpdir) / "graph.json"
@@ -143,19 +172,26 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                     as_json=True,
                     report_markdown_out=str(report_path),
                     diagram_output_dir=str(artifact_dir),
+                    worker_limit=1,
                 )
             )
 
             written_report = report_path.read_text(encoding="utf-8")
             mermaid_preview_path = Path(payload["artifacts"]["mermaid_preview"])
             dot_path = Path(payload["artifacts"]["dot_source"])
+            schedule_json_path = Path(payload["artifacts"]["worker_limited_schedule_json"])
 
             self.assertTrue(report_path.exists())
             self.assertTrue(mermaid_preview_path.exists())
             self.assertTrue(dot_path.exists())
+            self.assertTrue(schedule_json_path.exists())
             self.assertIn('[GitHub-friendly Mermaid preview](../artifacts/graph_mermaid.md)', written_report)
+            self.assertIn('[Worker-limited schedule JSON](../artifacts/graph_single_worker_schedule.json)', written_report)
+            self.assertIn('## Worker-limited comparison', written_report)
             self.assertIn('```mermaid', mermaid_preview_path.read_text(encoding="utf-8"))
+            self.assertEqual(json.loads(schedule_json_path.read_text(encoding="utf-8"))["makespan"], 9)
             self.assertEqual(payload["report_markdown_out"], str(report_path))
+            self.assertEqual(payload["worker_limited_schedule"]["makespan"], 9)
             self.assertIn('## Task timing table', payload["report_markdown"])
 
     def test_cli_plan_json_output(self) -> None:
@@ -193,6 +229,24 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
         self.assertIn("flowchart LR", result.stdout)
         self.assertIn('subgraph layer_3["layer 3"]', result.stdout)
+
+    def test_cli_schedule_requires_worker_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "schedule",
+                    str(graph_path),
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires --worker-limit", result.stderr)
 
     def test_cli_report_rejects_report_flags_on_non_report_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

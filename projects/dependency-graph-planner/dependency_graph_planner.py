@@ -54,6 +54,32 @@ class PlanResult:
     critical_path: list[str]
 
 
+@dataclass(frozen=True)
+class ScheduledTask:
+    name: str
+    worker: int
+    ready_at: int
+    start: int
+    finish: int
+    queue_delay: int
+    duration: int
+    critical: bool
+
+
+@dataclass(frozen=True)
+class WorkerLimitedSchedule:
+    worker_limit: int
+    makespan: int
+    unlimited_makespan: int
+    total_work: int
+    theoretical_lower_bound: int
+    idle_capacity: int
+    utilization: float
+    dispatch_order: list[str]
+    assignments: list[ScheduledTask]
+    worker_timelines: list[list[ScheduledTask]]
+
+
 def load_manifest(path: str | Path) -> dict:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -253,6 +279,113 @@ def build_plan(tasks: dict[str, Task]) -> PlanResult:
     return PlanResult(order=order, layers=layers, total_duration=total_duration, timings=timings, critical_path=critical_path)
 
 
+def build_worker_limited_schedule(
+    tasks: dict[str, Task],
+    plan: PlanResult,
+    *,
+    worker_limit: int,
+) -> WorkerLimitedSchedule:
+    if worker_limit <= 0:
+        raise ValueError("--worker-limit must be a positive integer")
+
+    timings_by_name = {timing.name: timing for timing in plan.timings}
+    order_index = {name: index for index, name in enumerate(plan.order)}
+    dependents = build_dependents(tasks)
+    remaining_deps = {name: len(task.deps) for name, task in tasks.items()}
+    finish_times: dict[str, int] = {}
+    ready_at: dict[str, int] = {name: 0 for name, count in remaining_deps.items() if count == 0}
+    ready_queue: list[tuple[int, int, int, int, str]] = []
+
+    def push_ready(name: str) -> None:
+        timing = timings_by_name[name]
+        heapq.heappush(
+            ready_queue,
+            (
+                0 if timing.critical else 1,
+                timing.slack,
+                -timing.duration,
+                order_index[name],
+                name,
+            ),
+        )
+
+    for name, count in remaining_deps.items():
+        if count == 0:
+            push_ready(name)
+
+    available_workers = list(range(1, worker_limit + 1))
+    heapq.heapify(available_workers)
+    running: list[tuple[int, int, int, str]] = []
+    assignments: list[ScheduledTask] = []
+    dispatch_order: list[str] = []
+    current_time = 0
+
+    while ready_queue or running:
+        while ready_queue and available_workers:
+            _, _, _, _, name = heapq.heappop(ready_queue)
+            worker = heapq.heappop(available_workers)
+            start = current_time
+            finish = start + tasks[name].duration
+            ready_time = ready_at.get(name, current_time)
+            assignments.append(
+                ScheduledTask(
+                    name=name,
+                    worker=worker,
+                    ready_at=ready_time,
+                    start=start,
+                    finish=finish,
+                    queue_delay=start - ready_time,
+                    duration=tasks[name].duration,
+                    critical=timings_by_name[name].critical,
+                )
+            )
+            dispatch_order.append(name)
+            heapq.heappush(running, (finish, worker, order_index[name], name))
+
+        if not running:
+            break
+
+        current_time = running[0][0]
+        completed: list[str] = []
+        while running and running[0][0] == current_time:
+            _, worker, _, name = heapq.heappop(running)
+            finish_times[name] = current_time
+            heapq.heappush(available_workers, worker)
+            completed.append(name)
+
+        for finished_name in sorted(completed, key=order_index.get):
+            for dependent in dependents[finished_name]:
+                remaining_deps[dependent] -= 1
+                if remaining_deps[dependent] == 0:
+                    ready_at[dependent] = max((finish_times[dep] for dep in tasks[dependent].deps), default=current_time)
+                    push_ready(dependent)
+
+    worker_timelines = [[] for _ in range(worker_limit)]
+    for assignment in assignments:
+        worker_timelines[assignment.worker - 1].append(assignment)
+    for timeline in worker_timelines:
+        timeline.sort(key=lambda item: (item.start, item.finish, item.name))
+
+    total_work = sum(task.duration for task in tasks.values())
+    makespan = max((assignment.finish for assignment in assignments), default=0)
+    theoretical_lower_bound = max(plan.total_duration, (total_work + worker_limit - 1) // worker_limit)
+    idle_capacity = max(0, makespan * worker_limit - total_work)
+    utilization = 0.0 if makespan == 0 else total_work / (makespan * worker_limit)
+
+    return WorkerLimitedSchedule(
+        worker_limit=worker_limit,
+        makespan=makespan,
+        unlimited_makespan=plan.total_duration,
+        total_work=total_work,
+        theoretical_lower_bound=theoretical_lower_bound,
+        idle_capacity=idle_capacity,
+        utilization=utilization,
+        dispatch_order=dispatch_order,
+        assignments=assignments,
+        worker_timelines=worker_timelines,
+    )
+
+
 def plan_to_dict(plan: PlanResult) -> dict:
     return {
         "order": plan.order,
@@ -275,6 +408,45 @@ def plan_to_dict(plan: PlanResult) -> dict:
     }
 
 
+def schedule_to_dict(schedule: WorkerLimitedSchedule) -> dict:
+    return {
+        "worker_limit": schedule.worker_limit,
+        "makespan": schedule.makespan,
+        "unlimited_makespan": schedule.unlimited_makespan,
+        "theoretical_lower_bound": schedule.theoretical_lower_bound,
+        "total_work": schedule.total_work,
+        "idle_capacity": schedule.idle_capacity,
+        "utilization": round(schedule.utilization, 6),
+        "dispatch_order": schedule.dispatch_order,
+        "assignments": [
+            {
+                "name": item.name,
+                "worker": item.worker,
+                "ready_at": item.ready_at,
+                "start": item.start,
+                "finish": item.finish,
+                "queue_delay": item.queue_delay,
+                "duration": item.duration,
+                "critical": item.critical,
+            }
+            for item in schedule.assignments
+        ],
+        "worker_timelines": [
+            [
+                {
+                    "name": item.name,
+                    "start": item.start,
+                    "finish": item.finish,
+                    "queue_delay": item.queue_delay,
+                    "critical": item.critical,
+                }
+                for item in timeline
+            ]
+            for timeline in schedule.worker_timelines
+        ],
+    }
+
+
 def _render_text_plan(plan: PlanResult) -> str:
     lines = [
         f"topological order: {', '.join(plan.order)}",
@@ -289,6 +461,36 @@ def _render_text_plan(plan: PlanResult) -> str:
             f"- {item.name}: duration={item.duration}, ES={item.earliest_start}, EF={item.earliest_finish}, "
             f"LS={item.latest_start}, LF={item.latest_finish}, {flag}"
         )
+    return "\n".join(lines)
+
+
+def _render_text_schedule(schedule: WorkerLimitedSchedule) -> str:
+    lines = [
+        (
+            f"worker-limited schedule: workers={schedule.worker_limit}, makespan={schedule.makespan}, "
+            f"unlimited={schedule.unlimited_makespan}, lower_bound={schedule.theoretical_lower_bound}"
+        ),
+        (
+            f"capacity utilization: {schedule.utilization * 100:.1f}% "
+            f"(idle capacity={schedule.idle_capacity})"
+        ),
+        f"dispatch order: {', '.join(schedule.dispatch_order)}",
+        "worker timelines:",
+    ]
+    for index, timeline in enumerate(schedule.worker_timelines, start=1):
+        if not timeline:
+            lines.append(f"- worker {index}: (idle)")
+            continue
+        rendered = ", ".join(f"{item.name} [{item.start}→{item.finish}]" for item in timeline)
+        lines.append(f"- worker {index}: {rendered}")
+
+    delayed = [item for item in schedule.assignments if item.queue_delay > 0]
+    if delayed:
+        lines.append("queue delays:")
+        for item in delayed:
+            lines.append(
+                f"- {item.name}: ready={item.ready_at}, start={item.start}, delay={item.queue_delay}, worker={item.worker}"
+            )
     return "\n".join(lines)
 
 
@@ -374,6 +576,15 @@ def _humanize_stem(value: str) -> str:
     return value.replace("-", " ").replace("_", " ").strip() or value
 
 
+def _pluralize(value: int, singular: str, plural: str | None = None) -> str:
+    resolved_plural = plural or f"{singular}s"
+    return singular if value == 1 else resolved_plural
+
+
+def _worker_limit_slug(worker_limit: int) -> str:
+    return "single_worker" if worker_limit == 1 else f"{worker_limit}_workers"
+
+
 def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
     if explicit_title:
         return explicit_title
@@ -402,6 +613,7 @@ def write_report_supporting_artifacts(
     *,
     graph_path: str | Path,
     output_dir: str | Path,
+    worker_limited_schedule: WorkerLimitedSchedule | None = None,
 ) -> dict[str, str]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -418,11 +630,18 @@ def write_report_supporting_artifacts(
     _write_text(dot_path, dot_diagram + "\n")
     _write_text(mermaid_preview_path, render_mermaid_wrapper(mermaid_diagram, source_label=str(graph_path)))
 
-    return {
+    artifacts = {
         "mermaid_source": str(mermaid_path),
         "mermaid_preview": str(mermaid_preview_path),
         "dot_source": str(dot_path),
     }
+
+    if worker_limited_schedule is not None:
+        schedule_json_path = output_dir / f"{stem}_{_worker_limit_slug(worker_limited_schedule.worker_limit)}_schedule.json"
+        _write_text(schedule_json_path, json.dumps(schedule_to_dict(worker_limited_schedule), indent=2) + "\n")
+        artifacts["worker_limited_schedule_json"] = str(schedule_json_path)
+
+    return artifacts
 
 
 def render_report_markdown(
@@ -432,6 +651,7 @@ def render_report_markdown(
     source_label: str,
     title: str | None = None,
     diagram_links: Sequence[tuple[str, str]] | None = None,
+    worker_limited_schedule: WorkerLimitedSchedule | None = None,
 ) -> str:
     resolved_title = build_report_title(source_label=source_label, explicit_title=title)
     timings_by_name = {timing.name: timing for timing in plan.timings}
@@ -455,6 +675,11 @@ def render_report_markdown(
         ]
     )
 
+    if worker_limited_schedule:
+        lines.append(
+            f"- Worker-limited makespan ({worker_limited_schedule.worker_limit} {_pluralize(worker_limited_schedule.worker_limit, 'worker')}): {_markdown_code(worker_limited_schedule.makespan)}"
+        )
+
     if diagram_links:
         lines.extend(["", "## Linked artifacts", ""])
         for label, target in diagram_links:
@@ -467,7 +692,7 @@ def render_report_markdown(
             "",
             f"- deterministic ready-queue ordering keeps the plan stable: {_markdown_code(', '.join(plan.order))}",
             (
-                f"- widest parallel layer: {_markdown_code(f'layer {widest_layer_index}') } with "
+                f"- widest parallel layer: {_markdown_code(f'layer {widest_layer_index}')} with "
                 f"{_markdown_code(len(widest_layer))} task(s)"
                 + (
                     ": " + ", ".join(_markdown_code(name) for name in widest_layer)
@@ -476,6 +701,40 @@ def render_report_markdown(
                 )
             ),
             f"- non-critical slack budget available for schedule tradeoffs: {_markdown_code(total_slack)} time units",
+        ]
+    )
+
+    if worker_limited_schedule:
+        delayed = [item for item in worker_limited_schedule.assignments if item.queue_delay > 0]
+        most_delayed = max(
+            delayed,
+            key=lambda item: (item.queue_delay, item.duration, item.name),
+            default=None,
+        )
+        delta = worker_limited_schedule.makespan - worker_limited_schedule.unlimited_makespan
+        lines.extend(
+            [
+                (
+                    f"- worker-limited dispatch uses critical-first, low-slack, longer-duration tie-breaking across "
+                    f"{_markdown_code(str(worker_limited_schedule.worker_limit) + ' ' + _pluralize(worker_limited_schedule.worker_limit, 'worker'))}"
+                ),
+                (
+                    f"- worker cap increases makespan by {_markdown_code(delta)} time unit(s) "
+                    f"over the unlimited-layer bound of {_markdown_code(worker_limited_schedule.unlimited_makespan)}"
+                ),
+                (
+                    f"- utilization under the worker cap: {_markdown_code(f'{worker_limited_schedule.utilization * 100:.1f}%')} "
+                    f"with {_markdown_code(worker_limited_schedule.idle_capacity)} idle worker-time unit(s)"
+                ),
+            ]
+        )
+        if most_delayed:
+            lines.append(
+                f"- biggest queue delay: {_markdown_code(most_delayed.name)} waited {_markdown_code(most_delayed.queue_delay)} time unit(s) after becoming ready"
+            )
+
+    lines.extend(
+        [
             "",
             "## Parallel layer windows",
             "",
@@ -492,6 +751,61 @@ def render_report_markdown(
         lines.append(
             f"- Layer {index} ({_markdown_code(min(starts))} → {_markdown_code(max(finishes))}): {rendered_tasks}"
         )
+
+    if worker_limited_schedule:
+        lines.extend(
+            [
+                "",
+                "## Worker-limited comparison",
+                "",
+                f"- Worker limit: {_markdown_code(worker_limited_schedule.worker_limit)}",
+                f"- Total work: {_markdown_code(worker_limited_schedule.total_work)}",
+                f"- Theoretical lower bound: {_markdown_code(worker_limited_schedule.theoretical_lower_bound)}",
+                f"- Unlimited layered makespan: {_markdown_code(worker_limited_schedule.unlimited_makespan)}",
+                f"- Worker-limited makespan: {_markdown_code(worker_limited_schedule.makespan)}",
+                f"- Dispatch order: {_markdown_code(', '.join(worker_limited_schedule.dispatch_order))}",
+                "",
+                "### Worker timelines",
+                "",
+            ]
+        )
+        for index, timeline in enumerate(worker_limited_schedule.worker_timelines, start=1):
+            if not timeline:
+                lines.append(f"- Worker {index}: {_markdown_code('idle for the full run')}")
+                continue
+            window = f"{timeline[0].start} → {timeline[-1].finish}"
+            tasks_rendered = ", ".join(
+                f"{item.name} ({item.start}→{item.finish})" for item in timeline
+            )
+            lines.append(
+                f"- Worker {index} ({_markdown_code(window)}): {tasks_rendered}"
+            )
+
+        lines.extend(
+            [
+                "",
+                "### Worker-limited task table",
+                "",
+                "| Task | Worker | Ready at | Start | Finish | Queue delay | Critical |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            ]
+        )
+        for item in worker_limited_schedule.assignments:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _escape_markdown_table_cell(item.name),
+                        str(item.worker),
+                        str(item.ready_at),
+                        str(item.start),
+                        str(item.finish),
+                        str(item.queue_delay),
+                        "yes" if item.critical else "no",
+                    ]
+                )
+                + " |"
+            )
 
     lines.extend(
         [
@@ -556,6 +870,8 @@ def _build_report_artifact_links(
         ("Mermaid source", artifacts["mermaid_source"]),
         ("Graphviz DOT source", artifacts["dot_source"]),
     ]
+    if "worker_limited_schedule_json" in artifacts:
+        ordered.append(("Worker-limited schedule JSON", artifacts["worker_limited_schedule_json"]))
     if report_markdown_out:
         return [
             (label, _relative_markdown_link(target, from_path=report_markdown_out))
@@ -564,22 +880,29 @@ def _build_report_artifact_links(
     return ordered
 
 
-def _ensure_report_flags_are_valid(
+def _ensure_command_flags_are_valid(
     command: str,
     *,
     report_markdown_out: str | None,
     report_title: str | None,
     diagram_output_dir: str | None,
+    worker_limit: int | None,
 ) -> None:
     if command != "report" and any(value is not None for value in (report_markdown_out, report_title, diagram_output_dir)):
         raise ValueError("report-specific flags require the report command")
+    if command not in {"report", "schedule"} and worker_limit is not None:
+        raise ValueError("--worker-limit requires the schedule or report command")
+    if command == "schedule" and worker_limit is None:
+        raise ValueError("the schedule command requires --worker-limit")
+    if worker_limit is not None and worker_limit <= 0:
+        raise ValueError("--worker-limit must be a positive integer")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect and plan dependency graphs")
     parser.add_argument(
         "command",
-        choices=["validate", "plan", "critical-path", "layers", "diagram", "report"],
+        choices=["validate", "plan", "critical-path", "layers", "diagram", "report", "schedule"],
         help="command to run",
     )
     parser.add_argument("graph", help="path to a JSON manifest")
@@ -597,6 +920,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--diagram-output-dir",
         help="optional directory where the report command should emit Mermaid and DOT companion artifacts",
     )
+    parser.add_argument(
+        "--worker-limit",
+        type=int,
+        help="simulate a deterministic worker-limited schedule (required for schedule, optional for report)",
+    )
     return parser
 
 
@@ -608,15 +936,18 @@ def run_command(
     report_markdown_out: str | None = None,
     report_title: str | None = None,
     diagram_output_dir: str | None = None,
+    worker_limit: int | None = None,
 ) -> str:
-    _ensure_report_flags_are_valid(
+    _ensure_command_flags_are_valid(
         command,
         report_markdown_out=report_markdown_out,
         report_title=report_title,
         diagram_output_dir=diagram_output_dir,
+        worker_limit=worker_limit,
     )
     tasks = parse_tasks(load_manifest(graph_path))
     plan = build_plan(tasks)
+    schedule = build_worker_limited_schedule(tasks, plan, worker_limit=worker_limit) if worker_limit is not None else None
     if command == "validate":
         payload = {"status": "ok", "tasks": len(tasks), "order": plan.order}
     elif command == "critical-path":
@@ -628,9 +959,21 @@ def run_command(
         if as_json:
             return json.dumps({"format": diagram_format, "diagram": diagram}, indent=2)
         return diagram
+    elif command == "schedule":
+        if schedule is None:
+            raise ValueError("the schedule command requires --worker-limit")
+        if as_json:
+            return json.dumps(schedule_to_dict(schedule), indent=2)
+        return _render_text_schedule(schedule)
     elif command == "report":
         artifacts = (
-            write_report_supporting_artifacts(tasks, plan, graph_path=graph_path, output_dir=diagram_output_dir)
+            write_report_supporting_artifacts(
+                tasks,
+                plan,
+                graph_path=graph_path,
+                output_dir=diagram_output_dir,
+                worker_limited_schedule=schedule,
+            )
             if diagram_output_dir
             else {}
         )
@@ -641,6 +984,7 @@ def run_command(
             source_label=graph_path,
             title=report_title,
             diagram_links=diagram_links,
+            worker_limited_schedule=schedule,
         )
         if report_markdown_out:
             _write_text(report_markdown_out, report)
@@ -648,6 +992,7 @@ def run_command(
             return json.dumps(
                 {
                     "summary": plan_to_dict(plan),
+                    "worker_limited_schedule": schedule_to_dict(schedule) if schedule else None,
                     "report_title": build_report_title(source_label=graph_path, explicit_title=report_title),
                     "report_markdown": report,
                     "artifacts": artifacts,
@@ -682,6 +1027,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             report_markdown_out=args.report_markdown_out,
             report_title=args.report_title,
             diagram_output_dir=args.diagram_output_dir,
+            worker_limit=args.worker_limit,
         )
     except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")

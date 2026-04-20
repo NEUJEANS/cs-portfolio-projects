@@ -41,3 +41,17 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 worker-limited report slice
+- [x] reuse the 2026-04-19 worker-limited scheduling research note for this resumable follow-up
+- [x] reuse the 2026-04-19 worker-limited refresh/self-test note before editing
+- [x] update project docs and checklist for the worker-limited report slice
+- [x] implement worker-limited report support with linked schedule JSON artifact export
+- [x] add regression coverage for report wording, schedule artifact writing, and relative links
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

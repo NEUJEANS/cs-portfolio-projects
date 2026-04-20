@@ -1,0 +1,107 @@
+{
+  "worker_limit": 1,
+  "makespan": 9,
+  "unlimited_makespan": 8,
+  "theoretical_lower_bound": 9,
+  "total_work": 9,
+  "idle_capacity": 0,
+  "utilization": 1.0,
+  "dispatch_order": [
+    "lint",
+    "compile",
+    "unit",
+    "package",
+    "publish"
+  ],
+  "assignments": [
+    {
+      "name": "lint",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 1,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true
+    },
+    {
+      "name": "compile",
+      "worker": 1,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 5,
+      "queue_delay": 0,
+      "duration": 4,
+      "critical": true
+    },
+    {
+      "name": "unit",
+      "worker": 1,
+      "ready_at": 5,
+      "start": 5,
+      "finish": 7,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true
+    },
+    {
+      "name": "package",
+      "worker": 1,
+      "ready_at": 5,
+      "start": 7,
+      "finish": 8,
+      "queue_delay": 2,
+      "duration": 1,
+      "critical": false
+    },
+    {
+      "name": "publish",
+      "worker": 1,
+      "ready_at": 8,
+      "start": 8,
+      "finish": 9,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true
+    }
+  ],
+  "worker_timelines": [
+    [
+      {
+        "name": "lint",
+        "start": 0,
+        "finish": 1,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "compile",
+        "start": 1,
+        "finish": 5,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "unit",
+        "start": 5,
+        "finish": 7,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "package",
+        "start": 7,
+        "finish": 8,
+        "queue_delay": 2,
+        "critical": false
+      },
+      {
+        "name": "publish",
+        "start": 8,
+        "finish": 9,
+        "queue_delay": 0,
+        "critical": true
+      }
+    ]
+  ]
+}
