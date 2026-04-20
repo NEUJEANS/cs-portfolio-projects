@@ -2,6 +2,8 @@ import argparse
 import csv
 import json
 import os
+import shutil
+import subprocess
 import sys
 from collections import deque
 from dataclasses import dataclass
@@ -541,6 +543,7 @@ def render_compare_html(
     json_output_path: str | Path | None = None,
     csv_output_path: str | Path | None = None,
     markdown_output_path: str | Path | None = None,
+    png_output_path: str | Path | None = None,
 ) -> str:
     trial_rows = _comparison_trial_rows(comparison)
     component_cards = []
@@ -638,6 +641,7 @@ def render_compare_html(
             ('JSON payload', json_output_path),
             ('CSV timings', csv_output_path),
             ('Markdown report', markdown_output_path),
+            ('PNG snapshot', png_output_path),
         ):
             if target is None:
                 continue
@@ -750,6 +754,98 @@ def maybe_write_text(path: Path | None, content: str) -> None:
     path.write_text(content, encoding='utf-8')
 
 
+def resolve_chrome_binary(preferred: str | Path | None = None) -> str:
+    candidates: list[str] = []
+    if preferred is not None:
+        candidates.append(str(preferred))
+    candidates.extend(['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'])
+    for candidate in candidates:
+        candidate_path = Path(candidate).expanduser()
+        if candidate_path.is_absolute() and candidate_path.exists():
+            return str(candidate_path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise RuntimeError(
+        'Could not find a Chrome/Chromium binary for PNG capture. Pass --chrome-binary or install google-chrome/chromium.'
+    )
+
+
+def default_compare_png_height(comparison: dict[str, object], width: int) -> int:
+    normalized_width = max(720, width)
+    trial_count = int(comparison['repeat'])
+    component_count = int(comparison['component_count'])
+    if normalized_width >= 1280:
+        trial_columns = 3
+        component_columns = 4
+    elif normalized_width >= 900:
+        trial_columns = 2
+        component_columns = 3
+    else:
+        trial_columns = 1
+        component_columns = 1
+    trial_rows = max(1, (trial_count + trial_columns - 1) // trial_columns)
+    component_rows = max(1, (component_count + component_columns - 1) // component_columns)
+    estimated_height = 840 + (trial_rows * 320) + (component_rows * 180)
+    return max(1100, min(estimated_height, 2600))
+
+
+def build_compare_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    resolved_html = Path(html_output_path).resolve()
+    resolved_png = Path(png_output_path).resolve()
+    return [
+        resolve_chrome_binary(chrome_binary),
+        '--headless',
+        '--disable-gpu',
+        '--hide-scrollbars',
+        f'--window-size={width},{height}',
+        f'--virtual-time-budget={capture_ms}',
+        f'--screenshot={resolved_png}',
+        resolved_html.as_uri(),
+    ]
+
+
+def render_compare_png(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    comparison: dict[str, object],
+    *,
+    width: int = 1440,
+    height: int | None = None,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> Path:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        raise RuntimeError(f'HTML dashboard not found for PNG capture: {html_path}')
+    png_path = Path(png_output_path)
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    effective_width = max(720, width)
+    effective_height = height if height is not None else default_compare_png_height(comparison, effective_width)
+    command = build_compare_png_command(
+        html_path,
+        png_path,
+        width=effective_width,
+        height=max(900, effective_height),
+        capture_ms=max(0, capture_ms),
+        chrome_binary=chrome_binary,
+    )
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or 'unknown Chrome headless error'
+        raise RuntimeError(f'PNG capture failed: {detail}')
+    if not png_path.exists():
+        raise RuntimeError(f'PNG capture did not create the expected output file: {png_path}')
+    return png_path
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze strongly connected components with Tarjan and Kosaraju workflows.")
@@ -765,6 +861,11 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument('--csv-output', type=Path, help='Optional CSV export path for per-run timing rows')
     compare.add_argument('--markdown-output', type=Path, help='Optional Markdown report path for a portfolio-ready summary')
     compare.add_argument('--html-output', type=Path, help='Optional HTML dashboard path for a portfolio-ready benchmark card/gallery')
+    compare.add_argument('--png-output', type=Path, help='Optional PNG screenshot path captured from the HTML dashboard for slide decks or chat uploads')
+    compare.add_argument('--png-width', type=int, default=1440, help='Viewport width in pixels for PNG capture (default: 1440)')
+    compare.add_argument('--png-height', type=int, help='Optional viewport height override for PNG capture; defaults to an auto-sized dashboard height')
+    compare.add_argument('--png-capture-ms', type=int, default=1500, help='Virtual time budget in milliseconds before capturing the PNG screenshot')
+    compare.add_argument('--chrome-binary', type=Path, help='Optional Chrome/Chromium binary for PNG capture')
     explain = subparsers.add_parser('explain', help='Print a concise text explanation')
     explain.add_argument('--limit', type=int, default=5, help='Maximum number of components to describe')
     return parser
@@ -776,27 +877,47 @@ def main(argv: list[str] | None = None) -> int:
     graph = load_graph(args.graph_path)
 
     if args.command == 'compare':
+        if args.png_output is not None and args.html_output is None:
+            parser.error('--png-output requires --html-output because the PNG is captured from the generated HTML dashboard')
         comparison = compare_algorithms(graph, repeat=args.repeat)
         json_text = json.dumps(comparison, indent=2)
         maybe_write_text(args.json_output, json_text + '\n')
         maybe_write_text(args.csv_output, render_compare_csv(comparison))
         maybe_write_text(args.markdown_output, render_compare_markdown(args.graph_path, comparison))
-        maybe_write_text(
-            args.html_output,
-            render_compare_html(
-                args.graph_path,
+        if args.html_output is not None:
+            maybe_write_text(
+                args.html_output,
+                render_compare_html(
+                    args.graph_path,
+                    comparison,
+                    html_output_path=args.html_output,
+                    json_output_path=args.json_output,
+                    csv_output_path=args.csv_output,
+                    markdown_output_path=args.markdown_output,
+                    png_output_path=args.png_output,
+                ),
+            )
+        if args.png_output is not None:
+            render_compare_png(
+                args.html_output,
+                args.png_output,
                 comparison,
-                html_output_path=args.html_output,
-                json_output_path=args.json_output,
-                csv_output_path=args.csv_output,
-                markdown_output_path=args.markdown_output,
-            ),
-        )
+                width=args.png_width,
+                height=args.png_height,
+                capture_ms=args.png_capture_ms,
+                chrome_binary=args.chrome_binary,
+            )
         compare_payload = dict(comparison)
-        for field_name in ('json_output', 'csv_output', 'markdown_output', 'html_output'):
+        for field_name in ('json_output', 'csv_output', 'markdown_output', 'html_output', 'png_output'):
             field_value = getattr(args, field_name)
             if field_value is not None:
                 compare_payload[field_name] = str(field_value)
+        return_png_height = args.png_height
+        if args.png_output is not None and return_png_height is None:
+            return_png_height = default_compare_png_height(comparison, args.png_width)
+        if args.png_output is not None:
+            compare_payload['png_width'] = max(720, args.png_width)
+            compare_payload['png_height'] = max(900, return_png_height)
         print(json.dumps(compare_payload, indent=2))
         return 0
 

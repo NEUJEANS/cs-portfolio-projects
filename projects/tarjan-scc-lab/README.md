@@ -8,7 +8,7 @@ A graph-algorithms portfolio project that finds strongly connected components in
 - condensation DAG generation for reasoning about cycles at the component level
 - deterministic JSON/text CLI output suitable for demos, scripting, and interviews
 - side-by-side Tarjan vs. Kosaraju comparison with repeatable timing output
-- JSON, CSV, Markdown, and HTML benchmark-report exports for portfolio screenshots or static-site embeds
+- JSON, CSV, Markdown, HTML, and PNG benchmark-report exports for portfolio screenshots or static-site embeds
 - focused automated tests for algorithm correctness, input validation, and CLI behavior
 
 ## Files
@@ -29,10 +29,13 @@ python3 tarjan_scc_lab.py sample_graph.json compare --repeat 10 \
   --json-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.json \
   --csv-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.csv \
   --markdown-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.md \
-  --html-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.html
+  --html-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.html \
+  --png-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.png
 python3 tarjan_scc_lab.py sample_graph.json explain --limit 4
 ../../.venv/bin/python -m pytest -q test_tarjan_scc_lab.py
 ```
+
+`--png-output` captures a Chrome/Chromium headless screenshot from the generated HTML dashboard, so pair it with `--html-output` and optionally pass `--chrome-binary` when the browser is not on `PATH`.
 
 ## Input formats
 Adjacency list:
@@ -197,6 +200,8 @@ The comparison flow can now also write portfolio-ready artifacts directly:
 - `--csv-output` writes one row per timing run so you can chart variance in a spreadsheet or static site
 - `--markdown-output` writes a report with graph metadata, average timings, per-run timing rows, a component roster, and ready-made interview talking points
 - `--html-output` writes a static benchmark dashboard with summary cards, per-trial timing bars, a component gallery, and sibling artifact links
+- `--png-output` drives a headless Chrome/Chromium capture of that dashboard so the same run can emit a slide-ready bitmap companion without a manual screenshot round-trip
+- `--png-width`, `--png-height`, `--png-capture-ms`, and `--chrome-binary` let you tune the raster capture viewport, wait budget, and browser executable when needed
 - the repo includes a checked-in sample bundle under `docs/artifacts/tarjan-scc-lab/` for screenshot-friendly demos
 
 Example Markdown report excerpt:
@@ -217,9 +222,8 @@ Example Markdown report excerpt:
 | 1 | 0.031251 | 0.040812 | 0.009561 | tarjan |
 ```
 
-The HTML dashboard is especially useful for portfolio hosting because it keeps the benchmark summary, trial-by-trial comparison, component roster, and links to the sibling JSON/CSV/Markdown artifacts together in one static page.
+The HTML dashboard is especially useful for portfolio hosting because it keeps the benchmark summary, trial-by-trial comparison, component roster, and links to the sibling JSON/CSV/Markdown/PNG artifacts together in one static page. The PNG helper builds directly on that dashboard so slide decks, chat uploads, and README thumbnails can reuse the same artifact bundle with one extra flag.
 
 ## Future improvements
 - stream very large graphs from edge lists instead of loading everything into memory first
-- add raster/PNG capture helpers on top of the HTML benchmark dashboard for slide decks or chat uploads that prefer bitmap assets
 - add a small HTML/markdown report template that consumes `topology_groups` directly for layered SCC portfolio cards

@@ -2,22 +2,27 @@ import csv
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 
+import tarjan_scc_lab
 from tarjan_scc_lab import (
     DirectedGraph,
+    build_compare_png_command,
     compare_algorithms,
     condensation_dag,
     condensation_dot,
     condensation_mermaid,
+    default_compare_png_height,
     kosaraju_strongly_connected_components,
     load_graph,
     main,
     render_compare_csv,
     render_compare_html,
     render_compare_markdown,
+    render_compare_png,
     summarize_components,
     tarjan_strongly_connected_components,
     transpose_graph,
@@ -249,6 +254,7 @@ def test_render_compare_html_includes_trial_gallery_component_cards_and_relative
     json_output = tmp_path / 'artifacts' / 'benchmark.json'
     csv_output = tmp_path / 'artifacts' / 'benchmark.csv'
     markdown_output = tmp_path / 'artifacts' / 'benchmark.md'
+    png_output = tmp_path / 'artifacts' / 'benchmark.png'
     html = render_compare_html(
         FIXTURE_PATH,
         comparison,
@@ -256,6 +262,7 @@ def test_render_compare_html_includes_trial_gallery_component_cards_and_relative
         json_output_path=json_output,
         csv_output_path=csv_output,
         markdown_output_path=markdown_output,
+        png_output_path=png_output,
     )
     assert '<h1>Tarjan vs. Kosaraju benchmark dashboard</h1>' in html
     assert 'Per-trial timing gallery' in html
@@ -264,8 +271,70 @@ def test_render_compare_html_includes_trial_gallery_component_cards_and_relative
     assert 'href="../../artifacts/benchmark.json"' in html
     assert 'href="../../artifacts/benchmark.csv"' in html
     assert 'href="../../artifacts/benchmark.md"' in html
+    assert 'href="../../artifacts/benchmark.png"' in html
+    assert 'PNG snapshot' in html
     assert 'C0' in html
     assert 'A, B, C' in html
+
+
+def test_default_compare_png_height_grows_with_more_dashboard_cards():
+    graph = load_graph(FIXTURE_PATH)
+    compact = compare_algorithms(graph, repeat=2)
+    dense = compare_algorithms(graph, repeat=7)
+    dense['components'] = dense['components'] + [['I'], ['J'], ['K'], ['L'], ['M']]
+    dense['component_count'] = len(dense['components'])
+    compact_height = default_compare_png_height(compact, 1440)
+    dense_height = default_compare_png_height(dense, 1440)
+    assert compact_height >= 1100
+    assert dense_height > compact_height
+
+
+def test_build_compare_png_command_uses_headless_chrome_and_file_uri(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setattr(tarjan_scc_lab, 'resolve_chrome_binary', lambda preferred=None: '/usr/bin/google-chrome')
+    html_path = tmp_path / 'benchmark.html'
+    png_path = tmp_path / 'benchmark.png'
+    command = build_compare_png_command(
+        html_path,
+        png_path,
+        width=1600,
+        height=1700,
+        capture_ms=2200,
+    )
+    assert command[0] == '/usr/bin/google-chrome'
+    assert '--headless' in command
+    assert '--window-size=1600,1700' in command
+    assert '--virtual-time-budget=2200' in command
+    assert f'--screenshot={png_path.resolve()}' in command
+    assert command[-1] == html_path.resolve().as_uri()
+
+
+def test_render_compare_png_invokes_chrome_and_returns_output_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    graph = load_graph(FIXTURE_PATH)
+    comparison = compare_algorithms(graph, repeat=2)
+    html_path = tmp_path / 'benchmark.html'
+    html_path.write_text('<!doctype html><title>benchmark</title>', encoding='utf-8')
+    png_path = tmp_path / 'captures' / 'benchmark.png'
+
+    def fake_run(command: list[str], capture_output: bool, text: bool, check: bool):
+        assert '--headless' in command
+        assert f'--screenshot={png_path.resolve()}' in command
+        png_path.parent.mkdir(parents=True, exist_ok=True)
+        png_path.write_bytes(b'fake-png')
+        return SimpleNamespace(returncode=0, stderr='', stdout='')
+
+    monkeypatch.setattr(tarjan_scc_lab, 'resolve_chrome_binary', lambda preferred=None: '/usr/bin/google-chrome')
+    monkeypatch.setattr(tarjan_scc_lab.subprocess, 'run', fake_run)
+    output_path = render_compare_png(html_path, png_path, comparison, width=1500, capture_ms=900)
+    assert output_path == png_path
+    assert png_path.read_bytes() == b'fake-png'
+
+
+def test_cli_compare_requires_html_output_when_png_is_requested(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(FIXTURE_PATH), 'compare', '--png-output', 'benchmark.png'])
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert '--png-output requires --html-output' in captured.err
 
 
 def test_condensation_mermaid_groups_components_by_topology_level():

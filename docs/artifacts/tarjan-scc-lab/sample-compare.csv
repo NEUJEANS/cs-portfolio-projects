@@ -1,6 +1,6 @@
 trial,tarjan_ms,kosaraju_ms,delta_ms,winner,algorithms_match,node_count,edge_count,component_count
-1,0.0105,0.01545,0.00495,tarjan,True,8,10,4
-2,0.011692,0.013155,0.001463,tarjan,True,8,10,4
-3,0.007535,0.011442,0.003907,tarjan,True,8,10,4
-4,0.006823,0.013606,0.006783,tarjan,True,8,10,4
-5,0.007595,0.013215,0.00562,tarjan,True,8,10,4
+1,0.013866,0.01557,0.001704,tarjan,True,8,10,4
+2,0.008726,0.013085,0.004359,tarjan,True,8,10,4
+3,0.007925,0.018756,0.010831,tarjan,True,8,10,4
+4,0.009598,0.012103,0.002505,tarjan,True,8,10,4
+5,0.007614,0.011341,0.003727,tarjan,True,8,10,4
