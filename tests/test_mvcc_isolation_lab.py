@@ -76,6 +76,13 @@ class MvccIsolationLabTests(unittest.TestCase):
         self.assertTrue(result.invariants[0]["ok"])
         self.assertIn("alice_on_call", result.transactions[1]["abort_reason"])
 
+    def test_strict_2pl_aborts_first_writer_in_doctor_scenario(self) -> None:
+        result = run_simulation(load_scenario(DOCTOR_SCENARIO), "strict-2pl")
+        self.assertEqual(result.final_state, {"alice_on_call": True, "bob_on_call": False})
+        self.assertEqual([item["status"] for item in result.transactions], ["aborted", "committed"])
+        self.assertTrue(result.invariants[0]["ok"])
+        self.assertIn("strict-2pl write lock conflict", result.transactions[0]["abort_reason"])
+
     def test_read_committed_breaks_repeatable_read_expectation(self) -> None:
         result = run_simulation(load_scenario(REPEATABLE_SCENARIO), "read-committed")
         reader, writer = result.transactions
@@ -98,6 +105,15 @@ class MvccIsolationLabTests(unittest.TestCase):
         self.assertIn("inventory", reader["abort_reason"])
         self.assertEqual(writer["status"], "committed")
         self.assertEqual(result.final_state, {"inventory": 8})
+
+    def test_strict_2pl_reader_preserves_repeatable_read_by_aborting_writer(self) -> None:
+        result = run_simulation(load_scenario(REPEATABLE_SCENARIO), "strict-2pl")
+        reader, writer = result.transactions
+        self.assertEqual(reader["status"], "committed")
+        self.assertEqual(writer["status"], "aborted")
+        self.assertIn("strict-2pl write lock conflict", writer["abort_reason"])
+        self.assertEqual(result.final_state, {"inventory": 5})
+        self.assertTrue(all(item["ok"] for item in result.invariants))
 
     def test_read_committed_allows_predicate_phantom_double_booking(self) -> None:
         result = run_simulation(load_scenario(PHANTOM_SCENARIO), "read-committed")
@@ -127,10 +143,27 @@ class MvccIsolationLabTests(unittest.TestCase):
             ['prefix=booking_room101_2026-04-20T09:00_, value="reserved"'],
         )
 
+    def test_strict_2pl_aborts_first_booking_on_predicate_lock_conflict(self) -> None:
+        result = run_simulation(load_scenario(PHANTOM_SCENARIO), "strict-2pl")
+        self.assertEqual([item["status"] for item in result.transactions], ["aborted", "committed"])
+        self.assertTrue(result.invariants[0]["ok"])
+        self.assertIn("strict-2pl predicate lock conflict", result.transactions[0]["abort_reason"])
+        self.assertEqual(
+            result.final_state,
+            {
+                "booking_room101_2026-04-20T09:00_bob": "reserved",
+                "room101_capacity": 1,
+            },
+        )
+
     def test_compare_runs_all_supported_modes(self) -> None:
         results = compare_scenario(load_scenario(DOCTOR_SCENARIO))
-        self.assertEqual(set(results), {"read-committed", "snapshot", "serializable"})
+        self.assertEqual(
+            set(results),
+            {"read-committed", "snapshot", "serializable", "strict-2pl"},
+        )
         self.assertEqual(results["serializable"].final_state["bob_on_call"], True)
+        self.assertEqual(results["strict-2pl"].final_state["alice_on_call"], True)
 
     def test_compare_markdown_export_is_written(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -149,11 +182,12 @@ class MvccIsolationLabTests(unittest.TestCase):
                 text=True,
                 cwd=REPO_ROOT,
             )
-            self.assertIn("MVCC isolation comparison", completed.stdout)
+            self.assertIn("Isolation comparison", completed.stdout)
             report = output_path.read_text()
             self.assertIn("Doctor on-call write skew", report)
             self.assertIn("Two doctors each see coverage in their snapshot", report)
             self.assertIn("serializable", report)
+            self.assertIn("strict-2pl", report)
 
     def test_run_json_output_contains_trace_and_invariants(self) -> None:
         completed = subprocess.run(
@@ -282,6 +316,7 @@ class MvccIsolationLabTests(unittest.TestCase):
                     "doctor_on_call_read_committed_timeline.svg",
                     "doctor_on_call_serializable_timeline.svg",
                     "doctor_on_call_snapshot_timeline.svg",
+                    "doctor_on_call_strict_2pl_timeline.svg",
                 ],
             )
 
@@ -306,6 +341,10 @@ class MvccIsolationLabTests(unittest.TestCase):
             self.assertEqual(
                 payload["_meta"]["timeline_svg_outputs"]["serializable"],
                 str(Path(temp_dir) / "doctor_on_call_serializable_timeline.svg"),
+            )
+            self.assertEqual(
+                payload["_meta"]["timeline_svg_outputs"]["strict-2pl"],
+                str(Path(temp_dir) / "doctor_on_call_strict_2pl_timeline.svg"),
             )
 
 

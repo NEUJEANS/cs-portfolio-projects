@@ -1,0 +1,24 @@
+# Wrap-up — 2026-04-20 13:01 UTC
+
+- Project: `mvcc-isolation-lab`
+- Slice: added a teaching-oriented `strict-2pl` isolation mode with shared/exclusive key locks plus predicate locks for scan-driven phantom protection
+- What changed:
+  - implemented `strict-2pl` in the simulator with deterministic abort-on-conflict behavior
+  - added regression coverage for write-skew, repeatable-read, and phantom scenarios under the new mode
+  - regenerated committed comparison Markdown reports and added strict-2pl SVG timelines for the sample scenarios
+  - updated the project README and completed the remaining checklist item
+- Tests run:
+  - `python3 -m unittest tests.test_mvcc_isolation_lab -v`
+  - `python3 -m py_compile projects/mvcc-isolation-lab/mvcc_isolation_lab.py tests/test_mvcc_isolation_lab.py`
+  - `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare projects/mvcc-isolation-lab/doctor_on_call.json --markdown-out docs/artifacts/mvcc-isolation-lab/doctor_on_call_compare.md --timeline-svg-dir docs/artifacts/mvcc-isolation-lab`
+  - `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare projects/mvcc-isolation-lab/repeatable_read_window.json --markdown-out docs/artifacts/mvcc-isolation-lab/repeatable_read_window_compare.md --timeline-svg-dir docs/artifacts/mvcc-isolation-lab`
+  - `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare projects/mvcc-isolation-lab/conference_room_booking_phantom.json --markdown-out docs/artifacts/mvcc-isolation-lab/conference_room_booking_phantom_compare.md --timeline-svg-dir docs/artifacts/mvcc-isolation-lab`
+- Reviews run:
+  - review 1: targeted unit-test pass for simulator semantics and export paths
+  - review 2: syntax/CLI smoke test for `strict-2pl` run output
+  - review 3: git diff review of README, simulator logic, tests, and regenerated artifact files
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → passed with 0 verified and 0 unverified secrets
+- Commit: `f99b3a3`
+- Next step:
+  - add a lock-wait/deadlock-focused scenario or a side-by-side visualization that explicitly contrasts optimistic validation aborts with lock-conflict aborts

@@ -1,6 +1,6 @@
 # MVCC Isolation Lab
 
-A compact Python simulator that compares `read-committed`, `snapshot`, and optimistic `serializable` validation on hand-authored transaction schedules so students can show concurrency-control intuition with runnable code instead of only theory notes.
+A compact Python simulator that compares `read-committed`, `snapshot`, optimistic `serializable` validation, and a teaching-oriented `strict-2pl` locking model on hand-authored transaction schedules so students can show concurrency-control intuition with runnable code instead of only theory notes.
 
 ## Why this project is portfolio-worthy
 - demonstrates database-concurrency fundamentals that show up in MVCC engines, optimistic concurrency control, and interview system-design discussions
@@ -10,9 +10,10 @@ A compact Python simulator that compares `read-committed`, `snapshot`, and optim
 
 ## Features
 - JSON scenario loader with validation for records, transactions, schedules, and invariants
-- step-by-step simulation for `read-committed`, `snapshot`, and optimistic `serializable` validation
+- step-by-step simulation for `read-committed`, `snapshot`, optimistic `serializable`, and teaching-oriented `strict-2pl` locking
 - buffered writes plus per-transaction snapshots so traces explain what each transaction could actually see
 - safe expression evaluator for scenario `assert` and `write` steps using booleans, arithmetic, comparisons, and a tiny `count_prefix(...)` helper for invariant checks
+- lock-conflict traces for `strict-2pl`, including point-key shared/exclusive lock conflicts and predicate-lock conflicts for scan-driven phantom protection
 - predicate/range-style `scan` steps that count matching rows by key prefix so the lab can model phantom anomalies alongside simple point reads
 - invariant checks that make schedule-level correctness visible in the final output
 - comparison mode that replays the same scenario across all supported isolation levels
@@ -61,8 +62,9 @@ Expressions used by `assert`, `write`, and final invariants can also call `count
 - `read-committed` - each read sees the latest committed state at that step, plus the transaction's own buffered writes
 - `snapshot` - each transaction reads from the committed snapshot captured when it began; commit aborts only on write-write conflicts that happened after the snapshot
 - `serializable` - uses the same read snapshot as `snapshot`, but commit validation aborts when any key in the transaction's read or write set changed since its snapshot, or when a previously scanned predicate/range result changed before commit
+- `strict-2pl` - acquires shared locks for reads, exclusive locks for writes, and shared predicate locks for scans; instead of modeling wait queues and deadlock detection, the teaching model aborts immediately on lock contention so the conflict stays explicit in the trace
 
-This `serializable` mode is intentionally a small optimistic validation model for teaching, not a vendor-exact implementation of PostgreSQL SSI or every serializable database.
+This `serializable` mode is intentionally a small optimistic validation model for teaching, not a vendor-exact implementation of PostgreSQL SSI or every serializable database. The `strict-2pl` mode is also intentionally simplified: it shows lock-based serializability and phantom protection, but chooses deterministic abort-on-conflict behavior instead of simulating a full lock manager with waiting and deadlock resolution.
 
 ## Usage
 Run from the repository root.
@@ -120,16 +122,19 @@ python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
 - `doctor_on_call.json`
   - `snapshot` lets both doctors commit because they update different rows, which violates the final coverage invariant
   - `serializable` aborts one doctor because its read set overlaps with a key changed after its snapshot
-  - the committed SVG exports make the overlap visible by showing both transactions starting from version `v0`, then only one committed version row landing in `serializable`
+  - `strict-2pl` also preserves the invariant, but it does so earlier by aborting a writer on a lock-upgrade conflict caused by the other doctor's shared read lock
+  - the committed SVG exports make the overlap visible by showing both transactions starting from version `v0`, then only one committed version row landing in the stricter modes
 - `repeatable_read_window.json`
   - `read-committed` lets the reader observe different values across its two reads, causing the transaction's repeatable-read assertion to fail
   - `snapshot` keeps the reader on a stable snapshot so the reader commits cleanly
   - `serializable` also gives the reader a stable snapshot, but the final optimistic validation can still abort the transaction because its read set changed before commit
-  - the SVG timelines make the mid-schedule writer commit easy to spot without reading raw JSON traces
+  - `strict-2pl` keeps the reader stable by forcing the writer to abort on a lock conflict before the update lands
+  - the SVG timelines make the mid-schedule writer commit or abort easy to spot without reading raw JSON traces
 - `conference_room_booking_phantom.json`
   - both booking transactions scan the same `booking_room101_...` predicate and each sees zero rows before inserting a different reservation row
   - `read-committed` and `snapshot` both allow the double-booking because there is no direct key overlap to abort on
   - `serializable` now detects that the scanned predicate changed between snapshot and commit, so one booking aborts with a predicate-conflict explanation
+  - `strict-2pl` protects the same predicate earlier by aborting a conflicting insert against the other coordinator's scan lock
   - the committed compare report and SVG timelines make the phantom anomaly visible without needing a database server
 
 ## Testing

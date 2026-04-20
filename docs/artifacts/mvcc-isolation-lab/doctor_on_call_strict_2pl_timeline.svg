@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1636" height="498" viewBox="0 0 1636 498" role="img" aria-labelledby="timeline-title timeline-desc">
+<title id="timeline-title">Doctor on-call write skew timeline</title>
+<desc id="timeline-desc">Two doctors each see coverage in their snapshot and independently sign off, illustrating write skew under snapshot isolation.</desc>
+<style>text { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #0f172a; }.title { font-size: 24px; font-weight: 700; }.subtitle { font-size: 13px; fill: #475569; }.lane-label { font-size: 13px; font-weight: 600; }.tick-label { font-size: 12px; fill: #64748b; }.event-text { font-size: 10.5px; font-weight: 600; }.summary-text { font-size: 12px; fill: #334155; }.grid { stroke: #e2e8f0; stroke-width: 1; }.lane { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1; }.connector { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }.event-card { stroke: #475569; stroke-width: 1; }.version-band { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1; }</style>
+<text x="24" y="36" class="title">Doctor on-call write skew</text>
+<text x="24" y="58" class="subtitle">Isolation: strict-2pl · ticks: 8 · final version: 1</text>
+<line x1="268.0" y1="72" x2="268.0" y2="390.0" class="grid" />
+<text x="256.0" y="82" class="tick-label">t1</text>
+<line x1="444.0" y1="72" x2="444.0" y2="390.0" class="grid" />
+<text x="432.0" y="82" class="tick-label">t2</text>
+<line x1="620.0" y1="72" x2="620.0" y2="390.0" class="grid" />
+<text x="608.0" y="82" class="tick-label">t3</text>
+<line x1="796.0" y1="72" x2="796.0" y2="390.0" class="grid" />
+<text x="784.0" y="82" class="tick-label">t4</text>
+<line x1="972.0" y1="72" x2="972.0" y2="390.0" class="grid" />
+<text x="960.0" y="82" class="tick-label">t5</text>
+<line x1="1148.0" y1="72" x2="1148.0" y2="390.0" class="grid" />
+<text x="1136.0" y="82" class="tick-label">t6</text>
+<line x1="1324.0" y1="72" x2="1324.0" y2="390.0" class="grid" />
+<text x="1312.0" y="82" class="tick-label">t7</text>
+<line x1="1500.0" y1="72" x2="1500.0" y2="390.0" class="grid" />
+<text x="1488.0" y="82" class="tick-label">t8</text>
+<rect x="16" y="88.0" width="1604" height="96" class="lane" />
+<text x="28" y="122.0" class="lane-label">T1</text>
+<rect x="16" y="194.0" width="1604" height="96" class="lane" />
+<text x="28" y="228.0" class="lane-label">T2</text>
+<polyline points="268.0,113.0 268.0,151.0 620.0,113.0 972.0,113.0 1324.0,113.0" class="connector" />
+<polyline points="444.0,219.0 444.0,257.0 796.0,219.0 1148.0,219.0 1500.0,219.0 1500.0,257.0" class="connector" />
+<rect x="202.0" y="98.0" width="132" height="30" rx="10" ry="10" fill="#dbe4ff" class="event-card" />
+<text x="210.0" y="109.0" class="event-text"><tspan x="210.0" dy="0">begin</tspan><tspan x="210.0" dy="14">snapshot v0</tspan></text>
+<rect x="202.0" y="136.0" width="132" height="30" rx="10" ry="10" fill="#d1fae5" class="event-card" />
+<text x="210.0" y="147.0" class="event-text"><tspan x="210.0" dy="0">read alice_on_call</tspan><tspan x="210.0" dy="14">alice = true</tspan></text>
+<rect x="378.0" y="204.0" width="132" height="30" rx="10" ry="10" fill="#dbe4ff" class="event-card" />
+<text x="386.0" y="215.0" class="event-text"><tspan x="386.0" dy="0">begin</tspan><tspan x="386.0" dy="14">snapshot v0</tspan></text>
+<rect x="378.0" y="242.0" width="132" height="30" rx="10" ry="10" fill="#d1fae5" class="event-card" />
+<text x="386.0" y="253.0" class="event-text"><tspan x="386.0" dy="0">read alice_on_call</tspan><tspan x="386.0" dy="14">alice = true</tspan></text>
+<rect x="554.0" y="98.0" width="132" height="30" rx="10" ry="10" fill="#d1fae5" class="event-card" />
+<text x="562.0" y="109.0" class="event-text"><tspan x="562.0" dy="0">read bob_on_call</tspan><tspan x="562.0" dy="14">bob = true</tspan></text>
+<rect x="730.0" y="204.0" width="132" height="30" rx="10" ry="10" fill="#d1fae5" class="event-card" />
+<text x="738.0" y="215.0" class="event-text"><tspan x="738.0" dy="0">read bob_on_call</tspan><tspan x="738.0" dy="14">bob = true</tspan></text>
+<rect x="906.0" y="98.0" width="132" height="30" rx="10" ry="10" fill="#ddd6fe" class="event-card" />
+<text x="914.0" y="109.0" class="event-text"><tspan x="914.0" dy="0">assert ✓</tspan><tspan x="914.0" dy="14">alice or bob</tspan></text>
+<rect x="1082.0" y="204.0" width="132" height="30" rx="10" ry="10" fill="#ddd6fe" class="event-card" />
+<text x="1090.0" y="215.0" class="event-text"><tspan x="1090.0" dy="0">assert ✓</tspan><tspan x="1090.0" dy="14">alice or bob</tspan></text>
+<rect x="1258.0" y="98.0" width="132" height="30" rx="10" ry="10" fill="#fecaca" class="event-card" />
+<text x="1266.0" y="109.0" class="event-text"><tspan x="1266.0" dy="0">abort</tspan><tspan x="1266.0" dy="14">strict-2pl write lock conflic…</tspan></text>
+<rect x="1434.0" y="204.0" width="132" height="30" rx="10" ry="10" fill="#fde68a" class="event-card" />
+<text x="1442.0" y="215.0" class="event-text"><tspan x="1442.0" dy="0">write bob_on_call</tspan><tspan x="1442.0" dy="14">false</tspan></text>
+<rect x="1434.0" y="242.0" width="132" height="30" rx="10" ry="10" fill="#bfdbfe" class="event-card" />
+<text x="1442.0" y="253.0" class="event-text"><tspan x="1442.0" dy="0">commit ✓</tspan><tspan x="1442.0" dy="14">v1 · {&quot;bob_on_call&quot;: false}</tspan></text>
+<rect x="16" y="318.0" width="1604" height="56" rx="10" ry="10" class="version-band" />
+<text x="28" y="342.0" class="lane-label">Committed versions</text>
+<rect x="1434.0" y="325.0" width="132" height="34" rx="10" ry="10" fill="#dbeafe" class="event-card" />
+<text x="1444.0" y="338.0" class="event-text"><tspan x="1444.0" dy="0">v1</tspan><tspan x="1444.0" dy="14">{&quot;bob_on_call&quot;: false}</tspan></text>
+<text x="24" y="406.0" class="lane-label">Summary</text>
+<text x="24.0" y="428.0" class="summary-text"><tspan x="24.0" dy="0">Final state: {&quot;alice_on_call&quot;: true, &quot;bob_on_call&quot;: false}</tspan><tspan x="24.0" dy="14">Invariants: at_least_one_doctor_on_call=ok</tspan></text>
+</svg>

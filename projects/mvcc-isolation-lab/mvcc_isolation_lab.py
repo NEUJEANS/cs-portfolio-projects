@@ -2,7 +2,8 @@
 """MVCC isolation lab.
 
 A compact simulator for comparing read committed, snapshot isolation,
-and optimistic serializable validation on small hand-authored scenarios.
+optimistic serializable validation, and a strict 2PL teaching model on
+small hand-authored scenarios.
 """
 
 from __future__ import annotations
@@ -16,7 +17,12 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 
-SUPPORTED_ISOLATION_LEVELS = ("read-committed", "snapshot", "serializable")
+SUPPORTED_ISOLATION_LEVELS = (
+    "read-committed",
+    "snapshot",
+    "serializable",
+    "strict-2pl",
+)
 SUPPORTED_STEP_OPS = {"read", "scan", "assert", "write"}
 EVENT_COLORS = {
     "begin": "#dbe4ff",
@@ -51,12 +57,22 @@ class TransactionRuntime:
     write_set: set[str] = field(default_factory=set)
     writes: Dict[str, Any] = field(default_factory=dict)
     predicate_reads: List[Dict[str, Any]] = field(default_factory=list)
+    held_shared_locks: set[str] = field(default_factory=set)
+    held_exclusive_locks: set[str] = field(default_factory=set)
+    held_predicate_locks: List[Dict[str, Any]] = field(default_factory=list)
     status: str = "active"
     abort_reason: Optional[str] = None
 
     @property
     def finished(self) -> bool:
         return self.status != "active" or self.cursor >= len(self.steps)
+
+
+@dataclass
+class LockTable:
+    shared_key_locks: Dict[str, set[str]] = field(default_factory=dict)
+    exclusive_key_locks: Dict[str, str] = field(default_factory=dict)
+    predicate_locks: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -282,7 +298,11 @@ def visible_state(
     committed_state: Dict[str, Any],
     isolation_level: str,
 ) -> Dict[str, Any]:
-    base = dict(committed_state if isolation_level == "read-committed" else transaction.snapshot)
+    base = dict(
+        committed_state
+        if isolation_level in {"read-committed", "strict-2pl"}
+        else transaction.snapshot
+    )
     base.update(transaction.writes)
     return base
 
@@ -387,12 +407,138 @@ def collect_predicate_conflicts(
     return conflicts
 
 
+def normalize_predicate_lock(key_prefix: str, value_equals: Any = MISSING) -> Dict[str, Any]:
+    return {
+        "key_prefix": key_prefix,
+        "has_value_equals": value_equals is not MISSING,
+        "value_equals": None if value_equals is MISSING else value_equals,
+    }
+
+
+def predicate_lock_marker(predicate: Dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        predicate["key_prefix"],
+        str(predicate["has_value_equals"]),
+        json.dumps(predicate.get("value_equals"), sort_keys=True),
+    )
+
+
+def value_matches_predicate(key: str, value: Any, predicate: Dict[str, Any]) -> bool:
+    if value is MISSING:
+        return False
+    value_equals = predicate["value_equals"] if predicate["has_value_equals"] else MISSING
+    return matches_scan_filter(key, value, predicate["key_prefix"], value_equals)
+
+
+def write_changes_predicate_membership(
+    key: str,
+    previous_value: Any,
+    new_value: Any,
+    predicate: Dict[str, Any],
+) -> bool:
+    return value_matches_predicate(key, previous_value, predicate) or value_matches_predicate(
+        key, new_value, predicate
+    )
+
+
+def release_transaction_locks(transaction: TransactionRuntime, lock_table: LockTable) -> None:
+    for key in list(transaction.held_shared_locks):
+        holders = lock_table.shared_key_locks.get(key)
+        if holders is None:
+            continue
+        holders.discard(transaction.name)
+        if not holders:
+            lock_table.shared_key_locks.pop(key, None)
+    for key in list(transaction.held_exclusive_locks):
+        if lock_table.exclusive_key_locks.get(key) == transaction.name:
+            lock_table.exclusive_key_locks.pop(key, None)
+    if transaction.held_predicate_locks:
+        markers = {predicate_lock_marker(item) for item in transaction.held_predicate_locks}
+        lock_table.predicate_locks = [
+            item
+            for item in lock_table.predicate_locks
+            if item["transaction"] != transaction.name or predicate_lock_marker(item) not in markers
+        ]
+    transaction.held_shared_locks.clear()
+    transaction.held_exclusive_locks.clear()
+    transaction.held_predicate_locks.clear()
+
+
+def acquire_shared_key_lock(
+    transaction: TransactionRuntime,
+    key: str,
+    lock_table: LockTable,
+) -> Optional[str]:
+    holder = lock_table.exclusive_key_locks.get(key)
+    if holder and holder != transaction.name:
+        return f"strict-2pl read lock conflict on {key} held by {holder}"
+    lock_table.shared_key_locks.setdefault(key, set()).add(transaction.name)
+    transaction.held_shared_locks.add(key)
+    return None
+
+
+def acquire_exclusive_key_lock(
+    transaction: TransactionRuntime,
+    key: str,
+    lock_table: LockTable,
+) -> Optional[str]:
+    holder = lock_table.exclusive_key_locks.get(key)
+    if holder and holder != transaction.name:
+        return f"strict-2pl write lock conflict on {key} held by {holder}"
+    other_shared_holders = sorted(lock_table.shared_key_locks.get(key, set()) - {transaction.name})
+    if other_shared_holders:
+        joined = ", ".join(other_shared_holders)
+        return f"strict-2pl write lock conflict on {key} held by shared lock(s) {joined}"
+    lock_table.exclusive_key_locks[key] = transaction.name
+    transaction.held_exclusive_locks.add(key)
+    return None
+
+
+def acquire_predicate_lock(
+    transaction: TransactionRuntime,
+    key_prefix: str,
+    value_equals: Any,
+    lock_table: LockTable,
+) -> None:
+    predicate = normalize_predicate_lock(key_prefix, value_equals)
+    marker = predicate_lock_marker(predicate)
+    if any(predicate_lock_marker(item) == marker for item in transaction.held_predicate_locks):
+        return
+    transaction.held_predicate_locks.append(predicate)
+    lock_table.predicate_locks.append({"transaction": transaction.name, **predicate})
+
+
+def collect_predicate_lock_conflicts(
+    transaction: TransactionRuntime,
+    key: str,
+    previous_value: Any,
+    new_value: Any,
+    lock_table: LockTable,
+) -> List[str]:
+    conflicts: List[str] = []
+    seen: set[tuple[str, str]] = set()
+    for predicate in lock_table.predicate_locks:
+        if predicate["transaction"] == transaction.name:
+            continue
+        if not write_changes_predicate_membership(key, previous_value, new_value, predicate):
+            continue
+        value_equals = predicate["value_equals"] if predicate["has_value_equals"] else MISSING
+        label = format_predicate_label(predicate["key_prefix"], value_equals)
+        marker = (predicate["transaction"], label)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        conflicts.append(f"{label} held by {predicate['transaction']}")
+    return conflicts
+
+
 def commit_transaction(
     transaction: TransactionRuntime,
     committed_state: Dict[str, Any],
     record_versions: Dict[str, int],
     current_version: int,
     isolation_level: str,
+    lock_table: Optional[LockTable] = None,
 ) -> tuple[bool, str, int]:
     changed_keys = {key for key, version in record_versions.items() if version > transaction.start_version}
 
@@ -402,6 +548,8 @@ def commit_transaction(
             reason = "snapshot write-write conflict on " + ", ".join(conflicting_keys)
             transaction.status = "aborted"
             transaction.abort_reason = reason
+            if lock_table is not None:
+                release_transaction_locks(transaction, lock_table)
             return False, reason, current_version
     elif isolation_level == "serializable":
         conflicting_keys = sorted((transaction.read_set | transaction.write_set) & changed_keys)
@@ -419,6 +567,8 @@ def commit_transaction(
             reason = " | ".join(parts)
             transaction.status = "aborted"
             transaction.abort_reason = reason
+            if lock_table is not None:
+                release_transaction_locks(transaction, lock_table)
             return False, reason, current_version
 
     if transaction.writes:
@@ -428,7 +578,31 @@ def commit_transaction(
             record_versions[key] = current_version
 
     transaction.status = "committed"
+    if lock_table is not None:
+        release_transaction_locks(transaction, lock_table)
     return True, "committed", current_version
+
+
+def abort_transaction(
+    transaction: TransactionRuntime,
+    reason: str,
+    tick: int,
+    trace: List[Dict[str, Any]],
+    lock_table: Optional[LockTable] = None,
+) -> None:
+    transaction.status = "aborted"
+    transaction.abort_reason = reason
+    if lock_table is not None:
+        release_transaction_locks(transaction, lock_table)
+    trace.append(
+        {
+            "event": "commit",
+            "tick": tick,
+            "transaction": transaction.name,
+            "status": "aborted",
+            "reason": reason,
+        }
+    )
 
 
 def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> SimulationResult:
@@ -440,7 +614,7 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
     validate_scenario(scenario)
 
     metadata = scenario.get("metadata", {})
-    title = metadata.get("title", "Unnamed MVCC scenario")
+    title = metadata.get("title", "Unnamed isolation scenario")
     description = metadata.get("description", "")
     committed_state = dict(scenario["records"])
     record_versions = {key: 0 for key in committed_state}
@@ -448,6 +622,7 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
     runtimes: Dict[str, TransactionRuntime] = {}
     transaction_specs = {item["name"]: item for item in scenario["transactions"]}
     trace: List[Dict[str, Any]] = []
+    lock_table = LockTable() if isolation_level == "strict-2pl" else None
 
     for tick, transaction_name in enumerate(scenario["schedule"], start=1):
         runtime = runtimes.get(transaction_name)
@@ -482,6 +657,11 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
             key = step["key"]
             if key not in state_view:
                 raise ScenarioError(f"transaction {transaction_name!r} read missing key {key!r}")
+            if lock_table is not None:
+                reason = acquire_shared_key_lock(runtime, key, lock_table)
+                if reason:
+                    abort_transaction(runtime, reason, tick, trace, lock_table)
+                    continue
             value = state_view[key]
             alias = step.get("as", key)
             runtime.locals[alias] = value
@@ -501,6 +681,8 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
         elif op == "scan":
             alias = step["as"]
             value_equals = scan_value_equals(step)
+            if lock_table is not None:
+                acquire_predicate_lock(runtime, step["key_prefix"], value_equals, lock_table)
             matches = collect_scan_matches(state_view, step["key_prefix"], value_equals)
             count = len(matches)
             runtime.locals[alias] = count
@@ -541,18 +723,12 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
                 }
             )
             if not result:
-                runtime.status = "aborted"
-                runtime.abort_reason = step.get(
-                    "message", f"assertion failed: {step['expr']}"
-                )
-                trace.append(
-                    {
-                        "event": "commit",
-                        "tick": tick,
-                        "transaction": transaction_name,
-                        "status": "aborted",
-                        "reason": runtime.abort_reason,
-                    }
+                abort_transaction(
+                    runtime,
+                    step.get("message", f"assertion failed: {step['expr']}"),
+                    tick,
+                    trace,
+                    lock_table,
                 )
         elif op == "write":
             key = step["key"]
@@ -560,6 +736,28 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
             value = step.get("value")
             if "expr" in step:
                 value = evaluate_expression(step["expr"], env)
+            if lock_table is not None:
+                previous_value = state_view.get(key, MISSING)
+                predicate_conflicts = collect_predicate_lock_conflicts(
+                    runtime,
+                    key,
+                    previous_value,
+                    value,
+                    lock_table,
+                )
+                if predicate_conflicts:
+                    abort_transaction(
+                        runtime,
+                        "strict-2pl predicate lock conflict on " + "; ".join(predicate_conflicts),
+                        tick,
+                        trace,
+                        lock_table,
+                    )
+                    continue
+                reason = acquire_exclusive_key_lock(runtime, key, lock_table)
+                if reason:
+                    abort_transaction(runtime, reason, tick, trace, lock_table)
+                    continue
             runtime.writes[key] = value
             runtime.write_set.add(key)
             runtime.locals[key] = value
@@ -585,6 +783,7 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
                 record_versions,
                 current_version,
                 isolation_level,
+                lock_table,
             )
             trace.append(
                 {
@@ -614,6 +813,8 @@ def run_simulation(scenario: Dict[str, Any], isolation_level: str) -> Simulation
         elif runtime.status == "active":
             runtime.status = "incomplete"
             runtime.abort_reason = "schedule ended before transaction finished"
+            if lock_table is not None:
+                release_transaction_locks(runtime, lock_table)
         transactions.append(
             {
                 "name": runtime.name,
@@ -675,21 +876,16 @@ def render_run_text(result: SimulationResult) -> str:
         lines.append("Invariants:")
         for invariant in result.invariants:
             badge = "ok" if invariant["ok"] else "FAILED"
-            lines.append(
-                f"  - {invariant['name']}: {badge} ({invariant['expr']})"
-            )
+            lines.append(f"  - {invariant['name']}: {badge} ({invariant['expr']})")
     return "\n".join(lines)
 
 
 def compare_scenario(scenario: Dict[str, Any]) -> Dict[str, SimulationResult]:
-    return {
-        level: run_simulation(scenario, level)
-        for level in SUPPORTED_ISOLATION_LEVELS
-    }
+    return {level: run_simulation(scenario, level) for level in SUPPORTED_ISOLATION_LEVELS}
 
 
 def render_compare_text(results: Dict[str, SimulationResult]) -> str:
-    lines = ["MVCC isolation comparison:"]
+    lines = ["Isolation comparison:"]
     for level in SUPPORTED_ISOLATION_LEVELS:
         result = results[level]
         violations = len(result.invariant_violations)
@@ -995,7 +1191,7 @@ def command_compare(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="MVCC isolation level simulator")
+    parser = argparse.ArgumentParser(description="Isolation level simulator")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate_parser = subparsers.add_parser("validate", help="validate a scenario JSON file")
