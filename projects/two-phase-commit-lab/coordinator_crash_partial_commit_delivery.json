@@ -1,0 +1,30 @@
+{
+  "title": "Coordinator crash after one COMMIT delivery",
+  "description": "All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery.",
+  "transaction_id": "order-5120",
+  "participants": [
+    {
+      "name": "inventory",
+      "role": "reserve stock",
+      "vote": "commit",
+      "notes": "inventory hears COMMIT before the coordinator dies"
+    },
+    {
+      "name": "billing",
+      "role": "capture payment",
+      "vote": "commit",
+      "notes": "payment is still prepared and waiting for a final answer"
+    },
+    {
+      "name": "shipping",
+      "role": "create shipment",
+      "vote": "commit",
+      "notes": "shipment remains in doubt until it learns the durable outcome"
+    }
+  ],
+  "failures": {
+    "coordinator_crash": "after-decision-log",
+    "recover_after_crash": false,
+    "decision_deliveries_before_crash": 1
+  }
+}

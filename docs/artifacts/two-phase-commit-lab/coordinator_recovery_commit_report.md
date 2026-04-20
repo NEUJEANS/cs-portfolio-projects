@@ -8,6 +8,8 @@ All participants vote YES, the coordinator durably logs COMMIT, then crashes bef
 - durable decision recorded: `yes`
 - coordinator crash point: `after-decision-log`
 - coordinator recovery simulated: `yes`
+- configured decision deliveries before crash: `0`
+- successful decision deliveries before crash: `0`
 
 ## Participant summary
 | Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |

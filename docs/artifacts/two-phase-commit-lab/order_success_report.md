@@ -8,6 +8,8 @@ Inventory, billing, and shipping all vote YES, so the coordinator records a dura
 - durable decision recorded: `yes`
 - coordinator crash point: `none`
 - coordinator recovery simulated: `no`
+- configured decision deliveries before crash: `0`
+- successful decision deliveries before crash: `0`
 
 ## Participant summary
 | Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |

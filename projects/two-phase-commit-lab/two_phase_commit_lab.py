@@ -32,6 +32,7 @@ class ParticipantPlan:
 class FailurePlan:
     coordinator_crash: str = "none"
     recover_after_crash: bool = False
+    decision_deliveries_before_crash: int = 0
 
 
 @dataclass
@@ -56,6 +57,8 @@ class SimulationResult:
     participants: list[dict[str, Any]]
     trace: list[str]
     takeaways: list[str]
+    termination_hint_summary: str | None
+    termination_hints: list[str]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -104,6 +107,7 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
 
     participants: list[ParticipantPlan] = []
     seen_names: set[str] = set()
+    commit_voter_count = 0
     for index, entry in enumerate(participants_raw, start=1):
         if not isinstance(entry, dict):
             raise ScenarioError(f"participant #{index} must be an object")
@@ -117,6 +121,8 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
             raise ScenarioError(
                 f"participant {name} vote must be one of {sorted(VALID_VOTES)}"
             )
+        if vote == "commit":
+            commit_voter_count += 1
         role = entry.get("role", "participant")
         if not isinstance(role, str) or not role.strip():
             raise ScenarioError(f"participant {name} role must be a non-empty string")
@@ -140,10 +146,7 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
             raise ScenarioError(
                 f"participant {name} reconnect_after_missed_decision must be a boolean"
             )
-        if (
-            second_phase_delivery != "miss"
-            and reconnect_after_missed_decision
-        ):
+        if second_phase_delivery != "miss" and reconnect_after_missed_decision:
             raise ScenarioError(
                 f"participant {name} reconnect_after_missed_decision only makes sense when second_phase_delivery is 'miss'"
             )
@@ -173,6 +176,25 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
         raise ScenarioError("recover_after_crash must be a boolean")
     if coordinator_crash == "none" and recover_after_crash:
         raise ScenarioError("recover_after_crash only makes sense when a crash point exists")
+    decision_deliveries_before_crash = failures_raw.get(
+        "decision_deliveries_before_crash",
+        0,
+    )
+    if not isinstance(decision_deliveries_before_crash, int):
+        raise ScenarioError("decision_deliveries_before_crash must be an integer")
+    if decision_deliveries_before_crash < 0:
+        raise ScenarioError("decision_deliveries_before_crash must be >= 0")
+    if (
+        coordinator_crash != "after-decision-log"
+        and decision_deliveries_before_crash
+    ):
+        raise ScenarioError(
+            "decision_deliveries_before_crash only makes sense when coordinator_crash is 'after-decision-log'"
+        )
+    if decision_deliveries_before_crash > commit_voter_count:
+        raise ScenarioError(
+            "decision_deliveries_before_crash cannot exceed the number of commit-voting participants"
+        )
 
     return Scenario(
         title=title,
@@ -182,6 +204,7 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
         failures=FailurePlan(
             coordinator_crash=coordinator_crash,
             recover_after_crash=recover_after_crash,
+            decision_deliveries_before_crash=decision_deliveries_before_crash,
         ),
     )
 
@@ -220,6 +243,53 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
             else:
                 log(f"{participant.plan.name}: rolls back prepared work and acknowledges ABORT")
 
+    def deliver_decision_to_prepared_participant(
+        participant: ParticipantRuntime,
+        *,
+        allow_reconnect: bool,
+    ) -> bool:
+        assert coordinator.decision is not None
+        log(f"coordinator -> {participant.plan.name}: {coordinator.decision.upper()}")
+        if (
+            participant.plan.second_phase_delivery == "miss"
+            and not participant.missed_second_phase_delivery
+        ):
+            participant.missed_second_phase_delivery = True
+            participant.state = "prepared-awaiting-decision"
+            log(
+                f"{participant.plan.name}: misses the first {coordinator.decision.upper()} delivery while disconnected and stays PREPARED"
+            )
+            if allow_reconnect and participant.plan.reconnect_after_missed_decision:
+                log(
+                    f"{participant.plan.name}: times out in PREPARED, reconnects, and asks the coordinator to replay the durable decision"
+                )
+                finish_prepared_participant(participant, via_reconnect=True)
+                return True
+            if allow_reconnect:
+                log(
+                    f"{participant.plan.name}: remains in doubt until a coordinator retry, recovery, or peer hint reveals the final decision"
+                )
+            return False
+
+        finish_prepared_participant(participant)
+        return True
+
+    def deliver_before_crash(max_successful_deliveries: int) -> int:
+        if max_successful_deliveries <= 0:
+            return 0
+        successful_deliveries = 0
+        for participant in participants:
+            if not participant.prepared or participant.acked_decision:
+                continue
+            if successful_deliveries >= max_successful_deliveries:
+                break
+            if deliver_decision_to_prepared_participant(
+                participant,
+                allow_reconnect=False,
+            ):
+                successful_deliveries += 1
+        return successful_deliveries
+
     log(
         f"coordinator starts 2PC for {scenario.transaction_id} with {len(participants)} participants"
     )
@@ -245,6 +315,7 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
     crash_point = scenario.failures.coordinator_crash
     recover = scenario.failures.recover_after_crash
     blocking_reason: str | None = None
+    successful_decision_deliveries_before_crash = 0
 
     if wants_commit and crash_point == "before-decision":
         coordinator.state = "crashed-before-decision"
@@ -269,6 +340,7 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
                 participants=participants,
                 coordinator=coordinator,
                 trace=trace,
+                successful_decision_deliveries_before_crash=successful_decision_deliveries_before_crash,
             )
     elif wants_commit:
         coordinator.decision = "commit"
@@ -283,49 +355,57 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
             log("coordinator writes ABORT decision because at least one participant timed out")
 
     if crash_point == "after-decision-log":
+        successful_decision_deliveries_before_crash = deliver_before_crash(
+            scenario.failures.decision_deliveries_before_crash
+        )
+        if successful_decision_deliveries_before_crash:
+            log(
+                f"coordinator reaches {successful_decision_deliveries_before_crash} participant(s) with the durable {coordinator.decision.upper()} decision before crashing"
+            )
         coordinator.state = "crashed-after-decision"
         log("coordinator crashes after the durable decision is logged but before all participants hear it")
         if recover:
             coordinator.state = "recovered"
             log("recovery replays the durable decision log and resumes decision broadcast")
         else:
-            blocking_reason = (
-                f"the durable {coordinator.decision.upper()} decision exists, but the coordinator crashed "
-                "before completing the second phase; prepared participants stay in doubt until recovery"
-            )
-            log("prepared participants stay blocked until the coordinator recovers and replays its log")
-            return _build_result(
-                scenario,
-                outcome="blocked",
-                decision=coordinator.decision,
-                decision_durable=True,
-                blocking_reason=blocking_reason,
-                participants=participants,
-                coordinator=coordinator,
-                trace=trace,
-            )
+            unresolved_participants = [
+                participant
+                for participant in participants
+                if participant.prepared and not participant.acked_decision
+            ]
+            if unresolved_participants:
+                blocking_reason = _build_after_decision_blocking_reason(
+                    participants,
+                    coordinator.decision,
+                )
+                log(
+                    "some prepared participants still lack the final decision and remain blocked until coordinator recovery or a termination-protocol exchange"
+                )
+                return _build_result(
+                    scenario,
+                    outcome="blocked",
+                    decision=coordinator.decision,
+                    decision_durable=True,
+                    blocking_reason=blocking_reason,
+                    participants=participants,
+                    coordinator=coordinator,
+                    trace=trace,
+                    successful_decision_deliveries_before_crash=successful_decision_deliveries_before_crash,
+                )
+            log("every prepared participant heard the durable decision before the coordinator crashed")
 
     assert coordinator.decision is not None
     for participant in participants:
-        log(f"coordinator -> {participant.plan.name}: {coordinator.decision.upper()}")
+        if participant.acked_decision:
+            log(
+                f"{participant.plan.name}: already knows {coordinator.decision.upper()} from an earlier delivery"
+            )
+            continue
         if participant.prepared:
-            if participant.plan.second_phase_delivery == "miss":
-                participant.missed_second_phase_delivery = True
-                participant.state = "prepared-awaiting-decision"
-                log(
-                    f"{participant.plan.name}: misses the first {coordinator.decision.upper()} delivery while disconnected and stays PREPARED"
-                )
-                if participant.plan.reconnect_after_missed_decision:
-                    log(
-                        f"{participant.plan.name}: times out in PREPARED, reconnects, and asks the coordinator to replay the durable decision"
-                    )
-                    finish_prepared_participant(participant, via_reconnect=True)
-                else:
-                    log(
-                        f"{participant.plan.name}: remains in doubt until a coordinator retry or recovery reveals the final decision"
-                    )
-            else:
-                finish_prepared_participant(participant)
+            deliver_decision_to_prepared_participant(
+                participant,
+                allow_reconnect=True,
+            )
         elif participant.state == "timed_out":
             log(f"{participant.plan.name}: was unavailable during voting and never prepared local work")
         elif coordinator.decision == "commit":
@@ -344,6 +424,7 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
         participants=participants,
         coordinator=coordinator,
         trace=trace,
+        successful_decision_deliveries_before_crash=successful_decision_deliveries_before_crash,
     )
 
 
@@ -368,6 +449,7 @@ def render_markdown_report(result: SimulationResult) -> str:
 
     trace_lines = [f"{index}. {entry}" for index, entry in enumerate(result.trace, start=1)]
     takeaway_lines = [f"- {entry}" for entry in result.takeaways]
+    termination_lines = [f"- {entry}" for entry in result.termination_hints]
 
     lines = [
         f"# {result.title}",
@@ -380,14 +462,30 @@ def render_markdown_report(result: SimulationResult) -> str:
         f"- durable decision recorded: `{'yes' if result.decision_durable else 'no'}`",
         f"- coordinator crash point: `{result.failures['coordinator_crash']}`",
         f"- coordinator recovery simulated: `{'yes' if result.failures['recover_after_crash'] else 'no'}`",
+        f"- configured decision deliveries before crash: `{result.failures['decision_deliveries_before_crash']}`",
+        f"- successful decision deliveries before crash: `{result.failures['successful_decision_deliveries_before_crash']}`",
     ]
     if result.blocking_reason:
         lines.append(f"- blocking reason: {result.blocking_reason}")
+    if result.termination_hint_summary:
+        lines.append(f"- termination hint summary: {result.termination_hint_summary}")
     lines.extend(
         [
             "",
             "## Participant summary",
             *participant_lines,
+        ]
+    )
+    if termination_lines:
+        lines.extend(
+            [
+                "",
+                "## Termination protocol hints",
+                *termination_lines,
+            ]
+        )
+    lines.extend(
+        [
             "",
             "## Trace",
             *trace_lines,
@@ -423,10 +521,16 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         for participant in entry.result.participants
         if participant["recovered_after_reconnect"]
     )
+    actionable_termination_hint_count = sum(
+        1
+        for entry in entries
+        if entry.result.termination_hint_summary
+        and not entry.result.termination_hint_summary.startswith("wait:")
+    )
 
     comparison_lines = [
-        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Report |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     snapshot_lines: list[str] = []
     for entry in entries:
@@ -445,8 +549,9 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
             title_cell = f"[{result.title}]({entry.report_path})"
             report_cell = f"[report]({entry.report_path})"
         reconnect_cell = f"`{recovered_count}/{missed_count}`" if missed_count else "`-`"
+        termination_cell = result.termination_hint_summary or "-"
         comparison_lines.append(
-            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {report} |".format(
+            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {termination} | {report} |".format(
                 title=title_cell,
                 outcome=result.outcome,
                 decision=result.decision or "none",
@@ -456,6 +561,7 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
                 prepared=prepared_count,
                 acked=acked_count,
                 reconnect=reconnect_cell,
+                termination=termination_cell,
                 total=len(result.participants),
                 report=report_cell,
             )
@@ -474,6 +580,7 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
                 f"- outcome: `{result.outcome}` with decision `{result.decision or 'none'}`",
                 f"- participants prepared/acked: `{prepared_count}/{len(result.participants)}` prepared, `{acked_count}/{len(result.participants)}` acked",
                 f"- participant reconnect recovery: {reconnect_snapshot}",
+                f"- termination hint: {result.termination_hint_summary or '-'}",
                 f"- why it matters: {_primary_takeaway(result)}",
             ]
         )
@@ -484,7 +591,7 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
     lines = [
         "# Two-phase commit scenario catalog",
         "",
-        "A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, and recovery cases.",
+        "A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, recovery, and peer-assisted incident-response cases.",
         "",
         "## Bundle summary",
         f"- scenarios: `{len(entries)}`",
@@ -492,6 +599,7 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         f"- crash cases: `{crash_count}`",
         f"- coordinator recovery cases: `{recovery_count}`",
         f"- participant reconnect recoveries: `{reconnect_recovery_count}`",
+        f"- blocked scenarios with actionable peer hints: `{actionable_termination_hint_count}`",
         "",
         "## Scenario comparison",
         *comparison_lines,
@@ -500,6 +608,7 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         "- plain 2PC is easy to explain because every scenario pivots on the coordinator's durable decision log.",
         "- blocking shows up when participants are already prepared but cannot prove the final outcome after a coordinator crash.",
         "- participant-side reconnects matter too: even with a durable decision, a prepared participant can stay in doubt until the coordinator retries or recovery answers the query.",
+        "- when the coordinator is down, participants can still ask peers whether anyone already knows the durable decision or never reached PREPARED; otherwise the protocol remains blocked.",
         "- recovery is operationally different from blocking: once the decision is durable, replay can safely finish phase two.",
         "",
         "## Scenario snapshots",
@@ -632,6 +741,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{result.title}: outcome={result.outcome} decision={result.decision or 'none'}")
             if result.blocking_reason:
                 print(f"blocking_reason={result.blocking_reason}")
+            if result.termination_hint_summary:
+                print(f"termination_hint={result.termination_hint_summary}")
             print(f"participants={len(result.participants)} trace_events={len(result.trace)}")
         return 0
 
@@ -662,6 +773,7 @@ def _build_result(
     participants: list[ParticipantRuntime],
     coordinator: CoordinatorRuntime,
     trace: list[str],
+    successful_decision_deliveries_before_crash: int,
 ) -> SimulationResult:
     participant_rows = [
         {
@@ -686,6 +798,11 @@ def _build_result(
         participants=participant_rows,
         coordinator=coordinator,
     )
+    termination_hint_summary, termination_hints = _build_termination_guidance(
+        blocking_reason=blocking_reason,
+        decision=decision,
+        participants=participant_rows,
+    )
     return SimulationResult(
         title=scenario.title,
         description=scenario.description,
@@ -697,10 +814,14 @@ def _build_result(
         failures={
             "coordinator_crash": scenario.failures.coordinator_crash,
             "recover_after_crash": scenario.failures.recover_after_crash,
+            "decision_deliveries_before_crash": scenario.failures.decision_deliveries_before_crash,
+            "successful_decision_deliveries_before_crash": successful_decision_deliveries_before_crash,
         },
         participants=participant_rows,
         trace=trace,
         takeaways=takeaways,
+        termination_hint_summary=termination_hint_summary,
+        termination_hints=termination_hints,
     )
 
 
@@ -718,6 +839,7 @@ def _build_takeaways(
     prepared_count = sum(1 for item in participants if item["prepared"])
     missed_count = sum(1 for item in participants if item["missed_second_phase_delivery"])
     recovered_count = sum(1 for item in participants if item["recovered_after_reconnect"])
+    acked_count = sum(1 for item in participants if item["acked_decision"])
     lines = [
         f"{_count_phrase(yes_count, 'participant')} were willing to commit, {abort_count} voted abort, and {timeout_count} timed out.",
         f"{_count_phrase(prepared_count, 'participant')} reached PREPARED before the transaction finished.",
@@ -727,6 +849,10 @@ def _build_takeaways(
             f"{_count_phrase(missed_count, 'participant')} missed the first second-phase delivery, and {_count_phrase(recovered_count, 'participant')} later recovered by reconnecting for the durable decision."
         )
     if blocking_reason:
+        if decision is not None:
+            lines.append(
+                f"{_count_phrase(acked_count, 'participant')} already {_verb_for_count(acked_count, 'knows', 'know')} the durable {decision.upper()} while other prepared peers remain blocked."
+            )
         lines.append(blocking_reason)
     elif decision == "commit":
         lines.append(
@@ -740,7 +866,93 @@ def _build_takeaways(
     return lines
 
 
+def _build_termination_guidance(
+    *,
+    blocking_reason: str | None,
+    decision: str | None,
+    participants: list[dict[str, Any]],
+) -> tuple[str | None, list[str]]:
+    if not blocking_reason:
+        return None, []
+
+    informed_peers = [item["name"] for item in participants if item["acked_decision"]]
+    uncertain_peers = [
+        item["name"]
+        for item in participants
+        if item["prepared"] and not item["acked_decision"]
+    ]
+    non_prepared_peers = [
+        item["name"]
+        for item in participants
+        if not item["prepared"] and item["state"] in {"aborted", "timed_out"}
+    ]
+
+    if informed_peers and decision is not None:
+        informed_names = _format_name_list(informed_peers)
+        uncertain_names = _format_name_list(uncertain_peers) or "the remaining prepared peers"
+        summary = f"{decision.upper()} visible via {informed_names}"
+        hints = [
+            f"Ask reachable peers whether anyone already knows the final decision. Here, {informed_names} {_verb_for_count(len(informed_peers), 'already knows', 'already know')} `{decision.upper()}` and can relay it to {uncertain_names}.",
+            "Treat the peer answer as evidence of the coordinator's durable outcome, not permission to invent a brand-new one locally.",
+            "If no informed peer is reachable, the unresolved participants still need coordinator recovery or another authoritative replay.",
+        ]
+        return summary, hints
+
+    if non_prepared_peers:
+        peer_names = _format_name_list(non_prepared_peers)
+        summary = f"ABORT safe via {peer_names}"
+        hints = [
+            f"Ask whether any peer never reached PREPARED. Here, {peer_names} {_verb_for_count(len(non_prepared_peers), 'never prepared', 'never prepared')} local work, so the classic termination protocol can safely conclude `ABORT`.",
+            "This is the normal escape hatch when a participant can prove the transaction never reached unanimous PREPARED state.",
+            "If every reachable peer is instead still PREPARED/in doubt, the block remains.",
+        ]
+        return summary, hints
+
+    uncertain_names = _format_name_list(uncertain_peers) or "every reachable peer"
+    if decision is not None:
+        summary = f"wait: durable {decision.upper()} exists but no peer can prove it yet"
+        hints = [
+            "Ask reachable peers whether anyone already heard the final decision from the coordinator.",
+            f"In this run, {uncertain_names} {_verb_for_count(len(uncertain_peers), 'is', 'are')} still PREPARED/in doubt, so no peer can yet prove `{decision.upper()}`.",
+            "Keep waiting for coordinator recovery or an authoritative retry; do not invent a local outcome.",
+        ]
+        return summary, hints
+
+    summary = "wait: all prepared peers are still uncertain"
+    hints = [
+        "Ask reachable peers whether anyone already knows COMMIT/ABORT or never reached PREPARED.",
+        f"In this run, {uncertain_names} {_verb_for_count(len(uncertain_peers), 'is', 'are')} still PREPARED/in doubt, so the classic termination protocol cannot finish safely yet.",
+        "Keep waiting for coordinator recovery; plain 2PC stays blocked when every reachable participant is uncertain.",
+    ]
+    return summary, hints
+
+
+def _build_after_decision_blocking_reason(
+    participants: list[ParticipantRuntime],
+    decision: str | None,
+) -> str:
+    assert decision is not None
+    informed_names = [participant.plan.name for participant in participants if participant.acked_decision]
+    unresolved_names = [
+        participant.plan.name
+        for participant in participants
+        if participant.prepared and not participant.acked_decision
+    ]
+    if informed_names:
+        return (
+            f"the durable {decision.upper()} decision exists and {_format_name_list(informed_names)} "
+            f"{_verb_for_count(len(informed_names), 'already knows', 'already know')} it, but "
+            f"{_format_name_list(unresolved_names)} remain in doubt until coordinator recovery or a peer-to-peer termination check"
+        )
+    return (
+        f"the durable {decision.upper()} decision exists, but no prepared participant has learned it yet; "
+        "prepared participants stay in doubt until recovery or a termination-protocol exchange"
+    )
+
+
 def _primary_takeaway(result: SimulationResult) -> str:
+    if result.termination_hint_summary and not result.termination_hint_summary.startswith("wait:"):
+        return f"blocked does not always mean blind waiting: {result.termination_hint_summary}."
     if result.blocking_reason:
         return result.blocking_reason
     for entry in result.takeaways:
@@ -757,6 +969,20 @@ def _count_phrase(count: int, singular: str, plural: str | None = None) -> str:
         plural = f"{singular}s"
     noun = singular if count == 1 else plural
     return f"{count} {noun}"
+
+
+def _format_name_list(names: list[str]) -> str:
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return f"{', '.join(names[:-1])}, and {names[-1]}"
+
+
+def _verb_for_count(count: int, singular: str, plural: str) -> str:
+    return singular if count == 1 else plural
 
 
 def _required_string(payload: dict[str, Any], key: str) -> str:

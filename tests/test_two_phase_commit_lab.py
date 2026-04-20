@@ -15,6 +15,9 @@ SCENARIO_DIR = REPO_ROOT / "projects/two-phase-commit-lab"
 SUCCESS_SCENARIO = SCENARIO_DIR / "order_success.json"
 ABORT_SCENARIO = SCENARIO_DIR / "payment_validation_abort.json"
 BLOCKED_SCENARIO = SCENARIO_DIR / "coordinator_crash_before_decision.json"
+PARTIAL_DELIVERY_BLOCKED_SCENARIO = (
+    SCENARIO_DIR / "coordinator_crash_partial_commit_delivery.json"
+)
 RECOVERY_SCENARIO = SCENARIO_DIR / "coordinator_recovery_commit.json"
 PARTICIPANT_RECOVERY_SCENARIO = SCENARIO_DIR / "participant_reconnect_commit.json"
 SPEC = importlib.util.spec_from_file_location("two_phase_commit_lab", SCRIPT)
@@ -88,6 +91,40 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         with self.assertRaises(ScenarioError):
             validate_scenario(scenario)
 
+    def test_validate_rejects_partial_deliveries_without_after_decision_crash(self) -> None:
+        scenario = {
+            "title": "bad",
+            "description": "partial delivery metadata should be tied to post-log crashes",
+            "transaction_id": "tx-4",
+            "participants": [
+                {"name": "inventory", "vote": "commit"},
+                {"name": "billing", "vote": "commit"},
+            ],
+            "failures": {
+                "coordinator_crash": "before-decision",
+                "decision_deliveries_before_crash": 1,
+            },
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
+    def test_validate_rejects_too_many_pre_crash_deliveries(self) -> None:
+        scenario = {
+            "title": "bad",
+            "description": "cannot deliver to more prepared peers than exist",
+            "transaction_id": "tx-5",
+            "participants": [
+                {"name": "inventory", "vote": "commit"},
+                {"name": "billing", "vote": "abort"},
+            ],
+            "failures": {
+                "coordinator_crash": "after-decision-log",
+                "decision_deliveries_before_crash": 2,
+            },
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
     def test_happy_path_commits_every_prepared_participant(self) -> None:
         result = simulate_two_phase_commit(load_scenario(SUCCESS_SCENARIO))
         self.assertEqual(result.outcome, "commit")
@@ -96,6 +133,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertEqual([item["state"] for item in result.participants], ["committed", "committed", "committed"])
         self.assertTrue(all(item["acked_decision"] for item in result.participants))
         self.assertIn("durable COMMIT decision", " ".join(result.takeaways))
+        self.assertIsNone(result.termination_hint_summary)
 
     def test_abort_vote_forces_global_abort(self) -> None:
         result = simulate_two_phase_commit(load_scenario(ABORT_SCENARIO))
@@ -114,6 +152,57 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertFalse(result.decision_durable)
         self.assertTrue(all(item["state"] == "prepared" for item in result.participants))
         self.assertIn("remain blocked", result.blocking_reason)
+        self.assertEqual(result.termination_hint_summary, "wait: all prepared peers are still uncertain")
+
+    def test_partial_commit_delivery_exposes_peer_visible_termination_hint(self) -> None:
+        result = simulate_two_phase_commit(load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO))
+        self.assertEqual(result.outcome, "blocked")
+        self.assertEqual(result.decision, "commit")
+        self.assertTrue(result.decision_durable)
+        inventory = next(item for item in result.participants if item["name"] == "inventory")
+        billing = next(item for item in result.participants if item["name"] == "billing")
+        shipping = next(item for item in result.participants if item["name"] == "shipping")
+        self.assertEqual(inventory["state"], "committed")
+        self.assertTrue(inventory["acked_decision"])
+        self.assertEqual(billing["state"], "prepared")
+        self.assertEqual(shipping["state"], "prepared")
+        self.assertEqual(result.failures["successful_decision_deliveries_before_crash"], 1)
+        self.assertEqual(result.termination_hint_summary, "COMMIT visible via inventory")
+        self.assertIn("relay it to billing and shipping", " ".join(result.termination_hints))
+
+    def test_pre_crash_missed_delivery_does_not_count_as_successful_delivery(self) -> None:
+        scenario = validate_scenario(
+            {
+                "title": "Crash after missed commit fanout",
+                "description": "Both prepared peers miss the first COMMIT before the coordinator crashes.",
+                "transaction_id": "tx-missed-1",
+                "participants": [
+                    {
+                        "name": "inventory",
+                        "vote": "commit",
+                        "second_phase_delivery": "miss",
+                    },
+                    {
+                        "name": "billing",
+                        "vote": "commit",
+                        "second_phase_delivery": "miss",
+                    },
+                ],
+                "failures": {
+                    "coordinator_crash": "after-decision-log",
+                    "decision_deliveries_before_crash": 1,
+                },
+            }
+        )
+        result = simulate_two_phase_commit(scenario)
+        self.assertEqual(result.outcome, "blocked")
+        self.assertEqual(result.decision, "commit")
+        self.assertEqual(result.failures["decision_deliveries_before_crash"], 1)
+        self.assertEqual(result.failures["successful_decision_deliveries_before_crash"], 0)
+        self.assertEqual(
+            result.termination_hint_summary,
+            "wait: durable COMMIT exists but no peer can prove it yet",
+        )
 
     def test_recovery_replays_durable_commit(self) -> None:
         result = simulate_two_phase_commit(load_scenario(RECOVERY_SCENARIO))
@@ -135,14 +224,14 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertTrue(shipping["acked_decision"])
         self.assertIn("asks the coordinator to replay the durable decision", " ".join(result.trace))
 
-    def test_markdown_report_mentions_blocking_reason(self) -> None:
-        result = simulate_two_phase_commit(load_scenario(BLOCKED_SCENARIO))
+    def test_markdown_report_mentions_blocking_reason_and_termination_hints(self) -> None:
+        result = simulate_two_phase_commit(load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO))
         report = render_markdown_report(result)
         self.assertIn("final outcome: `blocked`", report)
         self.assertIn("blocking reason:", report)
-        self.assertIn("Participant summary", report)
-        self.assertIn("2nd-phase delivery", report)
-        self.assertIn("coordinator starts 2PC", report)
+        self.assertIn("termination hint summary: COMMIT visible via inventory", report)
+        self.assertIn("## Termination protocol hints", report)
+        self.assertIn("inventory already knows `COMMIT`", report)
 
     def test_collect_scenario_paths_from_directory_is_sorted(self) -> None:
         paths = collect_scenario_paths([SCENARIO_DIR])
@@ -150,6 +239,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             [path.name for path in paths],
             [
                 "coordinator_crash_before_decision.json",
+                "coordinator_crash_partial_commit_delivery.json",
                 "coordinator_recovery_commit.json",
                 "order_success.json",
                 "participant_reconnect_commit.json",
@@ -168,14 +258,13 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             )
             catalog = render_catalog_markdown(entries)
             self.assertIn("# Two-phase commit scenario catalog", catalog)
-            self.assertIn("- outcomes: `3 commit`, `1 abort`, `1 blocked`", catalog)
+            self.assertIn("- outcomes: `3 commit`, `1 abort`, `2 blocked`", catalog)
             self.assertIn("- participant reconnect recoveries: `1`", catalog)
-            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Report |", catalog)
-            self.assertIn("[Order service happy-path commit](reports/order_success_report.md)", catalog)
-            self.assertIn("description: Every participant votes YES and enters PREPARED", catalog)
-            self.assertIn("participant reconnect recovery: `-` (no participant missed the first second-phase delivery)", catalog)
-            self.assertIn("participant reconnect recovery: `1/1` recovered after missing the first second-phase delivery", catalog)
-            self.assertIn("why it matters: 1 participant missed the first second-phase delivery, and 1 participant later recovered by reconnecting for the durable decision.", catalog)
+            self.assertIn("- blocked scenarios with actionable peer hints: `1`", catalog)
+            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report |", catalog)
+            self.assertIn("[Coordinator crash after one COMMIT delivery](reports/coordinator_crash_partial_commit_delivery_report.md)", catalog)
+            self.assertIn("termination hint: COMMIT visible via inventory", catalog)
+            self.assertIn("blocked does not always mean blind waiting: COMMIT visible via inventory.", catalog)
 
     def test_catalog_command_writes_index_and_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -197,14 +286,15 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
                 text=True,
                 cwd=REPO_ROOT,
             )
-            self.assertIn("wrote 5 scenario reports", completed.stdout)
+            self.assertIn("wrote 6 scenario reports", completed.stdout)
             self.assertTrue((report_dir / "order_success_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_report.md").exists())
+            self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_report.md").exists())
             self.assertTrue((report_dir / "participant_reconnect_commit_report.md").exists())
             catalog = catalog_path.read_text()
             self.assertIn("[report](reports/order_success_report.md)", catalog)
-            self.assertIn("outcome: `blocked` with decision `none`", catalog)
-            self.assertIn("Participant reconnect resolves a missed COMMIT", catalog)
+            self.assertIn("outcome: `blocked` with decision `commit`", catalog)
+            self.assertIn("termination hint: COMMIT visible via inventory", catalog)
 
     def test_cli_json_output_and_markdown_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -228,6 +318,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             payload = json.loads(stdout)
             self.assertEqual(payload["outcome"], "commit")
             self.assertEqual(payload["participants"][0]["state"], "committed")
+            self.assertIsNone(payload["termination_hint_summary"])
             report = report_path.read_text()
             self.assertIn("Order service happy-path commit", report)
             self.assertIn("final outcome: `commit`", report)

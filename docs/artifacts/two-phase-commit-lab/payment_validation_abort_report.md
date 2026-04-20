@@ -8,6 +8,8 @@ Inventory is ready, but the risk service votes NO after a fraud signal. The coor
 - durable decision recorded: `yes`
 - coordinator crash point: `none`
 - coordinator recovery simulated: `no`
+- configured decision deliveries before crash: `0`
+- successful decision deliveries before crash: `0`
 
 ## Participant summary
 | Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |
@@ -27,11 +29,10 @@ Inventory is ready, but the risk service votes NO after a fraud signal. The coor
 8. coordinator writes ABORT decision because at least one participant voted NO
 9. coordinator -> inventory: ABORT
 10. inventory: rolls back prepared work and acknowledges ABORT
-11. coordinator -> risk: ABORT
-12. risk: is already safely aborted
-13. coordinator -> billing: ABORT
-14. billing: rolls back prepared work and acknowledges ABORT
-15. transaction resolves as ABORT
+11. risk: is already safely aborted
+12. coordinator -> billing: ABORT
+13. billing: rolls back prepared work and acknowledges ABORT
+14. transaction resolves as ABORT
 
 ## Takeaways
 - 2 participants were willing to commit, 1 voted abort, and 0 timed out.

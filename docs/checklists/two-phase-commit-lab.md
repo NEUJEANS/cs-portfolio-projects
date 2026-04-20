@@ -9,5 +9,6 @@
 - [x] add automated tests for validation, simulation outcomes, blocking semantics, and CLI artifact output
 - [x] extend the lab beyond coordinator-only recovery with participant-side reconnect handling after missed second-phase delivery
 - [x] surface reconnect recovery in the committed reports/catalog so the portfolio story stays visible on GitHub
+- [x] add blocked-case termination-protocol hints plus a partial-decision-delivery crash scenario so the lab shows what peers can still ask while recovery is pending
 - [x] run at least 3 review passes and fix issues found
 - [x] run tests, secret-scan, commit, push, and add a wrap-up note for the slice
