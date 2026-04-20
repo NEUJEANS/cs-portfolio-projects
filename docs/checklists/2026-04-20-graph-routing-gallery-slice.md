@@ -12,7 +12,7 @@
 - [x] complete three review passes and fix the issues found
 - [x] rerun focused tests, smoke commands, deterministic artifact checks, and `git diff --check`
 - [x] run a secret scan before push
-- [ ] commit, push, and add a timestamped wrap-up
+- [x] commit, push, and add a timestamped wrap-up
 
 ## Review passes completed
 1. **Scenario-summary semantics review** — found that negative-cycle incidents were being counted as "same-cost reroutes" whenever the path changed without a cost delta; fixed by counting reroutes only when both baseline/candidate entries stay stably reachable without status/presence churn.
