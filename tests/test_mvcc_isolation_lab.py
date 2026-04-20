@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DOCTOR_SCENARIO = REPO_ROOT / "projects/mvcc-isolation-lab/doctor_on_call.json"
+REPEATABLE_SCENARIO = REPO_ROOT / "projects/mvcc-isolation-lab/repeatable_read_window.json"
+SCRIPT = REPO_ROOT / "projects/mvcc-isolation-lab/mvcc_isolation_lab.py"
+SPEC = importlib.util.spec_from_file_location("mvcc_isolation_lab", SCRIPT)
+assert SPEC and SPEC.loader
+MODULE = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = MODULE
+SPEC.loader.exec_module(MODULE)
+ScenarioError = MODULE.ScenarioError
+compare_scenario = MODULE.compare_scenario
+load_scenario = MODULE.load_scenario
+run_simulation = MODULE.run_simulation
+validate_scenario = MODULE.validate_scenario
+
+
+class MvccIsolationLabTests(unittest.TestCase):
+    def test_validate_rejects_duplicate_transaction_names(self) -> None:
+        scenario = {
+            "records": {"x": 1},
+            "transactions": [
+                {"name": "T1", "steps": [{"op": "read", "key": "x"}]},
+                {"name": "T1", "steps": [{"op": "read", "key": "x"}]},
+            ],
+            "schedule": ["T1"],
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
+    def test_validate_rejects_unknown_schedule_entry(self) -> None:
+        scenario = {
+            "records": {"x": 1},
+            "transactions": [{"name": "T1", "steps": [{"op": "read", "key": "x"}]}],
+            "schedule": ["T2"],
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
+    def test_snapshot_allows_write_skew_in_doctor_scenario(self) -> None:
+        result = run_simulation(load_scenario(DOCTOR_SCENARIO), "snapshot")
+        self.assertEqual(result.final_state, {"alice_on_call": False, "bob_on_call": False})
+        self.assertEqual([item["status"] for item in result.transactions], ["committed", "committed"])
+        self.assertFalse(result.invariants[0]["ok"])
+
+    def test_serializable_aborts_second_writer_in_doctor_scenario(self) -> None:
+        result = run_simulation(load_scenario(DOCTOR_SCENARIO), "serializable")
+        self.assertEqual(result.final_state, {"alice_on_call": False, "bob_on_call": True})
+        self.assertEqual([item["status"] for item in result.transactions], ["committed", "aborted"])
+        self.assertTrue(result.invariants[0]["ok"])
+        self.assertIn("alice_on_call", result.transactions[1]["abort_reason"])
+
+    def test_read_committed_breaks_repeatable_read_expectation(self) -> None:
+        result = run_simulation(load_scenario(REPEATABLE_SCENARIO), "read-committed")
+        reader, writer = result.transactions
+        self.assertEqual(reader["status"], "aborted")
+        self.assertEqual(writer["status"], "committed")
+        self.assertEqual(result.final_state, {"inventory": 8})
+
+    def test_snapshot_keeps_repeatable_read_stable(self) -> None:
+        result = run_simulation(load_scenario(REPEATABLE_SCENARIO), "snapshot")
+        reader, writer = result.transactions
+        self.assertEqual(reader["status"], "committed")
+        self.assertEqual(writer["status"], "committed")
+        self.assertEqual(result.final_state, {"inventory": 8})
+        self.assertTrue(all(item["ok"] for item in result.invariants))
+
+    def test_serializable_repeatable_read_scenario_aborts_reader_at_validation(self) -> None:
+        result = run_simulation(load_scenario(REPEATABLE_SCENARIO), "serializable")
+        reader, writer = result.transactions
+        self.assertEqual(reader["status"], "aborted")
+        self.assertIn("inventory", reader["abort_reason"])
+        self.assertEqual(writer["status"], "committed")
+        self.assertEqual(result.final_state, {"inventory": 8})
+
+    def test_compare_runs_all_supported_modes(self) -> None:
+        results = compare_scenario(load_scenario(DOCTOR_SCENARIO))
+        self.assertEqual(set(results), {"read-committed", "snapshot", "serializable"})
+        self.assertEqual(results["serializable"].final_state["bob_on_call"], True)
+
+    def test_compare_markdown_export_is_written(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "doctor.md"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "compare",
+                    str(DOCTOR_SCENARIO),
+                    "--markdown-out",
+                    str(output_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn("MVCC isolation comparison", completed.stdout)
+            report = output_path.read_text()
+            self.assertIn("Doctor on-call write skew", report)
+            self.assertIn("serializable", report)
+
+    def test_run_json_output_contains_trace_and_invariants(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(SCRIPT),
+                "run",
+                str(DOCTOR_SCENARIO),
+                "--isolation",
+                "snapshot",
+                "--json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["isolation_level"], "snapshot")
+        self.assertGreater(len(payload["trace"]), 0)
+        self.assertEqual(payload["invariants"][0]["name"], "at_least_one_doctor_on_call")
+
+
+if __name__ == "__main__":
+    unittest.main()

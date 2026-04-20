@@ -87,6 +87,7 @@ A curated set of practical, GitHub-worthy computer science student projects buil
 - [x] `link-state-routing-lab`
 - [x] `graph-routing-negative-cycle-lab`
 - [x] `crdt-orset-lab`
+- [x] `mvcc-isolation-lab`
 
 ## Suggested order
 Start with compact, polished command-line or local-storage projects, then move into systems and algorithm-heavy labs with stronger benchmarking and architecture notes.

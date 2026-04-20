@@ -1,0 +1,115 @@
+# MVCC Isolation Lab
+
+A compact Python simulator that compares `read-committed`, `snapshot`, and optimistic `serializable` validation on hand-authored transaction schedules so students can show concurrency-control intuition with runnable code instead of only theory notes.
+
+## Why this project is portfolio-worthy
+- demonstrates database-concurrency fundamentals that show up in MVCC engines, optimistic concurrency control, and interview system-design discussions
+- turns isolation-level theory into a reproducible CLI with traceable schedules, commit/abort decisions, and invariant checks
+- gives you concrete examples for write skew, repeatable-read behavior, and why serializable validation is stricter than snapshot isolation
+- stays dependency-free and small enough to study in one sitting while still being extensible for richer anomaly demos later
+
+## Features
+- JSON scenario loader with validation for records, transactions, schedules, and invariants
+- step-by-step simulation for `read-committed`, `snapshot`, and optimistic `serializable` validation
+- buffered writes plus per-transaction snapshots so traces explain what each transaction could actually see
+- safe expression evaluator for scenario `assert` and `write` steps using booleans, arithmetic, and comparisons
+- invariant checks that make schedule-level correctness visible in the final output
+- comparison mode that replays the same scenario across all supported isolation levels
+- Markdown comparison export for recruiter-friendly artifact snapshots in `docs/artifacts/`
+- committed sample scenarios for write skew and repeatable-read behavior
+
+## Project structure
+- `mvcc_isolation_lab.py` - scenario validation, simulator, trace generation, comparison rendering, and CLI entrypoint
+- `doctor_on_call.json` - classic write-skew scenario where two doctors each sign off based on the same stale snapshot
+- `repeatable_read_window.json` - compact scenario that shows a long-running reader under a concurrent writer
+- `CHECKLIST.md` - resumable project checklist for future slices
+- `tests/test_mvcc_isolation_lab.py` - regression tests for validation, isolation semantics, and CLI exports
+- `docs/artifacts/mvcc-isolation-lab/` - committed Markdown comparison artifacts generated from the sample scenarios
+
+## Scenario format
+```json
+{
+  "records": {"inventory": 5},
+  "transactions": [
+    {
+      "name": "Reader",
+      "steps": [
+        {"op": "read", "key": "inventory", "as": "first_seen"},
+        {"op": "assert", "expr": "first_seen >= 0"}
+      ]
+    }
+  ],
+  "schedule": ["Reader"],
+  "invariants": [
+    {"name": "inventory_non_negative", "expr": "inventory >= 0"}
+  ]
+}
+```
+
+### Supported step types
+- `read` - reads a key from the transaction's visible view and stores it under `as` (defaults to the key name)
+- `assert` - evaluates an expression against the visible state plus prior local aliases; aborts the transaction when false
+- `write` - buffers a literal `value` or computed `expr` until commit time
+
+### Isolation model used in the lab
+- `read-committed` - each read sees the latest committed state at that step, plus the transaction's own buffered writes
+- `snapshot` - each transaction reads from the committed snapshot captured when it began; commit aborts only on write-write conflicts that happened after the snapshot
+- `serializable` - uses the same read snapshot as `snapshot`, but commit validation aborts when any key in the transaction's read or write set changed since its snapshot
+
+This `serializable` mode is intentionally a small optimistic validation model for teaching, not a vendor-exact implementation of PostgreSQL SSI or every serializable database.
+
+## Usage
+Run from the repository root.
+
+### Validate a scenario
+```bash
+python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py validate \
+  projects/mvcc-isolation-lab/doctor_on_call.json
+```
+
+### Run one isolation level
+```bash
+python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py run \
+  projects/mvcc-isolation-lab/doctor_on_call.json \
+  --isolation snapshot
+```
+
+### Emit the full JSON result for scripting
+```bash
+python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py run \
+  projects/mvcc-isolation-lab/repeatable_read_window.json \
+  --isolation read-committed \
+  --json
+```
+
+### Compare all isolation levels at once
+```bash
+python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
+  projects/mvcc-isolation-lab/doctor_on_call.json
+```
+
+### Export a Markdown comparison artifact
+```bash
+python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
+  projects/mvcc-isolation-lab/doctor_on_call.json \
+  --markdown-out docs/artifacts/mvcc-isolation-lab/doctor_on_call_compare.md
+```
+
+## What the committed samples show
+- `doctor_on_call.json`
+  - `snapshot` lets both doctors commit because they update different rows, which violates the final coverage invariant
+  - `serializable` aborts one doctor because its read set overlaps with a key changed after its snapshot
+- `repeatable_read_window.json`
+  - `read-committed` lets the reader observe different values across its two reads, causing the transaction's repeatable-read assertion to fail
+  - `snapshot` keeps the reader on a stable snapshot so the reader commits cleanly
+  - `serializable` also gives the reader a stable snapshot, but the final optimistic validation can still abort the transaction because its read set changed before commit
+
+## Testing
+```bash
+python3 -m unittest tests.test_mvcc_isolation_lab -v
+```
+
+## Future ideas
+- add timeline/SVG exports so recruiters can see begin/read/write/commit windows visually
+- add predicate-based phantom demos for range queries instead of only key-based conflicts
+- add lock-based strict two-phase locking as another comparison mode

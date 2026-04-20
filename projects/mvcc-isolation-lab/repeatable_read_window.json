@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "title": "Repeatable read window",
+    "description": "A long-running reader observes a value twice while a concurrent writer increments it in the middle of the schedule."
+  },
+  "records": {
+    "inventory": 5
+  },
+  "transactions": [
+    {
+      "name": "Reader",
+      "steps": [
+        {"op": "read", "key": "inventory", "as": "first_seen"},
+        {
+          "op": "read",
+          "key": "inventory",
+          "as": "second_seen"
+        },
+        {
+          "op": "assert",
+          "expr": "first_seen == second_seen",
+          "message": "The reader expected a repeatable value across both reads."
+        }
+      ]
+    },
+    {
+      "name": "Writer",
+      "steps": [
+        {"op": "read", "key": "inventory", "as": "current"},
+        {"op": "write", "key": "inventory", "expr": "current + 3"}
+      ]
+    }
+  ],
+  "schedule": ["Reader", "Writer", "Writer", "Reader", "Reader"],
+  "invariants": [
+    {
+      "name": "inventory_non_negative",
+      "expr": "inventory >= 0",
+      "message": "Inventory should stay non-negative after the update."
+    }
+  ]
+}

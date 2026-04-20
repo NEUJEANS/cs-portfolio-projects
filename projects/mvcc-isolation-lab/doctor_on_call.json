@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "title": "Doctor on-call write skew",
+    "description": "Two doctors each see coverage in their snapshot and independently sign off, illustrating write skew under snapshot isolation."
+  },
+  "records": {
+    "alice_on_call": true,
+    "bob_on_call": true
+  },
+  "transactions": [
+    {
+      "name": "T1",
+      "steps": [
+        {"op": "read", "key": "alice_on_call", "as": "alice"},
+        {"op": "read", "key": "bob_on_call", "as": "bob"},
+        {
+          "op": "assert",
+          "expr": "alice or bob",
+          "message": "T1 only signs off if coverage still exists in its visible view."
+        },
+        {"op": "write", "key": "alice_on_call", "value": false}
+      ]
+    },
+    {
+      "name": "T2",
+      "steps": [
+        {"op": "read", "key": "alice_on_call", "as": "alice"},
+        {"op": "read", "key": "bob_on_call", "as": "bob"},
+        {
+          "op": "assert",
+          "expr": "alice or bob",
+          "message": "T2 only signs off if coverage still exists in its visible view."
+        },
+        {"op": "write", "key": "bob_on_call", "value": false}
+      ]
+    }
+  ],
+  "schedule": ["T1", "T2", "T1", "T2", "T1", "T2", "T1", "T2"],
+  "invariants": [
+    {
+      "name": "at_least_one_doctor_on_call",
+      "expr": "alice_on_call or bob_on_call",
+      "message": "At least one doctor should remain on call after the schedule commits."
+    }
+  ]
+}
