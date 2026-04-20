@@ -7,5 +7,7 @@
 - [x] cover happy-path commit, participant veto abort, blocking coordinator crash, and recovery replay with committed scenarios
 - [x] add CLI commands for validation, simulation, JSON output, and Markdown artifact export
 - [x] add automated tests for validation, simulation outcomes, blocking semantics, and CLI artifact output
+- [x] extend the lab beyond coordinator-only recovery with participant-side reconnect handling after missed second-phase delivery
+- [x] surface reconnect recovery in the committed reports/catalog so the portfolio story stays visible on GitHub
 - [x] run at least 3 review passes and fix issues found
 - [x] run tests, secret-scan, commit, push, and add a wrap-up note for the slice

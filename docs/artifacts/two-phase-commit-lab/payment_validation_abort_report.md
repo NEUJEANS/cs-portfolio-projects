@@ -10,11 +10,11 @@ Inventory is ready, but the risk service votes NO after a fraud signal. The coor
 - coordinator recovery simulated: `no`
 
 ## Participant summary
-| Participant | Role | Planned vote | Final state | Acked decision | Notes |
-| --- | --- | --- | --- | --- | --- |
-| inventory | reserve stock | commit | aborted | yes | items are in stock |
-| risk | fraud screening | abort | aborted | no | card fingerprint mismatched historical behavior |
-| billing | capture payment | commit | aborted | yes | would have charged if risk had approved |
+| Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| inventory | reserve stock | commit | deliver | aborted | yes | no | items are in stock |
+| risk | fraud screening | abort | deliver | aborted | no | no | card fingerprint mismatched historical behavior |
+| billing | capture payment | commit | deliver | aborted | yes | no | would have charged if risk had approved |
 
 ## Trace
 1. coordinator starts 2PC for order-1088 with 3 participants

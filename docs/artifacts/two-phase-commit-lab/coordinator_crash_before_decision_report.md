@@ -11,11 +11,11 @@ Every participant votes YES and enters PREPARED, but the coordinator crashes bef
 - blocking reason: all participants are prepared, but the coordinator crashed before a durable decision was recorded; prepared participants remain blocked awaiting recovery
 
 ## Participant summary
-| Participant | Role | Planned vote | Final state | Acked decision | Notes |
-| --- | --- | --- | --- | --- | --- |
-| inventory | reserve stock | commit | prepared | no | local reservation is durable but not final |
-| billing | capture payment | commit | prepared | no | payment provider is waiting for final confirmation |
-| shipping | create shipment | commit | prepared | no | label request is staged but not finalized |
+| Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| inventory | reserve stock | commit | deliver | prepared | no | no | local reservation is durable but not final |
+| billing | capture payment | commit | deliver | prepared | no | no | payment provider is waiting for final confirmation |
+| shipping | create shipment | commit | deliver | prepared | no | no | label request is staged but not finalized |
 
 ## Trace
 1. coordinator starts 2PC for order-2021 with 3 participants

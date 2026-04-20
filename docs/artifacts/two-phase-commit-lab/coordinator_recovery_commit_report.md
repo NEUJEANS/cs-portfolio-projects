@@ -10,11 +10,11 @@ All participants vote YES, the coordinator durably logs COMMIT, then crashes bef
 - coordinator recovery simulated: `yes`
 
 ## Participant summary
-| Participant | Role | Planned vote | Final state | Acked decision | Notes |
-| --- | --- | --- | --- | --- | --- |
-| inventory | reserve stock | commit | committed | yes | reservation is prepared before the crash |
-| billing | capture payment | commit | committed | yes | prepared payment can commit after recovery |
-| shipping | create shipment | commit | committed | yes | shipment creation waits for replayed decision |
+| Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| inventory | reserve stock | commit | deliver | committed | yes | no | reservation is prepared before the crash |
+| billing | capture payment | commit | deliver | committed | yes | no | prepared payment can commit after recovery |
+| shipping | create shipment | commit | deliver | committed | yes | no | shipment creation waits for replayed decision |
 
 ## Trace
 1. coordinator starts 2PC for order-3050 with 3 participants

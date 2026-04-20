@@ -1,0 +1,31 @@
+{
+  "title": "Participant reconnect resolves a missed COMMIT",
+  "description": "All participants vote YES and the coordinator durably logs COMMIT, but shipping misses the first second-phase message during a disconnect. After timing out in PREPARED, it reconnects, learns the durable decision, and safely commits.",
+  "transaction_id": "order-4099",
+  "participants": [
+    {
+      "name": "inventory",
+      "role": "reserve stock",
+      "vote": "commit",
+      "notes": "inventory receives the decision on the first broadcast"
+    },
+    {
+      "name": "billing",
+      "role": "capture payment",
+      "vote": "commit",
+      "notes": "billing acknowledges COMMIT immediately"
+    },
+    {
+      "name": "shipping",
+      "role": "create shipment",
+      "vote": "commit",
+      "notes": "a network blip drops the first COMMIT delivery, so shipping reconnects to fetch the durable outcome",
+      "second_phase_delivery": "miss",
+      "reconnect_after_missed_decision": true
+    }
+  ],
+  "failures": {
+    "coordinator_crash": "none",
+    "recover_after_crash": false
+  }
+}

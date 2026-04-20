@@ -16,6 +16,7 @@ SUCCESS_SCENARIO = SCENARIO_DIR / "order_success.json"
 ABORT_SCENARIO = SCENARIO_DIR / "payment_validation_abort.json"
 BLOCKED_SCENARIO = SCENARIO_DIR / "coordinator_crash_before_decision.json"
 RECOVERY_SCENARIO = SCENARIO_DIR / "coordinator_recovery_commit.json"
+PARTICIPANT_RECOVERY_SCENARIO = SCENARIO_DIR / "participant_reconnect_commit.json"
 SPEC = importlib.util.spec_from_file_location("two_phase_commit_lab", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -55,6 +56,38 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         with self.assertRaises(ScenarioError):
             validate_scenario(scenario)
 
+    def test_validate_rejects_reconnect_without_missed_delivery(self) -> None:
+        scenario = {
+            "title": "bad",
+            "description": "reconnect flag without a missed delivery should fail",
+            "transaction_id": "tx-2",
+            "participants": [
+                {
+                    "name": "inventory",
+                    "vote": "commit",
+                    "reconnect_after_missed_decision": True,
+                }
+            ],
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
+    def test_validate_rejects_missed_second_phase_for_non_commit_vote(self) -> None:
+        scenario = {
+            "title": "bad",
+            "description": "non-commit participants should not model missed decision delivery",
+            "transaction_id": "tx-3",
+            "participants": [
+                {
+                    "name": "risk",
+                    "vote": "abort",
+                    "second_phase_delivery": "miss",
+                }
+            ],
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
     def test_happy_path_commits_every_prepared_participant(self) -> None:
         result = simulate_two_phase_commit(load_scenario(SUCCESS_SCENARIO))
         self.assertEqual(result.outcome, "commit")
@@ -90,12 +123,25 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertEqual([item["state"] for item in result.participants], ["committed", "committed", "committed"])
         self.assertIn("replays the durable decision log", " ".join(result.trace))
 
+    def test_participant_reconnect_recovers_missed_commit(self) -> None:
+        result = simulate_two_phase_commit(load_scenario(PARTICIPANT_RECOVERY_SCENARIO))
+        self.assertEqual(result.outcome, "commit")
+        self.assertEqual(result.decision, "commit")
+        shipping = next(item for item in result.participants if item["name"] == "shipping")
+        self.assertEqual(shipping["second_phase_delivery"], "miss")
+        self.assertTrue(shipping["missed_second_phase_delivery"])
+        self.assertTrue(shipping["recovered_after_reconnect"])
+        self.assertEqual(shipping["state"], "committed")
+        self.assertTrue(shipping["acked_decision"])
+        self.assertIn("asks the coordinator to replay the durable decision", " ".join(result.trace))
+
     def test_markdown_report_mentions_blocking_reason(self) -> None:
         result = simulate_two_phase_commit(load_scenario(BLOCKED_SCENARIO))
         report = render_markdown_report(result)
         self.assertIn("final outcome: `blocked`", report)
         self.assertIn("blocking reason:", report)
         self.assertIn("Participant summary", report)
+        self.assertIn("2nd-phase delivery", report)
         self.assertIn("coordinator starts 2PC", report)
 
     def test_collect_scenario_paths_from_directory_is_sorted(self) -> None:
@@ -106,6 +152,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
                 "coordinator_crash_before_decision.json",
                 "coordinator_recovery_commit.json",
                 "order_success.json",
+                "participant_reconnect_commit.json",
                 "payment_validation_abort.json",
             ],
         )
@@ -121,11 +168,14 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             )
             catalog = render_catalog_markdown(entries)
             self.assertIn("# Two-phase commit scenario catalog", catalog)
-            self.assertIn("- outcomes: `2 commit`, `1 abort`, `1 blocked`", catalog)
-            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Report |", catalog)
+            self.assertIn("- outcomes: `3 commit`, `1 abort`, `1 blocked`", catalog)
+            self.assertIn("- participant reconnect recoveries: `1`", catalog)
+            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Report |", catalog)
             self.assertIn("[Order service happy-path commit](reports/order_success_report.md)", catalog)
             self.assertIn("description: Every participant votes YES and enters PREPARED", catalog)
-            self.assertIn("participants prepared/acked: `3/3` prepared, `0/3` acked", catalog)
+            self.assertIn("participant reconnect recovery: `-` (no participant missed the first second-phase delivery)", catalog)
+            self.assertIn("participant reconnect recovery: `1/1` recovered after missing the first second-phase delivery", catalog)
+            self.assertIn("why it matters: 1 participant missed the first second-phase delivery, and 1 participant later recovered by reconnecting for the durable decision.", catalog)
 
     def test_catalog_command_writes_index_and_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -147,12 +197,14 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
                 text=True,
                 cwd=REPO_ROOT,
             )
-            self.assertIn("wrote 4 scenario reports", completed.stdout)
+            self.assertIn("wrote 5 scenario reports", completed.stdout)
             self.assertTrue((report_dir / "order_success_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_report.md").exists())
+            self.assertTrue((report_dir / "participant_reconnect_commit_report.md").exists())
             catalog = catalog_path.read_text()
             self.assertIn("[report](reports/order_success_report.md)", catalog)
             self.assertIn("outcome: `blocked` with decision `none`", catalog)
+            self.assertIn("Participant reconnect resolves a missed COMMIT", catalog)
 
     def test_cli_json_output_and_markdown_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

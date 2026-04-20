@@ -10,11 +10,11 @@ Inventory, billing, and shipping all vote YES, so the coordinator records a dura
 - coordinator recovery simulated: `no`
 
 ## Participant summary
-| Participant | Role | Planned vote | Final state | Acked decision | Notes |
-| --- | --- | --- | --- | --- | --- |
-| inventory | reserve stock | commit | committed | yes | SKU stock is available |
-| billing | capture payment | commit | committed | yes | authorization already succeeded |
-| shipping | create shipment | commit | committed | yes | carrier label quota is healthy |
+| Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| inventory | reserve stock | commit | deliver | committed | yes | no | SKU stock is available |
+| billing | capture payment | commit | deliver | committed | yes | no | authorization already succeeded |
+| shipping | create shipment | commit | deliver | committed | yes | no | carrier label quota is healthy |
 
 ## Trace
 1. coordinator starts 2PC for order-1042 with 3 participants

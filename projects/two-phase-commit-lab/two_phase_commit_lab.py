@@ -15,6 +15,7 @@ class ScenarioError(ValueError):
 
 VALID_VOTES = {"commit", "abort", "timeout"}
 VALID_CRASH_POINTS = {"none", "before-decision", "after-decision-log"}
+VALID_SECOND_PHASE_DELIVERIES = {"deliver", "miss"}
 
 
 @dataclass
@@ -23,6 +24,8 @@ class ParticipantPlan:
     vote: str
     role: str = "participant"
     notes: str = ""
+    second_phase_delivery: str = "deliver"
+    reconnect_after_missed_decision: bool = False
 
 
 @dataclass
@@ -64,6 +67,8 @@ class ParticipantRuntime:
     state: str = "new"
     acked_decision: bool = False
     prepared: bool = False
+    missed_second_phase_delivery: bool = False
+    recovered_after_reconnect: bool = False
 
 
 @dataclass
@@ -118,8 +123,39 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
         notes = entry.get("notes", "")
         if not isinstance(notes, str):
             raise ScenarioError(f"participant {name} notes must be a string")
+        second_phase_delivery = entry.get("second_phase_delivery", "deliver")
+        if second_phase_delivery not in VALID_SECOND_PHASE_DELIVERIES:
+            raise ScenarioError(
+                f"participant {name} second_phase_delivery must be one of {sorted(VALID_SECOND_PHASE_DELIVERIES)}"
+            )
+        if second_phase_delivery == "miss" and vote != "commit":
+            raise ScenarioError(
+                f"participant {name} second_phase_delivery='miss' only makes sense for vote='commit'"
+            )
+        reconnect_after_missed_decision = entry.get(
+            "reconnect_after_missed_decision",
+            False,
+        )
+        if not isinstance(reconnect_after_missed_decision, bool):
+            raise ScenarioError(
+                f"participant {name} reconnect_after_missed_decision must be a boolean"
+            )
+        if (
+            second_phase_delivery != "miss"
+            and reconnect_after_missed_decision
+        ):
+            raise ScenarioError(
+                f"participant {name} reconnect_after_missed_decision only makes sense when second_phase_delivery is 'miss'"
+            )
         participants.append(
-            ParticipantPlan(name=name, vote=vote, role=role.strip(), notes=notes.strip())
+            ParticipantPlan(
+                name=name,
+                vote=vote,
+                role=role.strip(),
+                notes=notes.strip(),
+                second_phase_delivery=second_phase_delivery,
+                reconnect_after_missed_decision=reconnect_after_missed_decision,
+            )
         )
 
     failures_raw = raw.get("failures", {})
@@ -157,6 +193,32 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
 
     def log(message: str) -> None:
         trace.append(message)
+
+    def finish_prepared_participant(
+        participant: ParticipantRuntime,
+        *,
+        via_reconnect: bool = False,
+    ) -> None:
+        assert coordinator.decision is not None
+        participant.acked_decision = True
+        if via_reconnect:
+            participant.recovered_after_reconnect = True
+        if coordinator.decision == "commit":
+            participant.state = "committed"
+            if via_reconnect:
+                log(
+                    f"{participant.plan.name}: reconnects, learns the durable COMMIT decision, commits local work, and acknowledges COMMIT"
+                )
+            else:
+                log(f"{participant.plan.name}: commits local work and acknowledges COMMIT")
+        else:
+            participant.state = "aborted"
+            if via_reconnect:
+                log(
+                    f"{participant.plan.name}: reconnects, learns the durable ABORT decision, rolls back prepared work, and acknowledges ABORT"
+                )
+            else:
+                log(f"{participant.plan.name}: rolls back prepared work and acknowledges ABORT")
 
     log(
         f"coordinator starts 2PC for {scenario.transaction_id} with {len(participants)} participants"
@@ -246,24 +308,30 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
     assert coordinator.decision is not None
     for participant in participants:
         log(f"coordinator -> {participant.plan.name}: {coordinator.decision.upper()}")
-        if coordinator.decision == "commit":
-            if participant.prepared:
-                participant.state = "committed"
-                participant.acked_decision = True
-                log(f"{participant.plan.name}: commits local work and acknowledges COMMIT")
-            elif participant.state == "timed_out":
-                log(f"{participant.plan.name}: was unavailable during voting and never prepared local work")
+        if participant.prepared:
+            if participant.plan.second_phase_delivery == "miss":
+                participant.missed_second_phase_delivery = True
+                participant.state = "prepared-awaiting-decision"
+                log(
+                    f"{participant.plan.name}: misses the first {coordinator.decision.upper()} delivery while disconnected and stays PREPARED"
+                )
+                if participant.plan.reconnect_after_missed_decision:
+                    log(
+                        f"{participant.plan.name}: times out in PREPARED, reconnects, and asks the coordinator to replay the durable decision"
+                    )
+                    finish_prepared_participant(participant, via_reconnect=True)
+                else:
+                    log(
+                        f"{participant.plan.name}: remains in doubt until a coordinator retry or recovery reveals the final decision"
+                    )
             else:
-                log(f"{participant.plan.name}: had already refused the transaction before COMMIT was possible")
+                finish_prepared_participant(participant)
+        elif participant.state == "timed_out":
+            log(f"{participant.plan.name}: was unavailable during voting and never prepared local work")
+        elif coordinator.decision == "commit":
+            log(f"{participant.plan.name}: had already refused the transaction before COMMIT was possible")
         else:
-            if participant.prepared:
-                participant.state = "aborted"
-                participant.acked_decision = True
-                log(f"{participant.plan.name}: rolls back prepared work and acknowledges ABORT")
-            elif participant.state == "timed_out":
-                log(f"{participant.plan.name}: times out without preparing any local work")
-            else:
-                log(f"{participant.plan.name}: is already safely aborted")
+            log(f"{participant.plan.name}: is already safely aborted")
 
     coordinator.state = "complete"
     log(f"transaction resolves as {coordinator.decision.upper()}")
@@ -281,17 +349,19 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
 
 def render_markdown_report(result: SimulationResult) -> str:
     participant_lines = [
-        "| Participant | Role | Planned vote | Final state | Acked decision | Notes |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for participant in result.participants:
         participant_lines.append(
-            "| {name} | {role} | {planned_vote} | {state} | {acked_decision} | {notes} |".format(
+            "| {name} | {role} | {planned_vote} | {delivery} | {state} | {acked_decision} | {recovered} | {notes} |".format(
                 name=participant["name"],
                 role=participant["role"],
                 planned_vote=participant["planned_vote"],
+                delivery=participant["second_phase_delivery"],
                 state=participant["state"],
                 acked_decision="yes" if participant["acked_decision"] else "no",
+                recovered="yes" if participant["recovered_after_reconnect"] else "no",
                 notes=participant["notes"] or "-",
             )
         )
@@ -347,23 +417,36 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         for entry in entries
         if entry.result.failures["recover_after_crash"]
     )
+    reconnect_recovery_count = sum(
+        1
+        for entry in entries
+        for participant in entry.result.participants
+        if participant["recovered_after_reconnect"]
+    )
 
     comparison_lines = [
-        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Report |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Report |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     snapshot_lines: list[str] = []
     for entry in entries:
         result = entry.result
         prepared_count = sum(1 for item in result.participants if item["prepared"])
         acked_count = sum(1 for item in result.participants if item["acked_decision"])
+        recovered_count = sum(
+            1 for item in result.participants if item["recovered_after_reconnect"]
+        )
+        missed_count = sum(
+            1 for item in result.participants if item["missed_second_phase_delivery"]
+        )
         title_cell = result.title
         report_cell = "-"
         if entry.report_path:
             title_cell = f"[{result.title}]({entry.report_path})"
             report_cell = f"[report]({entry.report_path})"
+        reconnect_cell = f"`{recovered_count}/{missed_count}`" if missed_count else "`-`"
         comparison_lines.append(
-            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {report} |".format(
+            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {report} |".format(
                 title=title_cell,
                 outcome=result.outcome,
                 decision=result.decision or "none",
@@ -372,11 +455,17 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
                 recovery="yes" if result.failures["recover_after_crash"] else "no",
                 prepared=prepared_count,
                 acked=acked_count,
+                reconnect=reconnect_cell,
                 total=len(result.participants),
                 report=report_cell,
             )
         )
 
+        reconnect_snapshot = (
+            f"`{recovered_count}/{missed_count}` recovered after missing the first second-phase delivery"
+            if missed_count
+            else "`-` (no participant missed the first second-phase delivery)"
+        )
         snapshot_lines.extend(
             [
                 f"### {result.title}",
@@ -384,6 +473,7 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
                 f"- description: {result.description}",
                 f"- outcome: `{result.outcome}` with decision `{result.decision or 'none'}`",
                 f"- participants prepared/acked: `{prepared_count}/{len(result.participants)}` prepared, `{acked_count}/{len(result.participants)}` acked",
+                f"- participant reconnect recovery: {reconnect_snapshot}",
                 f"- why it matters: {_primary_takeaway(result)}",
             ]
         )
@@ -400,7 +490,8 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         f"- scenarios: `{len(entries)}`",
         f"- outcomes: `{commit_count} commit`, `{abort_count} abort`, `{blocked_count} blocked`",
         f"- crash cases: `{crash_count}`",
-        f"- recovery cases: `{recovery_count}`",
+        f"- coordinator recovery cases: `{recovery_count}`",
+        f"- participant reconnect recoveries: `{reconnect_recovery_count}`",
         "",
         "## Scenario comparison",
         *comparison_lines,
@@ -408,6 +499,7 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         "## Interview talking points",
         "- plain 2PC is easy to explain because every scenario pivots on the coordinator's durable decision log.",
         "- blocking shows up when participants are already prepared but cannot prove the final outcome after a coordinator crash.",
+        "- participant-side reconnects matter too: even with a durable decision, a prepared participant can stay in doubt until the coordinator retries or recovery answers the query.",
         "- recovery is operationally different from blocking: once the decision is durable, replay can safely finish phase two.",
         "",
         "## Scenario snapshots",
@@ -576,9 +668,13 @@ def _build_result(
             "name": participant.plan.name,
             "role": participant.plan.role,
             "planned_vote": participant.plan.vote,
+            "second_phase_delivery": participant.plan.second_phase_delivery,
+            "reconnect_after_missed_decision": participant.plan.reconnect_after_missed_decision,
             "state": participant.state,
             "prepared": participant.prepared,
             "acked_decision": participant.acked_decision,
+            "missed_second_phase_delivery": participant.missed_second_phase_delivery,
+            "recovered_after_reconnect": participant.recovered_after_reconnect,
             "notes": participant.plan.notes,
         }
         for participant in participants
@@ -620,10 +716,16 @@ def _build_takeaways(
     abort_count = sum(1 for item in participants if item["planned_vote"] == "abort")
     timeout_count = sum(1 for item in participants if item["planned_vote"] == "timeout")
     prepared_count = sum(1 for item in participants if item["prepared"])
+    missed_count = sum(1 for item in participants if item["missed_second_phase_delivery"])
+    recovered_count = sum(1 for item in participants if item["recovered_after_reconnect"])
     lines = [
-        f"{yes_count} participants were willing to commit, {abort_count} voted abort, and {timeout_count} timed out.",
-        f"{prepared_count} participants reached PREPARED before the transaction finished.",
+        f"{_count_phrase(yes_count, 'participant')} were willing to commit, {abort_count} voted abort, and {timeout_count} timed out.",
+        f"{_count_phrase(prepared_count, 'participant')} reached PREPARED before the transaction finished.",
     ]
+    if missed_count:
+        lines.append(
+            f"{_count_phrase(missed_count, 'participant')} missed the first second-phase delivery, and {_count_phrase(recovered_count, 'participant')} later recovered by reconnecting for the durable decision."
+        )
     if blocking_reason:
         lines.append(blocking_reason)
     elif decision == "commit":
@@ -642,9 +744,19 @@ def _primary_takeaway(result: SimulationResult) -> str:
     if result.blocking_reason:
         return result.blocking_reason
     for entry in result.takeaways:
+        if "reconnecting for the durable decision" in entry:
+            return entry
+    for entry in result.takeaways:
         if entry.startswith("2PC "):
             return entry
     return result.takeaways[-1]
+
+
+def _count_phrase(count: int, singular: str, plural: str | None = None) -> str:
+    if plural is None:
+        plural = f"{singular}s"
+    noun = singular if count == 1 else plural
+    return f"{count} {noun}"
 
 
 def _required_string(payload: dict[str, Any], key: str) -> str:
