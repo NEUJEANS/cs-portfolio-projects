@@ -1,0 +1,29 @@
+{
+  "title": "Coordinator crash before durable decision",
+  "description": "Every participant votes YES and enters PREPARED, but the coordinator crashes before it records COMMIT or ABORT. This is the classic blocking case that makes plain 2PC operationally painful.",
+  "transaction_id": "order-2021",
+  "participants": [
+    {
+      "name": "inventory",
+      "role": "reserve stock",
+      "vote": "commit",
+      "notes": "local reservation is durable but not final"
+    },
+    {
+      "name": "billing",
+      "role": "capture payment",
+      "vote": "commit",
+      "notes": "payment provider is waiting for final confirmation"
+    },
+    {
+      "name": "shipping",
+      "role": "create shipment",
+      "vote": "commit",
+      "notes": "label request is staged but not finalized"
+    }
+  ],
+  "failures": {
+    "coordinator_crash": "before-decision",
+    "recover_after_crash": false
+  }
+}

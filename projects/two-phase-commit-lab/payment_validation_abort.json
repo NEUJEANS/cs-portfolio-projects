@@ -1,0 +1,29 @@
+{
+  "title": "Fraud check forces global abort",
+  "description": "Inventory is ready, but the risk service votes NO after a fraud signal. The coordinator must abort the whole distributed transaction so no participant commits alone.",
+  "transaction_id": "order-1088",
+  "participants": [
+    {
+      "name": "inventory",
+      "role": "reserve stock",
+      "vote": "commit",
+      "notes": "items are in stock"
+    },
+    {
+      "name": "risk",
+      "role": "fraud screening",
+      "vote": "abort",
+      "notes": "card fingerprint mismatched historical behavior"
+    },
+    {
+      "name": "billing",
+      "role": "capture payment",
+      "vote": "commit",
+      "notes": "would have charged if risk had approved"
+    }
+  ],
+  "failures": {
+    "coordinator_crash": "none",
+    "recover_after_crash": false
+  }
+}

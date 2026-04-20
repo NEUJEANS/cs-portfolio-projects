@@ -1,0 +1,11 @@
+# two-phase-commit-lab checklist
+
+- [x] define portfolio goals: atomic commit, blocking behavior, and recovery replay in a small runnable lab
+- [x] do brief research on prepare/commit/abort semantics and why durable decision logging matters
+- [x] refresh the protocol flow with a short self-test note before coding
+- [x] implement JSON scenario validation plus deterministic 2PC simulation
+- [x] cover happy-path commit, participant veto abort, blocking coordinator crash, and recovery replay with committed scenarios
+- [x] add CLI commands for validation, simulation, JSON output, and Markdown artifact export
+- [x] add automated tests for validation, simulation outcomes, blocking semantics, and CLI artifact output
+- [x] run at least 3 review passes and fix issues found
+- [x] run tests, secret-scan, commit, push, and add a wrap-up note for the slice

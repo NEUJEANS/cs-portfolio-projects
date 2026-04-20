@@ -1,0 +1,29 @@
+{
+  "title": "Recovery replays a durable commit",
+  "description": "All participants vote YES, the coordinator durably logs COMMIT, then crashes before everyone hears the outcome. Recovery replays the log and safely finishes phase two.",
+  "transaction_id": "order-3050",
+  "participants": [
+    {
+      "name": "inventory",
+      "role": "reserve stock",
+      "vote": "commit",
+      "notes": "reservation is prepared before the crash"
+    },
+    {
+      "name": "billing",
+      "role": "capture payment",
+      "vote": "commit",
+      "notes": "prepared payment can commit after recovery"
+    },
+    {
+      "name": "shipping",
+      "role": "create shipment",
+      "vote": "commit",
+      "notes": "shipment creation waits for replayed decision"
+    }
+  ],
+  "failures": {
+    "coordinator_crash": "after-decision-log",
+    "recover_after_crash": true
+  }
+}

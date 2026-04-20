@@ -1,0 +1,29 @@
+{
+  "title": "Order service happy-path commit",
+  "description": "Inventory, billing, and shipping all vote YES, so the coordinator records a durable commit and every participant applies the order in the second phase.",
+  "transaction_id": "order-1042",
+  "participants": [
+    {
+      "name": "inventory",
+      "role": "reserve stock",
+      "vote": "commit",
+      "notes": "SKU stock is available"
+    },
+    {
+      "name": "billing",
+      "role": "capture payment",
+      "vote": "commit",
+      "notes": "authorization already succeeded"
+    },
+    {
+      "name": "shipping",
+      "role": "create shipment",
+      "vote": "commit",
+      "notes": "carrier label quota is healthy"
+    }
+  ],
+  "failures": {
+    "coordinator_crash": "none",
+    "recover_after_crash": false
+  }
+}
