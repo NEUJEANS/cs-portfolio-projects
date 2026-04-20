@@ -35,6 +35,7 @@ load_scenario = MODULE.load_scenario
 render_catalog_markdown = MODULE.render_catalog_markdown
 render_comparison_html = MODULE.render_comparison_html
 render_comparison_markdown = MODULE.render_comparison_markdown
+render_incident_response_html = MODULE.render_incident_response_html
 render_markdown_report = MODULE.render_markdown_report
 render_termination_resolution_markdown = MODULE.render_termination_resolution_markdown
 simulate_two_phase_commit = MODULE.simulate_two_phase_commit
@@ -347,10 +348,36 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("[md](reports/coordinator_crash_partial_commit_delivery_termination.md)", catalog)
             self.assertIn("related artifacts: [report](reports/coordinator_crash_partial_commit_delivery_report.md) / [compare html](reports/coordinator_crash_partial_commit_delivery_protocol_compare.html) / [compare md](reports/coordinator_crash_partial_commit_delivery_protocol_compare.md) / [termination md](reports/coordinator_crash_partial_commit_delivery_termination.md)", catalog)
 
+    def test_incident_response_dashboard_groups_blocked_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "scenario_catalog.md"
+            report_dir = Path(temp_dir) / "reports"
+            entries = build_catalog_entries(
+                collect_scenario_paths([SCENARIO_DIR]),
+                catalog_path=catalog_path,
+                report_dir=report_dir,
+            )
+            dashboard = render_incident_response_html(
+                entries,
+                catalog_markdown_path="scenario_catalog.md",
+            )
+            self.assertIn("Blocked-case triage at a glance", dashboard)
+            self.assertIn("Recovery-required / still blocked", dashboard)
+            self.assertIn("Peer-visible COMMIT evidence", dashboard)
+            self.assertIn("Safe-ABORT evidence", dashboard)
+            self.assertIn("Coordinator crash before durable decision", dashboard)
+            self.assertIn("Coordinator crash after one COMMIT delivery", dashboard)
+            self.assertIn("Coordinator crash after durable ABORT", dashboard)
+            self.assertIn('href="scenario_catalog.md"', dashboard)
+            self.assertIn('href="reports/coordinator_crash_before_decision_report.md"', dashboard)
+            self.assertIn('href="reports/coordinator_crash_partial_commit_delivery_report.md"', dashboard)
+            self.assertIn('href="reports/coordinator_crash_durable_abort_report.md"', dashboard)
+
     def test_catalog_command_writes_index_and_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report_dir = Path(temp_dir) / "reports"
             catalog_path = Path(temp_dir) / "scenario_catalog.md"
+            dashboard_path = Path(temp_dir) / "incident_response_dashboard.html"
             completed = subprocess.run(
                 [
                     "python3",
@@ -368,17 +395,23 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
                 cwd=REPO_ROOT,
             )
             self.assertIn("wrote 7 scenario reports", completed.stdout)
+            self.assertIn("wrote incident-response dashboard", completed.stdout)
+            self.assertTrue(dashboard_path.exists())
             self.assertTrue((report_dir / "order_success_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_durable_abort_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_report.md").exists())
             self.assertTrue((report_dir / "participant_reconnect_commit_report.md").exists())
             catalog = catalog_path.read_text()
+            dashboard = dashboard_path.read_text()
+            self.assertIn("[incident-response dashboard](incident_response_dashboard.html)", catalog)
             self.assertIn("[report](reports/order_success_report.md)", catalog)
             self.assertIn("outcome: `blocked` with decision `commit`", catalog)
             self.assertIn("outcome: `blocked` with decision `abort`", catalog)
             self.assertIn("termination hint: COMMIT visible via inventory", catalog)
             self.assertIn("termination hint: ABORT safe via risk", catalog)
+            self.assertIn("Peer-visible COMMIT evidence", dashboard)
+            self.assertIn("Safe-ABORT evidence", dashboard)
 
     def test_cli_json_output_and_markdown_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

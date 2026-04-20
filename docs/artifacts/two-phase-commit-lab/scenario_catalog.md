@@ -2,6 +2,8 @@
 
 A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, recovery, and peer-assisted incident-response cases.
 
+Need the blocked-case triage view first? Open the [incident-response dashboard](incident_response_dashboard.html).
+
 ## Bundle summary
 - scenarios: `7`
 - outcomes: `3 commit`, `1 abort`, `3 blocked`

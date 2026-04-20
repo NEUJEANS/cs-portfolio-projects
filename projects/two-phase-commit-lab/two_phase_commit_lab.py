@@ -1155,7 +1155,10 @@ def render_termination_resolution_markdown(result: TerminationResolutionResult) 
     return "\n".join(lines)
 
 
-def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
+def render_catalog_markdown(
+    entries: list[CatalogEntry],
+    incident_dashboard_path: str | None = None,
+) -> str:
     if not entries:
         raise ScenarioError("catalog requires at least one scenario")
 
@@ -1268,11 +1271,20 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
             snapshot_lines.append(f"- related artifacts: {' / '.join(related_artifacts)}")
         snapshot_lines.append("")
 
+    incident_dashboard_lines: list[str] = []
+    if incident_dashboard_path:
+        incident_dashboard_lines = [
+            "Need the blocked-case triage view first? Open the "
+            f"[incident-response dashboard]({incident_dashboard_path}).",
+            "",
+        ]
+
     lines = [
         "# Two-phase commit scenario catalog",
         "",
         "A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, recovery, and peer-assisted incident-response cases.",
         "",
+        *incident_dashboard_lines,
         "## Bundle summary",
         f"- scenarios: `{len(entries)}`",
         f"- outcomes: `{commit_count} commit`, `{abort_count} abort`, `{blocked_count} blocked`",
@@ -1297,6 +1309,359 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         *snapshot_lines,
     ]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_incident_response_html(
+    entries: list[CatalogEntry],
+    *,
+    catalog_markdown_path: str | None = None,
+) -> str:
+    blocked_entries = [entry for entry in entries if entry.result.outcome == "blocked"]
+    group_specs = [
+        (
+            "recovery",
+            "Recovery-required / still blocked",
+            "These incidents do not yet have decisive peer evidence, so the safe play is to wait for coordinator recovery or keep the transaction blocked.",
+            "warning",
+        ),
+        (
+            "commit-evidence",
+            "Peer-visible COMMIT evidence",
+            "At least one peer already knows the durable COMMIT, so the incident can pivot from blind waiting into a concrete peer-assisted resolution drill.",
+            "success",
+        ),
+        (
+            "abort-evidence",
+            "Safe-ABORT evidence",
+            "A peer that never reached PREPARED can safely prove rollback, which turns the incident into an evidence-backed ABORT response instead of indefinite doubt.",
+            "danger",
+        ),
+    ]
+    grouped_entries: dict[str, list[CatalogEntry]] = {key: [] for key, *_ in group_specs}
+    for entry in blocked_entries:
+        grouped_entries[_incident_response_group(entry.result)].append(entry)
+
+    summary_cards = [
+        (
+            "Blocked incidents",
+            str(len(blocked_entries)),
+            "Baseline blocked scenarios in the current 2PC sample bundle.",
+            "neutral",
+        ),
+        (
+            "Recovery-required",
+            str(len(grouped_entries["recovery"])),
+            "No decisive peer evidence exists yet, so coordinator recovery still matters most.",
+            "warning",
+        ),
+        (
+            "Peer-visible COMMIT",
+            str(len(grouped_entries["commit-evidence"])),
+            "A participant already heard durable COMMIT before the crash.",
+            "success",
+        ),
+        (
+            "Safe-ABORT evidence",
+            str(len(grouped_entries["abort-evidence"])),
+            "A non-prepared peer can prove rollback safely.",
+            "danger",
+        ),
+    ]
+    summary_cards_html = "".join(
+        f'''<article class="summary-card summary-card--{_html_escape(tone)}">
+      <p class="summary-label">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description, tone in summary_cards
+    )
+
+    catalog_link_html = ""
+    if catalog_markdown_path:
+        catalog_link_html = (
+            '<a class="catalog-link" href="'
+            + _html_escape(catalog_markdown_path)
+            + '">Open the full scenario catalog</a>'
+        )
+
+    if not blocked_entries:
+        sections_html = """
+        <section class="group group--neutral">
+          <div class="group-header">
+            <div>
+              <p class="eyebrow">No blocked baselines</p>
+              <h2>No incident-response cases yet</h2>
+            </div>
+            <span class="group-count">0</span>
+          </div>
+          <p class="group-description">Once a scenario blocks after PREPARE, this dashboard will group it by whether recovery, peer-visible COMMIT evidence, or safe-ABORT evidence drives the response.</p>
+        </section>
+        """
+    else:
+        section_parts: list[str] = []
+        for key, heading, description, tone in group_specs:
+            matches = grouped_entries[key]
+            if not matches:
+                continue
+            cards_html = "".join(_render_incident_response_card_html(entry) for entry in matches)
+            section_parts.append(
+                f'''<section class="group group--{_html_escape(tone)}">
+          <div class="group-header">
+            <div>
+              <p class="eyebrow">Blocked-case bucket</p>
+              <h2>{_html_escape(heading)}</h2>
+            </div>
+            <span class="group-count">{len(matches)}</span>
+          </div>
+          <p class="group-description">{_html_escape(description)}</p>
+          <div class="incident-grid">
+            {cards_html}
+          </div>
+        </section>'''
+            )
+        sections_html = "\n".join(section_parts)
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Two-phase commit incident-response dashboard</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --surface: #ffffff;
+        --surface-alt: #eef2ff;
+        --text: #172033;
+        --muted: #5b6475;
+        --border: #d7dfef;
+        --shadow: 0 18px 40px rgba(23, 32, 51, 0.08);
+        --warning: #8a5a00;
+        --warning-bg: #fff4d6;
+        --success: #1f6b3b;
+        --success-bg: #ddf7e6;
+        --danger: #9f1c1c;
+        --danger-bg: #ffe0e0;
+        --neutral: #3056d3;
+        --neutral-bg: #e5edff;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+        color: var(--text);
+      }}
+      main {{ max-width: 1180px; margin: 0 auto; padding: 48px 20px 64px; }}
+      .hero {{
+        background: linear-gradient(140deg, #172033 0%, #274690 58%, #3155d4 100%);
+        color: #fff;
+        padding: 32px;
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+      }}
+      .eyebrow {{
+        margin: 0 0 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.76rem;
+        font-weight: 700;
+        opacity: 0.78;
+      }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      h1 {{ font-size: clamp(2rem, 3vw, 3rem); margin-bottom: 14px; }}
+      .lede {{ max-width: 78ch; line-height: 1.65; font-size: 1rem; margin-bottom: 18px; color: rgba(255,255,255,0.9); }}
+      .hero-links {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }}
+      .catalog-link {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 11px 16px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.16);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 700;
+      }}
+      .summary-grid, .incident-grid {{
+        display: grid;
+        gap: 16px;
+      }}
+      .summary-grid {{
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        margin: 24px 0 0;
+      }}
+      .summary-card, .incident-card, .group {{
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+      }}
+      .summary-card {{ padding: 20px; }}
+      .summary-card strong {{ display: block; font-size: 2rem; margin-bottom: 8px; }}
+      .summary-card p {{ color: var(--muted); line-height: 1.5; margin-bottom: 0; }}
+      .summary-label {{ font-size: 0.9rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }}
+      .summary-card--warning strong, .group--warning h2, .pill--warning {{ color: var(--warning); }}
+      .summary-card--success strong, .group--success h2, .pill--success {{ color: var(--success); }}
+      .summary-card--danger strong, .group--danger h2, .pill--danger {{ color: var(--danger); }}
+      .summary-card--neutral strong, .group--neutral h2, .pill--neutral {{ color: var(--neutral); }}
+      .group {{ padding: 24px; margin-top: 28px; }}
+      .group-header {{ display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 8px; }}
+      .group-count {{
+        min-width: 48px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: var(--surface-alt);
+        text-align: center;
+        font-weight: 800;
+      }}
+      .group--warning .group-count {{ background: var(--warning-bg); color: var(--warning); }}
+      .group--success .group-count {{ background: var(--success-bg); color: var(--success); }}
+      .group--danger .group-count {{ background: var(--danger-bg); color: var(--danger); }}
+      .group--neutral .group-count {{ background: var(--neutral-bg); color: var(--neutral); }}
+      .group-description {{ color: var(--muted); line-height: 1.6; max-width: 78ch; margin-bottom: 18px; }}
+      .incident-grid {{ grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }}
+      .incident-card {{ padding: 20px; }}
+      .incident-card__header {{ display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 12px; }}
+      .incident-card__header h3 {{ margin-bottom: 6px; font-size: 1.15rem; }}
+      .incident-card__description {{ color: var(--muted); line-height: 1.55; margin-bottom: 14px; }}
+      .pill {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 6px 12px;
+        background: var(--surface-alt);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }}
+      .pill--warning {{ background: var(--warning-bg); }}
+      .pill--success {{ background: var(--success-bg); }}
+      .pill--danger {{ background: var(--danger-bg); }}
+      .incident-facts {{
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 14px;
+        margin: 0 0 14px;
+      }}
+      .incident-facts div {{ background: #f8faff; border: 1px solid var(--border); border-radius: 16px; padding: 10px 12px; }}
+      .incident-facts dt {{ margin: 0 0 6px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }}
+      .incident-facts dd {{ margin: 0; font-weight: 700; }}
+      .incident-card__callout {{
+        border-left: 4px solid var(--border);
+        background: #fafcff;
+        border-radius: 16px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+        line-height: 1.55;
+        color: var(--text);
+      }}
+      .incident-card__callout strong {{ display: block; margin-bottom: 4px; }}
+      .artifact-links {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }}
+      .artifact-link {{
+        display: inline-flex;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--neutral-bg);
+        color: var(--neutral);
+        text-decoration: none;
+        font-weight: 700;
+      }}
+      @media (max-width: 720px) {{
+        .hero {{ padding: 24px; border-radius: 22px; }}
+        .group {{ padding: 20px; }}
+        .incident-facts {{ grid-template-columns: 1fr; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Two-phase commit incident-response dashboard</p>
+        <h1>Blocked-case triage at a glance</h1>
+        <p class="lede">This static dashboard strips the portfolio bundle down to the incidents that actually block after <code>PREPARE</code>. It groups them by the response story that matters most during triage: waiting for coordinator recovery, following peer-visible <code>COMMIT</code> evidence, or proving a safe <code>ABORT</code> from a peer that never reached <code>PREPARED</code>.</p>
+        <div class="hero-links">
+          {catalog_link_html}
+        </div>
+      </section>
+
+      <section class="summary-grid">
+        {summary_cards_html}
+      </section>
+
+      {sections_html}
+    </main>
+  </body>
+</html>
+'''
+
+
+def _incident_response_group(result: SimulationResult) -> str:
+    summary = result.termination_hint_summary or ""
+    if summary.startswith("COMMIT visible"):
+        return "commit-evidence"
+    if summary.startswith("ABORT safe"):
+        return "abort-evidence"
+    return "recovery"
+
+
+def _render_incident_response_card_html(entry: CatalogEntry) -> str:
+    result = entry.result
+    prepared_count = sum(1 for item in result.participants if item["prepared"])
+    acked_count = sum(1 for item in result.participants if item["acked_decision"])
+    blocked_count = sum(1 for item in result.participants if item["state"] == "prepared")
+    decision_label = (result.decision or "none").upper()
+    pill_tone = {
+        "COMMIT": "success",
+        "ABORT": "danger",
+    }.get(decision_label, "warning")
+    evidence_label = result.termination_hint_summary or "No decisive peer evidence yet"
+    links: list[tuple[str, str]] = []
+    if entry.report_path:
+        links.append(("report", entry.report_path))
+    if entry.termination_markdown_path:
+        links.append(("termination md", entry.termination_markdown_path))
+    if entry.comparison_html_path:
+        links.append(("compare html", entry.comparison_html_path))
+    if entry.comparison_markdown_path:
+        links.append(("compare md", entry.comparison_markdown_path))
+    links_html = "".join(
+        f'<a class="artifact-link" href="{_html_escape(path)}">{_html_escape(label)}</a>'
+        for label, path in links
+    )
+    return f'''<article class="incident-card">
+      <div class="incident-card__header">
+        <div>
+          <p class="eyebrow">transaction {_html_escape(result.transaction_id)}</p>
+          <h3>{_html_escape(result.title)}</h3>
+        </div>
+        <span class="pill pill--{_html_escape(pill_tone)}">{_html_escape(decision_label)}</span>
+      </div>
+      <p class="incident-card__description">{_html_escape(result.description)}</p>
+      <dl class="incident-facts">
+        <div><dt>Crash point</dt><dd>{_html_escape(result.failures['coordinator_crash'])}</dd></div>
+        <div><dt>Durable decision</dt><dd>{'yes' if result.decision_durable else 'no'}</dd></div>
+        <div><dt>Prepared / total</dt><dd>{prepared_count}/{len(result.participants)}</dd></div>
+        <div><dt>Acked / total</dt><dd>{acked_count}/{len(result.participants)}</dd></div>
+        <div><dt>Still blocked</dt><dd>{blocked_count}</dd></div>
+        <div><dt>Recovery configured</dt><dd>{'yes' if result.failures['recover_after_crash'] else 'no'}</dd></div>
+      </dl>
+      <div class="incident-card__callout">
+        <strong>Evidence</strong>
+        {_html_escape(evidence_label)}
+      </div>
+      <div class="incident-card__callout">
+        <strong>Blocking story</strong>
+        {_html_escape(result.blocking_reason or 'No blocking reason recorded.')}
+      </div>
+      <div class="artifact-links">
+        {links_html}
+      </div>
+    </article>'''
 
 
 def write_markdown_report(path: str | Path, result: SimulationResult) -> None:
@@ -1326,10 +1691,36 @@ def write_termination_resolution_markdown(
     output_path.write_text(render_termination_resolution_markdown(result))
 
 
-def write_catalog(path: str | Path, entries: list[CatalogEntry]) -> None:
+def write_incident_response_dashboard(
+    path: str | Path,
+    entries: list[CatalogEntry],
+    *,
+    catalog_markdown_path: str | None = None,
+) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(render_catalog_markdown(entries))
+    output_path.write_text(
+        render_incident_response_html(
+            entries,
+            catalog_markdown_path=catalog_markdown_path,
+        )
+    )
+
+
+def write_catalog(
+    path: str | Path,
+    entries: list[CatalogEntry],
+    *,
+    incident_dashboard_path: str | None = None,
+) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        render_catalog_markdown(
+            entries,
+            incident_dashboard_path=incident_dashboard_path,
+        )
+    )
 
 
 def collect_scenario_paths(paths: list[Path]) -> list[Path]:
@@ -1547,9 +1938,24 @@ def main(argv: list[str] | None = None) -> int:
             catalog_path=args.markdown_out,
             report_dir=args.report_dir,
         )
-        write_catalog(args.markdown_out, entries)
+        incident_dashboard_path = args.markdown_out.parent / "incident_response_dashboard.html"
+        incident_dashboard_relative_path = _relative_artifact_path(
+            incident_dashboard_path,
+            start=args.markdown_out.parent,
+        ) or incident_dashboard_path.name
+        write_incident_response_dashboard(
+            incident_dashboard_path,
+            entries,
+            catalog_markdown_path=args.markdown_out.name,
+        )
+        write_catalog(
+            args.markdown_out,
+            entries,
+            incident_dashboard_path=incident_dashboard_relative_path,
+        )
         if args.report_dir:
             print(f"wrote {len(entries)} scenario reports to {args.report_dir}")
+        print(f"wrote incident-response dashboard to {incident_dashboard_path}")
         print(f"wrote catalog to {args.markdown_out}")
         return 0
 

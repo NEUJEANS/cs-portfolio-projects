@@ -17,8 +17,9 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - protocol comparison mode that contrasts the same business incident as plain 2PC versus an orchestrated saga, making the blocking-vs-compensation trade-off visible in Markdown, JSON, and static HTML dashboard artifacts
 - Markdown report export for recruiter-friendly artifacts under `docs/artifacts/two-phase-commit-lab/`
 - static HTML comparison dashboards for recruiter screenshots, GitHub Pages browsing, or interview walkthrough links
+- a compact incident-response HTML dashboard that groups blocked scenarios by recovery-required cases, peer-visible `COMMIT` evidence, and safe-`ABORT` evidence
 - multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, termination hints, and any committed comparison/termination companion artifacts in one place
-- clean CLI commands for validation, single-scenario simulation, protocol comparison, and bundle generation
+- clean CLI commands for validation, single-scenario simulation, protocol comparison, termination walkthroughs, and bundle generation
 
 ## Project structure
 - `two_phase_commit_lab.py` - validator, simulator, peer-resolution/2PC-vs-saga artifact generators (Markdown/JSON/HTML), catalog generator, and CLI entrypoint
@@ -30,8 +31,8 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - `coordinator_recovery_commit.json` - the coordinator logs COMMIT, crashes, then replays the decision during recovery
 - `participant_reconnect_commit.json` - a prepared participant misses the first `COMMIT`, reconnects, and resolves the durable outcome safely
 - `CHECKLIST.md` - resumable slice history plus next ideas
-- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, HTML/Markdown CLI output, and catalog generation
-- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, peer-resolution artifacts, the scenario catalog landing page, and protocol-comparison Markdown/JSON/HTML artifacts with cross-links between them when the companion files exist
+- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, HTML/Markdown CLI output, the incident-response dashboard, and catalog generation
+- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, peer-resolution artifacts, the scenario catalog landing page, the blocked-case incident-response dashboard, and protocol-comparison Markdown/JSON/HTML artifacts with cross-links between them when the companion files exist
 
 ## Scenario format
 ```json
@@ -140,6 +141,8 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   --report-dir docs/artifacts/two-phase-commit-lab
 ```
 
+That bundle command also refreshes `incident_response_dashboard.html`, a compact blocked-case triage page that deep-links back into the full scenario catalog and per-scenario artifacts.
+
 ## What the committed samples show
 - `order_success.json`
   - every participant writes a prepared record, the coordinator logs COMMIT, and the second phase finishes cleanly
@@ -156,7 +159,9 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
 - `participant_reconnect_commit.json`
   - a prepared participant can still end up temporarily in doubt after missing the first second-phase message, then safely finish by reconnecting to learn the durable decision
 - `scenario_catalog.md`
-  - one landing page compares all committed scenarios and now deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, and peer-termination walkthroughs whenever those companion artifacts exist
+  - one landing page compares all committed scenarios and now deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, and the blocked-case incident dashboard
+- `incident_response_dashboard.html`
+  - a compact on-call style triage view for only the blocked scenarios, grouped into recovery-required, peer-visible `COMMIT`, and safe-`ABORT` evidence buckets
 - `coordinator_crash_before_decision_protocol_compare.md` / `.html`
   - a side-by-side 2PC vs saga artifact for the classic blocking crash, useful when interviewers ask why microservices often avoid plain 2PC
 - `coordinator_crash_partial_commit_delivery_protocol_compare.md` / `.html`

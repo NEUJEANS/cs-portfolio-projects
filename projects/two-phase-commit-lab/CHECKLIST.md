@@ -10,8 +10,8 @@
 - [x] Add a blocked-after-ABORT sample so peer termination resolution demonstrates both decisive COMMIT witnesses and safe ABORT proofs via a non-prepared peer
 - [x] Add a compact static HTML dashboard for protocol comparison artifacts so recruiters can browse 2PC-vs-saga tradeoffs without reading Markdown first
 - [x] Cross-link the scenario catalog to committed comparison dashboards and peer-termination walkthrough artifacts when those companions exist
+- [x] Add a compact incident-response landing page that groups blocked scenarios by recovery, peer-visible COMMIT, and safe-ABORT evidence
 
 ## Next candidate slices
 - [ ] add scenario tags or thematic grouping controls if the sample set grows beyond the current seven cases
 - [ ] add a sequence-diagram or timeline export for the termination-resolution flow
-- [ ] add a compact incident-response landing page that groups blocked scenarios by recovery, peer-visible COMMIT, and safe-ABORT evidence
