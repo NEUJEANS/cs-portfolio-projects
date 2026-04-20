@@ -53,17 +53,38 @@
     {
       "label": "generated-stress-seed17-2-workers",
       "graph": "generated_stress_seed17.json",
-      "worker_limit": 2
+      "worker_limit": 2,
+      "stochastic_durations": {
+        "samples": 64,
+        "seed": 20260420,
+        "low_factor": 0.7,
+        "mode_factor": 1.0,
+        "high_factor": 1.8
+      }
     },
     {
       "label": "generated-stress-seed29-2-workers",
       "graph": "generated_stress_seed29.json",
-      "worker_limit": 2
+      "worker_limit": 2,
+      "stochastic_durations": {
+        "samples": 64,
+        "seed": 20260420,
+        "low_factor": 0.7,
+        "mode_factor": 1.0,
+        "high_factor": 1.8
+      }
     },
     {
       "label": "generated-stress-seed41-2-workers",
       "graph": "generated_stress_seed41.json",
-      "worker_limit": 2
+      "worker_limit": 2,
+      "stochastic_durations": {
+        "samples": 64,
+        "seed": 20260420,
+        "low_factor": 0.7,
+        "mode_factor": 1.0,
+        "high_factor": 1.8
+      }
     }
   ]
 }

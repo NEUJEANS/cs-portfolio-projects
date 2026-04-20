@@ -1,4 +1,4 @@
-strategy,scenario_count,rank_1_finishes,best_makespan_finishes,average_makespan,average_delta_vs_critical_path_lower_bound,average_ratio_vs_critical_path_lower_bound,average_delta_vs_best,average_total_queue_delay,average_max_queue_delay,average_utilization
-critical-first,11,7,10,17.181818,3.181818,1.238115,0.090909,20.909091,8.272727,0.634253
-fifo,11,7,7,18.909091,4.909091,1.325541,1.818182,11.909091,4.727273,0.580863
-longest-processing-time,10,3,6,19.8,5.1,1.33381,1.8,13.7,5.6,0.585407
+strategy,scenario_count,rank_1_finishes,best_makespan_finishes,average_makespan,average_delta_vs_critical_path_lower_bound,average_ratio_vs_critical_path_lower_bound,average_delta_vs_best,average_total_queue_delay,average_max_queue_delay,average_utilization,stochastic_scenario_count,average_sampled_makespan,average_p50_makespan,average_p90_makespan,average_worst_makespan,average_sampled_delta_vs_critical_path_lower_bound,average_sampled_ratio_vs_critical_path_lower_bound,average_sampled_delta_vs_best,average_best_finish_rate
+critical-first,11,7,10,17.181818,3.181818,1.238115,0.090909,20.909091,8.272727,0.634253,3,31.536458,31.333333,33.333333,36.666667,6.682292,1.270913,0.0,1.0
+fifo,11,7,7,18.909091,4.909091,1.325541,1.818182,11.909091,4.727273,0.580863,3,38.15625,38.0,41.333333,43.666667,13.302083,1.538805,6.619792,0.0
+longest-processing-time,10,3,6,19.8,5.1,1.33381,1.8,13.7,5.6,0.585407,3,38.046875,38.0,41.333333,44.333333,13.192708,1.532609,6.510417,0.0

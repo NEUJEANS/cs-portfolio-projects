@@ -27,6 +27,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - synthetic manifest generators for CI, release, data-pipeline, and seeded stress-workload stories so the project can showcase multiple workload families without hand-authoring every DAG
 - batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary plus JSON/CSV/HTML companion artifacts across both hand-authored and generated manifests
 - benchmark exports that surface each strategy's gap and ratio versus the critical-path lower bound, making scheduler efficiency easier to discuss in interviews
+- stochastic benchmark replays that resample task durations with seeded triangular ranges so the suite can compare heuristic robustness under uncertainty instead of only fixed-duration DAGs
 
 ## Project structure
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, scheduler, CLI, diagram export helpers, walkthrough-report generation, HTML dashboard rendering, and schedule SVG export
@@ -97,6 +98,18 @@ Notes:
       "worker_limit": 3,
       "strategies": ["critical-first", "fifo"],
       "resource_capacities": {"browser-lab": 3, "gpu": 1, "signing": 1}
+    },
+    {
+      "label": "generated-stress-seed17-2-workers",
+      "graph": "generated_stress_seed17.json",
+      "worker_limit": 2,
+      "stochastic_durations": {
+        "samples": 64,
+        "seed": 20260420,
+        "low_factor": 0.7,
+        "mode_factor": 1.0,
+        "high_factor": 1.8
+      }
     }
   ]
 }
@@ -113,7 +126,7 @@ The `benchmark` command can emit five complementary outputs from the same suite 
 - aggregate CSV leaderboard (`--benchmark-aggregate-csv-out`) for one row per strategy
 - per-scenario strategy CSV (`--benchmark-strategy-csv-out`) for plotting/notebooks
 
-Each benchmark export now includes both the raw makespan gap and the makespan ratio versus the scenario's critical-path lower bound, so the scoreboard can describe not only who won but also how far each heuristic stayed from the theoretical floor.
+Each benchmark export now includes both the raw makespan gap and the makespan ratio versus the scenario's critical-path lower bound, so the scoreboard can describe not only who won but also how far each heuristic stayed from the theoretical floor. When `stochastic_durations` is present, the same scenario also emits sampled average/p50/p90/worst makespans plus best-finish rates so the suite can compare robustness under duration drift.
 
 Scenario fields:
 - `label` - required unique scenario name used in the Markdown report
@@ -121,6 +134,7 @@ Scenario fields:
 - `worker_limit` - required positive worker cap for every strategy replay in that scenario
 - `strategies` - optional subset of ready-queue strategies; defaults to all supported strategies
 - `resource_capacities` - optional inline renewable-resource capacities that override the manifest for just that scenario
+- `stochastic_durations` - optional seeded triangular-duration replay config with `samples`, `low_factor`, `mode_factor`, `high_factor`, and optional `seed` fields for uncertainty benchmarking
 
 ## Usage
 Run from the repository root.
@@ -387,8 +401,8 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - how a benchmark suite makes it obvious when one heuristic wins, ties, or loses across different workload shapes
 - why synthetic CI, release, data-pipeline, and stress generators make the scheduler story broader without burying the repo in hand-authored DAGs
 - how gap/ratio-to-critical-path metrics help explain whether a heuristic merely wins or actually stays close to the theoretical floor
+- why seeded triangular duration replays are a practical way to talk about schedule robustness without needing a full discrete-event simulator
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
-- simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
 - surface manifest metadata inside Mermaid preview wrappers and schedule SVG captions for even more polished artifact storytelling

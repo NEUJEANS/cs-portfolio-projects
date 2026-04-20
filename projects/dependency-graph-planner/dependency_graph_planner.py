@@ -8,6 +8,7 @@ import csv
 import heapq
 import io
 import json
+import math
 import os
 import random
 from dataclasses import dataclass, field
@@ -114,6 +115,15 @@ class WorkerLimitedSchedule:
 
 
 @dataclass(frozen=True)
+class BenchmarkStochasticConfig:
+    samples: int
+    seed: int
+    low_factor: float
+    mode_factor: float
+    high_factor: float
+
+
+@dataclass(frozen=True)
 class BenchmarkScenario:
     label: str
     graph_label: str
@@ -121,6 +131,7 @@ class BenchmarkScenario:
     worker_limit: int
     strategies: tuple[str, ...]
     resource_capacity_overrides: dict[str, int] = field(default_factory=dict)
+    stochastic_config: BenchmarkStochasticConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +152,20 @@ class BenchmarkStrategyResult:
 
 
 @dataclass(frozen=True)
+class BenchmarkStochasticStrategyResult:
+    strategy: str
+    average_makespan: float
+    p50_makespan: int
+    p90_makespan: int
+    worst_makespan: int
+    average_delta_vs_critical_path_lower_bound: float
+    average_ratio_vs_critical_path_lower_bound: float
+    average_delta_vs_best: float
+    best_finish_count: int
+    best_finish_rate: float
+
+
+@dataclass(frozen=True)
 class BenchmarkScenarioResult:
     label: str
     graph_label: str
@@ -154,6 +179,8 @@ class BenchmarkScenarioResult:
     best_makespan: int
     best_makespan_strategies: list[str]
     rank_1_strategies: list[str]
+    stochastic_config: BenchmarkStochasticConfig | None = None
+    stochastic_strategy_results: list[BenchmarkStochasticStrategyResult] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -172,11 +199,26 @@ class BenchmarkStrategyAggregate:
 
 
 @dataclass(frozen=True)
+class BenchmarkStochasticAggregate:
+    strategy: str
+    scenario_count: int
+    average_sampled_makespan: float
+    average_p50_makespan: float
+    average_p90_makespan: float
+    average_worst_makespan: float
+    average_delta_vs_critical_path_lower_bound: float
+    average_ratio_vs_critical_path_lower_bound: float
+    average_delta_vs_best: float
+    average_best_finish_rate: float
+
+
+@dataclass(frozen=True)
 class BenchmarkSuiteResult:
     title: str
     source_label: str
     scenarios: list[BenchmarkScenarioResult]
     aggregates: list[BenchmarkStrategyAggregate]
+    stochastic_aggregates: list[BenchmarkStochasticAggregate] = field(default_factory=list)
 
 
 def load_manifest(path: str | Path) -> dict:
@@ -410,6 +452,71 @@ def _parse_inline_resource_capacities(raw_value: Any, *, label: str) -> dict[str
     return dict(sorted(capacities.items()))
 
 
+def _parse_positive_factor(raw_value: Any, *, label: str, field_name: str, default: float) -> float:
+    if raw_value is None:
+        return default
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+        raise GraphValidationError(f"benchmark scenario {label!r} {field_name} must be a positive number")
+    value = float(raw_value)
+    if value <= 0:
+        raise GraphValidationError(f"benchmark scenario {label!r} {field_name} must be a positive number")
+    return value
+
+
+def _default_benchmark_stochastic_seed(label: str) -> int:
+    return sum((index + 1) * ord(char) for index, char in enumerate(label))
+
+
+def _parse_benchmark_stochastic_config(raw_value: Any, *, label: str) -> BenchmarkStochasticConfig | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, dict):
+        raise GraphValidationError(f"benchmark scenario {label!r} stochastic_durations must be a JSON object")
+
+    samples = raw_value.get("samples")
+    if not isinstance(samples, int) or samples <= 0:
+        raise GraphValidationError(f"benchmark scenario {label!r} stochastic_durations.samples must be a positive integer")
+
+    raw_seed = raw_value.get("seed")
+    if raw_seed is None:
+        seed = _default_benchmark_stochastic_seed(label)
+    elif isinstance(raw_seed, bool) or not isinstance(raw_seed, int):
+        raise GraphValidationError(f"benchmark scenario {label!r} stochastic_durations.seed must be an integer")
+    else:
+        seed = raw_seed
+
+    low_factor = _parse_positive_factor(
+        raw_value.get("low_factor"),
+        label=label,
+        field_name="stochastic_durations.low_factor",
+        default=0.75,
+    )
+    mode_factor = _parse_positive_factor(
+        raw_value.get("mode_factor"),
+        label=label,
+        field_name="stochastic_durations.mode_factor",
+        default=1.0,
+    )
+    high_factor = _parse_positive_factor(
+        raw_value.get("high_factor"),
+        label=label,
+        field_name="stochastic_durations.high_factor",
+        default=1.5,
+    )
+    if not (low_factor <= mode_factor <= high_factor):
+        raise GraphValidationError(
+            f"benchmark scenario {label!r} stochastic duration factors must satisfy low_factor <= mode_factor <= high_factor"
+        )
+
+    return BenchmarkStochasticConfig(
+        samples=samples,
+        seed=seed,
+        low_factor=low_factor,
+        mode_factor=mode_factor,
+        high_factor=high_factor,
+    )
+
+
 def load_benchmark_suite(
     path: str | Path,
     *,
@@ -465,6 +572,10 @@ def load_benchmark_suite(
                     entry.get("resource_capacities"),
                     label=label,
                 ),
+                stochastic_config=_parse_benchmark_stochastic_config(
+                    entry.get("stochastic_durations"),
+                    label=label,
+                ),
             )
         )
 
@@ -492,6 +603,128 @@ def _benchmark_rank_key(item: BenchmarkStrategyResult) -> tuple[int, int, int]:
 
 def _average(values: Sequence[float]) -> float:
     return 0.0 if not values else sum(values) / len(values)
+
+
+def _nearest_rank_percentile(values: Sequence[int], percentile: float) -> int:
+    if not values:
+        return 0
+    ordered = sorted(values)
+    index = max(0, min(len(ordered) - 1, math.ceil((percentile / 100) * len(ordered)) - 1))
+    return ordered[index]
+
+
+def _clone_tasks_with_durations(tasks: dict[str, Task], durations: dict[str, int]) -> dict[str, Task]:
+    return {
+        name: Task(
+            name=task.name,
+            deps=task.deps,
+            duration=durations[name],
+            command=task.command,
+            resource_class=task.resource_class,
+            resource_demands=dict(task.resource_demands),
+        )
+        for name, task in tasks.items()
+    }
+
+
+def _sample_task_durations(
+    tasks: dict[str, Task],
+    *,
+    rng: random.Random,
+    config: BenchmarkStochasticConfig,
+) -> dict[str, int]:
+    sampled: dict[str, int] = {}
+    for name in sorted(tasks):
+        task = tasks[name]
+        factor = rng.triangular(config.low_factor, config.high_factor, config.mode_factor)
+        sampled[name] = max(1, int(round(task.duration * factor)))
+    return sampled
+
+
+def _build_stochastic_strategy_results(
+    tasks: dict[str, Task],
+    *,
+    strategies: Sequence[str],
+    worker_limit: int,
+    resource_capacities: dict[str, int],
+    config: BenchmarkStochasticConfig,
+) -> list[BenchmarkStochasticStrategyResult]:
+    rng = random.Random(config.seed)
+    sampled_metrics = {
+        strategy: {
+            "makespans": [],
+            "delta_vs_critical_path": [],
+            "ratio_vs_critical_path": [],
+            "delta_vs_best": [],
+            "best_finish_count": 0,
+        }
+        for strategy in strategies
+    }
+
+    for _ in range(config.samples):
+        sampled_durations = _sample_task_durations(tasks, rng=rng, config=config)
+        sampled_tasks = _clone_tasks_with_durations(tasks, sampled_durations)
+        sampled_plan = build_plan(sampled_tasks)
+        sampled_schedules: list[tuple[str, WorkerLimitedSchedule]] = []
+        for strategy in strategies:
+            sampled_schedules.append(
+                (
+                    strategy,
+                    build_worker_limited_schedule(
+                        sampled_tasks,
+                        sampled_plan,
+                        worker_limit=worker_limit,
+                        strategy=strategy,
+                        resource_capacities=resource_capacities,
+                    ),
+                )
+            )
+
+        sampled_best_makespan = min(schedule.makespan for _, schedule in sampled_schedules)
+        sampled_lower_bound = sampled_plan.total_duration
+        for strategy, schedule in sampled_schedules:
+            metrics = sampled_metrics[strategy]
+            metrics["makespans"].append(schedule.makespan)
+            metrics["delta_vs_critical_path"].append(schedule.makespan - sampled_lower_bound)
+            metrics["ratio_vs_critical_path"].append(
+                (schedule.makespan / sampled_lower_bound) if sampled_lower_bound else 0.0
+            )
+            metrics["delta_vs_best"].append(schedule.makespan - sampled_best_makespan)
+            if schedule.makespan == sampled_best_makespan:
+                metrics["best_finish_count"] += 1
+
+    results: list[BenchmarkStochasticStrategyResult] = []
+    for strategy in strategies:
+        metrics = sampled_metrics[strategy]
+        makespans = metrics["makespans"]
+        best_finish_count = int(metrics["best_finish_count"])
+        results.append(
+            BenchmarkStochasticStrategyResult(
+                strategy=strategy,
+                average_makespan=_average([float(item) for item in makespans]),
+                p50_makespan=_nearest_rank_percentile(makespans, 50),
+                p90_makespan=_nearest_rank_percentile(makespans, 90),
+                worst_makespan=max(makespans, default=0),
+                average_delta_vs_critical_path_lower_bound=_average(
+                    [float(item) for item in metrics["delta_vs_critical_path"]]
+                ),
+                average_ratio_vs_critical_path_lower_bound=_average(metrics["ratio_vs_critical_path"]),
+                average_delta_vs_best=_average([float(item) for item in metrics["delta_vs_best"]]),
+                best_finish_count=best_finish_count,
+                best_finish_rate=(best_finish_count / config.samples) if config.samples else 0.0,
+            )
+        )
+
+    results.sort(
+        key=lambda item: (
+            item.average_makespan,
+            item.p90_makespan,
+            item.worst_makespan,
+            item.average_delta_vs_best,
+            SCHEDULE_STRATEGIES.index(item.strategy),
+        )
+    )
+    return results
 
 
 def build_benchmark_suite_result(
@@ -582,6 +815,16 @@ def build_benchmark_suite_result(
                 )
             )
 
+        stochastic_strategy_results: list[BenchmarkStochasticStrategyResult] = []
+        if scenario.stochastic_config is not None:
+            stochastic_strategy_results = _build_stochastic_strategy_results(
+                tasks,
+                strategies=scenario.strategies,
+                worker_limit=scenario.worker_limit,
+                resource_capacities=resolved_resource_capacities,
+                config=scenario.stochastic_config,
+            )
+
         scenario_results.append(
             BenchmarkScenarioResult(
                 label=scenario.label,
@@ -598,6 +841,8 @@ def build_benchmark_suite_result(
                     item.strategy for item in ranked_results if item.tied_best_makespan
                 ],
                 rank_1_strategies=[item.strategy for item in ranked_results if item.rank == 1],
+                stochastic_config=scenario.stochastic_config,
+                stochastic_strategy_results=stochastic_strategy_results,
             )
         )
 
@@ -636,11 +881,54 @@ def build_benchmark_suite_result(
             SCHEDULE_STRATEGIES.index(item.strategy),
         )
     )
+
+    stochastic_lookup: dict[str, list[BenchmarkStochasticStrategyResult]] = {
+        strategy: [] for strategy in SCHEDULE_STRATEGIES
+    }
+    for scenario_result in scenario_results:
+        for item in scenario_result.stochastic_strategy_results:
+            stochastic_lookup[item.strategy].append(item)
+
+    stochastic_aggregates: list[BenchmarkStochasticAggregate] = []
+    for strategy in SCHEDULE_STRATEGIES:
+        items = stochastic_lookup[strategy]
+        if not items:
+            continue
+        stochastic_aggregates.append(
+            BenchmarkStochasticAggregate(
+                strategy=strategy,
+                scenario_count=len(items),
+                average_sampled_makespan=_average([item.average_makespan for item in items]),
+                average_p50_makespan=_average([float(item.p50_makespan) for item in items]),
+                average_p90_makespan=_average([float(item.p90_makespan) for item in items]),
+                average_worst_makespan=_average([float(item.worst_makespan) for item in items]),
+                average_delta_vs_critical_path_lower_bound=_average(
+                    [item.average_delta_vs_critical_path_lower_bound for item in items]
+                ),
+                average_ratio_vs_critical_path_lower_bound=_average(
+                    [item.average_ratio_vs_critical_path_lower_bound for item in items]
+                ),
+                average_delta_vs_best=_average([item.average_delta_vs_best for item in items]),
+                average_best_finish_rate=_average([item.best_finish_rate for item in items]),
+            )
+        )
+
+    stochastic_aggregates.sort(
+        key=lambda item: (
+            item.average_p90_makespan,
+            item.average_sampled_makespan,
+            item.average_worst_makespan,
+            item.average_delta_vs_best,
+            -item.average_best_finish_rate,
+            SCHEDULE_STRATEGIES.index(item.strategy),
+        )
+    )
     return BenchmarkSuiteResult(
         title=resolved_title,
         source_label=_display_path_label(suite_path),
         scenarios=scenario_results,
         aggregates=aggregates,
+        stochastic_aggregates=stochastic_aggregates,
     )
 
 
@@ -2420,6 +2708,7 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
         "title": result.title,
         "source_label": result.source_label,
         "scenario_count": len(result.scenarios),
+        "stochastic_scenario_count": sum(1 for scenario in result.scenarios if scenario.stochastic_config is not None),
         "scenarios": [
             {
                 "label": scenario.label,
@@ -2433,6 +2722,17 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
                 "best_makespan": scenario.best_makespan,
                 "best_makespan_strategies": scenario.best_makespan_strategies,
                 "rank_1_strategies": scenario.rank_1_strategies,
+                "stochastic_durations": (
+                    {
+                        "samples": scenario.stochastic_config.samples,
+                        "seed": scenario.stochastic_config.seed,
+                        "low_factor": round(scenario.stochastic_config.low_factor, 6),
+                        "mode_factor": round(scenario.stochastic_config.mode_factor, 6),
+                        "high_factor": round(scenario.stochastic_config.high_factor, 6),
+                    }
+                    if scenario.stochastic_config is not None
+                    else None
+                ),
                 "strategy_results": [
                     {
                         "strategy": item.strategy,
@@ -2450,6 +2750,27 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
                         "tied_best_makespan": item.tied_best_makespan,
                     }
                     for item in scenario.strategy_results
+                ],
+                "stochastic_strategy_results": [
+                    {
+                        "strategy": item.strategy,
+                        "average_makespan": round(item.average_makespan, 6),
+                        "p50_makespan": item.p50_makespan,
+                        "p90_makespan": item.p90_makespan,
+                        "worst_makespan": item.worst_makespan,
+                        "average_delta_vs_critical_path_lower_bound": round(
+                            item.average_delta_vs_critical_path_lower_bound,
+                            6,
+                        ),
+                        "average_ratio_vs_critical_path_lower_bound": round(
+                            item.average_ratio_vs_critical_path_lower_bound,
+                            6,
+                        ),
+                        "average_delta_vs_best": round(item.average_delta_vs_best, 6),
+                        "best_finish_count": item.best_finish_count,
+                        "best_finish_rate": round(item.best_finish_rate, 6),
+                    }
+                    for item in scenario.stochastic_strategy_results
                 ],
             }
             for scenario in result.scenarios
@@ -2470,6 +2791,21 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
             }
             for item in result.aggregates
         ],
+        "stochastic_aggregates": [
+            {
+                "strategy": item.strategy,
+                "scenario_count": item.scenario_count,
+                "average_sampled_makespan": round(item.average_sampled_makespan, 6),
+                "average_p50_makespan": round(item.average_p50_makespan, 6),
+                "average_p90_makespan": round(item.average_p90_makespan, 6),
+                "average_worst_makespan": round(item.average_worst_makespan, 6),
+                "average_delta_vs_critical_path_lower_bound": round(item.average_delta_vs_critical_path_lower_bound, 6),
+                "average_ratio_vs_critical_path_lower_bound": round(item.average_ratio_vs_critical_path_lower_bound, 6),
+                "average_delta_vs_best": round(item.average_delta_vs_best, 6),
+                "average_best_finish_rate": round(item.average_best_finish_rate, 6),
+            }
+            for item in result.stochastic_aggregates
+        ],
     }
 
 
@@ -2483,28 +2819,49 @@ def _render_csv_rows(rows: Sequence[dict[str, Any]], *, fieldnames: Sequence[str
 
 
 def benchmark_aggregate_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]]:
-    return [
-        {
-            "strategy": item.strategy,
-            "scenario_count": item.scenario_count,
-            "rank_1_finishes": item.rank_1_finishes,
-            "best_makespan_finishes": item.best_makespan_finishes,
-            "average_makespan": round(item.average_makespan, 6),
-            "average_delta_vs_critical_path_lower_bound": round(item.average_delta_vs_critical_path_lower_bound, 6),
-            "average_ratio_vs_critical_path_lower_bound": round(item.average_ratio_vs_critical_path_lower_bound, 6),
-            "average_delta_vs_best": round(item.average_delta_vs_best, 6),
-            "average_total_queue_delay": round(item.average_total_queue_delay, 6),
-            "average_max_queue_delay": round(item.average_max_queue_delay, 6),
-            "average_utilization": round(item.average_utilization, 6),
-        }
-        for item in result.aggregates
-    ]
+    stochastic_lookup = {item.strategy: item for item in result.stochastic_aggregates}
+    rows: list[dict[str, Any]] = []
+    for item in result.aggregates:
+        stochastic = stochastic_lookup.get(item.strategy)
+        rows.append(
+            {
+                "strategy": item.strategy,
+                "scenario_count": item.scenario_count,
+                "rank_1_finishes": item.rank_1_finishes,
+                "best_makespan_finishes": item.best_makespan_finishes,
+                "average_makespan": round(item.average_makespan, 6),
+                "average_delta_vs_critical_path_lower_bound": round(item.average_delta_vs_critical_path_lower_bound, 6),
+                "average_ratio_vs_critical_path_lower_bound": round(item.average_ratio_vs_critical_path_lower_bound, 6),
+                "average_delta_vs_best": round(item.average_delta_vs_best, 6),
+                "average_total_queue_delay": round(item.average_total_queue_delay, 6),
+                "average_max_queue_delay": round(item.average_max_queue_delay, 6),
+                "average_utilization": round(item.average_utilization, 6),
+                "stochastic_scenario_count": stochastic.scenario_count if stochastic else "",
+                "average_sampled_makespan": round(stochastic.average_sampled_makespan, 6) if stochastic else "",
+                "average_p50_makespan": round(stochastic.average_p50_makespan, 6) if stochastic else "",
+                "average_p90_makespan": round(stochastic.average_p90_makespan, 6) if stochastic else "",
+                "average_worst_makespan": round(stochastic.average_worst_makespan, 6) if stochastic else "",
+                "average_sampled_delta_vs_critical_path_lower_bound": round(
+                    stochastic.average_delta_vs_critical_path_lower_bound,
+                    6,
+                ) if stochastic else "",
+                "average_sampled_ratio_vs_critical_path_lower_bound": round(
+                    stochastic.average_ratio_vs_critical_path_lower_bound,
+                    6,
+                ) if stochastic else "",
+                "average_sampled_delta_vs_best": round(stochastic.average_delta_vs_best, 6) if stochastic else "",
+                "average_best_finish_rate": round(stochastic.average_best_finish_rate, 6) if stochastic else "",
+            }
+        )
+    return rows
 
 
 def benchmark_strategy_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for scenario in result.scenarios:
+        stochastic_lookup = {item.strategy: item for item in scenario.stochastic_strategy_results}
         for item in scenario.strategy_results:
+            stochastic = stochastic_lookup.get(item.strategy)
             rows.append(
                 {
                     "suite_title": result.title,
@@ -2520,6 +2877,11 @@ def benchmark_strategy_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]
                     "rank_1_strategies": ",".join(scenario.rank_1_strategies),
                     "best_makespan_strategies": ",".join(scenario.best_makespan_strategies),
                     "resource_capacities": json.dumps(scenario.resource_capacities, sort_keys=True),
+                    "stochastic_samples": scenario.stochastic_config.samples if scenario.stochastic_config else "",
+                    "stochastic_seed": scenario.stochastic_config.seed if scenario.stochastic_config else "",
+                    "stochastic_low_factor": round(scenario.stochastic_config.low_factor, 6) if scenario.stochastic_config else "",
+                    "stochastic_mode_factor": round(scenario.stochastic_config.mode_factor, 6) if scenario.stochastic_config else "",
+                    "stochastic_high_factor": round(scenario.stochastic_config.high_factor, 6) if scenario.stochastic_config else "",
                     "strategy": item.strategy,
                     "rank": item.rank,
                     "makespan": item.makespan,
@@ -2533,6 +2895,21 @@ def benchmark_strategy_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]
                     "utilization": round(item.utilization, 6),
                     "tied_best_makespan": item.tied_best_makespan,
                     "dispatch_order": ",".join(item.dispatch_order),
+                    "stochastic_average_makespan": round(stochastic.average_makespan, 6) if stochastic else "",
+                    "stochastic_p50_makespan": stochastic.p50_makespan if stochastic else "",
+                    "stochastic_p90_makespan": stochastic.p90_makespan if stochastic else "",
+                    "stochastic_worst_makespan": stochastic.worst_makespan if stochastic else "",
+                    "stochastic_average_delta_vs_critical_path_lower_bound": round(
+                        stochastic.average_delta_vs_critical_path_lower_bound,
+                        6,
+                    ) if stochastic else "",
+                    "stochastic_average_ratio_vs_critical_path_lower_bound": round(
+                        stochastic.average_ratio_vs_critical_path_lower_bound,
+                        6,
+                    ) if stochastic else "",
+                    "stochastic_average_delta_vs_best": round(stochastic.average_delta_vs_best, 6) if stochastic else "",
+                    "stochastic_best_finish_count": stochastic.best_finish_count if stochastic else "",
+                    "stochastic_best_finish_rate": round(stochastic.best_finish_rate, 6) if stochastic else "",
                 }
             )
     return rows
@@ -2553,6 +2930,15 @@ def render_benchmark_aggregate_csv(result: BenchmarkSuiteResult) -> str:
             "average_total_queue_delay",
             "average_max_queue_delay",
             "average_utilization",
+            "stochastic_scenario_count",
+            "average_sampled_makespan",
+            "average_p50_makespan",
+            "average_p90_makespan",
+            "average_worst_makespan",
+            "average_sampled_delta_vs_critical_path_lower_bound",
+            "average_sampled_ratio_vs_critical_path_lower_bound",
+            "average_sampled_delta_vs_best",
+            "average_best_finish_rate",
         ),
     )
 
@@ -2574,6 +2960,11 @@ def render_benchmark_strategy_csv(result: BenchmarkSuiteResult) -> str:
             "rank_1_strategies",
             "best_makespan_strategies",
             "resource_capacities",
+            "stochastic_samples",
+            "stochastic_seed",
+            "stochastic_low_factor",
+            "stochastic_mode_factor",
+            "stochastic_high_factor",
             "strategy",
             "rank",
             "makespan",
@@ -2587,6 +2978,15 @@ def render_benchmark_strategy_csv(result: BenchmarkSuiteResult) -> str:
             "utilization",
             "tied_best_makespan",
             "dispatch_order",
+            "stochastic_average_makespan",
+            "stochastic_p50_makespan",
+            "stochastic_p90_makespan",
+            "stochastic_worst_makespan",
+            "stochastic_average_delta_vs_critical_path_lower_bound",
+            "stochastic_average_ratio_vs_critical_path_lower_bound",
+            "stochastic_average_delta_vs_best",
+            "stochastic_best_finish_count",
+            "stochastic_best_finish_rate",
         ),
     )
 
@@ -2613,6 +3013,13 @@ def _build_benchmark_artifact_links(
     return ordered
 
 
+def _format_stochastic_config(config: BenchmarkStochasticConfig) -> str:
+    return (
+        f"{config.samples} triangular samples (seed {config.seed}, "
+        f"factors {config.low_factor:.2f}×/{config.mode_factor:.2f}×/{config.high_factor:.2f}×)"
+    )
+
+
 
 def render_benchmark_suite_markdown(
     result: BenchmarkSuiteResult,
@@ -2621,6 +3028,7 @@ def render_benchmark_suite_markdown(
 ) -> str:
     strategies = [item.strategy for item in result.aggregates]
     top_strategy = result.aggregates[0].strategy if result.aggregates else "(none)"
+    stochastic_scenario_count = sum(1 for scenario in result.scenarios if scenario.stochastic_config is not None)
     lines = [f"# {result.title}", ""]
     lines.extend(
         [
@@ -2628,6 +3036,7 @@ def render_benchmark_suite_markdown(
             f"- Scenario count: {_markdown_code(len(result.scenarios))}",
             f"- Strategies covered: {_markdown_code(', '.join(strategies))}",
             f"- Aggregate leader: {_markdown_code(top_strategy)}",
+            f"- Stochastic uncertainty scenarios: {_markdown_code(stochastic_scenario_count)}",
         ]
     )
 
@@ -2666,6 +3075,36 @@ def render_benchmark_suite_markdown(
             + " |"
         )
 
+    if result.stochastic_aggregates:
+        lines.extend(
+            [
+                "",
+                "## Aggregate stochastic robustness",
+                "",
+                "| Strategy | Stochastic scenarios | Avg sampled makespan | Avg p50 | Avg p90 | Avg worst-case | Avg Δ vs sampled critical path | Avg ratio vs sampled critical path | Avg Δ vs sampled best | Avg sampled best-finish rate |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for item in result.stochastic_aggregates:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _escape_markdown_table_cell(item.strategy),
+                        str(item.scenario_count),
+                        f"{item.average_sampled_makespan:.2f}",
+                        f"{item.average_p50_makespan:.2f}",
+                        f"{item.average_p90_makespan:.2f}",
+                        f"{item.average_worst_makespan:.2f}",
+                        f"{item.average_delta_vs_critical_path_lower_bound:.2f}",
+                        f"{item.average_ratio_vs_critical_path_lower_bound:.2f}×",
+                        f"{item.average_delta_vs_best:.2f}",
+                        f"{item.average_best_finish_rate * 100:.1f}%",
+                    ]
+                )
+                + " |"
+            )
+
     for scenario in result.scenarios:
         lines.extend(
             [
@@ -2687,6 +3126,10 @@ def render_benchmark_suite_markdown(
                 for resource_class, capacity in scenario.resource_capacities.items()
             )
             lines.append(f"- Resource capacities: {_markdown_code(rendered_caps)}")
+        if scenario.stochastic_config is not None:
+            lines.append(
+                f"- Stochastic duration simulation: {_markdown_code(_format_stochastic_config(scenario.stochastic_config))}"
+            )
 
         lines.extend(
             [
@@ -2717,6 +3160,35 @@ def render_benchmark_suite_markdown(
                 + " |"
             )
 
+        if scenario.stochastic_strategy_results:
+            lines.extend(
+                [
+                    "",
+                    "### Stochastic robustness",
+                    "",
+                    "| Strategy | Avg sampled makespan | P50 | P90 | Worst-case | Avg Δ vs sampled critical path | Avg ratio vs sampled critical path | Avg Δ vs sampled best | Best-finish rate |",
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                ]
+            )
+            for item in scenario.stochastic_strategy_results:
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        [
+                            _escape_markdown_table_cell(item.strategy),
+                            f"{item.average_makespan:.2f}",
+                            str(item.p50_makespan),
+                            str(item.p90_makespan),
+                            str(item.worst_makespan),
+                            f"{item.average_delta_vs_critical_path_lower_bound:.2f}",
+                            f"{item.average_ratio_vs_critical_path_lower_bound:.2f}×",
+                            f"{item.average_delta_vs_best:.2f}",
+                            f"{item.best_finish_rate * 100:.1f}% ({item.best_finish_count}/{scenario.stochastic_config.samples if scenario.stochastic_config else 0})",
+                        ]
+                    )
+                    + " |"
+                )
+
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -2729,6 +3201,7 @@ def render_benchmark_dashboard_html(
 ) -> str:
     artifacts = artifacts or {}
     strategy_count = len(result.aggregates)
+    stochastic_scenario_count = sum(1 for scenario in result.scenarios if scenario.stochastic_config is not None)
     top_strategy = result.aggregates[0] if result.aggregates else None
     lowest_gap_strategy = (
         min(
@@ -2742,6 +3215,7 @@ def render_benchmark_dashboard_html(
         if result.aggregates
         else None
     )
+    stochastic_leader = result.stochastic_aggregates[0] if result.stochastic_aggregates else None
     summary_cards = [
         ("Scenarios", str(len(result.scenarios))),
         ("Strategies", str(strategy_count)),
@@ -2757,6 +3231,15 @@ def render_benchmark_dashboard_html(
                 f" ({lowest_gap_strategy.strategy})"
             )
             if lowest_gap_strategy
+            else "(n/a)",
+        ),
+        ("Stochastic scenarios", str(stochastic_scenario_count)),
+        (
+            "Best avg sampled p90",
+            (
+                f"{stochastic_leader.average_p90_makespan:.2f} ({stochastic_leader.strategy})"
+            )
+            if stochastic_leader
             else "(n/a)",
         ),
     ]

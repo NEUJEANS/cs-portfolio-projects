@@ -4,6 +4,7 @@
 - Scenario count: `11`
 - Strategies covered: `critical-first, fifo, longest-processing-time`
 - Aggregate leader: `critical-first`
+- Stochastic uncertainty scenarios: `3`
 
 ## Linked artifacts
 
@@ -19,6 +20,14 @@
 | critical-first | 11 | 7 | 10 | 17.18 | 3.18 | 1.24× | 0.09 | 20.91 | 8.27 | 63.4% |
 | fifo | 11 | 7 | 7 | 18.91 | 4.91 | 1.33× | 1.82 | 11.91 | 4.73 | 58.1% |
 | longest-processing-time | 10 | 3 | 6 | 19.80 | 5.10 | 1.33× | 1.80 | 13.70 | 5.60 | 58.5% |
+
+## Aggregate stochastic robustness
+
+| Strategy | Stochastic scenarios | Avg sampled makespan | Avg p50 | Avg p90 | Avg worst-case | Avg Δ vs sampled critical path | Avg ratio vs sampled critical path | Avg Δ vs sampled best | Avg sampled best-finish rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| critical-first | 3 | 31.54 | 31.33 | 33.33 | 36.67 | 6.68 | 1.27× | 0.00 | 100.0% |
+| longest-processing-time | 3 | 38.05 | 38.00 | 41.33 | 44.33 | 13.19 | 1.53× | 6.51 | 0.0% |
+| fifo | 3 | 38.16 | 38.00 | 41.33 | 43.67 | 13.30 | 1.54× | 6.62 | 0.0% |
 
 ## Scenario — sample-2-workers
 
@@ -162,12 +171,21 @@
 - Critical-path lower bound: `22`
 - Best scenario makespan: `28` via `critical-first`
 - Rank-1 strategies after queue-delay tie-breaks: `critical-first`
+- Stochastic duration simulation: `64 triangular samples (seed 20260420, factors 0.70×/1.00×/1.80×)`
 
 | Rank | Strategy | Makespan | Δ vs unlimited | Δ vs critical path | Ratio vs critical path | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | 1 | critical-first | 28 | 6 | 6 | 1.27× | 0 | 68 | 22 | 2 | 96.4% | seed, bulk-01, critical-chain-01, critical-chain-02, bulk-04, critical-chain-03, critical-chain-04, bulk-02, critical-chain-05, follow-up-02, critical-chain-06, bulk-05, follow-up-01, bulk-03, follow-up-03, ship |
 | 2 | fifo | 33 | 11 | 11 | 1.50× | 5 | 33 | 11 | 12 | 81.8% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |
 | 2 | longest-processing-time | 33 | 11 | 11 | 1.50× | 5 | 33 | 11 | 12 | 81.8% | bulk-01, bulk-04, bulk-02, bulk-03, bulk-05, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |
+
+### Stochastic robustness
+
+| Strategy | Avg sampled makespan | P50 | P90 | Worst-case | Avg Δ vs sampled critical path | Avg ratio vs sampled critical path | Avg Δ vs sampled best | Best-finish rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| critical-first | 33.39 | 33 | 35 | 38 | 7.80 | 1.31× | 0.00 | 100.0% (64/64) |
+| fifo | 39.00 | 39 | 42 | 45 | 13.41 | 1.53× | 5.61 | 0.0% (0/64) |
+| longest-processing-time | 39.97 | 40 | 43 | 47 | 14.38 | 1.56× | 6.58 | 0.0% (0/64) |
 
 ## Scenario — generated-stress-seed29-2-workers
 
@@ -178,12 +196,21 @@
 - Critical-path lower bound: `20`
 - Best scenario makespan: `25` via `critical-first`
 - Rank-1 strategies after queue-delay tie-breaks: `critical-first`
+- Stochastic duration simulation: `64 triangular samples (seed 20260420, factors 0.70×/1.00×/1.80×)`
 
 | Rank | Strategy | Makespan | Δ vs unlimited | Δ vs critical path | Ratio vs critical path | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | 1 | critical-first | 25 | 5 | 5 | 1.25× | 0 | 61 | 19 | 4 | 92.0% | seed, bulk-01, critical-chain-01, bulk-03, critical-chain-02, critical-chain-03, bulk-04, critical-chain-04, follow-up-03, critical-chain-05, bulk-02, critical-chain-06, bulk-05, follow-up-01, follow-up-02, ship |
 | 2 | longest-processing-time | 30 | 10 | 10 | 1.50× | 5 | 35 | 10 | 14 | 76.7% | bulk-03, bulk-02, bulk-05, bulk-01, bulk-04, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, follow-up-02, critical-chain-03, critical-chain-04, critical-chain-05, critical-chain-06, ship |
 | 3 | fifo | 32 | 12 | 12 | 1.60× | 7 | 34 | 8 | 18 | 71.9% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, follow-up-01, follow-up-02, follow-up-03, critical-chain-01, critical-chain-02, critical-chain-03, critical-chain-04, critical-chain-05, critical-chain-06, ship |
+
+### Stochastic robustness
+
+| Strategy | Avg sampled makespan | P50 | P90 | Worst-case | Avg Δ vs sampled critical path | Avg ratio vs sampled critical path | Avg Δ vs sampled best | Best-finish rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| critical-first | 28.20 | 28 | 30 | 33 | 4.86 | 1.21× | 0.00 | 100.0% (64/64) |
+| longest-processing-time | 35.17 | 35 | 39 | 42 | 11.83 | 1.51× | 6.97 | 0.0% (0/64) |
+| fifo | 36.52 | 36 | 40 | 42 | 13.17 | 1.57× | 8.31 | 0.0% (0/64) |
 
 ## Scenario — generated-stress-seed41-2-workers
 
@@ -194,9 +221,18 @@
 - Critical-path lower bound: `22`
 - Best scenario makespan: `28` via `critical-first`
 - Rank-1 strategies after queue-delay tie-breaks: `critical-first`
+- Stochastic duration simulation: `64 triangular samples (seed 20260420, factors 0.70×/1.00×/1.80×)`
 
 | Rank | Strategy | Makespan | Δ vs unlimited | Δ vs critical path | Ratio vs critical path | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | 1 | critical-first | 28 | 6 | 6 | 1.27× | 0 | 61 | 21 | 2 | 96.4% | seed, bulk-02, critical-chain-01, critical-chain-02, bulk-05, critical-chain-03, critical-chain-04, follow-up-03, bulk-03, critical-chain-05, follow-up-02, critical-chain-06, bulk-01, bulk-04, follow-up-01, ship |
 | 2 | fifo | 33 | 11 | 11 | 1.50× | 5 | 32 | 10 | 12 | 81.8% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, follow-up-01, critical-chain-01, critical-chain-02, follow-up-03, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |
 | 3 | longest-processing-time | 33 | 11 | 11 | 1.50× | 5 | 33 | 11 | 12 | 81.8% | bulk-05, bulk-01, bulk-02, bulk-03, bulk-04, seed, critical-chain-01, follow-up-01, critical-chain-02, follow-up-03, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |
+
+### Stochastic robustness
+
+| Strategy | Avg sampled makespan | P50 | P90 | Worst-case | Avg Δ vs sampled critical path | Avg ratio vs sampled critical path | Avg Δ vs sampled best | Best-finish rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| critical-first | 33.02 | 33 | 35 | 39 | 7.39 | 1.29× | 0.00 | 100.0% (64/64) |
+| fifo | 38.95 | 39 | 42 | 44 | 13.33 | 1.52× | 5.94 | 0.0% (0/64) |
+| longest-processing-time | 39.00 | 39 | 42 | 44 | 13.38 | 1.53× | 5.98 | 0.0% (0/64) |

@@ -18,6 +18,7 @@
 - [x] Add metadata-aware default report titles/descriptions so showcase manifests render recruiter-friendly case-study headings automatically
 - [x] Add seeded stress-workload benchmark cases plus gap/ratio-to-critical-path reporting across Markdown, HTML, JSON, and CSV exports
 - [x] Refresh README, tests, review notes, and wrap-up support so the new scheduler story is visible in-repo
+- [x] Simulate stochastic duration changes to compare heuristic robustness under uncertainty
 
 ## Next candidate slices
-- [ ] Simulate stochastic duration changes to compare heuristic robustness under uncertainty
+- [ ] Surface manifest metadata inside Mermaid preview wrappers and schedule SVG captions for even more polished artifact storytelling

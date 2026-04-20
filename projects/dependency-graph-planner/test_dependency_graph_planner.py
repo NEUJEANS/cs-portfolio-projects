@@ -11,6 +11,7 @@ from dependency_graph_planner import (
     BenchmarkStrategyAggregate,
     BenchmarkSuiteResult,
     CycleError,
+    GraphValidationError,
     build_benchmark_suite_result,
     build_plan,
     build_worker_limited_schedule,
@@ -71,30 +72,41 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             ]
         }
 
-    def _write_benchmark_suite_files(self, tmpdir: str) -> Path:
+    def _write_benchmark_suite_files(self, tmpdir: str, *, include_stochastic: bool = False) -> Path:
         tmp_path = Path(tmpdir)
         (tmp_path / "sample_graph.json").write_text(json.dumps(self.graph), encoding="utf-8")
         (tmp_path / "strategy_graph.json").write_text(json.dumps(self.strategy_graph), encoding="utf-8")
         (tmp_path / "resource_graph.json").write_text(json.dumps(self.resource_graph), encoding="utf-8")
         (tmp_path / "multi_resource_graph.json").write_text(json.dumps(self.multi_resource_graph), encoding="utf-8")
+
+        scenarios = [
+            {"label": "sample-2-workers", "graph": "sample_graph.json", "worker_limit": 2},
+            {"label": "strategy-2-workers", "graph": "strategy_graph.json", "worker_limit": 2},
+            {"label": "resource-3-workers", "graph": "resource_graph.json", "worker_limit": 3},
+            {"label": "multi-resource-3-workers", "graph": "multi_resource_graph.json", "worker_limit": 3},
+            {
+                "label": "multi-resource-browser-bump",
+                "graph": "multi_resource_graph.json",
+                "worker_limit": 3,
+                "strategies": ["critical-first", "fifo"],
+                "resource_capacities": {"browser-lab": 3, "gpu": 1, "signing": 1},
+            },
+        ]
+        if include_stochastic:
+            scenarios[1]["stochastic_durations"] = {
+                "samples": 32,
+                "seed": 20260420,
+                "low_factor": 0.7,
+                "mode_factor": 1.0,
+                "high_factor": 1.8,
+            }
+
         suite_path = tmp_path / "benchmark_suite.json"
         suite_path.write_text(
             json.dumps(
                 {
                     "title": "Dependency graph strategy benchmark suite",
-                    "scenarios": [
-                        {"label": "sample-2-workers", "graph": "sample_graph.json", "worker_limit": 2},
-                        {"label": "strategy-2-workers", "graph": "strategy_graph.json", "worker_limit": 2},
-                        {"label": "resource-3-workers", "graph": "resource_graph.json", "worker_limit": 3},
-                        {"label": "multi-resource-3-workers", "graph": "multi_resource_graph.json", "worker_limit": 3},
-                        {
-                            "label": "multi-resource-browser-bump",
-                            "graph": "multi_resource_graph.json",
-                            "worker_limit": 3,
-                            "strategies": ["critical-first", "fifo"],
-                            "resource_capacities": {"browser-lab": 3, "gpu": 1, "signing": 1},
-                        },
-                    ],
+                    "scenarios": scenarios,
                 }
             ),
             encoding="utf-8",
@@ -815,6 +827,77 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             self.assertEqual(payload["artifacts"]["benchmark_json"], str(json_path))
             self.assertEqual(payload["artifacts"]["benchmark_aggregate_csv"], str(aggregate_csv_path))
             self.assertEqual(payload["artifacts"]["benchmark_strategy_csv"], str(strategy_csv_path))
+
+    def test_run_command_benchmark_includes_stochastic_robustness_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            suite_path = self._write_benchmark_suite_files(tmpdir, include_stochastic=True)
+            dashboard_path = Path(tmpdir) / "benchmark_suite_dashboard.html"
+            payload = json.loads(
+                run_command(
+                    "benchmark",
+                    str(suite_path),
+                    as_json=True,
+                    benchmark_html_out=str(dashboard_path),
+                )
+            )
+
+            self.assertEqual(payload["scenario_count"], 5)
+            self.assertEqual(payload["stochastic_scenario_count"], 1)
+            strategy_scenario = next(item for item in payload["scenarios"] if item["label"] == "strategy-2-workers")
+            self.assertEqual(
+                strategy_scenario["stochastic_durations"],
+                {
+                    "samples": 32,
+                    "seed": 20260420,
+                    "low_factor": 0.7,
+                    "mode_factor": 1.0,
+                    "high_factor": 1.8,
+                },
+            )
+            self.assertEqual(len(strategy_scenario["stochastic_strategy_results"]), 3)
+            self.assertEqual(
+                [item["strategy"] for item in strategy_scenario["stochastic_strategy_results"]],
+                ["critical-first", "fifo", "longest-processing-time"],
+            )
+            best_strategy = strategy_scenario["stochastic_strategy_results"][0]
+            trailing_strategy = strategy_scenario["stochastic_strategy_results"][-1]
+            self.assertEqual(best_strategy["strategy"], "critical-first")
+            self.assertGreater(best_strategy["best_finish_rate"], 0.0)
+            self.assertGreater(trailing_strategy["average_delta_vs_best"], 0.0)
+            self.assertIn("## Aggregate stochastic robustness", payload["benchmark_markdown"])
+            self.assertIn("### Stochastic robustness", payload["benchmark_markdown"])
+            self.assertTrue(dashboard_path.exists())
+            self.assertIn("Best avg sampled p90", dashboard_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["stochastic_aggregates"][0]["strategy"], "critical-first")
+
+    def test_build_benchmark_suite_result_rejects_invalid_stochastic_duration_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            (tmp_path / "sample_graph.json").write_text(json.dumps(self.graph), encoding="utf-8")
+            suite_path = tmp_path / "benchmark_suite.json"
+            suite_path.write_text(
+                json.dumps(
+                    {
+                        "scenarios": [
+                            {
+                                "label": "bad-stochastic-order",
+                                "graph": "sample_graph.json",
+                                "worker_limit": 2,
+                                "stochastic_durations": {
+                                    "samples": 8,
+                                    "low_factor": 1.2,
+                                    "mode_factor": 1.0,
+                                    "high_factor": 1.8,
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(GraphValidationError, "low_factor <= mode_factor <= high_factor"):
+                build_benchmark_suite_result(suite_path)
 
     def test_run_command_generate_ci_manifest_writes_file_and_scales_shards(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

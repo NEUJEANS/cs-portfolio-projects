@@ -204,3 +204,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 stochastic benchmark slice
+- [x] confirm the repo was still synced with `origin/main` before continuing from the dirty local dependency-graph-planner slice
+- [x] continue the unfinished local stochastic-benchmark slice instead of starting a competing change
+- [x] capture a brief slice note explaining why extra external web research was not needed for this incremental uncertainty-benchmark follow-up
+- [x] refresh triangular-duration replay expectations and capture a short self-test note
+- [x] update the project checklist, slice checklist, README, benchmark suite, and artifact references for stochastic-duration scenarios
+- [x] implement seeded stochastic benchmark replays and aggregate robustness reporting across Markdown, HTML, JSON, and CSV outputs
+- [x] add regression coverage for stochastic benchmark payloads and invalid stochastic-duration configs
+- [x] regenerate the committed benchmark-suite artifact bundle so the repo browser shows the new robustness story immediately
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

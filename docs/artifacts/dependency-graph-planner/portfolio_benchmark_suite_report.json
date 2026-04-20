@@ -2,6 +2,7 @@
   "title": "Dependency graph strategy benchmark suite",
   "source_label": "projects/dependency-graph-planner/portfolio_benchmark_suite.json",
   "scenario_count": 11,
+  "stochastic_scenario_count": 3,
   "scenarios": [
     {
       "label": "sample-2-workers",
@@ -23,6 +24,7 @@
         "fifo",
         "longest-processing-time"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "critical-first",
@@ -87,7 +89,8 @@
           ],
           "tied_best_makespan": true
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "strategy-2-workers",
@@ -105,6 +108,7 @@
       "rank_1_strategies": [
         "critical-first"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "critical-first",
@@ -172,7 +176,8 @@
           ],
           "tied_best_makespan": false
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "resource-3-workers",
@@ -194,6 +199,7 @@
       "rank_1_strategies": [
         "fifo"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "fifo",
@@ -258,7 +264,8 @@
           ],
           "tied_best_makespan": true
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "multi-resource-3-workers",
@@ -284,6 +291,7 @@
         "fifo",
         "longest-processing-time"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "critical-first",
@@ -351,7 +359,8 @@
           ],
           "tied_best_makespan": true
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "multi-resource-browser-bump",
@@ -373,6 +382,7 @@
       "rank_1_strategies": [
         "fifo"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "fifo",
@@ -418,7 +428,8 @@
           ],
           "tied_best_makespan": false
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "generated-ci-4-workers",
@@ -443,6 +454,7 @@
         "fifo",
         "longest-processing-time"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "critical-first",
@@ -540,7 +552,8 @@
           ],
           "tied_best_makespan": true
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "generated-release-3-workers",
@@ -563,6 +576,7 @@
       "rank_1_strategies": [
         "fifo"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "fifo",
@@ -669,7 +683,8 @@
           ],
           "tied_best_makespan": true
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "generated-data-pipeline-4-workers",
@@ -692,6 +707,7 @@
       "rank_1_strategies": [
         "fifo"
       ],
+      "stochastic_durations": null,
       "strategy_results": [
         {
           "strategy": "fifo",
@@ -789,7 +805,8 @@
           ],
           "tied_best_makespan": true
         }
-      ]
+      ],
+      "stochastic_strategy_results": []
     },
     {
       "label": "generated-stress-seed17-2-workers",
@@ -807,6 +824,13 @@
       "rank_1_strategies": [
         "critical-first"
       ],
+      "stochastic_durations": {
+        "samples": 64,
+        "seed": 20260420,
+        "low_factor": 0.7,
+        "mode_factor": 1.0,
+        "high_factor": 1.8
+      },
       "strategy_results": [
         {
           "strategy": "critical-first",
@@ -904,6 +928,44 @@
           ],
           "tied_best_makespan": false
         }
+      ],
+      "stochastic_strategy_results": [
+        {
+          "strategy": "critical-first",
+          "average_makespan": 33.390625,
+          "p50_makespan": 33,
+          "p90_makespan": 35,
+          "worst_makespan": 38,
+          "average_delta_vs_critical_path_lower_bound": 7.796875,
+          "average_ratio_vs_critical_path_lower_bound": 1.308211,
+          "average_delta_vs_best": 0.0,
+          "best_finish_count": 64,
+          "best_finish_rate": 1.0
+        },
+        {
+          "strategy": "fifo",
+          "average_makespan": 39.0,
+          "p50_makespan": 39,
+          "p90_makespan": 42,
+          "worst_makespan": 45,
+          "average_delta_vs_critical_path_lower_bound": 13.40625,
+          "average_ratio_vs_critical_path_lower_bound": 1.526069,
+          "average_delta_vs_best": 5.609375,
+          "best_finish_count": 0,
+          "best_finish_rate": 0.0
+        },
+        {
+          "strategy": "longest-processing-time",
+          "average_makespan": 39.96875,
+          "p50_makespan": 40,
+          "p90_makespan": 43,
+          "worst_makespan": 47,
+          "average_delta_vs_critical_path_lower_bound": 14.375,
+          "average_ratio_vs_critical_path_lower_bound": 1.564809,
+          "average_delta_vs_best": 6.578125,
+          "best_finish_count": 0,
+          "best_finish_rate": 0.0
+        }
       ]
     },
     {
@@ -922,6 +984,13 @@
       "rank_1_strategies": [
         "critical-first"
       ],
+      "stochastic_durations": {
+        "samples": 64,
+        "seed": 20260420,
+        "low_factor": 0.7,
+        "mode_factor": 1.0,
+        "high_factor": 1.8
+      },
       "strategy_results": [
         {
           "strategy": "critical-first",
@@ -1019,6 +1088,44 @@
           ],
           "tied_best_makespan": false
         }
+      ],
+      "stochastic_strategy_results": [
+        {
+          "strategy": "critical-first",
+          "average_makespan": 28.203125,
+          "p50_makespan": 28,
+          "p90_makespan": 30,
+          "worst_makespan": 33,
+          "average_delta_vs_critical_path_lower_bound": 4.859375,
+          "average_ratio_vs_critical_path_lower_bound": 1.211347,
+          "average_delta_vs_best": 0.0,
+          "best_finish_count": 64,
+          "best_finish_rate": 1.0
+        },
+        {
+          "strategy": "longest-processing-time",
+          "average_makespan": 35.171875,
+          "p50_makespan": 35,
+          "p90_makespan": 39,
+          "worst_makespan": 42,
+          "average_delta_vs_critical_path_lower_bound": 11.828125,
+          "average_ratio_vs_critical_path_lower_bound": 1.507997,
+          "average_delta_vs_best": 6.96875,
+          "best_finish_count": 0,
+          "best_finish_rate": 0.0
+        },
+        {
+          "strategy": "fifo",
+          "average_makespan": 36.515625,
+          "p50_makespan": 36,
+          "p90_makespan": 40,
+          "worst_makespan": 42,
+          "average_delta_vs_critical_path_lower_bound": 13.171875,
+          "average_ratio_vs_critical_path_lower_bound": 1.566832,
+          "average_delta_vs_best": 8.3125,
+          "best_finish_count": 0,
+          "best_finish_rate": 0.0
+        }
       ]
     },
     {
@@ -1037,6 +1144,13 @@
       "rank_1_strategies": [
         "critical-first"
       ],
+      "stochastic_durations": {
+        "samples": 64,
+        "seed": 20260420,
+        "low_factor": 0.7,
+        "mode_factor": 1.0,
+        "high_factor": 1.8
+      },
       "strategy_results": [
         {
           "strategy": "critical-first",
@@ -1134,6 +1248,44 @@
           ],
           "tied_best_makespan": false
         }
+      ],
+      "stochastic_strategy_results": [
+        {
+          "strategy": "critical-first",
+          "average_makespan": 33.015625,
+          "p50_makespan": 33,
+          "p90_makespan": 35,
+          "worst_makespan": 39,
+          "average_delta_vs_critical_path_lower_bound": 7.390625,
+          "average_ratio_vs_critical_path_lower_bound": 1.293181,
+          "average_delta_vs_best": 0.0,
+          "best_finish_count": 64,
+          "best_finish_rate": 1.0
+        },
+        {
+          "strategy": "fifo",
+          "average_makespan": 38.953125,
+          "p50_makespan": 39,
+          "p90_makespan": 42,
+          "worst_makespan": 44,
+          "average_delta_vs_critical_path_lower_bound": 13.328125,
+          "average_ratio_vs_critical_path_lower_bound": 1.523515,
+          "average_delta_vs_best": 5.9375,
+          "best_finish_count": 0,
+          "best_finish_rate": 0.0
+        },
+        {
+          "strategy": "longest-processing-time",
+          "average_makespan": 39.0,
+          "p50_makespan": 39,
+          "p90_makespan": 42,
+          "worst_makespan": 44,
+          "average_delta_vs_critical_path_lower_bound": 13.375,
+          "average_ratio_vs_critical_path_lower_bound": 1.525019,
+          "average_delta_vs_best": 5.984375,
+          "best_finish_count": 0,
+          "best_finish_rate": 0.0
+        }
       ]
     }
   ],
@@ -1178,7 +1330,45 @@
       "average_utilization": 0.585407
     }
   ],
-  "benchmark_markdown": "# Dependency graph strategy benchmark suite\n\n- Suite source: `projects/dependency-graph-planner/portfolio_benchmark_suite.json`\n- Scenario count: `11`\n- Strategies covered: `critical-first, fifo, longest-processing-time`\n- Aggregate leader: `critical-first`\n\n## Linked artifacts\n\n- [Benchmark dashboard HTML](portfolio_benchmark_suite_report_dashboard.html)\n- [Benchmark JSON snapshot](portfolio_benchmark_suite_report.json)\n- [Aggregate strategy CSV](portfolio_benchmark_suite_aggregates.csv)\n- [Per-scenario strategy CSV](portfolio_benchmark_suite_strategies.csv)\n\n## Aggregate strategy scoreboard\n\n| Strategy | Scenarios | Rank-1 finishes | Best-makespan finishes | Avg makespan | Avg \u0394 vs critical path | Avg ratio vs critical path | Avg \u0394 vs best | Avg total queue delay | Avg max queue delay | Avg utilization |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| critical-first | 11 | 7 | 10 | 17.18 | 3.18 | 1.24\u00d7 | 0.09 | 20.91 | 8.27 | 63.4% |\n| fifo | 11 | 7 | 7 | 18.91 | 4.91 | 1.33\u00d7 | 1.82 | 11.91 | 4.73 | 58.1% |\n| longest-processing-time | 10 | 3 | 6 | 19.80 | 5.10 | 1.33\u00d7 | 1.80 | 13.70 | 5.60 | 58.5% |\n\n## Scenario \u2014 sample-2-workers\n\n- Manifest: `sample_graph.json`\n- Worker limit: `2 workers`\n- Task count: `5`\n- Unlimited makespan: `8`\n- Critical-path lower bound: `8`\n- Best scenario makespan: `8` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 8 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, unit, package, publish |\n| 1 | fifo | 8 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, package, unit, publish |\n| 1 | longest-processing-time | 8 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, unit, package, publish |\n\n## Scenario \u2014 strategy-2-workers\n\n- Manifest: `strategy_graph.json`\n- Worker limit: `2 workers`\n- Task count: `6`\n- Unlimited makespan: `10`\n- Critical-path lower bound: `10`\n- Best scenario makespan: `13` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 13 | 3 | 3 | 1.30\u00d7 | 0 | 6 | 6 | 4 | 84.6% | core-seed, alpha-long, core-stage-1, core-stage-2, beta-long, ship |\n| 2 | fifo | 16 | 6 | 6 | 1.60\u00d7 | 3 | 6 | 6 | 10 | 68.8% | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |\n| 2 | longest-processing-time | 16 | 6 | 6 | 1.60\u00d7 | 3 | 6 | 6 | 10 | 68.8% | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |\n\n## Scenario \u2014 resource-3-workers\n\n- Manifest: `resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `5`\n- Unlimited makespan: `6`\n- Critical-path lower bound: `6`\n- Best scenario makespan: `8` via `fifo, critical-first, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `gpu=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 8 | 2 | 2 | 1.33\u00d7 | 0 | 2 | 2 | 13 | 45.8% | prep, docs, gpu-eval, gpu-train, package |\n| 2 | critical-first | 8 | 2 | 2 | 1.33\u00d7 | 0 | 4 | 4 | 13 | 45.8% | prep, gpu-train, docs, gpu-eval, package |\n| 2 | longest-processing-time | 8 | 2 | 2 | 1.33\u00d7 | 0 | 4 | 4 | 13 | 45.8% | prep, gpu-train, docs, gpu-eval, package |\n\n## Scenario \u2014 multi-resource-3-workers\n\n- Manifest: `multi_resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `6`\n- Unlimited makespan: `7`\n- Critical-path lower bound: `7`\n- Best scenario makespan: `10` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n- Resource capacities: `browser-lab=2, gpu=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 10 | 3 | 3 | 1.43\u00d7 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n| 1 | fifo | 10 | 3 | 3 | 1.43\u00d7 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n| 1 | longest-processing-time | 10 | 3 | 3 | 1.43\u00d7 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n\n## Scenario \u2014 multi-resource-browser-bump\n\n- Manifest: `multi_resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `6`\n- Unlimited makespan: `7`\n- Critical-path lower bound: `7`\n- Best scenario makespan: `8` via `fifo`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `browser-lab=3, gpu=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 8 | 1 | 1 | 1.14\u00d7 | 0 | 2 | 2 | 10 | 58.3% | prep, browser-matrix, cross-platform-cert, gpu-train, sign, package |\n| 2 | critical-first | 9 | 2 | 2 | 1.29\u00d7 | 1 | 4 | 4 | 13 | 51.9% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n\n## Scenario \u2014 generated-ci-4-workers\n\n- Manifest: `generated_ci_pipeline.json`\n- Worker limit: `4 workers`\n- Task count: `16`\n- Unlimited makespan: `16`\n- Critical-path lower bound: `16`\n- Best scenario makespan: `16` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n- Resource capacities: `browser-lab=1, docker-builder=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 16 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |\n| 1 | fifo | 16 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-02, unit-shard-03, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |\n| 1 | longest-processing-time | 16 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, security-scan, publish-preview-image, deploy-preview, smoke-preview, promote-mainline |\n\n## Scenario \u2014 generated-release-3-workers\n\n- Manifest: `generated_release_pipeline.json`\n- Worker limit: `3 workers`\n- Task count: `19`\n- Unlimited makespan: `21`\n- Critical-path lower bound: `21`\n- Best scenario makespan: `24` via `fifo, longest-processing-time, critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `prod-slot=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 24 | 3 | 3 | 1.14\u00d7 | 0 | 5 | 3 | 42 | 41.7% | freeze-release-branch, assemble-release-notes, build-linux, build-macos, build-windows, sign-linux, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n| 2 | longest-processing-time | 24 | 3 | 3 | 1.14\u00d7 | 0 | 7 | 3 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-windows, sign-macos, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n| 3 | critical-first | 24 | 3 | 3 | 1.14\u00d7 | 0 | 7 | 4 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n\n## Scenario \u2014 generated-data-pipeline-4-workers\n\n- Manifest: `generated_data_pipeline.json`\n- Worker limit: `4 workers`\n- Task count: `16`\n- Unlimited makespan: `15`\n- Critical-path lower bound: `15`\n- Best scenario makespan: `20` via `fifo, critical-first, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `gpu=1, warehouse=2`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 20 | 5 | 5 | 1.33\u00d7 | 0 | 12 | 5 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-02, transform-partition-03, transform-partition-04, transform-partition-05, build-features, backfill-marts, train-model, publish-dashboard, publish-model, notify-ops |\n| 2 | critical-first | 20 | 5 | 5 | 1.33\u00d7 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, schema-validate, quality-profile, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |\n| 2 | longest-processing-time | 20 | 5 | 5 | 1.33\u00d7 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |\n\n## Scenario \u2014 generated-stress-seed17-2-workers\n\n- Manifest: `generated_stress_seed17.json`\n- Worker limit: `2 workers`\n- Task count: `16`\n- Unlimited makespan: `22`\n- Critical-path lower bound: `22`\n- Best scenario makespan: `28` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 28 | 6 | 6 | 1.27\u00d7 | 0 | 68 | 22 | 2 | 96.4% | seed, bulk-01, critical-chain-01, critical-chain-02, bulk-04, critical-chain-03, critical-chain-04, bulk-02, critical-chain-05, follow-up-02, critical-chain-06, bulk-05, follow-up-01, bulk-03, follow-up-03, ship |\n| 2 | fifo | 33 | 11 | 11 | 1.50\u00d7 | 5 | 33 | 11 | 12 | 81.8% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n| 2 | longest-processing-time | 33 | 11 | 11 | 1.50\u00d7 | 5 | 33 | 11 | 12 | 81.8% | bulk-01, bulk-04, bulk-02, bulk-03, bulk-05, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n\n## Scenario \u2014 generated-stress-seed29-2-workers\n\n- Manifest: `generated_stress_seed29.json`\n- Worker limit: `2 workers`\n- Task count: `16`\n- Unlimited makespan: `20`\n- Critical-path lower bound: `20`\n- Best scenario makespan: `25` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 25 | 5 | 5 | 1.25\u00d7 | 0 | 61 | 19 | 4 | 92.0% | seed, bulk-01, critical-chain-01, bulk-03, critical-chain-02, critical-chain-03, bulk-04, critical-chain-04, follow-up-03, critical-chain-05, bulk-02, critical-chain-06, bulk-05, follow-up-01, follow-up-02, ship |\n| 2 | longest-processing-time | 30 | 10 | 10 | 1.50\u00d7 | 5 | 35 | 10 | 14 | 76.7% | bulk-03, bulk-02, bulk-05, bulk-01, bulk-04, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, follow-up-02, critical-chain-03, critical-chain-04, critical-chain-05, critical-chain-06, ship |\n| 3 | fifo | 32 | 12 | 12 | 1.60\u00d7 | 7 | 34 | 8 | 18 | 71.9% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, follow-up-01, follow-up-02, follow-up-03, critical-chain-01, critical-chain-02, critical-chain-03, critical-chain-04, critical-chain-05, critical-chain-06, ship |\n\n## Scenario \u2014 generated-stress-seed41-2-workers\n\n- Manifest: `generated_stress_seed41.json`\n- Worker limit: `2 workers`\n- Task count: `16`\n- Unlimited makespan: `22`\n- Critical-path lower bound: `22`\n- Best scenario makespan: `28` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 28 | 6 | 6 | 1.27\u00d7 | 0 | 61 | 21 | 2 | 96.4% | seed, bulk-02, critical-chain-01, critical-chain-02, bulk-05, critical-chain-03, critical-chain-04, follow-up-03, bulk-03, critical-chain-05, follow-up-02, critical-chain-06, bulk-01, bulk-04, follow-up-01, ship |\n| 2 | fifo | 33 | 11 | 11 | 1.50\u00d7 | 5 | 32 | 10 | 12 | 81.8% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, follow-up-01, critical-chain-01, critical-chain-02, follow-up-03, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n| 3 | longest-processing-time | 33 | 11 | 11 | 1.50\u00d7 | 5 | 33 | 11 | 12 | 81.8% | bulk-05, bulk-01, bulk-02, bulk-03, bulk-04, seed, critical-chain-01, follow-up-01, critical-chain-02, follow-up-03, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n",
+  "stochastic_aggregates": [
+    {
+      "strategy": "critical-first",
+      "scenario_count": 3,
+      "average_sampled_makespan": 31.536458,
+      "average_p50_makespan": 31.333333,
+      "average_p90_makespan": 33.333333,
+      "average_worst_makespan": 36.666667,
+      "average_delta_vs_critical_path_lower_bound": 6.682292,
+      "average_ratio_vs_critical_path_lower_bound": 1.270913,
+      "average_delta_vs_best": 0.0,
+      "average_best_finish_rate": 1.0
+    },
+    {
+      "strategy": "longest-processing-time",
+      "scenario_count": 3,
+      "average_sampled_makespan": 38.046875,
+      "average_p50_makespan": 38.0,
+      "average_p90_makespan": 41.333333,
+      "average_worst_makespan": 44.333333,
+      "average_delta_vs_critical_path_lower_bound": 13.192708,
+      "average_ratio_vs_critical_path_lower_bound": 1.532609,
+      "average_delta_vs_best": 6.510417,
+      "average_best_finish_rate": 0.0
+    },
+    {
+      "strategy": "fifo",
+      "scenario_count": 3,
+      "average_sampled_makespan": 38.15625,
+      "average_p50_makespan": 38.0,
+      "average_p90_makespan": 41.333333,
+      "average_worst_makespan": 43.666667,
+      "average_delta_vs_critical_path_lower_bound": 13.302083,
+      "average_ratio_vs_critical_path_lower_bound": 1.538805,
+      "average_delta_vs_best": 6.619792,
+      "average_best_finish_rate": 0.0
+    }
+  ],
+  "benchmark_markdown": "# Dependency graph strategy benchmark suite\n\n- Suite source: `projects/dependency-graph-planner/portfolio_benchmark_suite.json`\n- Scenario count: `11`\n- Strategies covered: `critical-first, fifo, longest-processing-time`\n- Aggregate leader: `critical-first`\n- Stochastic uncertainty scenarios: `3`\n\n## Linked artifacts\n\n- [Benchmark dashboard HTML](portfolio_benchmark_suite_report_dashboard.html)\n- [Benchmark JSON snapshot](portfolio_benchmark_suite_report.json)\n- [Aggregate strategy CSV](portfolio_benchmark_suite_aggregates.csv)\n- [Per-scenario strategy CSV](portfolio_benchmark_suite_strategies.csv)\n\n## Aggregate strategy scoreboard\n\n| Strategy | Scenarios | Rank-1 finishes | Best-makespan finishes | Avg makespan | Avg \u0394 vs critical path | Avg ratio vs critical path | Avg \u0394 vs best | Avg total queue delay | Avg max queue delay | Avg utilization |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| critical-first | 11 | 7 | 10 | 17.18 | 3.18 | 1.24\u00d7 | 0.09 | 20.91 | 8.27 | 63.4% |\n| fifo | 11 | 7 | 7 | 18.91 | 4.91 | 1.33\u00d7 | 1.82 | 11.91 | 4.73 | 58.1% |\n| longest-processing-time | 10 | 3 | 6 | 19.80 | 5.10 | 1.33\u00d7 | 1.80 | 13.70 | 5.60 | 58.5% |\n\n## Aggregate stochastic robustness\n\n| Strategy | Stochastic scenarios | Avg sampled makespan | Avg p50 | Avg p90 | Avg worst-case | Avg \u0394 vs sampled critical path | Avg ratio vs sampled critical path | Avg \u0394 vs sampled best | Avg sampled best-finish rate |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| critical-first | 3 | 31.54 | 31.33 | 33.33 | 36.67 | 6.68 | 1.27\u00d7 | 0.00 | 100.0% |\n| longest-processing-time | 3 | 38.05 | 38.00 | 41.33 | 44.33 | 13.19 | 1.53\u00d7 | 6.51 | 0.0% |\n| fifo | 3 | 38.16 | 38.00 | 41.33 | 43.67 | 13.30 | 1.54\u00d7 | 6.62 | 0.0% |\n\n## Scenario \u2014 sample-2-workers\n\n- Manifest: `sample_graph.json`\n- Worker limit: `2 workers`\n- Task count: `5`\n- Unlimited makespan: `8`\n- Critical-path lower bound: `8`\n- Best scenario makespan: `8` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 8 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, unit, package, publish |\n| 1 | fifo | 8 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, package, unit, publish |\n| 1 | longest-processing-time | 8 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 7 | 56.2% | lint, compile, unit, package, publish |\n\n## Scenario \u2014 strategy-2-workers\n\n- Manifest: `strategy_graph.json`\n- Worker limit: `2 workers`\n- Task count: `6`\n- Unlimited makespan: `10`\n- Critical-path lower bound: `10`\n- Best scenario makespan: `13` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 13 | 3 | 3 | 1.30\u00d7 | 0 | 6 | 6 | 4 | 84.6% | core-seed, alpha-long, core-stage-1, core-stage-2, beta-long, ship |\n| 2 | fifo | 16 | 6 | 6 | 1.60\u00d7 | 3 | 6 | 6 | 10 | 68.8% | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |\n| 2 | longest-processing-time | 16 | 6 | 6 | 1.60\u00d7 | 3 | 6 | 6 | 10 | 68.8% | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |\n\n## Scenario \u2014 resource-3-workers\n\n- Manifest: `resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `5`\n- Unlimited makespan: `6`\n- Critical-path lower bound: `6`\n- Best scenario makespan: `8` via `fifo, critical-first, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `gpu=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 8 | 2 | 2 | 1.33\u00d7 | 0 | 2 | 2 | 13 | 45.8% | prep, docs, gpu-eval, gpu-train, package |\n| 2 | critical-first | 8 | 2 | 2 | 1.33\u00d7 | 0 | 4 | 4 | 13 | 45.8% | prep, gpu-train, docs, gpu-eval, package |\n| 2 | longest-processing-time | 8 | 2 | 2 | 1.33\u00d7 | 0 | 4 | 4 | 13 | 45.8% | prep, gpu-train, docs, gpu-eval, package |\n\n## Scenario \u2014 multi-resource-3-workers\n\n- Manifest: `multi_resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `6`\n- Unlimited makespan: `7`\n- Critical-path lower bound: `7`\n- Best scenario makespan: `10` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n- Resource capacities: `browser-lab=2, gpu=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 10 | 3 | 3 | 1.43\u00d7 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n| 1 | fifo | 10 | 3 | 3 | 1.43\u00d7 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n| 1 | longest-processing-time | 10 | 3 | 3 | 1.43\u00d7 | 0 | 5 | 5 | 16 | 46.7% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n\n## Scenario \u2014 multi-resource-browser-bump\n\n- Manifest: `multi_resource_graph.json`\n- Worker limit: `3 workers`\n- Task count: `6`\n- Unlimited makespan: `7`\n- Critical-path lower bound: `7`\n- Best scenario makespan: `8` via `fifo`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `browser-lab=3, gpu=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 8 | 1 | 1 | 1.14\u00d7 | 0 | 2 | 2 | 10 | 58.3% | prep, browser-matrix, cross-platform-cert, gpu-train, sign, package |\n| 2 | critical-first | 9 | 2 | 2 | 1.29\u00d7 | 1 | 4 | 4 | 13 | 51.9% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |\n\n## Scenario \u2014 generated-ci-4-workers\n\n- Manifest: `generated_ci_pipeline.json`\n- Worker limit: `4 workers`\n- Task count: `16`\n- Unlimited makespan: `16`\n- Critical-path lower bound: `16`\n- Best scenario makespan: `16` via `critical-first, fifo, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`\n- Resource capacities: `browser-lab=1, docker-builder=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 16 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |\n| 1 | fifo | 16 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-02, unit-shard-03, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |\n| 1 | longest-processing-time | 16 | 0 | 0 | 1.00\u00d7 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, security-scan, publish-preview-image, deploy-preview, smoke-preview, promote-mainline |\n\n## Scenario \u2014 generated-release-3-workers\n\n- Manifest: `generated_release_pipeline.json`\n- Worker limit: `3 workers`\n- Task count: `19`\n- Unlimited makespan: `21`\n- Critical-path lower bound: `21`\n- Best scenario makespan: `24` via `fifo, longest-processing-time, critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `prod-slot=1, signing=1`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 24 | 3 | 3 | 1.14\u00d7 | 0 | 5 | 3 | 42 | 41.7% | freeze-release-branch, assemble-release-notes, build-linux, build-macos, build-windows, sign-linux, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n| 2 | longest-processing-time | 24 | 3 | 3 | 1.14\u00d7 | 0 | 7 | 3 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-windows, sign-macos, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n| 3 | critical-first | 24 | 3 | 3 | 1.14\u00d7 | 0 | 7 | 4 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |\n\n## Scenario \u2014 generated-data-pipeline-4-workers\n\n- Manifest: `generated_data_pipeline.json`\n- Worker limit: `4 workers`\n- Task count: `16`\n- Unlimited makespan: `15`\n- Critical-path lower bound: `15`\n- Best scenario makespan: `20` via `fifo, critical-first, longest-processing-time`\n- Rank-1 strategies after queue-delay tie-breaks: `fifo`\n- Resource capacities: `gpu=1, warehouse=2`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | fifo | 20 | 5 | 5 | 1.33\u00d7 | 0 | 12 | 5 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-02, transform-partition-03, transform-partition-04, transform-partition-05, build-features, backfill-marts, train-model, publish-dashboard, publish-model, notify-ops |\n| 2 | critical-first | 20 | 5 | 5 | 1.33\u00d7 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, schema-validate, quality-profile, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |\n| 2 | longest-processing-time | 20 | 5 | 5 | 1.33\u00d7 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |\n\n## Scenario \u2014 generated-stress-seed17-2-workers\n\n- Manifest: `generated_stress_seed17.json`\n- Worker limit: `2 workers`\n- Task count: `16`\n- Unlimited makespan: `22`\n- Critical-path lower bound: `22`\n- Best scenario makespan: `28` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n- Stochastic duration simulation: `64 triangular samples (seed 20260420, factors 0.70\u00d7/1.00\u00d7/1.80\u00d7)`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 28 | 6 | 6 | 1.27\u00d7 | 0 | 68 | 22 | 2 | 96.4% | seed, bulk-01, critical-chain-01, critical-chain-02, bulk-04, critical-chain-03, critical-chain-04, bulk-02, critical-chain-05, follow-up-02, critical-chain-06, bulk-05, follow-up-01, bulk-03, follow-up-03, ship |\n| 2 | fifo | 33 | 11 | 11 | 1.50\u00d7 | 5 | 33 | 11 | 12 | 81.8% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n| 2 | longest-processing-time | 33 | 11 | 11 | 1.50\u00d7 | 5 | 33 | 11 | 12 | 81.8% | bulk-01, bulk-04, bulk-02, bulk-03, bulk-05, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n\n### Stochastic robustness\n\n| Strategy | Avg sampled makespan | P50 | P90 | Worst-case | Avg \u0394 vs sampled critical path | Avg ratio vs sampled critical path | Avg \u0394 vs sampled best | Best-finish rate |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| critical-first | 33.39 | 33 | 35 | 38 | 7.80 | 1.31\u00d7 | 0.00 | 100.0% (64/64) |\n| fifo | 39.00 | 39 | 42 | 45 | 13.41 | 1.53\u00d7 | 5.61 | 0.0% (0/64) |\n| longest-processing-time | 39.97 | 40 | 43 | 47 | 14.38 | 1.56\u00d7 | 6.58 | 0.0% (0/64) |\n\n## Scenario \u2014 generated-stress-seed29-2-workers\n\n- Manifest: `generated_stress_seed29.json`\n- Worker limit: `2 workers`\n- Task count: `16`\n- Unlimited makespan: `20`\n- Critical-path lower bound: `20`\n- Best scenario makespan: `25` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n- Stochastic duration simulation: `64 triangular samples (seed 20260420, factors 0.70\u00d7/1.00\u00d7/1.80\u00d7)`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 25 | 5 | 5 | 1.25\u00d7 | 0 | 61 | 19 | 4 | 92.0% | seed, bulk-01, critical-chain-01, bulk-03, critical-chain-02, critical-chain-03, bulk-04, critical-chain-04, follow-up-03, critical-chain-05, bulk-02, critical-chain-06, bulk-05, follow-up-01, follow-up-02, ship |\n| 2 | longest-processing-time | 30 | 10 | 10 | 1.50\u00d7 | 5 | 35 | 10 | 14 | 76.7% | bulk-03, bulk-02, bulk-05, bulk-01, bulk-04, seed, critical-chain-01, follow-up-03, critical-chain-02, follow-up-01, follow-up-02, critical-chain-03, critical-chain-04, critical-chain-05, critical-chain-06, ship |\n| 3 | fifo | 32 | 12 | 12 | 1.60\u00d7 | 7 | 34 | 8 | 18 | 71.9% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, follow-up-01, follow-up-02, follow-up-03, critical-chain-01, critical-chain-02, critical-chain-03, critical-chain-04, critical-chain-05, critical-chain-06, ship |\n\n### Stochastic robustness\n\n| Strategy | Avg sampled makespan | P50 | P90 | Worst-case | Avg \u0394 vs sampled critical path | Avg ratio vs sampled critical path | Avg \u0394 vs sampled best | Best-finish rate |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| critical-first | 28.20 | 28 | 30 | 33 | 4.86 | 1.21\u00d7 | 0.00 | 100.0% (64/64) |\n| longest-processing-time | 35.17 | 35 | 39 | 42 | 11.83 | 1.51\u00d7 | 6.97 | 0.0% (0/64) |\n| fifo | 36.52 | 36 | 40 | 42 | 13.17 | 1.57\u00d7 | 8.31 | 0.0% (0/64) |\n\n## Scenario \u2014 generated-stress-seed41-2-workers\n\n- Manifest: `generated_stress_seed41.json`\n- Worker limit: `2 workers`\n- Task count: `16`\n- Unlimited makespan: `22`\n- Critical-path lower bound: `22`\n- Best scenario makespan: `28` via `critical-first`\n- Rank-1 strategies after queue-delay tie-breaks: `critical-first`\n- Stochastic duration simulation: `64 triangular samples (seed 20260420, factors 0.70\u00d7/1.00\u00d7/1.80\u00d7)`\n\n| Rank | Strategy | Makespan | \u0394 vs unlimited | \u0394 vs critical path | Ratio vs critical path | \u0394 vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n| 1 | critical-first | 28 | 6 | 6 | 1.27\u00d7 | 0 | 61 | 21 | 2 | 96.4% | seed, bulk-02, critical-chain-01, critical-chain-02, bulk-05, critical-chain-03, critical-chain-04, follow-up-03, bulk-03, critical-chain-05, follow-up-02, critical-chain-06, bulk-01, bulk-04, follow-up-01, ship |\n| 2 | fifo | 33 | 11 | 11 | 1.50\u00d7 | 5 | 32 | 10 | 12 | 81.8% | bulk-01, bulk-02, bulk-03, bulk-04, bulk-05, seed, follow-up-01, critical-chain-01, critical-chain-02, follow-up-03, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n| 3 | longest-processing-time | 33 | 11 | 11 | 1.50\u00d7 | 5 | 33 | 11 | 12 | 81.8% | bulk-05, bulk-01, bulk-02, bulk-03, bulk-04, seed, critical-chain-01, follow-up-01, critical-chain-02, follow-up-03, critical-chain-03, critical-chain-04, follow-up-02, critical-chain-05, critical-chain-06, ship |\n\n### Stochastic robustness\n\n| Strategy | Avg sampled makespan | P50 | P90 | Worst-case | Avg \u0394 vs sampled critical path | Avg ratio vs sampled critical path | Avg \u0394 vs sampled best | Best-finish rate |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| critical-first | 33.02 | 33 | 35 | 39 | 7.39 | 1.29\u00d7 | 0.00 | 100.0% (64/64) |\n| fifo | 38.95 | 39 | 42 | 44 | 13.33 | 1.52\u00d7 | 5.94 | 0.0% (0/64) |\n| longest-processing-time | 39.00 | 39 | 42 | 44 | 13.38 | 1.53\u00d7 | 5.98 | 0.0% (0/64) |\n",
   "benchmark_markdown_out": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md",
   "benchmark_html_out": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report_dashboard.html",
   "benchmark_json_out": "docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.json",
