@@ -87,6 +87,9 @@ class CatalogEntry:
     source_path: str
     report_path: str | None
     result: SimulationResult
+    comparison_markdown_path: str | None = None
+    comparison_html_path: str | None = None
+    termination_markdown_path: str | None = None
 
 
 @dataclass
@@ -1181,10 +1184,12 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         if entry.result.termination_hint_summary
         and not entry.result.termination_hint_summary.startswith("wait:")
     )
+    comparison_dashboard_count = sum(1 for entry in entries if entry.comparison_html_path)
+    termination_artifact_count = sum(1 for entry in entries if entry.termination_markdown_path)
 
     comparison_lines = [
-        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     snapshot_lines: list[str] = []
     for entry in entries:
@@ -1202,10 +1207,20 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         if entry.report_path:
             title_cell = f"[{result.title}]({entry.report_path})"
             report_cell = f"[report]({entry.report_path})"
+        compare_links: list[str] = []
+        if entry.comparison_html_path:
+            compare_links.append(f"[html]({entry.comparison_html_path})")
+        if entry.comparison_markdown_path:
+            compare_links.append(f"[md]({entry.comparison_markdown_path})")
+        termination_links: list[str] = []
+        if entry.termination_markdown_path:
+            termination_links.append(f"[md]({entry.termination_markdown_path})")
+        compare_cell = " / ".join(compare_links) if compare_links else "-"
+        termination_artifact_cell = " / ".join(termination_links) if termination_links else "-"
         reconnect_cell = f"`{recovered_count}/{missed_count}`" if missed_count else "`-`"
         termination_cell = result.termination_hint_summary or "-"
         comparison_lines.append(
-            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {termination} | {report} |".format(
+            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {termination} | {report} | {compare} | {termination_artifact} |".format(
                 title=title_cell,
                 outcome=result.outcome,
                 decision=result.decision or "none",
@@ -1218,6 +1233,8 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
                 termination=termination_cell,
                 total=len(result.participants),
                 report=report_cell,
+                compare=compare_cell,
+                termination_artifact=termination_artifact_cell,
             )
         )
 
@@ -1226,6 +1243,15 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
             if missed_count
             else "`-` (no participant missed the first second-phase delivery)"
         )
+        related_artifacts: list[str] = []
+        if entry.report_path:
+            related_artifacts.append(f"[report]({entry.report_path})")
+        if entry.comparison_html_path:
+            related_artifacts.append(f"[compare html]({entry.comparison_html_path})")
+        if entry.comparison_markdown_path:
+            related_artifacts.append(f"[compare md]({entry.comparison_markdown_path})")
+        if entry.termination_markdown_path:
+            related_artifacts.append(f"[termination md]({entry.termination_markdown_path})")
         snapshot_lines.extend(
             [
                 f"### {result.title}",
@@ -1238,8 +1264,8 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
                 f"- why it matters: {_primary_takeaway(result)}",
             ]
         )
-        if entry.report_path:
-            snapshot_lines.append(f"- deep dive: [{entry.report_path}]({entry.report_path})")
+        if related_artifacts:
+            snapshot_lines.append(f"- related artifacts: {' / '.join(related_artifacts)}")
         snapshot_lines.append("")
 
     lines = [
@@ -1254,6 +1280,8 @@ def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
         f"- coordinator recovery cases: `{recovery_count}`",
         f"- participant reconnect recoveries: `{reconnect_recovery_count}`",
         f"- blocked scenarios with actionable peer hints: `{actionable_termination_hint_count}`",
+        f"- scenarios with protocol-comparison dashboards: `{comparison_dashboard_count}`",
+        f"- scenarios with peer-termination walkthroughs: `{termination_artifact_count}`",
         "",
         "## Scenario comparison",
         *comparison_lines,
@@ -1328,6 +1356,12 @@ def collect_scenario_paths(paths: list[Path]) -> list[Path]:
     return collected
 
 
+def _relative_artifact_path(path: Path, *, start: Path) -> str | None:
+    if not path.exists():
+        return None
+    return os.path.relpath(path, start=start).replace(os.sep, "/")
+
+
 def build_catalog_entries(
     scenario_paths: list[Path],
     *,
@@ -1335,17 +1369,33 @@ def build_catalog_entries(
     report_dir: Path | None = None,
 ) -> list[CatalogEntry]:
     entries: list[CatalogEntry] = []
+    artifact_dir = report_dir or catalog_path.parent
     for scenario_path in scenario_paths:
         result = simulate_two_phase_commit(load_scenario(scenario_path))
         report_path: str | None = None
+        report_file = artifact_dir / f"{scenario_path.stem}_report.md"
         if report_dir is not None:
-            report_file = report_dir / f"{scenario_path.stem}_report.md"
             write_markdown_report(report_file, result)
-            report_path = os.path.relpath(report_file, start=catalog_path.parent).replace(os.sep, "/")
+        report_path = _relative_artifact_path(report_file, start=catalog_path.parent)
+        comparison_markdown_path = _relative_artifact_path(
+            artifact_dir / f"{scenario_path.stem}_protocol_compare.md",
+            start=catalog_path.parent,
+        )
+        comparison_html_path = _relative_artifact_path(
+            artifact_dir / f"{scenario_path.stem}_protocol_compare.html",
+            start=catalog_path.parent,
+        )
+        termination_markdown_path = _relative_artifact_path(
+            artifact_dir / f"{scenario_path.stem}_termination.md",
+            start=catalog_path.parent,
+        )
         entries.append(
             CatalogEntry(
                 source_path=str(scenario_path).replace(os.sep, "/"),
                 report_path=report_path,
+                comparison_markdown_path=comparison_markdown_path,
+                comparison_html_path=comparison_html_path,
+                termination_markdown_path=termination_markdown_path,
                 result=result,
             )
         )

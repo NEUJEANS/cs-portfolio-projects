@@ -14,5 +14,6 @@
 - [x] simulate the peer-to-peer termination protocol end-to-end so blocked participants either resolve from decisive peers or stay visibly stuck
 - [x] add a durable-ABORT crash scenario so peer termination resolution also shows the safe rollback path when a reachable peer never reached PREPARED
 - [x] add a compact static HTML dashboard for protocol comparison artifacts so the 2PC-vs-saga story is screenshot-friendly on GitHub Pages or in recruiter walkthroughs
+- [x] cross-link the scenario catalog to any committed comparison dashboards and peer-termination walkthroughs so recruiters can jump between related artifacts without manual file hunting
 - [x] run at least 3 review passes and fix issues found
 - [x] run tests, secret-scan, commit, push, and add a wrap-up note for the slice

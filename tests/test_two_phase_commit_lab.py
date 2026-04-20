@@ -318,11 +318,34 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("- outcomes: `3 commit`, `1 abort`, `3 blocked`", catalog)
             self.assertIn("- participant reconnect recoveries: `1`", catalog)
             self.assertIn("- blocked scenarios with actionable peer hints: `2`", catalog)
-            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report |", catalog)
+            self.assertIn("- scenarios with protocol-comparison dashboards: `0`", catalog)
+            self.assertIn("- scenarios with peer-termination walkthroughs: `0`", catalog)
+            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination |", catalog)
             self.assertIn("[Coordinator crash after one COMMIT delivery](reports/coordinator_crash_partial_commit_delivery_report.md)", catalog)
             self.assertIn("termination hint: COMMIT visible via inventory", catalog)
             self.assertIn("termination hint: ABORT safe via risk", catalog)
             self.assertIn("blocked does not always mean blind waiting: COMMIT visible via inventory.", catalog)
+
+    def test_catalog_detects_related_compare_and_termination_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "scenario_catalog.md"
+            report_dir = Path(temp_dir) / "reports"
+            report_dir.mkdir(parents=True, exist_ok=True)
+            (report_dir / "coordinator_crash_partial_commit_delivery_protocol_compare.html").write_text("<html></html>")
+            (report_dir / "coordinator_crash_partial_commit_delivery_protocol_compare.md").write_text("# compare")
+            (report_dir / "coordinator_crash_partial_commit_delivery_termination.md").write_text("# termination")
+            entries = build_catalog_entries(
+                [PARTIAL_DELIVERY_BLOCKED_SCENARIO],
+                catalog_path=catalog_path,
+                report_dir=report_dir,
+            )
+            catalog = render_catalog_markdown(entries)
+            self.assertIn("- scenarios with protocol-comparison dashboards: `1`", catalog)
+            self.assertIn("- scenarios with peer-termination walkthroughs: `1`", catalog)
+            self.assertIn("[html](reports/coordinator_crash_partial_commit_delivery_protocol_compare.html)", catalog)
+            self.assertIn("[md](reports/coordinator_crash_partial_commit_delivery_protocol_compare.md)", catalog)
+            self.assertIn("[md](reports/coordinator_crash_partial_commit_delivery_termination.md)", catalog)
+            self.assertIn("related artifacts: [report](reports/coordinator_crash_partial_commit_delivery_report.md) / [compare html](reports/coordinator_crash_partial_commit_delivery_protocol_compare.html) / [compare md](reports/coordinator_crash_partial_commit_delivery_protocol_compare.md) / [termination md](reports/coordinator_crash_partial_commit_delivery_termination.md)", catalog)
 
     def test_catalog_command_writes_index_and_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
