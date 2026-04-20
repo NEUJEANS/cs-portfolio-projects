@@ -35,9 +35,13 @@ export_mermaid = module.export_mermaid
 johnson = module.johnson
 load_graph = module.load_graph
 render_html_comparison = module.render_html_comparison
+render_html_gallery = module.render_html_gallery
 render_markdown_comparison = module.render_markdown_comparison
 render_pretty = module.render_pretty
 render_svg_comparison = module.render_svg_comparison
+load_routing_gallery_manifest = module.load_routing_gallery_manifest
+render_markdown_gallery = module.render_markdown_gallery
+summarize_comparison_metrics = module.summarize_comparison_metrics
 
 
 class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
@@ -249,6 +253,24 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         self.assertEqual(diffs["C"].changed_fields, ("presence",))
         self.assertEqual(diffs["C"].summary, "node added in candidate graph")
         self.assertEqual(comparison.changed_route_count, 1)
+
+    def test_summarize_comparison_metrics_counts_only_stable_same_cost_reroutes(self) -> None:
+        stable_comparison = compare_reports(
+            build_report(*load_graph(SAMPLE_PATH), source="A", mode="bellman-ford"),
+            build_report(*load_graph(ROUTE_SHIFT_PATH), source="A", mode="bellman-ford"),
+        )
+        stable_metrics = summarize_comparison_metrics(stable_comparison)
+        self.assertEqual(stable_metrics.same_cost_reroutes, 1)
+        self.assertEqual(stable_metrics.cost_changes, 1)
+        self.assertEqual(stable_metrics.status_changes, 0)
+
+        incident_comparison = compare_reports(
+            build_report(*load_graph(SAMPLE_PATH), source="A", mode="bellman-ford"),
+            build_report(*load_graph(NEGATIVE_PATH), source="A", mode="bellman-ford"),
+        )
+        incident_metrics = summarize_comparison_metrics(incident_comparison)
+        self.assertEqual(incident_metrics.same_cost_reroutes, 0)
+        self.assertEqual(incident_metrics.status_changes, 4)
 
     def test_build_route_table_marks_cycle_reachable_nodes(self) -> None:
         report = build_report(*load_graph(NEGATIVE_PATH), source="A", mode="bellman-ford")
@@ -586,6 +608,304 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn("Bellman-Ford from A", completed.stdout)
             self.assertTrue(output_path.exists())
             self.assertIn("## Johnson all-pairs shortest paths", output_path.read_text(encoding="utf-8"))
+
+    def test_load_routing_gallery_manifest_resolves_relative_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            baseline = base_dir / "baseline.json"
+            candidate = base_dir / "candidate.json"
+            artifact = base_dir / "report.md"
+            baseline.write_text(json.dumps({"name": "base", "nodes": ["A", "B"], "edges": [{"source": "A", "target": "B", "weight": 1}]}), encoding="utf-8")
+            candidate.write_text(json.dumps({"name": "cand", "nodes": ["A", "B"], "edges": [{"source": "A", "target": "B", "weight": 2}]}), encoding="utf-8")
+            artifact.write_text("# report\n", encoding="utf-8")
+            manifest = base_dir / "gallery.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "title": "Routing gallery",
+                        "description": "Scenario bundle",
+                        "scenarios": [
+                            {
+                                "slug": "weight-shift",
+                                "title": "Weight shift",
+                                "description": "Cost changes only.",
+                                "baseline_graph": "baseline.json",
+                                "candidate_graph": "candidate.json",
+                                "source": "A",
+                                "artifacts": [
+                                    {
+                                        "label": "Markdown report",
+                                        "path": "report.md",
+                                        "description": "Linked report",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            gallery = load_routing_gallery_manifest(manifest)
+            self.assertEqual(gallery.title, "Routing gallery")
+            self.assertEqual(len(gallery.scenarios), 1)
+            self.assertEqual(gallery.scenarios[0].baseline_graph, baseline.resolve())
+            self.assertEqual(gallery.scenarios[0].artifacts[0].path, artifact.resolve())
+
+    def test_render_markdown_gallery_includes_relative_artifact_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            artifact_dir = base_dir / "artifacts"
+            artifact_dir.mkdir()
+            report_path = artifact_dir / "route-diff.md"
+            report_path.write_text("# diff\\n", encoding="utf-8")
+            manifest = base_dir / "gallery.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "title": "Routing gallery",
+                        "description": "Scenario bundle",
+                        "scenarios": [
+                            {
+                                "slug": "route-shift",
+                                "title": "Route shift",
+                                "description": "Shows a same-cost reroute.",
+                                "baseline_graph": str(SAMPLE_PATH),
+                                "candidate_graph": str(ROUTE_SHIFT_PATH),
+                                "source": "A",
+                                "artifacts": [
+                                    {
+                                        "label": "Markdown report",
+                                        "path": str(report_path),
+                                        "description": "Changed-route report",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            gallery = load_routing_gallery_manifest(manifest)
+            output_path = base_dir / "site" / "gallery.md"
+            output_path.parent.mkdir()
+            rendered = render_markdown_gallery(gallery, output_path=output_path)
+            self.assertIn("# Routing gallery", rendered)
+            self.assertIn("same-cost reroutes with path churn", rendered)
+            self.assertIn("../artifacts/route-diff.md", rendered)
+            self.assertIn("Route shift", rendered)
+
+    def test_render_html_gallery_includes_relative_artifact_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            artifact_dir = base_dir / "artifacts"
+            artifact_dir.mkdir()
+            report_path = artifact_dir / "route-diff.md"
+            report_path.write_text("# diff\n", encoding="utf-8")
+            manifest = base_dir / "gallery.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "title": "Routing gallery",
+                        "description": "Scenario bundle",
+                        "scenarios": [
+                            {
+                                "slug": "route-shift",
+                                "title": "Route shift",
+                                "description": "Shows a same-cost reroute.",
+                                "baseline_graph": str(SAMPLE_PATH),
+                                "candidate_graph": str(ROUTE_SHIFT_PATH),
+                                "source": "A",
+                                "artifacts": [
+                                    {
+                                        "label": "Markdown report",
+                                        "path": str(report_path),
+                                        "description": "Changed-route report",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            gallery = load_routing_gallery_manifest(manifest)
+            output_path = base_dir / "site" / "gallery.html"
+            output_path.parent.mkdir()
+            rendered = render_html_gallery(gallery, output_path=output_path)
+            self.assertIn('<article class="scenario-card" id="route-shift">', rendered)
+            self.assertIn('../artifacts/route-diff.md', rendered)
+            self.assertIn('same-cost reroutes with path churn', rendered)
+            self.assertIn('href="#route-shift"', rendered)
+
+    def test_render_markdown_gallery_does_not_label_negative_cycle_incident_as_same_cost_reroute(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            report_path = base_dir / "incident.md"
+            report_path.write_text("# incident\n", encoding="utf-8")
+            manifest = base_dir / "gallery.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "title": "Routing gallery",
+                        "description": "Scenario bundle",
+                        "scenarios": [
+                            {
+                                "slug": "negative-cycle-incident",
+                                "title": "Negative cycle incident",
+                                "description": "Candidate graph becomes unstable.",
+                                "baseline_graph": str(SAMPLE_PATH),
+                                "candidate_graph": str(NEGATIVE_PATH),
+                                "source": "A",
+                                "artifacts": [
+                                    {
+                                        "label": "Markdown report",
+                                        "path": str(report_path),
+                                        "description": "Incident diff",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            gallery = load_routing_gallery_manifest(manifest)
+            output_path = base_dir / "site" / "gallery.md"
+            output_path.parent.mkdir()
+            rendered = render_markdown_gallery(gallery, output_path=output_path)
+            self.assertIn("candidate introduces a reachable negative cycle", rendered)
+            self.assertIn("- Same-cost reroutes: 0", rendered)
+
+    def test_cli_can_export_gallery_markdown_and_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            report_path = base_dir / "route-diff.md"
+            dashboard_path = base_dir / "route-diff.html"
+            svg_path = base_dir / "route-diff.svg"
+            report_path.write_text("# diff\n", encoding="utf-8")
+            dashboard_path.write_text("<!doctype html><title>diff</title>\n", encoding="utf-8")
+            svg_path.write_text('<svg xmlns="http://www.w3.org/2000/svg"></svg>\n', encoding="utf-8")
+            manifest = base_dir / "gallery.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "title": "Routing gallery",
+                        "description": "Scenario bundle",
+                        "scenarios": [
+                            {
+                                "slug": "route-shift",
+                                "title": "Route shift",
+                                "description": "Shows a same-cost reroute.",
+                                "baseline_graph": str(SAMPLE_PATH),
+                                "candidate_graph": str(ROUTE_SHIFT_PATH),
+                                "source": "A",
+                                "artifacts": [
+                                    {
+                                        "label": "Markdown report",
+                                        "path": str(report_path),
+                                        "description": "Changed-route report",
+                                    },
+                                    {
+                                        "label": "HTML dashboard",
+                                        "path": str(dashboard_path),
+                                        "description": "Dashboard artifact",
+                                    },
+                                    {
+                                        "label": "SVG card",
+                                        "path": str(svg_path),
+                                        "description": "Compact summary card",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            markdown_output = base_dir / "gallery.md"
+            html_output = base_dir / "gallery.html"
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    "--gallery-manifest",
+                    str(manifest),
+                    "--export-gallery-markdown",
+                    str(markdown_output),
+                    "--export-gallery-html",
+                    str(html_output),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["scenario_count"], 1)
+            self.assertTrue(markdown_output.exists())
+            self.assertTrue(html_output.exists())
+            self.assertIn("Routing gallery", markdown_output.read_text(encoding="utf-8"))
+            rendered_html = html_output.read_text(encoding="utf-8")
+            self.assertIn('<article class="scenario-card" id="route-shift">', rendered_html)
+            self.assertIn("Route shift", rendered_html)
+            self.assertIn('href="#route-shift"', rendered_html)
+
+    def test_cli_gallery_export_requires_manifest(self) -> None:
+        completed = subprocess.run(
+            [
+                str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                str(MODULE_PATH),
+                "--export-gallery-markdown",
+                str(PROJECT_ROOT / "docs" / "artifacts" / "should-not-exist-gallery.md"),
+            ],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--export-gallery-markdown requires --gallery-manifest", completed.stderr)
+
+    def test_cli_gallery_export_rejects_graph_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            manifest = base_dir / "gallery.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "title": "Routing gallery",
+                        "description": "Scenario bundle",
+                        "scenarios": [
+                            {
+                                "slug": "route-shift",
+                                "title": "Route shift",
+                                "description": "Shows a same-cost reroute.",
+                                "baseline_graph": str(SAMPLE_PATH),
+                                "candidate_graph": str(ROUTE_SHIFT_PATH),
+                                "source": "A",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    str(SAMPLE_PATH),
+                    "--gallery-manifest",
+                    str(manifest),
+                    "--export-gallery-html",
+                    str(base_dir / "gallery.html"),
+                ],
+                cwd=PROJECT_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("gallery exports do not use the graph positional argument", completed.stderr)
 
 
 if __name__ == "__main__":

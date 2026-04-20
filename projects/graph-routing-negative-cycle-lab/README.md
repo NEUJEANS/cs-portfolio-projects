@@ -22,6 +22,7 @@ A Python graph-routing lab that demonstrates Bellman-Ford single-source shortest
 - export route-table diff Markdown artifacts for release-review or routing-change walkthroughs
 - export a static HTML diff dashboard with summary cards and audit tables for portfolio screenshots or walkthroughs
 - export a compact SVG summary card for README thumbnails, slide decks, or quick review comments
+- bundle several comparison scenarios into one static gallery landing page with linked Markdown, HTML, and SVG artifacts
 
 ## Usage
 ```bash
@@ -44,7 +45,15 @@ python3 graph_routing_lab.py sample_graph.json --source A --mode bellman-ford \
 python3 graph_routing_lab.py sample_graph.json --source A --mode bellman-ford \
   --compare-graph route_shift_graph.json \
   --export-compare-svg ../../docs/artifacts/graph-routing-negative-cycle-route-diff-card.svg
-pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
+python3 graph_routing_lab.py sample_graph.json --source A --mode bellman-ford \
+  --compare-graph negative_cycle_graph.json \
+  --export-compare-markdown ../../docs/artifacts/graph-routing-negative-cycle-incident-report.md \
+  --export-compare-html ../../docs/artifacts/graph-routing-negative-cycle-incident-dashboard.html \
+  --export-compare-svg ../../docs/artifacts/graph-routing-negative-cycle-incident-card.svg
+python3 graph_routing_lab.py --gallery-manifest portfolio_gallery_manifest.json \
+  --export-gallery-markdown ../../docs/artifacts/graph-routing-negative-cycle-gallery.md \
+  --export-gallery-html ../../docs/artifacts/graph-routing-negative-cycle-gallery.html
+python3 -m unittest ../../tests/test_graph_routing_negative_cycle_lab.py -v
 ```
 
 ## Graph JSON format
@@ -61,11 +70,14 @@ pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
 }
 ```
 
-## Sample comparison fixture
+## Sample comparison fixtures
 - `route_shift_graph.json` changes two edge weights so the source `A` route table shifts from `A -> C -> B` to direct `A -> B`, while `D` keeps the same cost but moves to the alternate `A -> C -> D` path.
-- `docs/artifacts/graph-routing-negative-cycle-route-diff-report.md` shows the committed Markdown diff artifact for that comparison workflow.
-- `docs/artifacts/graph-routing-negative-cycle-route-diff-dashboard.html` shows the companion static HTML dashboard with summary cards and a route-diff audit table.
-- `docs/artifacts/graph-routing-negative-cycle-route-diff-card.svg` shows the compact companion SVG card for README thumbnails or slide decks.
+- `negative_cycle_graph.json` shows the harder failure mode where a candidate graph introduces a reachable negative cycle.
+- `link_failure_graph.json` shows a partial outage where `D` becomes unreachable and the remaining stable routes get more expensive.
+- `docs/artifacts/graph-routing-negative-cycle-route-diff-report.md`, `graph-routing-negative-cycle-route-diff-dashboard.html`, and `graph-routing-negative-cycle-route-diff-card.svg` are the committed artifact trio for the same-cost reroute story.
+- `docs/artifacts/graph-routing-negative-cycle-incident-report.md`, `graph-routing-negative-cycle-incident-dashboard.html`, and `graph-routing-negative-cycle-incident-card.svg` are the committed artifact trio for the negative-cycle incident story.
+- `docs/artifacts/graph-routing-negative-cycle-link-failure-report.md`, `graph-routing-negative-cycle-link-failure-dashboard.html`, and `graph-routing-negative-cycle-link-failure-card.svg` are the committed artifact trio for the link-failure regression story.
+- `portfolio_gallery_manifest.json` plus `docs/artifacts/graph-routing-negative-cycle-gallery.{md,html}` bundle the three scenarios into one recruiter-friendly landing page.
 
 ## Testing focus
 - Bellman-Ford shortest paths and predecessor chains
@@ -74,6 +86,7 @@ pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
 - route-table diff coverage for edge-weight changes, cost deltas, and same-cost path swaps
 - CLI JSON/pretty output smoke tests
 - Markdown, HTML, and SVG comparison artifact coverage for routing-change walkthroughs
+- gallery manifest + Markdown/HTML landing-page export coverage for multi-scenario portfolio bundles
 - Markdown export coverage for unreachable nodes, iteration logs, negative-cycle explanations, and route-table comparison artifacts
 - Mermaid and Graphviz DOT export artifact coverage
 - input validation for duplicate nodes and invalid edge endpoints
@@ -81,4 +94,4 @@ pytest -q ../../tests/test_graph_routing_negative_cycle_lab.py
 ## Future improvements
 - compare Bellman-Ford vs DAG shortest-path performance on acyclic graphs
 - optionally render DOT exports to PNG/SVG when `dot` is installed locally
-- add a small multi-scenario routing gallery that compares several graph diffs on one landing page
+- add incident-type filters or preset manifests so the gallery can pivot between reroute, outage, and negative-cycle stories

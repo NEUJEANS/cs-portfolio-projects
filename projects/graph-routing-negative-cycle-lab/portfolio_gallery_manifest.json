@@ -1,0 +1,81 @@
+{
+  "title": "Graph routing route-diff gallery",
+  "description": "Static landing page for three Bellman-Ford route-diff stories: same-cost path churn, a candidate negative-cycle incident, and a link-failure reachability regression.",
+  "scenarios": [
+    {
+      "slug": "same-cost-reroute",
+      "title": "Same-cost reroute after edge-weight shift",
+      "description": "Small weight changes flip B to a direct route and reroute D at the same final cost, showing why distance deltas alone can hide path churn.",
+      "baseline_graph": "sample_graph.json",
+      "candidate_graph": "route_shift_graph.json",
+      "source": "A",
+      "artifacts": [
+        {
+          "label": "Markdown report",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-route-diff-report.md",
+          "description": "Text diff with changed edges and per-node route explanations."
+        },
+        {
+          "label": "HTML dashboard",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-route-diff-dashboard.html",
+          "description": "Static dashboard with summary cards and audit tables."
+        },
+        {
+          "label": "SVG summary card",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-route-diff-card.svg",
+          "description": "Compact visual card for README thumbnails or slides."
+        }
+      ]
+    },
+    {
+      "slug": "negative-cycle-incident",
+      "title": "Candidate negative-cycle incident",
+      "description": "The candidate graph introduces a reachable negative cycle, turning every formerly stable route into an unstable routing incident that must be surfaced immediately.",
+      "baseline_graph": "sample_graph.json",
+      "candidate_graph": "negative_cycle_graph.json",
+      "source": "A",
+      "artifacts": [
+        {
+          "label": "Markdown report",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-incident-report.md",
+          "description": "Route-diff report that highlights the reachable cycle and unstable route table."
+        },
+        {
+          "label": "HTML dashboard",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-incident-dashboard.html",
+          "description": "Static incident dashboard for the negative-cycle regression."
+        },
+        {
+          "label": "SVG summary card",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-incident-card.svg",
+          "description": "Compact cycle-incident card for quick portfolio previews."
+        }
+      ]
+    },
+    {
+      "slug": "link-failure-regression",
+      "title": "Link-failure reachability regression",
+      "description": "A broken path to D and higher route costs for B/C show how topology drift can mix cost regressions with a hard reachability failure.",
+      "baseline_graph": "sample_graph.json",
+      "candidate_graph": "link_failure_graph.json",
+      "source": "A",
+      "artifacts": [
+        {
+          "label": "Markdown report",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-link-failure-report.md",
+          "description": "Diff artifact for the partial outage / unreachable-destination scenario."
+        },
+        {
+          "label": "HTML dashboard",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-link-failure-dashboard.html",
+          "description": "Static dashboard covering the link-failure regression."
+        },
+        {
+          "label": "SVG summary card",
+          "path": "../../docs/artifacts/graph-routing-negative-cycle-link-failure-card.svg",
+          "description": "Compact outage card showing the reachability regression."
+        }
+      ]
+    }
+  ]
+}

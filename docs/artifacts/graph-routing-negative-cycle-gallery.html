@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graph routing route-diff gallery</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #dbe3ef;
+        --text: #10233d;
+        --muted: #51627a;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 18rem); color: var(--text); }
+      main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 56px; }
+      .hero, .summary-card, .scenario-card { background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.06); }
+      .hero { padding: 28px; margin-bottom: 20px; }
+      .eyebrow { margin: 0 0 8px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+      h1, h2, h3, h4 { margin: 0; }
+      .hero p, .lede, .summary-card p, .artifact-card p { color: var(--muted); line-height: 1.6; }
+      .summary-grid, .scenario-grid { display: grid; gap: 16px; }
+      .summary-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px; }
+      .scenario-grid { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+      .summary-card, .scenario-card { padding: 20px; }
+      .summary-card strong { display: block; margin-top: 6px; font-size: 1.9rem; }
+      .scenario-card__header { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+      .pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 12px; font-size: 0.82rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
+      .story-label { font-weight: 700; color: #1d4ed8; }
+      .scenario-link { color: inherit; text-decoration: none; }
+      .scenario-link:hover { text-decoration: underline; }
+      .metric-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+      .metric-list div { padding: 10px 12px; background: rgba(255,255,255,0.8); border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.25); }
+      .metric-list dt { margin: 0 0 4px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+      .metric-list dd { margin: 0; font-size: 1rem; font-weight: 600; }
+      .cycle-note, .changed-nodes { color: var(--muted); }
+      code { font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(15, 23, 42, 0.05); padding: 2px 6px; border-radius: 8px; }
+      .artifact-list { display: grid; gap: 12px; margin-top: 16px; }
+      .artifact-card { border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: #fcfdff; }
+      .artifact-card a { color: #1d4ed8; text-decoration: none; }
+      .artifact-card a:hover { text-decoration: underline; }
+      .empty-state { color: var(--muted); }
+      @media (max-width: 820px) {
+        main { padding-inline: 14px; }
+        .hero, .summary-card, .scenario-card { border-radius: 16px; }
+        .scenario-card__header { flex-direction: column; align-items: start; }
+        .metric-list { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Graph routing negative-cycle lab</p>
+        <h1>Graph routing route-diff gallery</h1>
+        <p>Static landing page for three Bellman-Ford route-diff stories: same-cost path churn, a candidate negative-cycle incident, and a link-failure reachability regression.</p>
+      </section>
+      <section class="summary-grid">
+        <article class="summary-card">
+      <p class="eyebrow">Scenario count</p>
+      <strong>3</strong>
+      <p>Distinct graph-to-graph routing stories bundled into one landing page.</p>
+    </article><article class="summary-card">
+      <p class="eyebrow">Changed routes</p>
+      <strong>9</strong>
+      <p>Total changed route-table entries across the committed scenarios.</p>
+    </article><article class="summary-card">
+      <p class="eyebrow">Candidate negative cycles</p>
+      <strong>1</strong>
+      <p>Scenarios where the candidate graph makes shortest paths unstable.</p>
+    </article><article class="summary-card">
+      <p class="eyebrow">Scenarios featuring same-cost reroutes</p>
+      <strong>1</strong>
+      <p>Scenarios containing at least one path shift without a headline distance change.</p>
+    </article>
+      </section>
+      <section class="scenario-grid">
+        <article class="scenario-card" id="same-cost-reroute">
+      <div class="scenario-card__header">
+        <div>
+          <p class="eyebrow">same-cost-reroute</p>
+          <h2><a class="scenario-link" href="#same-cost-reroute">Same-cost reroute after edge-weight shift</a></h2>
+        </div>
+        <span class="pill">source A</span>
+      </div>
+      <p class="lede">Small weight changes flip B to a direct route and reroute D at the same final cost, showing why distance deltas alone can hide path churn.</p>
+      <p class="story-label">same-cost reroutes with path churn</p>
+      <dl class="metric-list">
+        <div><dt>Baseline</dt><dd><code>routing_demo</code></dd></div>
+        <div><dt>Candidate</dt><dd><code>routing_shift_demo</code></dd></div>
+        <div><dt>Changed edges</dt><dd>2</dd></div>
+        <div><dt>Changed routes</dt><dd>2</dd></div>
+        <div><dt>Same-cost reroutes</dt><dd>1</dd></div>
+        <div><dt>Status changes</dt><dd>0</dd></div>
+      </dl>
+      <p class="cycle-note"><strong>Baseline cycle:</strong> none<br><strong>Candidate cycle:</strong> none</p>
+      <p class="changed-nodes"><strong>Changed nodes:</strong> B, D</p>
+      <section class="artifact-list">
+        <h3>Linked artifacts</h3>
+        <article class="artifact-card"><h4><a href="graph-routing-negative-cycle-route-diff-report.md">Markdown report</a></h4><p>Text diff with changed edges and per-node route explanations.</p></article><article class="artifact-card"><h4><a href="graph-routing-negative-cycle-route-diff-dashboard.html">HTML dashboard</a></h4><p>Static dashboard with summary cards and audit tables.</p></article><article class="artifact-card"><h4><a href="graph-routing-negative-cycle-route-diff-card.svg">SVG summary card</a></h4><p>Compact visual card for README thumbnails or slides.</p></article>
+      </section>
+    </article><article class="scenario-card" id="negative-cycle-incident">
+      <div class="scenario-card__header">
+        <div>
+          <p class="eyebrow">negative-cycle-incident</p>
+          <h2><a class="scenario-link" href="#negative-cycle-incident">Candidate negative-cycle incident</a></h2>
+        </div>
+        <span class="pill">source A</span>
+      </div>
+      <p class="lede">The candidate graph introduces a reachable negative cycle, turning every formerly stable route into an unstable routing incident that must be surfaced immediately.</p>
+      <p class="story-label">candidate introduces a reachable negative cycle</p>
+      <dl class="metric-list">
+        <div><dt>Baseline</dt><dd><code>routing_demo</code></dd></div>
+        <div><dt>Candidate</dt><dd><code>negative_cycle_demo</code></dd></div>
+        <div><dt>Changed edges</dt><dd>8</dd></div>
+        <div><dt>Changed routes</dt><dd>4</dd></div>
+        <div><dt>Same-cost reroutes</dt><dd>0</dd></div>
+        <div><dt>Status changes</dt><dd>4</dd></div>
+      </dl>
+      <p class="cycle-note"><strong>Baseline cycle:</strong> none<br><strong>Candidate cycle:</strong> A -&gt; B -&gt; C -&gt; A</p>
+      <p class="changed-nodes"><strong>Changed nodes:</strong> A, B, C, D</p>
+      <section class="artifact-list">
+        <h3>Linked artifacts</h3>
+        <article class="artifact-card"><h4><a href="graph-routing-negative-cycle-incident-report.md">Markdown report</a></h4><p>Route-diff report that highlights the reachable cycle and unstable route table.</p></article><article class="artifact-card"><h4><a href="graph-routing-negative-cycle-incident-dashboard.html">HTML dashboard</a></h4><p>Static incident dashboard for the negative-cycle regression.</p></article><article class="artifact-card"><h4><a href="graph-routing-negative-cycle-incident-card.svg">SVG summary card</a></h4><p>Compact cycle-incident card for quick portfolio previews.</p></article>
+      </section>
+    </article><article class="scenario-card" id="link-failure-regression">
+      <div class="scenario-card__header">
+        <div>
+          <p class="eyebrow">link-failure-regression</p>
+          <h2><a class="scenario-link" href="#link-failure-regression">Link-failure reachability regression</a></h2>
+        </div>
+        <span class="pill">source A</span>
+      </div>
+      <p class="lede">A broken path to D and higher route costs for B/C show how topology drift can mix cost regressions with a hard reachability failure.</p>
+      <p class="story-label">reachability or route status changes</p>
+      <dl class="metric-list">
+        <div><dt>Baseline</dt><dd><code>routing_demo</code></dd></div>
+        <div><dt>Candidate</dt><dd><code>link_failure_demo</code></dd></div>
+        <div><dt>Changed edges</dt><dd>4</dd></div>
+        <div><dt>Changed routes</dt><dd>3</dd></div>
+        <div><dt>Same-cost reroutes</dt><dd>0</dd></div>
+        <div><dt>Status changes</dt><dd>1</dd></div>
+      </dl>
+      <p class="cycle-note"><strong>Baseline cycle:</strong> none<br><strong>Candidate cycle:</strong> none</p>
+      <p class="changed-nodes"><strong>Changed nodes:</strong> B, C, D</p>
+      <section class="artifact-list">
+        <h3>Linked artifacts</h3>
+        <article class="artifact-card"><h4><a href="graph-routing-negative-cycle-link-failure-report.md">Markdown report</a></h4><p>Diff artifact for the partial outage / unreachable-destination scenario.</p></article><article class="artifact-card"><h4><a href="graph-routing-negative-cycle-link-failure-dashboard.html">HTML dashboard</a></h4><p>Static dashboard covering the link-failure regression.</p></article><article class="artifact-card"><h4><a href="graph-routing-negative-cycle-link-failure-card.svg">SVG summary card</a></h4><p>Compact outage card showing the reachability regression.</p></article>
+      </section>
+    </article>
+      </section>
+    </main>
+  </body>
+</html>

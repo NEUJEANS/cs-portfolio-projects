@@ -1,0 +1,10 @@
+{
+  "name": "link_failure_demo",
+  "nodes": ["A", "B", "C", "D"],
+  "edges": [
+    {"source": "A", "target": "B", "weight": 2},
+    {"source": "A", "target": "C", "weight": 4},
+    {"source": "C", "target": "B", "weight": -1},
+    {"source": "D", "target": "A", "weight": 1}
+  ]
+}

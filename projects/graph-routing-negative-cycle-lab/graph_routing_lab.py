@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import html
 import json
 import textwrap
@@ -172,6 +173,56 @@ class RoutingComparison:
             "changed_route_count": self.changed_route_count,
             "unchanged_route_count": self.unchanged_route_count,
         }
+
+
+@dataclass(frozen=True)
+class ComparisonMetrics:
+    changed_diffs: tuple[RouteDiff, ...]
+    same_cost_reroutes: int
+    cost_changes: int
+    predecessor_changes: int
+    status_changes: int
+    presence_changes: int
+
+
+@dataclass(frozen=True)
+class GalleryArtifact:
+    label: str
+    path: Path
+    description: str
+
+
+@dataclass(frozen=True)
+class GalleryScenario:
+    slug: str
+    title: str
+    description: str
+    baseline_graph: Path
+    candidate_graph: Path
+    source: str
+    artifacts: tuple[GalleryArtifact, ...]
+
+
+@dataclass(frozen=True)
+class RoutingGallery:
+    title: str
+    description: str
+    manifest_path: Path
+    scenarios: tuple[GalleryScenario, ...]
+
+
+@dataclass(frozen=True)
+class GalleryScenarioSummary:
+    scenario: GalleryScenario
+    comparison: RoutingComparison
+    baseline_graph_name: str
+    candidate_graph_name: str
+    same_cost_reroutes: int
+    cost_changes: int
+    predecessor_changes: int
+    status_changes: int
+    changed_nodes: tuple[str, ...]
+    story_label: str
 
 
 def load_graph(path: str | Path) -> tuple[str, tuple[str, ...], tuple[Edge, ...]]:
@@ -832,6 +883,32 @@ def compare_reports(baseline_report: RoutingReport, candidate_report: RoutingRep
     )
 
 
+def summarize_comparison_metrics(comparison: RoutingComparison) -> ComparisonMetrics:
+    changed_diffs = tuple(diff for diff in comparison.route_diffs if diff.changed_fields)
+    same_cost_reroutes = sum(
+        1
+        for diff in changed_diffs
+        if (
+            diff.baseline is not None
+            and diff.candidate is not None
+            and 'path' in diff.changed_fields
+            and 'cost' not in diff.changed_fields
+            and 'status' not in diff.changed_fields
+            and 'presence' not in diff.changed_fields
+            and diff.baseline.status == 'reachable'
+            and diff.candidate.status == 'reachable'
+        )
+    )
+    return ComparisonMetrics(
+        changed_diffs=changed_diffs,
+        same_cost_reroutes=same_cost_reroutes,
+        cost_changes=sum(1 for diff in changed_diffs if 'cost' in diff.changed_fields),
+        predecessor_changes=sum(1 for diff in changed_diffs if 'predecessor' in diff.changed_fields),
+        status_changes=sum(1 for diff in changed_diffs if 'status' in diff.changed_fields),
+        presence_changes=sum(1 for diff in changed_diffs if 'presence' in diff.changed_fields),
+    )
+
+
 def render_pretty_comparison(comparison: RoutingComparison) -> str:
     lines = [
         f'Route-table comparison: {comparison.baseline_graph} vs {comparison.candidate_graph}',
@@ -977,14 +1054,12 @@ def _render_svg_text_block(x: int, y: int, lines: Iterable[str], class_name: str
 
 
 def render_svg_comparison(comparison: RoutingComparison) -> str:
-    changed_diffs = [diff for diff in comparison.route_diffs if diff.changed_fields]
-    same_cost_reroutes = sum(
-        1 for diff in changed_diffs if 'path' in diff.changed_fields and 'cost' not in diff.changed_fields
-    )
-    cost_changes = sum(1 for diff in changed_diffs if 'cost' in diff.changed_fields)
-    predecessor_changes = sum(1 for diff in changed_diffs if 'predecessor' in diff.changed_fields)
-    presence_changes = sum(1 for diff in changed_diffs if 'presence' in diff.changed_fields)
-    featured_diffs = changed_diffs[:3]
+    metrics = summarize_comparison_metrics(comparison)
+    same_cost_reroutes = metrics.same_cost_reroutes
+    cost_changes = metrics.cost_changes
+    predecessor_changes = metrics.predecessor_changes
+    presence_changes = metrics.presence_changes
+    featured_diffs = list(metrics.changed_diffs[:3])
 
     summary_cards: list[tuple[str, str, str]] = [
         ('Changed edges', str(len(comparison.edge_changes)), 'edge-weight or edge-presence differences'),
@@ -1111,8 +1186,8 @@ def render_svg_comparison(comparison: RoutingComparison) -> str:
         )
 
     footer_note = (
-        f'Showing first {len(featured_diffs)} changed routes out of {len(changed_diffs)} total.'
-        if len(changed_diffs) > len(featured_diffs)
+        f'Showing first {len(featured_diffs)} changed routes out of {len(metrics.changed_diffs)} total.'
+        if len(metrics.changed_diffs) > len(featured_diffs)
         else 'Deterministic static artifact for README thumbnails, slide decks, and quick routing-change reviews.'
     )
     elements.append(_render_svg_text_block(38, height - 18, (footer_note,), 'footer', line_height=18))
@@ -1148,13 +1223,12 @@ def render_svg_comparison(comparison: RoutingComparison) -> str:
 
 
 def render_html_comparison(comparison: RoutingComparison) -> str:
-    changed_diffs = [diff for diff in comparison.route_diffs if diff.changed_fields]
-    same_cost_reroutes = sum(
-        1 for diff in changed_diffs if 'path' in diff.changed_fields and 'cost' not in diff.changed_fields
-    )
-    cost_changes = sum(1 for diff in changed_diffs if 'cost' in diff.changed_fields)
-    predecessor_changes = sum(1 for diff in changed_diffs if 'predecessor' in diff.changed_fields)
-    presence_changes = sum(1 for diff in changed_diffs if 'presence' in diff.changed_fields)
+    metrics = summarize_comparison_metrics(comparison)
+    changed_diffs = list(metrics.changed_diffs)
+    same_cost_reroutes = metrics.same_cost_reroutes
+    cost_changes = metrics.cost_changes
+    predecessor_changes = metrics.predecessor_changes
+    presence_changes = metrics.presence_changes
 
     summary_cards = [
         ('Changed edges', str(len(comparison.edge_changes)), 'Edge-weight or edge-presence differences between the two graph variants.'),
@@ -1435,6 +1509,415 @@ def export_compare_svg(comparison: RoutingComparison, output_path: str | Path) -
     return output
 
 
+def relative_output_path(target: str | Path, output_path: str | Path) -> str:
+    return Path(os.path.relpath(Path(target), start=Path(output_path).parent)).as_posix()
+
+
+def _validate_non_empty_string(value: object, *, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f'gallery manifest field {field_name!r} must be a non-empty string')
+    return value.strip()
+
+
+def _resolve_manifest_path(base_dir: Path, raw_path: object, *, field_name: str) -> Path:
+    text = _validate_non_empty_string(raw_path, field_name=field_name)
+    path = Path(text)
+    if not path.is_absolute():
+        path = (base_dir / path).resolve()
+    return path
+
+
+def _load_gallery_artifacts(base_dir: Path, payload: object, *, scenario_slug: str) -> tuple[GalleryArtifact, ...]:
+    if payload is None:
+        return tuple()
+    if not isinstance(payload, list):
+        raise ValueError(f'gallery manifest scenario {scenario_slug!r} must define artifacts as a list')
+    artifacts: list[GalleryArtifact] = []
+    for index, artifact_payload in enumerate(payload, start=1):
+        if not isinstance(artifact_payload, dict):
+            raise ValueError(
+                f'gallery manifest scenario {scenario_slug!r} artifact #{index} must be an object'
+            )
+        label = _validate_non_empty_string(
+            artifact_payload.get('label'),
+            field_name=f'{scenario_slug}.artifacts[{index}].label',
+        )
+        description = _validate_non_empty_string(
+            artifact_payload.get('description'),
+            field_name=f'{scenario_slug}.artifacts[{index}].description',
+        )
+        artifact_path = _resolve_manifest_path(
+            base_dir,
+            artifact_payload.get('path'),
+            field_name=f'{scenario_slug}.artifacts[{index}].path',
+        )
+        if not artifact_path.exists():
+            raise ValueError(
+                f'gallery manifest scenario {scenario_slug!r} references a missing artifact: {artifact_path}'
+            )
+        artifacts.append(GalleryArtifact(label=label, path=artifact_path, description=description))
+    return tuple(artifacts)
+
+
+def load_routing_gallery_manifest(path: str | Path) -> RoutingGallery:
+    manifest_path = Path(path).resolve()
+    payload = json.loads(manifest_path.read_text(encoding='utf-8'))
+    if not isinstance(payload, dict):
+        raise ValueError('gallery manifest must be a JSON object')
+    scenarios_payload = payload.get('scenarios')
+    if not isinstance(scenarios_payload, list) or not scenarios_payload:
+        raise ValueError('gallery manifest must include a non-empty scenarios list')
+
+    base_dir = manifest_path.parent
+    title = _validate_non_empty_string(payload.get('title', 'Graph routing diff gallery'), field_name='title')
+    description = _validate_non_empty_string(
+        payload.get(
+            'description',
+            'Portfolio-friendly landing page for multiple route-diff scenarios and their artifact bundles.',
+        ),
+        field_name='description',
+    )
+
+    scenarios: list[GalleryScenario] = []
+    seen_slugs: set[str] = set()
+    for index, scenario_payload in enumerate(scenarios_payload, start=1):
+        if not isinstance(scenario_payload, dict):
+            raise ValueError(f'gallery manifest scenario #{index} must be an object')
+        slug = _validate_non_empty_string(
+            scenario_payload.get('slug'),
+            field_name=f'scenarios[{index}].slug',
+        )
+        if slug in seen_slugs:
+            raise ValueError(f'gallery manifest scenario slugs must be unique; duplicate {slug!r}')
+        seen_slugs.add(slug)
+        title_text = _validate_non_empty_string(scenario_payload.get('title'), field_name=f'{slug}.title')
+        description_text = _validate_non_empty_string(
+            scenario_payload.get('description'),
+            field_name=f'{slug}.description',
+        )
+        source = _validate_non_empty_string(scenario_payload.get('source'), field_name=f'{slug}.source')
+        baseline_graph = _resolve_manifest_path(
+            base_dir,
+            scenario_payload.get('baseline_graph'),
+            field_name=f'{slug}.baseline_graph',
+        )
+        candidate_graph = _resolve_manifest_path(
+            base_dir,
+            scenario_payload.get('candidate_graph'),
+            field_name=f'{slug}.candidate_graph',
+        )
+        if not baseline_graph.exists():
+            raise ValueError(f'gallery manifest baseline graph does not exist: {baseline_graph}')
+        if not candidate_graph.exists():
+            raise ValueError(f'gallery manifest candidate graph does not exist: {candidate_graph}')
+        artifacts = _load_gallery_artifacts(base_dir, scenario_payload.get('artifacts', []), scenario_slug=slug)
+        scenarios.append(
+            GalleryScenario(
+                slug=slug,
+                title=title_text,
+                description=description_text,
+                baseline_graph=baseline_graph,
+                candidate_graph=candidate_graph,
+                source=source,
+                artifacts=artifacts,
+            )
+        )
+
+    return RoutingGallery(
+        title=title,
+        description=description,
+        manifest_path=manifest_path,
+        scenarios=tuple(scenarios),
+    )
+
+
+def _scenario_story_label(
+    comparison: RoutingComparison,
+    *,
+    same_cost_reroutes: int,
+    cost_changes: int,
+    status_changes: int,
+) -> str:
+    if comparison.baseline_negative_cycle is None and comparison.candidate_negative_cycle is not None:
+        return 'candidate introduces a reachable negative cycle'
+    if comparison.baseline_negative_cycle is not None and comparison.candidate_negative_cycle is None:
+        return 'candidate clears the reachable negative cycle'
+    if status_changes:
+        return 'reachability or route status changes'
+    if same_cost_reroutes:
+        return 'same-cost reroutes with path churn'
+    if cost_changes:
+        return 'cost-changing route regression or improvement'
+    return 'edge changes without route-table movement'
+
+
+def summarize_gallery_scenario(scenario: GalleryScenario) -> GalleryScenarioSummary:
+    baseline_graph_name, baseline_nodes, baseline_edges = load_graph(scenario.baseline_graph)
+    candidate_graph_name, candidate_nodes, candidate_edges = load_graph(scenario.candidate_graph)
+    baseline_report = build_report(
+        baseline_graph_name,
+        baseline_nodes,
+        baseline_edges,
+        source=scenario.source,
+        mode='bellman-ford',
+    )
+    candidate_report = build_report(
+        candidate_graph_name,
+        candidate_nodes,
+        candidate_edges,
+        source=scenario.source,
+        mode='bellman-ford',
+    )
+    comparison = compare_reports(baseline_report, candidate_report)
+    metrics = summarize_comparison_metrics(comparison)
+    same_cost_reroutes = metrics.same_cost_reroutes
+    cost_changes = metrics.cost_changes
+    predecessor_changes = metrics.predecessor_changes
+    status_changes = metrics.status_changes
+    changed_nodes = tuple(diff.node for diff in metrics.changed_diffs[:4])
+    return GalleryScenarioSummary(
+        scenario=scenario,
+        comparison=comparison,
+        baseline_graph_name=baseline_graph_name,
+        candidate_graph_name=candidate_graph_name,
+        same_cost_reroutes=same_cost_reroutes,
+        cost_changes=cost_changes,
+        predecessor_changes=predecessor_changes,
+        status_changes=status_changes,
+        changed_nodes=changed_nodes,
+        story_label=_scenario_story_label(
+            comparison,
+            same_cost_reroutes=same_cost_reroutes,
+            cost_changes=cost_changes,
+            status_changes=status_changes,
+        ),
+    )
+
+
+def build_gallery_summaries(gallery: RoutingGallery) -> tuple[GalleryScenarioSummary, ...]:
+    return tuple(summarize_gallery_scenario(scenario) for scenario in gallery.scenarios)
+
+
+def render_markdown_gallery(gallery: RoutingGallery, *, output_path: str | Path) -> str:
+    summaries = build_gallery_summaries(gallery)
+    total_changed_routes = sum(summary.comparison.changed_route_count for summary in summaries)
+    negative_cycle_scenarios = sum(1 for summary in summaries if summary.comparison.candidate_negative_cycle)
+    same_cost_reroute_scenarios = sum(1 for summary in summaries if summary.same_cost_reroutes)
+    lines = [
+        f'# {gallery.title}',
+        '',
+        gallery.description,
+        '',
+        '## Gallery summary',
+        '| metric | value |',
+        '| --- | --- |',
+        f'| scenario count | {len(summaries)} |',
+        f'| total changed routes | {total_changed_routes} |',
+        f'| scenarios with candidate negative cycles | {negative_cycle_scenarios} |',
+        f'| scenarios featuring same-cost reroutes | {same_cost_reroute_scenarios} |',
+        '',
+        '## Scenario overview',
+        '| Scenario | Source | Story | Changed edges | Changed routes | Linked artifacts |',
+        '| --- | --- | --- | ---: | ---: | --- |',
+    ]
+    for summary in summaries:
+        artifact_links = ', '.join(
+            f'[{artifact.label}]({relative_output_path(artifact.path, output_path)})'
+            for artifact in summary.scenario.artifacts
+        ) or '—'
+        lines.append(
+            '| ' + ' | '.join(
+                [
+                    f'[{summary.scenario.title}](#{summary.scenario.slug})',
+                    summary.scenario.source,
+                    summary.story_label,
+                    str(len(summary.comparison.edge_changes)),
+                    str(summary.comparison.changed_route_count),
+                    artifact_links,
+                ]
+            ) + ' |'
+        )
+
+    lines.append('')
+    lines.append('## Scenario cards')
+    for summary in summaries:
+        lines.extend(
+            [
+                '',
+                f'<a id="{summary.scenario.slug}"></a>',
+                f'### {summary.scenario.title}',
+                summary.scenario.description,
+                '',
+                f'- Source: `{summary.scenario.source}`',
+                f'- Baseline graph: `{summary.baseline_graph_name}`',
+                f'- Candidate graph: `{summary.candidate_graph_name}`',
+                f'- Story label: {summary.story_label}',
+                f'- Changed edges: {len(summary.comparison.edge_changes)}',
+                f'- Changed route entries: {summary.comparison.changed_route_count}',
+                f'- Same-cost reroutes: {summary.same_cost_reroutes}',
+                f'- Cost-changing routes: {summary.cost_changes}',
+                f'- Predecessor changes: {summary.predecessor_changes}',
+                f'- Status changes: {summary.status_changes}',
+                '- Baseline negative cycle: '
+                + (
+                    ' -> '.join(summary.comparison.baseline_negative_cycle)
+                    if summary.comparison.baseline_negative_cycle
+                    else 'none'
+                ),
+                '- Candidate negative cycle: '
+                + (
+                    ' -> '.join(summary.comparison.candidate_negative_cycle)
+                    if summary.comparison.candidate_negative_cycle
+                    else 'none'
+                ),
+                '- Changed nodes preview: ' + (', '.join(summary.changed_nodes) if summary.changed_nodes else 'none'),
+            ]
+        )
+        if summary.scenario.artifacts:
+            lines.extend(['', '#### Linked artifacts'])
+            for artifact in summary.scenario.artifacts:
+                lines.append(
+                    f'- [{artifact.label}]({relative_output_path(artifact.path, output_path)}) — {artifact.description}'
+                )
+    return "\n".join(lines) + "\n"
+
+
+def render_html_gallery(gallery: RoutingGallery, *, output_path: str | Path) -> str:
+    summaries = build_gallery_summaries(gallery)
+    total_changed_routes = sum(summary.comparison.changed_route_count for summary in summaries)
+    negative_cycle_scenarios = sum(1 for summary in summaries if summary.comparison.candidate_negative_cycle)
+    same_cost_reroute_scenarios = sum(1 for summary in summaries if summary.same_cost_reroutes)
+    summary_cards_html = ''.join(
+        f'''<article class="summary-card">
+      <p class="eyebrow">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description in (
+            ('Scenario count', str(len(summaries)), 'Distinct graph-to-graph routing stories bundled into one landing page.'),
+            ('Changed routes', str(total_changed_routes), 'Total changed route-table entries across the committed scenarios.'),
+            ('Candidate negative cycles', str(negative_cycle_scenarios), 'Scenarios where the candidate graph makes shortest paths unstable.'),
+            ('Scenarios featuring same-cost reroutes', str(same_cost_reroute_scenarios), 'Scenarios containing at least one path shift without a headline distance change.'),
+        )
+    )
+    scenario_cards_html = ''.join(
+        f'''<article class="scenario-card" id="{_html_escape(summary.scenario.slug)}">
+      <div class="scenario-card__header">
+        <div>
+          <p class="eyebrow">{_html_escape(summary.scenario.slug)}</p>
+          <h2><a class="scenario-link" href="#{_html_escape(summary.scenario.slug)}">{_html_escape(summary.scenario.title)}</a></h2>
+        </div>
+        <span class="pill">source {_html_escape(summary.scenario.source)}</span>
+      </div>
+      <p class="lede">{_html_escape(summary.scenario.description)}</p>
+      <p class="story-label">{_html_escape(summary.story_label)}</p>
+      <dl class="metric-list">
+        <div><dt>Baseline</dt><dd><code>{_html_escape(summary.baseline_graph_name)}</code></dd></div>
+        <div><dt>Candidate</dt><dd><code>{_html_escape(summary.candidate_graph_name)}</code></dd></div>
+        <div><dt>Changed edges</dt><dd>{len(summary.comparison.edge_changes)}</dd></div>
+        <div><dt>Changed routes</dt><dd>{summary.comparison.changed_route_count}</dd></div>
+        <div><dt>Same-cost reroutes</dt><dd>{summary.same_cost_reroutes}</dd></div>
+        <div><dt>Status changes</dt><dd>{summary.status_changes}</dd></div>
+      </dl>
+      <p class="cycle-note"><strong>Baseline cycle:</strong> {_html_escape(' -> '.join(summary.comparison.baseline_negative_cycle) if summary.comparison.baseline_negative_cycle else 'none')}<br><strong>Candidate cycle:</strong> {_html_escape(' -> '.join(summary.comparison.candidate_negative_cycle) if summary.comparison.candidate_negative_cycle else 'none')}</p>
+      <p class="changed-nodes"><strong>Changed nodes:</strong> {_html_escape(', '.join(summary.changed_nodes) if summary.changed_nodes else 'none')}</p>
+      <section class="artifact-list">
+        <h3>Linked artifacts</h3>
+        {''.join(
+            f'''<article class="artifact-card"><h4><a href="{_html_escape(relative_output_path(artifact.path, output_path))}">{_html_escape(artifact.label)}</a></h4><p>{_html_escape(artifact.description)}</p></article>'''
+            for artifact in summary.scenario.artifacts
+        ) or '<p class="empty-state">No linked artifacts were supplied for this scenario.</p>'}
+      </section>
+    </article>'''
+        for summary in summaries
+    )
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_html_escape(gallery.title)}</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #dbe3ef;
+        --text: #10233d;
+        --muted: #51627a;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 18rem); color: var(--text); }}
+      main {{ max-width: 1180px; margin: 0 auto; padding: 32px 20px 56px; }}
+      .hero, .summary-card, .scenario-card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.06); }}
+      .hero {{ padding: 28px; margin-bottom: 20px; }}
+      .eyebrow {{ margin: 0 0 8px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }}
+      h1, h2, h3, h4 {{ margin: 0; }}
+      .hero p, .lede, .summary-card p, .artifact-card p {{ color: var(--muted); line-height: 1.6; }}
+      .summary-grid, .scenario-grid {{ display: grid; gap: 16px; }}
+      .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px; }}
+      .scenario-grid {{ grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }}
+      .summary-card, .scenario-card {{ padding: 20px; }}
+      .summary-card strong {{ display: block; margin-top: 6px; font-size: 1.9rem; }}
+      .scenario-card__header {{ display: flex; justify-content: space-between; gap: 12px; align-items: start; }}
+      .pill {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 12px; font-size: 0.82rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); }}
+      .story-label {{ font-weight: 700; color: #1d4ed8; }}
+      .scenario-link {{ color: inherit; text-decoration: none; }}
+      .scenario-link:hover {{ text-decoration: underline; }}
+      .metric-list {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }}
+      .metric-list div {{ padding: 10px 12px; background: rgba(255,255,255,0.8); border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.25); }}
+      .metric-list dt {{ margin: 0 0 4px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }}
+      .metric-list dd {{ margin: 0; font-size: 1rem; font-weight: 600; }}
+      .cycle-note, .changed-nodes {{ color: var(--muted); }}
+      code {{ font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(15, 23, 42, 0.05); padding: 2px 6px; border-radius: 8px; }}
+      .artifact-list {{ display: grid; gap: 12px; margin-top: 16px; }}
+      .artifact-card {{ border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: #fcfdff; }}
+      .artifact-card a {{ color: #1d4ed8; text-decoration: none; }}
+      .artifact-card a:hover {{ text-decoration: underline; }}
+      .empty-state {{ color: var(--muted); }}
+      @media (max-width: 820px) {{
+        main {{ padding-inline: 14px; }}
+        .hero, .summary-card, .scenario-card {{ border-radius: 16px; }}
+        .scenario-card__header {{ flex-direction: column; align-items: start; }}
+        .metric-list {{ grid-template-columns: 1fr; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Graph routing negative-cycle lab</p>
+        <h1>{_html_escape(gallery.title)}</h1>
+        <p>{_html_escape(gallery.description)}</p>
+      </section>
+      <section class="summary-grid">
+        {summary_cards_html}
+      </section>
+      <section class="scenario-grid">
+        {scenario_cards_html}
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
+def export_gallery_markdown(gallery: RoutingGallery, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_markdown_gallery(gallery, output_path=output), encoding='utf-8')
+    return output
+
+
+def export_gallery_html(gallery: RoutingGallery, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_html_gallery(gallery, output_path=output), encoding='utf-8')
+    return output
+
+
 def build_report(
     graph_name: str,
     nodes: Iterable[str],
@@ -1458,7 +1941,7 @@ def build_report(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Explore Bellman-Ford, Johnson's algorithm, and negative cycles.")
-    parser.add_argument("graph", help="Path to a graph JSON file")
+    parser.add_argument("graph", nargs="?", help="Path to a graph JSON file")
     parser.add_argument("--source", help="Bellman-Ford source node")
     parser.add_argument(
         "--mode",
@@ -1483,11 +1966,54 @@ def parse_args() -> argparse.Namespace:
         "--export-compare-svg",
         help="Write a compact SVG route-table diff summary card comparing the main graph to --compare-graph",
     )
+    parser.add_argument(
+        "--gallery-manifest",
+        help="Path to a JSON manifest that describes several route-diff scenarios for a gallery landing page",
+    )
+    parser.add_argument(
+        "--export-gallery-markdown",
+        help="Write a Markdown gallery landing page from --gallery-manifest",
+    )
+    parser.add_argument(
+        "--export-gallery-html",
+        help="Write a static HTML gallery landing page from --gallery-manifest",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    gallery_mode = bool(args.gallery_manifest or args.export_gallery_markdown or args.export_gallery_html)
+    if gallery_mode:
+        if args.graph is not None:
+            raise ValueError('gallery exports do not use the graph positional argument')
+        if not args.gallery_manifest:
+            if args.export_gallery_markdown:
+                raise ValueError('--export-gallery-markdown requires --gallery-manifest')
+            raise ValueError('--export-gallery-html requires --gallery-manifest')
+        if not args.export_gallery_markdown and not args.export_gallery_html:
+            raise ValueError('--gallery-manifest requires --export-gallery-markdown and/or --export-gallery-html')
+        gallery = load_routing_gallery_manifest(args.gallery_manifest)
+        if args.export_gallery_markdown:
+            export_gallery_markdown(gallery, args.export_gallery_markdown)
+        if args.export_gallery_html:
+            export_gallery_html(gallery, args.export_gallery_html)
+        print(
+            json.dumps(
+                {
+                    'gallery': gallery.title,
+                    'scenario_count': len(gallery.scenarios),
+                    'markdown_output': args.export_gallery_markdown,
+                    'html_output': args.export_gallery_html,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    if not args.graph:
+        raise ValueError('graph is required unless --gallery-manifest is used')
     graph_name, nodes, edges = load_graph(args.graph)
     report = build_report(graph_name, nodes, edges, source=args.source, mode=args.mode)
     if args.export_mermaid:
