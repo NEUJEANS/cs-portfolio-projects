@@ -1,0 +1,30 @@
+{
+  "title": "Coordinator crash after durable ABORT",
+  "description": "Inventory and billing vote YES, but risk votes NO. The coordinator durably logs ABORT and crashes before the prepared YES-voters hear the decision. They are blocked in classic 2PC, but a peer-to-peer termination check can still prove ABORT safely because risk never reached PREPARED.",
+  "transaction_id": "order-6112",
+  "participants": [
+    {
+      "name": "inventory",
+      "role": "reserve stock",
+      "vote": "commit",
+      "notes": "inventory is prepared and waiting for the final decision"
+    },
+    {
+      "name": "risk",
+      "role": "fraud screening",
+      "vote": "abort",
+      "notes": "risk rejects the transaction before it ever reaches PREPARED"
+    },
+    {
+      "name": "billing",
+      "role": "capture payment",
+      "vote": "commit",
+      "notes": "billing is prepared but never hears the durable ABORT before the crash"
+    }
+  ],
+  "failures": {
+    "coordinator_crash": "after-decision-log",
+    "recover_after_crash": false,
+    "decision_deliveries_before_crash": 0
+  }
+}

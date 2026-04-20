@@ -1,0 +1,49 @@
+{
+  "title": "Coordinator crash after one COMMIT delivery",
+  "description": "All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery.",
+  "transaction_id": "order-5120",
+  "baseline_outcome": "blocked",
+  "baseline_decision": "commit",
+  "baseline_termination_hint_summary": "COMMIT visible via inventory",
+  "resolution_outcome": "commit",
+  "resolved_decision": "commit",
+  "unresolved_participants": [],
+  "participants": [
+    {
+      "participant": "inventory",
+      "role": "reserve stock",
+      "initial_state": "committed",
+      "peer_query": "answer peer termination requests",
+      "evidence": "already knows the durable COMMIT decision",
+      "final_state": "committed",
+      "resolved": true
+    },
+    {
+      "participant": "billing",
+      "role": "capture payment",
+      "initial_state": "prepared",
+      "peer_query": "ask inventory for the final decision",
+      "evidence": "inventory already knows the durable COMMIT decision",
+      "final_state": "committed",
+      "resolved": true
+    },
+    {
+      "participant": "shipping",
+      "role": "create shipment",
+      "initial_state": "prepared",
+      "peer_query": "ask inventory for the final decision",
+      "evidence": "inventory already knows the durable COMMIT decision",
+      "final_state": "committed",
+      "resolved": true
+    }
+  ],
+  "trace": [
+    "billing: asks inventory about the missing outcome, learns COMMIT, and finishes as COMMITTED",
+    "shipping: asks inventory about the missing outcome, learns COMMIT, and finishes as COMMITTED"
+  ],
+  "takeaways": [
+    "Classic 2PC remains blocking until a PREPARED participant either reaches the coordinator or learns an authoritative fact from a peer.",
+    "This scenario's peer-to-peer termination exchange resolves the blocked participants to `commit` without inventing a brand-new outcome locally.",
+    "Once inventory already knows `COMMIT`, that peer can act as the decisive witness for the remaining PREPARED participants."
+  ]
+}

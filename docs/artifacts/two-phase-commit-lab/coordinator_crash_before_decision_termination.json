@@ -1,0 +1,54 @@
+{
+  "title": "Coordinator crash before durable decision",
+  "description": "Every participant votes YES and enters PREPARED, but the coordinator crashes before it records COMMIT or ABORT. This is the classic blocking case that makes plain 2PC operationally painful.",
+  "transaction_id": "order-2021",
+  "baseline_outcome": "blocked",
+  "baseline_decision": null,
+  "baseline_termination_hint_summary": "wait: all prepared peers are still uncertain",
+  "resolution_outcome": "still-blocked",
+  "resolved_decision": null,
+  "unresolved_participants": [
+    "inventory",
+    "billing",
+    "shipping"
+  ],
+  "participants": [
+    {
+      "participant": "inventory",
+      "role": "reserve stock",
+      "initial_state": "prepared",
+      "peer_query": "ask peers whether anyone knows the final decision or never reached PREPARED",
+      "evidence": "every reachable peer is still PREPARED/in doubt, so no safe local conclusion exists yet",
+      "final_state": "prepared",
+      "resolved": false
+    },
+    {
+      "participant": "billing",
+      "role": "capture payment",
+      "initial_state": "prepared",
+      "peer_query": "ask peers whether anyone knows the final decision or never reached PREPARED",
+      "evidence": "every reachable peer is still PREPARED/in doubt, so no safe local conclusion exists yet",
+      "final_state": "prepared",
+      "resolved": false
+    },
+    {
+      "participant": "shipping",
+      "role": "create shipment",
+      "initial_state": "prepared",
+      "peer_query": "ask peers whether anyone knows the final decision or never reached PREPARED",
+      "evidence": "every reachable peer is still PREPARED/in doubt, so no safe local conclusion exists yet",
+      "final_state": "prepared",
+      "resolved": false
+    }
+  ],
+  "trace": [
+    "inventory: asks peers for the final outcome, but everyone reachable is still uncertain, so the participant stays PREPARED",
+    "billing: asks peers for the final outcome, but everyone reachable is still uncertain, so the participant stays PREPARED",
+    "shipping: asks peers for the final outcome, but everyone reachable is still uncertain, so the participant stays PREPARED"
+  ],
+  "takeaways": [
+    "Classic 2PC remains blocking until a PREPARED participant either reaches the coordinator or learns an authoritative fact from a peer.",
+    "The peer check still cannot finish the protocol here because every reachable peer is just as uncertain as the blocked participant.",
+    "When no peer knows COMMIT/ABORT and no peer can prove a missing PREPARED record, plain 2PC stays blocked until coordinator recovery."
+  ]
+}

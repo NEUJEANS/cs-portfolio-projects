@@ -1,6 +1,6 @@
 # Two-Phase Commit Lab
 
-A compact Python simulator that turns the classic distributed-transaction 2PC protocol into runnable portfolio artifacts. It shows the happy path, participant-driven aborts, coordinator crash blocking, coordinator recovery from a durable decision log, participant-side reconnect recovery after missed second-phase messages, and peer-assisted termination hints for coordinator-unavailable incidents without requiring a real database cluster.
+A compact Python simulator that turns the classic distributed-transaction 2PC protocol into runnable portfolio artifacts. It shows the happy path, participant-driven aborts, coordinator crash blocking, coordinator recovery from a durable decision log, participant-side reconnect recovery after missed second-phase messages, peer-assisted termination hints, and a full peer-to-peer termination-resolution pass for coordinator-unavailable incidents without requiring a real database cluster.
 
 ## Why this project is portfolio-worthy
 - demonstrates distributed-systems fundamentals beyond consensus by modeling atomic commit across multiple services
@@ -12,23 +12,25 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - JSON scenario validation for participant plans, votes, second-phase delivery quirks, coordinator crash/recovery settings, and optional pre-crash decision-delivery counts
 - deterministic 2PC simulation with trace output for `PREPARE`, votes, durable decisions, crash points, partial second-phase delivery, missed second-phase deliveries, and participant reconnect recovery
 - blocked-case termination hints that explain what a prepared participant can still ask peers while the coordinator is unavailable
-- committed sample scenarios for happy-path commit, participant veto abort, coordinator blocking before the decision log, durable-decision replay after a crash, one-peer-visible `COMMIT` after a crash, and participant-side reconnect after a missed `COMMIT`
+- peer-to-peer termination-resolution mode that actually plays out what happens when a blocked participant reaches a decisive peer (or proves that everyone is still stuck)
+- committed sample scenarios for happy-path commit, participant veto abort, coordinator blocking before the decision log, durable-decision replay after a crash, one-peer-visible `COMMIT` after a crash, blocked-after-`ABORT` resolution via a non-prepared peer, and participant-side reconnect after a missed `COMMIT`
 - protocol comparison mode that contrasts the same business incident as plain 2PC versus an orchestrated saga, making the blocking-vs-compensation trade-off visible in one artifact
 - Markdown report export for recruiter-friendly artifacts under `docs/artifacts/two-phase-commit-lab/`
 - multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, and termination hints in one place
 - clean CLI commands for validation, single-scenario simulation, protocol comparison, and bundle generation
 
 ## Project structure
-- `two_phase_commit_lab.py` - validator, simulator, 2PC-vs-saga comparison renderer, report generator, catalog generator, and CLI entrypoint
+- `two_phase_commit_lab.py` - validator, simulator, peer-resolution/2PC-vs-saga artifact generators, catalog generator, and CLI entrypoint
 - `order_success.json` - all participants vote YES and the transaction commits
 - `payment_validation_abort.json` - one participant votes NO so the transaction aborts globally
 - `coordinator_crash_before_decision.json` - all participants prepare, but the coordinator crashes before a durable outcome exists
 - `coordinator_crash_partial_commit_delivery.json` - the coordinator logs COMMIT, one participant hears it, then the coordinator crashes while other prepared peers remain blocked
+- `coordinator_crash_durable_abort.json` - the coordinator logs ABORT, crashes before the prepared YES-voters hear it, and leaves a blocked case that peers can still resolve safely
 - `coordinator_recovery_commit.json` - the coordinator logs COMMIT, crashes, then replays the decision during recovery
 - `participant_reconnect_commit.json` - a prepared participant misses the first `COMMIT`, reconnects, and resolves the durable outcome safely
 - `CHECKLIST.md` - resumable slice history plus next ideas
 - `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, CLI output, and catalog generation
-- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, the scenario catalog landing page, and protocol-comparison artifacts
+- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, peer-resolution artifacts, the scenario catalog landing page, and protocol-comparison artifacts
 
 ## Scenario format
 ```json
@@ -113,6 +115,21 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py compare \
   --json
 ```
 
+### Simulate the peer-to-peer termination protocol after a blocked run
+```bash
+python3 projects/two-phase-commit-lab/two_phase_commit_lab.py terminate \
+  projects/two-phase-commit-lab/coordinator_crash_partial_commit_delivery.json \
+  --markdown-out docs/artifacts/two-phase-commit-lab/coordinator_crash_partial_commit_delivery_termination.md \
+  --json
+```
+
+```bash
+python3 projects/two-phase-commit-lab/two_phase_commit_lab.py terminate \
+  projects/two-phase-commit-lab/coordinator_crash_durable_abort.json \
+  --markdown-out docs/artifacts/two-phase-commit-lab/coordinator_crash_durable_abort_termination.md \
+  --json
+```
+
 ### Generate the multi-scenario catalog bundle
 ```bash
 python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
@@ -130,6 +147,8 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   - plain 2PC can block when all participants are prepared but the coordinator crashes before a durable outcome exists
 - `coordinator_crash_partial_commit_delivery.json`
   - blocked does not always mean pure darkness: one participant already knows COMMIT, so peers can use a termination check to learn what the coordinator had durably decided
+- `coordinator_crash_durable_abort.json`
+  - blocked-after-ABORT incidents also have an actionable peer story: a participant that never reached PREPARED can prove that rollback is the only safe outcome
 - `coordinator_recovery_commit.json`
   - once the decision log is durable, recovery can safely replay COMMIT and finish the protocol after a crash
 - `participant_reconnect_commit.json`
@@ -140,6 +159,12 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   - a side-by-side 2PC vs saga artifact for the classic blocking crash, useful when interviewers ask why microservices often avoid plain 2PC
 - `coordinator_crash_partial_commit_delivery_protocol_compare.md`
   - a peer-visible-decision comparison artifact showing that some blocked 2PC incidents still have an actionable termination-protocol story before coordinator recovery
+- `coordinator_crash_partial_commit_delivery_termination.md`
+  - the blocked-after-decision case fully resolves via peer queries because `inventory` already knows the durable `COMMIT`
+- `coordinator_crash_before_decision_termination.md`
+  - the classic all-prepared crash still cannot resolve through peers alone, which keeps the blocking limitation obvious in artifact form
+- `coordinator_crash_durable_abort_termination.md`
+  - the blocked-after-ABORT case resolves safely because `risk` never reached `PREPARED`, so it can prove rollback to the waiting peers
 
 ## Testing
 ```bash
@@ -148,5 +173,5 @@ python3 -m unittest tests.test_two_phase_commit_lab -v
 
 ## Future ideas
 - add a side-by-side 2PC vs 3PC comparison mode to explain why non-blocking atomic commit is harder
-- add scenario tags or thematic groupings (happy path, blocking, coordinator recovery, participant reconnect, peer hints) inside the catalog if the sample set grows larger
-- optionally simulate full peer-to-peer termination resolution once a blocked participant reaches a decisive peer
+- add scenario tags or thematic groupings (happy path, blocking, coordinator recovery, participant reconnect, peer hints, peer-assisted commit, peer-assisted abort) inside the catalog if the sample set grows larger
+- consider a small incident-response timeline or sequence diagram export for the termination-resolution flow

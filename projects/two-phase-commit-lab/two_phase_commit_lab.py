@@ -115,6 +115,36 @@ class ComparisonResult:
         return asdict(self)
 
 
+@dataclass
+class TerminationResolutionStep:
+    participant: str
+    role: str
+    initial_state: str
+    peer_query: str
+    evidence: str
+    final_state: str
+    resolved: bool
+
+
+@dataclass
+class TerminationResolutionResult:
+    title: str
+    description: str
+    transaction_id: str
+    baseline_outcome: str
+    baseline_decision: str | None
+    baseline_termination_hint_summary: str | None
+    resolution_outcome: str
+    resolved_decision: str | None
+    unresolved_participants: list[str]
+    participants: list[TerminationResolutionStep]
+    trace: list[str]
+    takeaways: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def load_scenario(path: str | Path) -> Scenario:
     raw = json.loads(Path(path).read_text())
     return validate_scenario(raw)
@@ -473,6 +503,183 @@ def build_protocol_comparison(scenario: Scenario) -> ComparisonResult:
     )
 
 
+def build_peer_termination_resolution(scenario: Scenario) -> TerminationResolutionResult:
+    baseline = simulate_two_phase_commit(scenario)
+    informed_peers = [item["name"] for item in baseline.participants if item["acked_decision"]]
+    non_prepared_peers = [
+        item["name"]
+        for item in baseline.participants
+        if not item["prepared"] and item["state"] in {"aborted", "timed_out"}
+    ]
+    resolution_steps: list[TerminationResolutionStep] = []
+    trace: list[str] = []
+    unresolved_participants: list[str] = []
+
+    if baseline.outcome != "blocked":
+        trace.append(
+            "baseline run already reached a final outcome, so peer-to-peer termination is unnecessary in this scenario"
+        )
+        for participant in baseline.participants:
+            resolution_steps.append(
+                TerminationResolutionStep(
+                    participant=participant["name"],
+                    role=participant["role"],
+                    initial_state=participant["state"],
+                    peer_query="not needed",
+                    evidence="the coordinator already finished the transaction",
+                    final_state=participant["state"],
+                    resolved=True,
+                )
+            )
+        return TerminationResolutionResult(
+            title=baseline.title,
+            description=baseline.description,
+            transaction_id=baseline.transaction_id,
+            baseline_outcome=baseline.outcome,
+            baseline_decision=baseline.decision,
+            baseline_termination_hint_summary=baseline.termination_hint_summary,
+            resolution_outcome=baseline.outcome,
+            resolved_decision=baseline.decision,
+            unresolved_participants=[],
+            participants=resolution_steps,
+            trace=trace,
+            takeaways=[
+                "Peer-to-peer termination matters only when plain 2PC leaves a participant in doubt after PREPARED.",
+                f"This scenario already completed as `{baseline.outcome}`, so there is no extra peer-resolution step to perform.",
+            ],
+        )
+
+    for participant in baseline.participants:
+        if participant["prepared"] and not participant["acked_decision"]:
+            if informed_peers and baseline.decision is not None:
+                final_state = "committed" if baseline.decision == "commit" else "aborted"
+                evidence = (
+                    f"{_format_name_list(informed_peers)} already {_verb_for_count(len(informed_peers), 'knows', 'know')} the durable {baseline.decision.upper()} decision"
+                )
+                peer_query = f"ask {_format_name_list(informed_peers)} for the final decision"
+                trace.append(
+                    f"{participant['name']}: asks {_format_name_list(informed_peers)} about the missing outcome, learns {baseline.decision.upper()}, and finishes as {final_state.upper()}"
+                )
+                resolution_steps.append(
+                    TerminationResolutionStep(
+                        participant=participant["name"],
+                        role=participant["role"],
+                        initial_state=participant["state"],
+                        peer_query=peer_query,
+                        evidence=evidence,
+                        final_state=final_state,
+                        resolved=True,
+                    )
+                )
+                continue
+
+            if non_prepared_peers:
+                evidence = (
+                    f"{_format_name_list(non_prepared_peers)} {_verb_for_count(len(non_prepared_peers), 'never prepared', 'never prepared')} local work, so ABORT is the only safe outcome"
+                )
+                peer_query = f"ask {_format_name_list(non_prepared_peers)} whether anyone never reached PREPARED"
+                trace.append(
+                    f"{participant['name']}: asks {_format_name_list(non_prepared_peers)} about PREPARED state, proves ABORT safely, and rolls back local work"
+                )
+                resolution_steps.append(
+                    TerminationResolutionStep(
+                        participant=participant["name"],
+                        role=participant["role"],
+                        initial_state=participant["state"],
+                        peer_query=peer_query,
+                        evidence=evidence,
+                        final_state="aborted",
+                        resolved=True,
+                    )
+                )
+                continue
+
+            unresolved_participants.append(participant["name"])
+            evidence = "every reachable peer is still PREPARED/in doubt, so no safe local conclusion exists yet"
+            peer_query = "ask peers whether anyone knows the final decision or never reached PREPARED"
+            trace.append(
+                f"{participant['name']}: asks peers for the final outcome, but everyone reachable is still uncertain, so the participant stays PREPARED"
+            )
+            resolution_steps.append(
+                TerminationResolutionStep(
+                    participant=participant["name"],
+                    role=participant["role"],
+                    initial_state=participant["state"],
+                    peer_query=peer_query,
+                    evidence=evidence,
+                    final_state=participant["state"],
+                    resolved=False,
+                )
+            )
+            continue
+
+        if participant["acked_decision"] and baseline.decision is not None:
+            evidence = f"already knows the durable {baseline.decision.upper()} decision"
+            peer_query = "answer peer termination requests"
+        elif not participant["prepared"]:
+            evidence = "never reached PREPARED, so this peer can help prove ABORT"
+            peer_query = "answer whether local work ever reached PREPARED"
+        else:
+            evidence = "already final"
+            peer_query = "not needed"
+        resolution_steps.append(
+            TerminationResolutionStep(
+                participant=participant["name"],
+                role=participant["role"],
+                initial_state=participant["state"],
+                peer_query=peer_query,
+                evidence=evidence,
+                final_state=participant["state"],
+                resolved=True,
+            )
+        )
+
+    resolved_decision: str | None = None
+    resolution_outcome = "still-blocked"
+    if not unresolved_participants:
+        resolved_decision = baseline.decision or ("abort" if non_prepared_peers else None)
+        resolution_outcome = resolved_decision or "still-blocked"
+
+    takeaways = [
+        "Classic 2PC remains blocking until a PREPARED participant either reaches the coordinator or learns an authoritative fact from a peer.",
+    ]
+    if resolution_outcome in {"commit", "abort"}:
+        takeaways.append(
+            f"This scenario's peer-to-peer termination exchange resolves the blocked participants to `{resolution_outcome}` without inventing a brand-new outcome locally."
+        )
+    else:
+        takeaways.append(
+            "The peer check still cannot finish the protocol here because every reachable peer is just as uncertain as the blocked participant."
+        )
+    if informed_peers and baseline.decision is not None:
+        takeaways.append(
+            f"Once {_format_name_list(informed_peers)} already knows `{baseline.decision.upper()}`, that peer can act as the decisive witness for the remaining PREPARED participants."
+        )
+    elif non_prepared_peers:
+        takeaways.append(
+            f"Seeing that {_format_name_list(non_prepared_peers)} never reached PREPARED is enough to conclude `ABORT` safely."
+        )
+    else:
+        takeaways.append(
+            "When no peer knows COMMIT/ABORT and no peer can prove a missing PREPARED record, plain 2PC stays blocked until coordinator recovery."
+        )
+
+    return TerminationResolutionResult(
+        title=baseline.title,
+        description=baseline.description,
+        transaction_id=baseline.transaction_id,
+        baseline_outcome=baseline.outcome,
+        baseline_decision=baseline.decision,
+        baseline_termination_hint_summary=baseline.termination_hint_summary,
+        resolution_outcome=resolution_outcome,
+        resolved_decision=resolved_decision,
+        unresolved_participants=unresolved_participants,
+        participants=resolution_steps,
+        trace=trace,
+        takeaways=takeaways,
+    )
+
+
 def render_markdown_report(result: SimulationResult) -> str:
     participant_lines = [
         "| Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |",
@@ -613,6 +820,57 @@ def render_comparison_markdown(result: ComparisonResult) -> str:
     return "\n".join(lines)
 
 
+def render_termination_resolution_markdown(result: TerminationResolutionResult) -> str:
+    participant_lines = [
+        "| Participant | Role | Initial state | Peer query | Evidence | Final state | Resolved |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for participant in result.participants:
+        participant_lines.append(
+            "| {participant} | {role} | {initial_state} | {peer_query} | {evidence} | {final_state} | {resolved} |".format(
+                participant=participant.participant,
+                role=participant.role,
+                initial_state=participant.initial_state,
+                peer_query=participant.peer_query,
+                evidence=participant.evidence,
+                final_state=participant.final_state,
+                resolved="yes" if participant.resolved else "no",
+            )
+        )
+
+    trace_lines = [f"{index}. {entry}" for index, entry in enumerate(result.trace, start=1)]
+    unresolved = _format_name_list(result.unresolved_participants) or "none"
+    takeaways = [f"- {entry}" for entry in result.takeaways]
+
+    lines = [
+        f"# {result.title} peer-to-peer termination resolution",
+        "",
+        result.description,
+        "",
+        "## Baseline 2PC state",
+        f"- transaction id: `{result.transaction_id}`",
+        f"- baseline outcome: `{result.baseline_outcome}`",
+        f"- baseline decision: `{result.baseline_decision or 'none'}`",
+        f"- baseline termination hint: {result.baseline_termination_hint_summary or '-'}",
+        "",
+        "## Peer-to-peer resolution result",
+        f"- resolution outcome: `{result.resolution_outcome}`",
+        f"- resolved decision: `{result.resolved_decision or 'none'}`",
+        f"- unresolved participants after peer exchange: `{unresolved}`",
+        "",
+        "## Participant actions",
+        *participant_lines,
+        "",
+        "## Resolution trace",
+        *trace_lines,
+        "",
+        "## Takeaways",
+        *takeaways,
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
     if not entries:
         raise ScenarioError("catalog requires at least one scenario")
@@ -744,6 +1002,15 @@ def write_comparison_markdown(path: str | Path, result: ComparisonResult) -> Non
     output_path.write_text(render_comparison_markdown(result))
 
 
+def write_termination_resolution_markdown(
+    path: str | Path,
+    result: TerminationResolutionResult,
+) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_termination_resolution_markdown(result))
+
+
 def write_catalog(path: str | Path, entries: list[CatalogEntry]) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -826,6 +1093,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="optional path for a Markdown comparison artifact",
     )
 
+    terminate_parser = subparsers.add_parser(
+        "terminate",
+        help="simulate a participant-to-peer termination-protocol exchange after a blocked 2PC run",
+    )
+    terminate_parser.add_argument("scenario", type=Path)
+    terminate_parser.add_argument("--json", action="store_true", help="emit full JSON output")
+    terminate_parser.add_argument(
+        "--markdown-out",
+        type=Path,
+        help="optional path for a Markdown peer-resolution artifact",
+    )
+
     catalog_parser = subparsers.add_parser(
         "catalog",
         help="build a multi-scenario Markdown catalog and optional per-scenario reports",
@@ -892,6 +1171,27 @@ def main(argv: list[str] | None = None) -> int:
             for comparison in result.comparisons:
                 print(
                     f"{comparison.protocol}: outcome={comparison.outcome} blocking={comparison.blocking_behavior}"
+                )
+        return 0
+
+    if args.command == "terminate":
+        result = build_peer_termination_resolution(load_scenario(args.scenario))
+        if args.markdown_out:
+            write_termination_resolution_markdown(args.markdown_out, result)
+            stream = sys.stderr if args.json else sys.stdout
+            print(f"wrote Markdown peer-resolution artifact to {args.markdown_out}", file=stream)
+        if args.json:
+            print(json.dumps(result.to_dict(), indent=2))
+        else:
+            print(
+                f"{result.title}: baseline={result.baseline_outcome} peer_resolution={result.resolution_outcome}"
+            )
+            if result.resolved_decision:
+                print(f"resolved_decision={result.resolved_decision}")
+            if result.unresolved_participants:
+                print(
+                    "unresolved_participants="
+                    + ",".join(result.unresolved_participants)
                 )
         return 0
 

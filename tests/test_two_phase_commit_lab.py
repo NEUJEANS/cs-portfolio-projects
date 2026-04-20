@@ -18,6 +18,7 @@ BLOCKED_SCENARIO = SCENARIO_DIR / "coordinator_crash_before_decision.json"
 PARTIAL_DELIVERY_BLOCKED_SCENARIO = (
     SCENARIO_DIR / "coordinator_crash_partial_commit_delivery.json"
 )
+ABORT_BLOCKED_SCENARIO = SCENARIO_DIR / "coordinator_crash_durable_abort.json"
 RECOVERY_SCENARIO = SCENARIO_DIR / "coordinator_recovery_commit.json"
 PARTICIPANT_RECOVERY_SCENARIO = SCENARIO_DIR / "participant_reconnect_commit.json"
 SPEC = importlib.util.spec_from_file_location("two_phase_commit_lab", SCRIPT)
@@ -27,12 +28,14 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 ScenarioError = MODULE.ScenarioError
 build_catalog_entries = MODULE.build_catalog_entries
+build_peer_termination_resolution = MODULE.build_peer_termination_resolution
 build_protocol_comparison = MODULE.build_protocol_comparison
 collect_scenario_paths = MODULE.collect_scenario_paths
 load_scenario = MODULE.load_scenario
 render_catalog_markdown = MODULE.render_catalog_markdown
 render_comparison_markdown = MODULE.render_comparison_markdown
 render_markdown_report = MODULE.render_markdown_report
+render_termination_resolution_markdown = MODULE.render_termination_resolution_markdown
 simulate_two_phase_commit = MODULE.simulate_two_phase_commit
 validate_scenario = MODULE.validate_scenario
 
@@ -206,6 +209,56 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             "wait: durable COMMIT exists but no peer can prove it yet",
         )
 
+    def test_peer_termination_resolution_commits_after_partial_delivery_block(self) -> None:
+        result = build_peer_termination_resolution(
+            load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO)
+        )
+        self.assertEqual(result.baseline_outcome, "blocked")
+        self.assertEqual(result.baseline_decision, "commit")
+        self.assertEqual(result.resolution_outcome, "commit")
+        self.assertEqual(result.resolved_decision, "commit")
+        self.assertEqual(result.unresolved_participants, [])
+        billing = next(item for item in result.participants if item.participant == "billing")
+        shipping = next(item for item in result.participants if item.participant == "shipping")
+        self.assertEqual(billing.final_state, "committed")
+        self.assertEqual(shipping.final_state, "committed")
+        self.assertTrue(all(item.resolved for item in result.participants))
+        self.assertIn("learns COMMIT", " ".join(result.trace))
+
+    def test_peer_termination_resolution_stays_blocked_without_decisive_peer(self) -> None:
+        result = build_peer_termination_resolution(load_scenario(BLOCKED_SCENARIO))
+        self.assertEqual(result.baseline_outcome, "blocked")
+        self.assertEqual(result.resolution_outcome, "still-blocked")
+        self.assertEqual(result.resolved_decision, None)
+        self.assertEqual(sorted(result.unresolved_participants), ["billing", "inventory", "shipping"])
+        self.assertTrue(
+            any(
+                not item.resolved and item.final_state == "prepared"
+                for item in result.participants
+            )
+        )
+
+    def test_blocked_abort_exposes_safe_peer_resolution_hint(self) -> None:
+        result = simulate_two_phase_commit(load_scenario(ABORT_BLOCKED_SCENARIO))
+        self.assertEqual(result.outcome, "blocked")
+        self.assertEqual(result.decision, "abort")
+        self.assertTrue(result.decision_durable)
+        self.assertEqual(result.termination_hint_summary, "ABORT safe via risk")
+        self.assertIn("never reached PREPARED", " ".join(result.termination_hints))
+
+    def test_peer_termination_resolution_aborts_via_non_prepared_peer(self) -> None:
+        result = build_peer_termination_resolution(load_scenario(ABORT_BLOCKED_SCENARIO))
+        self.assertEqual(result.baseline_outcome, "blocked")
+        self.assertEqual(result.baseline_decision, "abort")
+        self.assertEqual(result.resolution_outcome, "abort")
+        self.assertEqual(result.resolved_decision, "abort")
+        self.assertEqual(result.unresolved_participants, [])
+        inventory = next(item for item in result.participants if item.participant == "inventory")
+        billing = next(item for item in result.participants if item.participant == "billing")
+        self.assertEqual(inventory.final_state, "aborted")
+        self.assertEqual(billing.final_state, "aborted")
+        self.assertIn("proves ABORT safely", " ".join(result.trace))
+
     def test_recovery_replays_durable_commit(self) -> None:
         result = simulate_two_phase_commit(load_scenario(RECOVERY_SCENARIO))
         self.assertEqual(result.outcome, "commit")
@@ -241,6 +294,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             [path.name for path in paths],
             [
                 "coordinator_crash_before_decision.json",
+                "coordinator_crash_durable_abort.json",
                 "coordinator_crash_partial_commit_delivery.json",
                 "coordinator_recovery_commit.json",
                 "order_success.json",
@@ -260,12 +314,13 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             )
             catalog = render_catalog_markdown(entries)
             self.assertIn("# Two-phase commit scenario catalog", catalog)
-            self.assertIn("- outcomes: `3 commit`, `1 abort`, `2 blocked`", catalog)
+            self.assertIn("- outcomes: `3 commit`, `1 abort`, `3 blocked`", catalog)
             self.assertIn("- participant reconnect recoveries: `1`", catalog)
-            self.assertIn("- blocked scenarios with actionable peer hints: `1`", catalog)
+            self.assertIn("- blocked scenarios with actionable peer hints: `2`", catalog)
             self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report |", catalog)
             self.assertIn("[Coordinator crash after one COMMIT delivery](reports/coordinator_crash_partial_commit_delivery_report.md)", catalog)
             self.assertIn("termination hint: COMMIT visible via inventory", catalog)
+            self.assertIn("termination hint: ABORT safe via risk", catalog)
             self.assertIn("blocked does not always mean blind waiting: COMMIT visible via inventory.", catalog)
 
     def test_catalog_command_writes_index_and_reports(self) -> None:
@@ -288,15 +343,18 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
                 text=True,
                 cwd=REPO_ROOT,
             )
-            self.assertIn("wrote 6 scenario reports", completed.stdout)
+            self.assertIn("wrote 7 scenario reports", completed.stdout)
             self.assertTrue((report_dir / "order_success_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_before_decision_report.md").exists())
+            self.assertTrue((report_dir / "coordinator_crash_durable_abort_report.md").exists())
             self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_report.md").exists())
             self.assertTrue((report_dir / "participant_reconnect_commit_report.md").exists())
             catalog = catalog_path.read_text()
             self.assertIn("[report](reports/order_success_report.md)", catalog)
             self.assertIn("outcome: `blocked` with decision `commit`", catalog)
+            self.assertIn("outcome: `blocked` with decision `abort`", catalog)
             self.assertIn("termination hint: COMMIT visible via inventory", catalog)
+            self.assertIn("termination hint: ABORT safe via risk", catalog)
 
     def test_cli_json_output_and_markdown_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -378,6 +436,17 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertIn("termination hint in the 2PC baseline: COMMIT visible via inventory", report)
         self.assertIn("ask an informed peer instead of inventing a local outcome", report)
 
+    def test_termination_resolution_markdown_tracks_peer_actions(self) -> None:
+        resolution = build_peer_termination_resolution(
+            load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO)
+        )
+        report = render_termination_resolution_markdown(resolution)
+        self.assertIn("# Coordinator crash after one COMMIT delivery peer-to-peer termination resolution", report)
+        self.assertIn("- baseline outcome: `blocked`", report)
+        self.assertIn("- resolution outcome: `commit`", report)
+        self.assertIn("ask inventory for the final decision", report)
+        self.assertIn("learns COMMIT", report)
+
     def test_compare_command_writes_markdown_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report_path = Path(temp_dir) / "comparison.md"
@@ -403,6 +472,47 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             report = report_path.read_text()
             self.assertIn("## Interview takeaways", report)
             self.assertIn("Saga (orchestrated)", report)
+
+    def test_terminate_command_writes_markdown_and_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "termination.md"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "terminate",
+                    str(PARTIAL_DELIVERY_BLOCKED_SCENARIO),
+                    "--markdown-out",
+                    str(report_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["baseline_outcome"], "blocked")
+            self.assertEqual(payload["resolution_outcome"], "commit")
+            report = report_path.read_text()
+            self.assertIn("## Participant actions", report)
+            self.assertIn("resolved decision: `commit`", report)
+
+    def test_terminate_command_summary_mentions_resolved_decision(self) -> None:
+        completed = subprocess.run(
+            [
+                "python3",
+                str(SCRIPT),
+                "terminate",
+                str(PARTIAL_DELIVERY_BLOCKED_SCENARIO),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        self.assertIn("peer_resolution=commit", completed.stdout)
+        self.assertIn("resolved_decision=commit", completed.stdout)
 
 
 if __name__ == "__main__":

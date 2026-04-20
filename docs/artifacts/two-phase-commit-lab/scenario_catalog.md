@@ -3,17 +3,18 @@
 A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, recovery, and peer-assisted incident-response cases.
 
 ## Bundle summary
-- scenarios: `6`
-- outcomes: `3 commit`, `1 abort`, `2 blocked`
-- crash cases: `3`
+- scenarios: `7`
+- outcomes: `3 commit`, `1 abort`, `3 blocked`
+- crash cases: `4`
 - coordinator recovery cases: `1`
 - participant reconnect recoveries: `1`
-- blocked scenarios with actionable peer hints: `1`
+- blocked scenarios with actionable peer hints: `2`
 
 ## Scenario comparison
 | Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Coordinator crash before durable decision](coordinator_crash_before_decision_report.md) | `blocked` | `none` | `no` | `before-decision` | `no` | `3/3` | `0/3` | `-` | wait: all prepared peers are still uncertain | [report](coordinator_crash_before_decision_report.md) |
+| [Coordinator crash after durable ABORT](coordinator_crash_durable_abort_report.md) | `blocked` | `abort` | `yes` | `after-decision-log` | `no` | `2/3` | `0/3` | `-` | ABORT safe via risk | [report](coordinator_crash_durable_abort_report.md) |
 | [Coordinator crash after one COMMIT delivery](coordinator_crash_partial_commit_delivery_report.md) | `blocked` | `commit` | `yes` | `after-decision-log` | `no` | `3/3` | `1/3` | `-` | COMMIT visible via inventory | [report](coordinator_crash_partial_commit_delivery_report.md) |
 | [Recovery replays a durable commit](coordinator_recovery_commit_report.md) | `commit` | `commit` | `yes` | `after-decision-log` | `yes` | `3/3` | `3/3` | `-` | - | [report](coordinator_recovery_commit_report.md) |
 | [Order service happy-path commit](order_success_report.md) | `commit` | `commit` | `yes` | `none` | `no` | `3/3` | `3/3` | `-` | - | [report](order_success_report.md) |
@@ -37,6 +38,16 @@ A recruiter-friendly landing page for the committed 2PC scenarios, showing how t
 - termination hint: wait: all prepared peers are still uncertain
 - why it matters: all participants are prepared, but the coordinator crashed before a durable decision was recorded; prepared participants remain blocked awaiting recovery
 - deep dive: [coordinator_crash_before_decision_report.md](coordinator_crash_before_decision_report.md)
+
+### Coordinator crash after durable ABORT
+- source: `projects/two-phase-commit-lab/coordinator_crash_durable_abort.json`
+- description: Inventory and billing vote YES, but risk votes NO. The coordinator durably logs ABORT and crashes before the prepared YES-voters hear the decision. They are blocked in classic 2PC, but a peer-to-peer termination check can still prove ABORT safely because risk never reached PREPARED.
+- outcome: `blocked` with decision `abort`
+- participants prepared/acked: `2/3` prepared, `0/3` acked
+- participant reconnect recovery: `-` (no participant missed the first second-phase delivery)
+- termination hint: ABORT safe via risk
+- why it matters: blocked does not always mean blind waiting: ABORT safe via risk.
+- deep dive: [coordinator_crash_durable_abort_report.md](coordinator_crash_durable_abort_report.md)
 
 ### Coordinator crash after one COMMIT delivery
 - source: `projects/two-phase-commit-lab/coordinator_crash_partial_commit_delivery.json`
