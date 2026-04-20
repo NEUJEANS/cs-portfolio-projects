@@ -12,18 +12,23 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "projects/extendible-hashing-lab/extendible_hashing_lab.py"
 SAMPLE_WORKLOAD = REPO_ROOT / "projects/extendible-hashing-lab/sample_workload.json"
+BENCHMARK_SUITE = REPO_ROOT / "projects/extendible-hashing-lab/benchmark_suite.json"
 SPEC = importlib.util.spec_from_file_location("extendible_hashing_lab", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
+BenchmarkError = MODULE.BenchmarkError
 ExtendibleHashTable = MODULE.ExtendibleHashTable
 SnapshotError = MODULE.SnapshotError
 WorkloadError = MODULE.WorkloadError
 load_snapshot = MODULE.load_snapshot
+run_benchmark_suite = MODULE.run_benchmark_suite
 run_workload = MODULE.run_workload
-validate_workload = MODULE.validate_workload
 stable_hash = MODULE.stable_hash
+summarize_benchmark_trials = MODULE.summarize_benchmark_trials
+validate_benchmark_suite = MODULE.validate_benchmark_suite
+validate_workload = MODULE.validate_workload
 
 
 def colliding_keys(depth: int, count: int, suffix: int = 0) -> list[str]:
@@ -287,12 +292,123 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertEqual([item.bucket_count for item in result.history], [1, 1, 2, 3, 2, 1])
         self.assertEqual(result.table.global_depth, 0)
 
-    def test_cli_run_inspect_lookup_and_delete(self) -> None:
+    def test_validate_benchmark_suite_rejects_duplicate_names(self) -> None:
+        with self.assertRaises(BenchmarkError):
+            validate_benchmark_suite(
+                {
+                    "scenarios": [
+                        {"name": "dup", "operations": [{"op": "put", "key": "alpha", "value": "1"}]},
+                        {"name": "dup", "operations": [{"op": "get", "key": "alpha"}]},
+                    ]
+                }
+            )
+
+    def test_run_benchmark_suite_returns_comparison_metrics(self) -> None:
+        summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
+        self.assertEqual(summary["scenario_count"], 3)
+        self.assertEqual(summary["trials"], 3)
+        scenario_names = [row["name"] for row in summary["results"]]
+        self.assertEqual(
+            scenario_names,
+            [
+                "directory-friendly-read-heavy",
+                "split-pressure-growth",
+                "delete-heavy-churn",
+            ],
+        )
+        self.assertTrue(all(row["validation"]["final_state_match"] for row in summary["results"]))
+        self.assertTrue(all(row["extendible"]["split_count"] >= 0 for row in summary["results"]))
+        self.assertTrue(all(row["extendible"]["directory_growth_count"] >= 0 for row in summary["results"]))
+        self.assertTrue(all(row["cuckoo"]["average_rehash_count"] >= 0 for row in summary["results"]))
+
+    def test_summarize_benchmark_trials_rejects_inconsistent_extendible_metrics(self) -> None:
+        scenario = {
+            "name": "nondeterministic-extendible",
+            "description": "synthetic inconsistent benchmark rows",
+            "operations": [{"op": "put", "key": "alpha", "value": "1"}],
+        }
+        trial_rows = [
+            {
+                "trial": 1,
+                "operation_mix": {
+                    "puts": 1,
+                    "insertions": 1,
+                    "updates": 0,
+                    "gets": 0,
+                    "get_hits": 0,
+                    "get_misses": 0,
+                    "deletes": 0,
+                    "delete_hits": 0,
+                    "delete_misses": 0,
+                },
+                "final_entry_count": 1,
+                "extendible": {
+                    "final_global_depth": 0,
+                    "peak_global_depth": 0,
+                    "final_bucket_count": 1,
+                    "peak_bucket_count": 1,
+                    "peak_directory_slots": 1,
+                    "load_factor": 0.5,
+                    "split_count": 0,
+                    "merge_count": 0,
+                    "directory_growth_count": 0,
+                    "directory_shrink_count": 0,
+                },
+                "cuckoo": {
+                    "final_capacity": 7,
+                    "load_factor": 0.1429,
+                    "rehash_count": 0,
+                    "displacement_count": 0,
+                    "empty_slots": 6,
+                },
+            },
+            {
+                "trial": 2,
+                "operation_mix": {
+                    "puts": 1,
+                    "insertions": 1,
+                    "updates": 0,
+                    "gets": 0,
+                    "get_hits": 0,
+                    "get_misses": 0,
+                    "deletes": 0,
+                    "delete_hits": 0,
+                    "delete_misses": 0,
+                },
+                "final_entry_count": 1,
+                "extendible": {
+                    "final_global_depth": 1,
+                    "peak_global_depth": 1,
+                    "final_bucket_count": 2,
+                    "peak_bucket_count": 2,
+                    "peak_directory_slots": 2,
+                    "load_factor": 0.25,
+                    "split_count": 1,
+                    "merge_count": 0,
+                    "directory_growth_count": 1,
+                    "directory_shrink_count": 0,
+                },
+                "cuckoo": {
+                    "final_capacity": 7,
+                    "load_factor": 0.1429,
+                    "rehash_count": 0,
+                    "displacement_count": 0,
+                    "empty_slots": 6,
+                },
+            },
+        ]
+        with self.assertRaises(BenchmarkError):
+            summarize_benchmark_trials(scenario, trial_rows)
+
+    def test_cli_run_inspect_lookup_delete_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             snapshot_path = tmp_path / "snapshot.json"
             report_path = tmp_path / "report.md"
             updated_snapshot_path = tmp_path / "snapshot-updated.json"
+            benchmark_json = tmp_path / "benchmark.json"
+            benchmark_md = tmp_path / "benchmark.md"
+            benchmark_csv = tmp_path / "benchmark.csv"
 
             run_process = subprocess.run(
                 [
@@ -363,6 +479,30 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn("deleted", delete_process.stdout)
             self.assertTrue(updated_snapshot_path.exists())
             self.assertIsNotNone(load_snapshot(updated_snapshot_path))
+
+            benchmark_process = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "benchmark",
+                    "--input",
+                    str(BENCHMARK_SUITE),
+                    "--json-out",
+                    str(benchmark_json),
+                    "--markdown-out",
+                    str(benchmark_md),
+                    "--csv-out",
+                    str(benchmark_csv),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(benchmark_json.exists())
+            self.assertTrue(benchmark_md.exists())
+            self.assertTrue(benchmark_csv.exists())
+            self.assertIn('"scenario_count": 3', benchmark_process.stdout)
+            self.assertIn("directory-friendly-read-heavy", benchmark_md.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

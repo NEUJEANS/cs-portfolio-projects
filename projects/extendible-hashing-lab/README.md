@@ -14,8 +14,9 @@ A portfolio-friendly Python lab that implements an extendible hash index with dy
 - bucket merge and directory shrink support so delete-heavy runs can demonstrate the full lifecycle
 - JSON snapshot save/load support for resumable inspection workflows
 - workload runner that records per-step growth and can export a Markdown trace report
-- CLI commands for workload execution, snapshot inspection, lookups, and deletions
-- unit tests that cover bucket splits, merges, directory shrinking, snapshot validation, and CLI flows
+- benchmark mode that compares extendible hashing against the repo's cuckoo-hashing lab across JSON suite scenarios with JSON/Markdown/CSV outputs
+- CLI commands for workload execution, snapshot inspection, lookups, deletions, and benchmark exports
+- unit tests that cover bucket splits, merges, directory shrinking, benchmark validation, and CLI flows
 
 ## Usage
 
@@ -70,6 +71,22 @@ python3 projects/extendible-hashing-lab/extendible_hashing_lab.py run \
   --report /tmp/extendible-delete-heavy.md
 ```
 
+Compare extendible hashing against the repo's cuckoo-hashing lab across the committed suite:
+
+```bash
+python3 projects/extendible-hashing-lab/extendible_hashing_lab.py benchmark \
+  --input projects/extendible-hashing-lab/benchmark_suite.json \
+  --json-out /tmp/extendible-benchmark.json \
+  --markdown-out /tmp/extendible-benchmark.md \
+  --csv-out /tmp/extendible-benchmark.csv \
+  --title 'Extendible hashing vs cuckoo hashing benchmark comparison'
+```
+
+See the committed benchmark demo outputs without rerunning anything:
+- `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.json`
+- `docs/artifacts/extendible-hashing-lab/benchmark_suite_report.md`
+- `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.csv`
+
 ## Test
 
 ```bash
@@ -77,5 +94,5 @@ python3 -m unittest tests.test_extendible_hashing_lab -v
 ```
 
 ## Future improvements
-- benchmark extendible hashing against linear probing, cuckoo hashing, or B-tree pages under mixed workloads
+- compare the benchmark suite against B-tree pages or linear probing so the project can tell a broader indexing-tradeoff story
 - export SVG or HTML visualizations that animate aliasing directory entries during repeated splits and merges
