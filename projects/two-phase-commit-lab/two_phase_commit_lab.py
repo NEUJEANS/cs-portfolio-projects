@@ -88,6 +88,33 @@ class CatalogEntry:
     result: SimulationResult
 
 
+@dataclass
+class ProtocolComparison:
+    protocol: str
+    outcome: str
+    coordination_model: str
+    consistency_model: str
+    atomicity: str
+    blocking_behavior: str
+    recovery_story: str
+    participant_story: str
+    interview_hook: str
+    tradeoffs: list[str]
+
+
+@dataclass
+class ComparisonResult:
+    title: str
+    description: str
+    transaction_id: str
+    scenario_snapshot: dict[str, Any]
+    comparisons: list[ProtocolComparison]
+    interview_takeaways: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def load_scenario(path: str | Path) -> Scenario:
     raw = json.loads(Path(path).read_text())
     return validate_scenario(raw)
@@ -428,6 +455,24 @@ def simulate_two_phase_commit(scenario: Scenario) -> SimulationResult:
     )
 
 
+def build_protocol_comparison(scenario: Scenario) -> ComparisonResult:
+    two_phase_result = simulate_two_phase_commit(scenario)
+    snapshot = _build_scenario_snapshot(scenario, two_phase_result)
+    comparisons = [
+        _build_two_phase_protocol_comparison(two_phase_result),
+        _build_saga_protocol_comparison(scenario, snapshot),
+    ]
+    interview_takeaways = _build_comparison_takeaways(snapshot, two_phase_result)
+    return ComparisonResult(
+        title=scenario.title,
+        description=scenario.description,
+        transaction_id=scenario.transaction_id,
+        scenario_snapshot=snapshot,
+        comparisons=comparisons,
+        interview_takeaways=interview_takeaways,
+    )
+
+
 def render_markdown_report(result: SimulationResult) -> str:
     participant_lines = [
         "| Participant | Role | Planned vote | 2nd-phase delivery | Final state | Acked decision | Recovered after reconnect | Notes |",
@@ -492,6 +537,76 @@ def render_markdown_report(result: SimulationResult) -> str:
             "",
             "## Takeaways",
             *takeaway_lines,
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_comparison_markdown(result: ComparisonResult) -> str:
+    snapshot = result.scenario_snapshot
+    comparison_lines = [
+        "| Protocol | Outcome in this scenario | Consistency model | Atomicity | Blocking behavior | Recovery story |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    detail_lines: list[str] = []
+    for comparison in result.comparisons:
+        comparison_lines.append(
+            "| {protocol} | `{outcome}` | {consistency} | {atomicity} | {blocking} | {recovery} |".format(
+                protocol=comparison.protocol,
+                outcome=comparison.outcome,
+                consistency=comparison.consistency_model,
+                atomicity=comparison.atomicity,
+                blocking=comparison.blocking_behavior,
+                recovery=comparison.recovery_story,
+            )
+        )
+        detail_lines.extend(
+            [
+                f"### {comparison.protocol}",
+                f"- coordination model: {comparison.coordination_model}",
+                f"- participant story: {comparison.participant_story}",
+                f"- interview hook: {comparison.interview_hook}",
+                "- tradeoffs:",
+                *[f"  - {entry}" for entry in comparison.tradeoffs],
+                "",
+            ]
+        )
+
+    missed_names = _format_name_list(snapshot["missed_second_phase_names"]) or "none"
+    informed_names = _format_name_list(snapshot["acked_decision_participants"]) or "none yet"
+    lines = [
+        f"# {result.title} protocol comparison",
+        "",
+        result.description,
+        "",
+        "## Scenario snapshot",
+        f"- transaction id: `{result.transaction_id}`",
+        f"- participants: `{snapshot['participant_count']}` total (`{snapshot['commit_voters']}` commit, `{snapshot['abort_voters']}` abort, `{snapshot['timeout_voters']}` timeout)",
+        f"- coordinator crash point: `{snapshot['coordinator_crash']}`",
+        f"- coordinator recovery simulated: `{'yes' if snapshot['recover_after_crash'] else 'no'}`",
+        f"- participant-configured missed second-phase deliveries: `{snapshot['missed_second_phase_participants']}` ({missed_names})",
+        f"- participants that learned the final 2PC decision: `{snapshot['acked_decision_count']}` ({informed_names})",
+        f"- 2PC baseline outcome: `{snapshot['two_phase_outcome']}`",
+    ]
+    if snapshot["coordinator_crash"] == "after-decision-log":
+        lines.append(
+            f"- successful second-phase deliveries before the crash: `{snapshot['successful_decision_deliveries_before_crash']}`"
+        )
+    if snapshot["termination_hint_summary"]:
+        lines.append(
+            f"- termination hint in the 2PC baseline: {snapshot['termination_hint_summary']}"
+        )
+    lines.extend(
+        [
+            "",
+            "## Protocol contrast",
+            *comparison_lines,
+            "",
+            "## Protocol notes",
+            *detail_lines,
+            "## Interview takeaways",
+            *[f"- {entry}" for entry in result.interview_takeaways],
             "",
         ]
     )
@@ -623,6 +738,12 @@ def write_markdown_report(path: str | Path, result: SimulationResult) -> None:
     output_path.write_text(render_markdown_report(result))
 
 
+def write_comparison_markdown(path: str | Path, result: ComparisonResult) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_comparison_markdown(result))
+
+
 def write_catalog(path: str | Path, entries: list[CatalogEntry]) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -693,6 +814,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="optional path for a Markdown report artifact",
     )
 
+    compare_parser = subparsers.add_parser(
+        "compare",
+        help="contrast 2PC with a saga-style alternative for the same scenario",
+    )
+    compare_parser.add_argument("scenario", type=Path)
+    compare_parser.add_argument("--json", action="store_true", help="emit full JSON output")
+    compare_parser.add_argument(
+        "--markdown-out",
+        type=Path,
+        help="optional path for a Markdown comparison artifact",
+    )
+
     catalog_parser = subparsers.add_parser(
         "catalog",
         help="build a multi-scenario Markdown catalog and optional per-scenario reports",
@@ -744,6 +877,22 @@ def main(argv: list[str] | None = None) -> int:
             if result.termination_hint_summary:
                 print(f"termination_hint={result.termination_hint_summary}")
             print(f"participants={len(result.participants)} trace_events={len(result.trace)}")
+        return 0
+
+    if args.command == "compare":
+        result = build_protocol_comparison(load_scenario(args.scenario))
+        if args.markdown_out:
+            write_comparison_markdown(args.markdown_out, result)
+            stream = sys.stderr if args.json else sys.stdout
+            print(f"wrote Markdown comparison to {args.markdown_out}", file=stream)
+        if args.json:
+            print(json.dumps(result.to_dict(), indent=2))
+        else:
+            print(f"{result.title}: compared {len(result.comparisons)} protocols")
+            for comparison in result.comparisons:
+                print(
+                    f"{comparison.protocol}: outcome={comparison.outcome} blocking={comparison.blocking_behavior}"
+                )
         return 0
 
     if args.command == "catalog":
@@ -948,6 +1097,178 @@ def _build_after_decision_blocking_reason(
         f"the durable {decision.upper()} decision exists, but no prepared participant has learned it yet; "
         "prepared participants stay in doubt until recovery or a termination-protocol exchange"
     )
+
+
+def _build_scenario_snapshot(
+    scenario: Scenario,
+    two_phase_result: SimulationResult,
+) -> dict[str, Any]:
+    commit_names = [plan.name for plan in scenario.participants if plan.vote == "commit"]
+    abort_names = [plan.name for plan in scenario.participants if plan.vote == "abort"]
+    timeout_names = [plan.name for plan in scenario.participants if plan.vote == "timeout"]
+    missed_names = [
+        plan.name
+        for plan in scenario.participants
+        if plan.second_phase_delivery == "miss"
+    ]
+    prepared_names = [
+        item["name"] for item in two_phase_result.participants if item["prepared"]
+    ]
+    acked_names = [
+        item["name"] for item in two_phase_result.participants if item["acked_decision"]
+    ]
+    return {
+        "participant_count": len(scenario.participants),
+        "commit_voters": len(commit_names),
+        "commit_participants": commit_names,
+        "abort_voters": len(abort_names),
+        "abort_participants": abort_names,
+        "timeout_voters": len(timeout_names),
+        "timeout_participants": timeout_names,
+        "prepared_participants": prepared_names,
+        "missed_second_phase_participants": len(missed_names),
+        "missed_second_phase_names": missed_names,
+        "acked_decision_count": len(acked_names),
+        "acked_decision_participants": acked_names,
+        "coordinator_crash": scenario.failures.coordinator_crash,
+        "recover_after_crash": scenario.failures.recover_after_crash,
+        "decision_deliveries_before_crash": scenario.failures.decision_deliveries_before_crash,
+        "successful_decision_deliveries_before_crash": two_phase_result.failures["successful_decision_deliveries_before_crash"],
+        "two_phase_outcome": two_phase_result.outcome,
+        "two_phase_decision": two_phase_result.decision,
+        "termination_hint_summary": two_phase_result.termination_hint_summary,
+    }
+
+
+def _build_two_phase_protocol_comparison(result: SimulationResult) -> ProtocolComparison:
+    prepared_count = sum(1 for item in result.participants if item["prepared"])
+    acked_count = sum(1 for item in result.participants if item["acked_decision"])
+    if result.outcome == "blocked":
+        blocking_behavior = "blocking once PREPARED participants cannot prove the coordinator's final decision"
+        recovery_story = (
+            "needs coordinator recovery or a safe termination-protocol answer from an authoritative peer"
+        )
+        interview_hook = "2PC buys atomic all-or-nothing semantics, but the price is visible coordinator-centered blocking in outage scenarios."
+    elif result.outcome == "commit":
+        blocking_behavior = "not blocked in this run, but PREPARED participants would wait if the coordinator failed mid-decision"
+        recovery_story = "durable decision logging lets the coordinator replay COMMIT and finish phase two after a restart"
+        interview_hook = "2PC's happy path is easy to reason about because one durable COMMIT record drives every participant to the same final state."
+    else:
+        blocking_behavior = "not blocked in this run because a NO vote or timeout forced a global ABORT before commit"
+        recovery_story = "ABORT is broadcast from the coordinator; participants roll back PREPARED work instead of compensating later"
+        interview_hook = "2PC gives a crisp all-or-nothing ABORT story, but it still depends on a central coordinator to publish the decision."
+
+    return ProtocolComparison(
+        protocol="2PC",
+        outcome=result.outcome,
+        coordination_model="single coordinator with PREPARE and COMMIT/ABORT phases over durable decision logging",
+        consistency_model="strong atomic commit when the decision completes; every participant follows the same global outcome",
+        atomicity="global all-or-nothing across participants once the coordinator's durable decision is known",
+        blocking_behavior=blocking_behavior,
+        recovery_story=recovery_story,
+        participant_story=(
+            f"{prepared_count}/{len(result.participants)} participants reached PREPARED and {acked_count}/{len(result.participants)} learned the final decision in this run"
+        ),
+        interview_hook=interview_hook,
+        tradeoffs=[
+            "easy to explain when interviewers ask how a durable decision log enforces atomic commit",
+            "participants may hold PREPARED state while waiting on the coordinator or an authoritative replay",
+            "fits tightly coupled all-or-nothing workflows better than high-availability microservice traffic",
+        ],
+    )
+
+
+def _build_saga_protocol_comparison(
+    scenario: Scenario,
+    snapshot: dict[str, Any],
+) -> ProtocolComparison:
+    abort_names = snapshot["abort_participants"]
+    timeout_names = snapshot["timeout_participants"]
+    crash_point = scenario.failures.coordinator_crash
+    recover = scenario.failures.recover_after_crash
+
+    if abort_names or timeout_names:
+        blocked_names = abort_names + timeout_names
+        outcome = "compensated-abort"
+        recovery_story = "earlier local steps compensate in reverse order; retry the failing step later if the business flow should continue"
+        participant_story = (
+            f"participants before {_format_name_list(blocked_names)} may need compensating transactions, but no peer waits in PREPARED limbo"
+        )
+        interview_hook = "Saga keeps services available on failure, but you trade a single crisp ABORT decision for compensation design and temporary inconsistency."
+    elif crash_point != "none" and not recover:
+        outcome = "paused-not-blocked"
+        recovery_story = "resume from the last durable saga step or compensate the already-finished steps; no global prepare barrier needs to be unblocked"
+        participant_story = (
+            "already-finished local transactions stay committed, unfinished steps pause for orchestrator recovery or operator action, and peers continue serving other work"
+        )
+        interview_hook = "A saga can still stall operationally, but it stalls as resumable workflow state instead of coordinator-driven prepared-lock blocking."
+    elif crash_point != "none" and recover:
+        outcome = "resumed-eventual-commit"
+        recovery_story = "a durable orchestration log or outbox can replay the next command and finish the remaining local transactions after restart"
+        participant_story = (
+            "completed local steps remain committed and the recovered orchestrator continues from the last durable checkpoint"
+        )
+        interview_hook = "Saga recovery is about replaying idempotent local steps or compensations, not re-running a global COMMIT decision across prepared peers."
+    else:
+        outcome = "eventual-commit"
+        recovery_story = "no compensation is needed because every local transaction succeeds and the workflow reaches the terminal success state"
+        participant_story = "each service commits its own local transaction in sequence; no participant enters PREPARED lock-wait state"
+        interview_hook = "Saga trades strict cross-service atomicity for availability: local commits happen independently and the workflow converges through messaging/orchestration."
+
+    return ProtocolComparison(
+        protocol="Saga (orchestrated)",
+        outcome=outcome,
+        coordination_model="ordered local transactions plus compensating actions, typically driven by an orchestrator or event flow",
+        consistency_model="eventual consistency across services, with explicit compensations when later steps fail",
+        atomicity="no single global atomic commit; earlier local success is repaired by compensation instead of a shared PREPARE/COMMIT barrier",
+        blocking_behavior="non-blocking for participant resources; the workflow can pause, but services do not sit on PREPARED locks waiting for a global decision",
+        recovery_story=recovery_story,
+        participant_story=participant_story,
+        interview_hook=interview_hook,
+        tradeoffs=[
+            "fits database-per-service architectures because each step owns only its local database transaction",
+            "developers must design idempotent retries and compensating actions instead of relying on automatic rollback",
+            "availability is usually better than plain 2PC, but isolation is weaker and temporary anomalies are possible",
+        ],
+    )
+
+
+def _build_comparison_takeaways(
+    snapshot: dict[str, Any],
+    two_phase_result: SimulationResult,
+) -> list[str]:
+    lines = [
+        f"In this scenario, plain 2PC resolves as `{two_phase_result.outcome}`, which is driven by one coordinator-owned durable decision and the PREPARED states around it.",
+        "An orchestrated saga would avoid PREPARED lock blocking by committing local work independently and using retries/compensations instead of a global commit barrier.",
+    ]
+    if two_phase_result.outcome == "blocked":
+        lines.append(
+            "Use this comparison to explain why high-availability microservice systems often choose sagas when temporary inconsistency is acceptable but indefinite coordinator blocking is not."
+        )
+    elif two_phase_result.outcome == "abort":
+        lines.append(
+            "This is a good interview story for contrasting immediate atomic ABORT in 2PC with compensation-based unwind logic in saga-style workflows."
+        )
+    else:
+        lines.append(
+            "Even on a clean commit path, the comparison shows the core trade-off: 2PC keeps stronger atomic semantics, while saga keeps participants looser and easier to recover operationally."
+        )
+    if snapshot["successful_decision_deliveries_before_crash"] and two_phase_result.decision:
+        lines.append(
+            f"Here, {_count_phrase(snapshot['successful_decision_deliveries_before_crash'], 'participant')} already heard the durable {two_phase_result.decision.upper()} before the crash, so the blocked 2PC case becomes a peer-assisted incident-response story rather than pure blind waiting."
+        )
+    if (
+        snapshot["termination_hint_summary"]
+        and not snapshot["termination_hint_summary"].startswith("wait:")
+    ):
+        lines.append(
+            f"The simulator's termination hint (`{snapshot['termination_hint_summary']}`) makes that concrete: a prepared participant can ask an informed peer instead of inventing a local outcome."
+        )
+    if snapshot["coordinator_crash"] != "none":
+        lines.append(
+            f"The configured crash point (`{snapshot['coordinator_crash']}`) is the teaching lever here: it shows that the same business transaction can become either coordinator-blocked (2PC) or resumable/compensatable (saga)."
+        )
+    return lines
 
 
 def _primary_takeaway(result: SimulationResult) -> str:

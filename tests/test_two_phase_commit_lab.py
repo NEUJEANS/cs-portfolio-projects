@@ -27,9 +27,11 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 ScenarioError = MODULE.ScenarioError
 build_catalog_entries = MODULE.build_catalog_entries
+build_protocol_comparison = MODULE.build_protocol_comparison
 collect_scenario_paths = MODULE.collect_scenario_paths
 load_scenario = MODULE.load_scenario
 render_catalog_markdown = MODULE.render_catalog_markdown
+render_comparison_markdown = MODULE.render_comparison_markdown
 render_markdown_report = MODULE.render_markdown_report
 simulate_two_phase_commit = MODULE.simulate_two_phase_commit
 validate_scenario = MODULE.validate_scenario
@@ -332,6 +334,75 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             cwd=REPO_ROOT,
         )
         self.assertIn("Recovery replays a durable commit", completed.stdout)
+
+    def test_protocol_comparison_calls_out_blocking_vs_saga_pause(self) -> None:
+        comparison = build_protocol_comparison(load_scenario(BLOCKED_SCENARIO))
+        self.assertEqual(comparison.scenario_snapshot["two_phase_outcome"], "blocked")
+        self.assertEqual([item.protocol for item in comparison.comparisons], ["2PC", "Saga (orchestrated)"])
+        two_pc = comparison.comparisons[0]
+        saga = comparison.comparisons[1]
+        self.assertEqual(two_pc.outcome, "blocked")
+        self.assertIn("PREPARED participants", two_pc.blocking_behavior)
+        self.assertEqual(saga.outcome, "paused-not-blocked")
+        self.assertIn("do not sit on PREPARED locks", saga.blocking_behavior)
+
+    def test_protocol_comparison_snapshot_tracks_peer_visible_commit_hints(self) -> None:
+        comparison = build_protocol_comparison(load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO))
+        snapshot = comparison.scenario_snapshot
+        self.assertEqual(snapshot["two_phase_outcome"], "blocked")
+        self.assertEqual(snapshot["successful_decision_deliveries_before_crash"], 1)
+        self.assertEqual(snapshot["acked_decision_count"], 1)
+        self.assertEqual(snapshot["acked_decision_participants"], ["inventory"])
+        self.assertEqual(snapshot["termination_hint_summary"], "COMMIT visible via inventory")
+        self.assertTrue(
+            any(
+                "peer-assisted incident-response story rather than pure blind waiting" in entry
+                for entry in comparison.interview_takeaways
+            )
+        )
+
+    def test_comparison_markdown_mentions_protocol_contrast(self) -> None:
+        comparison = build_protocol_comparison(load_scenario(BLOCKED_SCENARIO))
+        report = render_comparison_markdown(comparison)
+        self.assertIn("# Coordinator crash before durable decision protocol comparison", report)
+        self.assertIn("## Protocol contrast", report)
+        self.assertIn("| 2PC | `blocked` |", report)
+        self.assertIn("| Saga (orchestrated) | `paused-not-blocked` |", report)
+        self.assertIn("resumable workflow state instead of coordinator-driven prepared-lock blocking", report)
+
+    def test_comparison_markdown_exposes_peer_visible_commit_details(self) -> None:
+        comparison = build_protocol_comparison(load_scenario(PARTIAL_DELIVERY_BLOCKED_SCENARIO))
+        report = render_comparison_markdown(comparison)
+        self.assertIn("participants that learned the final 2PC decision: `1` (inventory)", report)
+        self.assertIn("successful second-phase deliveries before the crash: `1`", report)
+        self.assertIn("termination hint in the 2PC baseline: COMMIT visible via inventory", report)
+        self.assertIn("ask an informed peer instead of inventing a local outcome", report)
+
+    def test_compare_command_writes_markdown_and_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "comparison.md"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "compare",
+                    str(BLOCKED_SCENARIO),
+                    "--markdown-out",
+                    str(report_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["scenario_snapshot"]["two_phase_outcome"], "blocked")
+            self.assertEqual(len(payload["comparisons"]), 2)
+            self.assertEqual(payload["comparisons"][1]["protocol"], "Saga (orchestrated)")
+            report = report_path.read_text()
+            self.assertIn("## Interview takeaways", report)
+            self.assertIn("Saga (orchestrated)", report)
 
 
 if __name__ == "__main__":

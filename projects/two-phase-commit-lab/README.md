@@ -13,12 +13,13 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - deterministic 2PC simulation with trace output for `PREPARE`, votes, durable decisions, crash points, partial second-phase delivery, missed second-phase deliveries, and participant reconnect recovery
 - blocked-case termination hints that explain what a prepared participant can still ask peers while the coordinator is unavailable
 - committed sample scenarios for happy-path commit, participant veto abort, coordinator blocking before the decision log, durable-decision replay after a crash, one-peer-visible `COMMIT` after a crash, and participant-side reconnect after a missed `COMMIT`
+- protocol comparison mode that contrasts the same business incident as plain 2PC versus an orchestrated saga, making the blocking-vs-compensation trade-off visible in one artifact
 - Markdown report export for recruiter-friendly artifacts under `docs/artifacts/two-phase-commit-lab/`
 - multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, and termination hints in one place
-- clean CLI commands for validation, single-scenario simulation, and bundle generation
+- clean CLI commands for validation, single-scenario simulation, protocol comparison, and bundle generation
 
 ## Project structure
-- `two_phase_commit_lab.py` - validator, simulator, report renderer, catalog generator, and CLI entrypoint
+- `two_phase_commit_lab.py` - validator, simulator, 2PC-vs-saga comparison renderer, report generator, catalog generator, and CLI entrypoint
 - `order_success.json` - all participants vote YES and the transaction commits
 - `payment_validation_abort.json` - one participant votes NO so the transaction aborts globally
 - `coordinator_crash_before_decision.json` - all participants prepare, but the coordinator crashes before a durable outcome exists
@@ -26,8 +27,8 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - `coordinator_recovery_commit.json` - the coordinator logs COMMIT, crashes, then replays the decision during recovery
 - `participant_reconnect_commit.json` - a prepared participant misses the first `COMMIT`, reconnects, and resolves the durable outcome safely
 - `CHECKLIST.md` - resumable slice history plus next ideas
-- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, CLI output, and catalog generation
-- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports plus the scenario catalog landing page
+- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, CLI output, and catalog generation
+- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, the scenario catalog landing page, and protocol-comparison artifacts
 
 ## Scenario format
 ```json
@@ -104,6 +105,14 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py run \
   --markdown-out docs/artifacts/two-phase-commit-lab/coordinator_crash_partial_commit_delivery_report.md
 ```
 
+### Compare 2PC with an orchestrated saga for the same incident
+```bash
+python3 projects/two-phase-commit-lab/two_phase_commit_lab.py compare \
+  projects/two-phase-commit-lab/coordinator_crash_before_decision.json \
+  --markdown-out docs/artifacts/two-phase-commit-lab/coordinator_crash_before_decision_protocol_compare.md \
+  --json
+```
+
 ### Generate the multi-scenario catalog bundle
 ```bash
 python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
@@ -127,6 +136,10 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   - a prepared participant can still end up temporarily in doubt after missing the first second-phase message, then safely finish by reconnecting to learn the durable decision
 - `scenario_catalog.md`
   - one landing page compares all committed scenarios so recruiters can browse the protocol story without opening each artifact separately
+- `coordinator_crash_before_decision_protocol_compare.md`
+  - a side-by-side 2PC vs saga artifact for the classic blocking crash, useful when interviewers ask why microservices often avoid plain 2PC
+- `coordinator_crash_partial_commit_delivery_protocol_compare.md`
+  - a peer-visible-decision comparison artifact showing that some blocked 2PC incidents still have an actionable termination-protocol story before coordinator recovery
 
 ## Testing
 ```bash
