@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import textwrap
 from collections import deque
 from dataclasses import dataclass
 from heapq import heappop, heappush
@@ -955,6 +956,197 @@ def _render_changed_field_badges(changed_fields: tuple[str, ...]) -> str:
     )
 
 
+def _wrap_svg_text(text: str, *, width: int, max_lines: int) -> tuple[str, ...]:
+    wrapped = textwrap.wrap(text, width=width, break_long_words=False, break_on_hyphens=False) or [text]
+    if len(wrapped) > max_lines:
+        wrapped = wrapped[:max_lines]
+        wrapped[-1] = wrapped[-1].rstrip(' .,:;') + '…'
+    return tuple(wrapped)
+
+
+def _render_svg_text_block(x: int, y: int, lines: Iterable[str], class_name: str, *, line_height: int = 20) -> str:
+    lines_tuple = tuple(lines)
+    if not lines_tuple:
+        return ''
+    tspans = [f'<tspan x="{x}" dy="0">{_html_escape(lines_tuple[0])}</tspan>']
+    tspans.extend(
+        f'<tspan x="{x}" dy="{line_height}">{_html_escape(line)}</tspan>'
+        for line in lines_tuple[1:]
+    )
+    return f'<text x="{x}" y="{y}" class="{class_name}">' + ''.join(tspans) + '</text>'
+
+
+def render_svg_comparison(comparison: RoutingComparison) -> str:
+    changed_diffs = [diff for diff in comparison.route_diffs if diff.changed_fields]
+    same_cost_reroutes = sum(
+        1 for diff in changed_diffs if 'path' in diff.changed_fields and 'cost' not in diff.changed_fields
+    )
+    cost_changes = sum(1 for diff in changed_diffs if 'cost' in diff.changed_fields)
+    predecessor_changes = sum(1 for diff in changed_diffs if 'predecessor' in diff.changed_fields)
+    presence_changes = sum(1 for diff in changed_diffs if 'presence' in diff.changed_fields)
+    featured_diffs = changed_diffs[:3]
+
+    summary_cards: list[tuple[str, str, str]] = [
+        ('Changed edges', str(len(comparison.edge_changes)), 'edge-weight or edge-presence differences'),
+        ('Changed routes', str(comparison.changed_route_count), 'route-table entries that changed'),
+        ('Same-cost reroutes', str(same_cost_reroutes), 'paths that shifted without a cost delta'),
+        ('Predecessor changes', str(predecessor_changes), 'Bellman-Ford predecessor swaps'),
+    ]
+    if cost_changes:
+        summary_cards.append(('Cost-changing routes', str(cost_changes), 'routes whose total cost changed'))
+    elif presence_changes:
+        summary_cards.append(('Node presence changes', str(presence_changes), 'nodes only present in one variant'))
+
+    width = 1200
+    card_width = 204
+    card_height = 112
+    route_card_height = 138
+    footer_height = 42
+
+    summary_y = 224
+    route_y = summary_y + card_height + 18
+    height = route_y + max(1, len(featured_diffs)) * route_card_height + footer_height
+
+    elements: list[str] = []
+    elements.append(f'<rect width="{width}" height="{height}" fill="#f8fafc" rx="28" />')
+    elements.append(
+        '<rect x="24" y="24" width="1152" height="184" rx="24" fill="#ffffff" stroke="#dbe3ef" />'
+    )
+    elements.append(_render_svg_text_block(52, 58, ('Graph routing diff snapshot',), 'eyebrow', line_height=18))
+    elements.append(
+        _render_svg_text_block(
+            52,
+            94,
+            (f'{comparison.baseline_graph} vs {comparison.candidate_graph}',),
+            'headline',
+            line_height=22,
+        )
+    )
+    lede = (
+        f'Source {comparison.source}; baseline negative cycle '
+        + ('present' if comparison.baseline_negative_cycle else 'none')
+        + '; candidate negative cycle '
+        + ('present' if comparison.candidate_negative_cycle else 'none')
+        + '.'
+    )
+    elements.append(_render_svg_text_block(52, 126, _wrap_svg_text(lede, width=80, max_lines=2), 'lede', line_height=20))
+    elements.append(
+        _render_svg_text_block(
+            52,
+            168,
+            (f'Edge changes: {len(comparison.edge_changes)}', f'Changed routes: {comparison.changed_route_count}', f'Unchanged routes: {comparison.unchanged_route_count}'),
+            'meta',
+            line_height=18,
+        )
+    )
+
+    edge_preview_list = [
+        f'{change.source}→{change.target}: '
+        + f'{change.baseline_weight if change.baseline_weight is not None else "absent"}→{change.candidate_weight if change.candidate_weight is not None else "absent"}'
+        for change in comparison.edge_changes[:3]
+    ]
+    if len(comparison.edge_changes) > 3:
+        edge_preview_list.append(f'+{len(comparison.edge_changes) - 3} more edge changes')
+    edge_preview_lines = tuple(edge_preview_list) or ('No edge changes',)
+    elements.append('<rect x="774" y="48" width="364" height="136" rx="20" fill="#eff6ff" stroke="#bfdbfe" />')
+    elements.append(_render_svg_text_block(798, 78, ('Edge preview',), 'sectionLabel', line_height=18))
+    elements.append(_render_svg_text_block(798, 108, edge_preview_lines, 'smallMono', line_height=18))
+
+    summary_start_x = 44
+    summary_gap = 14
+    for index, (label, value, description) in enumerate(summary_cards[:5]):
+        x = summary_start_x + index * (card_width + summary_gap)
+        elements.append(
+            f'<rect x="{x}" y="{summary_y}" width="{card_width}" height="{card_height}" rx="20" fill="#ffffff" stroke="#dbe3ef" />'
+        )
+        elements.append(_render_svg_text_block(x + 18, summary_y + 34, (label,), 'cardLabel', line_height=16))
+        elements.append(_render_svg_text_block(x + 18, summary_y + 72, (value,), 'cardValue', line_height=22))
+        elements.append(
+            _render_svg_text_block(
+                x + 18,
+                summary_y + 94,
+                _wrap_svg_text(description, width=24, max_lines=2),
+                'cardNote',
+                line_height=15,
+            )
+        )
+
+    for index, diff in enumerate(featured_diffs or [None]):
+        y = route_y + index * route_card_height
+        elements.append(
+            f'<rect x="24" y="{y}" width="1152" height="{route_card_height - 14}" rx="22" fill="#ffffff" stroke="#dbe3ef" />'
+        )
+        if diff is None:
+            elements.append(_render_svg_text_block(52, y + 44, ('No changed route entries. The baseline and candidate route tables match.',), 'routeSummary', line_height=20))
+            continue
+        accent = '#2563eb' if 'cost' in diff.changed_fields else ('#dc2626' if 'presence' in diff.changed_fields or 'status' in diff.changed_fields else '#7c3aed')
+        elements.append(f'<rect x="24" y="{y}" width="12" height="{route_card_height - 14}" rx="6" fill="{accent}" />')
+        elements.append(_render_svg_text_block(52, y + 28, (f'Node {diff.node}',), 'routeNode', line_height=18))
+        badge_text = ' · '.join(field.replace('-', ' ') for field in diff.changed_fields) or 'unchanged'
+        elements.append(_render_svg_text_block(52, y + 52, (badge_text,), 'routeBadge', line_height=18))
+        summary_lines = _wrap_svg_text(diff.summary, width=74, max_lines=3)
+        elements.append(_render_svg_text_block(52, y + 82, summary_lines, 'routeSummary', line_height=18))
+        metric_lines = (
+            f'cost {_format_route_entry_cost(diff.baseline)} → {_format_route_entry_cost(diff.candidate)}',
+            f'predecessor {_format_route_entry_predecessor(diff.baseline)} → {_format_route_entry_predecessor(diff.candidate)}',
+            f'delta {_format_cost_delta(diff.baseline, diff.candidate)}',
+        )
+        elements.append(_render_svg_text_block(760, y + 40, metric_lines, 'smallMono', line_height=18))
+        path_lines = (
+            f'baseline: {_format_route_entry_path(diff.baseline)}',
+            f'candidate: {_format_route_entry_path(diff.candidate)}',
+        )
+        elements.append(
+            _render_svg_text_block(
+                760,
+                y + 96,
+                tuple(
+                    line
+                    for entry in path_lines
+                    for line in _wrap_svg_text(entry, width=46, max_lines=2)
+                ),
+                'smallMono',
+                line_height=17,
+            )
+        )
+
+    footer_note = (
+        f'Showing first {len(featured_diffs)} changed routes out of {len(changed_diffs)} total.'
+        if len(changed_diffs) > len(featured_diffs)
+        else 'Deterministic static artifact for README thumbnails, slide decks, and quick routing-change reviews.'
+    )
+    elements.append(_render_svg_text_block(38, height - 18, (footer_note,), 'footer', line_height=18))
+
+    title_text = f'{comparison.baseline_graph} vs {comparison.candidate_graph} route diff summary card'
+    desc_text = (
+        f'Source {comparison.source}. Changed edges {len(comparison.edge_changes)}. '
+        f'Changed routes {comparison.changed_route_count}. Same-cost reroutes {same_cost_reroutes}.'
+    )
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="svg-title svg-desc">
+  <title id="svg-title">{_html_escape(title_text)}</title>
+  <desc id="svg-desc">{_html_escape(desc_text)}</desc>
+  <style>
+    text {{ font-family: Inter, "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; fill: #10233d; }}
+    .eyebrow {{ font-size: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; fill: #2563eb; }}
+    .headline {{ font-size: 30px; font-weight: 700; }}
+    .lede {{ font-size: 16px; fill: #51627a; }}
+    .meta {{ font-size: 15px; fill: #51627a; }}
+    .sectionLabel {{ font-size: 16px; font-weight: 700; fill: #1d4ed8; }}
+    .cardLabel {{ font-size: 15px; fill: #51627a; }}
+    .cardValue {{ font-size: 32px; font-weight: 700; }}
+    .cardNote {{ font-size: 13px; fill: #51627a; }}
+    .routeNode {{ font-size: 20px; font-weight: 700; }}
+    .routeBadge {{ font-size: 14px; font-weight: 700; fill: #2563eb; }}
+    .routeSummary {{ font-size: 16px; fill: #10233d; }}
+    .smallMono {{ font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; fill: #334155; }}
+    .footer {{ font-size: 14px; fill: #51627a; }}
+  </style>
+  {''.join(elements)}
+</svg>
+'''
+
+
 def render_html_comparison(comparison: RoutingComparison) -> str:
     changed_diffs = [diff for diff in comparison.route_diffs if diff.changed_fields]
     same_cost_reroutes = sum(
@@ -1236,6 +1428,13 @@ def export_compare_html(comparison: RoutingComparison, output_path: str | Path) 
     return output
 
 
+def export_compare_svg(comparison: RoutingComparison, output_path: str | Path) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_svg_comparison(comparison), encoding='utf-8')
+    return output
+
+
 def build_report(
     graph_name: str,
     nodes: Iterable[str],
@@ -1280,6 +1479,10 @@ def parse_args() -> argparse.Namespace:
         "--export-compare-html",
         help="Write a static HTML route-table diff dashboard comparing the main graph to --compare-graph",
     )
+    parser.add_argument(
+        "--export-compare-svg",
+        help="Write a compact SVG route-table diff summary card comparing the main graph to --compare-graph",
+    )
     return parser.parse_args()
 
 
@@ -1297,6 +1500,8 @@ def main() -> None:
         raise ValueError('--export-compare-markdown requires --compare-graph')
     if args.export_compare_html and not args.compare_graph:
         raise ValueError('--export-compare-html requires --compare-graph')
+    if args.export_compare_svg and not args.compare_graph:
+        raise ValueError('--export-compare-svg requires --compare-graph')
     if args.compare_graph:
         if args.mode not in {'bellman-ford', 'full'} or not args.source:
             raise ValueError('--compare-graph requires --mode bellman-ford/full with --source')
@@ -1313,6 +1518,8 @@ def main() -> None:
             export_compare_markdown(comparison, args.export_compare_markdown)
         if args.export_compare_html:
             export_compare_html(comparison, args.export_compare_html)
+        if args.export_compare_svg:
+            export_compare_svg(comparison, args.export_compare_svg)
         if args.format == 'json':
             print(
                 json.dumps(

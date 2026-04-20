@@ -28,6 +28,7 @@ build_shortest_path_results = module.build_shortest_path_results
 compare_reports = module.compare_reports
 export_compare_html = module.export_compare_html
 export_compare_markdown = module.export_compare_markdown
+export_compare_svg = module.export_compare_svg
 export_dot = module.export_dot
 export_markdown = module.export_markdown
 export_mermaid = module.export_mermaid
@@ -36,6 +37,7 @@ load_graph = module.load_graph
 render_html_comparison = module.render_html_comparison
 render_markdown_comparison = module.render_markdown_comparison
 render_pretty = module.render_pretty
+render_svg_comparison = module.render_svg_comparison
 
 
 class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
@@ -290,6 +292,24 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertIn("weight-changed", rendered)
             self.assertIn("Route-table diff audit", render_html_comparison(comparison))
 
+    def test_export_compare_svg_writes_summary_card(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "route-diff-card.svg"
+            baseline = build_report(*load_graph(SAMPLE_PATH), source="A", mode="bellman-ford")
+            candidate = build_report(*load_graph(ROUTE_SHIFT_PATH), source="A", mode="bellman-ford")
+            comparison = compare_reports(baseline, candidate)
+            export_compare_svg(comparison, output_path)
+            rendered = output_path.read_text(encoding="utf-8")
+            self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', rendered)
+            self.assertIn('viewBox="0 0 1200 672"', rendered)
+            self.assertIn('preserveAspectRatio="xMidYMin meet"', rendered)
+            self.assertIn('<title id="svg-title">routing_demo vs routing_shift_demo route diff summary card</title>', rendered)
+            self.assertIn('Same-cost reroutes', rendered)
+            self.assertIn('Node B', rendered)
+            self.assertIn('cost 1 → 4', rendered)
+            self.assertIn('Deterministic static artifact', rendered)
+            self.assertIn('Graph routing diff snapshot', render_svg_comparison(comparison))
+
     def test_cli_json_mode_with_compare_graph_emits_comparison_payload(self) -> None:
         completed = subprocess.run(
             [
@@ -368,6 +388,32 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
             self.assertTrue(output_path.exists())
             self.assertIn("Changed route highlights", output_path.read_text(encoding="utf-8"))
 
+    def test_cli_can_export_compare_svg(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "cli-route-diff-card.svg"
+            completed = subprocess.run(
+                [
+                    str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                    str(MODULE_PATH),
+                    str(SAMPLE_PATH),
+                    "--source",
+                    "A",
+                    "--mode",
+                    "bellman-ford",
+                    "--compare-graph",
+                    str(ROUTE_SHIFT_PATH),
+                    "--export-compare-svg",
+                    str(output_path),
+                ],
+                cwd=PROJECT_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("Route-table comparison:", completed.stdout)
+            self.assertTrue(output_path.exists())
+            self.assertIn("route diff summary card", output_path.read_text(encoding="utf-8"))
+
     def test_cli_compare_markdown_requires_compare_graph(self) -> None:
         completed = subprocess.run(
             [
@@ -409,6 +455,27 @@ class GraphRoutingNegativeCycleLabTests(unittest.TestCase):
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("--export-compare-html requires --compare-graph", completed.stderr)
+
+    def test_cli_compare_svg_requires_compare_graph(self) -> None:
+        completed = subprocess.run(
+            [
+                str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+                str(MODULE_PATH),
+                str(SAMPLE_PATH),
+                "--source",
+                "A",
+                "--mode",
+                "bellman-ford",
+                "--export-compare-svg",
+                str(PROJECT_ROOT / "docs" / "artifacts" / "should-not-exist.svg"),
+            ],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--export-compare-svg requires --compare-graph", completed.stderr)
 
     def test_cli_json_mode_emits_johnson_payload(self) -> None:
         completed = subprocess.run(
