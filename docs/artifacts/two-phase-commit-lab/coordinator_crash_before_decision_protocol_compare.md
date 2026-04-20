@@ -5,6 +5,7 @@ Every participant votes YES and enters PREPARED, but the coordinator crashes bef
 ## Scenario snapshot
 - transaction id: `order-2021`
 - participants: `3` total (`3` commit, `0` abort, `0` timeout)
+- scenario tags: `blocking`, `crash`, `all-prepared`
 - coordinator crash point: `before-decision`
 - coordinator recovery simulated: `no`
 - participant-configured missed second-phase deliveries: `0` (none)

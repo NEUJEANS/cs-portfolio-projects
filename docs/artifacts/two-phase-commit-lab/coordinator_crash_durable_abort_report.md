@@ -4,6 +4,7 @@ Inventory and billing vote YES, but risk votes NO. The coordinator durably logs 
 
 ## Outcome
 - transaction id: `order-6112`
+- scenario tags: `blocking`, `crash`, `peer-assisted-abort`
 - final outcome: `blocked`
 - durable decision recorded: `yes`
 - coordinator crash point: `after-decision-log`

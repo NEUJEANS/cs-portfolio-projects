@@ -4,6 +4,7 @@ All participants vote YES, the coordinator durably logs COMMIT, then crashes bef
 
 ## Outcome
 - transaction id: `order-3050`
+- scenario tags: `recovery`, `crash`, `commit-replay`
 - final outcome: `commit`
 - durable decision recorded: `yes`
 - coordinator crash point: `after-decision-log`

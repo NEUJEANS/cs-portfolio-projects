@@ -4,6 +4,7 @@ Inventory is ready, but the risk service votes NO after a fraud signal. The coor
 
 ## Outcome
 - transaction id: `order-1088`
+- scenario tags: `abort`, `veto`, `baseline`
 - final outcome: `abort`
 - durable decision recorded: `yes`
 - coordinator crash point: `none`

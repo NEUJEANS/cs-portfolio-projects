@@ -4,6 +4,7 @@ All participants vote YES and the coordinator durably logs COMMIT, but shipping 
 
 ## Outcome
 - transaction id: `order-4099`
+- scenario tags: `participant-reconnect`, `missed-delivery`, `commit`
 - final outcome: `commit`
 - durable decision recorded: `yes`
 - coordinator crash point: `none`

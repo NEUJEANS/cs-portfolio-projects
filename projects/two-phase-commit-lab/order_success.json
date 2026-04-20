@@ -25,5 +25,10 @@
   "failures": {
     "coordinator_crash": "none",
     "recover_after_crash": false
-  }
+  },
+  "tags": [
+    "happy-path",
+    "commit",
+    "baseline"
+  ]
 }

@@ -25,5 +25,10 @@
   "failures": {
     "coordinator_crash": "before-decision",
     "recover_after_crash": false
-  }
+  },
+  "tags": [
+    "blocking",
+    "crash",
+    "all-prepared"
+  ]
 }

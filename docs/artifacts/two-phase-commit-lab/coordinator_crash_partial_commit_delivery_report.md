@@ -4,6 +4,7 @@ All participants vote YES and the coordinator durably logs COMMIT. Inventory hea
 
 ## Outcome
 - transaction id: `order-5120`
+- scenario tags: `blocking`, `crash`, `peer-assisted-commit`
 - final outcome: `blocked`
 - durable decision recorded: `yes`
 - coordinator crash point: `after-decision-log`

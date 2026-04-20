@@ -4,6 +4,7 @@ import argparse
 import html
 import json
 import os
+import re
 import sys
 import textwrap
 from dataclasses import asdict, dataclass, field
@@ -18,6 +19,16 @@ class ScenarioError(ValueError):
 VALID_VOTES = {"commit", "abort", "timeout"}
 VALID_CRASH_POINTS = {"none", "before-decision", "after-decision-log"}
 VALID_SECOND_PHASE_DELIVERIES = {"deliver", "miss"}
+CATALOG_HIGHLIGHT_TAGS = {
+    "blocking",
+    "crash",
+    "baseline",
+    "commit",
+    "recovery",
+    "participant-reconnect",
+    "peer-assisted-commit",
+    "peer-assisted-abort",
+}
 
 
 @dataclass
@@ -43,6 +54,7 @@ class Scenario:
     description: str
     transaction_id: str
     participants: list[ParticipantPlan]
+    tags: list[str] = field(default_factory=list)
     failures: FailurePlan = field(default_factory=FailurePlan)
 
 
@@ -51,6 +63,7 @@ class SimulationResult:
     title: str
     description: str
     transaction_id: str
+    tags: list[str]
     outcome: str
     decision: str | None
     decision_durable: bool
@@ -165,6 +178,8 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
     description = _required_string(raw, "description")
     transaction_id = _required_string(raw, "transaction_id")
 
+    tags = _normalize_scenario_tags(raw.get("tags", []))
+
     participants_raw = raw.get("participants")
     if not isinstance(participants_raw, list) or not participants_raw:
         raise ScenarioError("participants must be a non-empty list")
@@ -265,6 +280,7 @@ def validate_scenario(raw: dict[str, Any]) -> Scenario:
         description=description,
         transaction_id=transaction_id,
         participants=participants,
+        tags=tags,
         failures=FailurePlan(
             coordinator_crash=coordinator_crash,
             recover_after_crash=recover_after_crash,
@@ -717,6 +733,7 @@ def render_markdown_report(result: SimulationResult) -> str:
         "",
         "## Outcome",
         f"- transaction id: `{result.transaction_id}`",
+        f"- scenario tags: {_format_tag_list(result.tags)}",
         f"- final outcome: `{result.outcome}`",
         f"- durable decision recorded: `{'yes' if result.decision_durable else 'no'}`",
         f"- coordinator crash point: `{result.failures['coordinator_crash']}`",
@@ -789,6 +806,7 @@ def render_comparison_markdown(result: ComparisonResult) -> str:
 
     missed_names = _format_name_list(snapshot["missed_second_phase_names"]) or "none"
     informed_names = _format_name_list(snapshot["acked_decision_participants"]) or "none yet"
+    tag_summary = _format_tag_list(snapshot["tags"])
     lines = [
         f"# {result.title} protocol comparison",
         "",
@@ -797,6 +815,7 @@ def render_comparison_markdown(result: ComparisonResult) -> str:
         "## Scenario snapshot",
         f"- transaction id: `{result.transaction_id}`",
         f"- participants: `{snapshot['participant_count']}` total (`{snapshot['commit_voters']}` commit, `{snapshot['abort_voters']}` abort, `{snapshot['timeout_voters']}` timeout)",
+        f"- scenario tags: {tag_summary}",
         f"- coordinator crash point: `{snapshot['coordinator_crash']}`",
         f"- coordinator recovery simulated: `{'yes' if snapshot['recover_after_crash'] else 'no'}`",
         f"- participant-configured missed second-phase deliveries: `{snapshot['missed_second_phase_participants']}` ({missed_names})",
@@ -895,6 +914,7 @@ def render_comparison_html(result: ComparisonResult) -> str:
         ('Transaction id', result.transaction_id),
         ('Coordinator crash point', snapshot['coordinator_crash']),
         ('Coordinator recovery', 'yes' if snapshot['recover_after_crash'] else 'no'),
+        ('Scenario tags', _format_tag_list(snapshot['tags'])),
         ('Commit voters', _format_name_list(snapshot['commit_participants']) or 'none'),
         ('Abort voters', _format_name_list(snapshot['abort_participants']) or 'none'),
         ('Timeout voters', _format_name_list(snapshot['timeout_participants']) or 'none'),
@@ -1514,6 +1534,9 @@ def render_catalog_markdown(
     if not entries:
         raise ScenarioError("catalog requires at least one scenario")
 
+    all_tags = sorted({tag for entry in entries for tag in entry.result.tags})
+    tag_groups = _group_entries_by_tag(entries)
+    unique_tag_count = len(all_tags)
     commit_count = sum(1 for entry in entries if entry.result.outcome == "commit")
     abort_count = sum(1 for entry in entries if entry.result.outcome == "abort")
     blocked_count = sum(1 for entry in entries if entry.result.outcome == "blocked")
@@ -1548,8 +1571,8 @@ def render_catalog_markdown(
     )
 
     comparison_lines = [
-        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Scenario | Tags | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     snapshot_lines: list[str] = []
     for entry in entries:
@@ -1586,8 +1609,9 @@ def render_catalog_markdown(
         reconnect_cell = f"`{recovered_count}/{missed_count}`" if missed_count else "`-`"
         termination_cell = result.termination_hint_summary or "-"
         comparison_lines.append(
-            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {termination} | {report} | {compare} | {termination_artifact} | {timeline} |".format(
+            "| {title} | {tags} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {termination} | {report} | {compare} | {termination_artifact} | {timeline} |".format(
                 title=title_cell,
+                tags=_format_tag_list(result.tags),
                 outcome=result.outcome,
                 decision=result.decision or "none",
                 durable="yes" if result.decision_durable else "no",
@@ -1628,6 +1652,7 @@ def render_catalog_markdown(
                 f"### {result.title}",
                 f"- source: `{entry.source_path}`",
                 f"- description: {result.description}",
+                f"- tags: {_format_tag_list(result.tags)}",
                 f"- outcome: `{result.outcome}` with decision `{result.decision or 'none'}`",
                 f"- participants prepared/acked: `{prepared_count}/{len(result.participants)}` prepared, `{acked_count}/{len(result.participants)}` acked",
                 f"- participant reconnect recovery: {reconnect_snapshot}",
@@ -1647,6 +1672,19 @@ def render_catalog_markdown(
             "",
         ]
 
+    theme_lines: list[str] = []
+    if tag_groups:
+        theme_lines = [
+            "## Theme groups",
+            "Browse the bundle by scenario theme when you want only blocking incidents, recovery drills, or participant-side reconnect stories.",
+            "",
+        ]
+        for tag, tag_entries in tag_groups:
+            theme_lines.append(f"### `{tag}`")
+            theme_lines.append(f"- scenarios: `{len(tag_entries)}`")
+            theme_lines.append(f"- includes: {_format_catalog_entry_links(tag_entries)}")
+            theme_lines.append("")
+
     lines = [
         "# Two-phase commit scenario catalog",
         "",
@@ -1659,11 +1697,13 @@ def render_catalog_markdown(
         f"- crash cases: `{crash_count}`",
         f"- coordinator recovery cases: `{recovery_count}`",
         f"- participant reconnect recoveries: `{reconnect_recovery_count}`",
+        f"- scenario tags: `{unique_tag_count}` unique",
         f"- blocked scenarios with actionable peer hints: `{actionable_termination_hint_count}`",
         f"- scenarios with protocol-comparison dashboards: `{comparison_dashboard_count}`",
         f"- scenarios with peer-termination walkthroughs: `{termination_artifact_count}`",
         f"- scenarios with peer-termination timeline visuals: `{termination_timeline_count}`",
         "",
+        *theme_lines,
         "## Scenario comparison",
         *comparison_lines,
         "",
@@ -1678,6 +1718,57 @@ def render_catalog_markdown(
         *snapshot_lines,
     ]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _group_entries_by_tag(entries: list[CatalogEntry]) -> list[tuple[str, list[CatalogEntry]]]:
+    grouped: dict[str, list[CatalogEntry]] = {}
+    for entry in entries:
+        for tag in entry.result.tags:
+            grouped.setdefault(tag, []).append(entry)
+    curated_groups = [
+        (tag, tag_entries)
+        for tag, tag_entries in grouped.items()
+        if len(tag_entries) > 1 or tag in CATALOG_HIGHLIGHT_TAGS
+    ]
+    return sorted(curated_groups, key=lambda item: (-len(item[1]), item[0]))
+
+
+def _format_tag_list(tags: list[str]) -> str:
+    if not tags:
+        return "`untagged`"
+    return ", ".join(f"`{tag}`" for tag in tags)
+
+
+def _format_catalog_entry_links(entries: list[CatalogEntry]) -> str:
+    labels: list[str] = []
+    for entry in entries:
+        if entry.report_path:
+            labels.append(f"[{entry.result.title}]({entry.report_path})")
+        else:
+            labels.append(entry.result.title)
+    return "; ".join(labels)
+
+
+def _normalize_scenario_tags(raw_tags: Any) -> list[str]:
+    if raw_tags is None:
+        return []
+    if not isinstance(raw_tags, list):
+        raise ScenarioError("tags must be a list of strings when provided")
+
+    tags: list[str] = []
+    seen: set[str] = set()
+    for index, raw_tag in enumerate(raw_tags, start=1):
+        if not isinstance(raw_tag, str) or not raw_tag.strip():
+            raise ScenarioError(f"tag #{index} must be a non-empty string")
+        normalized = re.sub(r"[^a-z0-9-]", "", raw_tag.strip().lower().replace("_", "-").replace(" ", "-"))
+        normalized = re.sub(r"-+", "-", normalized).strip("-")
+        if not normalized:
+            raise ScenarioError(f"tag #{index} must contain letters or digits")
+        if normalized in seen:
+            raise ScenarioError(f"duplicate scenario tag: {normalized}")
+        seen.add(normalized)
+        tags.append(normalized)
+    return tags
 
 
 def render_incident_response_html(
@@ -2442,6 +2533,7 @@ def _build_result(
         title=scenario.title,
         description=scenario.description,
         transaction_id=scenario.transaction_id,
+        tags=list(scenario.tags),
         outcome=outcome,
         decision=decision,
         decision_durable=decision_durable,
@@ -2605,6 +2697,7 @@ def _build_scenario_snapshot(
     ]
     return {
         "participant_count": len(scenario.participants),
+        "tags": list(scenario.tags),
         "commit_voters": len(commit_names),
         "commit_participants": commit_names,
         "abort_voters": len(abort_names),

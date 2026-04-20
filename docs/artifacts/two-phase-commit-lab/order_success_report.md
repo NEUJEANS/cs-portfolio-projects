@@ -4,6 +4,7 @@ Inventory, billing, and shipping all vote YES, so the coordinator records a dura
 
 ## Outcome
 - transaction id: `order-1042`
+- scenario tags: `happy-path`, `commit`, `baseline`
 - final outcome: `commit`
 - durable decision recorded: `yes`
 - coordinator crash point: `none`

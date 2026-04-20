@@ -12,7 +12,8 @@
 - [x] Cross-link the scenario catalog to committed comparison dashboards and peer-termination walkthrough artifacts when those companions exist
 - [x] Add a compact incident-response landing page that groups blocked scenarios by recovery, peer-visible COMMIT, and safe-ABORT evidence
 - [x] Add standalone SVG/HTML timeline exports for blocked peer-termination walkthroughs and surface those visuals in the catalog/dashboard artifacts
+- [x] Add reusable scenario tags plus catalog theme-group sections so the sample bundle is easier to browse by blocking/recovery/reconnect story
 
 ## Next candidate slices
-- [ ] add scenario tags or thematic grouping controls if the sample set grows beyond the current seven cases
+- [ ] add a tag-focused export or CLI filter once the sample set grows beyond the current seven cases
 - [ ] add PNG/social-preview export for the timeline artifacts so they are easy to reuse in README hero images or slide decks

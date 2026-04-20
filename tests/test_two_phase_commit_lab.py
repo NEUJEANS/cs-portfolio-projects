@@ -68,6 +68,29 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         with self.assertRaises(ScenarioError):
             validate_scenario(scenario)
 
+    def test_validate_normalizes_scenario_tags(self) -> None:
+        scenario = validate_scenario(
+            {
+                "title": "tagged",
+                "description": "tags should normalize to kebab-case",
+                "transaction_id": "tx-tags-1",
+                "tags": ["Blocking Case", "peer_assisted_commit"],
+                "participants": [{"name": "inventory", "vote": "commit"}],
+            }
+        )
+        self.assertEqual(scenario.tags, ["blocking-case", "peer-assisted-commit"])
+
+    def test_validate_rejects_duplicate_tags_after_normalization(self) -> None:
+        scenario = {
+            "title": "bad",
+            "description": "duplicate tags should fail even after normalization",
+            "transaction_id": "tx-tags-2",
+            "tags": ["Blocking", "blocking"],
+            "participants": [{"name": "inventory", "vote": "commit"}],
+        }
+        with self.assertRaises(ScenarioError):
+            validate_scenario(scenario)
+
     def test_validate_rejects_reconnect_without_missed_delivery(self) -> None:
         scenario = {
             "title": "bad",
@@ -320,11 +343,15 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("# Two-phase commit scenario catalog", catalog)
             self.assertIn("- outcomes: `3 commit`, `1 abort`, `3 blocked`", catalog)
             self.assertIn("- participant reconnect recoveries: `1`", catalog)
+            self.assertIn("- scenario tags: `14` unique", catalog)
             self.assertIn("- blocked scenarios with actionable peer hints: `2`", catalog)
             self.assertIn("- scenarios with protocol-comparison dashboards: `0`", catalog)
             self.assertIn("- scenarios with peer-termination walkthroughs: `3`", catalog)
             self.assertIn("- scenarios with peer-termination timeline visuals: `3`", catalog)
-            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |", catalog)
+            self.assertIn("## Theme groups", catalog)
+            self.assertIn("### `blocking`", catalog)
+            self.assertIn("### `participant-reconnect`", catalog)
+            self.assertIn("| Scenario | Tags | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |", catalog)
             self.assertIn("[Coordinator crash after one COMMIT delivery](reports/coordinator_crash_partial_commit_delivery_report.md)", catalog)
             self.assertIn("termination hint: COMMIT visible via inventory", catalog)
             self.assertIn("termination hint: ABORT safe via risk", catalog)
@@ -489,6 +516,7 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertEqual(snapshot["acked_decision_count"], 1)
         self.assertEqual(snapshot["acked_decision_participants"], ["inventory"])
         self.assertEqual(snapshot["termination_hint_summary"], "COMMIT visible via inventory")
+        self.assertEqual(snapshot["tags"], ["blocking", "crash", "peer-assisted-commit"])
         self.assertTrue(
             any(
                 "peer-assisted incident-response story rather than pure blind waiting" in entry

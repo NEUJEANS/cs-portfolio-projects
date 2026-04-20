@@ -4,6 +4,7 @@ Every participant votes YES and enters PREPARED, but the coordinator crashes bef
 
 ## Outcome
 - transaction id: `order-2021`
+- scenario tags: `blocking`, `crash`, `all-prepared`
 - final outcome: `blocked`
 - durable decision recorded: `no`
 - coordinator crash point: `before-decision`

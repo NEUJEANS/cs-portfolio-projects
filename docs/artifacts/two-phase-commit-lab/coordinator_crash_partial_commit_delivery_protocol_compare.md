@@ -5,6 +5,7 @@ All participants vote YES and the coordinator durably logs COMMIT. Inventory hea
 ## Scenario snapshot
 - transaction id: `order-5120`
 - participants: `3` total (`3` commit, `0` abort, `0` timeout)
+- scenario tags: `blocking`, `crash`, `peer-assisted-commit`
 - coordinator crash point: `after-decision-log`
 - coordinator recovery simulated: `no`
 - participant-configured missed second-phase deliveries: `0` (none)

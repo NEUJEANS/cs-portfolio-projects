@@ -26,5 +26,10 @@
     "coordinator_crash": "after-decision-log",
     "recover_after_crash": false,
     "decision_deliveries_before_crash": 1
-  }
+  },
+  "tags": [
+    "blocking",
+    "crash",
+    "peer-assisted-commit"
+  ]
 }

@@ -25,5 +25,10 @@
   "failures": {
     "coordinator_crash": "after-decision-log",
     "recover_after_crash": true
-  }
+  },
+  "tags": [
+    "recovery",
+    "crash",
+    "commit-replay"
+  ]
 }

@@ -4,6 +4,11 @@
   "transaction_id": "order-2021",
   "scenario_snapshot": {
     "participant_count": 3,
+    "tags": [
+      "blocking",
+      "crash",
+      "all-prepared"
+    ],
     "commit_voters": 3,
     "commit_participants": [
       "inventory",

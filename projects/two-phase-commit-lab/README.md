@@ -9,7 +9,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - complements the repo's Raft, Chord, CRDT, and routing labs with transactional coordination instead of replication or routing logic
 
 ## Features
-- JSON scenario validation for participant plans, votes, second-phase delivery quirks, coordinator crash/recovery settings, and optional pre-crash decision-delivery counts
+- JSON scenario validation for participant plans, votes, optional thematic tags, second-phase delivery quirks, coordinator crash/recovery settings, and optional pre-crash decision-delivery counts
 - deterministic 2PC simulation with trace output for `PREPARE`, votes, durable decisions, crash points, partial second-phase delivery, missed second-phase deliveries, and participant reconnect recovery
 - blocked-case termination hints that explain what a prepared participant can still ask peers while the coordinator is unavailable
 - peer-to-peer termination-resolution mode that actually plays out what happens when a blocked participant reaches a decisive peer (or proves that everyone is still stuck)
@@ -19,7 +19,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - static HTML comparison dashboards for recruiter screenshots, GitHub Pages browsing, or interview walkthrough links
 - standalone SVG and HTML timeline exports for peer-termination walkthroughs, so blocked incidents have a visual sequence artifact as well as Markdown
 - a compact incident-response HTML dashboard that groups blocked scenarios by recovery-required cases, peer-visible `COMMIT` evidence, and safe-`ABORT` evidence
-- multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, termination hints, and any committed comparison/termination companion artifacts in one place
+- multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, termination hints, thematic tags, and any committed comparison/termination companion artifacts in one place
 - clean CLI commands for validation, single-scenario simulation, protocol comparison, termination walkthroughs, and bundle generation
 
 ## Project structure
@@ -41,6 +41,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
   "title": "Order service happy-path commit",
   "description": "Inventory, billing, and shipping all vote YES.",
   "transaction_id": "order-1042",
+  "tags": ["participant-reconnect", "commit"],
   "participants": [
     {"name": "inventory", "role": "reserve stock", "vote": "commit"},
     {
@@ -58,6 +59,10 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
   }
 }
 ```
+
+### Optional scenario tags
+- use a top-level `tags` array to label scenarios with recruiter-friendly themes such as `blocking`, `recovery`, `peer-assisted-commit`, or `participant-reconnect`
+- tags are normalized to lowercase kebab-case and must be unique within a scenario so the catalog can group related incidents cleanly
 
 ### Supported votes
 - `commit` - participant writes a local prepared record and replies YES
@@ -146,7 +151,7 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   --report-dir docs/artifacts/two-phase-commit-lab
 ```
 
-That bundle command also refreshes `incident_response_dashboard.html`, the peer-termination timeline HTML/SVG artifacts for blocked scenarios, and the scenario catalog links that point to those visual companions.
+That bundle command also refreshes `incident_response_dashboard.html`, the peer-termination timeline HTML/SVG artifacts for blocked scenarios, and the scenario catalog links and theme groups that point to those visual companions.
 
 ## What the committed samples show
 - `order_success.json`
@@ -164,7 +169,7 @@ That bundle command also refreshes `incident_response_dashboard.html`, the peer-
 - `participant_reconnect_commit.json`
   - a prepared participant can still end up temporarily in doubt after missing the first second-phase message, then safely finish by reconnecting to learn the durable decision
 - `scenario_catalog.md`
-  - one landing page compares all committed scenarios and now deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, timeline visuals, and the blocked-case incident dashboard
+  - one landing page compares all committed scenarios, groups them by reusable tags like `blocking` or `participant-reconnect`, and deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, timeline visuals, and the blocked-case incident dashboard
 - `incident_response_dashboard.html`
   - a compact on-call style triage view for only the blocked scenarios, grouped into recovery-required, peer-visible `COMMIT`, and safe-`ABORT` evidence buckets
 - `coordinator_crash_before_decision_protocol_compare.md` / `.html`
@@ -191,5 +196,5 @@ python3 -m unittest tests.test_two_phase_commit_lab -v
 
 ## Future ideas
 - add a side-by-side 2PC vs 3PC comparison mode to explain why non-blocking atomic commit is harder
-- add scenario tags or thematic groupings (happy path, blocking, coordinator recovery, participant reconnect, peer hints, peer-assisted commit, peer-assisted abort) inside the catalog if the sample set grows larger
+- add a tag-focused export or CLI filter when the catalog grows past the current scenario set
 - add PNG/social-preview export for the timeline artifacts so the visuals are easy to drop into README thumbnails or slide decks
