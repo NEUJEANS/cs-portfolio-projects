@@ -1,0 +1,275 @@
+{
+  "worker_limit": 3,
+  "strategy": "critical-first",
+  "makespan": 10,
+  "unlimited_makespan": 7,
+  "theoretical_lower_bound": 7,
+  "total_work": 14,
+  "idle_capacity": 16,
+  "utilization": 0.466667,
+  "resource_capacities": {
+    "browser-lab": 2,
+    "gpu": 1,
+    "signing": 1
+  },
+  "resource_summaries": [
+    {
+      "resource_class": "browser-lab",
+      "capacity": 2,
+      "task_count": 2,
+      "total_reserved_units": 12,
+      "peak_concurrent_usage": 2,
+      "utilization": 0.6,
+      "idle_capacity": 8,
+      "delayed_tasks": 1,
+      "max_queue_delay": 5
+    },
+    {
+      "resource_class": "gpu",
+      "capacity": 1,
+      "task_count": 2,
+      "total_reserved_units": 6,
+      "peak_concurrent_usage": 1,
+      "utilization": 0.6,
+      "idle_capacity": 4,
+      "delayed_tasks": 1,
+      "max_queue_delay": 5
+    },
+    {
+      "resource_class": "signing",
+      "capacity": 1,
+      "task_count": 1,
+      "total_reserved_units": 1,
+      "peak_concurrent_usage": 1,
+      "utilization": 0.1,
+      "idle_capacity": 9,
+      "delayed_tasks": 0,
+      "max_queue_delay": 0
+    }
+  ],
+  "dispatch_order": [
+    "prep",
+    "browser-matrix",
+    "gpu-train",
+    "cross-platform-cert",
+    "sign",
+    "package"
+  ],
+  "assignments": [
+    {
+      "name": "prep",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 1,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "browser-matrix",
+      "worker": 1,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 6,
+      "queue_delay": 0,
+      "duration": 5,
+      "critical": true,
+      "resource_class": "browser-lab",
+      "resource_slot": null,
+      "resource_demands": {
+        "browser-lab": 2
+      },
+      "resource_allocations": {
+        "browser-lab": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "name": "gpu-train",
+      "worker": 2,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 5,
+      "queue_delay": 0,
+      "duration": 4,
+      "critical": false,
+      "resource_class": "gpu",
+      "resource_slot": 1,
+      "resource_demands": {
+        "gpu": 1
+      },
+      "resource_allocations": {
+        "gpu": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "cross-platform-cert",
+      "worker": 1,
+      "ready_at": 1,
+      "start": 6,
+      "finish": 8,
+      "queue_delay": 5,
+      "duration": 2,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {
+        "browser-lab": 1,
+        "gpu": 1
+      },
+      "resource_allocations": {
+        "browser-lab": [
+          1
+        ],
+        "gpu": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "sign",
+      "worker": 1,
+      "ready_at": 8,
+      "start": 8,
+      "finish": 9,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": false,
+      "resource_class": "signing",
+      "resource_slot": 1,
+      "resource_demands": {
+        "signing": 1
+      },
+      "resource_allocations": {
+        "signing": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "package",
+      "worker": 1,
+      "ready_at": 9,
+      "start": 9,
+      "finish": 10,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    }
+  ],
+  "worker_timelines": [
+    [
+      {
+        "name": "prep",
+        "start": 0,
+        "finish": 1,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "browser-matrix",
+        "start": 1,
+        "finish": 6,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "browser-lab",
+        "resource_slot": null,
+        "resource_demands": {
+          "browser-lab": 2
+        },
+        "resource_allocations": {
+          "browser-lab": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "name": "cross-platform-cert",
+        "start": 6,
+        "finish": 8,
+        "queue_delay": 5,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {
+          "browser-lab": 1,
+          "gpu": 1
+        },
+        "resource_allocations": {
+          "browser-lab": [
+            1
+          ],
+          "gpu": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "sign",
+        "start": 8,
+        "finish": 9,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": "signing",
+        "resource_slot": 1,
+        "resource_demands": {
+          "signing": 1
+        },
+        "resource_allocations": {
+          "signing": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "package",
+        "start": 9,
+        "finish": 10,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    [
+      {
+        "name": "gpu-train",
+        "start": 1,
+        "finish": 5,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": "gpu",
+        "resource_slot": 1,
+        "resource_demands": {
+          "gpu": 1
+        },
+        "resource_allocations": {
+          "gpu": [
+            1
+          ]
+        }
+      }
+    ],
+    []
+  ]
+}

@@ -49,6 +49,17 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 {"name": "package", "deps": ["gpu-train", "gpu-eval", "docs"], "duration": 1},
             ]
         }
+        self.multi_resource_graph = {
+            "resource_capacities": {"browser-lab": 2, "gpu": 1, "signing": 1},
+            "tasks": [
+                {"name": "prep", "duration": 1},
+                {"name": "browser-matrix", "deps": ["prep"], "duration": 5, "resources": {"browser-lab": 2}},
+                {"name": "gpu-train", "deps": ["prep"], "duration": 4, "resource_class": "gpu"},
+                {"name": "cross-platform-cert", "deps": ["prep"], "duration": 2, "resources": {"browser-lab": 1, "gpu": 1}},
+                {"name": "sign", "deps": ["cross-platform-cert"], "duration": 1, "resources": {"signing": 1}},
+                {"name": "package", "deps": ["browser-matrix", "gpu-train", "sign"], "duration": 1},
+            ]
+        }
 
     def test_build_plan_returns_deterministic_topological_order(self) -> None:
         plan = build_plan(parse_tasks(self.graph))
@@ -120,9 +131,37 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertEqual(summary.resource_class, "gpu")
         self.assertEqual(summary.capacity, 1)
         self.assertEqual(summary.task_count, 2)
-        self.assertEqual(summary.total_work, 6)
+        self.assertEqual(summary.total_reserved_units, 6)
         self.assertEqual(summary.delayed_tasks, 1)
         self.assertEqual(summary.max_queue_delay, 4)
+
+    def test_worker_limited_schedule_supports_multi_resource_demands(self) -> None:
+        tasks = parse_tasks(self.multi_resource_graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(
+            tasks,
+            plan,
+            worker_limit=3,
+            resource_capacities={"browser-lab": 2, "gpu": 1, "signing": 1},
+        )
+
+        self.assertEqual(schedule.unlimited_makespan, 7)
+        self.assertEqual(schedule.makespan, 10)
+        self.assertEqual(
+            schedule.dispatch_order,
+            ["prep", "browser-matrix", "gpu-train", "cross-platform-cert", "sign", "package"],
+        )
+        cert = next(item for item in schedule.assignments if item.name == "cross-platform-cert")
+        self.assertEqual(cert.ready_at, 1)
+        self.assertEqual(cert.start, 6)
+        self.assertEqual(cert.queue_delay, 5)
+        self.assertEqual(cert.resource_demands, {"browser-lab": 1, "gpu": 1})
+        self.assertEqual(cert.resource_allocations, {"browser-lab": (1,), "gpu": (1,)})
+        browser_summary = next(item for item in schedule.resource_summaries if item.resource_class == "browser-lab")
+        self.assertEqual(browser_summary.total_reserved_units, 12)
+        self.assertEqual(browser_summary.peak_concurrent_usage, 2)
+        self.assertEqual(browser_summary.delayed_tasks, 1)
+        self.assertEqual(browser_summary.max_queue_delay, 5)
 
     def test_render_dependency_mermaid_groups_layers_and_marks_critical_path(self) -> None:
         tasks = parse_tasks(self.graph)
@@ -238,11 +277,11 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         )
         self.assertIn('- renewable resource caps active for the constrained run: `gpu=1`', report)
         self.assertIn('### Resource-class utilization', report)
-        self.assertIn('| gpu | 1 | 2 | 6 | 75.0% | 2 | 1 | 4 |', report)
+        self.assertIn('| gpu | 1 | 2 | 6 | 1 | 75.0% | 2 | 1 | 4 |', report)
         self.assertIn('- Worker 1 (`0 → 8`): prep (0→1), gpu-train (1→5) [gpu#1], gpu-eval (5→7) [gpu#1], package (7→8)', report)
-        self.assertIn('| gpu-eval | 1 | gpu | 1 | 1 | 5 | 7 | 4 | no |', report)
+        self.assertIn('| gpu-eval | 1 | gpu | gpu#1 | 1 | 5 | 7 | 4 | no |', report)
         self.assertIn('| gpu-train | 1 | prep | 4 | gpu | 1 | 5 | 1 | 5 | 0 | yes | — |', report)
-        self.assertIn('- Resource class: `gpu`', report)
+        self.assertIn('- Resources: `gpu`', report)
 
     def test_unknown_dependency_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "unknown dependencies"):
@@ -316,6 +355,30 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             if item["resource_class"] == "gpu"
         )
         self.assertEqual(gpu_slots, [1, 2])
+
+
+    def test_run_command_schedule_json_supports_multi_resource_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "multi_resource_graph.json"
+            graph_path.write_text(json.dumps(self.multi_resource_graph), encoding="utf-8")
+            default_payload = json.loads(run_command("schedule", str(graph_path), as_json=True, worker_limit=3))
+            overridden_payload = json.loads(
+                run_command(
+                    "schedule",
+                    str(graph_path),
+                    as_json=True,
+                    worker_limit=3,
+                    resource_capacity_overrides=["browser-lab=3"],
+                )
+            )
+        self.assertEqual(default_payload["makespan"], 10)
+        self.assertEqual(overridden_payload["makespan"], 9)
+        cert_default = next(item for item in default_payload["assignments"] if item["name"] == "cross-platform-cert")
+        cert_override = next(item for item in overridden_payload["assignments"] if item["name"] == "cross-platform-cert")
+        self.assertEqual(cert_default["resource_demands"], {"browser-lab": 1, "gpu": 1})
+        self.assertEqual(cert_default["resource_allocations"], {"browser-lab": [1], "gpu": [1]})
+        self.assertEqual(cert_override["start"], 5)
+        self.assertEqual(cert_override["resource_allocations"], {"browser-lab": [3], "gpu": [1]})
 
     def test_run_command_report_json_writes_report_and_companion_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -619,7 +682,7 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 text=True,
             )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("resource_capacities were provided but no task declares a resource_class", result.stderr)
+        self.assertIn("resource_capacities were provided but no task declares any resources", result.stderr)
 
     def test_cli_validate_fails_for_invalid_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

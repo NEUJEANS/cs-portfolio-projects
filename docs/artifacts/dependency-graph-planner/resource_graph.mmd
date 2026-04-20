@@ -7,8 +7,8 @@ flowchart LR
   end
   subgraph layer_1["layer 1"]
     task_1["docs<br/>d=3, slack=1"]
-    task_2["gpu-eval<br/>d=2, slack=2<br/>resource=gpu"]
-    task_3["gpu-train<br/>d=4, slack=0<br/>resource=gpu"]
+    task_2["gpu-eval<br/>d=2, slack=2<br/>resources=gpu"]
+    task_3["gpu-train<br/>d=4, slack=0<br/>resources=gpu"]
   end
   subgraph layer_2["layer 2"]
     task_4["package<br/>d=1, slack=0"]

@@ -7,7 +7,7 @@ import argparse
 import heapq
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -36,6 +36,7 @@ class Task:
     duration: int = 1
     command: str | None = None
     resource_class: str | None = None
+    resource_demands: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,8 @@ class ScheduledTask:
     critical: bool
     resource_class: str | None = None
     resource_slot: int | None = None
+    resource_demands: dict[str, int] = field(default_factory=dict)
+    resource_allocations: dict[str, tuple[int, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -78,7 +81,8 @@ class ResourceClassSummary:
     resource_class: str
     capacity: int
     task_count: int
-    total_work: int
+    total_reserved_units: int
+    peak_concurrent_usage: int
     utilization: float
     idle_capacity: int
     delayed_tasks: int
@@ -109,6 +113,47 @@ def load_manifest(path: str | Path) -> dict:
     return data
 
 
+def _parse_task_resource_demands(entry: dict[str, Any], name: str) -> tuple[str | None, dict[str, int]]:
+    resource_class = entry.get("resource_class")
+    if resource_class is not None:
+        if not isinstance(resource_class, str) or not resource_class.strip():
+            raise GraphValidationError(f"task {name!r} has an invalid resource_class")
+        resource_class = resource_class.strip()
+
+    raw_resources = entry.get("resources", {})
+    if raw_resources in (None, {}):
+        resource_demands: dict[str, int] = {}
+    else:
+        if not isinstance(raw_resources, dict):
+            raise GraphValidationError(f"task {name!r} has invalid resources")
+        resource_demands = {}
+        for raw_label, raw_amount in raw_resources.items():
+            if not isinstance(raw_label, str) or not raw_label.strip():
+                raise GraphValidationError(f"task {name!r} has invalid resources")
+            if not isinstance(raw_amount, int) or raw_amount <= 0:
+                raise GraphValidationError(f"task {name!r} has invalid resources")
+            label = raw_label.strip()
+            if label in resource_demands:
+                raise GraphValidationError(f"task {name!r} repeats resource {label!r}")
+            resource_demands[label] = raw_amount
+        resource_demands = dict(sorted(resource_demands.items()))
+
+    if resource_class is not None:
+        if resource_class in resource_demands:
+            raise GraphValidationError(
+                f"task {name!r} repeats resource_class {resource_class!r} inside resources"
+            )
+        resource_demands = dict(resource_demands)
+        resource_demands[resource_class] = 1
+        resource_demands = dict(sorted(resource_demands.items()))
+
+    normalized_resource_class = resource_class
+    if normalized_resource_class is None and len(resource_demands) == 1:
+        normalized_resource_class = next(iter(resource_demands))
+
+    return normalized_resource_class, resource_demands
+
+
 def parse_tasks(data: dict) -> dict[str, Task]:
     raw_tasks = data.get("tasks")
     if not isinstance(raw_tasks, list) or not raw_tasks:
@@ -130,11 +175,7 @@ def parse_tasks(data: dict) -> dict[str, Task]:
         command = entry.get("command")
         if command is not None and not isinstance(command, str):
             raise GraphValidationError(f"task {name!r} has a non-string command")
-        resource_class = entry.get("resource_class")
-        if resource_class is not None:
-            if not isinstance(resource_class, str) or not resource_class.strip():
-                raise GraphValidationError(f"task {name!r} has an invalid resource_class")
-            resource_class = resource_class.strip()
+        resource_class, resource_demands = _parse_task_resource_demands(entry, name)
         if name in tasks:
             raise GraphValidationError(f"duplicate task name: {name}")
         deduped_deps = tuple(dict.fromkeys(dep.strip() for dep in deps))
@@ -144,6 +185,7 @@ def parse_tasks(data: dict) -> dict[str, Task]:
             duration=duration,
             command=command,
             resource_class=resource_class,
+            resource_demands=resource_demands,
         )
 
     unknown = sorted({dep for task in tasks.values() for dep in task.deps if dep not in tasks})
@@ -170,13 +212,13 @@ def parse_resource_capacities(data: dict) -> dict[str, int]:
 
 
 def _task_resource_classes(tasks: dict[str, Task]) -> list[str]:
-    return sorted({task.resource_class for task in tasks.values() if task.resource_class})
+    return sorted({resource_class for task in tasks.values() for resource_class in task.resource_demands})
 
 
 def validate_manifest_resource_capacities(tasks: dict[str, Task], resource_capacities: dict[str, int]) -> None:
     declared_classes = set(_task_resource_classes(tasks))
     if not declared_classes and resource_capacities:
-        raise GraphValidationError("resource_capacities were provided but no task declares a resource_class")
+        raise GraphValidationError("resource_capacities were provided but no task declares any resources")
     unknown = sorted(set(resource_capacities) - declared_classes)
     if unknown:
         raise GraphValidationError(
@@ -213,7 +255,7 @@ def resolve_resource_capacities(
 
     if not required_classes:
         if combined:
-            raise ValueError("resource capacities were provided but no task declares a resource_class")
+            raise ValueError("resource capacities were provided but no task declares any resources")
         return {}
 
     unknown = sorted(set(combined) - required_classes)
@@ -442,7 +484,7 @@ def build_worker_limited_schedule(
         if unknown:
             raise ValueError(f"resource capacities reference unknown resource classes: {', '.join(unknown)}")
     elif resolved_resource_capacities:
-        raise ValueError("resource capacities were provided but no task declares a resource_class")
+        raise ValueError("resource capacities were provided but no task declares any resources")
 
     timings_by_name = {timing.name: timing for timing in plan.timings}
     order_index = {name: index for index, name in enumerate(plan.order)}
@@ -479,16 +521,23 @@ def build_worker_limited_schedule(
     for slots in available_resource_slots.values():
         heapq.heapify(slots)
 
-    running: list[tuple[int, int, int, str, str | None, int | None]] = []
+    running: list[tuple[int, int, int, str, dict[str, tuple[int, ...]]]] = []
     assignments: list[ScheduledTask] = []
     dispatch_order: list[str] = []
     current_time = 0
 
     def task_can_start(name: str) -> bool:
-        resource_class = tasks[name].resource_class
-        if resource_class is None:
-            return True
-        return bool(available_resource_slots[resource_class])
+        return all(
+            len(available_resource_slots[resource_class]) >= demand
+            for resource_class, demand in tasks[name].resource_demands.items()
+        )
+
+    def allocate_resources(name: str) -> dict[str, tuple[int, ...]]:
+        allocations: dict[str, tuple[int, ...]] = {}
+        for resource_class, demand in tasks[name].resource_demands.items():
+            slots = tuple(heapq.heappop(available_resource_slots[resource_class]) for _ in range(demand))
+            allocations[resource_class] = slots
+        return allocations
 
     while ready_queue or running:
         while ready_queue and available_workers:
@@ -506,10 +555,13 @@ def build_worker_limited_schedule(
                 break
 
             worker = heapq.heappop(available_workers)
-            resource_class = tasks[selected_name].resource_class
-            resource_slot = (
-                heapq.heappop(available_resource_slots[resource_class]) if resource_class is not None else None
-            )
+            resource_allocations = allocate_resources(selected_name)
+            legacy_resource_class = None
+            legacy_resource_slot = None
+            if len(resource_allocations) == 1:
+                legacy_resource_class, slots = next(iter(resource_allocations.items()))
+                if len(slots) == 1:
+                    legacy_resource_slot = slots[0]
             start = current_time
             finish = start + tasks[selected_name].duration
             ready_time = ready_at.get(selected_name, current_time)
@@ -523,12 +575,14 @@ def build_worker_limited_schedule(
                     queue_delay=start - ready_time,
                     duration=tasks[selected_name].duration,
                     critical=timings_by_name[selected_name].critical,
-                    resource_class=resource_class,
-                    resource_slot=resource_slot,
+                    resource_class=legacy_resource_class,
+                    resource_slot=legacy_resource_slot,
+                    resource_demands=dict(tasks[selected_name].resource_demands),
+                    resource_allocations=resource_allocations,
                 )
             )
             dispatch_order.append(selected_name)
-            heapq.heappush(running, (finish, worker, order_index[selected_name], selected_name, resource_class, resource_slot))
+            heapq.heappush(running, (finish, worker, order_index[selected_name], selected_name, resource_allocations))
 
         if not running:
             if ready_queue:
@@ -540,16 +594,17 @@ def build_worker_limited_schedule(
             break
 
         current_time = running[0][0]
-        completed: list[tuple[str, str | None, int | None]] = []
+        completed: list[tuple[str, dict[str, tuple[int, ...]]]] = []
         while running and running[0][0] == current_time:
-            _, worker, _, name, resource_class, resource_slot = heapq.heappop(running)
+            _, worker, _, name, resource_allocations = heapq.heappop(running)
             finish_times[name] = current_time
             heapq.heappush(available_workers, worker)
-            if resource_class is not None and resource_slot is not None:
-                heapq.heappush(available_resource_slots[resource_class], resource_slot)
-            completed.append((name, resource_class, resource_slot))
+            for resource_class, slots in resource_allocations.items():
+                for slot in slots:
+                    heapq.heappush(available_resource_slots[resource_class], slot)
+            completed.append((name, resource_allocations))
 
-        for finished_name, _, _ in sorted(completed, key=lambda item: order_index[item[0]]):
+        for finished_name, _ in sorted(completed, key=lambda item: order_index[item[0]]):
             for dependent in dependents[finished_name]:
                 remaining_deps[dependent] -= 1
                 if remaining_deps[dependent] == 0:
@@ -571,17 +626,30 @@ def build_worker_limited_schedule(
     resource_summaries: list[ResourceClassSummary] = []
     if resolved_resource_capacities:
         for resource_class, capacity in resolved_resource_capacities.items():
-            class_assignments = [item for item in assignments if item.resource_class == resource_class]
-            class_total_work = sum(item.duration for item in class_assignments)
-            class_idle_capacity = max(0, makespan * capacity - class_total_work)
-            class_utilization = 0.0 if makespan == 0 else class_total_work / (makespan * capacity)
+            class_assignments = [item for item in assignments if resource_class in item.resource_allocations]
+            total_reserved_units = sum(
+                item.duration * len(item.resource_allocations[resource_class]) for item in class_assignments
+            )
+            class_idle_capacity = max(0, makespan * capacity - total_reserved_units)
+            class_utilization = 0.0 if makespan == 0 else total_reserved_units / (makespan * capacity)
             delayed = [item for item in class_assignments if item.queue_delay > 0]
+            events: list[tuple[int, int]] = []
+            for item in class_assignments:
+                amount = len(item.resource_allocations[resource_class])
+                events.append((item.start, amount))
+                events.append((item.finish, -amount))
+            usage = 0
+            peak_concurrent_usage = 0
+            for _, delta in sorted(events, key=lambda item: (item[0], 0 if item[1] < 0 else 1, item[1])):
+                usage += delta
+                peak_concurrent_usage = max(peak_concurrent_usage, usage)
             resource_summaries.append(
                 ResourceClassSummary(
                     resource_class=resource_class,
                     capacity=capacity,
                     task_count=len(class_assignments),
-                    total_work=class_total_work,
+                    total_reserved_units=total_reserved_units,
+                    peak_concurrent_usage=peak_concurrent_usage,
                     utilization=class_utilization,
                     idle_capacity=class_idle_capacity,
                     delayed_tasks=len(delayed),
@@ -644,7 +712,8 @@ def schedule_to_dict(schedule: WorkerLimitedSchedule) -> dict:
                 "resource_class": item.resource_class,
                 "capacity": item.capacity,
                 "task_count": item.task_count,
-                "total_work": item.total_work,
+                "total_reserved_units": item.total_reserved_units,
+                "peak_concurrent_usage": item.peak_concurrent_usage,
                 "utilization": round(item.utilization, 6),
                 "idle_capacity": item.idle_capacity,
                 "delayed_tasks": item.delayed_tasks,
@@ -665,6 +734,11 @@ def schedule_to_dict(schedule: WorkerLimitedSchedule) -> dict:
                 "critical": item.critical,
                 "resource_class": item.resource_class,
                 "resource_slot": item.resource_slot,
+                "resource_demands": item.resource_demands,
+                "resource_allocations": {
+                    resource_class: list(slots)
+                    for resource_class, slots in item.resource_allocations.items()
+                },
             }
             for item in schedule.assignments
         ],
@@ -678,6 +752,11 @@ def schedule_to_dict(schedule: WorkerLimitedSchedule) -> dict:
                     "critical": item.critical,
                     "resource_class": item.resource_class,
                     "resource_slot": item.resource_slot,
+                    "resource_demands": item.resource_demands,
+                    "resource_allocations": {
+                        resource_class: list(slots)
+                        for resource_class, slots in item.resource_allocations.items()
+                    },
                 }
                 for item in timeline
             ]
@@ -686,12 +765,30 @@ def schedule_to_dict(schedule: WorkerLimitedSchedule) -> dict:
     }
 
 
+def _format_resource_demands(resource_demands: dict[str, int], *, empty: str = "") -> str:
+    if not resource_demands:
+        return empty
+    rendered: list[str] = []
+    for resource_class, demand in resource_demands.items():
+        rendered.append(resource_class if demand == 1 else f"{resource_class}×{demand}")
+    return ", ".join(rendered)
+
+
+def _format_resource_allocations(resource_allocations: dict[str, tuple[int, ...]], *, empty: str = "") -> str:
+    if not resource_allocations:
+        return empty
+    rendered: list[str] = []
+    for resource_class, slots in resource_allocations.items():
+        if len(slots) == 1:
+            rendered.append(f"{resource_class}#{slots[0]}")
+        else:
+            rendered.append(f"{resource_class}#{{{','.join(str(slot) for slot in slots)}}}")
+    return " + ".join(rendered)
+
+
 def _format_assignment_resource(item: ScheduledTask) -> str:
-    if item.resource_class is None:
-        return ""
-    if item.resource_slot is None:
-        return f" [{item.resource_class}]"
-    return f" [{item.resource_class}#{item.resource_slot}]"
+    rendered = _format_resource_allocations(item.resource_allocations)
+    return f" [{rendered}]" if rendered else ""
 
 
 def _render_text_plan(plan: PlanResult) -> str:
@@ -743,6 +840,7 @@ def _render_text_schedule(schedule: WorkerLimitedSchedule) -> str:
         for item in schedule.resource_summaries:
             lines.append(
                 f"- {item.resource_class}: capacity={item.capacity}, tasks={item.task_count}, "
+                f"reserved={item.total_reserved_units}, peak={item.peak_concurrent_usage}, "
                 f"utilization={item.utilization * 100:.1f}%, idle={item.idle_capacity}, "
                 f"delayed={item.delayed_tasks}, max_queue_delay={item.max_queue_delay}"
             )
@@ -751,13 +849,8 @@ def _render_text_schedule(schedule: WorkerLimitedSchedule) -> str:
     if delayed:
         lines.append("queue delays:")
         for item in delayed:
-            resource_suffix = (
-                f", resource={item.resource_class}#{item.resource_slot}"
-                if item.resource_class is not None and item.resource_slot is not None
-                else ""
-            )
             lines.append(
-                f"- {item.name}: ready={item.ready_at}, start={item.start}, delay={item.queue_delay}, worker={item.worker}{resource_suffix}"
+                f"- {item.name}: ready={item.ready_at}, start={item.start}, delay={item.queue_delay}, worker={item.worker}, resources={_format_resource_allocations(item.resource_allocations, empty='—')}"
             )
     return "\n".join(lines)
 
@@ -773,8 +866,9 @@ def _escape_mermaid(value: str) -> str:
 
 def _diagram_label(task: Task, timing: TaskTiming) -> str:
     lines = [timing.name, f"d={timing.duration}, slack={timing.slack}"]
-    if task.resource_class:
-        lines.append(f"resource={task.resource_class}")
+    rendered_resources = _format_resource_demands(task.resource_demands)
+    if rendered_resources:
+        lines.append(f"resources={rendered_resources}")
     return "\n".join(lines)
 
 
@@ -1122,11 +1216,8 @@ def render_report_markdown(
             ]
         )
         if most_delayed:
-            resource_suffix = (
-                f" on {_markdown_code(f'{most_delayed.resource_class}#{most_delayed.resource_slot}') }"
-                if most_delayed.resource_class is not None and most_delayed.resource_slot is not None
-                else ""
-            )
+            rendered_delay_resources = _format_resource_allocations(most_delayed.resource_allocations)
+            resource_suffix = f" on {_markdown_code(rendered_delay_resources)}" if rendered_delay_resources else ""
             lines.append(
                 f"- biggest queue delay: {_markdown_code(most_delayed.name)} waited {_markdown_code(most_delayed.queue_delay)} time unit(s) after becoming ready{resource_suffix}"
             )
@@ -1269,8 +1360,8 @@ def render_report_markdown(
                     "",
                     "### Resource-class utilization",
                     "",
-                    "| Resource class | Capacity | Tasks | Total work | Utilization | Idle capacity | Delayed tasks | Max queue delay |",
-                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                    "| Resource class | Capacity | Tasks | Reserved units | Peak concurrent usage | Utilization | Idle capacity | Delayed tasks | Max queue delay |",
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
                 ]
             )
             for item in worker_limited_schedule.resource_summaries:
@@ -1281,7 +1372,8 @@ def render_report_markdown(
                             _escape_markdown_table_cell(item.resource_class),
                             str(item.capacity),
                             str(item.task_count),
-                            str(item.total_work),
+                            str(item.total_reserved_units),
+                            str(item.peak_concurrent_usage),
                             f"{item.utilization * 100:.1f}%",
                             str(item.idle_capacity),
                             str(item.delayed_tasks),
@@ -1296,8 +1388,8 @@ def render_report_markdown(
                 "",
                 "### Worker-limited task table",
                 "",
-                "| Task | Worker | Resource class | Resource slot | Ready at | Start | Finish | Queue delay | Critical |",
-                "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+                "| Task | Worker | Resource demands | Resource allocations | Ready at | Start | Finish | Queue delay | Critical |",
+                "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | --- |",
             ]
         )
         for item in worker_limited_schedule.assignments:
@@ -1307,8 +1399,8 @@ def render_report_markdown(
                     [
                         _escape_markdown_table_cell(item.name),
                         str(item.worker),
-                        _escape_markdown_table_cell(item.resource_class or "—"),
-                        str(item.resource_slot) if item.resource_slot is not None else "—",
+                        _escape_markdown_table_cell(_format_resource_demands(item.resource_demands, empty="—")),
+                        _escape_markdown_table_cell(_format_resource_allocations(item.resource_allocations, empty="—")),
                         str(item.ready_at),
                         str(item.start),
                         str(item.finish),
@@ -1324,7 +1416,7 @@ def render_report_markdown(
             "",
             "## Task timing table",
             "",
-            "| Task | Layer | Depends on | Duration | Resource class | ES | EF | LS | LF | Slack | Critical | Command |",
+            "| Task | Layer | Depends on | Duration | Resources | ES | EF | LS | LF | Slack | Critical | Command |",
             "| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
         ]
     )
@@ -1341,7 +1433,7 @@ def render_report_markdown(
                     str(layer_by_name[name]),
                     _escape_markdown_table_cell(deps),
                     str(task.duration),
-                    _escape_markdown_table_cell(task.resource_class or "—"),
+                    _escape_markdown_table_cell(_format_resource_demands(task.resource_demands, empty="—")),
                     str(timing.earliest_start),
                     str(timing.earliest_finish),
                     str(timing.latest_start),
@@ -1366,7 +1458,7 @@ def render_report_markdown(
                 f"   - Dependencies: {deps}",
                 f"   - Window: {_markdown_code(f'{timing.earliest_start} → {timing.earliest_finish}')}",
                 f"   - Slack: {_markdown_code(timing.slack)}",
-                f"   - Resource class: {_markdown_code(task.resource_class) if task.resource_class else _markdown_code('generic worker')}",
+                f"   - Resources: {_markdown_code(_format_resource_demands(task.resource_demands, empty='generic worker'))}",
                 f"   - Command: {command}",
             ]
         )

@@ -27,7 +27,7 @@
 
 ## Task timing table
 
-| Task | Layer | Depends on | Duration | Resource class | ES | EF | LS | LF | Slack | Critical | Command |
+| Task | Layer | Depends on | Duration | Resources | ES | EF | LS | LF | Slack | Critical | Command |
 | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | lint | 0 | — | 1 | — | 0 | 1 | 0 | 1 | 0 | yes | ruff check . |
 | compile | 1 | lint | 4 | — | 1 | 5 | 1 | 5 | 0 | yes | python -m build |
@@ -41,29 +41,29 @@
    - Dependencies: `ready at start`
    - Window: `0 → 1`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `ruff check .`
 2. `compile`
    - Dependencies: `lint`
    - Window: `1 → 5`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `python -m build`
 3. `package`
    - Dependencies: `compile`
    - Window: `5 → 6`
    - Slack: `1`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `python -m zipapp`
 4. `unit`
    - Dependencies: `compile`
    - Window: `5 → 7`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `pytest`
 5. `publish`
    - Dependencies: `unit`, `package`
    - Window: `7 → 8`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `twine upload dist/*`

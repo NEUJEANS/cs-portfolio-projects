@@ -57,23 +57,23 @@
 
 ### Resource-class utilization
 
-| Resource class | Capacity | Tasks | Total work | Utilization | Idle capacity | Delayed tasks | Max queue delay |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| gpu | 1 | 2 | 6 | 75.0% | 2 | 1 | 4 |
+| Resource class | Capacity | Tasks | Reserved units | Peak concurrent usage | Utilization | Idle capacity | Delayed tasks | Max queue delay |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gpu | 1 | 2 | 6 | 1 | 75.0% | 2 | 1 | 4 |
 
 ### Worker-limited task table
 
-| Task | Worker | Resource class | Resource slot | Ready at | Start | Finish | Queue delay | Critical |
-| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Task | Worker | Resource demands | Resource allocations | Ready at | Start | Finish | Queue delay | Critical |
+| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | --- |
 | prep | 1 | — | — | 0 | 0 | 1 | 0 | yes |
-| gpu-train | 1 | gpu | 1 | 1 | 1 | 5 | 0 | yes |
+| gpu-train | 1 | gpu | gpu#1 | 1 | 1 | 5 | 0 | yes |
 | docs | 2 | — | — | 1 | 1 | 4 | 0 | no |
-| gpu-eval | 1 | gpu | 1 | 1 | 5 | 7 | 4 | no |
+| gpu-eval | 1 | gpu | gpu#1 | 1 | 5 | 7 | 4 | no |
 | package | 1 | — | — | 7 | 7 | 8 | 0 | yes |
 
 ## Task timing table
 
-| Task | Layer | Depends on | Duration | Resource class | ES | EF | LS | LF | Slack | Critical | Command |
+| Task | Layer | Depends on | Duration | Resources | ES | EF | LS | LF | Slack | Critical | Command |
 | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | prep | 0 | — | 1 | — | 0 | 1 | 0 | 1 | 0 | yes | python scripts/prepare_dataset.py |
 | docs | 1 | prep | 3 | — | 1 | 4 | 2 | 5 | 1 | no | mkdocs build |
@@ -87,29 +87,29 @@
    - Dependencies: `ready at start`
    - Window: `0 → 1`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `python scripts/prepare_dataset.py`
 2. `docs`
    - Dependencies: `prep`
    - Window: `1 → 4`
    - Slack: `1`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `mkdocs build`
 3. `gpu-eval`
    - Dependencies: `prep`
    - Window: `1 → 3`
    - Slack: `2`
-   - Resource class: `gpu`
+   - Resources: `gpu`
    - Command: `python eval.py --checkpoint best.pt`
 4. `gpu-train`
    - Dependencies: `prep`
    - Window: `1 → 5`
    - Slack: `0`
-   - Resource class: `gpu`
+   - Resources: `gpu`
    - Command: `python train.py --epochs 5`
 5. `package`
    - Dependencies: `gpu-train`, `gpu-eval`, `docs`
    - Window: `5 → 6`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `python -m build`

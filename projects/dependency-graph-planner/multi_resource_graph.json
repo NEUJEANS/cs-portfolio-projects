@@ -1,0 +1,55 @@
+{
+  "resource_capacities": {
+    "browser-lab": 2,
+    "gpu": 1,
+    "signing": 1
+  },
+  "tasks": [
+    {
+      "name": "prep",
+      "duration": 1,
+      "command": "python tools/prepare_release.py"
+    },
+    {
+      "name": "browser-matrix",
+      "deps": ["prep"],
+      "duration": 5,
+      "resources": {
+        "browser-lab": 2
+      },
+      "command": "python tools/run_browser_matrix.py --workers 2"
+    },
+    {
+      "name": "gpu-train",
+      "deps": ["prep"],
+      "duration": 4,
+      "resource_class": "gpu",
+      "command": "python tools/train_model.py"
+    },
+    {
+      "name": "cross-platform-cert",
+      "deps": ["prep"],
+      "duration": 2,
+      "resources": {
+        "browser-lab": 1,
+        "gpu": 1
+      },
+      "command": "python tools/certify_release.py"
+    },
+    {
+      "name": "sign",
+      "deps": ["cross-platform-cert"],
+      "duration": 1,
+      "resources": {
+        "signing": 1
+      },
+      "command": "python tools/sign_release.py"
+    },
+    {
+      "name": "package",
+      "deps": ["browser-matrix", "gpu-train", "sign"],
+      "duration": 1,
+      "command": "python tools/package_release.py"
+    }
+  ]
+}

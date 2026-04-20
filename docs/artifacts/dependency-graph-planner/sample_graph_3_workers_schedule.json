@@ -27,7 +27,9 @@
       "duration": 1,
       "critical": true,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     },
     {
       "name": "compile",
@@ -39,7 +41,9 @@
       "duration": 4,
       "critical": true,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     },
     {
       "name": "unit",
@@ -51,7 +55,9 @@
       "duration": 2,
       "critical": true,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     },
     {
       "name": "package",
@@ -63,7 +69,9 @@
       "duration": 1,
       "critical": false,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     },
     {
       "name": "publish",
@@ -75,7 +83,9 @@
       "duration": 1,
       "critical": true,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     }
   ],
   "worker_timelines": [
@@ -87,7 +97,9 @@
         "queue_delay": 0,
         "critical": true,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       },
       {
         "name": "compile",
@@ -96,7 +108,9 @@
         "queue_delay": 0,
         "critical": true,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       },
       {
         "name": "unit",
@@ -105,7 +119,9 @@
         "queue_delay": 0,
         "critical": true,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       },
       {
         "name": "publish",
@@ -114,7 +130,9 @@
         "queue_delay": 0,
         "critical": true,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       }
     ],
     [
@@ -125,7 +143,9 @@
         "queue_delay": 0,
         "critical": false,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       }
     ],
     []

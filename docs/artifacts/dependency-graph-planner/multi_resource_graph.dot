@@ -1,0 +1,32 @@
+digraph DependencyGraph {
+  rankdir=LR;
+  label="Dependency graph (makespan=7)";
+  labelloc=t;
+  node [shape=box, style="rounded", fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  subgraph layer_0 {
+    rank=same;
+    "prep" [label="prep\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_1 {
+    rank=same;
+    "browser-matrix" [label="browser-matrix\nd=5, slack=0\nresources=browser-lab×2", color="firebrick", penwidth=2, peripheries=2];
+    "cross-platform-cert" [label="cross-platform-cert\nd=2, slack=2\nresources=browser-lab, gpu"];
+    "gpu-train" [label="gpu-train\nd=4, slack=1\nresources=gpu"];
+  }
+  subgraph layer_2 {
+    rank=same;
+    "sign" [label="sign\nd=1, slack=2\nresources=signing"];
+  }
+  subgraph layer_3 {
+    rank=same;
+    "package" [label="package\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  "prep" -> "browser-matrix" [color="firebrick", penwidth=2];
+  "prep" -> "cross-platform-cert";
+  "prep" -> "gpu-train";
+  "cross-platform-cert" -> "sign";
+  "browser-matrix" -> "package" [color="firebrick", penwidth=2];
+  "gpu-train" -> "package";
+  "sign" -> "package";
+}

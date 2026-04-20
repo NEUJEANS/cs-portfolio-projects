@@ -67,8 +67,8 @@
 
 ### Worker-limited task table
 
-| Task | Worker | Resource class | Resource slot | Ready at | Start | Finish | Queue delay | Critical |
-| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Task | Worker | Resource demands | Resource allocations | Ready at | Start | Finish | Queue delay | Critical |
+| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | --- |
 | core-seed | 1 | — | — | 0 | 0 | 1 | 0 | yes |
 | alpha-long | 2 | — | — | 0 | 0 | 6 | 0 | no |
 | core-stage-1 | 1 | — | — | 1 | 1 | 5 | 0 | yes |
@@ -78,7 +78,7 @@
 
 ## Task timing table
 
-| Task | Layer | Depends on | Duration | Resource class | ES | EF | LS | LF | Slack | Critical | Command |
+| Task | Layer | Depends on | Duration | Resources | ES | EF | LS | LF | Slack | Critical | Command |
 | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | alpha-long | 0 | — | 6 | — | 0 | 6 | 3 | 9 | 3 | no | — |
 | beta-long | 0 | — | 6 | — | 0 | 6 | 3 | 9 | 3 | no | — |
@@ -93,35 +93,35 @@
    - Dependencies: `ready at start`
    - Window: `0 → 6`
    - Slack: `3`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `documentation only`
 2. `beta-long`
    - Dependencies: `ready at start`
    - Window: `0 → 6`
    - Slack: `3`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `documentation only`
 3. `core-seed`
    - Dependencies: `ready at start`
    - Window: `0 → 1`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `documentation only`
 4. `core-stage-1`
    - Dependencies: `core-seed`
    - Window: `1 → 5`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `documentation only`
 5. `core-stage-2`
    - Dependencies: `core-stage-1`
    - Window: `5 → 9`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `documentation only`
 6. `ship`
    - Dependencies: `alpha-long`, `beta-long`, `core-stage-2`
    - Window: `9 → 10`
    - Slack: `0`
-   - Resource class: `generic worker`
+   - Resources: `generic worker`
    - Command: `documentation only`

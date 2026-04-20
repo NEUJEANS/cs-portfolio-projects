@@ -15,7 +15,8 @@
       "resource_class": "gpu",
       "capacity": 1,
       "task_count": 2,
-      "total_work": 6,
+      "total_reserved_units": 6,
+      "peak_concurrent_usage": 1,
       "utilization": 0.75,
       "idle_capacity": 2,
       "delayed_tasks": 1,
@@ -40,7 +41,9 @@
       "duration": 1,
       "critical": true,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     },
     {
       "name": "gpu-train",
@@ -52,7 +55,15 @@
       "duration": 4,
       "critical": true,
       "resource_class": "gpu",
-      "resource_slot": 1
+      "resource_slot": 1,
+      "resource_demands": {
+        "gpu": 1
+      },
+      "resource_allocations": {
+        "gpu": [
+          1
+        ]
+      }
     },
     {
       "name": "docs",
@@ -64,7 +75,9 @@
       "duration": 3,
       "critical": false,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     },
     {
       "name": "gpu-eval",
@@ -76,7 +89,15 @@
       "duration": 2,
       "critical": false,
       "resource_class": "gpu",
-      "resource_slot": 1
+      "resource_slot": 1,
+      "resource_demands": {
+        "gpu": 1
+      },
+      "resource_allocations": {
+        "gpu": [
+          1
+        ]
+      }
     },
     {
       "name": "package",
@@ -88,7 +109,9 @@
       "duration": 1,
       "critical": true,
       "resource_class": null,
-      "resource_slot": null
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
     }
   ],
   "worker_timelines": [
@@ -100,7 +123,9 @@
         "queue_delay": 0,
         "critical": true,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       },
       {
         "name": "gpu-train",
@@ -109,7 +134,15 @@
         "queue_delay": 0,
         "critical": true,
         "resource_class": "gpu",
-        "resource_slot": 1
+        "resource_slot": 1,
+        "resource_demands": {
+          "gpu": 1
+        },
+        "resource_allocations": {
+          "gpu": [
+            1
+          ]
+        }
       },
       {
         "name": "gpu-eval",
@@ -118,7 +151,15 @@
         "queue_delay": 4,
         "critical": false,
         "resource_class": "gpu",
-        "resource_slot": 1
+        "resource_slot": 1,
+        "resource_demands": {
+          "gpu": 1
+        },
+        "resource_allocations": {
+          "gpu": [
+            1
+          ]
+        }
       },
       {
         "name": "package",
@@ -127,7 +168,9 @@
         "queue_delay": 0,
         "critical": true,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       }
     ],
     [
@@ -138,7 +181,9 @@
         "queue_delay": 0,
         "critical": false,
         "resource_class": null,
-        "resource_slot": null
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
       }
     ],
     []
