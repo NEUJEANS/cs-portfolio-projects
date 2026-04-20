@@ -11,4 +11,6 @@
 - [x] regenerate non-empty resource-constrained artifacts from a checked-in showcase manifest
 - [x] review the slice at least three times and fix the issues found
 - [x] run secret scan before push
+- [x] commit and push feature slice
+- [x] append wrap-up note
 - [ ] next: support multi-resource demand vectors or richer benchmark suites so the scheduler story goes beyond single-class bottlenecks
