@@ -1,0 +1,24 @@
+# Wrap-up — 2026-04-20 14:31 UTC
+
+- Project: `two-phase-commit-lab`
+- Slice: added a multi-scenario catalog bundle that regenerates the detailed reports and compares all committed 2PC scenarios in one landing page
+- What changed:
+  - added a `catalog` CLI command that discovers scenario JSON files, simulates each case, regenerates per-scenario Markdown reports, and writes a committed comparison page
+  - added catalog rendering with aggregate outcome counts, decision/crash/recovery comparison columns, and per-scenario snapshots with descriptions plus deep links
+  - updated the project README/checklist and added slice checklist, research, learning, and review notes so the work stays resumable
+  - added regression coverage for scenario discovery and catalog bundle generation
+- Tests run:
+  - `python3 -m py_compile projects/two-phase-commit-lab/two_phase_commit_lab.py tests/test_two_phase_commit_lab.py`
+  - `python3 -m unittest tests.test_two_phase_commit_lab -v`
+  - `python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog projects/two-phase-commit-lab --markdown-out docs/artifacts/two-phase-commit-lab/scenario_catalog.md --report-dir docs/artifacts/two-phase-commit-lab`
+  - deterministic double-export hash check for `scenario_catalog.md` using two fresh temp roots with the same `reports/` layout
+  - `git diff --check`
+- Reviews run:
+  - review 1: added missing scenario descriptions to the catalog snapshots so the landing page stands on its own
+  - review 2: added an explicit `Decision` column so blocked-vs-decided cases are easier to scan
+  - review 3: replaced brittle takeaway indexing with `_primary_takeaway(...)` so future copy edits do not break snapshot summaries
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → passed with 0 verified and 0 unverified secrets
+- Commit: `56682b6`
+- Next step:
+  - model participant-side recovery/reconnect behavior after missed second-phase messages so the lab goes beyond coordinator-only recovery

@@ -11,17 +11,21 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "projects/two-phase-commit-lab/two_phase_commit_lab.py"
-SUCCESS_SCENARIO = REPO_ROOT / "projects/two-phase-commit-lab/order_success.json"
-ABORT_SCENARIO = REPO_ROOT / "projects/two-phase-commit-lab/payment_validation_abort.json"
-BLOCKED_SCENARIO = REPO_ROOT / "projects/two-phase-commit-lab/coordinator_crash_before_decision.json"
-RECOVERY_SCENARIO = REPO_ROOT / "projects/two-phase-commit-lab/coordinator_recovery_commit.json"
+SCENARIO_DIR = REPO_ROOT / "projects/two-phase-commit-lab"
+SUCCESS_SCENARIO = SCENARIO_DIR / "order_success.json"
+ABORT_SCENARIO = SCENARIO_DIR / "payment_validation_abort.json"
+BLOCKED_SCENARIO = SCENARIO_DIR / "coordinator_crash_before_decision.json"
+RECOVERY_SCENARIO = SCENARIO_DIR / "coordinator_recovery_commit.json"
 SPEC = importlib.util.spec_from_file_location("two_phase_commit_lab", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 ScenarioError = MODULE.ScenarioError
+build_catalog_entries = MODULE.build_catalog_entries
+collect_scenario_paths = MODULE.collect_scenario_paths
 load_scenario = MODULE.load_scenario
+render_catalog_markdown = MODULE.render_catalog_markdown
 render_markdown_report = MODULE.render_markdown_report
 simulate_two_phase_commit = MODULE.simulate_two_phase_commit
 validate_scenario = MODULE.validate_scenario
@@ -93,6 +97,62 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
         self.assertIn("blocking reason:", report)
         self.assertIn("Participant summary", report)
         self.assertIn("coordinator starts 2PC", report)
+
+    def test_collect_scenario_paths_from_directory_is_sorted(self) -> None:
+        paths = collect_scenario_paths([SCENARIO_DIR])
+        self.assertEqual(
+            [path.name for path in paths],
+            [
+                "coordinator_crash_before_decision.json",
+                "coordinator_recovery_commit.json",
+                "order_success.json",
+                "payment_validation_abort.json",
+            ],
+        )
+
+    def test_render_catalog_markdown_summarizes_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "scenario_catalog.md"
+            report_dir = Path(temp_dir) / "reports"
+            entries = build_catalog_entries(
+                collect_scenario_paths([SCENARIO_DIR]),
+                catalog_path=catalog_path,
+                report_dir=report_dir,
+            )
+            catalog = render_catalog_markdown(entries)
+            self.assertIn("# Two-phase commit scenario catalog", catalog)
+            self.assertIn("- outcomes: `2 commit`, `1 abort`, `1 blocked`", catalog)
+            self.assertIn("| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Report |", catalog)
+            self.assertIn("[Order service happy-path commit](reports/order_success_report.md)", catalog)
+            self.assertIn("description: Every participant votes YES and enters PREPARED", catalog)
+            self.assertIn("participants prepared/acked: `3/3` prepared, `0/3` acked", catalog)
+
+    def test_catalog_command_writes_index_and_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_dir = Path(temp_dir) / "reports"
+            catalog_path = Path(temp_dir) / "scenario_catalog.md"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "catalog",
+                    str(SCENARIO_DIR),
+                    "--markdown-out",
+                    str(catalog_path),
+                    "--report-dir",
+                    str(report_dir),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn("wrote 4 scenario reports", completed.stdout)
+            self.assertTrue((report_dir / "order_success_report.md").exists())
+            self.assertTrue((report_dir / "coordinator_crash_before_decision_report.md").exists())
+            catalog = catalog_path.read_text()
+            self.assertIn("[report](reports/order_success_report.md)", catalog)
+            self.assertIn("outcome: `blocked` with decision `none`", catalog)
 
     def test_cli_json_output_and_markdown_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

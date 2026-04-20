@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -70,6 +71,13 @@ class CoordinatorRuntime:
     state: str = "running"
     decision: str | None = None
     decision_durable: bool = False
+
+
+@dataclass
+class CatalogEntry:
+    source_path: str
+    report_path: str | None
+    result: SimulationResult
 
 
 def load_scenario(path: str | Path) -> Scenario:
@@ -322,10 +330,150 @@ def render_markdown_report(result: SimulationResult) -> str:
     return "\n".join(lines)
 
 
+def render_catalog_markdown(entries: list[CatalogEntry]) -> str:
+    if not entries:
+        raise ScenarioError("catalog requires at least one scenario")
+
+    commit_count = sum(1 for entry in entries if entry.result.outcome == "commit")
+    abort_count = sum(1 for entry in entries if entry.result.outcome == "abort")
+    blocked_count = sum(1 for entry in entries if entry.result.outcome == "blocked")
+    crash_count = sum(
+        1
+        for entry in entries
+        if entry.result.failures["coordinator_crash"] != "none"
+    )
+    recovery_count = sum(
+        1
+        for entry in entries
+        if entry.result.failures["recover_after_crash"]
+    )
+
+    comparison_lines = [
+        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Report |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    snapshot_lines: list[str] = []
+    for entry in entries:
+        result = entry.result
+        prepared_count = sum(1 for item in result.participants if item["prepared"])
+        acked_count = sum(1 for item in result.participants if item["acked_decision"])
+        title_cell = result.title
+        report_cell = "-"
+        if entry.report_path:
+            title_cell = f"[{result.title}]({entry.report_path})"
+            report_cell = f"[report]({entry.report_path})"
+        comparison_lines.append(
+            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {report} |".format(
+                title=title_cell,
+                outcome=result.outcome,
+                decision=result.decision or "none",
+                durable="yes" if result.decision_durable else "no",
+                crash=result.failures["coordinator_crash"],
+                recovery="yes" if result.failures["recover_after_crash"] else "no",
+                prepared=prepared_count,
+                acked=acked_count,
+                total=len(result.participants),
+                report=report_cell,
+            )
+        )
+
+        snapshot_lines.extend(
+            [
+                f"### {result.title}",
+                f"- source: `{entry.source_path}`",
+                f"- description: {result.description}",
+                f"- outcome: `{result.outcome}` with decision `{result.decision or 'none'}`",
+                f"- participants prepared/acked: `{prepared_count}/{len(result.participants)}` prepared, `{acked_count}/{len(result.participants)}` acked",
+                f"- why it matters: {_primary_takeaway(result)}",
+            ]
+        )
+        if entry.report_path:
+            snapshot_lines.append(f"- deep dive: [{entry.report_path}]({entry.report_path})")
+        snapshot_lines.append("")
+
+    lines = [
+        "# Two-phase commit scenario catalog",
+        "",
+        "A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, and recovery cases.",
+        "",
+        "## Bundle summary",
+        f"- scenarios: `{len(entries)}`",
+        f"- outcomes: `{commit_count} commit`, `{abort_count} abort`, `{blocked_count} blocked`",
+        f"- crash cases: `{crash_count}`",
+        f"- recovery cases: `{recovery_count}`",
+        "",
+        "## Scenario comparison",
+        *comparison_lines,
+        "",
+        "## Interview talking points",
+        "- plain 2PC is easy to explain because every scenario pivots on the coordinator's durable decision log.",
+        "- blocking shows up when participants are already prepared but cannot prove the final outcome after a coordinator crash.",
+        "- recovery is operationally different from blocking: once the decision is durable, replay can safely finish phase two.",
+        "",
+        "## Scenario snapshots",
+        *snapshot_lines,
+    ]
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def write_markdown_report(path: str | Path, result: SimulationResult) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(render_markdown_report(result))
+
+
+def write_catalog(path: str | Path, entries: list[CatalogEntry]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_catalog_markdown(entries))
+
+
+def collect_scenario_paths(paths: list[Path]) -> list[Path]:
+    collected: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        if path.is_dir():
+            candidates = sorted(candidate for candidate in path.iterdir() if candidate.suffix == ".json")
+        elif path.is_file():
+            candidates = [path]
+        else:
+            raise ScenarioError(f"path does not exist: {path}")
+
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            collected.append(candidate)
+
+    if not collected:
+        joined = ", ".join(str(path) for path in paths)
+        raise ScenarioError(f"no scenario JSON files found in: {joined}")
+    return collected
+
+
+def build_catalog_entries(
+    scenario_paths: list[Path],
+    *,
+    catalog_path: Path,
+    report_dir: Path | None = None,
+) -> list[CatalogEntry]:
+    entries: list[CatalogEntry] = []
+    for scenario_path in scenario_paths:
+        result = simulate_two_phase_commit(load_scenario(scenario_path))
+        report_path: str | None = None
+        if report_dir is not None:
+            report_file = report_dir / f"{scenario_path.stem}_report.md"
+            write_markdown_report(report_file, result)
+            report_path = os.path.relpath(report_file, start=catalog_path.parent).replace(os.sep, "/")
+        entries.append(
+            CatalogEntry(
+                source_path=str(scenario_path).replace(os.sep, "/"),
+                report_path=report_path,
+                result=result,
+            )
+        )
+    return entries
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -342,6 +490,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--markdown-out",
         type=Path,
         help="optional path for a Markdown report artifact",
+    )
+
+    catalog_parser = subparsers.add_parser(
+        "catalog",
+        help="build a multi-scenario Markdown catalog and optional per-scenario reports",
+    )
+    catalog_parser.add_argument(
+        "paths",
+        nargs="+",
+        type=Path,
+        help="scenario JSON files or directories containing scenario JSON files",
+    )
+    catalog_parser.add_argument(
+        "--markdown-out",
+        type=Path,
+        required=True,
+        help="path for the catalog Markdown artifact",
+    )
+    catalog_parser.add_argument(
+        "--report-dir",
+        type=Path,
+        help="optional directory for regenerated per-scenario Markdown reports",
     )
 
     return parser
@@ -371,6 +541,19 @@ def main(argv: list[str] | None = None) -> int:
             if result.blocking_reason:
                 print(f"blocking_reason={result.blocking_reason}")
             print(f"participants={len(result.participants)} trace_events={len(result.trace)}")
+        return 0
+
+    if args.command == "catalog":
+        scenario_paths = collect_scenario_paths(args.paths)
+        entries = build_catalog_entries(
+            scenario_paths,
+            catalog_path=args.markdown_out,
+            report_dir=args.report_dir,
+        )
+        write_catalog(args.markdown_out, entries)
+        if args.report_dir:
+            print(f"wrote {len(entries)} scenario reports to {args.report_dir}")
+        print(f"wrote catalog to {args.markdown_out}")
         return 0
 
     parser.error(f"unsupported command: {args.command}")
@@ -453,6 +636,15 @@ def _build_takeaways(
         )
     lines.append(f"Final coordinator state: {coordinator.state}.")
     return lines
+
+
+def _primary_takeaway(result: SimulationResult) -> str:
+    if result.blocking_reason:
+        return result.blocking_reason
+    for entry in result.takeaways:
+        if entry.startswith("2PC "):
+            return entry
+    return result.takeaways[-1]
 
 
 def _required_string(payload: dict[str, Any], key: str) -> str:
