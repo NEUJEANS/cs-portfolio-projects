@@ -104,3 +104,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 benchmark suite slice
+- [x] confirm the repo was still synced with `origin/main` before continuing from the locally modified planner file
+- [x] capture a brief slice note explaining why extra external web research was not needed for this incremental benchmark/reporting follow-up
+- [x] refresh expected benchmark outcomes for the sample, strategy, resource, and multi-resource showcase manifests before editing
+- [x] update the project checklist, README, and artifact references for the new benchmark workflow
+- [x] implement a `benchmark` command that loads a suite file, replays multiple manifests, ranks strategies, and exports Markdown/JSON summaries
+- [x] commit a dedicated `portfolio_benchmark_suite.json` showcase file plus a recruiter-friendly benchmark report artifact
+- [x] expand regression coverage for relative suite graph paths, inline resource-capacity overrides, strategy subsets, and benchmark-flag validation
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

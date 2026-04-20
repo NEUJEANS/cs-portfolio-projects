@@ -21,6 +21,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - CLI output in text or JSON form for scripting
 - Mermaid and Graphviz DOT diagram export with per-layer grouping and critical-path highlighting
 - recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, worker/resource comparisons, and linked diagram/schedule artifacts
+- batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary
 
 ## Project structure
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, scheduler, CLI, diagram export helpers, and walkthrough-report generation
@@ -28,6 +29,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - `resource_graph.json` - example manifest showing how a single scarce renewable resource serializes otherwise parallel-ready work
 - `strategy_graph.json` - example manifest that makes scheduling-strategy tradeoffs visible under a fixed worker cap
 - `multi_resource_graph.json` - example manifest showing tasks that need multiple renewable resources at once
+- `portfolio_benchmark_suite.json` - example benchmark suite that replays the committed showcase manifests in one batch
 - `test_dependency_graph_planner.py` - unit and CLI tests
 - `CHECKLIST.md` - resumable slice tracker for future portfolio work on this project
 - `docs/artifacts/dependency-graph-planner/` - committed Mermaid, DOT, report, and schedule outputs from the sample manifests
@@ -67,6 +69,34 @@ Notes:
 - `resource_class` is treated as shorthand for `resources: {"that-class": 1}`
 - when both are present, `resource_class` must not duplicate a key already listed in `resources`
 - resource-aware scheduling/reporting requires capacities for every declared renewable resource
+
+## Benchmark suite format
+```json
+{
+  "title": "Dependency graph strategy benchmark suite",
+  "scenarios": [
+    {"label": "sample-2-workers", "graph": "sample_graph.json", "worker_limit": 2},
+    {
+      "label": "multi-resource-browser-bump",
+      "graph": "multi_resource_graph.json",
+      "worker_limit": 3,
+      "strategies": ["critical-first", "fifo"],
+      "resource_capacities": {"browser-lab": 3, "gpu": 1, "signing": 1}
+    }
+  ]
+}
+```
+
+Suite fields:
+- `title` - optional report title override for the `benchmark` command
+- `scenarios` - required non-empty list of benchmark cases
+
+Scenario fields:
+- `label` - required unique scenario name used in the Markdown report
+- `graph` - required relative or absolute path to a dependency-graph manifest
+- `worker_limit` - required positive worker cap for every strategy replay in that scenario
+- `strategies` - optional subset of ready-queue strategies; defaults to all supported strategies
+- `resource_capacities` - optional inline renewable-resource capacities that override the manifest for just that scenario
 
 ## Usage
 Run from the repository root.
@@ -212,6 +242,14 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
 ```
 This emits the linked strategy-comparison report plus `strategy_graph_2_workers_critical_first_schedule.json`, `strategy_graph_2_workers_fifo_schedule.json`, and `strategy_graph_2_workers_longest_processing_time_schedule.json`.
 
+### Benchmark a suite of manifests
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py benchmark \
+  projects/dependency-graph-planner/portfolio_benchmark_suite.json \
+  --benchmark-markdown-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md
+```
+This emits a scoreboard-style Markdown report that compares scheduling strategies across the committed sample, strategy, resource, and multi-resource manifests in one batch.
+
 Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/sample_graph.mmd`
 - `docs/artifacts/dependency-graph-planner/sample_graph_mermaid.md`
@@ -239,6 +277,7 @@ Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph.dot`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_report.md`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_3_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md`
 
 ## Testing
 ```bash
@@ -252,10 +291,11 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - why worker caps expose queue delay even on a valid DAG and why that matters for CI runners or deployment gates
 - how renewable resource constraints extend a plain worker-cap demo toward real runner pools such as GPUs, signing hosts, or browser labs
 - why multi-resource demand vectors are closer to real release engineering than a single-label toy scheduler
+- how a benchmark suite makes it obvious when one heuristic wins, ties, or loses across different workload shapes
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
-- add batch benchmark suites so heuristic schedules can be compared across many manifests instead of one example at a time
 - export compact HTML/SVG dashboards for README-first browsing without opening raw schedule JSON
 - simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
 - add synthetic manifest generators for CI, release, and data-pipeline scheduling patterns
+- export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis

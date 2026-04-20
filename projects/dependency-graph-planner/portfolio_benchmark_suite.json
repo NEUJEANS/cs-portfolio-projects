@@ -1,0 +1,39 @@
+{
+  "title": "Dependency graph strategy benchmark suite",
+  "scenarios": [
+    {
+      "label": "sample-2-workers",
+      "graph": "sample_graph.json",
+      "worker_limit": 2
+    },
+    {
+      "label": "strategy-2-workers",
+      "graph": "strategy_graph.json",
+      "worker_limit": 2
+    },
+    {
+      "label": "resource-3-workers",
+      "graph": "resource_graph.json",
+      "worker_limit": 3
+    },
+    {
+      "label": "multi-resource-3-workers",
+      "graph": "multi_resource_graph.json",
+      "worker_limit": 3
+    },
+    {
+      "label": "multi-resource-browser-bump",
+      "graph": "multi_resource_graph.json",
+      "worker_limit": 3,
+      "strategies": [
+        "critical-first",
+        "fifo"
+      ],
+      "resource_capacities": {
+        "browser-lab": 3,
+        "gpu": 1,
+        "signing": 1
+      }
+    }
+  ]
+}

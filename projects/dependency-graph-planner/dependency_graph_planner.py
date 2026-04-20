@@ -106,6 +106,67 @@ class WorkerLimitedSchedule:
     resource_summaries: list[ResourceClassSummary]
 
 
+@dataclass(frozen=True)
+class BenchmarkScenario:
+    label: str
+    graph_label: str
+    graph_path: str
+    worker_limit: int
+    strategies: tuple[str, ...]
+    resource_capacity_overrides: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class BenchmarkStrategyResult:
+    strategy: str
+    makespan: int
+    delta_vs_unlimited: int
+    delta_vs_best: int
+    total_queue_delay: int
+    max_queue_delay: int
+    utilization: float
+    idle_capacity: int
+    dispatch_order: list[str]
+    rank: int
+    tied_best_makespan: bool
+
+
+@dataclass(frozen=True)
+class BenchmarkScenarioResult:
+    label: str
+    graph_label: str
+    graph_path: str
+    worker_limit: int
+    task_count: int
+    unlimited_makespan: int
+    resource_capacities: dict[str, int]
+    strategy_results: list[BenchmarkStrategyResult]
+    best_makespan: int
+    best_makespan_strategies: list[str]
+    rank_1_strategies: list[str]
+
+
+@dataclass(frozen=True)
+class BenchmarkStrategyAggregate:
+    strategy: str
+    scenario_count: int
+    rank_1_finishes: int
+    best_makespan_finishes: int
+    average_makespan: float
+    average_delta_vs_best: float
+    average_total_queue_delay: float
+    average_max_queue_delay: float
+    average_utilization: float
+
+
+@dataclass(frozen=True)
+class BenchmarkSuiteResult:
+    title: str
+    source_label: str
+    scenarios: list[BenchmarkScenarioResult]
+    aggregates: list[BenchmarkStrategyAggregate]
+
+
 def load_manifest(path: str | Path) -> dict:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -267,6 +328,274 @@ def resolve_resource_capacities(
         raise ValueError(f"missing resource capacities for resource classes: {', '.join(missing)}")
 
     return {name: combined[name] for name in sorted(required_classes)}
+
+
+def _parse_benchmark_strategies(raw_value: Any, *, label: str) -> tuple[str, ...]:
+    if raw_value in (None, []):
+        return SCHEDULE_STRATEGIES
+    if not isinstance(raw_value, list) or not raw_value:
+        raise GraphValidationError(
+            f"benchmark scenario {label!r} strategies must be a non-empty list when provided"
+        )
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for raw_strategy in raw_value:
+        if not isinstance(raw_strategy, str):
+            raise GraphValidationError(f"benchmark scenario {label!r} has an invalid strategy")
+        try:
+            strategy = _resolve_schedule_strategy(raw_strategy)
+        except ValueError as exc:
+            raise GraphValidationError(f"benchmark scenario {label!r} has an invalid strategy") from exc
+        if strategy in seen:
+            continue
+        seen.add(strategy)
+        ordered.append(strategy)
+    return tuple(ordered)
+
+
+def _parse_inline_resource_capacities(raw_value: Any, *, label: str) -> dict[str, int]:
+    if raw_value in (None, {}):
+        return {}
+    if not isinstance(raw_value, dict):
+        raise GraphValidationError(f"benchmark scenario {label!r} resource_capacities must be a JSON object")
+
+    capacities: dict[str, int] = {}
+    for raw_name, raw_capacity in raw_value.items():
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise GraphValidationError(
+                f"benchmark scenario {label!r} resource_capacities keys must be non-empty strings"
+            )
+        if not isinstance(raw_capacity, int) or raw_capacity <= 0:
+            raise GraphValidationError(
+                f"benchmark scenario {label!r} resource_capacities[{raw_name!r}] must be a positive integer"
+            )
+        capacities[raw_name.strip()] = raw_capacity
+    return dict(sorted(capacities.items()))
+
+
+def load_benchmark_suite(
+    path: str | Path,
+    *,
+    explicit_title: str | None = None,
+) -> tuple[str, list[BenchmarkScenario]]:
+    suite_data = load_manifest(path)
+    raw_title = suite_data.get("title")
+    if raw_title is not None and (not isinstance(raw_title, str) or not raw_title.strip()):
+        raise GraphValidationError("benchmark suite title must be a non-empty string when provided")
+
+    raw_scenarios = suite_data.get("scenarios")
+    if not isinstance(raw_scenarios, list) or not raw_scenarios:
+        raise GraphValidationError("benchmark suite must include a non-empty scenarios list")
+
+    suite_path = Path(path)
+    suite_dir = suite_path.parent
+    scenarios: list[BenchmarkScenario] = []
+    seen_labels: set[str] = set()
+    for index, entry in enumerate(raw_scenarios, start=1):
+        if not isinstance(entry, dict):
+            raise GraphValidationError(f"benchmark scenario {index} must be a JSON object")
+
+        label = entry.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise GraphValidationError(f"benchmark scenario {index} needs a non-empty string label")
+        label = label.strip()
+        if label in seen_labels:
+            raise GraphValidationError(f"duplicate benchmark scenario label: {label}")
+        seen_labels.add(label)
+
+        graph_label = entry.get("graph")
+        if not isinstance(graph_label, str) or not graph_label.strip():
+            raise GraphValidationError(f"benchmark scenario {label!r} needs a non-empty string graph")
+        graph_label = graph_label.strip()
+        graph_path = Path(graph_label)
+        if not graph_path.is_absolute():
+            graph_path = (suite_dir / graph_path).resolve()
+
+        worker_limit = entry.get("worker_limit")
+        if not isinstance(worker_limit, int) or worker_limit <= 0:
+            raise GraphValidationError(
+                f"benchmark scenario {label!r} must have a positive integer worker_limit"
+            )
+
+        scenarios.append(
+            BenchmarkScenario(
+                label=label,
+                graph_label=graph_label,
+                graph_path=str(graph_path),
+                worker_limit=worker_limit,
+                strategies=_parse_benchmark_strategies(entry.get("strategies"), label=label),
+                resource_capacity_overrides=_parse_inline_resource_capacities(
+                    entry.get("resource_capacities"),
+                    label=label,
+                ),
+            )
+        )
+
+    return (
+        build_benchmark_title(
+            source_label=str(path),
+            explicit_title=explicit_title or (raw_title.strip() if isinstance(raw_title, str) else None),
+        ),
+        scenarios,
+    )
+
+
+def _benchmark_result_sort_key(item: BenchmarkStrategyResult) -> tuple[int, int, int, int]:
+    return (
+        item.makespan,
+        item.total_queue_delay,
+        item.max_queue_delay,
+        SCHEDULE_STRATEGIES.index(item.strategy),
+    )
+
+
+def _benchmark_rank_key(item: BenchmarkStrategyResult) -> tuple[int, int, int]:
+    return (item.makespan, item.total_queue_delay, item.max_queue_delay)
+
+
+def _average(values: Sequence[float]) -> float:
+    return 0.0 if not values else sum(values) / len(values)
+
+
+def build_benchmark_suite_result(
+    suite_path: str | Path,
+    *,
+    title: str | None = None,
+) -> BenchmarkSuiteResult:
+    resolved_title, scenarios = load_benchmark_suite(suite_path, explicit_title=title)
+    scenario_results: list[BenchmarkScenarioResult] = []
+
+    for scenario in scenarios:
+        manifest = load_manifest(scenario.graph_path)
+        tasks = parse_tasks(manifest)
+        manifest_resource_capacities = parse_resource_capacities(manifest)
+        validate_manifest_resource_capacities(tasks, manifest_resource_capacities)
+        plan = build_plan(tasks)
+        override_flags = [
+            f"{resource_class}={capacity}"
+            for resource_class, capacity in scenario.resource_capacity_overrides.items()
+        ]
+        resolved_resource_capacities = resolve_resource_capacities(
+            tasks,
+            manifest_resource_capacities,
+            override_flags,
+        )
+
+        strategy_results: list[BenchmarkStrategyResult] = []
+        raw_results: list[tuple[str, WorkerLimitedSchedule]] = []
+        for strategy in scenario.strategies:
+            schedule = build_worker_limited_schedule(
+                tasks,
+                plan,
+                worker_limit=scenario.worker_limit,
+                strategy=strategy,
+                resource_capacities=resolved_resource_capacities,
+            )
+            raw_results.append((strategy, schedule))
+
+        best_makespan = min(schedule.makespan for _, schedule in raw_results)
+        provisional_results: list[BenchmarkStrategyResult] = []
+        for strategy, schedule in raw_results:
+            delayed = [item.queue_delay for item in schedule.assignments if item.queue_delay > 0]
+            provisional_results.append(
+                BenchmarkStrategyResult(
+                    strategy=strategy,
+                    makespan=schedule.makespan,
+                    delta_vs_unlimited=schedule.makespan - schedule.unlimited_makespan,
+                    delta_vs_best=schedule.makespan - best_makespan,
+                    total_queue_delay=sum(item.queue_delay for item in schedule.assignments),
+                    max_queue_delay=max(delayed, default=0),
+                    utilization=schedule.utilization,
+                    idle_capacity=schedule.idle_capacity,
+                    dispatch_order=list(schedule.dispatch_order),
+                    rank=0,
+                    tied_best_makespan=schedule.makespan == best_makespan,
+                )
+            )
+
+        sorted_results = sorted(provisional_results, key=_benchmark_result_sort_key)
+        ranked_results: list[BenchmarkStrategyResult] = []
+        current_rank = 0
+        previous_rank_key: tuple[int, int, int] | None = None
+        for item in sorted_results:
+            rank_key = _benchmark_rank_key(item)
+            if rank_key != previous_rank_key:
+                current_rank += 1
+                previous_rank_key = rank_key
+            ranked_results.append(
+                BenchmarkStrategyResult(
+                    strategy=item.strategy,
+                    makespan=item.makespan,
+                    delta_vs_unlimited=item.delta_vs_unlimited,
+                    delta_vs_best=item.delta_vs_best,
+                    total_queue_delay=item.total_queue_delay,
+                    max_queue_delay=item.max_queue_delay,
+                    utilization=item.utilization,
+                    idle_capacity=item.idle_capacity,
+                    dispatch_order=item.dispatch_order,
+                    rank=current_rank,
+                    tied_best_makespan=item.tied_best_makespan,
+                )
+            )
+
+        scenario_results.append(
+            BenchmarkScenarioResult(
+                label=scenario.label,
+                graph_label=scenario.graph_label,
+                graph_path=scenario.graph_path,
+                worker_limit=scenario.worker_limit,
+                task_count=len(tasks),
+                unlimited_makespan=plan.total_duration,
+                resource_capacities=resolved_resource_capacities,
+                strategy_results=ranked_results,
+                best_makespan=best_makespan,
+                best_makespan_strategies=[
+                    item.strategy for item in ranked_results if item.tied_best_makespan
+                ],
+                rank_1_strategies=[item.strategy for item in ranked_results if item.rank == 1],
+            )
+        )
+
+    aggregate_lookup: dict[str, list[BenchmarkStrategyResult]] = {strategy: [] for strategy in SCHEDULE_STRATEGIES}
+    for scenario_result in scenario_results:
+        for item in scenario_result.strategy_results:
+            aggregate_lookup[item.strategy].append(item)
+
+    aggregates: list[BenchmarkStrategyAggregate] = []
+    for strategy in SCHEDULE_STRATEGIES:
+        items = aggregate_lookup[strategy]
+        if not items:
+            continue
+        aggregates.append(
+            BenchmarkStrategyAggregate(
+                strategy=strategy,
+                scenario_count=len(items),
+                rank_1_finishes=sum(1 for item in items if item.rank == 1),
+                best_makespan_finishes=sum(1 for item in items if item.tied_best_makespan),
+                average_makespan=_average([float(item.makespan) for item in items]),
+                average_delta_vs_best=_average([float(item.delta_vs_best) for item in items]),
+                average_total_queue_delay=_average([float(item.total_queue_delay) for item in items]),
+                average_max_queue_delay=_average([float(item.max_queue_delay) for item in items]),
+                average_utilization=_average([item.utilization for item in items]),
+            )
+        )
+
+    aggregates.sort(
+        key=lambda item: (
+            -item.rank_1_finishes,
+            -item.best_makespan_finishes,
+            item.average_delta_vs_best,
+            item.average_makespan,
+            SCHEDULE_STRATEGIES.index(item.strategy),
+        )
+    )
+    return BenchmarkSuiteResult(
+        title=resolved_title,
+        source_label=str(suite_path),
+        scenarios=scenario_results,
+        aggregates=aggregates,
+    )
 
 
 def build_dependents(tasks: dict[str, Task]) -> dict[str, list[str]]:
@@ -1019,6 +1348,13 @@ def build_report_title(*, source_label: str, explicit_title: str | None = None) 
     return f"Dependency graph walkthrough — {display_name}"
 
 
+def build_benchmark_title(*, source_label: str, explicit_title: str | None = None) -> str:
+    if explicit_title:
+        return explicit_title
+    display_name = _humanize_stem(Path(source_label).stem).title()
+    return f"Dependency graph benchmark suite — {display_name}"
+
+
 def render_mermaid_wrapper(diagram: str, *, source_label: str) -> str:
     title = f"Dependency graph — {_humanize_stem(Path(source_label).stem).title()}"
     return f"# {title}\n\n```mermaid\n{diagram}\n```\n"
@@ -1507,6 +1843,149 @@ def _build_report_artifact_links(
     return ordered
 
 
+def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
+    return {
+        "title": result.title,
+        "source_label": result.source_label,
+        "scenario_count": len(result.scenarios),
+        "scenarios": [
+            {
+                "label": scenario.label,
+                "graph_label": scenario.graph_label,
+                "graph_path": scenario.graph_path,
+                "worker_limit": scenario.worker_limit,
+                "task_count": scenario.task_count,
+                "unlimited_makespan": scenario.unlimited_makespan,
+                "resource_capacities": scenario.resource_capacities,
+                "best_makespan": scenario.best_makespan,
+                "best_makespan_strategies": scenario.best_makespan_strategies,
+                "rank_1_strategies": scenario.rank_1_strategies,
+                "strategy_results": [
+                    {
+                        "strategy": item.strategy,
+                        "rank": item.rank,
+                        "makespan": item.makespan,
+                        "delta_vs_unlimited": item.delta_vs_unlimited,
+                        "delta_vs_best": item.delta_vs_best,
+                        "total_queue_delay": item.total_queue_delay,
+                        "max_queue_delay": item.max_queue_delay,
+                        "utilization": round(item.utilization, 6),
+                        "idle_capacity": item.idle_capacity,
+                        "dispatch_order": item.dispatch_order,
+                        "tied_best_makespan": item.tied_best_makespan,
+                    }
+                    for item in scenario.strategy_results
+                ],
+            }
+            for scenario in result.scenarios
+        ],
+        "aggregates": [
+            {
+                "strategy": item.strategy,
+                "scenario_count": item.scenario_count,
+                "rank_1_finishes": item.rank_1_finishes,
+                "best_makespan_finishes": item.best_makespan_finishes,
+                "average_makespan": round(item.average_makespan, 6),
+                "average_delta_vs_best": round(item.average_delta_vs_best, 6),
+                "average_total_queue_delay": round(item.average_total_queue_delay, 6),
+                "average_max_queue_delay": round(item.average_max_queue_delay, 6),
+                "average_utilization": round(item.average_utilization, 6),
+            }
+            for item in result.aggregates
+        ],
+    }
+
+
+def render_benchmark_suite_markdown(result: BenchmarkSuiteResult) -> str:
+    strategies = [item.strategy for item in result.aggregates]
+    lines = [f"# {result.title}", ""]
+    lines.extend(
+        [
+            f"- Suite source: {_markdown_code(result.source_label)}",
+            f"- Scenario count: {_markdown_code(len(result.scenarios))}",
+            f"- Strategies covered: {_markdown_code(', '.join(strategies))}",
+        ]
+    )
+
+    lines.extend(
+        [
+            "",
+            "## Aggregate strategy scoreboard",
+            "",
+            "| Strategy | Scenarios | Rank-1 finishes | Best-makespan finishes | Avg makespan | Avg Δ vs best | Avg total queue delay | Avg max queue delay | Avg utilization |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for item in result.aggregates:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _escape_markdown_table_cell(item.strategy),
+                    str(item.scenario_count),
+                    str(item.rank_1_finishes),
+                    str(item.best_makespan_finishes),
+                    f"{item.average_makespan:.2f}",
+                    f"{item.average_delta_vs_best:.2f}",
+                    f"{item.average_total_queue_delay:.2f}",
+                    f"{item.average_max_queue_delay:.2f}",
+                    f"{item.average_utilization * 100:.1f}%",
+                ]
+            )
+            + " |"
+        )
+
+    for scenario in result.scenarios:
+        lines.extend(
+            [
+                "",
+                f"## Scenario — {scenario.label}",
+                "",
+                f"- Manifest: {_markdown_code(scenario.graph_label)}",
+                f"- Worker limit: {_markdown_code(_format_worker_limit_label(scenario.worker_limit))}",
+                f"- Task count: {_markdown_code(scenario.task_count)}",
+                f"- Unlimited makespan: {_markdown_code(scenario.unlimited_makespan)}",
+                f"- Best scenario makespan: {_markdown_code(scenario.best_makespan)} via {_markdown_code(', '.join(scenario.best_makespan_strategies))}",
+                f"- Rank-1 strategies after queue-delay tie-breaks: {_markdown_code(', '.join(scenario.rank_1_strategies))}",
+            ]
+        )
+        if scenario.resource_capacities:
+            rendered_caps = ", ".join(
+                f"{resource_class}={capacity}"
+                for resource_class, capacity in scenario.resource_capacities.items()
+            )
+            lines.append(f"- Resource capacities: {_markdown_code(rendered_caps)}")
+
+        lines.extend(
+            [
+                "",
+                "| Rank | Strategy | Makespan | Δ vs unlimited | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |",
+                "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            ]
+        )
+        for item in scenario.strategy_results:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        str(item.rank),
+                        _escape_markdown_table_cell(item.strategy),
+                        str(item.makespan),
+                        str(item.delta_vs_unlimited),
+                        str(item.delta_vs_best),
+                        str(item.total_queue_delay),
+                        str(item.max_queue_delay),
+                        str(item.idle_capacity),
+                        f"{item.utilization * 100:.1f}%",
+                        _escape_markdown_table_cell(", ".join(item.dispatch_order)),
+                    ]
+                )
+                + " |"
+            )
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _ensure_command_flags_are_valid(
     command: str,
     *,
@@ -1518,9 +1997,27 @@ def _ensure_command_flags_are_valid(
     strategy: str | None,
     compare_strategies: Sequence[str] | None,
     resource_capacity_overrides: Sequence[str] | None,
+    benchmark_markdown_out: str | None,
+    benchmark_title: str | None,
 ) -> None:
     if command != "report" and any(value is not None for value in (report_markdown_out, report_title, diagram_output_dir)):
         raise ValueError("report-specific flags require the report command")
+    if command != "benchmark" and any(value is not None for value in (benchmark_markdown_out, benchmark_title)):
+        raise ValueError("benchmark-specific flags require the benchmark command")
+    if command == "benchmark" and any(
+        value is not None
+        for value in (
+            report_markdown_out,
+            report_title,
+            diagram_output_dir,
+            worker_limit,
+            compare_worker_limits,
+            strategy,
+            compare_strategies,
+            resource_capacity_overrides,
+        )
+    ):
+        raise ValueError("schedule/report flags are not valid on the benchmark command")
     if command not in {"report", "schedule"} and worker_limit is not None:
         raise ValueError("--worker-limit requires the schedule or report command")
     if command != "report" and compare_worker_limits:
@@ -1552,10 +2049,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect and plan dependency graphs")
     parser.add_argument(
         "command",
-        choices=["validate", "plan", "critical-path", "layers", "diagram", "report", "schedule"],
+        choices=["validate", "plan", "critical-path", "layers", "diagram", "report", "schedule", "benchmark"],
         help="command to run",
     )
-    parser.add_argument("graph", help="path to a JSON manifest")
+    parser.add_argument("graph", help="path to a JSON manifest or benchmark suite")
     parser.add_argument("--json", action="store_true", dest="as_json", help="render machine-readable JSON output")
     parser.add_argument(
         "--format",
@@ -1570,6 +2067,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--diagram-output-dir",
         help="optional directory where the report command should emit Mermaid and DOT companion artifacts",
     )
+    parser.add_argument("--benchmark-markdown-out", help="write a Markdown summary for the benchmark command")
+    parser.add_argument("--benchmark-title", help="optional title for the benchmark command")
     parser.add_argument(
         "--worker-limit",
         type=int,
@@ -1616,6 +2115,8 @@ def run_command(
     strategy: str | None = None,
     compare_strategies: Sequence[str] | None = None,
     resource_capacity_overrides: Sequence[str] | None = None,
+    benchmark_markdown_out: str | None = None,
+    benchmark_title: str | None = None,
 ) -> str:
     _ensure_command_flags_are_valid(
         command,
@@ -1627,7 +2128,21 @@ def run_command(
         strategy=strategy,
         compare_strategies=compare_strategies,
         resource_capacity_overrides=resource_capacity_overrides,
+        benchmark_markdown_out=benchmark_markdown_out,
+        benchmark_title=benchmark_title,
     )
+    if command == "benchmark":
+        result = build_benchmark_suite_result(graph_path, title=benchmark_title)
+        report = render_benchmark_suite_markdown(result)
+        if benchmark_markdown_out:
+            _write_text(benchmark_markdown_out, report)
+        if as_json:
+            payload = benchmark_suite_to_dict(result)
+            payload["benchmark_markdown"] = report
+            payload["benchmark_markdown_out"] = benchmark_markdown_out
+            return json.dumps(payload, indent=2)
+        return report
+
     manifest = load_manifest(graph_path)
     tasks = parse_tasks(manifest)
     manifest_resource_capacities = parse_resource_capacities(manifest)
@@ -1768,6 +2283,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             strategy=args.strategy,
             compare_strategies=args.compare_strategies,
             resource_capacity_overrides=args.resource_capacity_overrides,
+            benchmark_markdown_out=args.benchmark_markdown_out,
+            benchmark_title=args.benchmark_title,
         )
     except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")

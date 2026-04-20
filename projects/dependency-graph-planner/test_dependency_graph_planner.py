@@ -61,6 +61,36 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             ]
         }
 
+    def _write_benchmark_suite_files(self, tmpdir: str) -> Path:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "sample_graph.json").write_text(json.dumps(self.graph), encoding="utf-8")
+        (tmp_path / "strategy_graph.json").write_text(json.dumps(self.strategy_graph), encoding="utf-8")
+        (tmp_path / "resource_graph.json").write_text(json.dumps(self.resource_graph), encoding="utf-8")
+        (tmp_path / "multi_resource_graph.json").write_text(json.dumps(self.multi_resource_graph), encoding="utf-8")
+        suite_path = tmp_path / "benchmark_suite.json"
+        suite_path.write_text(
+            json.dumps(
+                {
+                    "title": "Dependency graph strategy benchmark suite",
+                    "scenarios": [
+                        {"label": "sample-2-workers", "graph": "sample_graph.json", "worker_limit": 2},
+                        {"label": "strategy-2-workers", "graph": "strategy_graph.json", "worker_limit": 2},
+                        {"label": "resource-3-workers", "graph": "resource_graph.json", "worker_limit": 3},
+                        {"label": "multi-resource-3-workers", "graph": "multi_resource_graph.json", "worker_limit": 3},
+                        {
+                            "label": "multi-resource-browser-bump",
+                            "graph": "multi_resource_graph.json",
+                            "worker_limit": 3,
+                            "strategies": ["critical-first", "fifo"],
+                            "resource_capacities": {"browser-lab": 3, "gpu": 1, "signing": 1},
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return suite_path
+
     def test_build_plan_returns_deterministic_topological_order(self) -> None:
         plan = build_plan(parse_tasks(self.graph))
         self.assertEqual(plan.order, ["lint", "compile", "package", "unit", "publish"])
@@ -489,6 +519,56 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 json.loads(Path(schedule_paths["2:longest-processing-time"]).read_text(encoding="utf-8"))["strategy"],
                 "longest-processing-time",
             )
+
+    def test_run_command_benchmark_json_writes_markdown_and_resolves_relative_graphs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            suite_path = self._write_benchmark_suite_files(tmpdir)
+            report_path = Path(tmpdir) / "reports" / "benchmark_suite_report.md"
+            payload = json.loads(
+                run_command(
+                    "benchmark",
+                    str(suite_path),
+                    as_json=True,
+                    benchmark_markdown_out=str(report_path),
+                )
+            )
+
+            self.assertEqual(payload["title"], "Dependency graph strategy benchmark suite")
+            self.assertEqual(payload["scenario_count"], 5)
+            self.assertTrue(report_path.exists())
+            written_report = report_path.read_text(encoding="utf-8")
+            self.assertIn("## Aggregate strategy scoreboard", written_report)
+            self.assertIn("## Scenario — strategy-2-workers", written_report)
+            self.assertIn("## Scenario — multi-resource-browser-bump", written_report)
+            strategy_scenario = next(item for item in payload["scenarios"] if item["label"] == "strategy-2-workers")
+            resource_scenario = next(item for item in payload["scenarios"] if item["label"] == "resource-3-workers")
+            multi_resource_scenario = next(item for item in payload["scenarios"] if item["label"] == "multi-resource-3-workers")
+            browser_bump_scenario = next(item for item in payload["scenarios"] if item["label"] == "multi-resource-browser-bump")
+            aggregate_by_strategy = {item["strategy"]: item for item in payload["aggregates"]}
+            self.assertEqual(strategy_scenario["rank_1_strategies"], ["critical-first"])
+            self.assertEqual(strategy_scenario["best_makespan_strategies"], ["critical-first"])
+            self.assertEqual(resource_scenario["rank_1_strategies"], ["fifo"])
+            self.assertEqual(
+                resource_scenario["best_makespan_strategies"],
+                ["fifo", "critical-first", "longest-processing-time"],
+            )
+            self.assertEqual(
+                multi_resource_scenario["rank_1_strategies"],
+                ["critical-first", "fifo", "longest-processing-time"],
+            )
+            self.assertEqual(browser_bump_scenario["rank_1_strategies"], ["fifo"])
+            self.assertEqual(browser_bump_scenario["best_makespan_strategies"], ["fifo"])
+            self.assertEqual(browser_bump_scenario["resource_capacities"], {"browser-lab": 3, "gpu": 1, "signing": 1})
+            self.assertEqual([item["strategy"] for item in browser_bump_scenario["strategy_results"]], ["fifo", "critical-first"])
+            self.assertEqual(aggregate_by_strategy["critical-first"]["scenario_count"], 5)
+            self.assertEqual(aggregate_by_strategy["fifo"]["scenario_count"], 5)
+            self.assertEqual(aggregate_by_strategy["longest-processing-time"]["scenario_count"], 4)
+
+    def test_run_command_benchmark_rejects_schedule_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            suite_path = self._write_benchmark_suite_files(tmpdir)
+            with self.assertRaisesRegex(ValueError, "schedule/report flags are not valid on the benchmark command"):
+                run_command("benchmark", str(suite_path), worker_limit=2)
 
     def test_cli_plan_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
