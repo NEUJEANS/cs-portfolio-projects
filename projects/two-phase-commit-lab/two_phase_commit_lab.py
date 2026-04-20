@@ -1530,6 +1530,8 @@ def _wrap_svg_text(text: str, width: int) -> list[str]:
 def render_catalog_markdown(
     entries: list[CatalogEntry],
     incident_dashboard_path: str | None = None,
+    include_tags: list[str] | None = None,
+    require_all_tags: bool = False,
 ) -> str:
     if not entries:
         raise ScenarioError("catalog requires at least one scenario")
@@ -1569,6 +1571,16 @@ def render_catalog_markdown(
         for entry in entries
         if entry.termination_timeline_svg_path or entry.termination_timeline_html_path
     )
+
+    filter_lines: list[str] = []
+    if include_tags:
+        mode_label = "all" if require_all_tags else "any"
+        filter_lines = [
+            "## Active filters",
+            f"- scenario tags: `{mode_label}` of {_format_tag_list(include_tags)}",
+            "- this bundle is a recruiter-friendly subset of the provided scenario set rather than the full catalog",
+            "",
+        ]
 
     comparison_lines = [
         "| Scenario | Tags | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |",
@@ -1691,6 +1703,7 @@ def render_catalog_markdown(
         "A recruiter-friendly landing page for the committed 2PC scenarios, showing how the same protocol behaves across happy-path, veto, blocking, recovery, and peer-assisted incident-response cases.",
         "",
         *incident_dashboard_lines,
+        *filter_lines,
         "## Bundle summary",
         f"- scenarios: `{len(entries)}`",
         f"- outcomes: `{commit_count} commit`, `{abort_count} abort`, `{blocked_count} blocked`",
@@ -2194,6 +2207,8 @@ def write_catalog(
     entries: list[CatalogEntry],
     *,
     incident_dashboard_path: str | None = None,
+    include_tags: list[str] | None = None,
+    require_all_tags: bool = False,
 ) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2201,6 +2216,8 @@ def write_catalog(
         render_catalog_markdown(
             entries,
             incident_dashboard_path=incident_dashboard_path,
+            include_tags=include_tags,
+            require_all_tags=require_all_tags,
         )
     )
 
@@ -2227,6 +2244,39 @@ def collect_scenario_paths(paths: list[Path]) -> list[Path]:
         joined = ", ".join(str(path) for path in paths)
         raise ScenarioError(f"no scenario JSON files found in: {joined}")
     return collected
+
+
+def filter_scenario_paths_by_tags(
+    scenario_paths: list[Path],
+    *,
+    include_tags: list[str] | None = None,
+    require_all_tags: bool = False,
+) -> tuple[list[Path], list[str]]:
+    normalized_tags = _normalize_scenario_tags(include_tags or [])
+    if not normalized_tags:
+        return scenario_paths, []
+
+    required_tags = set(normalized_tags)
+    filtered_paths: list[Path] = []
+    for scenario_path in scenario_paths:
+        scenario = load_scenario(scenario_path)
+        scenario_tags = set(scenario.tags)
+        matches = required_tags.issubset(scenario_tags) if require_all_tags else bool(required_tags & scenario_tags)
+        if matches:
+            filtered_paths.append(scenario_path)
+
+    if not filtered_paths:
+        mode = "all" if require_all_tags else "any"
+        raise ScenarioError(
+            f"no scenarios matched include-tag filter ({mode} of: {', '.join(normalized_tags)})"
+        )
+    return filtered_paths, normalized_tags
+
+
+def _catalog_incident_dashboard_path(catalog_path: Path) -> Path:
+    if catalog_path.name == "scenario_catalog.md":
+        return catalog_path.parent / "incident_response_dashboard.html"
+    return catalog_path.parent / f"{catalog_path.stem}_incident_response_dashboard.html"
 
 
 def _relative_artifact_path(path: Path, *, start: Path) -> str | None:
@@ -2379,6 +2429,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         help="optional directory for regenerated per-scenario Markdown reports",
     )
+    catalog_parser.add_argument(
+        "--include-tag",
+        action="append",
+        default=[],
+        help="optional scenario tag filter; repeat to keep scenarios matching any provided tag",
+    )
+    catalog_parser.add_argument(
+        "--require-all-tags",
+        action="store_true",
+        help="when filtering by tags, require every --include-tag instead of the default any-tag match",
+    )
 
     return parser
 
@@ -2459,12 +2520,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "catalog":
         scenario_paths = collect_scenario_paths(args.paths)
-        entries = build_catalog_entries(
+        filtered_scenario_paths, normalized_include_tags = filter_scenario_paths_by_tags(
             scenario_paths,
+            include_tags=args.include_tag,
+            require_all_tags=args.require_all_tags,
+        )
+        entries = build_catalog_entries(
+            filtered_scenario_paths,
             catalog_path=args.markdown_out,
             report_dir=args.report_dir,
         )
-        incident_dashboard_path = args.markdown_out.parent / "incident_response_dashboard.html"
+        incident_dashboard_path = _catalog_incident_dashboard_path(args.markdown_out)
         incident_dashboard_relative_path = _relative_artifact_path(
             incident_dashboard_path,
             start=args.markdown_out.parent,
@@ -2478,9 +2544,19 @@ def main(argv: list[str] | None = None) -> int:
             args.markdown_out,
             entries,
             incident_dashboard_path=incident_dashboard_relative_path,
+            include_tags=normalized_include_tags,
+            require_all_tags=args.require_all_tags,
         )
         if args.report_dir:
             print(f"wrote {len(entries)} scenario reports to {args.report_dir}")
+        if normalized_include_tags:
+            mode_label = "all" if args.require_all_tags else "any"
+            print(
+                "applied tag filter ("
+                + mode_label
+                + "): "
+                + ", ".join(normalized_include_tags)
+            )
         print(f"wrote incident-response dashboard to {incident_dashboard_path}")
         print(f"wrote catalog to {args.markdown_out}")
         return 0

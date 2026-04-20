@@ -31,6 +31,7 @@ build_catalog_entries = MODULE.build_catalog_entries
 build_peer_termination_resolution = MODULE.build_peer_termination_resolution
 build_protocol_comparison = MODULE.build_protocol_comparison
 collect_scenario_paths = MODULE.collect_scenario_paths
+filter_scenario_paths_by_tags = MODULE.filter_scenario_paths_by_tags
 load_scenario = MODULE.load_scenario
 render_catalog_markdown = MODULE.render_catalog_markdown
 render_comparison_html = MODULE.render_comparison_html
@@ -330,6 +331,39 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             ],
         )
 
+    def test_filter_scenario_paths_by_tags_matches_any_tag_by_default(self) -> None:
+        paths = collect_scenario_paths([SCENARIO_DIR])
+        filtered, normalized_tags = filter_scenario_paths_by_tags(
+            paths,
+            include_tags=["peer assisted commit", "participant_reconnect"],
+        )
+        self.assertEqual(normalized_tags, ["peer-assisted-commit", "participant-reconnect"])
+        self.assertEqual(
+            [path.name for path in filtered],
+            [
+                "coordinator_crash_partial_commit_delivery.json",
+                "participant_reconnect_commit.json",
+            ],
+        )
+
+    def test_filter_scenario_paths_by_tags_can_require_all_tags(self) -> None:
+        paths = collect_scenario_paths([SCENARIO_DIR])
+        filtered, normalized_tags = filter_scenario_paths_by_tags(
+            paths,
+            include_tags=["blocking", "peer-assisted-abort"],
+            require_all_tags=True,
+        )
+        self.assertEqual(normalized_tags, ["blocking", "peer-assisted-abort"])
+        self.assertEqual(
+            [path.name for path in filtered],
+            ["coordinator_crash_durable_abort.json"],
+        )
+
+    def test_filter_scenario_paths_by_tags_rejects_empty_match(self) -> None:
+        paths = collect_scenario_paths([SCENARIO_DIR])
+        with self.assertRaises(ScenarioError):
+            filter_scenario_paths_by_tags(paths, include_tags=["not-a-real-tag"])
+
     def test_render_catalog_markdown_summarizes_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             catalog_path = Path(temp_dir) / "scenario_catalog.md"
@@ -356,6 +390,30 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("termination hint: COMMIT visible via inventory", catalog)
             self.assertIn("termination hint: ABORT safe via risk", catalog)
             self.assertIn("blocked does not always mean blind waiting: COMMIT visible via inventory.", catalog)
+
+    def test_render_catalog_markdown_mentions_active_tag_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            catalog_path = Path(temp_dir) / "peer_assisted_scenarios_catalog.md"
+            report_dir = Path(temp_dir) / "reports"
+            filtered_paths, normalized_tags = filter_scenario_paths_by_tags(
+                collect_scenario_paths([SCENARIO_DIR]),
+                include_tags=["peer-assisted-commit", "peer-assisted-abort"],
+            )
+            entries = build_catalog_entries(
+                filtered_paths,
+                catalog_path=catalog_path,
+                report_dir=report_dir,
+            )
+            catalog = render_catalog_markdown(
+                entries,
+                incident_dashboard_path="peer_assisted_scenarios_catalog_incident_response_dashboard.html",
+                include_tags=normalized_tags,
+            )
+            self.assertIn("## Active filters", catalog)
+            self.assertIn("- scenario tags: `any` of `peer-assisted-commit`, `peer-assisted-abort`", catalog)
+            self.assertIn("peer_assisted_scenarios_catalog_incident_response_dashboard.html", catalog)
+            self.assertIn("- scenarios: `2`", catalog)
+            self.assertIn("Peer-visible COMMIT evidence", render_incident_response_html(entries))
 
     def test_catalog_detects_related_compare_and_termination_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -459,6 +517,43 @@ class TwoPhaseCommitLabTests(unittest.TestCase):
             self.assertIn("and shipping.", partial_timeline)
             self.assertIn("Unresolved after the plain run: inventory and", abort_timeline)
             self.assertIn("billing.", abort_timeline)
+
+    def test_catalog_command_supports_tag_filtered_subset_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_dir = Path(temp_dir) / "reports"
+            catalog_path = Path(temp_dir) / "peer_assisted_scenarios_catalog.md"
+            dashboard_path = Path(temp_dir) / "peer_assisted_scenarios_catalog_incident_response_dashboard.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "catalog",
+                    str(SCENARIO_DIR),
+                    "--include-tag",
+                    "peer-assisted-commit",
+                    "--include-tag",
+                    "peer-assisted-abort",
+                    "--markdown-out",
+                    str(catalog_path),
+                    "--report-dir",
+                    str(report_dir),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn("applied tag filter (any): peer-assisted-commit, peer-assisted-abort", completed.stdout)
+            self.assertIn("wrote 2 scenario reports", completed.stdout)
+            self.assertTrue(catalog_path.exists())
+            self.assertTrue(dashboard_path.exists())
+            catalog = catalog_path.read_text()
+            self.assertIn("## Active filters", catalog)
+            self.assertIn("Coordinator crash after one COMMIT delivery", catalog)
+            self.assertIn("Coordinator crash after durable ABORT", catalog)
+            self.assertNotIn("Order service happy-path commit", catalog)
+            self.assertTrue((report_dir / "coordinator_crash_partial_commit_delivery_report.md").exists())
+            self.assertTrue((report_dir / "coordinator_crash_durable_abort_report.md").exists())
 
     def test_cli_json_output_and_markdown_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
