@@ -1,0 +1,7 @@
+Graph has 8 nodes, 10 directed edges, and 4 strongly connected components.
+Largest component size: 3.
+Condensation DAG spans 4 topological level(s).
+C0 (level 0, role source, in=0, out=1): A, B, C
+C1 (level 1, role bridge, in=1, out=1): D, E
+C2 (level 2, role bridge, in=1, out=1): F, G
+C3 (level 3, role sink, in=1, out=0): H

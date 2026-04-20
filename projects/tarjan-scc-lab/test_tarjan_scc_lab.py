@@ -23,7 +23,11 @@ from tarjan_scc_lab import (
     render_compare_html,
     render_compare_markdown,
     render_compare_png,
+    render_explain_text,
+    render_showcase_html,
+    render_showcase_markdown,
     summarize_components,
+    validate_showcase_artifact_paths,
     tarjan_strongly_connected_components,
     transpose_graph,
 )
@@ -275,6 +279,90 @@ def test_render_compare_html_includes_trial_gallery_component_cards_and_relative
     assert 'PNG snapshot' in html
     assert 'C0' in html
     assert 'A, B, C' in html
+
+
+
+def test_render_explain_text_matches_cli_summary_shape():
+    graph = load_graph(FIXTURE_PATH)
+    components = tarjan_strongly_connected_components(graph)
+    explanation = render_explain_text(graph, components, limit=2)
+    assert '4 strongly connected components' in explanation
+    assert 'Condensation DAG spans 4 topological level(s).' in explanation
+    assert 'C0 (level 0, role source, in=0, out=1): A, B, C' in explanation
+    assert 'C1 (level 1, role bridge, in=1, out=1): D, E' in explanation
+    assert 'C2 (' not in explanation
+
+
+def test_validate_showcase_artifact_paths_rejects_missing_files(tmp_path: Path):
+    present = tmp_path / 'present.txt'
+    present.write_text('ok', encoding='utf-8')
+    with pytest.raises(ValueError) as excinfo:
+        validate_showcase_artifact_paths({'present': present, 'missing': tmp_path / 'missing.txt'})
+    assert 'showcase artifact paths must exist before linking them' in str(excinfo.value)
+    assert 'missing:' in str(excinfo.value)
+
+
+def test_render_showcase_markdown_includes_preview_topology_groups_and_links(tmp_path: Path):
+    graph = load_graph(FIXTURE_PATH)
+    components = tarjan_strongly_connected_components(graph)
+    comparison = compare_algorithms(graph, repeat=2)
+    markdown_output = tmp_path / 'site' / 'showcase.md'
+    explain_path = tmp_path / 'artifacts' / 'sample-explain.txt'
+    condensation_json_path = tmp_path / 'artifacts' / 'sample-condensation.json'
+    compare_html_path = tmp_path / 'artifacts' / 'sample-compare.html'
+    for artifact in (explain_path, condensation_json_path, compare_html_path):
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text('artifact', encoding='utf-8')
+    markdown = render_showcase_markdown(
+        FIXTURE_PATH,
+        graph,
+        components,
+        comparison,
+        markdown_output_path=markdown_output,
+        explain_path=explain_path,
+        condensation_json_path=condensation_json_path,
+        compare_html_path=compare_html_path,
+        explain_limit=3,
+    )
+    assert '# Tarjan SCC showcase landing page' in markdown
+    assert '## Explanation preview' in markdown
+    assert '## Topology groups' in markdown
+    assert '- level 0 — 1 component(s): C0 (A, B, C)' in markdown
+    assert '[Explain text](../artifacts/sample-explain.txt)' in markdown
+    assert '[Condensation JSON](../artifacts/sample-condensation.json)' in markdown
+    assert '[Benchmark HTML](../artifacts/sample-compare.html)' in markdown
+
+
+def test_render_showcase_html_includes_artifact_cards_and_topology_groups(tmp_path: Path):
+    graph = load_graph(FIXTURE_PATH)
+    components = tarjan_strongly_connected_components(graph)
+    comparison = compare_algorithms(graph, repeat=2)
+    html_output = tmp_path / 'site' / 'showcase.html'
+    explain_path = tmp_path / 'artifacts' / 'sample-explain.txt'
+    mermaid_path = tmp_path / 'artifacts' / 'sample-condensation.mmd'
+    compare_png_path = tmp_path / 'artifacts' / 'sample-compare.png'
+    for artifact in (explain_path, mermaid_path, compare_png_path):
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text('artifact', encoding='utf-8')
+    html = render_showcase_html(
+        FIXTURE_PATH,
+        graph,
+        components,
+        comparison,
+        html_output_path=html_output,
+        explain_path=explain_path,
+        mermaid_path=mermaid_path,
+        compare_png_path=compare_png_path,
+        explain_limit=2,
+    )
+    assert 'Showcase landing page: explanation + condensation + benchmark bundle' in html
+    assert 'Interview-ready SCC walkthrough' in html
+    assert 'Topology level 0' in html
+    assert 'A, B, C' in html
+    assert 'href="../artifacts/sample-explain.txt"' in html
+    assert 'href="../artifacts/sample-condensation.mmd"' in html
+    assert 'href="../artifacts/sample-compare.png"' in html
+    assert 'How to narrate this project' in html
 
 
 def test_default_compare_png_height_grows_with_more_dashboard_cards():
@@ -640,6 +728,131 @@ def test_cli_compare_can_write_json_csv_markdown_and_html_artifacts(tmp_path: Pa
     assert 'href="benchmark.json"' in html_text
     assert 'href="benchmark.csv"' in html_text
     assert 'href="benchmark.md"' in html_text
+
+
+
+def test_cli_showcase_demo_writes_markdown_and_html_pages(tmp_path: Path):
+    explain_path = tmp_path / 'artifacts' / 'sample-explain.txt'
+    condensation_json_path = tmp_path / 'artifacts' / 'sample-condensation.json'
+    compare_json_path = tmp_path / 'artifacts' / 'sample-compare.json'
+    compare_html_path = tmp_path / 'artifacts' / 'sample-compare.html'
+    for artifact in (explain_path, condensation_json_path, compare_html_path):
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text('artifact', encoding='utf-8')
+    compare_json_path.write_text(
+        json.dumps(
+            {
+                'repeat': 9,
+                'algorithms_match': True,
+                'component_count': 4,
+                'average_ms': {'tarjan': 1.25, 'kosaraju': 2.5},
+                'faster_algorithm': 'tarjan',
+            }
+        ),
+        encoding='utf-8',
+    )
+    markdown_path = tmp_path / 'site' / 'showcase.md'
+    html_path = tmp_path / 'site' / 'showcase.html'
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).with_name('tarjan_scc_lab.py')),
+            str(FIXTURE_PATH),
+            'showcase-demo',
+            '--repeat',
+            '2',
+            '--limit',
+            '3',
+            '--markdown-output',
+            str(markdown_path),
+            '--html-output',
+            str(html_path),
+            '--explain-path',
+            str(explain_path),
+            '--condensation-json-path',
+            str(condensation_json_path),
+            '--compare-json-path',
+            str(compare_json_path),
+            '--compare-html-path',
+            str(compare_html_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload['command'] == 'showcase-demo'
+    assert payload['repeat'] == 9
+    assert payload['linked_artifact_count'] == 4
+    assert markdown_path.exists()
+    assert html_path.exists()
+    markdown_text = markdown_path.read_text()
+    html_text = html_path.read_text()
+    assert 'Tarjan SCC showcase landing page' in markdown_text
+    assert '| benchmark repeat count | 9 |' in markdown_text
+    assert 'Average timing winner: Tarjan (1.250000 ms Tarjan vs. 2.500000 ms Kosaraju).' in markdown_text
+    assert 'Showcase landing page: explanation + condensation + benchmark bundle' in html_text
+    assert 'Tarjan 1.250000 ms vs. Kosaraju 2.500000 ms across 9 run(s).' in html_text
+    assert 'href="../artifacts/sample-compare.html"' in html_text
+
+
+def test_cli_showcase_demo_rejects_invalid_compare_json(capsys, tmp_path: Path):
+    invalid_json_path = tmp_path / 'artifacts' / 'broken-compare.json'
+    invalid_json_path.parent.mkdir(parents=True, exist_ok=True)
+    invalid_json_path.write_text('{not json}', encoding='utf-8')
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                str(FIXTURE_PATH),
+                'showcase-demo',
+                '--markdown-output',
+                str(tmp_path / 'showcase.md'),
+                '--compare-json-path',
+                str(invalid_json_path),
+            ]
+        )
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert 'benchmark JSON artifact is not valid JSON' in captured.err
+
+
+def test_cli_showcase_demo_rejects_compare_json_with_bad_numeric_fields(capsys, tmp_path: Path):
+    compare_json_path = tmp_path / 'artifacts' / 'broken-numbers.json'
+    compare_json_path.parent.mkdir(parents=True, exist_ok=True)
+    compare_json_path.write_text(
+        json.dumps(
+            {
+                'repeat': 'oops',
+                'algorithms_match': True,
+                'component_count': 4,
+                'average_ms': {'tarjan': 1.0, 'kosaraju': 2.0},
+                'faster_algorithm': 'tarjan',
+            }
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                str(FIXTURE_PATH),
+                'showcase-demo',
+                '--markdown-output',
+                str(tmp_path / 'showcase.md'),
+                '--compare-json-path',
+                str(compare_json_path),
+            ]
+        )
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert 'benchmark JSON artifact must use numeric repeat/component_count/average_ms values' in captured.err
+
+
+def test_cli_showcase_demo_requires_output_path(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(FIXTURE_PATH), 'showcase-demo'])
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert 'showcase-demo requires --markdown-output and/or --html-output' in captured.err
 
 
 def test_cli_dot_outputs_graphviz_condensation_graph():

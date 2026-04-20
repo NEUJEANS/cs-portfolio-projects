@@ -14,17 +14,17 @@
 ## Average timings (ms)
 | algorithm | average_ms |
 | --- | ---: |
-| tarjan | 0.009546 |
-| kosaraju | 0.014171 |
+| tarjan | 0.008428 |
+| kosaraju | 0.014586 |
 
 ## Per-run timings (ms)
 | trial | tarjan_ms | kosaraju_ms | delta_ms | winner |
 | --- | ---: | ---: | ---: | --- |
-| 1 | 0.013866 | 0.015570 | 0.001704 | tarjan |
-| 2 | 0.008726 | 0.013085 | 0.004359 | tarjan |
-| 3 | 0.007925 | 0.018756 | 0.010831 | tarjan |
-| 4 | 0.009598 | 0.012103 | 0.002505 | tarjan |
-| 5 | 0.007614 | 0.011341 | 0.003727 | tarjan |
+| 1 | 0.010470 | 0.017984 | 0.007514 | tarjan |
+| 2 | 0.008927 | 0.012995 | 0.004068 | tarjan |
+| 3 | 0.007624 | 0.016611 | 0.008987 | tarjan |
+| 4 | 0.007785 | 0.011702 | 0.003917 | tarjan |
+| 5 | 0.007334 | 0.013636 | 0.006302 | tarjan |
 
 ## Component roster
 - C0: A, B, C
@@ -34,5 +34,5 @@
 
 ## Interview talking points
 - Both algorithms agree on the deterministic SCC grouping used by this lab.
-- Tarjan averaged 0.009546 ms while Kosaraju averaged 0.014171 ms on this graph.
+- Tarjan averaged 0.008428 ms while Kosaraju averaged 0.014586 ms on this graph.
 - The CSV export keeps one row per timing run so you can chart trial-by-trial variance in a spreadsheet or static portfolio page.

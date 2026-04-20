@@ -747,6 +747,375 @@ def render_compare_html(
 '''
 
 
+def render_explain_text(graph: DirectedGraph, components: list[list[str]], *, limit: int = 5) -> str:
+    component_limit = max(1, limit)
+    summary = summarize_components(graph, components)
+    lines = [
+        f"Graph has {len(graph.nodes)} nodes, {graph.edge_count} directed edges, and {len(components)} strongly connected components.",
+        f"Largest component size: {max((len(component) for component in components), default=0)}.",
+        f"Condensation DAG spans {summary['condensation_level_count']} topological level(s).",
+    ]
+    for index, component_summary in enumerate(summary['components'][:component_limit]):
+        lines.append(
+            f"C{index} (level {component_summary['topology_level']}, role {component_summary['bottleneck_role']}, in={component_summary['incoming_component_count']}, out={component_summary['outgoing_component_count']}): {', '.join(component_summary['nodes'])}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _showcase_artifact_sections(
+    output_path: str | Path,
+    *,
+    explain_path: str | Path | None = None,
+    condensation_json_path: str | Path | None = None,
+    dot_path: str | Path | None = None,
+    mermaid_path: str | Path | None = None,
+    compare_json_path: str | Path | None = None,
+    compare_csv_path: str | Path | None = None,
+    compare_markdown_path: str | Path | None = None,
+    compare_html_path: str | Path | None = None,
+    compare_png_path: str | Path | None = None,
+) -> list[dict[str, object]]:
+    sections: list[dict[str, object]] = []
+    for title, description, entries in (
+        (
+            'Walkthrough snapshot',
+            'Start with the concise SCC explanation before jumping into the diagram and benchmark artifacts.',
+            [('Explain text', explain_path, 'Plain-text interview walkthrough of the graph and topological SCC story.')],
+        ),
+        (
+            'Condensation views',
+            'Use whichever representation fits the audience: JSON for tooling, DOT for Graphviz, Mermaid for markdown-native docs.',
+            [
+                ('Condensation JSON', condensation_json_path, 'Machine-readable SCC condensation DAG with topology groups.'),
+                ('Graphviz DOT', dot_path, 'Diagram source for Graphviz or slide-friendly rendered images.'),
+                ('Mermaid flowchart', mermaid_path, 'GitHub-friendly markup for README and markdown embeds.'),
+            ],
+        ),
+        (
+            'Benchmark bundle',
+            'Compare Tarjan and Kosaraju through raw timings, a Markdown write-up, a browser-ready dashboard, and a PNG snapshot.',
+            [
+                ('Benchmark JSON', compare_json_path, 'Machine-readable timing payload with component roster and averages.'),
+                ('Benchmark CSV', compare_csv_path, 'Trial-by-trial timing rows for spreadsheets or charts.'),
+                ('Benchmark Markdown', compare_markdown_path, 'Portfolio-ready benchmark report with tables and talking points.'),
+                ('Benchmark HTML', compare_html_path, 'Static dashboard for browser demos or GitHub Pages hosting.'),
+                ('Benchmark PNG', compare_png_path, 'Slide-ready screenshot captured from the dashboard.'),
+            ],
+        ),
+    ):
+        links = [
+            {
+                'label': label,
+                'href': relative_href(target, output_path),
+                'description': entry_description,
+            }
+            for label, target, entry_description in entries
+            if target is not None
+        ]
+        if links:
+            sections.append({'title': title, 'description': description, 'links': links})
+    return sections
+
+
+def render_showcase_markdown(
+    graph_path: str | Path,
+    graph: DirectedGraph,
+    components: list[list[str]],
+    comparison: dict[str, object],
+    *,
+    markdown_output_path: str | Path,
+    explain_path: str | Path | None = None,
+    condensation_json_path: str | Path | None = None,
+    dot_path: str | Path | None = None,
+    mermaid_path: str | Path | None = None,
+    compare_json_path: str | Path | None = None,
+    compare_csv_path: str | Path | None = None,
+    compare_markdown_path: str | Path | None = None,
+    compare_html_path: str | Path | None = None,
+    compare_png_path: str | Path | None = None,
+    explain_limit: int = 4,
+) -> str:
+    summary = summarize_components(graph, components)
+    explanation = render_explain_text(graph, components, limit=explain_limit).rstrip()
+    sections = _showcase_artifact_sections(
+        markdown_output_path,
+        explain_path=explain_path,
+        condensation_json_path=condensation_json_path,
+        dot_path=dot_path,
+        mermaid_path=mermaid_path,
+        compare_json_path=compare_json_path,
+        compare_csv_path=compare_csv_path,
+        compare_markdown_path=compare_markdown_path,
+        compare_html_path=compare_html_path,
+        compare_png_path=compare_png_path,
+    )
+    lines = [
+        '# Tarjan SCC showcase landing page',
+        '',
+        'A compact landing page that ties together the SCC explanation, condensation views, and Tarjan-vs.-Kosaraju benchmark bundle for one graph.',
+        '',
+        '## Snapshot',
+        '| metric | value |',
+        '| --- | --- |',
+        f"| graph file | `{_markdown_escape(_display_graph_path(graph_path))}` |",
+        f"| node count | {summary['node_count']} |",
+        f"| edge count | {summary['edge_count']} |",
+        f"| strongly connected components | {summary['component_count']} |",
+        f"| condensation levels | {summary['condensation_level_count']} |",
+        f"| cyclic components | {summary['cyclic_component_count']} |",
+        f"| benchmark repeat count | {comparison['repeat']} |",
+        f"| algorithms match | {'yes' if comparison['algorithms_match'] else 'no'} |",
+        f"| average winner | {_friendly_faster_algorithm(str(comparison['faster_algorithm']))} |",
+        '',
+        '## Explanation preview',
+        '```text',
+        explanation,
+        '```',
+        '',
+        '## Topology groups',
+    ]
+    for group in summary['topology_groups']:
+        component_preview = '; '.join(
+            f"{component['id']} ({', '.join(component['nodes'])})" for component in group['components']
+        )
+        lines.append(
+            f"- level {group['level']} — {group['component_count']} component(s): {component_preview}"
+        )
+    lines.extend(
+        [
+            '',
+            '## Interview storyline',
+            f"- Tarjan and Kosaraju {'agree' if comparison['algorithms_match'] else 'do not agree'} on the deterministic SCC grouping for this graph.",
+            f"- The condensation DAG compresses the graph into {summary['component_count']} SCC node(s) spread across {summary['condensation_level_count']} topological level(s).",
+            f"- Average timing winner: {_friendly_faster_algorithm(str(comparison['faster_algorithm']))} ({comparison['average_ms']['tarjan']:.6f} ms Tarjan vs. {comparison['average_ms']['kosaraju']:.6f} ms Kosaraju).",
+        ]
+    )
+    if sections:
+        lines.extend(['', '## Linked artifact bundles'])
+        for section in sections:
+            lines.extend(['', f"### {section['title']}", section['description']])
+            for link in section['links']:
+                lines.append(
+                    f"- [{link['label']}]({_markdown_escape(link['href'])}) — {link['description']}"
+                )
+    return "\n".join(lines) + "\n"
+
+
+def render_showcase_html(
+    graph_path: str | Path,
+    graph: DirectedGraph,
+    components: list[list[str]],
+    comparison: dict[str, object],
+    *,
+    html_output_path: str | Path,
+    explain_path: str | Path | None = None,
+    condensation_json_path: str | Path | None = None,
+    dot_path: str | Path | None = None,
+    mermaid_path: str | Path | None = None,
+    compare_json_path: str | Path | None = None,
+    compare_csv_path: str | Path | None = None,
+    compare_markdown_path: str | Path | None = None,
+    compare_html_path: str | Path | None = None,
+    compare_png_path: str | Path | None = None,
+    explain_limit: int = 4,
+) -> str:
+    summary = summarize_components(graph, components)
+    explanation = render_explain_text(graph, components, limit=explain_limit).strip()
+    sections = _showcase_artifact_sections(
+        html_output_path,
+        explain_path=explain_path,
+        condensation_json_path=condensation_json_path,
+        dot_path=dot_path,
+        mermaid_path=mermaid_path,
+        compare_json_path=compare_json_path,
+        compare_csv_path=compare_csv_path,
+        compare_markdown_path=compare_markdown_path,
+        compare_html_path=compare_html_path,
+        compare_png_path=compare_png_path,
+    )
+    topology_cards_html = ''.join(
+        f'''<article class="topology-card">
+      <p class="eyebrow">Topology level {group['level']}</p>
+      <strong>{group['component_count']} component(s)</strong>
+      <p>{_html_escape('; '.join(f"{component['id']} ({', '.join(component['nodes'])})" for component in group['components']))}</p>
+    </article>'''
+        for group in summary['topology_groups']
+    )
+    artifact_sections_html = ''.join(
+        f'''<section class="artifact-section card">
+      <p class="eyebrow">{_html_escape(section['title'])}</p>
+      <h2>{_html_escape(section['title'])}</h2>
+      <p>{_html_escape(section['description'])}</p>
+      <div class="artifact-grid">
+        {''.join(
+            f'''<article class="artifact-link-card">
+          <h3><a href="{_html_escape(link['href'])}">{_html_escape(link['label'])}</a></h3>
+          <p>{_html_escape(link['description'])}</p>
+        </article>'''
+            for link in section['links']
+        )}
+      </div>
+    </section>'''
+        for section in sections
+    )
+    graph_label = _display_graph_path(graph_path)
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tarjan SCC showcase landing page</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1160px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2, h3 {{ line-height: 1.15; }}
+    p, li {{ line-height: 1.6; }}
+    code, pre {{ font-family: "SFMono-Regular", ui-monospace, monospace; }}
+    a {{ color: #1d4ed8; }}
+    .hero, .card {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.35rem; background: rgba(255, 255, 255, 0.94); box-shadow: 0 18px 44px rgba(15, 23, 42, 0.06); }}
+    .hero {{ padding: 1.5rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.95), rgba(236, 253, 245, 0.96)); }}
+    .card {{ padding: 1rem; }}
+    .eyebrow {{ margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }}
+    .chip-row, .metric-grid, .topology-grid, .artifact-grid {{ display: grid; gap: 1rem; }}
+    .chip-row {{ margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.65rem; }}
+    .chip {{ display: inline-flex; align-items: center; padding: 0.42rem 0.78rem; border-radius: 999px; background: rgba(224, 231, 255, 0.85); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; }}
+    .metric-grid, .topology-grid {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 1.4rem; }}
+    .artifact-grid {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 1rem; }}
+    .metric-card strong, .topology-card strong {{ display: block; margin-top: 0.25rem; font-size: 1.1rem; }}
+    .section-stack > * + * {{ margin-top: 1.2rem; }}
+    .artifact-link-card {{ border: 1px solid rgba(148, 163, 184, 0.24); border-radius: 1rem; padding: 0.95rem; background: rgba(248, 250, 252, 0.95); }}
+    .artifact-link-card h3 {{ margin: 0 0 0.35rem; }}
+    pre {{ margin: 0; white-space: pre-wrap; word-break: break-word; background: rgba(15, 23, 42, 0.95); color: #e2e8f0; padding: 1rem; border-radius: 1rem; overflow: auto; }}
+    ul {{ margin: 0.6rem 0 0; padding-left: 1.15rem; }}
+    @media (max-width: 760px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="section-stack">
+    <section class="hero">
+      <p class="eyebrow">Tarjan SCC lab</p>
+      <h1>Showcase landing page: explanation + condensation + benchmark bundle</h1>
+      <p>One polished jump-off page for the graph in <code>{_html_escape(graph_label)}</code>. Reviewers can start with the SCC explanation, inspect the condensation DAG in JSON/DOT/Mermaid form, then jump straight into the Tarjan-vs.-Kosaraju benchmark bundle without hunting through the repo tree.</p>
+      <div class="chip-row">
+        <span class="chip">{summary['node_count']} nodes</span>
+        <span class="chip">{summary['edge_count']} edges</span>
+        <span class="chip">{summary['component_count']} SCCs</span>
+        <span class="chip">{summary['condensation_level_count']} topology level(s)</span>
+        <span class="chip">Average winner {_html_escape(_friendly_faster_algorithm(str(comparison['faster_algorithm'])))}</span>
+      </div>
+    </section>
+
+    <section class="metric-grid">
+      <article class="metric-card card">
+        <p class="eyebrow">SCC structure</p>
+        <strong>{summary['component_count']} component(s)</strong>
+        <p>Largest SCC size: {summary['largest_component_size']}. Cyclic components: {summary['cyclic_component_count']}.</p>
+      </article>
+      <article class="metric-card card">
+        <p class="eyebrow">Condensation DAG</p>
+        <strong>{summary['condensation_level_count']} level(s)</strong>
+        <p>{summary['source_component_count']} source component(s), {summary['sink_component_count']} sink component(s), and {summary['condensation_edge_count']} cross-component edge(s).</p>
+      </article>
+      <article class="metric-card card">
+        <p class="eyebrow">Benchmark comparison</p>
+        <strong>{_html_escape(_friendly_faster_algorithm(str(comparison['faster_algorithm'])))}</strong>
+        <p>Tarjan {_html_escape(f"{comparison['average_ms']['tarjan']:.6f}")} ms vs. Kosaraju {_html_escape(f"{comparison['average_ms']['kosaraju']:.6f}")} ms across {comparison['repeat']} run(s).</p>
+      </article>
+      <article class="metric-card card">
+        <p class="eyebrow">Agreement check</p>
+        <strong>{'Algorithms match' if comparison['algorithms_match'] else 'Mismatch detected'}</strong>
+        <p>This keeps the benchmark grounded in the same deterministic SCC grouping used by the rest of the lab.</p>
+      </article>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">Explanation preview</p>
+      <h2>Interview-ready SCC walkthrough</h2>
+      <pre>{_html_escape(explanation)}</pre>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">Topology groups</p>
+      <h2>Condensation layers at a glance</h2>
+      <div class="topology-grid">
+        {topology_cards_html}
+      </div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">Interview storyline</p>
+      <h2>How to narrate this project</h2>
+      <ul>
+        <li>Start with the SCC explanation to show what the graph collapses into and why those cycles matter.</li>
+        <li>Use the condensation artifacts to switch between machine-readable data, Graphviz diagrams, and markdown-friendly Mermaid views.</li>
+        <li>Finish with the benchmark bundle to show both algorithmic knowledge and evidence-driven implementation evaluation.</li>
+      </ul>
+    </section>
+
+    {artifact_sections_html or '<section class="card"><p class="eyebrow">Artifact bundle</p><h2>No linked artifacts supplied</h2><p>Pass artifact paths to showcase-demo when you want this landing page to link the supporting JSON, diagram, and benchmark files.</p></section>'}
+  </main>
+</body>
+</html>
+'''
+
+
+def validate_showcase_artifact_paths(paths: dict[str, Path | None]) -> None:
+    missing = [f"{label}: {path}" for label, path in paths.items() if path is not None and not path.exists()]
+    if missing:
+        raise ValueError('showcase artifact paths must exist before linking them:\n- ' + '\n- '.join(missing))
+
+
+def load_compare_artifact_payload(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding='utf-8'))
+    except FileNotFoundError as error:
+        raise ValueError(f'benchmark JSON artifact does not exist: {path}') from error
+    except json.JSONDecodeError as error:
+        raise ValueError(f'benchmark JSON artifact is not valid JSON: {path}') from error
+
+    if not isinstance(payload, dict):
+        raise ValueError(f'benchmark JSON artifact must contain a JSON object: {path}')
+
+    required_fields = ('repeat', 'algorithms_match', 'component_count', 'average_ms', 'faster_algorithm')
+    missing_fields = [field_name for field_name in required_fields if field_name not in payload]
+    if missing_fields:
+        raise ValueError(
+            f"benchmark JSON artifact is missing required field(s) {', '.join(missing_fields)}: {path}"
+        )
+
+    average_ms = payload['average_ms']
+    if not isinstance(average_ms, dict) or 'tarjan' not in average_ms or 'kosaraju' not in average_ms:
+        raise ValueError(f'benchmark JSON artifact must expose average_ms.tarjan and average_ms.kosaraju: {path}')
+
+    try:
+        normalized_repeat = max(1, int(payload['repeat']))
+        normalized_component_count = int(payload['component_count'])
+        normalized_tarjan_average = float(average_ms['tarjan'])
+        normalized_kosaraju_average = float(average_ms['kosaraju'])
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            f'benchmark JSON artifact must use numeric repeat/component_count/average_ms values: {path}'
+        ) from error
+
+    faster_algorithm = str(payload['faster_algorithm'])
+    if faster_algorithm not in {'tarjan', 'kosaraju', 'tie'}:
+        raise ValueError(f"benchmark JSON artifact faster_algorithm must be 'tarjan', 'kosaraju', or 'tie': {path}")
+
+    normalized_payload = dict(payload)
+    normalized_payload['repeat'] = normalized_repeat
+    normalized_payload['component_count'] = normalized_component_count
+    normalized_payload['algorithms_match'] = bool(payload['algorithms_match'])
+    normalized_payload['faster_algorithm'] = faster_algorithm
+    normalized_payload['average_ms'] = {
+        'tarjan': normalized_tarjan_average,
+        'kosaraju': normalized_kosaraju_average,
+    }
+    return normalized_payload
+
+
 def maybe_write_text(path: Path | None, content: str) -> None:
     if path is None:
         return
@@ -868,6 +1237,20 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument('--chrome-binary', type=Path, help='Optional Chrome/Chromium binary for PNG capture')
     explain = subparsers.add_parser('explain', help='Print a concise text explanation')
     explain.add_argument('--limit', type=int, default=5, help='Maximum number of components to describe')
+    showcase = subparsers.add_parser('showcase-demo', help='Write a combined portfolio landing page for the current graph and its companion artifacts')
+    showcase.add_argument('--repeat', type=int, default=5, help='Number of timing runs to summarize in the embedded benchmark snapshot')
+    showcase.add_argument('--limit', type=int, default=4, help='Maximum number of SCCs to include in the embedded explanation preview')
+    showcase.add_argument('--markdown-output', type=Path, help='Optional Markdown landing-page path')
+    showcase.add_argument('--html-output', type=Path, help='Optional HTML landing-page path')
+    showcase.add_argument('--explain-path', type=Path, help='Optional existing explain-text artifact to link from the landing page')
+    showcase.add_argument('--condensation-json-path', type=Path, help='Optional existing condensation JSON artifact to link from the landing page')
+    showcase.add_argument('--dot-path', type=Path, help='Optional existing Graphviz DOT artifact to link from the landing page')
+    showcase.add_argument('--mermaid-path', type=Path, help='Optional existing Mermaid artifact to link from the landing page')
+    showcase.add_argument('--compare-json-path', type=Path, help='Optional existing benchmark JSON artifact to link from the landing page')
+    showcase.add_argument('--compare-csv-path', type=Path, help='Optional existing benchmark CSV artifact to link from the landing page')
+    showcase.add_argument('--compare-markdown-path', type=Path, help='Optional existing benchmark Markdown artifact to link from the landing page')
+    showcase.add_argument('--compare-html-path', type=Path, help='Optional existing benchmark HTML artifact to link from the landing page')
+    showcase.add_argument('--compare-png-path', type=Path, help='Optional existing benchmark PNG artifact to link from the landing page')
     return parser
 
 
@@ -936,18 +1319,85 @@ def main(argv: list[str] | None = None) -> int:
         print(condensation_mermaid(graph, components))
         return 0
     if args.command == 'explain':
-        limit = max(1, args.limit)
-        summary = summarize_components(graph, components)
-        lines = [
-            f"Graph has {len(graph.nodes)} nodes, {graph.edge_count} directed edges, and {len(components)} strongly connected components.",
-            f"Largest component size: {max((len(component) for component in components), default=0)}.",
-            f"Condensation DAG spans {summary['condensation_level_count']} topological level(s).",
-        ]
-        for index, component_summary in enumerate(summary['components'][:limit]):
-            lines.append(
-                f"C{index} (level {component_summary['topology_level']}, role {component_summary['bottleneck_role']}, in={component_summary['incoming_component_count']}, out={component_summary['outgoing_component_count']}): {', '.join(component_summary['nodes'])}"
+        print(render_explain_text(graph, components, limit=args.limit), end='')
+        return 0
+    if args.command == 'showcase-demo':
+        if args.markdown_output is None and args.html_output is None:
+            parser.error('showcase-demo requires --markdown-output and/or --html-output')
+        linked_artifacts = {
+            'Explain text': args.explain_path,
+            'Condensation JSON': args.condensation_json_path,
+            'Graphviz DOT': args.dot_path,
+            'Mermaid flowchart': args.mermaid_path,
+            'Benchmark JSON': args.compare_json_path,
+            'Benchmark CSV': args.compare_csv_path,
+            'Benchmark Markdown': args.compare_markdown_path,
+            'Benchmark HTML': args.compare_html_path,
+            'Benchmark PNG': args.compare_png_path,
+        }
+        try:
+            validate_showcase_artifact_paths(linked_artifacts)
+            comparison = (
+                load_compare_artifact_payload(args.compare_json_path)
+                if args.compare_json_path is not None
+                else compare_algorithms(graph, repeat=args.repeat)
             )
-        print("\n".join(lines))
+        except ValueError as error:
+            parser.error(str(error))
+        if args.markdown_output is not None:
+            maybe_write_text(
+                args.markdown_output,
+                render_showcase_markdown(
+                    args.graph_path,
+                    graph,
+                    components,
+                    comparison,
+                    markdown_output_path=args.markdown_output,
+                    explain_path=args.explain_path,
+                    condensation_json_path=args.condensation_json_path,
+                    dot_path=args.dot_path,
+                    mermaid_path=args.mermaid_path,
+                    compare_json_path=args.compare_json_path,
+                    compare_csv_path=args.compare_csv_path,
+                    compare_markdown_path=args.compare_markdown_path,
+                    compare_html_path=args.compare_html_path,
+                    compare_png_path=args.compare_png_path,
+                    explain_limit=args.limit,
+                ),
+            )
+        if args.html_output is not None:
+            maybe_write_text(
+                args.html_output,
+                render_showcase_html(
+                    args.graph_path,
+                    graph,
+                    components,
+                    comparison,
+                    html_output_path=args.html_output,
+                    explain_path=args.explain_path,
+                    condensation_json_path=args.condensation_json_path,
+                    dot_path=args.dot_path,
+                    mermaid_path=args.mermaid_path,
+                    compare_json_path=args.compare_json_path,
+                    compare_csv_path=args.compare_csv_path,
+                    compare_markdown_path=args.compare_markdown_path,
+                    compare_html_path=args.compare_html_path,
+                    compare_png_path=args.compare_png_path,
+                    explain_limit=args.limit,
+                ),
+            )
+        payload = {
+            'command': 'showcase-demo',
+            'graph_path': str(args.graph_path),
+            'node_count': len(graph.nodes),
+            'edge_count': graph.edge_count,
+            'component_count': len(components),
+            'repeat': int(comparison['repeat']),
+            'markdown_output': str(args.markdown_output) if args.markdown_output is not None else None,
+            'html_output': str(args.html_output) if args.html_output is not None else None,
+            'linked_artifact_count': sum(1 for value in linked_artifacts.values() if value is not None),
+        }
+        print(json.dumps(payload, indent=2))
         return 0
     parser.error(f'unsupported command: {args.command}')
     return 2

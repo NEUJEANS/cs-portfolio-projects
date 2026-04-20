@@ -1,0 +1,25 @@
+flowchart LR
+  classDef component fill:#EAF2FF,stroke:#4C78A8,stroke-width:1px,color:#0F172A;
+  subgraph level_0["topology level 0"]
+    direction TB
+    C0["C0<br/>level=0 | size=3<br/>A, B, C"]
+  end
+  subgraph level_1["topology level 1"]
+    direction TB
+    C1["C1<br/>level=1 | size=2<br/>D, E"]
+  end
+  subgraph level_2["topology level 2"]
+    direction TB
+    C2["C2<br/>level=2 | size=2<br/>F, G"]
+  end
+  subgraph level_3["topology level 3"]
+    direction TB
+    C3["C3<br/>level=3 | size=1<br/>H"]
+  end
+  class C0 component;
+  class C1 component;
+  class C2 component;
+  class C3 component;
+  C0 --> C1
+  C1 --> C2
+  C2 --> C3

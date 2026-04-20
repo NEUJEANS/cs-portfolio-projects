@@ -1,0 +1,23 @@
+digraph condensation {
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2FF", color="#4C78A8"];
+  C0 [label="C0\nlevel=0 | size=3\nA, B, C"];
+  C1 [label="C1\nlevel=1 | size=2\nD, E"];
+  C2 [label="C2\nlevel=2 | size=2\nF, G"];
+  C3 [label="C3\nlevel=3 | size=1\nH"];
+  { rank=same; // topology level 0
+    C0;
+  }
+  { rank=same; // topology level 1
+    C1;
+  }
+  { rank=same; // topology level 2
+    C2;
+  }
+  { rank=same; // topology level 3
+    C3;
+  }
+  C0 -> C1;
+  C1 -> C2;
+  C2 -> C3;
+}

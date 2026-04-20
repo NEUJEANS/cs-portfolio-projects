@@ -1,0 +1,154 @@
+{
+  "components": [
+    {
+      "id": "C0",
+      "nodes": [
+        "A",
+        "B",
+        "C"
+      ],
+      "size": 3,
+      "topology_level": 0,
+      "incoming_component_count": 0,
+      "outgoing_component_count": 1,
+      "bottleneck_role": "source"
+    },
+    {
+      "id": "C1",
+      "nodes": [
+        "D",
+        "E"
+      ],
+      "size": 2,
+      "topology_level": 1,
+      "incoming_component_count": 1,
+      "outgoing_component_count": 1,
+      "bottleneck_role": "bridge"
+    },
+    {
+      "id": "C2",
+      "nodes": [
+        "F",
+        "G"
+      ],
+      "size": 2,
+      "topology_level": 2,
+      "incoming_component_count": 1,
+      "outgoing_component_count": 1,
+      "bottleneck_role": "bridge"
+    },
+    {
+      "id": "C3",
+      "nodes": [
+        "H"
+      ],
+      "size": 1,
+      "topology_level": 3,
+      "incoming_component_count": 1,
+      "outgoing_component_count": 0,
+      "bottleneck_role": "sink"
+    }
+  ],
+  "topology_groups": [
+    {
+      "level": 0,
+      "component_count": 1,
+      "component_ids": [
+        "C0"
+      ],
+      "components": [
+        {
+          "id": "C0",
+          "nodes": [
+            "A",
+            "B",
+            "C"
+          ],
+          "size": 3,
+          "topology_level": 0,
+          "incoming_component_count": 0,
+          "outgoing_component_count": 1,
+          "bottleneck_role": "source"
+        }
+      ]
+    },
+    {
+      "level": 1,
+      "component_count": 1,
+      "component_ids": [
+        "C1"
+      ],
+      "components": [
+        {
+          "id": "C1",
+          "nodes": [
+            "D",
+            "E"
+          ],
+          "size": 2,
+          "topology_level": 1,
+          "incoming_component_count": 1,
+          "outgoing_component_count": 1,
+          "bottleneck_role": "bridge"
+        }
+      ]
+    },
+    {
+      "level": 2,
+      "component_count": 1,
+      "component_ids": [
+        "C2"
+      ],
+      "components": [
+        {
+          "id": "C2",
+          "nodes": [
+            "F",
+            "G"
+          ],
+          "size": 2,
+          "topology_level": 2,
+          "incoming_component_count": 1,
+          "outgoing_component_count": 1,
+          "bottleneck_role": "bridge"
+        }
+      ]
+    },
+    {
+      "level": 3,
+      "component_count": 1,
+      "component_ids": [
+        "C3"
+      ],
+      "components": [
+        {
+          "id": "C3",
+          "nodes": [
+            "H"
+          ],
+          "size": 1,
+          "topology_level": 3,
+          "incoming_component_count": 1,
+          "outgoing_component_count": 0,
+          "bottleneck_role": "sink"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "C0",
+      "to": "C1"
+    },
+    {
+      "from": "C1",
+      "to": "C2"
+    },
+    {
+      "from": "C2",
+      "to": "C3"
+    }
+  ],
+  "edge_count": 3,
+  "level_count": 4
+}

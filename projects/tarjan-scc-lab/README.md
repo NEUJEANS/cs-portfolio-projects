@@ -9,6 +9,7 @@ A graph-algorithms portfolio project that finds strongly connected components in
 - deterministic JSON/text CLI output suitable for demos, scripting, and interviews
 - side-by-side Tarjan vs. Kosaraju comparison with repeatable timing output
 - JSON, CSV, Markdown, HTML, and PNG benchmark-report exports for portfolio screenshots or static-site embeds
+- a combined showcase landing page that links the explanation, condensation views, and benchmark bundle into one recruiter-friendly story
 - focused automated tests for algorithm correctness, input validation, and CLI behavior
 
 ## Files
@@ -32,10 +33,30 @@ python3 tarjan_scc_lab.py sample_graph.json compare --repeat 10 \
   --html-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.html \
   --png-output ../../docs/artifacts/tarjan-scc-lab/sample-compare.png
 python3 tarjan_scc_lab.py sample_graph.json explain --limit 4
+python3 tarjan_scc_lab.py sample_graph.json explain --limit 4 > ../../docs/artifacts/tarjan-scc-lab/sample-explain.txt
+python3 tarjan_scc_lab.py sample_graph.json condensation > ../../docs/artifacts/tarjan-scc-lab/sample-condensation.json
+python3 tarjan_scc_lab.py sample_graph.json dot > ../../docs/artifacts/tarjan-scc-lab/sample-condensation.dot
+python3 tarjan_scc_lab.py sample_graph.json mermaid > ../../docs/artifacts/tarjan-scc-lab/sample-condensation.mmd
+python3 tarjan_scc_lab.py sample_graph.json showcase-demo \
+  --repeat 5 \
+  --limit 4 \
+  --markdown-output ../../docs/artifacts/tarjan-scc-lab/sample-showcase.md \
+  --html-output ../../docs/artifacts/tarjan-scc-lab/sample-showcase.html \
+  --explain-path ../../docs/artifacts/tarjan-scc-lab/sample-explain.txt \
+  --condensation-json-path ../../docs/artifacts/tarjan-scc-lab/sample-condensation.json \
+  --dot-path ../../docs/artifacts/tarjan-scc-lab/sample-condensation.dot \
+  --mermaid-path ../../docs/artifacts/tarjan-scc-lab/sample-condensation.mmd \
+  --compare-json-path ../../docs/artifacts/tarjan-scc-lab/sample-compare.json \
+  --compare-csv-path ../../docs/artifacts/tarjan-scc-lab/sample-compare.csv \
+  --compare-markdown-path ../../docs/artifacts/tarjan-scc-lab/sample-compare.md \
+  --compare-html-path ../../docs/artifacts/tarjan-scc-lab/sample-compare.html \
+  --compare-png-path ../../docs/artifacts/tarjan-scc-lab/sample-compare.png
 ../../.venv/bin/python -m pytest -q test_tarjan_scc_lab.py
 ```
 
 `--png-output` captures a Chrome/Chromium headless screenshot from the generated HTML dashboard, so pair it with `--html-output` and optionally pass `--chrome-binary` when the browser is not on `PATH`.
+
+When `showcase-demo` receives `--compare-json-path`, it reuses that committed benchmark payload for the embedded timing snapshot so the landing page stays numerically aligned with the linked benchmark bundle.
 
 ## Input formats
 Adjacency list:
@@ -196,6 +217,7 @@ Example output excerpt:
 This gives the project a stronger "theory plus evaluation" story: one implementation is enough to solve the problem, but comparing both shows awareness of alternative SCC strategies and the trade-off of Kosaraju's transpose/pass structure.
 
 The comparison flow can now also write portfolio-ready artifacts directly:
+- `showcase-demo` adds a final recruiter-friendly landing page in Markdown/HTML that reuses the graph summary and, when `--compare-json-path` is supplied, the exact linked benchmark snapshot while linking the raw explain/condensation/benchmark artifacts together
 - `--json-output` writes the compare payload to disk without relying on shell redirection, which makes artifact bundles easier to script and review
 - `--csv-output` writes one row per timing run so you can chart variance in a spreadsheet or static site
 - `--markdown-output` writes a report with graph metadata, average timings, per-run timing rows, a component roster, and ready-made interview talking points
@@ -222,8 +244,8 @@ Example Markdown report excerpt:
 | 1 | 0.031251 | 0.040812 | 0.009561 | tarjan |
 ```
 
-The HTML dashboard is especially useful for portfolio hosting because it keeps the benchmark summary, trial-by-trial comparison, component roster, and links to the sibling JSON/CSV/Markdown/PNG artifacts together in one static page. The PNG helper builds directly on that dashboard so slide decks, chat uploads, and README thumbnails can reuse the same artifact bundle with one extra flag.
+The HTML dashboard is especially useful for portfolio hosting because it keeps the benchmark summary, trial-by-trial comparison, component roster, and links to the sibling JSON/CSV/Markdown/PNG artifacts together in one static page. The PNG helper builds directly on that dashboard so slide decks, chat uploads, and README thumbnails can reuse the same artifact bundle with one extra flag. The new showcase page sits one level above that bundle so reviewers can start with the text explanation and condensation layers, then click into the benchmark dashboard only when they want the deeper evidence.
 
 ## Future improvements
 - stream very large graphs from edge lists instead of loading everything into memory first
-- add a small HTML/markdown report template that consumes `topology_groups` directly for layered SCC portfolio cards
+- add a cross-graph landing page that compares multiple SCC fixtures side by side with shared topology and benchmark cards

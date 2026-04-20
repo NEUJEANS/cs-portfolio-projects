@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tarjan SCC showcase landing page</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1160px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    h1, h2, h3 { line-height: 1.15; }
+    p, li { line-height: 1.6; }
+    code, pre { font-family: "SFMono-Regular", ui-monospace, monospace; }
+    a { color: #1d4ed8; }
+    .hero, .card { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.35rem; background: rgba(255, 255, 255, 0.94); box-shadow: 0 18px 44px rgba(15, 23, 42, 0.06); }
+    .hero { padding: 1.5rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.95), rgba(236, 253, 245, 0.96)); }
+    .card { padding: 1rem; }
+    .eyebrow { margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }
+    .chip-row, .metric-grid, .topology-grid, .artifact-grid { display: grid; gap: 1rem; }
+    .chip-row { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.65rem; }
+    .chip { display: inline-flex; align-items: center; padding: 0.42rem 0.78rem; border-radius: 999px; background: rgba(224, 231, 255, 0.85); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; }
+    .metric-grid, .topology-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 1.4rem; }
+    .artifact-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 1rem; }
+    .metric-card strong, .topology-card strong { display: block; margin-top: 0.25rem; font-size: 1.1rem; }
+    .section-stack > * + * { margin-top: 1.2rem; }
+    .artifact-link-card { border: 1px solid rgba(148, 163, 184, 0.24); border-radius: 1rem; padding: 0.95rem; background: rgba(248, 250, 252, 0.95); }
+    .artifact-link-card h3 { margin: 0 0 0.35rem; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; background: rgba(15, 23, 42, 0.95); color: #e2e8f0; padding: 1rem; border-radius: 1rem; overflow: auto; }
+    ul { margin: 0.6rem 0 0; padding-left: 1.15rem; }
+    @media (max-width: 760px) {
+      main { padding: 1rem 0.75rem 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="section-stack">
+    <section class="hero">
+      <p class="eyebrow">Tarjan SCC lab</p>
+      <h1>Showcase landing page: explanation + condensation + benchmark bundle</h1>
+      <p>One polished jump-off page for the graph in <code>projects/tarjan-scc-lab/sample_graph.json</code>. Reviewers can start with the SCC explanation, inspect the condensation DAG in JSON/DOT/Mermaid form, then jump straight into the Tarjan-vs.-Kosaraju benchmark bundle without hunting through the repo tree.</p>
+      <div class="chip-row">
+        <span class="chip">8 nodes</span>
+        <span class="chip">10 edges</span>
+        <span class="chip">4 SCCs</span>
+        <span class="chip">4 topology level(s)</span>
+        <span class="chip">Average winner Tarjan</span>
+      </div>
+    </section>
+
+    <section class="metric-grid">
+      <article class="metric-card card">
+        <p class="eyebrow">SCC structure</p>
+        <strong>4 component(s)</strong>
+        <p>Largest SCC size: 3. Cyclic components: 3.</p>
+      </article>
+      <article class="metric-card card">
+        <p class="eyebrow">Condensation DAG</p>
+        <strong>4 level(s)</strong>
+        <p>1 source component(s), 1 sink component(s), and 3 cross-component edge(s).</p>
+      </article>
+      <article class="metric-card card">
+        <p class="eyebrow">Benchmark comparison</p>
+        <strong>Tarjan</strong>
+        <p>Tarjan 0.008428 ms vs. Kosaraju 0.014586 ms across 5 run(s).</p>
+      </article>
+      <article class="metric-card card">
+        <p class="eyebrow">Agreement check</p>
+        <strong>Algorithms match</strong>
+        <p>This keeps the benchmark grounded in the same deterministic SCC grouping used by the rest of the lab.</p>
+      </article>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">Explanation preview</p>
+      <h2>Interview-ready SCC walkthrough</h2>
+      <pre>Graph has 8 nodes, 10 directed edges, and 4 strongly connected components.
+Largest component size: 3.
+Condensation DAG spans 4 topological level(s).
+C0 (level 0, role source, in=0, out=1): A, B, C
+C1 (level 1, role bridge, in=1, out=1): D, E
+C2 (level 2, role bridge, in=1, out=1): F, G
+C3 (level 3, role sink, in=1, out=0): H</pre>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">Topology groups</p>
+      <h2>Condensation layers at a glance</h2>
+      <div class="topology-grid">
+        <article class="topology-card">
+      <p class="eyebrow">Topology level 0</p>
+      <strong>1 component(s)</strong>
+      <p>C0 (A, B, C)</p>
+    </article><article class="topology-card">
+      <p class="eyebrow">Topology level 1</p>
+      <strong>1 component(s)</strong>
+      <p>C1 (D, E)</p>
+    </article><article class="topology-card">
+      <p class="eyebrow">Topology level 2</p>
+      <strong>1 component(s)</strong>
+      <p>C2 (F, G)</p>
+    </article><article class="topology-card">
+      <p class="eyebrow">Topology level 3</p>
+      <strong>1 component(s)</strong>
+      <p>C3 (H)</p>
+    </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">Interview storyline</p>
+      <h2>How to narrate this project</h2>
+      <ul>
+        <li>Start with the SCC explanation to show what the graph collapses into and why those cycles matter.</li>
+        <li>Use the condensation artifacts to switch between machine-readable data, Graphviz diagrams, and markdown-friendly Mermaid views.</li>
+        <li>Finish with the benchmark bundle to show both algorithmic knowledge and evidence-driven implementation evaluation.</li>
+      </ul>
+    </section>
+
+    <section class="artifact-section card">
+      <p class="eyebrow">Walkthrough snapshot</p>
+      <h2>Walkthrough snapshot</h2>
+      <p>Start with the concise SCC explanation before jumping into the diagram and benchmark artifacts.</p>
+      <div class="artifact-grid">
+        <article class="artifact-link-card">
+          <h3><a href="sample-explain.txt">Explain text</a></h3>
+          <p>Plain-text interview walkthrough of the graph and topological SCC story.</p>
+        </article>
+      </div>
+    </section><section class="artifact-section card">
+      <p class="eyebrow">Condensation views</p>
+      <h2>Condensation views</h2>
+      <p>Use whichever representation fits the audience: JSON for tooling, DOT for Graphviz, Mermaid for markdown-native docs.</p>
+      <div class="artifact-grid">
+        <article class="artifact-link-card">
+          <h3><a href="sample-condensation.json">Condensation JSON</a></h3>
+          <p>Machine-readable SCC condensation DAG with topology groups.</p>
+        </article><article class="artifact-link-card">
+          <h3><a href="sample-condensation.dot">Graphviz DOT</a></h3>
+          <p>Diagram source for Graphviz or slide-friendly rendered images.</p>
+        </article><article class="artifact-link-card">
+          <h3><a href="sample-condensation.mmd">Mermaid flowchart</a></h3>
+          <p>GitHub-friendly markup for README and markdown embeds.</p>
+        </article>
+      </div>
+    </section><section class="artifact-section card">
+      <p class="eyebrow">Benchmark bundle</p>
+      <h2>Benchmark bundle</h2>
+      <p>Compare Tarjan and Kosaraju through raw timings, a Markdown write-up, a browser-ready dashboard, and a PNG snapshot.</p>
+      <div class="artifact-grid">
+        <article class="artifact-link-card">
+          <h3><a href="sample-compare.json">Benchmark JSON</a></h3>
+          <p>Machine-readable timing payload with component roster and averages.</p>
+        </article><article class="artifact-link-card">
+          <h3><a href="sample-compare.csv">Benchmark CSV</a></h3>
+          <p>Trial-by-trial timing rows for spreadsheets or charts.</p>
+        </article><article class="artifact-link-card">
+          <h3><a href="sample-compare.md">Benchmark Markdown</a></h3>
+          <p>Portfolio-ready benchmark report with tables and talking points.</p>
+        </article><article class="artifact-link-card">
+          <h3><a href="sample-compare.html">Benchmark HTML</a></h3>
+          <p>Static dashboard for browser demos or GitHub Pages hosting.</p>
+        </article><article class="artifact-link-card">
+          <h3><a href="sample-compare.png">Benchmark PNG</a></h3>
+          <p>Slide-ready screenshot captured from the dashboard.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
