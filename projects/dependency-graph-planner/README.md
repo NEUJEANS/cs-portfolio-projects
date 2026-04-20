@@ -24,7 +24,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - compact static HTML dashboards that turn each report bundle into a README-friendly landing page with relative links and embedded schedule previews
 - GitHub-friendly SVG schedule timelines for constrained runs so reviewers can inspect worker/resource bottlenecks without opening raw JSON
 - synthetic manifest generators for CI, release, and data-pipeline bottleneck stories so the project can showcase multiple workload families without hand-authoring every DAG
-- batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary across both hand-authored and generated manifests
+- batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary plus JSON/CSV/HTML companion artifacts across both hand-authored and generated manifests
 
 ## Project structure
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, scheduler, CLI, diagram export helpers, walkthrough-report generation, HTML dashboard rendering, and schedule SVG export
@@ -97,8 +97,9 @@ Suite fields:
 - `title` - optional report title override for the `benchmark` command
 - `scenarios` - required non-empty list of benchmark cases
 
-The `benchmark` command can emit four complementary outputs from the same suite run:
+The `benchmark` command can emit five complementary outputs from the same suite run:
 - Markdown scoreboard (`--benchmark-markdown-out`) for recruiter-friendly summaries
+- compact static HTML dashboard (`--benchmark-html-out`) for README/GitHub browsing with relative links to the full export bundle
 - full JSON snapshot (`--benchmark-json-out`) for programmatic ingestion
 - aggregate CSV leaderboard (`--benchmark-aggregate-csv-out`) for one row per strategy
 - per-scenario strategy CSV (`--benchmark-strategy-csv-out`) for plotting/notebooks
@@ -266,11 +267,12 @@ This emits the linked strategy-comparison report plus JSON and SVG schedule snap
 python3 projects/dependency-graph-planner/dependency_graph_planner.py benchmark \
   projects/dependency-graph-planner/portfolio_benchmark_suite.json \
   --benchmark-markdown-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md \
+  --benchmark-html-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report_dashboard.html \
   --benchmark-json-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.json \
   --benchmark-aggregate-csv-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_aggregates.csv \
   --benchmark-strategy-csv-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_strategies.csv
 ```
-This emits a scoreboard-style Markdown report plus JSON and CSV leaderboard snapshots that compare scheduling strategies across the committed sample, strategy, resource, multi-resource, and generated showcase manifests in one batch.
+This emits a scoreboard-style Markdown report plus a compact HTML dashboard and JSON/CSV leaderboard snapshots that compare scheduling strategies across the committed sample, strategy, resource, multi-resource, and generated showcase manifests in one batch.
 
 ### Generate a synthetic CI / release / data-pipeline manifest
 ```bash
@@ -354,6 +356,7 @@ Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/generated_data_pipeline_4_workers_schedule.json`
 - `docs/artifacts/dependency-graph-planner/generated_data_pipeline_4_workers_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md`
+- `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.json`
 - `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_aggregates.csv`
 - `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_strategies.csv`
@@ -377,5 +380,4 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 ## Future improvements
 - simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
 - add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
-- add a lightweight benchmark dashboard so suite results are browsable without opening Markdown or CSV files first
 - use manifest metadata automatically for default report/dashboard titles and richer artifact subtitles

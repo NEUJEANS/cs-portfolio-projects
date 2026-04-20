@@ -3,6 +3,14 @@
 - Suite source: `projects/dependency-graph-planner/portfolio_benchmark_suite.json`
 - Scenario count: `8`
 - Strategies covered: `fifo, critical-first, longest-processing-time`
+- Aggregate leader: `fifo`
+
+## Linked artifacts
+
+- [Benchmark dashboard HTML](portfolio_benchmark_suite_report_dashboard.html)
+- [Benchmark JSON snapshot](portfolio_benchmark_suite_report.json)
+- [Aggregate strategy CSV](portfolio_benchmark_suite_aggregates.csv)
+- [Per-scenario strategy CSV](portfolio_benchmark_suite_strategies.csv)
 
 ## Aggregate strategy scoreboard
 

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dependency graph strategy benchmark suite — benchmark dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1500px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1, h2, h3, p { margin-top: 0; }
+      a { color: var(--accent); }
+      code { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; word-break: break-word; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .hero p { color: var(--muted); max-width: 1020px; }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; padding: 0; }
+      .summary-grid li { list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #bfdbfe; }
+      .summary-grid strong { display: block; font-size: 1.25rem; margin-bottom: 6px; }
+      .panel { padding: 20px; margin-bottom: 24px; overflow: auto; }
+      .artifact-list { margin: 0; padding-left: 1.1rem; }
+      .artifact-list li { margin: 0.6rem 0; }
+      .muted { color: var(--muted); display: block; margin-top: 4px; font-size: 0.92rem; }
+      table { width: 100%; border-collapse: collapse; min-width: 900px; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th { font-size: 0.92rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1rem; }
+      .chip { display: inline-flex; align-items: center; padding: 0.45rem 0.75rem; border-radius: 999px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="chip">Dependency graph benchmark suite</p>
+        <h1>Dependency graph strategy benchmark suite — dashboard</h1>
+        <p>Static landing page for the planner's benchmark suite exports. Use it to browse aggregate winners, per-scenario tradeoffs, and the committed JSON/CSV snapshots without starting from raw files.</p>
+        <div class="chips">
+          <span class="chip">Suite <code>projects/dependency-graph-planner/portfolio_benchmark_suite.json</code></span>
+          <span class="chip">Scenarios 8</span>
+          <span class="chip">Strategies 3</span>
+        </div>
+        <ul class="summary-grid">
+          <li><strong>8</strong>Scenarios</li><li><strong>3</strong>Strategies</li><li><strong>fifo</strong>Top aggregate leader</li><li><strong>13.75</strong>Best average makespan</li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Artifact bundle</h2>
+        <p class="muted">Relative links keep the committed dashboard portable when it ships beside the Markdown, JSON, and CSV exports.</p>
+        <ul class="artifact-list">
+          <li><a href="portfolio_benchmark_suite_report.md">Markdown scoreboard</a><span class="muted"><code>portfolio_benchmark_suite_report.md</code></span></li><li><a href="portfolio_benchmark_suite_report.json">Benchmark JSON snapshot</a><span class="muted"><code>portfolio_benchmark_suite_report.json</code></span></li><li><a href="portfolio_benchmark_suite_aggregates.csv">Aggregate strategy CSV</a><span class="muted"><code>portfolio_benchmark_suite_aggregates.csv</code></span></li><li><a href="portfolio_benchmark_suite_strategies.csv">Per-scenario strategy CSV</a><span class="muted"><code>portfolio_benchmark_suite_strategies.csv</code></span></li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Aggregate strategy scoreboard</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Scenarios</th>
+              <th>Rank-1 finishes</th>
+              <th>Best-makespan finishes</th>
+              <th>Avg makespan</th>
+              <th>Avg Δ vs best</th>
+              <th>Avg total queue delay</th>
+              <th>Avg max queue delay</th>
+              <th>Avg utilization</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>fifo</code></td><td>8</td><td>7</td><td>7</td><td>13.75</td><td>0.38</td><td>4.00</td><td>2.88</td><td>50.4%</td></tr><tr><td><code>critical-first</code></td><td>8</td><td>4</td><td>7</td><td>13.50</td><td>0.12</td><td>5.00</td><td>3.62</td><td>51.6%</td></tr><tr><td><code>longest-processing-time</code></td><td>7</td><td>3</td><td>6</td><td>14.57</td><td>0.43</td><td>5.14</td><td>3.43</td><td>49.3%</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario summary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th>Worker limit</th>
+              <th>Tasks</th>
+              <th>Unlimited makespan</th>
+              <th>Best makespan</th>
+              <th>Rank-1 strategies</th>
+              <th>Resource caps</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>sample-2-workers</strong><span class="muted"><code>sample_graph.json</code></span></td><td>2 workers</td><td>5</td><td>8</td><td>8</td><td>critical-first, fifo, longest-processing-time</td><td>—</td></tr><tr><td><strong>strategy-2-workers</strong><span class="muted"><code>strategy_graph.json</code></span></td><td>2 workers</td><td>6</td><td>10</td><td>13</td><td>critical-first</td><td>—</td></tr><tr><td><strong>resource-3-workers</strong><span class="muted"><code>resource_graph.json</code></span></td><td>3 workers</td><td>5</td><td>6</td><td>8</td><td>fifo</td><td>gpu=1</td></tr><tr><td><strong>multi-resource-3-workers</strong><span class="muted"><code>multi_resource_graph.json</code></span></td><td>3 workers</td><td>6</td><td>7</td><td>10</td><td>critical-first, fifo, longest-processing-time</td><td>browser-lab=2, gpu=1, signing=1</td></tr><tr><td><strong>multi-resource-browser-bump</strong><span class="muted"><code>multi_resource_graph.json</code></span></td><td>3 workers</td><td>6</td><td>7</td><td>8</td><td>fifo</td><td>browser-lab=3, gpu=1, signing=1</td></tr><tr><td><strong>generated-ci-4-workers</strong><span class="muted"><code>generated_ci_pipeline.json</code></span></td><td>4 workers</td><td>16</td><td>16</td><td>16</td><td>critical-first, fifo, longest-processing-time</td><td>browser-lab=1, docker-builder=1</td></tr><tr><td><strong>generated-release-3-workers</strong><span class="muted"><code>generated_release_pipeline.json</code></span></td><td>3 workers</td><td>19</td><td>21</td><td>24</td><td>fifo</td><td>prod-slot=1, signing=1</td></tr><tr><td><strong>generated-data-pipeline-4-workers</strong><span class="muted"><code>generated_data_pipeline.json</code></span></td><td>4 workers</td><td>16</td><td>15</td><td>20</td><td>fifo</td><td>gpu=1, warehouse=2</td></tr>
+          </tbody>
+        </table>
+      </section>
+      
+      <section class="panel">
+        <h2>Scenario — sample-2-workers</h2>
+        <p class="muted">Manifest <code>sample_graph.json</code> · 2 workers · best makespan 8 via critical-first, fifo, longest-processing-time</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>critical-first</code></td><td>8</td><td>0</td><td>0</td><td>0</td><td>0</td><td>7</td><td>56.2%</td><td>lint, compile, unit, package, publish</td></tr><tr><td>1</td><td><code>fifo</code></td><td>8</td><td>0</td><td>0</td><td>0</td><td>0</td><td>7</td><td>56.2%</td><td>lint, compile, package, unit, publish</td></tr><tr><td>1</td><td><code>longest-processing-time</code></td><td>8</td><td>0</td><td>0</td><td>0</td><td>0</td><td>7</td><td>56.2%</td><td>lint, compile, unit, package, publish</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario — strategy-2-workers</h2>
+        <p class="muted">Manifest <code>strategy_graph.json</code> · 2 workers · best makespan 13 via critical-first</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>critical-first</code></td><td>13</td><td>3</td><td>0</td><td>6</td><td>6</td><td>4</td><td>84.6%</td><td>core-seed, alpha-long, core-stage-1, core-stage-2, beta-long, ship</td></tr><tr><td>2</td><td><code>fifo</code></td><td>16</td><td>6</td><td>3</td><td>6</td><td>6</td><td>10</td><td>68.8%</td><td>alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship</td></tr><tr><td>2</td><td><code>longest-processing-time</code></td><td>16</td><td>6</td><td>3</td><td>6</td><td>6</td><td>10</td><td>68.8%</td><td>alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario — resource-3-workers</h2>
+        <p class="muted">Manifest <code>resource_graph.json</code> · 3 workers · best makespan 8 via fifo, critical-first, longest-processing-time</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>fifo</code></td><td>8</td><td>2</td><td>0</td><td>2</td><td>2</td><td>13</td><td>45.8%</td><td>prep, docs, gpu-eval, gpu-train, package</td></tr><tr><td>2</td><td><code>critical-first</code></td><td>8</td><td>2</td><td>0</td><td>4</td><td>4</td><td>13</td><td>45.8%</td><td>prep, gpu-train, docs, gpu-eval, package</td></tr><tr><td>2</td><td><code>longest-processing-time</code></td><td>8</td><td>2</td><td>0</td><td>4</td><td>4</td><td>13</td><td>45.8%</td><td>prep, gpu-train, docs, gpu-eval, package</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario — multi-resource-3-workers</h2>
+        <p class="muted">Manifest <code>multi_resource_graph.json</code> · 3 workers · best makespan 10 via critical-first, fifo, longest-processing-time</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>critical-first</code></td><td>10</td><td>3</td><td>0</td><td>5</td><td>5</td><td>16</td><td>46.7%</td><td>prep, browser-matrix, gpu-train, cross-platform-cert, sign, package</td></tr><tr><td>1</td><td><code>fifo</code></td><td>10</td><td>3</td><td>0</td><td>5</td><td>5</td><td>16</td><td>46.7%</td><td>prep, browser-matrix, gpu-train, cross-platform-cert, sign, package</td></tr><tr><td>1</td><td><code>longest-processing-time</code></td><td>10</td><td>3</td><td>0</td><td>5</td><td>5</td><td>16</td><td>46.7%</td><td>prep, browser-matrix, gpu-train, cross-platform-cert, sign, package</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario — multi-resource-browser-bump</h2>
+        <p class="muted">Manifest <code>multi_resource_graph.json</code> · 3 workers · best makespan 8 via fifo</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>fifo</code></td><td>8</td><td>1</td><td>0</td><td>2</td><td>2</td><td>10</td><td>58.3%</td><td>prep, browser-matrix, cross-platform-cert, gpu-train, sign, package</td></tr><tr><td>2</td><td><code>critical-first</code></td><td>9</td><td>2</td><td>1</td><td>4</td><td>4</td><td>13</td><td>51.9%</td><td>prep, browser-matrix, gpu-train, cross-platform-cert, sign, package</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario — generated-ci-4-workers</h2>
+        <p class="muted">Manifest <code>generated_ci_pipeline.json</code> · 4 workers · best makespan 16 via critical-first, fifo, longest-processing-time</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>critical-first</code></td><td>16</td><td>0</td><td>0</td><td>0</td><td>0</td><td>37</td><td>42.2%</td><td>checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline</td></tr><tr><td>1</td><td><code>fifo</code></td><td>16</td><td>0</td><td>0</td><td>0</td><td>0</td><td>37</td><td>42.2%</td><td>checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-02, unit-shard-03, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline</td></tr><tr><td>1</td><td><code>longest-processing-time</code></td><td>16</td><td>0</td><td>0</td><td>0</td><td>0</td><td>37</td><td>42.2%</td><td>checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, security-scan, publish-preview-image, deploy-preview, smoke-preview, promote-mainline</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario — generated-release-3-workers</h2>
+        <p class="muted">Manifest <code>generated_release_pipeline.json</code> · 3 workers · best makespan 24 via fifo, longest-processing-time, critical-first</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>fifo</code></td><td>24</td><td>3</td><td>0</td><td>5</td><td>3</td><td>42</td><td>41.7%</td><td>freeze-release-branch, assemble-release-notes, build-linux, build-macos, build-windows, sign-linux, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release</td></tr><tr><td>2</td><td><code>longest-processing-time</code></td><td>24</td><td>3</td><td>0</td><td>7</td><td>3</td><td>42</td><td>41.7%</td><td>freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-windows, sign-macos, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release</td></tr><tr><td>3</td><td><code>critical-first</code></td><td>24</td><td>3</td><td>0</td><td>7</td><td>4</td><td>42</td><td>41.7%</td><td>freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario — generated-data-pipeline-4-workers</h2>
+        <p class="muted">Manifest <code>generated_data_pipeline.json</code> · 4 workers · best makespan 20 via fifo, critical-first, longest-processing-time</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>fifo</code></td><td>20</td><td>5</td><td>0</td><td>12</td><td>5</td><td>45</td><td>43.8%</td><td>ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-02, transform-partition-03, transform-partition-04, transform-partition-05, build-features, backfill-marts, train-model, publish-dashboard, publish-model, notify-ops</td></tr><tr><td>2</td><td><code>critical-first</code></td><td>20</td><td>5</td><td>0</td><td>14</td><td>6</td><td>45</td><td>43.8%</td><td>ingest-events, ingest-orders, ingest-payments, schema-validate, quality-profile, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops</td></tr><tr><td>2</td><td><code>longest-processing-time</code></td><td>20</td><td>5</td><td>0</td><td>14</td><td>6</td><td>45</td><td>43.8%</td><td>ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

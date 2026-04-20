@@ -2497,16 +2497,50 @@ def render_benchmark_strategy_csv(result: BenchmarkSuiteResult) -> str:
     )
 
 
-def render_benchmark_suite_markdown(result: BenchmarkSuiteResult) -> str:
+def _build_benchmark_artifact_links(
+    artifacts: dict[str, str],
+    *,
+    benchmark_markdown_out: str | None,
+) -> list[tuple[str, str]]:
+    ordered: list[tuple[str, str]] = []
+    if artifacts.get("benchmark_html"):
+        ordered.append(("Benchmark dashboard HTML", artifacts["benchmark_html"]))
+    if artifacts.get("benchmark_json"):
+        ordered.append(("Benchmark JSON snapshot", artifacts["benchmark_json"]))
+    if artifacts.get("benchmark_aggregate_csv"):
+        ordered.append(("Aggregate strategy CSV", artifacts["benchmark_aggregate_csv"]))
+    if artifacts.get("benchmark_strategy_csv"):
+        ordered.append(("Per-scenario strategy CSV", artifacts["benchmark_strategy_csv"]))
+    if benchmark_markdown_out:
+        return [
+            (label, _relative_markdown_link(target, from_path=benchmark_markdown_out))
+            for label, target in ordered
+        ]
+    return ordered
+
+
+
+def render_benchmark_suite_markdown(
+    result: BenchmarkSuiteResult,
+    *,
+    artifact_links: Sequence[tuple[str, str]] | None = None,
+) -> str:
     strategies = [item.strategy for item in result.aggregates]
+    top_strategy = result.aggregates[0].strategy if result.aggregates else "(none)"
     lines = [f"# {result.title}", ""]
     lines.extend(
         [
             f"- Suite source: {_markdown_code(result.source_label)}",
             f"- Scenario count: {_markdown_code(len(result.scenarios))}",
             f"- Strategies covered: {_markdown_code(', '.join(strategies))}",
+            f"- Aggregate leader: {_markdown_code(top_strategy)}",
         ]
     )
+
+    if artifact_links:
+        lines.extend(["", "## Linked artifacts", ""])
+        for label, target in artifact_links:
+            lines.append(f"- [{label}]({target})")
 
     lines.extend(
         [
@@ -2586,6 +2620,231 @@ def render_benchmark_suite_markdown(result: BenchmarkSuiteResult) -> str:
 
     return "\n".join(lines).rstrip() + "\n"
 
+
+
+def render_benchmark_dashboard_html(
+    result: BenchmarkSuiteResult,
+    *,
+    html_output_path: str,
+    artifacts: dict[str, str] | None = None,
+) -> str:
+    artifacts = artifacts or {}
+    strategy_count = len(result.aggregates)
+    top_strategy = result.aggregates[0] if result.aggregates else None
+    summary_cards = [
+        ("Scenarios", str(len(result.scenarios))),
+        ("Strategies", str(strategy_count)),
+        ("Top aggregate leader", top_strategy.strategy if top_strategy else "(none)"),
+        (
+            "Best average makespan",
+            f"{top_strategy.average_makespan:.2f}" if top_strategy else "(n/a)",
+        ),
+    ]
+    summary_html = "".join(
+        f'<li><strong>{_html_escape(value)}</strong>{_html_escape(label)}</li>' for label, value in summary_cards
+    )
+
+    artifact_rows: list[str] = []
+    if artifacts.get("benchmark_markdown"):
+        href = _relative_markdown_link(artifacts["benchmark_markdown"], from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">Markdown scoreboard</a><span class="muted"><code>{_html_escape(Path(artifacts["benchmark_markdown"]).name)}</code></span></li>'
+        )
+    if artifacts.get("benchmark_json"):
+        href = _relative_markdown_link(artifacts["benchmark_json"], from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">Benchmark JSON snapshot</a><span class="muted"><code>{_html_escape(Path(artifacts["benchmark_json"]).name)}</code></span></li>'
+        )
+    if artifacts.get("benchmark_aggregate_csv"):
+        href = _relative_markdown_link(artifacts["benchmark_aggregate_csv"], from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">Aggregate strategy CSV</a><span class="muted"><code>{_html_escape(Path(artifacts["benchmark_aggregate_csv"]).name)}</code></span></li>'
+        )
+    if artifacts.get("benchmark_strategy_csv"):
+        href = _relative_markdown_link(artifacts["benchmark_strategy_csv"], from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">Per-scenario strategy CSV</a><span class="muted"><code>{_html_escape(Path(artifacts["benchmark_strategy_csv"]).name)}</code></span></li>'
+        )
+
+    aggregate_rows = "".join(
+        "<tr>"
+        f"<td><code>{_html_escape(item.strategy)}</code></td>"
+        f"<td>{item.scenario_count}</td>"
+        f"<td>{item.rank_1_finishes}</td>"
+        f"<td>{item.best_makespan_finishes}</td>"
+        f"<td>{item.average_makespan:.2f}</td>"
+        f"<td>{item.average_delta_vs_best:.2f}</td>"
+        f"<td>{item.average_total_queue_delay:.2f}</td>"
+        f"<td>{item.average_max_queue_delay:.2f}</td>"
+        f"<td>{_html_escape(_format_percent(item.average_utilization))}</td>"
+        "</tr>"
+        for item in result.aggregates
+    )
+
+    scenario_rows = "".join(
+        "<tr>"
+        f"<td><strong>{_html_escape(scenario.label)}</strong><span class=\"muted\"><code>{_html_escape(scenario.graph_label)}</code></span></td>"
+        f"<td>{_html_escape(_format_worker_limit_label(scenario.worker_limit))}</td>"
+        f"<td>{scenario.task_count}</td>"
+        f"<td>{scenario.unlimited_makespan}</td>"
+        f"<td>{scenario.best_makespan}</td>"
+        f"<td>{_html_escape(', '.join(scenario.rank_1_strategies))}</td>"
+        f"<td>{_html_escape(', '.join(f'{name}={capacity}' for name, capacity in scenario.resource_capacities.items()) if scenario.resource_capacities else '—')}</td>"
+        "</tr>"
+        for scenario in result.scenarios
+    )
+
+    scenario_sections: list[str] = []
+    for scenario in result.scenarios:
+        strategy_rows = "".join(
+            "<tr>"
+            f"<td>{item.rank}</td>"
+            f"<td><code>{_html_escape(item.strategy)}</code></td>"
+            f"<td>{item.makespan}</td>"
+            f"<td>{item.delta_vs_unlimited}</td>"
+            f"<td>{item.delta_vs_best}</td>"
+            f"<td>{item.total_queue_delay}</td>"
+            f"<td>{item.max_queue_delay}</td>"
+            f"<td>{item.idle_capacity}</td>"
+            f"<td>{_html_escape(_format_percent(item.utilization))}</td>"
+            f"<td>{_html_escape(', '.join(item.dispatch_order))}</td>"
+            "</tr>"
+            for item in scenario.strategy_results
+        )
+        scenario_sections.append(
+            f'''
+      <section class="panel">
+        <h2>Scenario — {_html_escape(scenario.label)}</h2>
+        <p class="muted">Manifest <code>{_html_escape(scenario.graph_label)}</code> · {_html_escape(_format_worker_limit_label(scenario.worker_limit))} · best makespan {scenario.best_makespan} via {_html_escape(', '.join(scenario.best_makespan_strategies))}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Δ vs best</th>
+              <th>Total queue delay</th>
+              <th>Max queue delay</th>
+              <th>Idle capacity</th>
+              <th>Utilization</th>
+              <th>Dispatch order</th>
+            </tr>
+          </thead>
+          <tbody>
+            {strategy_rows}
+          </tbody>
+        </table>
+      </section>'''
+        )
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_html_escape(result.title)} — benchmark dashboard</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eff6ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1500px; margin: 0 auto; padding: 32px 20px 64px; }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      a {{ color: var(--accent); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; word-break: break-word; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p {{ color: var(--muted); max-width: 1020px; }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #bfdbfe; }}
+      .summary-grid strong {{ display: block; font-size: 1.25rem; margin-bottom: 6px; }}
+      .panel {{ padding: 20px; margin-bottom: 24px; overflow: auto; }}
+      .artifact-list {{ margin: 0; padding-left: 1.1rem; }}
+      .artifact-list li {{ margin: 0.6rem 0; }}
+      .muted {{ color: var(--muted); display: block; margin-top: 4px; font-size: 0.92rem; }}
+      table {{ width: 100%; border-collapse: collapse; min-width: 900px; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.92rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }}
+      .chips {{ display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1rem; }}
+      .chip {{ display: inline-flex; align-items: center; padding: 0.45rem 0.75rem; border-radius: 999px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="chip">Dependency graph benchmark suite</p>
+        <h1>{_html_escape(result.title)} — dashboard</h1>
+        <p>Static landing page for the planner's benchmark suite exports. Use it to browse aggregate winners, per-scenario tradeoffs, and the committed JSON/CSV snapshots without starting from raw files.</p>
+        <div class="chips">
+          <span class="chip">Suite <code>{_html_escape(result.source_label)}</code></span>
+          <span class="chip">Scenarios {len(result.scenarios)}</span>
+          <span class="chip">Strategies {strategy_count}</span>
+        </div>
+        <ul class="summary-grid">
+          {summary_html}
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Artifact bundle</h2>
+        <p class="muted">Relative links keep the committed dashboard portable when it ships beside the Markdown, JSON, and CSV exports.</p>
+        <ul class="artifact-list">
+          {''.join(artifact_rows) if artifact_rows else '<li>No companion benchmark artifacts were exported for this view yet.</li>'}
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Aggregate strategy scoreboard</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Scenarios</th>
+              <th>Rank-1 finishes</th>
+              <th>Best-makespan finishes</th>
+              <th>Avg makespan</th>
+              <th>Avg Δ vs best</th>
+              <th>Avg total queue delay</th>
+              <th>Avg max queue delay</th>
+              <th>Avg utilization</th>
+            </tr>
+          </thead>
+          <tbody>
+            {aggregate_rows}
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Scenario summary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th>Worker limit</th>
+              <th>Tasks</th>
+              <th>Unlimited makespan</th>
+              <th>Best makespan</th>
+              <th>Rank-1 strategies</th>
+              <th>Resource caps</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scenario_rows}
+          </tbody>
+        </table>
+      </section>
+      {''.join(scenario_sections)}
+    </main>
+  </body>
+</html>
+'''
 
 
 
@@ -2949,6 +3208,7 @@ def _ensure_command_flags_are_valid(
     compare_strategies: Sequence[str] | None,
     resource_capacity_overrides: Sequence[str] | None,
     benchmark_markdown_out: str | None,
+    benchmark_html_out: str | None,
     benchmark_json_out: str | None,
     benchmark_aggregate_csv_out: str | None,
     benchmark_strategy_csv_out: str | None,
@@ -2969,6 +3229,7 @@ def _ensure_command_flags_are_valid(
             compare_strategies,
             resource_capacity_overrides,
             benchmark_markdown_out,
+            benchmark_html_out,
             benchmark_json_out,
             benchmark_aggregate_csv_out,
             benchmark_strategy_csv_out,
@@ -2997,6 +3258,7 @@ def _ensure_command_flags_are_valid(
         value is not None
         for value in (
             benchmark_markdown_out,
+            benchmark_html_out,
             benchmark_json_out,
             benchmark_aggregate_csv_out,
             benchmark_strategy_csv_out,
@@ -3059,6 +3321,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional directory where the report command should emit Mermaid and DOT companion artifacts",
     )
     parser.add_argument("--benchmark-markdown-out", help="write a Markdown summary for the benchmark command")
+    parser.add_argument("--benchmark-html-out", help="write a compact static HTML dashboard for the benchmark command")
     parser.add_argument("--benchmark-json-out", help="write the full benchmark JSON snapshot to a file")
     parser.add_argument("--benchmark-aggregate-csv-out", help="write aggregate strategy leaderboard rows as CSV")
     parser.add_argument("--benchmark-strategy-csv-out", help="write per-scenario strategy rows as CSV for plotting/notebooks")
@@ -3117,6 +3380,7 @@ def run_command(
     compare_strategies: Sequence[str] | None = None,
     resource_capacity_overrides: Sequence[str] | None = None,
     benchmark_markdown_out: str | None = None,
+    benchmark_html_out: str | None = None,
     benchmark_json_out: str | None = None,
     benchmark_aggregate_csv_out: str | None = None,
     benchmark_strategy_csv_out: str | None = None,
@@ -3136,6 +3400,7 @@ def run_command(
         compare_strategies=compare_strategies,
         resource_capacity_overrides=resource_capacity_overrides,
         benchmark_markdown_out=benchmark_markdown_out,
+        benchmark_html_out=benchmark_html_out,
         benchmark_json_out=benchmark_json_out,
         benchmark_aggregate_csv_out=benchmark_aggregate_csv_out,
         benchmark_strategy_csv_out=benchmark_strategy_csv_out,
@@ -3152,24 +3417,46 @@ def run_command(
 
     if command == "benchmark":
         result = build_benchmark_suite_result(graph_path, title=benchmark_title)
-        report = render_benchmark_suite_markdown(result)
         payload = benchmark_suite_to_dict(result)
         artifacts: dict[str, str] = {}
         if benchmark_markdown_out:
-            _write_text(benchmark_markdown_out, report)
             artifacts["benchmark_markdown"] = benchmark_markdown_out
+        if benchmark_html_out:
+            artifacts["benchmark_html"] = benchmark_html_out
         if benchmark_json_out:
             artifacts["benchmark_json"] = benchmark_json_out
         if benchmark_aggregate_csv_out:
+            artifacts["benchmark_aggregate_csv"] = benchmark_aggregate_csv_out
+        if benchmark_strategy_csv_out:
+            artifacts["benchmark_strategy_csv"] = benchmark_strategy_csv_out
+
+        report = render_benchmark_suite_markdown(
+            result,
+            artifact_links=_build_benchmark_artifact_links(
+                artifacts,
+                benchmark_markdown_out=benchmark_markdown_out,
+            ),
+        )
+        if benchmark_markdown_out:
+            _write_text(benchmark_markdown_out, report)
+        if benchmark_aggregate_csv_out:
             aggregate_csv = render_benchmark_aggregate_csv(result)
             _write_text(benchmark_aggregate_csv_out, aggregate_csv)
-            artifacts["benchmark_aggregate_csv"] = benchmark_aggregate_csv_out
         if benchmark_strategy_csv_out:
             strategy_csv = render_benchmark_strategy_csv(result)
             _write_text(benchmark_strategy_csv_out, strategy_csv)
-            artifacts["benchmark_strategy_csv"] = benchmark_strategy_csv_out
+        if benchmark_html_out:
+            _write_text(
+                benchmark_html_out,
+                render_benchmark_dashboard_html(
+                    result,
+                    html_output_path=benchmark_html_out,
+                    artifacts=artifacts,
+                ),
+            )
         payload["benchmark_markdown"] = report
         payload["benchmark_markdown_out"] = benchmark_markdown_out
+        payload["benchmark_html_out"] = benchmark_html_out
         payload["benchmark_json_out"] = benchmark_json_out
         payload["benchmark_aggregate_csv_out"] = benchmark_aggregate_csv_out
         payload["benchmark_strategy_csv_out"] = benchmark_strategy_csv_out
@@ -3348,6 +3635,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             compare_strategies=args.compare_strategies,
             resource_capacity_overrides=args.resource_capacity_overrides,
             benchmark_markdown_out=args.benchmark_markdown_out,
+            benchmark_html_out=args.benchmark_html_out,
             benchmark_json_out=args.benchmark_json_out,
             benchmark_aggregate_csv_out=args.benchmark_aggregate_csv_out,
             benchmark_strategy_csv_out=args.benchmark_strategy_csv_out,

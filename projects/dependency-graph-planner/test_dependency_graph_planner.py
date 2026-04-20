@@ -9,9 +9,11 @@ from pathlib import Path
 
 from dependency_graph_planner import (
     CycleError,
+    build_benchmark_suite_result,
     build_plan,
     build_worker_limited_schedule,
     parse_tasks,
+    render_benchmark_dashboard_html,
     render_dependency_diagram,
     render_report_dashboard_html,
     render_report_markdown,
@@ -595,6 +597,29 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 "longest-processing-time",
             )
 
+    def test_render_benchmark_dashboard_html_links_relative_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            suite_path = self._write_benchmark_suite_files(tmpdir)
+            result = build_benchmark_suite_result(str(suite_path))
+            html = render_benchmark_dashboard_html(
+                result,
+                html_output_path=str(Path(tmpdir) / "reports" / "benchmark_suite_dashboard.html"),
+                artifacts={
+                    "benchmark_markdown": str(Path(tmpdir) / "reports" / "benchmark_suite_report.md"),
+                    "benchmark_json": str(Path(tmpdir) / "reports" / "benchmark_suite_report.json"),
+                    "benchmark_aggregate_csv": str(Path(tmpdir) / "reports" / "benchmark_suite_aggregates.csv"),
+                    "benchmark_strategy_csv": str(Path(tmpdir) / "reports" / "benchmark_suite_strategies.csv"),
+                },
+            )
+
+        self.assertIn('href="benchmark_suite_report.md"', html)
+        self.assertIn('href="benchmark_suite_report.json"', html)
+        self.assertIn('href="benchmark_suite_aggregates.csv"', html)
+        self.assertIn('href="benchmark_suite_strategies.csv"', html)
+        self.assertIn('Aggregate strategy scoreboard', html)
+        self.assertIn('Scenario summary', html)
+        self.assertIn('Scenario — strategy-2-workers', html)
+
     def test_run_command_benchmark_json_writes_markdown_and_resolves_relative_graphs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             suite_path = self._write_benchmark_suite_files(tmpdir)
@@ -652,9 +677,11 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 Path(suite_path).parent.joinpath("sample_graph.json").relative_to(Path.cwd()).as_posix(),
             )
 
-    def test_run_command_benchmark_writes_json_and_csv_exports(self) -> None:
+    def test_run_command_benchmark_writes_markdown_html_json_and_csv_exports(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             suite_path = self._write_benchmark_suite_files(tmpdir)
+            report_path = Path(tmpdir) / "reports" / "benchmark_suite_report.md"
+            dashboard_path = Path(tmpdir) / "reports" / "benchmark_suite_dashboard.html"
             json_path = Path(tmpdir) / "reports" / "benchmark_suite_report.json"
             aggregate_csv_path = Path(tmpdir) / "reports" / "benchmark_suite_aggregates.csv"
             strategy_csv_path = Path(tmpdir) / "reports" / "benchmark_suite_strategies.csv"
@@ -663,23 +690,38 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                     "benchmark",
                     str(suite_path),
                     as_json=True,
+                    benchmark_markdown_out=str(report_path),
+                    benchmark_html_out=str(dashboard_path),
                     benchmark_json_out=str(json_path),
                     benchmark_aggregate_csv_out=str(aggregate_csv_path),
                     benchmark_strategy_csv_out=str(strategy_csv_path),
                 )
             )
 
+            self.assertTrue(report_path.exists())
+            self.assertTrue(dashboard_path.exists())
             self.assertTrue(json_path.exists())
             self.assertTrue(aggregate_csv_path.exists())
             self.assertTrue(strategy_csv_path.exists())
             written_payload = json.loads(json_path.read_text(encoding="utf-8"))
+            written_report = report_path.read_text(encoding="utf-8")
+            written_dashboard = dashboard_path.read_text(encoding="utf-8")
             self.assertEqual(written_payload["scenario_count"], 5)
+            self.assertEqual(written_payload["benchmark_html_out"], str(dashboard_path))
             self.assertEqual(written_payload["benchmark_strategy_csv_out"], str(strategy_csv_path))
+            self.assertIn("[Benchmark dashboard HTML](benchmark_suite_dashboard.html)", written_report)
+            self.assertIn("[Benchmark JSON snapshot](benchmark_suite_report.json)", written_report)
+            self.assertIn('href="benchmark_suite_report.md"', written_dashboard)
+            self.assertIn('href="benchmark_suite_report.json"', written_dashboard)
+            self.assertIn('href="benchmark_suite_aggregates.csv"', written_dashboard)
+            self.assertIn('href="benchmark_suite_strategies.csv"', written_dashboard)
             self.assertIn("strategy,scenario_count,rank_1_finishes", aggregate_csv_path.read_text(encoding="utf-8"))
             strategy_csv = strategy_csv_path.read_text(encoding="utf-8")
             self.assertIn("scenario_label,graph_label,graph_path,worker_limit", strategy_csv)
             self.assertIn("strategy-2-workers", strategy_csv)
             self.assertIn("multi-resource-browser-bump", strategy_csv)
+            self.assertEqual(payload["artifacts"]["benchmark_markdown"], str(report_path))
+            self.assertEqual(payload["artifacts"]["benchmark_html"], str(dashboard_path))
             self.assertEqual(payload["artifacts"]["benchmark_json"], str(json_path))
             self.assertEqual(payload["artifacts"]["benchmark_aggregate_csv"], str(aggregate_csv_path))
             self.assertEqual(payload["artifacts"]["benchmark_strategy_csv"], str(strategy_csv_path))
@@ -865,6 +907,27 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                     "plan",
                     str(graph_path),
                     "--benchmark-json-out",
+                    str(output_path),
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("benchmark-specific flags require the benchmark command", result.stderr)
+
+    def test_cli_plan_rejects_benchmark_html_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            output_path = Path(tmpdir) / "bad.html"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "plan",
+                    str(graph_path),
+                    "--benchmark-html-out",
                     str(output_path),
                 ],
                 cwd=Path(__file__).resolve().parents[2],

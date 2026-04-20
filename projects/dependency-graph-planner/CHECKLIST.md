@@ -11,12 +11,12 @@
 - [x] Add per-task multi-resource demand vectors plus per-resource allocation/peak-usage reporting
 - [x] Commit dedicated single-resource and multi-resource showcase manifests and artifact bundles
 - [x] Add batch benchmark-suite mode plus a committed portfolio benchmark report
+- [x] Export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis
 - [x] Export compact HTML report dashboards plus GitHub-friendly schedule SVG artifacts
 - [x] Add synthetic manifest generators for CI, release, and data-pipeline bottleneck patterns
+- [x] Export benchmark dashboard HTML artifacts with relative links to the Markdown, JSON, and CSV suite bundle
 - [x] Refresh README, tests, review notes, and wrap-up support so the new scheduler story is visible in-repo
 
 ## Next candidate slices
 - [ ] Add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
-- [x] Export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis
 - [ ] Add metadata-aware default report titles/descriptions so generated manifests render even more recruiter-friendly headings automatically
-- [ ] Add optional benchmark dashboard artifacts so suite scoreboards are browsable without opening Markdown/CSV files first
