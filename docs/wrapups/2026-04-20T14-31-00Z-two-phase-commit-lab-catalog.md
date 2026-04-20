@@ -19,6 +19,6 @@
   - review 3: replaced brittle takeaway indexing with `_primary_takeaway(...)` so future copy edits do not break snapshot summaries
 - Secret scan:
   - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → passed with 0 verified and 0 unverified secrets
-- Commit: `56682b6`
+- Commit: `13e3689`
 - Next step:
   - model participant-side recovery/reconnect behavior after missed second-phase messages so the lab goes beyond coordinator-only recovery
