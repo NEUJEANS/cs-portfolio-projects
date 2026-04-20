@@ -9,7 +9,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 
 class GraphValidationError(ValueError):
@@ -585,6 +585,31 @@ def _worker_limit_slug(worker_limit: int) -> str:
     return "single_worker" if worker_limit == 1 else f"{worker_limit}_workers"
 
 
+def _format_worker_limit_label(worker_limit: int) -> str:
+    return f"{worker_limit} {_pluralize(worker_limit, 'worker')}"
+
+
+def _collect_report_worker_limits(
+    *,
+    worker_limit: int | None,
+    compare_worker_limits: Sequence[int] | None = None,
+) -> list[int]:
+    ordered: list[int] = []
+    if worker_limit is not None:
+        ordered.append(worker_limit)
+    if compare_worker_limits:
+        ordered.extend(compare_worker_limits)
+
+    unique: list[int] = []
+    seen: set[int] = set()
+    for limit in ordered:
+        if limit in seen:
+            continue
+        seen.add(limit)
+        unique.append(limit)
+    return sorted(unique)
+
+
 def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
     if explicit_title:
         return explicit_title
@@ -614,7 +639,8 @@ def write_report_supporting_artifacts(
     graph_path: str | Path,
     output_dir: str | Path,
     worker_limited_schedule: WorkerLimitedSchedule | None = None,
-) -> dict[str, str]:
+    comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
+) -> dict[str, Any]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(graph_path).stem
@@ -630,16 +656,30 @@ def write_report_supporting_artifacts(
     _write_text(dot_path, dot_diagram + "\n")
     _write_text(mermaid_preview_path, render_mermaid_wrapper(mermaid_diagram, source_label=str(graph_path)))
 
-    artifacts = {
+    artifacts: dict[str, Any] = {
         "mermaid_source": str(mermaid_path),
         "mermaid_preview": str(mermaid_preview_path),
         "dot_source": str(dot_path),
     }
 
+    schedule_lookup: dict[int, WorkerLimitedSchedule] = {}
+    for schedule in comparison_schedules or ():
+        schedule_lookup[schedule.worker_limit] = schedule
     if worker_limited_schedule is not None:
-        schedule_json_path = output_dir / f"{stem}_{_worker_limit_slug(worker_limited_schedule.worker_limit)}_schedule.json"
-        _write_text(schedule_json_path, json.dumps(schedule_to_dict(worker_limited_schedule), indent=2) + "\n")
-        artifacts["worker_limited_schedule_json"] = str(schedule_json_path)
+        schedule_lookup[worker_limited_schedule.worker_limit] = worker_limited_schedule
+
+    if schedule_lookup:
+        schedule_paths: dict[str, str] = {}
+        for limit in sorted(schedule_lookup):
+            schedule = schedule_lookup[limit]
+            schedule_json_path = output_dir / f"{stem}_{_worker_limit_slug(schedule.worker_limit)}_schedule.json"
+            _write_text(schedule_json_path, json.dumps(schedule_to_dict(schedule), indent=2) + "\n")
+            schedule_paths[str(limit)] = str(schedule_json_path)
+        artifacts["worker_limited_schedule_jsons"] = schedule_paths
+        if worker_limited_schedule is not None:
+            artifacts["worker_limited_schedule_json"] = schedule_paths[str(worker_limited_schedule.worker_limit)]
+        elif len(schedule_paths) == 1:
+            artifacts["worker_limited_schedule_json"] = next(iter(schedule_paths.values()))
 
     return artifacts
 
@@ -652,6 +692,7 @@ def render_report_markdown(
     title: str | None = None,
     diagram_links: Sequence[tuple[str, str]] | None = None,
     worker_limited_schedule: WorkerLimitedSchedule | None = None,
+    comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
 ) -> str:
     resolved_title = build_report_title(source_label=source_label, explicit_title=title)
     timings_by_name = {timing.name: timing for timing in plan.timings}
@@ -663,6 +704,10 @@ def render_report_markdown(
         default=(0, []),
     )
     critical_path_rendered = " -> ".join(plan.critical_path) if plan.critical_path else "(none)"
+    comparison_schedule_lookup = {schedule.worker_limit: schedule for schedule in comparison_schedules or ()}
+    if worker_limited_schedule is not None:
+        comparison_schedule_lookup.setdefault(worker_limited_schedule.worker_limit, worker_limited_schedule)
+    ordered_comparison_schedules = [comparison_schedule_lookup[limit] for limit in sorted(comparison_schedule_lookup)]
 
     lines = [f"# {resolved_title}", ""]
     lines.extend(
@@ -677,8 +722,11 @@ def render_report_markdown(
 
     if worker_limited_schedule:
         lines.append(
-            f"- Worker-limited makespan ({worker_limited_schedule.worker_limit} {_pluralize(worker_limited_schedule.worker_limit, 'worker')}): {_markdown_code(worker_limited_schedule.makespan)}"
+            f"- Worker-limited makespan ({_format_worker_limit_label(worker_limited_schedule.worker_limit)}): {_markdown_code(worker_limited_schedule.makespan)}"
         )
+    elif ordered_comparison_schedules:
+        labels = ", ".join(_markdown_code(_format_worker_limit_label(schedule.worker_limit)) for schedule in ordered_comparison_schedules)
+        lines.append(f"- Worker-cap comparison set: {labels}")
 
     if diagram_links:
         lines.extend(["", "## Linked artifacts", ""])
@@ -716,7 +764,7 @@ def render_report_markdown(
             [
                 (
                     f"- worker-limited dispatch uses critical-first, low-slack, longer-duration tie-breaking across "
-                    f"{_markdown_code(str(worker_limited_schedule.worker_limit) + ' ' + _pluralize(worker_limited_schedule.worker_limit, 'worker'))}"
+                    f"{_markdown_code(_format_worker_limit_label(worker_limited_schedule.worker_limit))}"
                 ),
                 (
                     f"- worker cap increases makespan by {_markdown_code(delta)} time unit(s) "
@@ -732,6 +780,15 @@ def render_report_markdown(
             lines.append(
                 f"- biggest queue delay: {_markdown_code(most_delayed.name)} waited {_markdown_code(most_delayed.queue_delay)} time unit(s) after becoming ready"
             )
+
+    if ordered_comparison_schedules:
+        comparison_summary = ", ".join(
+            f"{_format_worker_limit_label(schedule.worker_limit)} → {schedule.makespan}"
+            for schedule in ordered_comparison_schedules
+        )
+        lines.append(
+            f"- compared worker caps against the unlimited baseline of {_markdown_code(plan.total_duration)}: {_markdown_code(comparison_summary)}"
+        )
 
     lines.extend(
         [
@@ -751,6 +808,35 @@ def render_report_markdown(
         lines.append(
             f"- Layer {index} ({_markdown_code(min(starts))} → {_markdown_code(max(finishes))}): {rendered_tasks}"
         )
+
+    if ordered_comparison_schedules:
+        lines.extend(
+            [
+                "",
+                "## Worker-capacity comparison",
+                "",
+                "| Worker limit | Makespan | Δ vs unlimited | Lower bound | Utilization | Idle capacity | Delayed tasks | Max queue delay |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for schedule in ordered_comparison_schedules:
+            delayed = [item for item in schedule.assignments if item.queue_delay > 0]
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _escape_markdown_table_cell(_format_worker_limit_label(schedule.worker_limit)),
+                        str(schedule.makespan),
+                        str(schedule.makespan - schedule.unlimited_makespan),
+                        str(schedule.theoretical_lower_bound),
+                        f"{schedule.utilization * 100:.1f}%",
+                        str(schedule.idle_capacity),
+                        str(len(delayed)),
+                        str(max((item.queue_delay for item in delayed), default=0)),
+                    ]
+                )
+                + " |"
+            )
 
     if worker_limited_schedule:
         lines.extend(
@@ -861,7 +947,7 @@ def render_report_markdown(
 
 
 def _build_report_artifact_links(
-    artifacts: dict[str, str],
+    artifacts: dict[str, Any],
     *,
     report_markdown_out: str | None,
 ) -> list[tuple[str, str]]:
@@ -870,8 +956,18 @@ def _build_report_artifact_links(
         ("Mermaid source", artifacts["mermaid_source"]),
         ("Graphviz DOT source", artifacts["dot_source"]),
     ]
-    if "worker_limited_schedule_json" in artifacts:
-        ordered.append(("Worker-limited schedule JSON", artifacts["worker_limited_schedule_json"]))
+    schedule_paths = artifacts.get("worker_limited_schedule_jsons") or {}
+    if isinstance(schedule_paths, dict) and schedule_paths:
+        if len(schedule_paths) == 1:
+            ordered.append(("Worker-limited schedule JSON", next(iter(schedule_paths.values()))))
+        else:
+            for worker_limit in sorted(schedule_paths, key=int):
+                ordered.append(
+                    (
+                        f"Worker-limited schedule JSON ({_format_worker_limit_label(int(worker_limit))})",
+                        schedule_paths[worker_limit],
+                    )
+                )
     if report_markdown_out:
         return [
             (label, _relative_markdown_link(target, from_path=report_markdown_out))
@@ -887,15 +983,20 @@ def _ensure_command_flags_are_valid(
     report_title: str | None,
     diagram_output_dir: str | None,
     worker_limit: int | None,
+    compare_worker_limits: Sequence[int] | None,
 ) -> None:
     if command != "report" and any(value is not None for value in (report_markdown_out, report_title, diagram_output_dir)):
         raise ValueError("report-specific flags require the report command")
     if command not in {"report", "schedule"} and worker_limit is not None:
         raise ValueError("--worker-limit requires the schedule or report command")
+    if command != "report" and compare_worker_limits:
+        raise ValueError("--compare-worker-limit requires the report command")
     if command == "schedule" and worker_limit is None:
         raise ValueError("the schedule command requires --worker-limit")
     if worker_limit is not None and worker_limit <= 0:
         raise ValueError("--worker-limit must be a positive integer")
+    if compare_worker_limits and any(limit <= 0 for limit in compare_worker_limits):
+        raise ValueError("--compare-worker-limit values must be positive integers")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -925,6 +1026,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="simulate a deterministic worker-limited schedule (required for schedule, optional for report)",
     )
+    parser.add_argument(
+        "--compare-worker-limit",
+        dest="compare_worker_limits",
+        action="append",
+        type=int,
+        help="repeatable extra worker limits to compare inside report output",
+    )
     return parser
 
 
@@ -937,6 +1045,7 @@ def run_command(
     report_title: str | None = None,
     diagram_output_dir: str | None = None,
     worker_limit: int | None = None,
+    compare_worker_limits: Sequence[int] | None = None,
 ) -> str:
     _ensure_command_flags_are_valid(
         command,
@@ -944,10 +1053,25 @@ def run_command(
         report_title=report_title,
         diagram_output_dir=diagram_output_dir,
         worker_limit=worker_limit,
+        compare_worker_limits=compare_worker_limits,
     )
     tasks = parse_tasks(load_manifest(graph_path))
     plan = build_plan(tasks)
-    schedule = build_worker_limited_schedule(tasks, plan, worker_limit=worker_limit) if worker_limit is not None else None
+    schedule_cache: dict[int, WorkerLimitedSchedule] = {}
+
+    def get_schedule(limit: int) -> WorkerLimitedSchedule:
+        cached = schedule_cache.get(limit)
+        if cached is None:
+            cached = build_worker_limited_schedule(tasks, plan, worker_limit=limit)
+            schedule_cache[limit] = cached
+        return cached
+
+    schedule = get_schedule(worker_limit) if worker_limit is not None else None
+    comparison_limits = _collect_report_worker_limits(
+        worker_limit=worker_limit if command == "report" else None,
+        compare_worker_limits=compare_worker_limits if command == "report" else None,
+    )
+    comparison_schedules = [get_schedule(limit) for limit in comparison_limits]
     if command == "validate":
         payload = {"status": "ok", "tasks": len(tasks), "order": plan.order}
     elif command == "critical-path":
@@ -973,6 +1097,7 @@ def run_command(
                 graph_path=graph_path,
                 output_dir=diagram_output_dir,
                 worker_limited_schedule=schedule,
+                comparison_schedules=comparison_schedules,
             )
             if diagram_output_dir
             else {}
@@ -985,6 +1110,7 @@ def run_command(
             title=report_title,
             diagram_links=diagram_links,
             worker_limited_schedule=schedule,
+            comparison_schedules=comparison_schedules,
         )
         if report_markdown_out:
             _write_text(report_markdown_out, report)
@@ -993,6 +1119,7 @@ def run_command(
                 {
                     "summary": plan_to_dict(plan),
                     "worker_limited_schedule": schedule_to_dict(schedule) if schedule else None,
+                    "worker_limited_schedule_comparisons": [schedule_to_dict(item) for item in comparison_schedules],
                     "report_title": build_report_title(source_label=graph_path, explicit_title=report_title),
                     "report_markdown": report,
                     "artifacts": artifacts,
@@ -1028,6 +1155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             report_title=args.report_title,
             diagram_output_dir=args.diagram_output_dir,
             worker_limit=args.worker_limit,
+            compare_worker_limits=args.compare_worker_limits,
         )
     except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")

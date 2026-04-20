@@ -12,7 +12,9 @@
 - [GitHub-friendly Mermaid preview](sample_graph_mermaid.md)
 - [Mermaid source](sample_graph.mmd)
 - [Graphviz DOT source](sample_graph.dot)
-- [Worker-limited schedule JSON](sample_graph_single_worker_schedule.json)
+- [Worker-limited schedule JSON (1 worker)](sample_graph_single_worker_schedule.json)
+- [Worker-limited schedule JSON (2 workers)](sample_graph_2_workers_schedule.json)
+- [Worker-limited schedule JSON (3 workers)](sample_graph_3_workers_schedule.json)
 
 ## Portfolio summary
 
@@ -23,7 +25,7 @@
 - worker cap increases makespan by `1` time unit(s) over the unlimited-layer bound of `8`
 - utilization under the worker cap: `100.0%` with `0` idle worker-time unit(s)
 - biggest queue delay: `package` waited `2` time unit(s) after becoming ready
-- compared worker caps against the unlimited baseline of `8`: `1 worker → 9`
+- compared worker caps against the unlimited baseline of `8`: `1 worker → 9, 2 workers → 8, 3 workers → 8`
 
 ## Parallel layer windows
 
@@ -37,6 +39,8 @@
 | Worker limit | Makespan | Δ vs unlimited | Lower bound | Utilization | Idle capacity | Delayed tasks | Max queue delay |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1 worker | 9 | 1 | 9 | 100.0% | 0 | 1 | 2 |
+| 2 workers | 8 | 0 | 8 | 56.2% | 7 | 0 | 0 |
+| 3 workers | 8 | 0 | 8 | 37.5% | 15 | 0 | 0 |
 
 ## Worker-limited comparison
 

@@ -1,0 +1,110 @@
+{
+  "worker_limit": 3,
+  "makespan": 8,
+  "unlimited_makespan": 8,
+  "theoretical_lower_bound": 8,
+  "total_work": 9,
+  "idle_capacity": 15,
+  "utilization": 0.375,
+  "dispatch_order": [
+    "lint",
+    "compile",
+    "unit",
+    "package",
+    "publish"
+  ],
+  "assignments": [
+    {
+      "name": "lint",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 1,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true
+    },
+    {
+      "name": "compile",
+      "worker": 1,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 5,
+      "queue_delay": 0,
+      "duration": 4,
+      "critical": true
+    },
+    {
+      "name": "unit",
+      "worker": 1,
+      "ready_at": 5,
+      "start": 5,
+      "finish": 7,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true
+    },
+    {
+      "name": "package",
+      "worker": 2,
+      "ready_at": 5,
+      "start": 5,
+      "finish": 6,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": false
+    },
+    {
+      "name": "publish",
+      "worker": 1,
+      "ready_at": 7,
+      "start": 7,
+      "finish": 8,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true
+    }
+  ],
+  "worker_timelines": [
+    [
+      {
+        "name": "lint",
+        "start": 0,
+        "finish": 1,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "compile",
+        "start": 1,
+        "finish": 5,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "unit",
+        "start": 5,
+        "finish": 7,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "publish",
+        "start": 7,
+        "finish": 8,
+        "queue_delay": 0,
+        "critical": true
+      }
+    ],
+    [
+      {
+        "name": "package",
+        "start": 5,
+        "finish": 6,
+        "queue_delay": 0,
+        "critical": false
+      }
+    ],
+    []
+  ]
+}

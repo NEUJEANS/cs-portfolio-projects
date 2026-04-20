@@ -55,3 +55,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 multi-capacity comparison slice
+- [x] confirm the repo was still synced with `origin/main` before continuing from the locally modified planner file
+- [x] reuse the 2026-04-19 worker-limited scheduling and report-export notes; no extra web research was needed for this incremental slice
+- [x] refresh expected sample-graph makespans for 1-worker, 2-worker, and 3-worker runs before editing
+- [x] update the project checklist, slice checklist, README, and artifact references for multi-capacity comparisons
+- [x] implement repeatable `--compare-worker-limit` support for report rendering and multi-schedule artifact export
+- [x] add regression coverage for comparison summaries/tables, multi-artifact links, deduped comparison limits, and compare-flag validation
+- [x] regenerate committed comparison report artifacts and schedule JSON snapshots
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

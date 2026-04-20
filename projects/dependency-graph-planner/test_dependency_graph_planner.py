@@ -113,6 +113,27 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertIn('1. `lint`', report)
         self.assertIn('- Window: `0 → 1`', report)
 
+    def test_render_report_markdown_includes_multi_worker_comparison_table(self) -> None:
+        tasks = parse_tasks(self.graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(tasks, plan, worker_limit=1)
+        comparison_schedules = [
+            build_worker_limited_schedule(tasks, plan, worker_limit=2),
+            build_worker_limited_schedule(tasks, plan, worker_limit=3),
+        ]
+        report = render_report_markdown(
+            tasks,
+            plan,
+            source_label="projects/dependency-graph-planner/sample_graph.json",
+            worker_limited_schedule=schedule,
+            comparison_schedules=comparison_schedules,
+        )
+        self.assertIn('## Worker-capacity comparison', report)
+        self.assertIn('compared worker caps against the unlimited baseline of `8`: `1 worker → 9, 2 workers → 8, 3 workers → 8`', report)
+        self.assertIn('| 1 worker | 9 | 1 | 9 | 100.0% | 0 | 1 | 2 |', report)
+        self.assertIn('| 2 workers | 8 | 0 | 8 | 56.2% | 7 | 0 | 0 |', report)
+        self.assertIn('| 3 workers | 8 | 0 | 8 | 37.5% | 15 | 0 | 0 |', report)
+
     def test_unknown_dependency_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "unknown dependencies"):
             parse_tasks({"tasks": [{"name": "deploy", "deps": ["missing"]}]})
@@ -194,6 +215,36 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             self.assertEqual(payload["worker_limited_schedule"]["makespan"], 9)
             self.assertIn('## Task timing table', payload["report_markdown"])
 
+    def test_run_command_report_json_writes_multi_capacity_comparison_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            report_path = Path(tmpdir) / "reports" / "graph_comparison_report.md"
+            artifact_dir = Path(tmpdir) / "artifacts"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            payload = json.loads(
+                run_command(
+                    "report",
+                    str(graph_path),
+                    as_json=True,
+                    report_markdown_out=str(report_path),
+                    diagram_output_dir=str(artifact_dir),
+                    worker_limit=1,
+                    compare_worker_limits=[2, 3, 1],
+                )
+            )
+
+            written_report = report_path.read_text(encoding="utf-8")
+            schedule_paths = payload["artifacts"]["worker_limited_schedule_jsons"]
+
+            self.assertEqual(sorted(schedule_paths), ["1", "2", "3"])
+            self.assertEqual(len(payload["worker_limited_schedule_comparisons"]), 3)
+            self.assertIn('[Worker-limited schedule JSON (1 worker)](../artifacts/graph_single_worker_schedule.json)', written_report)
+            self.assertIn('[Worker-limited schedule JSON (2 workers)](../artifacts/graph_2_workers_schedule.json)', written_report)
+            self.assertIn('[Worker-limited schedule JSON (3 workers)](../artifacts/graph_3_workers_schedule.json)', written_report)
+            self.assertIn('## Worker-capacity comparison', written_report)
+            self.assertEqual(json.loads(Path(schedule_paths["2"]).read_text(encoding="utf-8"))["worker_limit"], 2)
+            self.assertEqual(json.loads(Path(schedule_paths["3"]).read_text(encoding="utf-8"))["worker_limit"], 3)
+
     def test_cli_plan_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             graph_path = Path(tmpdir) / "graph.json"
@@ -268,6 +319,26 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("report-specific flags require the report command", result.stderr)
+
+    def test_cli_compare_worker_limit_requires_report_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "plan",
+                    str(graph_path),
+                    "--compare-worker-limit",
+                    "2",
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--compare-worker-limit requires the report command", result.stderr)
 
     def test_cli_validate_fails_for_invalid_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
