@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any, Sequence
 
 
+DEFAULT_SCHEDULE_STRATEGY = "critical-first"
+SCHEDULE_STRATEGIES = ("critical-first", "fifo", "longest-processing-time")
+
+
 class GraphValidationError(ValueError):
     """Raised when the manifest is structurally invalid."""
 
@@ -69,6 +73,7 @@ class ScheduledTask:
 @dataclass(frozen=True)
 class WorkerLimitedSchedule:
     worker_limit: int
+    strategy: str
     makespan: int
     unlimited_makespan: int
     total_work: int
@@ -272,6 +277,39 @@ def _extract_critical_path(
     return candidates[0]
 
 
+def _resolve_schedule_strategy(strategy: str | None) -> str:
+    resolved = strategy or DEFAULT_SCHEDULE_STRATEGY
+    if resolved not in SCHEDULE_STRATEGIES:
+        raise ValueError(
+            f"unsupported schedule strategy: {resolved} (choose from {', '.join(SCHEDULE_STRATEGIES)})"
+        )
+    return resolved
+
+
+def _schedule_priority(
+    *,
+    strategy: str,
+    timing: TaskTiming,
+    order_index: int,
+    ready_at: int,
+    ready_sequence: int,
+) -> tuple[Any, ...]:
+    if strategy == "critical-first":
+        return (
+            0 if timing.critical else 1,
+            timing.slack,
+            -timing.duration,
+            ready_at,
+            order_index,
+            ready_sequence,
+        )
+    if strategy == "fifo":
+        return (ready_at, ready_sequence, order_index)
+    if strategy == "longest-processing-time":
+        return (-timing.duration, ready_at, timing.slack, ready_sequence, order_index)
+    raise ValueError(f"unsupported schedule strategy: {strategy}")
+
+
 def build_plan(tasks: dict[str, Task]) -> PlanResult:
     order = topological_order(tasks)
     layers = build_layers(tasks, order)
@@ -284,9 +322,11 @@ def build_worker_limited_schedule(
     plan: PlanResult,
     *,
     worker_limit: int,
+    strategy: str = DEFAULT_SCHEDULE_STRATEGY,
 ) -> WorkerLimitedSchedule:
     if worker_limit <= 0:
         raise ValueError("--worker-limit must be a positive integer")
+    resolved_strategy = _resolve_schedule_strategy(strategy)
 
     timings_by_name = {timing.name: timing for timing in plan.timings}
     order_index = {name: index for index, name in enumerate(plan.order)}
@@ -294,23 +334,24 @@ def build_worker_limited_schedule(
     remaining_deps = {name: len(task.deps) for name, task in tasks.items()}
     finish_times: dict[str, int] = {}
     ready_at: dict[str, int] = {name: 0 for name, count in remaining_deps.items() if count == 0}
-    ready_queue: list[tuple[int, int, int, int, str]] = []
+    ready_queue: list[tuple[Any, ...]] = []
+    ready_sequence = 0
 
     def push_ready(name: str) -> None:
+        nonlocal ready_sequence
+        ready_sequence += 1
         timing = timings_by_name[name]
-        heapq.heappush(
-            ready_queue,
-            (
-                0 if timing.critical else 1,
-                timing.slack,
-                -timing.duration,
-                order_index[name],
-                name,
-            ),
+        priority = _schedule_priority(
+            strategy=resolved_strategy,
+            timing=timing,
+            order_index=order_index[name],
+            ready_at=ready_at.get(name, 0),
+            ready_sequence=ready_sequence,
         )
+        heapq.heappush(ready_queue, (*priority, name))
 
-    for name, count in remaining_deps.items():
-        if count == 0:
+    for name in plan.order:
+        if remaining_deps[name] == 0:
             push_ready(name)
 
     available_workers = list(range(1, worker_limit + 1))
@@ -322,7 +363,7 @@ def build_worker_limited_schedule(
 
     while ready_queue or running:
         while ready_queue and available_workers:
-            _, _, _, _, name = heapq.heappop(ready_queue)
+            *_, name = heapq.heappop(ready_queue)
             worker = heapq.heappop(available_workers)
             start = current_time
             finish = start + tasks[name].duration
@@ -374,6 +415,7 @@ def build_worker_limited_schedule(
 
     return WorkerLimitedSchedule(
         worker_limit=worker_limit,
+        strategy=resolved_strategy,
         makespan=makespan,
         unlimited_makespan=plan.total_duration,
         total_work=total_work,
@@ -411,6 +453,7 @@ def plan_to_dict(plan: PlanResult) -> dict:
 def schedule_to_dict(schedule: WorkerLimitedSchedule) -> dict:
     return {
         "worker_limit": schedule.worker_limit,
+        "strategy": schedule.strategy,
         "makespan": schedule.makespan,
         "unlimited_makespan": schedule.unlimited_makespan,
         "theoretical_lower_bound": schedule.theoretical_lower_bound,
@@ -467,7 +510,7 @@ def _render_text_plan(plan: PlanResult) -> str:
 def _render_text_schedule(schedule: WorkerLimitedSchedule) -> str:
     lines = [
         (
-            f"worker-limited schedule: workers={schedule.worker_limit}, makespan={schedule.makespan}, "
+            f"worker-limited schedule: workers={schedule.worker_limit}, strategy={schedule.strategy}, makespan={schedule.makespan}, "
             f"unlimited={schedule.unlimited_makespan}, lower_bound={schedule.theoretical_lower_bound}"
         ),
         (
@@ -589,6 +632,24 @@ def _format_worker_limit_label(worker_limit: int) -> str:
     return f"{worker_limit} {_pluralize(worker_limit, 'worker')}"
 
 
+def _format_schedule_strategy_label(strategy: str) -> str:
+    return strategy
+
+
+def _strategy_dispatch_blurb(strategy: str) -> str:
+    if strategy == "critical-first":
+        return "critical-first, low-slack, longer-duration tie-breaking"
+    if strategy == "fifo":
+        return "FIFO ready-queue order"
+    if strategy == "longest-processing-time":
+        return "longest-processing-time-first ready-queue ordering"
+    return strategy
+
+
+def _strategy_slug(strategy: str) -> str:
+    return strategy.replace("-", "_")
+
+
 def _collect_report_worker_limits(
     *,
     worker_limit: int | None,
@@ -608,6 +669,25 @@ def _collect_report_worker_limits(
         seen.add(limit)
         unique.append(limit)
     return sorted(unique)
+
+
+def _collect_report_strategies(
+    *,
+    strategy: str | None,
+    compare_strategies: Sequence[str] | None = None,
+) -> list[str]:
+    ordered = [_resolve_schedule_strategy(strategy)]
+    if compare_strategies:
+        ordered.extend(_resolve_schedule_strategy(item) for item in compare_strategies)
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for item in ordered:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
 
 
 def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
@@ -640,6 +720,7 @@ def write_report_supporting_artifacts(
     output_dir: str | Path,
     worker_limited_schedule: WorkerLimitedSchedule | None = None,
     comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
+    strategy_comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
 ) -> dict[str, Any]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -662,22 +743,43 @@ def write_report_supporting_artifacts(
         "dot_source": str(dot_path),
     }
 
-    schedule_lookup: dict[int, WorkerLimitedSchedule] = {}
+    schedule_lookup: dict[tuple[int, str], WorkerLimitedSchedule] = {}
     for schedule in comparison_schedules or ():
-        schedule_lookup[schedule.worker_limit] = schedule
+        schedule_lookup[(schedule.worker_limit, schedule.strategy)] = schedule
+    for schedule in strategy_comparison_schedules or ():
+        schedule_lookup[(schedule.worker_limit, schedule.strategy)] = schedule
     if worker_limited_schedule is not None:
-        schedule_lookup[worker_limited_schedule.worker_limit] = worker_limited_schedule
+        schedule_lookup[(worker_limited_schedule.worker_limit, worker_limited_schedule.strategy)] = worker_limited_schedule
 
     if schedule_lookup:
         schedule_paths: dict[str, str] = {}
-        for limit in sorted(schedule_lookup):
-            schedule = schedule_lookup[limit]
-            schedule_json_path = output_dir / f"{stem}_{_worker_limit_slug(schedule.worker_limit)}_schedule.json"
+        include_strategy_in_key = len({schedule.strategy for schedule in schedule_lookup.values()}) > 1 or any(
+            schedule.strategy != DEFAULT_SCHEDULE_STRATEGY for schedule in schedule_lookup.values()
+        )
+        ordered_schedules = sorted(
+            schedule_lookup.values(),
+            key=lambda item: (item.worker_limit, SCHEDULE_STRATEGIES.index(item.strategy), item.dispatch_order),
+        )
+        for schedule in ordered_schedules:
+            key = (
+                f"{schedule.worker_limit}:{schedule.strategy}"
+                if include_strategy_in_key
+                else str(schedule.worker_limit)
+            )
+            filename = f"{stem}_{_worker_limit_slug(schedule.worker_limit)}"
+            if include_strategy_in_key or schedule.strategy != DEFAULT_SCHEDULE_STRATEGY:
+                filename += f"_{_strategy_slug(schedule.strategy)}"
+            schedule_json_path = output_dir / f"{filename}_schedule.json"
             _write_text(schedule_json_path, json.dumps(schedule_to_dict(schedule), indent=2) + "\n")
-            schedule_paths[str(limit)] = str(schedule_json_path)
+            schedule_paths[key] = str(schedule_json_path)
         artifacts["worker_limited_schedule_jsons"] = schedule_paths
         if worker_limited_schedule is not None:
-            artifacts["worker_limited_schedule_json"] = schedule_paths[str(worker_limited_schedule.worker_limit)]
+            primary_key = (
+                f"{worker_limited_schedule.worker_limit}:{worker_limited_schedule.strategy}"
+                if include_strategy_in_key
+                else str(worker_limited_schedule.worker_limit)
+            )
+            artifacts["worker_limited_schedule_json"] = schedule_paths[primary_key]
         elif len(schedule_paths) == 1:
             artifacts["worker_limited_schedule_json"] = next(iter(schedule_paths.values()))
 
@@ -693,6 +795,7 @@ def render_report_markdown(
     diagram_links: Sequence[tuple[str, str]] | None = None,
     worker_limited_schedule: WorkerLimitedSchedule | None = None,
     comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
+    strategy_comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
 ) -> str:
     resolved_title = build_report_title(source_label=source_label, explicit_title=title)
     timings_by_name = {timing.name: timing for timing in plan.timings}
@@ -709,6 +812,17 @@ def render_report_markdown(
         comparison_schedule_lookup.setdefault(worker_limited_schedule.worker_limit, worker_limited_schedule)
     ordered_comparison_schedules = [comparison_schedule_lookup[limit] for limit in sorted(comparison_schedule_lookup)]
 
+    ordered_strategy_schedules: list[WorkerLimitedSchedule] = []
+    seen_strategies: set[str] = set()
+    if worker_limited_schedule is not None:
+        ordered_strategy_schedules.append(worker_limited_schedule)
+        seen_strategies.add(worker_limited_schedule.strategy)
+    for schedule in strategy_comparison_schedules or ():
+        if schedule.strategy in seen_strategies:
+            continue
+        ordered_strategy_schedules.append(schedule)
+        seen_strategies.add(schedule.strategy)
+
     lines = [f"# {resolved_title}", ""]
     lines.extend(
         [
@@ -723,6 +837,9 @@ def render_report_markdown(
     if worker_limited_schedule:
         lines.append(
             f"- Worker-limited makespan ({_format_worker_limit_label(worker_limited_schedule.worker_limit)}): {_markdown_code(worker_limited_schedule.makespan)}"
+        )
+        lines.append(
+            f"- Worker-limited strategy: {_markdown_code(_format_schedule_strategy_label(worker_limited_schedule.strategy))}"
         )
     elif ordered_comparison_schedules:
         labels = ", ".join(_markdown_code(_format_worker_limit_label(schedule.worker_limit)) for schedule in ordered_comparison_schedules)
@@ -763,7 +880,7 @@ def render_report_markdown(
         lines.extend(
             [
                 (
-                    f"- worker-limited dispatch uses critical-first, low-slack, longer-duration tie-breaking across "
+                    f"- worker-limited dispatch uses {_strategy_dispatch_blurb(worker_limited_schedule.strategy)} across "
                     f"{_markdown_code(_format_worker_limit_label(worker_limited_schedule.worker_limit))}"
                 ),
                 (
@@ -788,6 +905,15 @@ def render_report_markdown(
         )
         lines.append(
             f"- compared worker caps against the unlimited baseline of {_markdown_code(plan.total_duration)}: {_markdown_code(comparison_summary)}"
+        )
+
+    if len(ordered_strategy_schedules) > 1:
+        strategy_summary = ", ".join(
+            f"{_format_schedule_strategy_label(schedule.strategy)} → {schedule.makespan}"
+            for schedule in ordered_strategy_schedules
+        )
+        lines.append(
+            f"- compared scheduling strategies at {_markdown_code(_format_worker_limit_label(ordered_strategy_schedules[0].worker_limit))}: {_markdown_code(strategy_summary)}"
         )
 
     lines.extend(
@@ -838,6 +964,35 @@ def render_report_markdown(
                 + " |"
             )
 
+    if len(ordered_strategy_schedules) > 1:
+        baseline_makespan = ordered_strategy_schedules[0].makespan
+        lines.extend(
+            [
+                "",
+                "## Scheduling-strategy comparison",
+                "",
+                "| Strategy | Makespan | Δ vs unlimited | Δ vs primary strategy | Delayed tasks | Max queue delay | Dispatch order |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            ]
+        )
+        for schedule in ordered_strategy_schedules:
+            delayed = [item for item in schedule.assignments if item.queue_delay > 0]
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _escape_markdown_table_cell(_format_schedule_strategy_label(schedule.strategy)),
+                        str(schedule.makespan),
+                        str(schedule.makespan - schedule.unlimited_makespan),
+                        str(schedule.makespan - baseline_makespan),
+                        str(len(delayed)),
+                        str(max((item.queue_delay for item in delayed), default=0)),
+                        _escape_markdown_table_cell(", ".join(schedule.dispatch_order)),
+                    ]
+                )
+                + " |"
+            )
+
     if worker_limited_schedule:
         lines.extend(
             [
@@ -845,6 +1000,7 @@ def render_report_markdown(
                 "## Worker-limited comparison",
                 "",
                 f"- Worker limit: {_markdown_code(worker_limited_schedule.worker_limit)}",
+                f"- Strategy: {_markdown_code(_format_schedule_strategy_label(worker_limited_schedule.strategy))}",
                 f"- Total work: {_markdown_code(worker_limited_schedule.total_work)}",
                 f"- Theoretical lower bound: {_markdown_code(worker_limited_schedule.theoretical_lower_bound)}",
                 f"- Unlimited layered makespan: {_markdown_code(worker_limited_schedule.unlimited_makespan)}",
@@ -958,16 +1114,27 @@ def _build_report_artifact_links(
     ]
     schedule_paths = artifacts.get("worker_limited_schedule_jsons") or {}
     if isinstance(schedule_paths, dict) and schedule_paths:
-        if len(schedule_paths) == 1:
-            ordered.append(("Worker-limited schedule JSON", next(iter(schedule_paths.values()))))
+        parsed_schedule_paths: list[tuple[int, str | None, str]] = []
+        for raw_key, path in schedule_paths.items():
+            if ":" in raw_key:
+                raw_limit, strategy = raw_key.split(":", maxsplit=1)
+                parsed_schedule_paths.append((int(raw_limit), strategy, path))
+            else:
+                parsed_schedule_paths.append((int(raw_key), None, path))
+
+        parsed_schedule_paths.sort(
+            key=lambda item: (item[0], SCHEDULE_STRATEGIES.index(item[1]) if item[1] else -1)
+        )
+
+        if len(parsed_schedule_paths) == 1 and parsed_schedule_paths[0][1] is None:
+            ordered.append(("Worker-limited schedule JSON", parsed_schedule_paths[0][2]))
         else:
-            for worker_limit in sorted(schedule_paths, key=int):
-                ordered.append(
-                    (
-                        f"Worker-limited schedule JSON ({_format_worker_limit_label(int(worker_limit))})",
-                        schedule_paths[worker_limit],
-                    )
-                )
+            for worker_limit, strategy, path in parsed_schedule_paths:
+                label = f"Worker-limited schedule JSON ({_format_worker_limit_label(worker_limit)}"
+                if strategy is not None:
+                    label += f", {_format_schedule_strategy_label(strategy)}"
+                label += ")"
+                ordered.append((label, path))
     if report_markdown_out:
         return [
             (label, _relative_markdown_link(target, from_path=report_markdown_out))
@@ -984,6 +1151,8 @@ def _ensure_command_flags_are_valid(
     diagram_output_dir: str | None,
     worker_limit: int | None,
     compare_worker_limits: Sequence[int] | None,
+    strategy: str | None,
+    compare_strategies: Sequence[str] | None,
 ) -> None:
     if command != "report" and any(value is not None for value in (report_markdown_out, report_title, diagram_output_dir)):
         raise ValueError("report-specific flags require the report command")
@@ -991,12 +1160,25 @@ def _ensure_command_flags_are_valid(
         raise ValueError("--worker-limit requires the schedule or report command")
     if command != "report" and compare_worker_limits:
         raise ValueError("--compare-worker-limit requires the report command")
+    if command not in {"report", "schedule"} and strategy is not None:
+        raise ValueError("--strategy requires the schedule or report command")
+    if command != "report" and compare_strategies:
+        raise ValueError("--compare-strategy requires the report command")
     if command == "schedule" and worker_limit is None:
         raise ValueError("the schedule command requires --worker-limit")
+    if command == "report" and strategy is not None and worker_limit is None:
+        raise ValueError("--strategy on the report command requires --worker-limit")
+    if command == "report" and compare_strategies and worker_limit is None:
+        raise ValueError("--compare-strategy requires --worker-limit on the report command")
     if worker_limit is not None and worker_limit <= 0:
         raise ValueError("--worker-limit must be a positive integer")
     if compare_worker_limits and any(limit <= 0 for limit in compare_worker_limits):
         raise ValueError("--compare-worker-limit values must be positive integers")
+    if strategy is not None:
+        _resolve_schedule_strategy(strategy)
+    if compare_strategies:
+        for item in compare_strategies:
+            _resolve_schedule_strategy(item)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1033,6 +1215,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="repeatable extra worker limits to compare inside report output",
     )
+    parser.add_argument(
+        "--strategy",
+        choices=SCHEDULE_STRATEGIES,
+        help="ready-queue strategy for schedule/report worker-limited runs",
+    )
+    parser.add_argument(
+        "--compare-strategy",
+        dest="compare_strategies",
+        action="append",
+        choices=SCHEDULE_STRATEGIES,
+        help="repeatable extra ready-queue strategies to compare inside report output (requires --worker-limit)",
+    )
     return parser
 
 
@@ -1046,6 +1240,8 @@ def run_command(
     diagram_output_dir: str | None = None,
     worker_limit: int | None = None,
     compare_worker_limits: Sequence[int] | None = None,
+    strategy: str | None = None,
+    compare_strategies: Sequence[str] | None = None,
 ) -> str:
     _ensure_command_flags_are_valid(
         command,
@@ -1054,24 +1250,39 @@ def run_command(
         diagram_output_dir=diagram_output_dir,
         worker_limit=worker_limit,
         compare_worker_limits=compare_worker_limits,
+        strategy=strategy,
+        compare_strategies=compare_strategies,
     )
     tasks = parse_tasks(load_manifest(graph_path))
     plan = build_plan(tasks)
-    schedule_cache: dict[int, WorkerLimitedSchedule] = {}
+    resolved_strategy = _resolve_schedule_strategy(strategy)
+    schedule_cache: dict[tuple[int, str], WorkerLimitedSchedule] = {}
 
-    def get_schedule(limit: int) -> WorkerLimitedSchedule:
-        cached = schedule_cache.get(limit)
+    def get_schedule(limit: int, schedule_strategy: str) -> WorkerLimitedSchedule:
+        cache_key = (limit, schedule_strategy)
+        cached = schedule_cache.get(cache_key)
         if cached is None:
-            cached = build_worker_limited_schedule(tasks, plan, worker_limit=limit)
-            schedule_cache[limit] = cached
+            cached = build_worker_limited_schedule(tasks, plan, worker_limit=limit, strategy=schedule_strategy)
+            schedule_cache[cache_key] = cached
         return cached
 
-    schedule = get_schedule(worker_limit) if worker_limit is not None else None
+    schedule = get_schedule(worker_limit, resolved_strategy) if worker_limit is not None else None
     comparison_limits = _collect_report_worker_limits(
         worker_limit=worker_limit if command == "report" else None,
         compare_worker_limits=compare_worker_limits if command == "report" else None,
     )
-    comparison_schedules = [get_schedule(limit) for limit in comparison_limits]
+    comparison_schedules = [get_schedule(limit, resolved_strategy) for limit in comparison_limits]
+    strategy_comparison_schedules = (
+        [
+            get_schedule(worker_limit, schedule_strategy)
+            for schedule_strategy in _collect_report_strategies(
+                strategy=resolved_strategy,
+                compare_strategies=compare_strategies if command == "report" else None,
+            )
+        ]
+        if command == "report" and worker_limit is not None
+        else []
+    )
     if command == "validate":
         payload = {"status": "ok", "tasks": len(tasks), "order": plan.order}
     elif command == "critical-path":
@@ -1098,6 +1309,7 @@ def run_command(
                 output_dir=diagram_output_dir,
                 worker_limited_schedule=schedule,
                 comparison_schedules=comparison_schedules,
+                strategy_comparison_schedules=strategy_comparison_schedules,
             )
             if diagram_output_dir
             else {}
@@ -1111,6 +1323,7 @@ def run_command(
             diagram_links=diagram_links,
             worker_limited_schedule=schedule,
             comparison_schedules=comparison_schedules,
+            strategy_comparison_schedules=strategy_comparison_schedules,
         )
         if report_markdown_out:
             _write_text(report_markdown_out, report)
@@ -1120,6 +1333,7 @@ def run_command(
                     "summary": plan_to_dict(plan),
                     "worker_limited_schedule": schedule_to_dict(schedule) if schedule else None,
                     "worker_limited_schedule_comparisons": [schedule_to_dict(item) for item in comparison_schedules],
+                    "worker_limited_strategy_comparisons": [schedule_to_dict(item) for item in strategy_comparison_schedules],
                     "report_title": build_report_title(source_label=graph_path, explicit_title=report_title),
                     "report_markdown": report,
                     "artifacts": artifacts,
@@ -1156,6 +1370,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             diagram_output_dir=args.diagram_output_dir,
             worker_limit=args.worker_limit,
             compare_worker_limits=args.compare_worker_limits,
+            strategy=args.strategy,
+            compare_strategies=args.compare_strategies,
         )
     except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")

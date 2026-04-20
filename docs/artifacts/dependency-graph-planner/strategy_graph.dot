@@ -1,0 +1,30 @@
+digraph DependencyGraph {
+  rankdir=LR;
+  label="Dependency graph (makespan=10)";
+  labelloc=t;
+  node [shape=box, style="rounded", fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  subgraph layer_0 {
+    rank=same;
+    "alpha-long" [label="alpha-long\nd=6, slack=3"];
+    "beta-long" [label="beta-long\nd=6, slack=3"];
+    "core-seed" [label="core-seed\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_1 {
+    rank=same;
+    "core-stage-1" [label="core-stage-1\nd=4, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_2 {
+    rank=same;
+    "core-stage-2" [label="core-stage-2\nd=4, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_3 {
+    rank=same;
+    "ship" [label="ship\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  "core-seed" -> "core-stage-1" [color="firebrick", penwidth=2];
+  "core-stage-1" -> "core-stage-2" [color="firebrick", penwidth=2];
+  "alpha-long" -> "ship";
+  "beta-long" -> "ship";
+  "core-stage-2" -> "ship" [color="firebrick", penwidth=2];
+}

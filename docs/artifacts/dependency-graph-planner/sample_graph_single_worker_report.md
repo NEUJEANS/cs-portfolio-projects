@@ -6,6 +6,7 @@
 - Estimated makespan: `8`
 - Critical path: `lint -> compile -> unit -> publish`
 - Worker-limited makespan (1 worker): `9`
+- Worker-limited strategy: `critical-first`
 
 ## Linked artifacts
 
@@ -41,6 +42,7 @@
 ## Worker-limited comparison
 
 - Worker limit: `1`
+- Strategy: `critical-first`
 - Total work: `9`
 - Theoretical lower bound: `9`
 - Unlimited layered makespan: `8`

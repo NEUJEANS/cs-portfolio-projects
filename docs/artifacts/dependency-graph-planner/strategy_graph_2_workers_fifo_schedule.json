@@ -1,0 +1,128 @@
+{
+  "worker_limit": 2,
+  "strategy": "fifo",
+  "makespan": 16,
+  "unlimited_makespan": 10,
+  "theoretical_lower_bound": 11,
+  "total_work": 22,
+  "idle_capacity": 10,
+  "utilization": 0.6875,
+  "dispatch_order": [
+    "alpha-long",
+    "beta-long",
+    "core-seed",
+    "core-stage-1",
+    "core-stage-2",
+    "ship"
+  ],
+  "assignments": [
+    {
+      "name": "alpha-long",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 6,
+      "queue_delay": 0,
+      "duration": 6,
+      "critical": false
+    },
+    {
+      "name": "beta-long",
+      "worker": 2,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 6,
+      "queue_delay": 0,
+      "duration": 6,
+      "critical": false
+    },
+    {
+      "name": "core-seed",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 6,
+      "finish": 7,
+      "queue_delay": 6,
+      "duration": 1,
+      "critical": true
+    },
+    {
+      "name": "core-stage-1",
+      "worker": 1,
+      "ready_at": 7,
+      "start": 7,
+      "finish": 11,
+      "queue_delay": 0,
+      "duration": 4,
+      "critical": true
+    },
+    {
+      "name": "core-stage-2",
+      "worker": 1,
+      "ready_at": 11,
+      "start": 11,
+      "finish": 15,
+      "queue_delay": 0,
+      "duration": 4,
+      "critical": true
+    },
+    {
+      "name": "ship",
+      "worker": 1,
+      "ready_at": 15,
+      "start": 15,
+      "finish": 16,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true
+    }
+  ],
+  "worker_timelines": [
+    [
+      {
+        "name": "alpha-long",
+        "start": 0,
+        "finish": 6,
+        "queue_delay": 0,
+        "critical": false
+      },
+      {
+        "name": "core-seed",
+        "start": 6,
+        "finish": 7,
+        "queue_delay": 6,
+        "critical": true
+      },
+      {
+        "name": "core-stage-1",
+        "start": 7,
+        "finish": 11,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "core-stage-2",
+        "start": 11,
+        "finish": 15,
+        "queue_delay": 0,
+        "critical": true
+      },
+      {
+        "name": "ship",
+        "start": 15,
+        "finish": 16,
+        "queue_delay": 0,
+        "critical": true
+      }
+    ],
+    [
+      {
+        "name": "beta-long",
+        "start": 0,
+        "finish": 6,
+        "queue_delay": 0,
+        "critical": false
+      }
+    ]
+  ]
+}

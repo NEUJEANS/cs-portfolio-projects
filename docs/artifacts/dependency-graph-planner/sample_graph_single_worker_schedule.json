@@ -1,5 +1,6 @@
 {
   "worker_limit": 1,
+  "strategy": "critical-first",
   "makespan": 9,
   "unlimited_makespan": 8,
   "theoretical_lower_bound": 9,

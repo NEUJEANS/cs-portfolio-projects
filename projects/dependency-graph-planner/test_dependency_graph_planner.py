@@ -29,6 +29,16 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 {"name": "publish", "deps": ["unit", "package"], "duration": 1, "command": "twine upload dist/*"},
             ]
         }
+        self.strategy_graph = {
+            "tasks": [
+                {"name": "alpha-long", "duration": 6},
+                {"name": "beta-long", "duration": 6},
+                {"name": "core-seed", "duration": 1},
+                {"name": "core-stage-1", "deps": ["core-seed"], "duration": 4},
+                {"name": "core-stage-2", "deps": ["core-stage-1"], "duration": 4},
+                {"name": "ship", "deps": ["alpha-long", "beta-long", "core-stage-2"], "duration": 1},
+            ]
+        }
 
     def test_build_plan_returns_deterministic_topological_order(self) -> None:
         plan = build_plan(parse_tasks(self.graph))
@@ -54,6 +64,30 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertEqual(package_assignment.ready_at, 5)
         self.assertEqual(package_assignment.start, 7)
         self.assertEqual(package_assignment.queue_delay, 2)
+
+    def test_worker_limited_schedule_can_compare_ready_queue_strategies(self) -> None:
+        tasks = parse_tasks(self.strategy_graph)
+        plan = build_plan(tasks)
+        critical_first = build_worker_limited_schedule(tasks, plan, worker_limit=2, strategy="critical-first")
+        fifo = build_worker_limited_schedule(tasks, plan, worker_limit=2, strategy="fifo")
+        longest_processing_time = build_worker_limited_schedule(
+            tasks,
+            plan,
+            worker_limit=2,
+            strategy="longest-processing-time",
+        )
+
+        self.assertEqual(critical_first.strategy, "critical-first")
+        self.assertEqual(critical_first.makespan, 13)
+        self.assertEqual(critical_first.dispatch_order[:4], ["core-seed", "alpha-long", "core-stage-1", "core-stage-2"])
+        self.assertEqual(fifo.strategy, "fifo")
+        self.assertEqual(fifo.makespan, 16)
+        self.assertEqual(fifo.dispatch_order[:3], ["alpha-long", "beta-long", "core-seed"])
+        self.assertEqual(longest_processing_time.strategy, "longest-processing-time")
+        self.assertEqual(longest_processing_time.makespan, 16)
+        self.assertEqual(longest_processing_time.dispatch_order[:3], ["alpha-long", "beta-long", "core-seed"])
+        delayed_seed = next(item for item in fifo.assignments if item.name == "core-seed")
+        self.assertEqual(delayed_seed.queue_delay, 6)
 
     def test_render_dependency_mermaid_groups_layers_and_marks_critical_path(self) -> None:
         tasks = parse_tasks(self.graph)
@@ -134,6 +168,28 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertIn('| 2 workers | 8 | 0 | 8 | 56.2% | 7 | 0 | 0 |', report)
         self.assertIn('| 3 workers | 8 | 0 | 8 | 37.5% | 15 | 0 | 0 |', report)
 
+    def test_render_report_markdown_includes_strategy_comparison_table(self) -> None:
+        tasks = parse_tasks(self.strategy_graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(tasks, plan, worker_limit=2, strategy="critical-first")
+        strategy_schedules = [
+            build_worker_limited_schedule(tasks, plan, worker_limit=2, strategy="fifo"),
+            build_worker_limited_schedule(tasks, plan, worker_limit=2, strategy="longest-processing-time"),
+        ]
+        report = render_report_markdown(
+            tasks,
+            plan,
+            source_label="projects/dependency-graph-planner/strategy_graph.json",
+            worker_limited_schedule=schedule,
+            strategy_comparison_schedules=strategy_schedules,
+        )
+        self.assertIn('- Worker-limited strategy: `critical-first`', report)
+        self.assertIn('compared scheduling strategies at `2 workers`: `critical-first → 13, fifo → 16, longest-processing-time → 16`', report)
+        self.assertIn('## Scheduling-strategy comparison', report)
+        self.assertIn('| critical-first | 13 | 3 | 0 | 1 | 6 | core-seed, alpha-long, core-stage-1, core-stage-2, beta-long, ship |', report)
+        self.assertIn('| fifo | 16 | 6 | 3 | 1 | 6 | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |', report)
+        self.assertIn('- Strategy: `critical-first`', report)
+
     def test_unknown_dependency_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "unknown dependencies"):
             parse_tasks({"tasks": [{"name": "deploy", "deps": ["missing"]}]})
@@ -176,6 +232,7 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
             payload = json.loads(run_command("schedule", str(graph_path), as_json=True, worker_limit=1))
         self.assertEqual(payload["worker_limit"], 1)
+        self.assertEqual(payload["strategy"], "critical-first")
         self.assertEqual(payload["makespan"], 9)
         self.assertEqual(payload["dispatch_order"], ["lint", "compile", "unit", "package", "publish"])
         self.assertEqual(payload["assignments"][3]["queue_delay"], 2)
@@ -244,6 +301,51 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             self.assertIn('## Worker-capacity comparison', written_report)
             self.assertEqual(json.loads(Path(schedule_paths["2"]).read_text(encoding="utf-8"))["worker_limit"], 2)
             self.assertEqual(json.loads(Path(schedule_paths["3"]).read_text(encoding="utf-8"))["worker_limit"], 3)
+
+    def test_run_command_report_json_writes_strategy_comparison_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "strategy_graph.json"
+            report_path = Path(tmpdir) / "reports" / "strategy_report.md"
+            artifact_dir = Path(tmpdir) / "artifacts"
+            graph_path.write_text(json.dumps(self.strategy_graph), encoding="utf-8")
+            payload = json.loads(
+                run_command(
+                    "report",
+                    str(graph_path),
+                    as_json=True,
+                    report_markdown_out=str(report_path),
+                    diagram_output_dir=str(artifact_dir),
+                    worker_limit=2,
+                    compare_strategies=["fifo", "longest-processing-time", "fifo"],
+                )
+            )
+
+            written_report = report_path.read_text(encoding="utf-8")
+            schedule_paths = payload["artifacts"]["worker_limited_schedule_jsons"]
+
+            self.assertEqual(
+                sorted(schedule_paths),
+                ["2:critical-first", "2:fifo", "2:longest-processing-time"],
+            )
+            self.assertEqual(len(payload["worker_limited_strategy_comparisons"]), 3)
+            self.assertIn(
+                '[Worker-limited schedule JSON (2 workers, critical-first)](../artifacts/strategy_graph_2_workers_critical_first_schedule.json)',
+                written_report,
+            )
+            self.assertIn(
+                '[Worker-limited schedule JSON (2 workers, fifo)](../artifacts/strategy_graph_2_workers_fifo_schedule.json)',
+                written_report,
+            )
+            self.assertIn(
+                '[Worker-limited schedule JSON (2 workers, longest-processing-time)](../artifacts/strategy_graph_2_workers_longest_processing_time_schedule.json)',
+                written_report,
+            )
+            self.assertIn('## Scheduling-strategy comparison', written_report)
+            self.assertEqual(json.loads(Path(schedule_paths["2:fifo"]).read_text(encoding="utf-8"))["strategy"], "fifo")
+            self.assertEqual(
+                json.loads(Path(schedule_paths["2:longest-processing-time"]).read_text(encoding="utf-8"))["strategy"],
+                "longest-processing-time",
+            )
 
     def test_cli_plan_json_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -339,6 +441,68 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--compare-worker-limit requires the report command", result.stderr)
+
+    def test_cli_strategy_requires_schedule_or_report_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "plan",
+                    str(graph_path),
+                    "--strategy",
+                    "fifo",
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--strategy requires the schedule or report command", result.stderr)
+
+    def test_cli_compare_strategy_requires_report_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "schedule",
+                    str(graph_path),
+                    "--worker-limit",
+                    "2",
+                    "--compare-strategy",
+                    "fifo",
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--compare-strategy requires the report command", result.stderr)
+
+    def test_cli_report_compare_strategy_requires_worker_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "report",
+                    str(graph_path),
+                    "--compare-strategy",
+                    "fifo",
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--compare-strategy requires --worker-limit on the report command", result.stderr)
 
     def test_cli_validate_fails_for_invalid_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

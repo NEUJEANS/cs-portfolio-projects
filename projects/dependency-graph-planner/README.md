@@ -15,13 +15,15 @@ A compact Python project that models a build or delivery workflow as a directed 
 - parallel layer generation for "what can run together" views
 - critical-path and slack calculation using task durations
 - deterministic worker-limited list scheduling with queue-delay tracking for realistic single-worker or small-runner scenarios
+- selectable ready-queue strategies (`critical-first`, `fifo`, and `longest-processing-time`) for comparing scheduler tradeoffs on the same DAG
 - CLI output in text or JSON form for scripting
 - Mermaid and Graphviz DOT diagram export with per-layer grouping and critical-path highlighting
-- recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, and optional repeatable multi-cap worker comparisons with relative links to companion diagram artifacts plus committed schedule JSON snapshots
+- recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, optional repeatable multi-cap worker comparisons, and optional strategy-comparison tables with relative links to companion diagram artifacts plus committed schedule JSON snapshots
 
 ## Project structure
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, CLI, diagram export helpers, and walkthrough-report generation
 - `sample_graph.json` - example build-style workflow manifest
+- `strategy_graph.json` - example manifest that makes scheduling-strategy tradeoffs visible under a two-worker cap
 - `test_dependency_graph_planner.py` - unit and CLI tests
 - `docs/artifacts/dependency-graph-planner/` - committed sample Mermaid, Markdown-wrapper, DOT, and walkthrough-report outputs from the example graph
 
@@ -77,6 +79,14 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py schedule \
   --worker-limit 1
 ```
 
+### Compare different ready-queue strategies on the same worker cap
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py schedule \
+  projects/dependency-graph-planner/strategy_graph.json \
+  --worker-limit 2 \
+  --strategy fifo
+```
+
 ### Export a Mermaid dependency diagram
 ```bash
 python3 projects/dependency-graph-planner/dependency_graph_planner.py diagram \
@@ -123,6 +133,18 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
 ```
 This emits the linked comparison report plus `sample_graph_single_worker_schedule.json`, `sample_graph_2_workers_schedule.json`, and `sample_graph_3_workers_schedule.json`.
 
+### Compare scheduling strategies at a fixed worker cap
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
+  projects/dependency-graph-planner/strategy_graph.json \
+  --worker-limit 2 \
+  --compare-strategy fifo \
+  --compare-strategy longest-processing-time \
+  --report-markdown-out docs/artifacts/dependency-graph-planner/strategy_graph_strategy_report.md \
+  --diagram-output-dir docs/artifacts/dependency-graph-planner
+```
+This emits the linked strategy-comparison report plus `strategy_graph_2_workers_critical_first_schedule.json`, `strategy_graph_2_workers_fifo_schedule.json`, and `strategy_graph_2_workers_longest_processing_time_schedule.json`.
+
 Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/sample_graph.mmd`
 - `docs/artifacts/dependency-graph-planner/sample_graph_mermaid.md`
@@ -133,6 +155,13 @@ Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/sample_graph_single_worker_schedule.json`
 - `docs/artifacts/dependency-graph-planner/sample_graph_2_workers_schedule.json`
 - `docs/artifacts/dependency-graph-planner/sample_graph_3_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/strategy_graph.mmd`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_mermaid.md`
+- `docs/artifacts/dependency-graph-planner/strategy_graph.dot`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_strategy_report.md`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_critical_first_schedule.json`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_fifo_schedule.json`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_longest_processing_time_schedule.json`
 
 ## Testing
 ```bash
@@ -149,7 +178,7 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
-- support weighted heuristics such as longest-processing-time-first within ready queues
-- simulate execution traces and compare heuristic schedulers on the same DAG
-- compare side-by-side scheduling heuristics (critical-first vs FIFO vs longest-processing-time) on the same DAG
+- add more specialized heuristics such as shortest-processing-time-first or randomized stress-test baselines
+- simulate execution traces and compare heuristic schedulers across larger benchmark suites, not just single manifests
 - add environment-tag or resource-class constraints so plans can respect specialized runners, deploy lanes, or approval gates
+- export compact HTML/SVG strategy dashboards for README-first browsing without opening raw schedule JSON

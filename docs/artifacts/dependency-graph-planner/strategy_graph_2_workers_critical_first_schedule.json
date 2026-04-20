@@ -1,22 +1,23 @@
 {
-  "worker_limit": 3,
+  "worker_limit": 2,
   "strategy": "critical-first",
-  "makespan": 8,
-  "unlimited_makespan": 8,
-  "theoretical_lower_bound": 8,
-  "total_work": 9,
-  "idle_capacity": 15,
-  "utilization": 0.375,
+  "makespan": 13,
+  "unlimited_makespan": 10,
+  "theoretical_lower_bound": 11,
+  "total_work": 22,
+  "idle_capacity": 4,
+  "utilization": 0.846154,
   "dispatch_order": [
-    "lint",
-    "compile",
-    "unit",
-    "package",
-    "publish"
+    "core-seed",
+    "alpha-long",
+    "core-stage-1",
+    "core-stage-2",
+    "beta-long",
+    "ship"
   ],
   "assignments": [
     {
-      "name": "lint",
+      "name": "core-seed",
       "worker": 1,
       "ready_at": 0,
       "start": 0,
@@ -26,7 +27,17 @@
       "critical": true
     },
     {
-      "name": "compile",
+      "name": "alpha-long",
+      "worker": 2,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 6,
+      "queue_delay": 0,
+      "duration": 6,
+      "critical": false
+    },
+    {
+      "name": "core-stage-1",
       "worker": 1,
       "ready_at": 1,
       "start": 1,
@@ -36,31 +47,31 @@
       "critical": true
     },
     {
-      "name": "unit",
+      "name": "core-stage-2",
       "worker": 1,
       "ready_at": 5,
       "start": 5,
-      "finish": 7,
+      "finish": 9,
       "queue_delay": 0,
-      "duration": 2,
+      "duration": 4,
       "critical": true
     },
     {
-      "name": "package",
+      "name": "beta-long",
       "worker": 2,
-      "ready_at": 5,
-      "start": 5,
-      "finish": 6,
-      "queue_delay": 0,
-      "duration": 1,
+      "ready_at": 0,
+      "start": 6,
+      "finish": 12,
+      "queue_delay": 6,
+      "duration": 6,
       "critical": false
     },
     {
-      "name": "publish",
+      "name": "ship",
       "worker": 1,
-      "ready_at": 7,
-      "start": 7,
-      "finish": 8,
+      "ready_at": 12,
+      "start": 12,
+      "finish": 13,
       "queue_delay": 0,
       "duration": 1,
       "critical": true
@@ -69,43 +80,49 @@
   "worker_timelines": [
     [
       {
-        "name": "lint",
+        "name": "core-seed",
         "start": 0,
         "finish": 1,
         "queue_delay": 0,
         "critical": true
       },
       {
-        "name": "compile",
+        "name": "core-stage-1",
         "start": 1,
         "finish": 5,
         "queue_delay": 0,
         "critical": true
       },
       {
-        "name": "unit",
+        "name": "core-stage-2",
         "start": 5,
-        "finish": 7,
+        "finish": 9,
         "queue_delay": 0,
         "critical": true
       },
       {
-        "name": "publish",
-        "start": 7,
-        "finish": 8,
+        "name": "ship",
+        "start": 12,
+        "finish": 13,
         "queue_delay": 0,
         "critical": true
       }
     ],
     [
       {
-        "name": "package",
-        "start": 5,
+        "name": "alpha-long",
+        "start": 0,
         "finish": 6,
         "queue_delay": 0,
         "critical": false
+      },
+      {
+        "name": "beta-long",
+        "start": 6,
+        "finish": 12,
+        "queue_delay": 6,
+        "critical": false
       }
-    ],
-    []
+    ]
   ]
 }
