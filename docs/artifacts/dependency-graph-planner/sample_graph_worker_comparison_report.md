@@ -59,23 +59,23 @@
 
 ### Worker-limited task table
 
-| Task | Worker | Ready at | Start | Finish | Queue delay | Critical |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| lint | 1 | 0 | 0 | 1 | 0 | yes |
-| compile | 1 | 1 | 1 | 5 | 0 | yes |
-| unit | 1 | 5 | 5 | 7 | 0 | yes |
-| package | 1 | 5 | 7 | 8 | 2 | no |
-| publish | 1 | 8 | 8 | 9 | 0 | yes |
+| Task | Worker | Resource class | Resource slot | Ready at | Start | Finish | Queue delay | Critical |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| lint | 1 | — | — | 0 | 0 | 1 | 0 | yes |
+| compile | 1 | — | — | 1 | 1 | 5 | 0 | yes |
+| unit | 1 | — | — | 5 | 5 | 7 | 0 | yes |
+| package | 1 | — | — | 5 | 7 | 8 | 2 | no |
+| publish | 1 | — | — | 8 | 8 | 9 | 0 | yes |
 
 ## Task timing table
 
-| Task | Layer | Depends on | Duration | ES | EF | LS | LF | Slack | Critical | Command |
-| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| lint | 0 | — | 1 | 0 | 1 | 0 | 1 | 0 | yes | ruff check . |
-| compile | 1 | lint | 4 | 1 | 5 | 1 | 5 | 0 | yes | python -m build |
-| package | 2 | compile | 1 | 5 | 6 | 6 | 7 | 1 | no | python -m zipapp |
-| unit | 2 | compile | 2 | 5 | 7 | 5 | 7 | 0 | yes | pytest |
-| publish | 3 | unit, package | 1 | 7 | 8 | 7 | 8 | 0 | yes | twine upload dist/* |
+| Task | Layer | Depends on | Duration | Resource class | ES | EF | LS | LF | Slack | Critical | Command |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| lint | 0 | — | 1 | — | 0 | 1 | 0 | 1 | 0 | yes | ruff check . |
+| compile | 1 | lint | 4 | — | 1 | 5 | 1 | 5 | 0 | yes | python -m build |
+| package | 2 | compile | 1 | — | 5 | 6 | 6 | 7 | 1 | no | python -m zipapp |
+| unit | 2 | compile | 2 | — | 5 | 7 | 5 | 7 | 0 | yes | pytest |
+| publish | 3 | unit, package | 1 | — | 7 | 8 | 7 | 8 | 0 | yes | twine upload dist/* |
 
 ## Deterministic execution order
 
@@ -83,24 +83,29 @@
    - Dependencies: `ready at start`
    - Window: `0 → 1`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `ruff check .`
 2. `compile`
    - Dependencies: `lint`
    - Window: `1 → 5`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `python -m build`
 3. `package`
    - Dependencies: `compile`
    - Window: `5 → 6`
    - Slack: `1`
+   - Resource class: `generic worker`
    - Command: `python -m zipapp`
 4. `unit`
    - Dependencies: `compile`
    - Window: `5 → 7`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `pytest`
 5. `publish`
    - Dependencies: `unit`, `package`
    - Window: `7 → 8`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `twine upload dist/*`

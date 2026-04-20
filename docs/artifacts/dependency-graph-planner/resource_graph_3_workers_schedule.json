@@ -2,23 +2,36 @@
   "worker_limit": 3,
   "strategy": "critical-first",
   "makespan": 8,
-  "unlimited_makespan": 8,
-  "theoretical_lower_bound": 8,
-  "total_work": 9,
-  "idle_capacity": 15,
-  "utilization": 0.375,
-  "resource_capacities": {},
-  "resource_summaries": [],
+  "unlimited_makespan": 6,
+  "theoretical_lower_bound": 6,
+  "total_work": 11,
+  "idle_capacity": 13,
+  "utilization": 0.458333,
+  "resource_capacities": {
+    "gpu": 1
+  },
+  "resource_summaries": [
+    {
+      "resource_class": "gpu",
+      "capacity": 1,
+      "task_count": 2,
+      "total_work": 6,
+      "utilization": 0.75,
+      "idle_capacity": 2,
+      "delayed_tasks": 1,
+      "max_queue_delay": 4
+    }
+  ],
   "dispatch_order": [
-    "lint",
-    "compile",
-    "unit",
-    "package",
-    "publish"
+    "prep",
+    "gpu-train",
+    "docs",
+    "gpu-eval",
+    "package"
   ],
   "assignments": [
     {
-      "name": "lint",
+      "name": "prep",
       "worker": 1,
       "ready_at": 0,
       "start": 0,
@@ -30,7 +43,7 @@
       "resource_slot": null
     },
     {
-      "name": "compile",
+      "name": "gpu-train",
       "worker": 1,
       "ready_at": 1,
       "start": 1,
@@ -38,35 +51,35 @@
       "queue_delay": 0,
       "duration": 4,
       "critical": true,
-      "resource_class": null,
-      "resource_slot": null
+      "resource_class": "gpu",
+      "resource_slot": 1
     },
     {
-      "name": "unit",
-      "worker": 1,
-      "ready_at": 5,
-      "start": 5,
-      "finish": 7,
-      "queue_delay": 0,
-      "duration": 2,
-      "critical": true,
-      "resource_class": null,
-      "resource_slot": null
-    },
-    {
-      "name": "package",
+      "name": "docs",
       "worker": 2,
-      "ready_at": 5,
-      "start": 5,
-      "finish": 6,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 4,
       "queue_delay": 0,
-      "duration": 1,
+      "duration": 3,
       "critical": false,
       "resource_class": null,
       "resource_slot": null
     },
     {
-      "name": "publish",
+      "name": "gpu-eval",
+      "worker": 1,
+      "ready_at": 1,
+      "start": 5,
+      "finish": 7,
+      "queue_delay": 4,
+      "duration": 2,
+      "critical": false,
+      "resource_class": "gpu",
+      "resource_slot": 1
+    },
+    {
+      "name": "package",
       "worker": 1,
       "ready_at": 7,
       "start": 7,
@@ -81,7 +94,7 @@
   "worker_timelines": [
     [
       {
-        "name": "lint",
+        "name": "prep",
         "start": 0,
         "finish": 1,
         "queue_delay": 0,
@@ -90,25 +103,25 @@
         "resource_slot": null
       },
       {
-        "name": "compile",
+        "name": "gpu-train",
         "start": 1,
         "finish": 5,
         "queue_delay": 0,
         "critical": true,
-        "resource_class": null,
-        "resource_slot": null
+        "resource_class": "gpu",
+        "resource_slot": 1
       },
       {
-        "name": "unit",
+        "name": "gpu-eval",
         "start": 5,
         "finish": 7,
-        "queue_delay": 0,
-        "critical": true,
-        "resource_class": null,
-        "resource_slot": null
+        "queue_delay": 4,
+        "critical": false,
+        "resource_class": "gpu",
+        "resource_slot": 1
       },
       {
-        "name": "publish",
+        "name": "package",
         "start": 7,
         "finish": 8,
         "queue_delay": 0,
@@ -119,9 +132,9 @@
     ],
     [
       {
-        "name": "package",
-        "start": 5,
-        "finish": 6,
+        "name": "docs",
+        "start": 1,
+        "finish": 4,
         "queue_delay": 0,
         "critical": false,
         "resource_class": null,

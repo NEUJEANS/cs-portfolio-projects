@@ -15,6 +15,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - parallel layer generation for "what can run together" views
 - critical-path and slack calculation using task durations
 - deterministic worker-limited list scheduling with queue-delay tracking for realistic single-worker or small-runner scenarios
+- renewable resource-class constraints so schedules can model scarce runners such as GPUs or signing hosts
 - selectable ready-queue strategies (`critical-first`, `fifo`, and `longest-processing-time`) for comparing scheduler tradeoffs on the same DAG
 - CLI output in text or JSON form for scripting
 - Mermaid and Graphviz DOT diagram export with per-layer grouping and critical-path highlighting
@@ -24,6 +25,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, CLI, diagram export helpers, and walkthrough-report generation
 - `sample_graph.json` - example build-style workflow manifest
 - `strategy_graph.json` - example manifest that makes scheduling-strategy tradeoffs visible under a two-worker cap
+- `resource_graph.json` - example manifest that shows how scarce renewable resource classes serialize otherwise parallel-ready work
 - `test_dependency_graph_planner.py` - unit and CLI tests
 - `docs/artifacts/dependency-graph-planner/` - committed sample Mermaid, Markdown-wrapper, DOT, and walkthrough-report outputs from the example graph
 
@@ -43,6 +45,10 @@ Fields:
 - `deps` - optional dependency list
 - `duration` - optional positive integer duration, default `1`
 - `command` - optional command string for documentation/demo purposes
+- `resource_class` - optional renewable resource label used by worker-limited scheduling (`gpu`, `signing`, `browser-lab`, etc.)
+
+Top-level fields:
+- `resource_capacities` - optional object mapping renewable `resource_class` names to positive integer capacities used by `schedule` / `report`
 
 ## Usage
 Run from the repository root.
@@ -77,6 +83,21 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py layers \
 python3 projects/dependency-graph-planner/dependency_graph_planner.py schedule \
   projects/dependency-graph-planner/sample_graph.json \
   --worker-limit 1
+```
+
+### Simulate a worker-limited schedule with scarce renewable resources
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py schedule \
+  projects/dependency-graph-planner/resource_graph.json \
+  --worker-limit 3
+```
+
+### Override a manifest resource capacity from the CLI
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py schedule \
+  projects/dependency-graph-planner/resource_graph.json \
+  --worker-limit 3 \
+  --resource-capacity gpu=2
 ```
 
 ### Compare different ready-queue strategies on the same worker cap
@@ -133,6 +154,16 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
 ```
 This emits the linked comparison report plus `sample_graph_single_worker_schedule.json`, `sample_graph_2_workers_schedule.json`, and `sample_graph_3_workers_schedule.json`.
 
+### Report a worker-limited run with renewable resource summaries
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
+  projects/dependency-graph-planner/resource_graph.json \
+  --worker-limit 3 \
+  --report-markdown-out docs/artifacts/dependency-graph-planner/resource_graph_resource_report.md \
+  --diagram-output-dir docs/artifacts/dependency-graph-planner
+```
+This emits the linked report plus `resource_graph_3_workers_schedule.json` with per-task resource-slot assignments and resource-utilization summaries.
+
 ### Compare scheduling strategies at a fixed worker cap
 ```bash
 python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
@@ -157,6 +188,11 @@ Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/sample_graph_3_workers_schedule.json`
 - `docs/artifacts/dependency-graph-planner/strategy_graph.mmd`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_mermaid.md`
+- `docs/artifacts/dependency-graph-planner/resource_graph.mmd`
+- `docs/artifacts/dependency-graph-planner/resource_graph_mermaid.md`
+- `docs/artifacts/dependency-graph-planner/resource_graph.dot`
+- `docs/artifacts/dependency-graph-planner/resource_graph_resource_report.md`
+- `docs/artifacts/dependency-graph-planner/resource_graph_3_workers_schedule.json`
 - `docs/artifacts/dependency-graph-planner/strategy_graph.dot`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_strategy_report.md`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_critical_first_schedule.json`
@@ -175,10 +211,11 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - why Mermaid and DOT are useful complementary export targets for README-friendly diagrams versus richer offline rendering
 - how a recruiter-friendly report can reuse deterministic plan/timing data without requiring terminal screenshots
 - how worker caps expose queue delay even on a valid DAG and why that matters for CI runners or deployment gates
+- how renewable resource classes extend a plain worker-cap demo toward real runner pools such as GPUs, signing hosts, or browser labs
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
 - add more specialized heuristics such as shortest-processing-time-first or randomized stress-test baselines
 - simulate execution traces and compare heuristic schedulers across larger benchmark suites, not just single manifests
-- add environment-tag or resource-class constraints so plans can respect specialized runners, deploy lanes, or approval gates
+- support per-task multi-resource demand vectors instead of the current single optional `resource_class` label
 - export compact HTML/SVG strategy dashboards for README-first browsing without opening raw schedule JSON

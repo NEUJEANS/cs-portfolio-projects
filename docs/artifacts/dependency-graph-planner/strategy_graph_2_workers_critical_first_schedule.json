@@ -7,6 +7,8 @@
   "total_work": 22,
   "idle_capacity": 4,
   "utilization": 0.846154,
+  "resource_capacities": {},
+  "resource_summaries": [],
   "dispatch_order": [
     "core-seed",
     "alpha-long",
@@ -24,7 +26,9 @@
       "finish": 1,
       "queue_delay": 0,
       "duration": 1,
-      "critical": true
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null
     },
     {
       "name": "alpha-long",
@@ -34,7 +38,9 @@
       "finish": 6,
       "queue_delay": 0,
       "duration": 6,
-      "critical": false
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null
     },
     {
       "name": "core-stage-1",
@@ -44,7 +50,9 @@
       "finish": 5,
       "queue_delay": 0,
       "duration": 4,
-      "critical": true
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null
     },
     {
       "name": "core-stage-2",
@@ -54,7 +62,9 @@
       "finish": 9,
       "queue_delay": 0,
       "duration": 4,
-      "critical": true
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null
     },
     {
       "name": "beta-long",
@@ -64,7 +74,9 @@
       "finish": 12,
       "queue_delay": 6,
       "duration": 6,
-      "critical": false
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null
     },
     {
       "name": "ship",
@@ -74,7 +86,9 @@
       "finish": 13,
       "queue_delay": 0,
       "duration": 1,
-      "critical": true
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null
     }
   ],
   "worker_timelines": [
@@ -84,28 +98,36 @@
         "start": 0,
         "finish": 1,
         "queue_delay": 0,
-        "critical": true
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null
       },
       {
         "name": "core-stage-1",
         "start": 1,
         "finish": 5,
         "queue_delay": 0,
-        "critical": true
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null
       },
       {
         "name": "core-stage-2",
         "start": 5,
         "finish": 9,
         "queue_delay": 0,
-        "critical": true
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null
       },
       {
         "name": "ship",
         "start": 12,
         "finish": 13,
         "queue_delay": 0,
-        "critical": true
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null
       }
     ],
     [
@@ -114,14 +136,18 @@
         "start": 0,
         "finish": 6,
         "queue_delay": 0,
-        "critical": false
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null
       },
       {
         "name": "beta-long",
         "start": 6,
         "finish": 12,
         "queue_delay": 6,
-        "critical": false
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null
       }
     ]
   ]

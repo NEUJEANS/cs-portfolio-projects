@@ -1,0 +1,26 @@
+# Dependency graph — Resource Graph
+
+```mermaid
+flowchart LR
+  %% makespan=6
+  %% critical_path=prep,gpu-train,package
+  classDef critical fill:#fee2e2,stroke:#b91c1c,stroke-width:2px
+  subgraph layer_0["layer 0"]
+    task_0["prep<br/>d=1, slack=0"]
+  end
+  subgraph layer_1["layer 1"]
+    task_1["docs<br/>d=3, slack=1"]
+    task_2["gpu-eval<br/>d=2, slack=2<br/>resource=gpu"]
+    task_3["gpu-train<br/>d=4, slack=0<br/>resource=gpu"]
+  end
+  subgraph layer_2["layer 2"]
+    task_4["package<br/>d=1, slack=0"]
+  end
+  task_0 --> task_1
+  task_0 --> task_2
+  task_0 --> task_3
+  task_3 --> task_4
+  task_2 --> task_4
+  task_1 --> task_4
+  class task_0,task_3,task_4 critical
+```

@@ -1,0 +1,38 @@
+{
+  "resource_capacities": {
+    "gpu": 1
+  },
+  "tasks": [
+    {
+      "name": "prep",
+      "duration": 1,
+      "command": "python scripts/prepare_dataset.py"
+    },
+    {
+      "name": "gpu-train",
+      "deps": ["prep"],
+      "duration": 4,
+      "command": "python train.py --epochs 5",
+      "resource_class": "gpu"
+    },
+    {
+      "name": "gpu-eval",
+      "deps": ["prep"],
+      "duration": 2,
+      "command": "python eval.py --checkpoint best.pt",
+      "resource_class": "gpu"
+    },
+    {
+      "name": "docs",
+      "deps": ["prep"],
+      "duration": 3,
+      "command": "mkdocs build"
+    },
+    {
+      "name": "package",
+      "deps": ["gpu-train", "gpu-eval", "docs"],
+      "duration": 1,
+      "command": "python -m build"
+    }
+  ]
+}

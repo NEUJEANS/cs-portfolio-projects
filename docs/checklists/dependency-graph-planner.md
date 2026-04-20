@@ -87,3 +87,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 renewable resource-class slice
+- [x] confirm the repo was still synced with `origin/main` before continuing from the locally modified planner file
+- [x] do brief terminology research on RCPSP-style renewable resource capacities for DAG schedules
+- [x] refresh expected resource-graph makespans for `gpu=1` vs `gpu=2` before editing
+- [x] update the project checklist, README, and artifact references for resource-class constrained schedules
+- [x] implement manifest-backed renewable resource capacities plus repeatable `--resource-capacity class=count` overrides for `schedule` / `report`
+- [x] add recruiter-friendly report coverage for resource labels, slot assignments, and resource-utilization summaries
+- [x] add regression coverage for resource-constrained schedules, override behavior, report output, and CLI misuse handling
+- [x] commit a dedicated `resource_graph.json` showcase manifest plus Mermaid/DOT/report/schedule artifacts
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

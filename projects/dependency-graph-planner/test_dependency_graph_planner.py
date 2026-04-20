@@ -39,6 +39,16 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                 {"name": "ship", "deps": ["alpha-long", "beta-long", "core-stage-2"], "duration": 1},
             ]
         }
+        self.resource_graph = {
+            "resource_capacities": {"gpu": 1},
+            "tasks": [
+                {"name": "prep", "duration": 1},
+                {"name": "gpu-train", "deps": ["prep"], "duration": 4, "resource_class": "gpu"},
+                {"name": "gpu-eval", "deps": ["prep"], "duration": 2, "resource_class": "gpu"},
+                {"name": "docs", "deps": ["prep"], "duration": 3},
+                {"name": "package", "deps": ["gpu-train", "gpu-eval", "docs"], "duration": 1},
+            ]
+        }
 
     def test_build_plan_returns_deterministic_topological_order(self) -> None:
         plan = build_plan(parse_tasks(self.graph))
@@ -88,6 +98,31 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertEqual(longest_processing_time.dispatch_order[:3], ["alpha-long", "beta-long", "core-seed"])
         delayed_seed = next(item for item in fifo.assignments if item.name == "core-seed")
         self.assertEqual(delayed_seed.queue_delay, 6)
+
+
+    def test_worker_limited_schedule_respects_resource_class_capacities(self) -> None:
+        tasks = parse_tasks(self.resource_graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(tasks, plan, worker_limit=3, resource_capacities={"gpu": 1})
+
+        self.assertEqual(schedule.makespan, 8)
+        self.assertEqual(schedule.unlimited_makespan, 6)
+        self.assertEqual(schedule.dispatch_order, ["prep", "gpu-train", "docs", "gpu-eval", "package"])
+        gpu_eval = next(item for item in schedule.assignments if item.name == "gpu-eval")
+        self.assertEqual(gpu_eval.ready_at, 1)
+        self.assertEqual(gpu_eval.start, 5)
+        self.assertEqual(gpu_eval.queue_delay, 4)
+        self.assertEqual(gpu_eval.resource_class, "gpu")
+        self.assertEqual(gpu_eval.resource_slot, 1)
+        self.assertEqual(schedule.resource_capacities, {"gpu": 1})
+        self.assertEqual(len(schedule.resource_summaries), 1)
+        summary = schedule.resource_summaries[0]
+        self.assertEqual(summary.resource_class, "gpu")
+        self.assertEqual(summary.capacity, 1)
+        self.assertEqual(summary.task_count, 2)
+        self.assertEqual(summary.total_work, 6)
+        self.assertEqual(summary.delayed_tasks, 1)
+        self.assertEqual(summary.max_queue_delay, 4)
 
     def test_render_dependency_mermaid_groups_layers_and_marks_critical_path(self) -> None:
         tasks = parse_tasks(self.graph)
@@ -142,8 +177,8 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertIn('- Worker-limited makespan (1 worker): `9`', report)
         self.assertIn('across `1 worker`', report)
         self.assertIn('## Worker-limited comparison', report)
-        self.assertIn('| package | 1 | 5 | 7 | 8 | 2 | no |', report)
-        self.assertIn('| lint | 0 | — | 1 | 0 | 1 | 0 | 1 | 0 | yes | ruff check . |', report)
+        self.assertIn('| package | 1 | — | — | 5 | 7 | 8 | 2 | no |', report)
+        self.assertIn('| lint | 0 | — | 1 | — | 0 | 1 | 0 | 1 | 0 | yes | ruff check . |', report)
         self.assertIn('1. `lint`', report)
         self.assertIn('- Window: `0 → 1`', report)
 
@@ -189,6 +224,25 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertIn('| critical-first | 13 | 3 | 0 | 1 | 6 | core-seed, alpha-long, core-stage-1, core-stage-2, beta-long, ship |', report)
         self.assertIn('| fifo | 16 | 6 | 3 | 1 | 6 | alpha-long, beta-long, core-seed, core-stage-1, core-stage-2, ship |', report)
         self.assertIn('- Strategy: `critical-first`', report)
+
+
+    def test_render_report_markdown_includes_resource_class_tables_and_labels(self) -> None:
+        tasks = parse_tasks(self.resource_graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(tasks, plan, worker_limit=3, resource_capacities={"gpu": 1})
+        report = render_report_markdown(
+            tasks,
+            plan,
+            source_label="projects/dependency-graph-planner/resource_graph.json",
+            worker_limited_schedule=schedule,
+        )
+        self.assertIn('- renewable resource caps active for the constrained run: `gpu=1`', report)
+        self.assertIn('### Resource-class utilization', report)
+        self.assertIn('| gpu | 1 | 2 | 6 | 75.0% | 2 | 1 | 4 |', report)
+        self.assertIn('- Worker 1 (`0 → 8`): prep (0→1), gpu-train (1→5) [gpu#1], gpu-eval (5→7) [gpu#1], package (7→8)', report)
+        self.assertIn('| gpu-eval | 1 | gpu | 1 | 1 | 5 | 7 | 4 | no |', report)
+        self.assertIn('| gpu-train | 1 | prep | 4 | gpu | 1 | 5 | 1 | 5 | 0 | yes | — |', report)
+        self.assertIn('- Resource class: `gpu`', report)
 
     def test_unknown_dependency_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "unknown dependencies"):
@@ -236,6 +290,32 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertEqual(payload["makespan"], 9)
         self.assertEqual(payload["dispatch_order"], ["lint", "compile", "unit", "package", "publish"])
         self.assertEqual(payload["assignments"][3]["queue_delay"], 2)
+
+
+    def test_run_command_schedule_json_accepts_resource_capacity_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "resource_graph.json"
+            graph_path.write_text(json.dumps(self.resource_graph), encoding="utf-8")
+            default_payload = json.loads(run_command("schedule", str(graph_path), as_json=True, worker_limit=3))
+            overridden_payload = json.loads(
+                run_command(
+                    "schedule",
+                    str(graph_path),
+                    as_json=True,
+                    worker_limit=3,
+                    resource_capacity_overrides=["gpu=2"],
+                )
+            )
+        self.assertEqual(default_payload["makespan"], 8)
+        self.assertEqual(default_payload["resource_capacities"], {"gpu": 1})
+        self.assertEqual(overridden_payload["makespan"], 6)
+        self.assertEqual(overridden_payload["resource_capacities"], {"gpu": 2})
+        gpu_slots = sorted(
+            item["resource_slot"]
+            for item in overridden_payload["assignments"]
+            if item["resource_class"] == "gpu"
+        )
+        self.assertEqual(gpu_slots, [1, 2])
 
     def test_run_command_report_json_writes_report_and_companion_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -484,6 +564,27 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--compare-strategy requires the report command", result.stderr)
 
+
+    def test_cli_resource_capacity_requires_schedule_or_report_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "plan",
+                    str(graph_path),
+                    "--resource-capacity",
+                    "gpu=2",
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--resource-capacity requires the schedule or report command", result.stderr)
+
     def test_cli_report_compare_strategy_requires_worker_limit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             graph_path = Path(tmpdir) / "graph.json"
@@ -503,6 +604,22 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--compare-strategy requires --worker-limit on the report command", result.stderr)
+
+    def test_cli_validate_rejects_unknown_resource_capacity_classes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(
+                json.dumps({"resource_capacities": {"gpu": 1}, "tasks": [{"name": "build", "duration": 1}]}),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, "projects/dependency-graph-planner/dependency_graph_planner.py", "validate", str(graph_path)],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("resource_capacities were provided but no task declares a resource_class", result.stderr)
 
     def test_cli_validate_fails_for_invalid_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

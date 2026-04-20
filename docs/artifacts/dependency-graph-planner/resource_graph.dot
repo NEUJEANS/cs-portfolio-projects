@@ -1,0 +1,27 @@
+digraph DependencyGraph {
+  rankdir=LR;
+  label="Dependency graph (makespan=6)";
+  labelloc=t;
+  node [shape=box, style="rounded", fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  subgraph layer_0 {
+    rank=same;
+    "prep" [label="prep\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_1 {
+    rank=same;
+    "docs" [label="docs\nd=3, slack=1"];
+    "gpu-eval" [label="gpu-eval\nd=2, slack=2\nresource=gpu"];
+    "gpu-train" [label="gpu-train\nd=4, slack=0\nresource=gpu", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_2 {
+    rank=same;
+    "package" [label="package\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  "prep" -> "docs";
+  "prep" -> "gpu-eval";
+  "prep" -> "gpu-train" [color="firebrick", penwidth=2];
+  "gpu-train" -> "package" [color="firebrick", penwidth=2];
+  "gpu-eval" -> "package";
+  "docs" -> "package";
+}

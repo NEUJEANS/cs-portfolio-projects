@@ -67,25 +67,25 @@
 
 ### Worker-limited task table
 
-| Task | Worker | Ready at | Start | Finish | Queue delay | Critical |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| core-seed | 1 | 0 | 0 | 1 | 0 | yes |
-| alpha-long | 2 | 0 | 0 | 6 | 0 | no |
-| core-stage-1 | 1 | 1 | 1 | 5 | 0 | yes |
-| core-stage-2 | 1 | 5 | 5 | 9 | 0 | yes |
-| beta-long | 2 | 0 | 6 | 12 | 6 | no |
-| ship | 1 | 12 | 12 | 13 | 0 | yes |
+| Task | Worker | Resource class | Resource slot | Ready at | Start | Finish | Queue delay | Critical |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| core-seed | 1 | — | — | 0 | 0 | 1 | 0 | yes |
+| alpha-long | 2 | — | — | 0 | 0 | 6 | 0 | no |
+| core-stage-1 | 1 | — | — | 1 | 1 | 5 | 0 | yes |
+| core-stage-2 | 1 | — | — | 5 | 5 | 9 | 0 | yes |
+| beta-long | 2 | — | — | 0 | 6 | 12 | 6 | no |
+| ship | 1 | — | — | 12 | 12 | 13 | 0 | yes |
 
 ## Task timing table
 
-| Task | Layer | Depends on | Duration | ES | EF | LS | LF | Slack | Critical | Command |
-| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| alpha-long | 0 | — | 6 | 0 | 6 | 3 | 9 | 3 | no | — |
-| beta-long | 0 | — | 6 | 0 | 6 | 3 | 9 | 3 | no | — |
-| core-seed | 0 | — | 1 | 0 | 1 | 0 | 1 | 0 | yes | — |
-| core-stage-1 | 1 | core-seed | 4 | 1 | 5 | 1 | 5 | 0 | yes | — |
-| core-stage-2 | 2 | core-stage-1 | 4 | 5 | 9 | 5 | 9 | 0 | yes | — |
-| ship | 3 | alpha-long, beta-long, core-stage-2 | 1 | 9 | 10 | 9 | 10 | 0 | yes | — |
+| Task | Layer | Depends on | Duration | Resource class | ES | EF | LS | LF | Slack | Critical | Command |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| alpha-long | 0 | — | 6 | — | 0 | 6 | 3 | 9 | 3 | no | — |
+| beta-long | 0 | — | 6 | — | 0 | 6 | 3 | 9 | 3 | no | — |
+| core-seed | 0 | — | 1 | — | 0 | 1 | 0 | 1 | 0 | yes | — |
+| core-stage-1 | 1 | core-seed | 4 | — | 1 | 5 | 1 | 5 | 0 | yes | — |
+| core-stage-2 | 2 | core-stage-1 | 4 | — | 5 | 9 | 5 | 9 | 0 | yes | — |
+| ship | 3 | alpha-long, beta-long, core-stage-2 | 1 | — | 9 | 10 | 9 | 10 | 0 | yes | — |
 
 ## Deterministic execution order
 
@@ -93,29 +93,35 @@
    - Dependencies: `ready at start`
    - Window: `0 → 6`
    - Slack: `3`
+   - Resource class: `generic worker`
    - Command: `documentation only`
 2. `beta-long`
    - Dependencies: `ready at start`
    - Window: `0 → 6`
    - Slack: `3`
+   - Resource class: `generic worker`
    - Command: `documentation only`
 3. `core-seed`
    - Dependencies: `ready at start`
    - Window: `0 → 1`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `documentation only`
 4. `core-stage-1`
    - Dependencies: `core-seed`
    - Window: `1 → 5`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `documentation only`
 5. `core-stage-2`
    - Dependencies: `core-stage-1`
    - Window: `5 → 9`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `documentation only`
 6. `ship`
    - Dependencies: `alpha-long`, `beta-long`, `core-stage-2`
    - Window: `9 → 10`
    - Slack: `0`
+   - Resource class: `generic worker`
    - Command: `documentation only`
