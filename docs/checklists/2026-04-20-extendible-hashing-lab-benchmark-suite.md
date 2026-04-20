@@ -8,4 +8,4 @@
 - [x] commit benchmark artifacts under `docs/artifacts/extendible-hashing-lab/`
 - [x] refresh the README and project/root checklists so the new slice is visible to portfolio reviewers
 - [x] complete at least 3 review passes, fix issues found, and rerun validation
-- [ ] run secret scan, commit, push, and write the final wrap-up
+- [x] run secret scan, commit, push, and write the final wrap-up
