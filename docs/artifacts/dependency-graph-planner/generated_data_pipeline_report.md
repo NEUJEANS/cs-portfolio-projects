@@ -1,4 +1,6 @@
-# Dependency graph walkthrough — Generated Data Pipeline
+# Synthetic data pipeline (5 transform partitions)
+
+Airflow-style batch DAG with warehouse bottlenecks, feature building, GPU training, and downstream publishing tasks.
 
 - Source manifest: `projects/dependency-graph-planner/generated_data_pipeline.json`
 - Task count: `16`

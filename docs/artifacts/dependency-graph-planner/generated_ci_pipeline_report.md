@@ -1,4 +1,6 @@
-# Dependency graph walkthrough — Generated Ci Pipeline
+# Synthetic CI pipeline (4 unit-test shards)
+
+GitHub Actions style fan-out/fan-in workflow with artifact packaging, image publish, preview deploy, and smoke coverage.
 
 - Source manifest: `projects/dependency-graph-planner/generated_ci_pipeline.json`
 - Task count: `16`

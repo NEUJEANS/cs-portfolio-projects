@@ -1,4 +1,8 @@
 {
+  "metadata": {
+    "title": "Ready-queue strategy tradeoff demo",
+    "description": "Compact benchmark graph that makes critical-first, FIFO, and longest-processing-time dispatch choices visibly diverge under the same worker cap."
+  },
   "tasks": [
     {"name": "alpha-long", "duration": 6},
     {"name": "beta-long", "duration": 6},

@@ -1,4 +1,6 @@
-# Dependency graph walkthrough — Resource Graph
+# GPU-constrained training and packaging pipeline
+
+ML-flavored workflow that shows how one scarce GPU serializes evaluation and training even when documentation work can proceed in parallel.
 
 - Source manifest: `projects/dependency-graph-planner/resource_graph.json`
 - Task count: `5`

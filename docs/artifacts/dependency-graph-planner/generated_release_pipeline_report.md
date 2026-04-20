@@ -1,4 +1,6 @@
-# Dependency graph walkthrough — Generated Release Pipeline
+# Synthetic release pipeline (3 canary phases)
+
+Release-engineering workflow with per-platform builds, serialized signing, staging validation, and progressive canary rollout.
 
 - Source manifest: `projects/dependency-graph-planner/generated_release_pipeline.json`
 - Task count: `19`

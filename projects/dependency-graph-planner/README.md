@@ -22,6 +22,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - Mermaid and Graphviz DOT diagram export with per-layer grouping and critical-path highlighting
 - recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, worker/resource comparisons, and linked diagram/schedule artifacts
 - compact static HTML dashboards that turn each report bundle into a README-friendly landing page with relative links and embedded schedule previews
+- manifest metadata (`metadata.title` / `metadata.description`) so committed reports and dashboards pick polished portfolio case-study headings by default
 - GitHub-friendly SVG schedule timelines for constrained runs so reviewers can inspect worker/resource bottlenecks without opening raw JSON
 - synthetic manifest generators for CI, release, and data-pipeline bottleneck stories so the project can showcase multiple workload families without hand-authoring every DAG
 - batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary plus JSON/CSV/HTML companion artifacts across both hand-authored and generated manifests
@@ -43,6 +44,10 @@ A compact Python project that models a build or delivery workflow as a directed 
 ## Manifest format
 ```json
 {
+  "metadata": {
+    "title": "Browser certification release pipeline",
+    "description": "Release workflow that highlights browser-lab bottlenecks and shared GPU/signing capacity."
+  },
   "resource_capacities": {
     "gpu": 1,
     "browser-lab": 2
@@ -69,6 +74,8 @@ Task fields:
 - `resources` - optional object mapping renewable resource labels to positive integer per-task demand counts
 
 Top-level fields:
+- `metadata.title` - optional non-empty string used as the default report/dashboard title when `--report-title` is omitted
+- `metadata.description` - optional non-empty string used as the default report/dashboard subtitle/intro paragraph
 - `resource_capacities` - optional object mapping renewable resource names to positive integer capacities used by `schedule` / `report`
 
 Notes:
@@ -380,4 +387,4 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 ## Future improvements
 - simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
 - add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
-- use manifest metadata automatically for default report/dashboard titles and richer artifact subtitles
+- surface manifest metadata inside Mermaid preview wrappers and schedule SVG captions for even more polished artifact storytelling

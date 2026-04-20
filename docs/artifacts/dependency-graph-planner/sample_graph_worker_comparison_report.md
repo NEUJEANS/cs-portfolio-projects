@@ -1,4 +1,6 @@
-# Dependency graph walkthrough — Sample Graph
+# Sample package release pipeline
+
+Small packaging workflow that highlights deterministic dependency planning, a publish gate, and the extra delay introduced by a single constrained worker.
 
 - Source manifest: `projects/dependency-graph-planner/sample_graph.json`
 - Task count: `5`

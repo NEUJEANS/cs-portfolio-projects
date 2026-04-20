@@ -1,4 +1,6 @@
-# Dependency graph walkthrough — Multi Resource Graph
+# Multi-resource release certification workflow
+
+Release-engineering example where browser labs, GPU time, and a signing slot all act as renewable resources that can bottleneck certification and packaging.
 
 - Source manifest: `projects/dependency-graph-planner/multi_resource_graph.json`
 - Task count: `6`

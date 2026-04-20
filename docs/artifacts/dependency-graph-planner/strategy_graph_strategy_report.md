@@ -1,4 +1,6 @@
-# Dependency graph walkthrough — Strategy Graph
+# Ready-queue strategy tradeoff demo
+
+Compact benchmark graph that makes critical-first, FIFO, and longest-processing-time dispatch choices visibly diverge under the same worker cap.
 
 - Source manifest: `projects/dependency-graph-planner/strategy_graph.json`
 - Task count: `6`

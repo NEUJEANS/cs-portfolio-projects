@@ -25,6 +25,10 @@ from dependency_graph_planner import (
 class DependencyGraphPlannerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.graph = {
+            "metadata": {
+                "title": "Sample package release pipeline",
+                "description": "Small packaging workflow that shows deterministic ordering, a publish gate, and a single constrained queue.",
+            },
             "tasks": [
                 {"name": "lint", "duration": 1, "command": "ruff check ."},
                 {"name": "compile", "deps": ["lint"], "duration": 4, "command": "python -m build"},
@@ -342,6 +346,8 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             plan,
             source_label="projects/dependency-graph-planner/sample_graph.json",
             html_output_path="/tmp/reports/sample_graph_dashboard.html",
+            manifest_title=self.graph["metadata"]["title"],
+            manifest_description=self.graph["metadata"]["description"],
             report_markdown_out="/tmp/reports/sample_graph_report.md",
             artifacts={
                 "mermaid_preview": "/tmp/artifacts/sample_graph_mermaid.md",
@@ -353,11 +359,33 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             },
             worker_limited_schedule=schedule,
         )
+        self.assertIn('Sample package release pipeline — dashboard', html)
+        self.assertIn(self.graph["metadata"]["description"], html)
         self.assertIn('href="sample_graph_report.md"', html)
         self.assertIn('href="../artifacts/sample_graph_single_worker_schedule.svg"', html)
         self.assertIn('src="../artifacts/sample_graph_single_worker_schedule.svg"', html)
         self.assertIn('Schedule comparison snapshot', html)
         self.assertIn('Schedule SVG — 1 worker / critical-first', html)
+
+    def test_render_report_markdown_prefers_manifest_metadata_for_default_title(self) -> None:
+        tasks = parse_tasks(self.graph)
+        plan = build_plan(tasks)
+        report = render_report_markdown(
+            tasks,
+            plan,
+            source_label="projects/dependency-graph-planner/sample_graph.json",
+            manifest_title=self.graph["metadata"]["title"],
+            manifest_description=self.graph["metadata"]["description"],
+        )
+        self.assertTrue(report.startswith(f"# {self.graph['metadata']['title']}\n\n"))
+        self.assertIn(self.graph["metadata"]["description"], report)
+        self.assertNotIn("# Dependency graph walkthrough — Sample Graph", report)
+
+    def test_parse_tasks_rejects_blank_manifest_metadata_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "metadata.title"):
+            parse_tasks({"metadata": {"title": "   "}, "tasks": [{"name": "only-task"}]})
+        with self.assertRaisesRegex(ValueError, "metadata.description"):
+            parse_tasks({"metadata": {"description": "\n"}, "tasks": [{"name": "only-task"}]})
 
     def test_unknown_dependency_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "unknown dependencies"):
@@ -500,7 +528,9 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', schedule_svg_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["report_markdown_out"], str(report_path))
             self.assertEqual(payload["report_html_out"], str(dashboard_path))
+            self.assertEqual(payload["report_title"], self.graph["metadata"]["title"])
             self.assertEqual(payload["worker_limited_schedule"]["makespan"], 9)
+            self.assertIn(self.graph["metadata"]["description"], payload["report_markdown"])
             self.assertIn('## Task timing table', payload["report_markdown"])
 
     def test_run_command_report_json_writes_multi_capacity_comparison_artifacts(self) -> None:

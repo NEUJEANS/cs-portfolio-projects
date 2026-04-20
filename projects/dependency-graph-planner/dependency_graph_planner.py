@@ -179,6 +179,29 @@ def load_manifest(path: str | Path) -> dict:
     return data
 
 
+def parse_manifest_metadata(data: dict[str, Any]) -> dict[str, str]:
+    raw_metadata = data.get("metadata", {})
+    if raw_metadata in (None, {}):
+        return {}
+    if not isinstance(raw_metadata, dict):
+        raise GraphValidationError("metadata must be a JSON object")
+
+    metadata: dict[str, str] = {}
+    raw_title = raw_metadata.get("title")
+    if raw_title is not None:
+        if not isinstance(raw_title, str) or not raw_title.strip():
+            raise GraphValidationError("metadata.title must be a non-empty string when provided")
+        metadata["title"] = raw_title.strip()
+
+    raw_description = raw_metadata.get("description")
+    if raw_description is not None:
+        if not isinstance(raw_description, str) or not raw_description.strip():
+            raise GraphValidationError("metadata.description must be a non-empty string when provided")
+        metadata["description"] = raw_description.strip()
+
+    return metadata
+
+
 def _parse_task_resource_demands(entry: dict[str, Any], name: str) -> tuple[str | None, dict[str, int]]:
     resource_class = entry.get("resource_class")
     if resource_class is not None:
@@ -221,6 +244,7 @@ def _parse_task_resource_demands(entry: dict[str, Any], name: str) -> tuple[str 
 
 
 def parse_tasks(data: dict) -> dict[str, Task]:
+    parse_manifest_metadata(data)
     raw_tasks = data.get("tasks")
     if not isinstance(raw_tasks, list) or not raw_tasks:
         raise GraphValidationError("manifest must include a non-empty tasks list")
@@ -1579,11 +1603,28 @@ def _display_path_label(path: str | Path) -> str:
 
 
 
-def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
+def build_report_title(
+    *,
+    source_label: str,
+    explicit_title: str | None = None,
+    manifest_title: str | None = None,
+) -> str:
     if explicit_title:
         return explicit_title
+    if manifest_title:
+        return manifest_title
     display_name = _humanize_stem(Path(source_label).stem).title()
     return f"Dependency graph walkthrough — {display_name}"
+
+
+def build_report_description(*, source_label: str, manifest_description: str | None = None) -> str:
+    if manifest_description:
+        return manifest_description
+    display_name = _humanize_stem(Path(source_label).stem).title()
+    return (
+        f"Recruiter-friendly walkthrough of {display_name}'s dependency graph, critical path, "
+        "and constrained scheduling evidence."
+    )
 
 
 def build_benchmark_title(*, source_label: str, explicit_title: str | None = None) -> str:
@@ -1707,12 +1748,22 @@ def render_report_markdown(
     *,
     source_label: str,
     title: str | None = None,
+    manifest_title: str | None = None,
+    manifest_description: str | None = None,
     diagram_links: Sequence[tuple[str, str]] | None = None,
     worker_limited_schedule: WorkerLimitedSchedule | None = None,
     comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
     strategy_comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
 ) -> str:
-    resolved_title = build_report_title(source_label=source_label, explicit_title=title)
+    resolved_title = build_report_title(
+        source_label=source_label,
+        explicit_title=title,
+        manifest_title=manifest_title,
+    )
+    resolved_description = build_report_description(
+        source_label=source_label,
+        manifest_description=manifest_description,
+    )
     timings_by_name = {timing.name: timing for timing in plan.timings}
     layer_by_name = {name: index for index, layer in enumerate(plan.layers) for name in layer}
     total_slack = sum(item.slack for item in plan.timings if not item.critical)
@@ -1731,7 +1782,7 @@ def render_report_markdown(
         strategy_comparison_schedules=strategy_comparison_schedules,
     )
 
-    lines = [f"# {resolved_title}", ""]
+    lines = [f"# {resolved_title}", "", resolved_description, ""]
     lines.extend(
         [
             f"- Source manifest: {_markdown_code(source_label)}",
@@ -2059,13 +2110,23 @@ def render_report_dashboard_html(
     source_label: str,
     html_output_path: str,
     title: str | None = None,
+    manifest_title: str | None = None,
+    manifest_description: str | None = None,
     report_markdown_out: str | None = None,
     artifacts: dict[str, Any] | None = None,
     worker_limited_schedule: WorkerLimitedSchedule | None = None,
     comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
     strategy_comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
 ) -> str:
-    resolved_title = build_report_title(source_label=source_label, explicit_title=title)
+    resolved_title = build_report_title(
+        source_label=source_label,
+        explicit_title=title,
+        manifest_title=manifest_title,
+    )
+    resolved_description = build_report_description(
+        source_label=source_label,
+        manifest_description=manifest_description,
+    )
     artifacts = artifacts or {}
     critical_path_text = " → ".join(plan.critical_path) if plan.critical_path else "(none)"
     ordered_comparison_schedules = _ordered_report_comparison_schedules(
@@ -2258,6 +2319,7 @@ def render_report_dashboard_html(
       <section class="hero">
         <p class="chip">Dependency graph planner</p>
         <h1>{_html_escape(resolved_title)} — dashboard</h1>
+        <p>{_html_escape(resolved_description)}</p>
         <p>Browser-friendly landing page for the committed walkthrough artifacts. Start here when you want the dependency graph story, the constrained schedule evidence, and the export bundle links without opening raw JSON first.</p>
         <div class="chips">
           <span class="chip">Source <code>{_html_escape(source_label)}</code></span>
@@ -3468,6 +3530,7 @@ def run_command(
         return report
 
     manifest = load_manifest(graph_path)
+    manifest_metadata = parse_manifest_metadata(manifest)
     tasks = parse_tasks(manifest)
     manifest_resource_capacities = parse_resource_capacities(manifest)
     validate_manifest_resource_capacities(tasks, manifest_resource_capacities)
@@ -3535,6 +3598,11 @@ def run_command(
             return json.dumps(schedule_to_dict(schedule), indent=2)
         return _render_text_schedule(schedule)
     elif command == "report":
+        resolved_report_title = build_report_title(
+            source_label=_display_path_label(graph_path),
+            explicit_title=report_title,
+            manifest_title=manifest_metadata.get("title"),
+        )
         artifacts = (
             write_report_supporting_artifacts(
                 tasks,
@@ -3562,7 +3630,9 @@ def run_command(
             tasks,
             plan,
             source_label=display_graph_label,
-            title=report_title,
+            title=resolved_report_title,
+            manifest_title=manifest_metadata.get("title"),
+            manifest_description=manifest_metadata.get("description"),
             diagram_links=diagram_links,
             worker_limited_schedule=schedule,
             comparison_schedules=comparison_schedules,
@@ -3578,7 +3648,9 @@ def run_command(
                     plan,
                     source_label=display_graph_label,
                     html_output_path=report_html_out,
-                    title=report_title,
+                    title=resolved_report_title,
+                    manifest_title=manifest_metadata.get("title"),
+                    manifest_description=manifest_metadata.get("description"),
                     report_markdown_out=report_markdown_out,
                     artifacts=artifacts,
                     worker_limited_schedule=schedule,
@@ -3593,7 +3665,7 @@ def run_command(
                     "worker_limited_schedule": schedule_to_dict(schedule) if schedule else None,
                     "worker_limited_schedule_comparisons": [schedule_to_dict(item) for item in comparison_schedules],
                     "worker_limited_strategy_comparisons": [schedule_to_dict(item) for item in strategy_comparison_schedules],
-                    "report_title": build_report_title(source_label=display_graph_label, explicit_title=report_title),
+                    "report_title": resolved_report_title,
                     "report_markdown": report,
                     "artifacts": artifacts,
                     "report_markdown_out": report_markdown_out,

@@ -1,4 +1,8 @@
 {
+  "metadata": {
+    "title": "GPU-constrained training and packaging pipeline",
+    "description": "ML-flavored workflow that shows how one scarce GPU serializes evaluation and training even when documentation work can proceed in parallel."
+  },
   "resource_capacities": {
     "gpu": 1
   },

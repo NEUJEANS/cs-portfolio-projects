@@ -1,4 +1,8 @@
 {
+  "metadata": {
+    "title": "Sample package release pipeline",
+    "description": "Small packaging workflow that highlights deterministic dependency planning, a publish gate, and the extra delay introduced by a single constrained worker."
+  },
   "tasks": [
     {"name": "lint", "duration": 1, "command": "ruff check ."},
     {"name": "compile", "deps": ["lint"], "duration": 4, "command": "python -m build"},

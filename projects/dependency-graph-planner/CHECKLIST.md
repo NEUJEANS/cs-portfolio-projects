@@ -15,8 +15,8 @@
 - [x] Export compact HTML report dashboards plus GitHub-friendly schedule SVG artifacts
 - [x] Add synthetic manifest generators for CI, release, and data-pipeline bottleneck patterns
 - [x] Export benchmark dashboard HTML artifacts with relative links to the Markdown, JSON, and CSV suite bundle
+- [x] Add metadata-aware default report titles/descriptions so showcase manifests render recruiter-friendly case-study headings automatically
 - [x] Refresh README, tests, review notes, and wrap-up support so the new scheduler story is visible in-repo
 
 ## Next candidate slices
 - [ ] Add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
-- [ ] Add metadata-aware default report titles/descriptions so generated manifests render even more recruiter-friendly headings automatically

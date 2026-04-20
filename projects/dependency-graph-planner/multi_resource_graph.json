@@ -1,4 +1,8 @@
 {
+  "metadata": {
+    "title": "Multi-resource release certification workflow",
+    "description": "Release-engineering example where browser labs, GPU time, and a signing slot all act as renewable resources that can bottleneck certification and packaging."
+  },
   "resource_capacities": {
     "browser-lab": 2,
     "gpu": 1,
