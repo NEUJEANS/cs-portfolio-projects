@@ -1,0 +1,26 @@
+# Wrap-up — 2026-04-20 13:23 UTC
+
+- Project: `mvcc-isolation-lab`
+- Slice: added static HTML comparison dashboards for the committed MVCC sample scenarios
+- What changed:
+  - added `compare --html-out` so the lab can emit recruiter-friendly static dashboards alongside the existing Markdown and SVG artifacts
+  - generated committed dashboards for `doctor_on_call`, `repeatable_read_window`, and `conference_room_booking_phantom`
+  - improved the dashboard during review with scenario-footprint chips, abort-cause summaries, and clearer per-transaction abort labels
+  - tightened the static-page affordance with better hover/focus styling and refreshed the project/root checklists plus slice research/learning/review notes
+- Tests run:
+  - `python3 -m py_compile projects/mvcc-isolation-lab/mvcc_isolation_lab.py tests/test_mvcc_isolation_lab.py`
+  - `python3 -m unittest tests.test_mvcc_isolation_lab -v`
+  - `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare projects/mvcc-isolation-lab/doctor_on_call.json --markdown-out docs/artifacts/mvcc-isolation-lab/doctor_on_call_compare.md --timeline-svg-dir docs/artifacts/mvcc-isolation-lab --html-out docs/artifacts/mvcc-isolation-lab/doctor_on_call_dashboard.html`
+  - `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare projects/mvcc-isolation-lab/repeatable_read_window.json --markdown-out docs/artifacts/mvcc-isolation-lab/repeatable_read_window_compare.md --timeline-svg-dir docs/artifacts/mvcc-isolation-lab --html-out docs/artifacts/mvcc-isolation-lab/repeatable_read_window_dashboard.html`
+  - `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare projects/mvcc-isolation-lab/conference_room_booking_phantom.json --markdown-out docs/artifacts/mvcc-isolation-lab/conference_room_booking_phantom_compare.md --timeline-svg-dir docs/artifacts/mvcc-isolation-lab --html-out docs/artifacts/mvcc-isolation-lab/conference_room_booking_phantom_dashboard.html`
+  - deterministic double-export hash check for the three `*_dashboard.html` files
+  - `git diff --check`
+- Reviews run:
+  - review 1: fixed misleading abort summaries by separating assertion-driven aborts from validation/lock conflicts
+  - review 2: added top-level scenario-footprint context so the dashboard reads well without opening the README first
+  - review 3: improved hover/focus affordances for the static artifact links
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → passed with 0 verified and 0 unverified secrets
+- Commit: `0fd52d8`
+- Next step:
+  - add a multi-scenario landing page that links the per-scenario HTML dashboards into one portfolio-friendly entry point
