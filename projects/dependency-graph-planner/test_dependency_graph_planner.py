@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 
 from dependency_graph_planner import (
+    BenchmarkStrategyAggregate,
+    BenchmarkSuiteResult,
     CycleError,
     build_benchmark_suite_result,
     build_plan,
@@ -650,6 +652,53 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertIn('Scenario summary', html)
         self.assertIn('Scenario — strategy-2-workers', html)
 
+    def test_render_benchmark_dashboard_html_summary_uses_lowest_gap_strategy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            suite_path = self._write_benchmark_suite_files(tmpdir)
+            base_result = build_benchmark_suite_result(str(suite_path))
+            result = BenchmarkSuiteResult(
+                title=base_result.title,
+                source_label=base_result.source_label,
+                scenarios=base_result.scenarios,
+                aggregates=[
+                    BenchmarkStrategyAggregate(
+                        strategy="critical-first",
+                        scenario_count=5,
+                        rank_1_finishes=5,
+                        best_makespan_finishes=5,
+                        average_makespan=10.0,
+                        average_delta_vs_critical_path_lower_bound=4.0,
+                        average_ratio_vs_critical_path_lower_bound=1.4,
+                        average_delta_vs_best=0.0,
+                        average_total_queue_delay=2.0,
+                        average_max_queue_delay=1.0,
+                        average_utilization=0.7,
+                    ),
+                    BenchmarkStrategyAggregate(
+                        strategy="fifo",
+                        scenario_count=5,
+                        rank_1_finishes=4,
+                        best_makespan_finishes=4,
+                        average_makespan=11.0,
+                        average_delta_vs_critical_path_lower_bound=1.5,
+                        average_ratio_vs_critical_path_lower_bound=1.1,
+                        average_delta_vs_best=1.0,
+                        average_total_queue_delay=3.0,
+                        average_max_queue_delay=1.0,
+                        average_utilization=0.6,
+                    ),
+                ],
+            )
+            html = render_benchmark_dashboard_html(
+                result,
+                html_output_path=str(Path(tmpdir) / "reports" / "benchmark_suite_dashboard.html"),
+            )
+
+        self.assertIn("Top aggregate leader", html)
+        self.assertIn("critical-first", html)
+        self.assertIn("Lowest avg gap vs critical path", html)
+        self.assertIn("1.50 (fifo)", html)
+
     def test_run_command_benchmark_json_writes_markdown_and_resolves_relative_graphs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             suite_path = self._write_benchmark_suite_files(tmpdir)
@@ -693,6 +742,12 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             self.assertEqual(aggregate_by_strategy["critical-first"]["scenario_count"], 5)
             self.assertEqual(aggregate_by_strategy["fifo"]["scenario_count"], 5)
             self.assertEqual(aggregate_by_strategy["longest-processing-time"]["scenario_count"], 4)
+            self.assertEqual(strategy_scenario["critical_path_lower_bound"], 10)
+            critical_first_result = next(item for item in strategy_scenario["strategy_results"] if item["strategy"] == "critical-first")
+            self.assertEqual(critical_first_result["delta_vs_critical_path_lower_bound"], 3)
+            self.assertAlmostEqual(critical_first_result["ratio_vs_critical_path_lower_bound"], 1.3)
+            self.assertIn("Avg Δ vs critical path", written_report)
+            self.assertIn("Ratio vs critical path", written_report)
 
     def test_run_command_benchmark_relativizes_repo_local_suite_source_label(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmpdir:
@@ -745,11 +800,16 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             self.assertIn('href="benchmark_suite_report.json"', written_dashboard)
             self.assertIn('href="benchmark_suite_aggregates.csv"', written_dashboard)
             self.assertIn('href="benchmark_suite_strategies.csv"', written_dashboard)
-            self.assertIn("strategy,scenario_count,rank_1_finishes", aggregate_csv_path.read_text(encoding="utf-8"))
+            aggregate_csv = aggregate_csv_path.read_text(encoding="utf-8")
+            self.assertIn("average_delta_vs_critical_path_lower_bound", aggregate_csv)
+            self.assertIn("average_ratio_vs_critical_path_lower_bound", aggregate_csv)
             strategy_csv = strategy_csv_path.read_text(encoding="utf-8")
-            self.assertIn("scenario_label,graph_label,graph_path,worker_limit", strategy_csv)
+            self.assertIn("critical_path_lower_bound", strategy_csv)
+            self.assertIn("delta_vs_critical_path_lower_bound", strategy_csv)
+            self.assertIn("ratio_vs_critical_path_lower_bound", strategy_csv)
             self.assertIn("strategy-2-workers", strategy_csv)
             self.assertIn("multi-resource-browser-bump", strategy_csv)
+            self.assertIn("critical-path lower bound", written_dashboard)
             self.assertEqual(payload["artifacts"]["benchmark_markdown"], str(report_path))
             self.assertEqual(payload["artifacts"]["benchmark_html"], str(dashboard_path))
             self.assertEqual(payload["artifacts"]["benchmark_json"], str(json_path))
@@ -802,6 +862,23 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertEqual(build_features["resources"], {"warehouse": 2})
         plan = build_plan(parse_tasks(payload))
         self.assertEqual(plan.order[-1], "notify-ops")
+
+    def test_run_command_generate_stress_manifest_is_seeded_and_scheduler_relevant(self) -> None:
+        payload = json.loads(run_command("generate", "stress", generator_width=4, generator_seed=17))
+
+        self.assertEqual(payload["metadata"]["generator"], "stress")
+        self.assertEqual(payload["metadata"]["generator_width"], 4)
+        self.assertEqual(payload["metadata"]["generator_seed"], 17)
+        task_names = [item["name"] for item in payload["tasks"]]
+        self.assertIn("seed", task_names)
+        self.assertIn("ship", task_names)
+        self.assertTrue(any(name.startswith("bulk-") for name in task_names))
+        plan = build_plan(parse_tasks(payload))
+        self.assertEqual(plan.order[-1], "ship")
+        tasks = parse_tasks(payload)
+        critical_first = build_worker_limited_schedule(tasks, plan, worker_limit=2, strategy="critical-first")
+        fifo = build_worker_limited_schedule(tasks, plan, worker_limit=2, strategy="fifo")
+        self.assertLessEqual(critical_first.makespan, fifo.makespan)
 
     def test_run_command_generate_rejects_non_positive_width(self) -> None:
         with self.assertRaisesRegex(ValueError, "--generator-width must be a positive integer"):

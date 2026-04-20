@@ -16,7 +16,8 @@
 - [x] Add synthetic manifest generators for CI, release, and data-pipeline bottleneck patterns
 - [x] Export benchmark dashboard HTML artifacts with relative links to the Markdown, JSON, and CSV suite bundle
 - [x] Add metadata-aware default report titles/descriptions so showcase manifests render recruiter-friendly case-study headings automatically
+- [x] Add seeded stress-workload benchmark cases plus gap/ratio-to-critical-path reporting across Markdown, HTML, JSON, and CSV exports
 - [x] Refresh README, tests, review notes, and wrap-up support so the new scheduler story is visible in-repo
 
 ## Next candidate slices
-- [ ] Add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
+- [ ] Simulate stochastic duration changes to compare heuristic robustness under uncertainty

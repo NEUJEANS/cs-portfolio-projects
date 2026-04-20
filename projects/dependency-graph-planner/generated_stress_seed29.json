@@ -1,0 +1,129 @@
+{
+  "metadata": {
+    "generator": "stress",
+    "generator_width": 3,
+    "generator_seed": 29,
+    "title": "Synthetic stress DAG (seed 29, width 3)",
+    "description": "Randomized-but-deterministic scheduling stress workload with a fragile critical chain, competing bulk work, and follow-up fan-in checks."
+  },
+  "tasks": [
+    {
+      "name": "seed",
+      "duration": 1,
+      "command": "python -m planner.seed_critical_path"
+    },
+    {
+      "name": "bulk-01",
+      "duration": 3,
+      "command": "python -m planner.run_bulk_job --batch=1"
+    },
+    {
+      "name": "bulk-02",
+      "duration": 5,
+      "command": "python -m planner.run_bulk_job --batch=2"
+    },
+    {
+      "name": "bulk-03",
+      "duration": 5,
+      "command": "python -m planner.run_bulk_job --batch=3"
+    },
+    {
+      "name": "bulk-04",
+      "duration": 3,
+      "command": "python -m planner.run_bulk_job --batch=4"
+    },
+    {
+      "name": "bulk-05",
+      "duration": 5,
+      "command": "python -m planner.run_bulk_job --batch=5"
+    },
+    {
+      "name": "critical-chain-01",
+      "duration": 3,
+      "deps": [
+        "seed"
+      ],
+      "command": "python -m planner.advance_chain --step=1"
+    },
+    {
+      "name": "critical-chain-02",
+      "duration": 2,
+      "deps": [
+        "critical-chain-01",
+        "bulk-01"
+      ],
+      "command": "python -m planner.advance_chain --step=2"
+    },
+    {
+      "name": "critical-chain-03",
+      "duration": 4,
+      "deps": [
+        "critical-chain-02"
+      ],
+      "command": "python -m planner.advance_chain --step=3"
+    },
+    {
+      "name": "critical-chain-04",
+      "duration": 2,
+      "deps": [
+        "critical-chain-03",
+        "bulk-03"
+      ],
+      "command": "python -m planner.advance_chain --step=4"
+    },
+    {
+      "name": "critical-chain-05",
+      "duration": 3,
+      "deps": [
+        "critical-chain-04"
+      ],
+      "command": "python -m planner.advance_chain --step=5"
+    },
+    {
+      "name": "critical-chain-06",
+      "duration": 4,
+      "deps": [
+        "critical-chain-05"
+      ],
+      "command": "python -m planner.advance_chain --step=6"
+    },
+    {
+      "name": "follow-up-01",
+      "duration": 1,
+      "deps": [
+        "bulk-04"
+      ],
+      "command": "python -m planner.verify_batch --job=1"
+    },
+    {
+      "name": "follow-up-02",
+      "duration": 1,
+      "deps": [
+        "bulk-04"
+      ],
+      "command": "python -m planner.verify_batch --job=2"
+    },
+    {
+      "name": "follow-up-03",
+      "duration": 3,
+      "deps": [
+        "bulk-04"
+      ],
+      "command": "python -m planner.verify_batch --job=3"
+    },
+    {
+      "name": "ship",
+      "duration": 1,
+      "deps": [
+        "bulk-02",
+        "bulk-03",
+        "bulk-05",
+        "critical-chain-06",
+        "follow-up-01",
+        "follow-up-02",
+        "follow-up-03"
+      ],
+      "command": "python -m planner.publish_schedule_story"
+    }
+  ]
+}

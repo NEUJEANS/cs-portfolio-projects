@@ -24,8 +24,9 @@ A compact Python project that models a build or delivery workflow as a directed 
 - compact static HTML dashboards that turn each report bundle into a README-friendly landing page with relative links and embedded schedule previews
 - manifest metadata (`metadata.title` / `metadata.description`) so committed reports and dashboards pick polished portfolio case-study headings by default
 - GitHub-friendly SVG schedule timelines for constrained runs so reviewers can inspect worker/resource bottlenecks without opening raw JSON
-- synthetic manifest generators for CI, release, and data-pipeline bottleneck stories so the project can showcase multiple workload families without hand-authoring every DAG
+- synthetic manifest generators for CI, release, data-pipeline, and seeded stress-workload stories so the project can showcase multiple workload families without hand-authoring every DAG
 - batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary plus JSON/CSV/HTML companion artifacts across both hand-authored and generated manifests
+- benchmark exports that surface each strategy's gap and ratio versus the critical-path lower bound, making scheduler efficiency easier to discuss in interviews
 
 ## Project structure
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, scheduler, CLI, diagram export helpers, walkthrough-report generation, HTML dashboard rendering, and schedule SVG export
@@ -37,6 +38,7 @@ A compact Python project that models a build or delivery workflow as a directed 
 - `generated_ci_pipeline.json` - generated CI-style showcase manifest with matrix-like unit-test fan-out, artifact packaging, preview deploy, and smoke coverage
 - `generated_release_pipeline.json` - generated release-engineering showcase manifest with platform builds, serialized signing, and progressive canary rollout
 - `generated_data_pipeline.json` - generated warehouse/ML showcase manifest with partition fan-out, bottlenecked transforms, feature building, and GPU training
+- `generated_stress_seed17.json`, `generated_stress_seed29.json`, `generated_stress_seed41.json` - seeded stress-workload manifests that create fragile critical chains plus competing bulk/fan-in work for strategy benchmarking
 - `test_dependency_graph_planner.py` - unit and CLI tests
 - `CHECKLIST.md` - resumable slice tracker for future portfolio work on this project
 - `docs/artifacts/dependency-graph-planner/` - committed Mermaid, DOT, report, and schedule outputs from the sample manifests
@@ -110,6 +112,8 @@ The `benchmark` command can emit five complementary outputs from the same suite 
 - full JSON snapshot (`--benchmark-json-out`) for programmatic ingestion
 - aggregate CSV leaderboard (`--benchmark-aggregate-csv-out`) for one row per strategy
 - per-scenario strategy CSV (`--benchmark-strategy-csv-out`) for plotting/notebooks
+
+Each benchmark export now includes both the raw makespan gap and the makespan ratio versus the scenario's critical-path lower bound, so the scoreboard can describe not only who won but also how far each heuristic stayed from the theoretical floor.
 
 Scenario fields:
 - `label` - required unique scenario name used in the Markdown report
@@ -279,15 +283,15 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py benchmark 
   --benchmark-aggregate-csv-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_aggregates.csv \
   --benchmark-strategy-csv-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_strategies.csv
 ```
-This emits a scoreboard-style Markdown report plus a compact HTML dashboard and JSON/CSV leaderboard snapshots that compare scheduling strategies across the committed sample, strategy, resource, multi-resource, and generated showcase manifests in one batch.
+This emits a scoreboard-style Markdown report plus a compact HTML dashboard and JSON/CSV leaderboard snapshots that compare scheduling strategies across the committed sample, strategy, resource, multi-resource, and generated showcase manifests in one batch, including per-scenario gap/ratio metrics versus the critical-path lower bound.
 
-### Generate a synthetic CI / release / data-pipeline manifest
+### Generate a synthetic CI / release / data-pipeline / stress manifest
 ```bash
 python3 projects/dependency-graph-planner/dependency_graph_planner.py generate ci \
   --generator-width 4 \
   --generated-manifest-out projects/dependency-graph-planner/generated_ci_pipeline.json
 ```
-Swap `ci` for `release` or `data-pipeline` to generate the other workload families. `--generator-width` scales unit-test shards, canary phases, or transform partitions depending on the selected generator.
+Swap `ci` for `release`, `data-pipeline`, or `stress` to generate the other workload families. `--generator-width` scales unit-test shards, canary phases, transform partitions, or stress-workload size depending on the selected generator. For the `stress` generator, `--generator-seed` locks in a deterministic randomized DAG so benchmark scenarios can be reproduced exactly.
 
 ### Export a generated manifest as a full recruiter-friendly artifact bundle
 ```bash
@@ -381,10 +385,10 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - how renewable resource constraints extend a plain worker-cap demo toward real runner pools such as GPUs, signing hosts, or browser labs
 - why multi-resource demand vectors are closer to real release engineering than a single-label toy scheduler
 - how a benchmark suite makes it obvious when one heuristic wins, ties, or loses across different workload shapes
-- why synthetic CI, release, and data-pipeline generators make the scheduler story broader without burying the repo in hand-authored DAGs
+- why synthetic CI, release, data-pipeline, and stress generators make the scheduler story broader without burying the repo in hand-authored DAGs
+- how gap/ratio-to-critical-path metrics help explain whether a heuristic merely wins or actually stays close to the theoretical floor
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
 - simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
-- add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
 - surface manifest metadata inside Mermaid preview wrappers and schedule SVG captions for even more polished artifact storytelling

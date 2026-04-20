@@ -187,3 +187,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 stress benchmark slice
+- [x] confirm the repo was still synced with `origin/main` before continuing from the dirty local dependency-graph-planner slice
+- [x] continue the unfinished local stress-benchmark slice instead of starting a competing change
+- [x] capture a brief slice note explaining why extra external web research was not needed for this incremental scheduling-benchmark follow-up
+- [x] refresh deterministic seeded-generator and critical-path-lower-bound expectations with a short self-test note
+- [x] update the project checklist, README, benchmark suite, and artifact references for seeded stress scenarios and lower-bound metrics
+- [x] implement the `stress` synthetic generator plus benchmark gap/ratio reporting versus the critical-path lower bound across Markdown, HTML, JSON, and CSV outputs
+- [x] add regression coverage for seeded stress generation and the benchmark dashboard summary-card logic
+- [x] commit seeded stress manifests plus regenerated benchmark-suite artifacts under `docs/artifacts/`
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

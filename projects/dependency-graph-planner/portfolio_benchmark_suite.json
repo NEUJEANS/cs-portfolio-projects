@@ -49,6 +49,21 @@
       "label": "generated-data-pipeline-4-workers",
       "graph": "generated_data_pipeline.json",
       "worker_limit": 4
+    },
+    {
+      "label": "generated-stress-seed17-2-workers",
+      "graph": "generated_stress_seed17.json",
+      "worker_limit": 2
+    },
+    {
+      "label": "generated-stress-seed29-2-workers",
+      "graph": "generated_stress_seed29.json",
+      "worker_limit": 2
+    },
+    {
+      "label": "generated-stress-seed41-2-workers",
+      "graph": "generated_stress_seed41.json",
+      "worker_limit": 2
     }
   ]
 }

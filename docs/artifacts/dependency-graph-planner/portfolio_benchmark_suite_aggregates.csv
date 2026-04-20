@@ -1,4 +1,4 @@
-strategy,scenario_count,rank_1_finishes,best_makespan_finishes,average_makespan,average_delta_vs_best,average_total_queue_delay,average_max_queue_delay,average_utilization
-fifo,8,7,7,13.75,0.375,4.0,2.875,0.504297
-critical-first,8,4,7,13.5,0.125,5.0,3.625,0.516027
-longest-processing-time,7,3,6,14.571429,0.428571,5.142857,3.428571,0.493006
+strategy,scenario_count,rank_1_finishes,best_makespan_finishes,average_makespan,average_delta_vs_critical_path_lower_bound,average_ratio_vs_critical_path_lower_bound,average_delta_vs_best,average_total_queue_delay,average_max_queue_delay,average_utilization
+critical-first,11,7,10,17.181818,3.181818,1.238115,0.090909,20.909091,8.272727,0.634253
+fifo,11,7,7,18.909091,4.909091,1.325541,1.818182,11.909091,4.727273,0.580863
+longest-processing-time,10,3,6,19.8,5.1,1.33381,1.8,13.7,5.6,0.585407

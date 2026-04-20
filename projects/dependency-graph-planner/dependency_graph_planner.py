@@ -9,6 +9,7 @@ import heapq
 import io
 import json
 import os
+import random
 from dataclasses import dataclass, field
 from html import escape as _html_escape
 from pathlib import Path
@@ -17,8 +18,9 @@ from typing import Any, Sequence
 
 DEFAULT_SCHEDULE_STRATEGY = "critical-first"
 SCHEDULE_STRATEGIES = ("critical-first", "fifo", "longest-processing-time")
-SYNTHETIC_GENERATORS = ("ci", "release", "data-pipeline")
+SYNTHETIC_GENERATORS = ("ci", "release", "data-pipeline", "stress")
 DEFAULT_GENERATOR_WIDTH = 3
+DEFAULT_GENERATOR_SEED = 13
 
 
 class GraphValidationError(ValueError):
@@ -126,6 +128,8 @@ class BenchmarkStrategyResult:
     strategy: str
     makespan: int
     delta_vs_unlimited: int
+    delta_vs_critical_path_lower_bound: int
+    ratio_vs_critical_path_lower_bound: float
     delta_vs_best: int
     total_queue_delay: int
     max_queue_delay: int
@@ -144,6 +148,7 @@ class BenchmarkScenarioResult:
     worker_limit: int
     task_count: int
     unlimited_makespan: int
+    critical_path_lower_bound: int
     resource_capacities: dict[str, int]
     strategy_results: list[BenchmarkStrategyResult]
     best_makespan: int
@@ -158,6 +163,8 @@ class BenchmarkStrategyAggregate:
     rank_1_finishes: int
     best_makespan_finishes: int
     average_makespan: float
+    average_delta_vs_critical_path_lower_bound: float
+    average_ratio_vs_critical_path_lower_bound: float
     average_delta_vs_best: float
     average_total_queue_delay: float
     average_max_queue_delay: float
@@ -524,6 +531,7 @@ def build_benchmark_suite_result(
             raw_results.append((strategy, schedule))
 
         best_makespan = min(schedule.makespan for _, schedule in raw_results)
+        critical_path_lower_bound = plan.total_duration
         provisional_results: list[BenchmarkStrategyResult] = []
         for strategy, schedule in raw_results:
             delayed = [item.queue_delay for item in schedule.assignments if item.queue_delay > 0]
@@ -532,6 +540,10 @@ def build_benchmark_suite_result(
                     strategy=strategy,
                     makespan=schedule.makespan,
                     delta_vs_unlimited=schedule.makespan - schedule.unlimited_makespan,
+                    delta_vs_critical_path_lower_bound=schedule.makespan - critical_path_lower_bound,
+                    ratio_vs_critical_path_lower_bound=(schedule.makespan / critical_path_lower_bound)
+                    if critical_path_lower_bound
+                    else 0.0,
                     delta_vs_best=schedule.makespan - best_makespan,
                     total_queue_delay=sum(item.queue_delay for item in schedule.assignments),
                     max_queue_delay=max(delayed, default=0),
@@ -557,6 +569,8 @@ def build_benchmark_suite_result(
                     strategy=item.strategy,
                     makespan=item.makespan,
                     delta_vs_unlimited=item.delta_vs_unlimited,
+                    delta_vs_critical_path_lower_bound=item.delta_vs_critical_path_lower_bound,
+                    ratio_vs_critical_path_lower_bound=item.ratio_vs_critical_path_lower_bound,
                     delta_vs_best=item.delta_vs_best,
                     total_queue_delay=item.total_queue_delay,
                     max_queue_delay=item.max_queue_delay,
@@ -576,6 +590,7 @@ def build_benchmark_suite_result(
                 worker_limit=scenario.worker_limit,
                 task_count=len(tasks),
                 unlimited_makespan=plan.total_duration,
+                critical_path_lower_bound=critical_path_lower_bound,
                 resource_capacities=resolved_resource_capacities,
                 strategy_results=ranked_results,
                 best_makespan=best_makespan,
@@ -603,6 +618,8 @@ def build_benchmark_suite_result(
                 rank_1_finishes=sum(1 for item in items if item.rank == 1),
                 best_makespan_finishes=sum(1 for item in items if item.tied_best_makespan),
                 average_makespan=_average([float(item.makespan) for item in items]),
+                average_delta_vs_critical_path_lower_bound=_average([float(item.delta_vs_critical_path_lower_bound) for item in items]),
+                average_ratio_vs_critical_path_lower_bound=_average([item.ratio_vs_critical_path_lower_bound for item in items]),
                 average_delta_vs_best=_average([float(item.delta_vs_best) for item in items]),
                 average_total_queue_delay=_average([float(item.total_queue_delay) for item in items]),
                 average_max_queue_delay=_average([float(item.max_queue_delay) for item in items]),
@@ -2411,6 +2428,7 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
                 "worker_limit": scenario.worker_limit,
                 "task_count": scenario.task_count,
                 "unlimited_makespan": scenario.unlimited_makespan,
+                "critical_path_lower_bound": scenario.critical_path_lower_bound,
                 "resource_capacities": scenario.resource_capacities,
                 "best_makespan": scenario.best_makespan,
                 "best_makespan_strategies": scenario.best_makespan_strategies,
@@ -2421,6 +2439,8 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
                         "rank": item.rank,
                         "makespan": item.makespan,
                         "delta_vs_unlimited": item.delta_vs_unlimited,
+                        "delta_vs_critical_path_lower_bound": item.delta_vs_critical_path_lower_bound,
+                        "ratio_vs_critical_path_lower_bound": round(item.ratio_vs_critical_path_lower_bound, 6),
                         "delta_vs_best": item.delta_vs_best,
                         "total_queue_delay": item.total_queue_delay,
                         "max_queue_delay": item.max_queue_delay,
@@ -2441,6 +2461,8 @@ def benchmark_suite_to_dict(result: BenchmarkSuiteResult) -> dict[str, Any]:
                 "rank_1_finishes": item.rank_1_finishes,
                 "best_makespan_finishes": item.best_makespan_finishes,
                 "average_makespan": round(item.average_makespan, 6),
+                "average_delta_vs_critical_path_lower_bound": round(item.average_delta_vs_critical_path_lower_bound, 6),
+                "average_ratio_vs_critical_path_lower_bound": round(item.average_ratio_vs_critical_path_lower_bound, 6),
                 "average_delta_vs_best": round(item.average_delta_vs_best, 6),
                 "average_total_queue_delay": round(item.average_total_queue_delay, 6),
                 "average_max_queue_delay": round(item.average_max_queue_delay, 6),
@@ -2468,6 +2490,8 @@ def benchmark_aggregate_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any
             "rank_1_finishes": item.rank_1_finishes,
             "best_makespan_finishes": item.best_makespan_finishes,
             "average_makespan": round(item.average_makespan, 6),
+            "average_delta_vs_critical_path_lower_bound": round(item.average_delta_vs_critical_path_lower_bound, 6),
+            "average_ratio_vs_critical_path_lower_bound": round(item.average_ratio_vs_critical_path_lower_bound, 6),
             "average_delta_vs_best": round(item.average_delta_vs_best, 6),
             "average_total_queue_delay": round(item.average_total_queue_delay, 6),
             "average_max_queue_delay": round(item.average_max_queue_delay, 6),
@@ -2491,6 +2515,7 @@ def benchmark_strategy_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]
                     "worker_limit": scenario.worker_limit,
                     "task_count": scenario.task_count,
                     "unlimited_makespan": scenario.unlimited_makespan,
+                    "critical_path_lower_bound": scenario.critical_path_lower_bound,
                     "best_makespan": scenario.best_makespan,
                     "rank_1_strategies": ",".join(scenario.rank_1_strategies),
                     "best_makespan_strategies": ",".join(scenario.best_makespan_strategies),
@@ -2499,6 +2524,8 @@ def benchmark_strategy_rows(result: BenchmarkSuiteResult) -> list[dict[str, Any]
                     "rank": item.rank,
                     "makespan": item.makespan,
                     "delta_vs_unlimited": item.delta_vs_unlimited,
+                    "delta_vs_critical_path_lower_bound": item.delta_vs_critical_path_lower_bound,
+                    "ratio_vs_critical_path_lower_bound": round(item.ratio_vs_critical_path_lower_bound, 6),
                     "delta_vs_best": item.delta_vs_best,
                     "total_queue_delay": item.total_queue_delay,
                     "max_queue_delay": item.max_queue_delay,
@@ -2520,6 +2547,8 @@ def render_benchmark_aggregate_csv(result: BenchmarkSuiteResult) -> str:
             "rank_1_finishes",
             "best_makespan_finishes",
             "average_makespan",
+            "average_delta_vs_critical_path_lower_bound",
+            "average_ratio_vs_critical_path_lower_bound",
             "average_delta_vs_best",
             "average_total_queue_delay",
             "average_max_queue_delay",
@@ -2540,6 +2569,7 @@ def render_benchmark_strategy_csv(result: BenchmarkSuiteResult) -> str:
             "worker_limit",
             "task_count",
             "unlimited_makespan",
+            "critical_path_lower_bound",
             "best_makespan",
             "rank_1_strategies",
             "best_makespan_strategies",
@@ -2548,6 +2578,8 @@ def render_benchmark_strategy_csv(result: BenchmarkSuiteResult) -> str:
             "rank",
             "makespan",
             "delta_vs_unlimited",
+            "delta_vs_critical_path_lower_bound",
+            "ratio_vs_critical_path_lower_bound",
             "delta_vs_best",
             "total_queue_delay",
             "max_queue_delay",
@@ -2609,8 +2641,8 @@ def render_benchmark_suite_markdown(
             "",
             "## Aggregate strategy scoreboard",
             "",
-            "| Strategy | Scenarios | Rank-1 finishes | Best-makespan finishes | Avg makespan | Avg Δ vs best | Avg total queue delay | Avg max queue delay | Avg utilization |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Strategy | Scenarios | Rank-1 finishes | Best-makespan finishes | Avg makespan | Avg Δ vs critical path | Avg ratio vs critical path | Avg Δ vs best | Avg total queue delay | Avg max queue delay | Avg utilization |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for item in result.aggregates:
@@ -2623,6 +2655,8 @@ def render_benchmark_suite_markdown(
                     str(item.rank_1_finishes),
                     str(item.best_makespan_finishes),
                     f"{item.average_makespan:.2f}",
+                    f"{item.average_delta_vs_critical_path_lower_bound:.2f}",
+                    f"{item.average_ratio_vs_critical_path_lower_bound:.2f}×",
                     f"{item.average_delta_vs_best:.2f}",
                     f"{item.average_total_queue_delay:.2f}",
                     f"{item.average_max_queue_delay:.2f}",
@@ -2642,6 +2676,7 @@ def render_benchmark_suite_markdown(
                 f"- Worker limit: {_markdown_code(_format_worker_limit_label(scenario.worker_limit))}",
                 f"- Task count: {_markdown_code(scenario.task_count)}",
                 f"- Unlimited makespan: {_markdown_code(scenario.unlimited_makespan)}",
+                f"- Critical-path lower bound: {_markdown_code(scenario.critical_path_lower_bound)}",
                 f"- Best scenario makespan: {_markdown_code(scenario.best_makespan)} via {_markdown_code(', '.join(scenario.best_makespan_strategies))}",
                 f"- Rank-1 strategies after queue-delay tie-breaks: {_markdown_code(', '.join(scenario.rank_1_strategies))}",
             ]
@@ -2656,8 +2691,8 @@ def render_benchmark_suite_markdown(
         lines.extend(
             [
                 "",
-                "| Rank | Strategy | Makespan | Δ vs unlimited | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |",
-                "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+                "| Rank | Strategy | Makespan | Δ vs unlimited | Δ vs critical path | Ratio vs critical path | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |",
+                "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
             ]
         )
         for item in scenario.strategy_results:
@@ -2669,6 +2704,8 @@ def render_benchmark_suite_markdown(
                         _escape_markdown_table_cell(item.strategy),
                         str(item.makespan),
                         str(item.delta_vs_unlimited),
+                        str(item.delta_vs_critical_path_lower_bound),
+                        f"{item.ratio_vs_critical_path_lower_bound:.2f}×",
                         str(item.delta_vs_best),
                         str(item.total_queue_delay),
                         str(item.max_queue_delay),
@@ -2693,6 +2730,18 @@ def render_benchmark_dashboard_html(
     artifacts = artifacts or {}
     strategy_count = len(result.aggregates)
     top_strategy = result.aggregates[0] if result.aggregates else None
+    lowest_gap_strategy = (
+        min(
+            result.aggregates,
+            key=lambda item: (
+                item.average_delta_vs_critical_path_lower_bound,
+                item.average_ratio_vs_critical_path_lower_bound,
+                SCHEDULE_STRATEGIES.index(item.strategy),
+            ),
+        )
+        if result.aggregates
+        else None
+    )
     summary_cards = [
         ("Scenarios", str(len(result.scenarios))),
         ("Strategies", str(strategy_count)),
@@ -2700,6 +2749,15 @@ def render_benchmark_dashboard_html(
         (
             "Best average makespan",
             f"{top_strategy.average_makespan:.2f}" if top_strategy else "(n/a)",
+        ),
+        (
+            "Lowest avg gap vs critical path",
+            (
+                f"{lowest_gap_strategy.average_delta_vs_critical_path_lower_bound:.2f}"
+                f" ({lowest_gap_strategy.strategy})"
+            )
+            if lowest_gap_strategy
+            else "(n/a)",
         ),
     ]
     summary_html = "".join(
@@ -2735,6 +2793,8 @@ def render_benchmark_dashboard_html(
         f"<td>{item.rank_1_finishes}</td>"
         f"<td>{item.best_makespan_finishes}</td>"
         f"<td>{item.average_makespan:.2f}</td>"
+        f"<td>{item.average_delta_vs_critical_path_lower_bound:.2f}</td>"
+        f"<td>{item.average_ratio_vs_critical_path_lower_bound:.2f}×</td>"
         f"<td>{item.average_delta_vs_best:.2f}</td>"
         f"<td>{item.average_total_queue_delay:.2f}</td>"
         f"<td>{item.average_max_queue_delay:.2f}</td>"
@@ -2749,6 +2809,7 @@ def render_benchmark_dashboard_html(
         f"<td>{_html_escape(_format_worker_limit_label(scenario.worker_limit))}</td>"
         f"<td>{scenario.task_count}</td>"
         f"<td>{scenario.unlimited_makespan}</td>"
+        f"<td>{scenario.critical_path_lower_bound}</td>"
         f"<td>{scenario.best_makespan}</td>"
         f"<td>{_html_escape(', '.join(scenario.rank_1_strategies))}</td>"
         f"<td>{_html_escape(', '.join(f'{name}={capacity}' for name, capacity in scenario.resource_capacities.items()) if scenario.resource_capacities else '—')}</td>"
@@ -2764,6 +2825,8 @@ def render_benchmark_dashboard_html(
             f"<td><code>{_html_escape(item.strategy)}</code></td>"
             f"<td>{item.makespan}</td>"
             f"<td>{item.delta_vs_unlimited}</td>"
+            f"<td>{item.delta_vs_critical_path_lower_bound}</td>"
+            f"<td>{item.ratio_vs_critical_path_lower_bound:.2f}×</td>"
             f"<td>{item.delta_vs_best}</td>"
             f"<td>{item.total_queue_delay}</td>"
             f"<td>{item.max_queue_delay}</td>"
@@ -2777,7 +2840,7 @@ def render_benchmark_dashboard_html(
             f'''
       <section class="panel">
         <h2>Scenario — {_html_escape(scenario.label)}</h2>
-        <p class="muted">Manifest <code>{_html_escape(scenario.graph_label)}</code> · {_html_escape(_format_worker_limit_label(scenario.worker_limit))} · best makespan {scenario.best_makespan} via {_html_escape(', '.join(scenario.best_makespan_strategies))}</p>
+        <p class="muted">Manifest <code>{_html_escape(scenario.graph_label)}</code> · {_html_escape(_format_worker_limit_label(scenario.worker_limit))} · critical-path lower bound {scenario.critical_path_lower_bound} · best makespan {scenario.best_makespan} via {_html_escape(', '.join(scenario.best_makespan_strategies))}</p>
         <table>
           <thead>
             <tr>
@@ -2785,6 +2848,8 @@ def render_benchmark_dashboard_html(
               <th>Strategy</th>
               <th>Makespan</th>
               <th>Δ vs unlimited</th>
+              <th>Δ vs critical path</th>
+              <th>Ratio vs critical path</th>
               <th>Δ vs best</th>
               <th>Total queue delay</th>
               <th>Max queue delay</th>
@@ -2872,6 +2937,8 @@ def render_benchmark_dashboard_html(
               <th>Rank-1 finishes</th>
               <th>Best-makespan finishes</th>
               <th>Avg makespan</th>
+              <th>Avg Δ vs critical path</th>
+              <th>Avg ratio vs critical path</th>
               <th>Avg Δ vs best</th>
               <th>Avg total queue delay</th>
               <th>Avg max queue delay</th>
@@ -2892,6 +2959,7 @@ def render_benchmark_dashboard_html(
               <th>Worker limit</th>
               <th>Tasks</th>
               <th>Unlimited makespan</th>
+              <th>Critical-path lower bound</th>
               <th>Best makespan</th>
               <th>Rank-1 strategies</th>
               <th>Resource caps</th>
@@ -2920,6 +2988,11 @@ def _resolve_synthetic_generator_name(name: str) -> str:
         "data-pipeline-bottleneck": "data-pipeline",
         "data-pipeline-bottlenecks": "data-pipeline",
         "data-pipeline-bottleneck-lab": "data-pipeline",
+        "random": "stress",
+        "randomized": "stress",
+        "randomized-stress": "stress",
+        "stress-test": "stress",
+        "stress-suite": "stress",
     }
     resolved = aliases.get(normalized, normalized)
     if resolved not in SYNTHETIC_GENERATORS:
@@ -2969,7 +3042,12 @@ def _synthetic_sequence_name(prefix: str, index: int, width: int) -> str:
 
 
 
-def build_synthetic_manifest(generator_name: str, *, width: int = DEFAULT_GENERATOR_WIDTH) -> dict[str, Any]:
+def build_synthetic_manifest(
+    generator_name: str,
+    *,
+    width: int = DEFAULT_GENERATOR_WIDTH,
+    seed: int | None = None,
+) -> dict[str, Any]:
     resolved_name = _resolve_synthetic_generator_name(generator_name)
     if width <= 0:
         raise ValueError("--generator-width must be a positive integer")
@@ -2977,8 +3055,96 @@ def build_synthetic_manifest(generator_name: str, *, width: int = DEFAULT_GENERA
         return _build_ci_pipeline_manifest(width)
     if resolved_name == "release":
         return _build_release_pipeline_manifest(width)
+    if resolved_name == "stress":
+        return _build_stress_pipeline_manifest(width, seed=seed)
     return _build_data_pipeline_manifest(width)
 
+
+def _default_generator_seed(width: int, *, offset: int = 0) -> int:
+    return DEFAULT_GENERATOR_SEED + offset + (width * 97)
+
+
+def _random_duration(rng: random.Random, *, low: int = 1, high: int = 5) -> int:
+    return rng.randint(low, high)
+
+
+def _build_stress_pipeline_manifest(width: int, *, seed: int | None = None) -> dict[str, Any]:
+    resolved_seed = _default_generator_seed(width) if seed is None else seed
+    rng = random.Random(resolved_seed)
+    distractor_count = width + 2
+    chain_length = width + 3
+    follow_up_count = max(2, width)
+
+    tasks: list[dict[str, Any]] = [
+        _build_synthetic_task("seed", duration=1, command="python -m planner.seed_critical_path"),
+    ]
+
+    distractor_names = [_synthetic_sequence_name("bulk", index, distractor_count) for index in range(1, distractor_count + 1)]
+    for index, name in enumerate(distractor_names, start=1):
+        duration = _random_duration(rng, low=3, high=6)
+        tasks.append(
+            _build_synthetic_task(
+                name,
+                duration=duration,
+                command=f"python -m planner.run_bulk_job --batch={index}",
+            )
+        )
+
+    previous = "seed"
+    chain_names: list[str] = []
+    for index in range(1, chain_length + 1):
+        name = _synthetic_sequence_name("critical-chain", index, chain_length)
+        chain_names.append(name)
+        deps = [previous]
+        if index > 1 and rng.random() < 0.45:
+            deps.append(rng.choice(distractor_names[: min(index, len(distractor_names))]))
+        tasks.append(
+            _build_synthetic_task(
+                name,
+                deps=deps,
+                duration=_random_duration(rng, low=2, high=4),
+                command=f"python -m planner.advance_chain --step={index}",
+            )
+        )
+        previous = name
+
+    follow_up_names: list[str] = []
+    for index in range(1, follow_up_count + 1):
+        name = _synthetic_sequence_name("follow-up", index, follow_up_count)
+        follow_up_names.append(name)
+        deps = [rng.choice(distractor_names)]
+        if rng.random() < 0.7:
+            deps.append(rng.choice(chain_names[: max(1, min(len(chain_names), index + 1))]))
+        tasks.append(
+            _build_synthetic_task(
+                name,
+                deps=sorted(set(deps)),
+                duration=_random_duration(rng, low=1, high=3),
+                command=f"python -m planner.verify_batch --job={index}",
+            )
+        )
+
+    final_deps = [chain_names[-1], *follow_up_names]
+    final_deps.extend(rng.sample(distractor_names, k=min(len(distractor_names), max(2, width))))
+    tasks.append(
+        _build_synthetic_task(
+            "ship",
+            deps=sorted(set(final_deps)),
+            duration=1,
+            command="python -m planner.publish_schedule_story",
+        )
+    )
+
+    return {
+        "metadata": {
+            "generator": "stress",
+            "generator_width": width,
+            "generator_seed": resolved_seed,
+            "title": f"Synthetic stress DAG (seed {resolved_seed}, width {width})",
+            "description": "Randomized-but-deterministic scheduling stress workload with a fragile critical chain, competing bulk work, and follow-up fan-in checks.",
+        },
+        "tasks": tasks,
+    }
 
 
 def _build_ci_pipeline_manifest(width: int) -> dict[str, Any]:
@@ -3277,6 +3443,7 @@ def _ensure_command_flags_are_valid(
     benchmark_title: str | None,
     generated_manifest_out: str | None,
     generator_width: int | None,
+    generator_seed: int | None,
 ) -> None:
     if command == "generate" and any(
         value is not None
@@ -3328,7 +3495,7 @@ def _ensure_command_flags_are_valid(
         )
     ):
         raise ValueError("benchmark-specific flags require the benchmark command")
-    if command != "generate" and any(value is not None for value in (generated_manifest_out, generator_width)):
+    if command != "generate" and any(value is not None for value in (generated_manifest_out, generator_width, generator_seed)):
         raise ValueError("generator-specific flags require the generate command")
     if command not in {"report", "schedule"} and worker_limit is not None:
         raise ValueError("--worker-limit requires the schedule or report command")
@@ -3392,7 +3559,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--generator-width",
         type=int,
-        help="positive integer scale factor used by the generate command (unit-test shards, canary phases, or transform partitions)",
+        help="positive integer scale factor used by the generate command (unit-test shards, canary phases, transform partitions, or stress workload size)",
+    )
+    parser.add_argument(
+        "--generator-seed",
+        type=int,
+        help="optional deterministic seed for the stress generator",
     )
     parser.add_argument(
         "--worker-limit",
@@ -3449,6 +3621,7 @@ def run_command(
     benchmark_title: str | None = None,
     generated_manifest_out: str | None = None,
     generator_width: int | None = None,
+    generator_seed: int | None = None,
 ) -> str:
     _ensure_command_flags_are_valid(
         command,
@@ -3469,9 +3642,14 @@ def run_command(
         benchmark_title=benchmark_title,
         generated_manifest_out=generated_manifest_out,
         generator_width=generator_width,
+        generator_seed=generator_seed,
     )
     if command == "generate":
-        manifest = build_synthetic_manifest(graph_path, width=generator_width or DEFAULT_GENERATOR_WIDTH)
+        manifest = build_synthetic_manifest(
+            graph_path,
+            width=generator_width or DEFAULT_GENERATOR_WIDTH,
+            seed=generator_seed,
+        )
         rendered_manifest = json.dumps(manifest, indent=2)
         if generated_manifest_out:
             _write_text(generated_manifest_out, rendered_manifest + "\n")
@@ -3714,6 +3892,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             benchmark_title=args.benchmark_title,
             generated_manifest_out=args.generated_manifest_out,
             generator_width=args.generator_width,
+            generator_seed=args.generator_seed,
         )
     except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")
