@@ -24,6 +24,8 @@ compare_scenario = MODULE.compare_scenario
 load_scenario = MODULE.load_scenario
 run_simulation = MODULE.run_simulation
 render_compare_html = MODULE.render_compare_html
+render_catalog_html = MODULE.render_catalog_html
+render_catalog_markdown = MODULE.render_catalog_markdown
 render_timeline_svg = MODULE.render_timeline_svg
 validate_scenario = MODULE.validate_scenario
 
@@ -407,6 +409,94 @@ class MvccIsolationLabTests(unittest.TestCase):
                 str(Path(temp_dir) / "doctor_on_call_strict_2pl_timeline.svg"),
             )
             self.assertEqual(payload["_meta"]["html_output"], str(html_path))
+
+
+    def test_render_catalog_outputs_link_summaries(self) -> None:
+        entries = [
+            {
+                "scenario": "doctor_on_call.json",
+                "scenario_stem": "doctor_on_call",
+                "title": "Doctor on-call write skew",
+                "description": "Two doctors each see coverage in their snapshot before writing.",
+                "transaction_count": 2,
+                "tick_count": 6,
+                "invariant_count": 1,
+                "safe_modes": 2,
+                "anomaly_modes": 2,
+                "aborted_transactions": 2,
+                "markdown": "doctor_on_call_compare.md",
+                "dashboard": "doctor_on_call_dashboard.html",
+                "timelines": {
+                    "serializable": "doctor_on_call_serializable_timeline.svg",
+                    "strict-2pl": "doctor_on_call_strict_2pl_timeline.svg",
+                },
+            }
+        ]
+        html = render_catalog_html(entries)
+        markdown = render_catalog_markdown(entries)
+        self.assertIn("Scenario gallery", html)
+        self.assertIn("doctor_on_call_dashboard.html", html)
+        self.assertIn("doctor_on_call_serializable_timeline.svg", html)
+        self.assertIn("Anomaly modes", html)
+        self.assertIn("Doctor on-call write skew", markdown)
+        self.assertIn("[Markdown comparison](doctor_on_call_compare.md)", markdown)
+        self.assertIn("Regenerate with `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py catalog <scenario-dir> --output-dir <artifact-dir>`", markdown)
+
+    def test_catalog_cli_builds_landing_page_and_scenario_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "catalog",
+                    str(REPO_ROOT / "projects/mvcc-isolation-lab"),
+                    "--output-dir",
+                    temp_dir,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn("Catalog scenarios: 3", completed.stdout)
+            index_html = Path(temp_dir) / "index.html"
+            index_md = Path(temp_dir) / "index.md"
+            self.assertTrue(index_html.exists())
+            self.assertTrue(index_md.exists())
+            self.assertTrue((Path(temp_dir) / "doctor_on_call_dashboard.html").exists())
+            self.assertTrue((Path(temp_dir) / "repeatable_read_window_dashboard.html").exists())
+            self.assertTrue((Path(temp_dir) / "conference_room_booking_phantom_dashboard.html").exists())
+            html = index_html.read_text()
+            self.assertIn("Doctor on-call write skew", html)
+            self.assertIn("repeatable_read_window_dashboard.html", html)
+            self.assertIn("conference_room_booking_phantom_strict_2pl_timeline.svg", html)
+            self.assertIn("Open first dashboard", html)
+
+    def test_catalog_json_output_reports_generated_index_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "catalog",
+                    str(REPO_ROOT / "projects/mvcc-isolation-lab"),
+                    "--output-dir",
+                    temp_dir,
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["scenario_count"], 3)
+            self.assertEqual(payload["index_html_output"], str(Path(temp_dir) / "index.html"))
+            self.assertEqual(payload["index_markdown_output"], str(Path(temp_dir) / "index.md"))
+            self.assertEqual(len(payload["scenarios"]), 3)
+            self.assertTrue(
+                any(item["scenario"] == "doctor_on_call.json" for item in payload["scenarios"])
+            )
 
 
 if __name__ == "__main__":

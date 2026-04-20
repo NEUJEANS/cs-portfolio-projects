@@ -13,3 +13,4 @@
 - [x] add predicate/range-query phantom examples
 - [x] add lock-based serialization mode for contrast with optimistic validation
 - [x] add a static HTML dashboard export that summarizes scenario footprint, abort causes, and links to Markdown/SVG artifacts
+- [x] add a multi-scenario gallery/catalog export that rebuilds every committed scenario dashboard and produces one portfolio landing page

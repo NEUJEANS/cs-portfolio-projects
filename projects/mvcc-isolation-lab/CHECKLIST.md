@@ -11,3 +11,4 @@
 - [x] add predicate/range-query phantom scenarios beyond key-based read/write validation
 - [x] add lock-based serializable comparison for contrast with optimistic validation
 - [x] add a static HTML dashboard export so recruiters can browse compare results and timelines without reading raw markdown first
+- [x] add a multi-scenario gallery/catalog export that rebuilds the committed dashboards and gives the lab one portfolio-friendly landing page

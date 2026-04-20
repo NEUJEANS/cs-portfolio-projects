@@ -19,6 +19,7 @@ A compact Python simulator that compares `read-committed`, `snapshot`, optimisti
 - comparison mode that replays the same scenario across all supported isolation levels
 - Markdown comparison export for recruiter-friendly artifact snapshots in `docs/artifacts/`
 - static HTML comparison dashboard export that links the Markdown summary and per-isolation timelines in one browseable page
+- multi-scenario gallery/catalog export that regenerates every committed scenario dashboard plus a single landing page for the full lab
 - self-contained SVG schedule exports that show begin/read/write/commit ordering plus committed version changes without needing a browser app or external assets
 - committed sample scenarios for write skew, repeatable-read drift, and predicate/range-query phantom behavior
 
@@ -29,7 +30,7 @@ A compact Python simulator that compares `read-committed`, `snapshot`, optimisti
 - `conference_room_booking_phantom.json` - booking-slot scan scenario where predicate conflicts matter more than key-based overlap
 - `CHECKLIST.md` - resumable project checklist for future slices
 - `tests/test_mvcc_isolation_lab.py` - regression tests for validation, isolation semantics, and CLI exports
-- `docs/artifacts/mvcc-isolation-lab/` - committed Markdown/HTML comparison artifacts plus SVG schedule timelines generated from the sample scenarios
+- `docs/artifacts/mvcc-isolation-lab/` - committed Markdown/HTML comparison artifacts, gallery landing pages, and SVG schedule timelines generated from the sample scenarios
 
 ## Scenario format
 ```json
@@ -128,6 +129,13 @@ python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
   --timeline-svg-dir docs/artifacts/mvcc-isolation-lab
 ```
 
+### Rebuild the full scenario gallery and landing page
+```bash
+python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py catalog \
+  projects/mvcc-isolation-lab \
+  --output-dir docs/artifacts/mvcc-isolation-lab
+```
+
 ## What the committed samples show
 - `doctor_on_call.json`
   - `snapshot` lets both doctors commit because they update different rows, which violates the final coverage invariant
@@ -135,6 +143,7 @@ python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
   - `strict-2pl` also preserves the invariant, but it does so earlier by aborting a writer on a lock-upgrade conflict caused by the other doctor's shared read lock
   - the committed SVG exports make the overlap visible by showing both transactions starting from version `v0`, then only one committed version row landing in the stricter modes
   - the committed HTML dashboard links the summary card, final-state diff, and timeline SVGs from one recruiter-friendly page
+- the committed gallery landing page links this dashboard alongside the other scenarios so the whole lab reads like one polished portfolio artifact instead of three disconnected exports
 - `repeatable_read_window.json`
   - `read-committed` lets the reader observe different values across its two reads, causing the transaction's repeatable-read assertion to fail
   - `snapshot` keeps the reader on a stable snapshot so the reader commits cleanly
@@ -156,4 +165,4 @@ python3 -m unittest tests.test_mvcc_isolation_lab -v
 ## Future ideas
 - add richer scan payloads (for example exposing matched key previews directly to expressions) while keeping the DSL compact
 - add a deadlock/waiting-mode variant that contrasts deterministic aborts with queue-based lock scheduling
-- add a multi-scenario landing page that links the committed per-scenario HTML dashboards together
+- add per-scenario timeline thumbnails or key event callouts to the gallery while keeping the page static and dependency-free

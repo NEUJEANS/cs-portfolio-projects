@@ -885,6 +885,10 @@ def compare_scenario(scenario: Dict[str, Any]) -> Dict[str, SimulationResult]:
     return {level: run_simulation(scenario, level) for level in SUPPORTED_ISOLATION_LEVELS}
 
 
+def trace_tick_count(result: SimulationResult) -> int:
+    return max((event.get("tick", 0) for event in result.trace), default=0)
+
+
 def render_compare_text(results: Dict[str, SimulationResult]) -> str:
     lines = ["Isolation comparison:"]
     for level in SUPPORTED_ISOLATION_LEVELS:
@@ -961,7 +965,7 @@ def render_compare_html(
     scenario = next(iter(results.values()))
     timeline_hrefs = timeline_hrefs or {}
     transaction_count = len(scenario.transactions)
-    trace_tick_count = max((event["tick"] for event in scenario.trace), default=0)
+    tick_count = trace_tick_count(scenario)
     invariant_count = len(scenario.invariants)
 
     def transaction_failed_assertion(result: SimulationResult, transaction_name: str) -> bool:
@@ -997,7 +1001,7 @@ def render_compare_html(
     summary_cards = [
         (
             "Scenario footprint",
-            f"{transaction_count} tx · {trace_tick_count} ticks · {invariant_count} invariants",
+            f"{transaction_count} tx · {tick_count} ticks · {invariant_count} invariants",
             "Quick sizing context for the replayed schedule before you inspect each isolation mode.",
         ),
         ("Isolation modes", str(len(results)), "Side-by-side replay count for this schedule."),
@@ -1157,7 +1161,7 @@ def render_compare_html(
     )
     hero_facts = [
         ("Transactions", str(transaction_count)),
-        ("Schedule ticks", str(trace_tick_count)),
+        ("Schedule ticks", str(tick_count)),
         ("Invariants", str(invariant_count)),
     ]
     hero_facts_html = "".join(
@@ -1246,6 +1250,280 @@ def render_compare_html(
       </section>
       <section class="summary-grid">{summary_cards_html}</section>
       <section class="mode-grid">{"".join(mode_cards_html)}</section>
+    </main>
+  </body>
+</html>
+'''
+
+
+
+def discover_scenarios(scenario_dir: str | Path) -> List[Path]:
+    directory = Path(scenario_dir)
+    scenarios = sorted(path for path in directory.glob("*.json") if path.is_file())
+    if not scenarios:
+        raise ScenarioError(f"no scenario JSON files found in {directory}")
+    return scenarios
+
+
+def build_catalog_entry(
+    scenario_path: str | Path,
+    results: Dict[str, SimulationResult],
+    *,
+    markdown_output: str | Path,
+    html_output: str | Path,
+    timeline_outputs: Dict[str, str | Path],
+) -> Dict[str, Any]:
+    scenario_path = Path(scenario_path)
+    scenario = next(iter(results.values()))
+    transaction_count = len(scenario.transactions)
+    tick_count = trace_tick_count(scenario)
+    invariant_count = len(scenario.invariants)
+    safe_modes = sum(1 for result in results.values() if not result.invariant_violations)
+    anomaly_modes = len(results) - safe_modes
+    aborted_transactions = sum(
+        1
+        for result in results.values()
+        for transaction in result.transactions
+        if transaction["status"] == "aborted"
+    )
+    return {
+        "scenario": scenario_path.name,
+        "scenario_stem": scenario_path.stem,
+        "title": scenario.title,
+        "description": scenario.description,
+        "transaction_count": transaction_count,
+        "tick_count": tick_count,
+        "invariant_count": invariant_count,
+        "safe_modes": safe_modes,
+        "anomaly_modes": anomaly_modes,
+        "aborted_transactions": aborted_transactions,
+        "markdown": Path(markdown_output).name,
+        "dashboard": Path(html_output).name,
+        "timelines": {level: Path(path).name for level, path in timeline_outputs.items()},
+    }
+
+
+def format_count(value: int, singular: str, plural: Optional[str] = None) -> str:
+    label = singular if value == 1 else (plural or singular + "s")
+    return f"{value} {label}"
+
+
+def write_compare_artifacts(
+    scenario_path: str | Path,
+    output_dir: str | Path,
+) -> Dict[str, Any]:
+    scenario_path = Path(scenario_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    scenario = load_scenario(scenario_path)
+    results = compare_scenario(scenario)
+    scenario_stem = scenario_path.stem
+
+    markdown_output = write_text_output(
+        output_dir / f"{scenario_stem}_compare.md",
+        render_compare_markdown(results),
+    )
+    timeline_outputs: Dict[str, str] = {}
+    for level, result in results.items():
+        filename = f"{scenario_stem}_{level.replace('-', '_')}_timeline.svg"
+        output_path = write_text_output(output_dir / filename, render_timeline_svg(result))
+        timeline_outputs[level] = str(output_path)
+
+    html_output = write_text_output(
+        output_dir / f"{scenario_stem}_dashboard.html",
+        render_compare_html(
+            results,
+            markdown_href=markdown_output.name,
+            timeline_hrefs={level: Path(path).name for level, path in timeline_outputs.items()},
+        ),
+    )
+    return {
+        "results": results,
+        "markdown_output": markdown_output,
+        "timeline_outputs": timeline_outputs,
+        "html_output": html_output,
+        "entry": build_catalog_entry(
+            scenario_path,
+            results,
+            markdown_output=markdown_output,
+            html_output=html_output,
+            timeline_outputs=timeline_outputs,
+        ),
+    }
+
+
+def render_catalog_markdown(entries: List[Dict[str, Any]]) -> str:
+    lines = ["# MVCC isolation lab scenario gallery", ""]
+    lines.append(
+        "A recruiter-friendly landing page for the committed MVCC scenarios, with per-scenario dashboards, Markdown comparisons, and timeline SVGs."
+    )
+    lines.append("")
+    lines.append(
+        "Regenerate with `python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py catalog <scenario-dir> --output-dir <artifact-dir>` when you want to refresh the full bundle."
+    )
+    lines.append("")
+    lines.append("| Scenario | Txs | Ticks | Safe modes | Anomaly modes | Aborted txs | Dashboard | Markdown |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |")
+    for entry in entries:
+        lines.append(
+            "| [{title}]({dashboard}) | {tx} | {ticks} | {safe} | {anomaly} | {aborts} | [dashboard]({dashboard}) | [compare]({markdown}) |".format(
+                title=entry["title"],
+                dashboard=entry["dashboard"],
+                markdown=entry["markdown"],
+                tx=entry["transaction_count"],
+                ticks=entry["tick_count"],
+                safe=entry["safe_modes"],
+                anomaly=entry["anomaly_modes"],
+                aborts=entry["aborted_transactions"],
+            )
+        )
+    lines.append("")
+    for entry in entries:
+        lines.append(f"## [{entry['title']}]({entry['dashboard']})")
+        lines.append("")
+        if entry["description"]:
+            lines.append(entry["description"])
+            lines.append("")
+        lines.extend(
+            [
+                f"- scenario: `{entry['scenario']}`",
+                (
+                    f"- footprint: {format_count(entry['transaction_count'], 'transaction')}, "
+                    f"{format_count(entry['tick_count'], 'schedule tick')}, "
+                    f"{format_count(entry['invariant_count'], 'invariant')}"
+                ),
+                (
+                    f"- outcomes: {format_count(entry['safe_modes'], 'safe mode')}, "
+                    f"{format_count(entry['anomaly_modes'], 'anomaly-visible mode')}, "
+                    f"{format_count(entry['aborted_transactions'], 'aborted transaction')} across all modes"
+                ),
+                f"- companion artifacts: [Markdown comparison]({entry['markdown']})",
+            ]
+        )
+        if entry["timelines"]:
+            timeline_links = ", ".join(
+                f"[{level}]({href})" for level, href in entry["timelines"].items()
+            )
+            lines.append(f"- timelines: {timeline_links}")
+        lines.append("")
+    return "\n".join(lines).strip() + "\n"
+
+
+def render_catalog_html(entries: List[Dict[str, Any]]) -> str:
+    scenario_count = len(entries)
+    total_aborts = sum(entry["aborted_transactions"] for entry in entries)
+    safe_modes = sum(entry["safe_modes"] for entry in entries)
+    anomaly_modes = sum(entry["anomaly_modes"] for entry in entries)
+    timeline_count = sum(len(entry["timelines"]) for entry in entries)
+
+    summary_cards = [
+        ("Scenarios", str(scenario_count), "Committed concurrency stories collected into one landing page."),
+        ("Invariant-safe replays", str(safe_modes), "Scenario/mode combinations that preserved every declared invariant."),
+        ("Anomaly-visible replays", str(anomaly_modes), "Scenario/mode combinations that still exposed an anomaly in the final state."),
+        ("Aborted transactions", str(total_aborts), "Total rejected transactions across all generated comparisons."),
+        ("Timeline SVGs", str(timeline_count), "Linked schedule visualizations generated for the four supported isolation modes."),
+    ]
+    primary_dashboard_href = entries[0]["dashboard"] if entries else None
+    summary_cards_html = "".join(
+        f'''<article class="summary-card">
+      <p class="summary-label">{escape(label)}</p>
+      <strong>{escape(value)}</strong>
+      <p>{escape(description)}</p>
+    </article>'''
+        for label, value, description in summary_cards
+    )
+
+    scenario_cards: List[str] = []
+    for entry in entries:
+        timeline_links = "".join(
+            f'<a href="{escape(href)}">{escape(level)} timeline</a>'
+            for level, href in entry["timelines"].items()
+        )
+        scenario_cards.append(
+            f'''<article class="scenario-card">
+      <div class="scenario-card__header">
+        <div>
+          <p class="eyebrow">{escape(entry["scenario"])}</p>
+          <h2><a href="{escape(entry["dashboard"])}">{escape(entry["title"])}</a></h2>
+        </div>
+        <span class="pill">{entry["safe_modes"]}/{len(SUPPORTED_ISOLATION_LEVELS)} safe modes</span>
+      </div>
+      <p class="scenario-card__lede">{escape(entry["description"] or "Scenario dashboard, Markdown comparison, and SVG timelines.")}</p>
+      <ul class="fact-list">
+        <li><span>Transactions</span><strong>{entry["transaction_count"]}</strong></li>
+        <li><span>Schedule ticks</span><strong>{entry["tick_count"]}</strong></li>
+        <li><span>Invariants</span><strong>{entry["invariant_count"]}</strong></li>
+        <li><span>Anomaly modes</span><strong>{entry["anomaly_modes"]}</strong></li>
+        <li><span>Aborted txs</span><strong>{entry["aborted_transactions"]}</strong></li>
+      </ul>
+      <div class="scenario-links">
+        <a href="{escape(entry["dashboard"])}">Open dashboard</a>
+        <a href="{escape(entry["markdown"])}">Markdown comparison</a>
+        {timeline_links}
+      </div>
+    </article>'''
+        )
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MVCC isolation lab scenario gallery</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #d9e2ec;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 20rem); color: var(--text); }}
+      main {{ max-width: 1240px; margin: 0 auto; padding: 32px 20px 56px; }}
+      .hero, .summary-card, .scenario-card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06); }}
+      .hero {{ padding: 28px; margin-bottom: 20px; }}
+      .eyebrow {{ margin: 0 0 8px; color: var(--accent); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }}
+      h1, h2, p {{ margin-top: 0; }}
+      .lede {{ margin: 14px 0 0; max-width: 72ch; line-height: 1.6; color: var(--muted); }}
+      .hero-links, .scenario-links {{ display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }}
+      a {{ color: var(--accent); text-decoration-thickness: 1.5px; text-underline-offset: 0.18em; font-weight: 600; }}
+      a:hover, a:focus-visible {{ text-decoration: underline; outline: 2px solid rgba(37, 99, 235, 0.18); outline-offset: 3px; border-radius: 6px; }}
+      .summary-grid, .scenario-grid {{ display: grid; gap: 16px; }}
+      .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px; }}
+      .summary-card {{ padding: 18px; }}
+      .summary-card strong {{ display: block; margin-top: 6px; font-size: 1.8rem; }}
+      .summary-label {{ margin-bottom: 0; color: var(--muted); font-size: 0.92rem; }}
+      .summary-card p:last-child {{ margin-bottom: 0; color: var(--muted); line-height: 1.5; }}
+      .scenario-grid {{ grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+      .scenario-card {{ padding: 22px; }}
+      .scenario-card__header {{ display: flex; justify-content: space-between; gap: 16px; align-items: start; }}
+      .scenario-card__header h2 {{ margin-bottom: 0; font-size: 1.18rem; }}
+      .scenario-card__lede {{ margin: 14px 0 0; color: var(--muted); line-height: 1.6; }}
+      .fact-list {{ list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0; margin: 18px 0 0; }}
+      .fact-list li {{ border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; background: rgba(255,255,255,0.72); }}
+      .fact-list span {{ display: block; color: var(--muted); font-size: 0.82rem; }}
+      .fact-list strong {{ display: block; margin-top: 4px; font-size: 1rem; }}
+      .pill {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 10px; font-size: 0.78rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); }}
+      @media (max-width: 720px) {{ .fact-list {{ grid-template-columns: 1fr; }} .scenario-card__header {{ flex-direction: column; }} }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">MVCC isolation lab</p>
+        <h1>Scenario gallery</h1>
+        <p class="lede">A single landing page for the committed concurrency-control scenarios, linking each recruiter-friendly dashboard, Markdown comparison, and schedule timeline without asking someone to browse the repo manually.</p>
+        <div class="hero-links">
+          <a href="index.md">Open gallery markdown</a>
+          {f'<a href="{escape(primary_dashboard_href)}">Open first dashboard</a>' if primary_dashboard_href else ''}
+        </div>
+      </section>
+      <section class="summary-grid">{summary_cards_html}</section>
+      <section class="scenario-grid">{"".join(scenario_cards)}</section>
     </main>
   </body>
 </html>
@@ -1518,6 +1796,44 @@ def command_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+
+
+def command_catalog(args: argparse.Namespace) -> int:
+    scenario_paths = discover_scenarios(args.scenario_dir)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    entries: List[Dict[str, Any]] = []
+    scenario_outputs: List[Dict[str, Any]] = []
+    for scenario_path in scenario_paths:
+        artifact_bundle = write_compare_artifacts(scenario_path, output_dir)
+        entries.append(artifact_bundle["entry"])
+        scenario_outputs.append(
+            {
+                "scenario": artifact_bundle["entry"]["scenario"],
+                "markdown_output": str(artifact_bundle["markdown_output"]),
+                "timeline_svg_outputs": artifact_bundle["timeline_outputs"],
+                "html_output": str(artifact_bundle["html_output"]),
+            }
+        )
+
+    markdown_output = write_text_output(output_dir / "index.md", render_catalog_markdown(entries))
+    html_output = write_text_output(output_dir / "index.html", render_catalog_html(entries))
+
+    payload: Dict[str, Any] = {
+        "scenario_count": len(entries),
+        "index_markdown_output": str(markdown_output),
+        "index_html_output": str(html_output),
+        "scenarios": scenario_outputs,
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(f"Catalog scenarios: {len(entries)}")
+        print(f"Catalog Markdown: {markdown_output}")
+        print(f"Catalog HTML: {html_output}")
+    return 0
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Isolation level simulator")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1559,6 +1875,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional path for a static HTML comparison dashboard",
     )
     compare_parser.set_defaults(func=command_compare)
+
+    catalog_parser = subparsers.add_parser(
+        "catalog", help="build per-scenario compare artifacts plus a landing page for a scenario directory"
+    )
+    catalog_parser.add_argument("scenario_dir", help="directory containing scenario JSON files")
+    catalog_parser.add_argument(
+        "--output-dir",
+        required=True,
+        help="directory where Markdown, HTML, SVG, and landing-page artifacts should be written",
+    )
+    catalog_parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
+    catalog_parser.set_defaults(func=command_catalog)
 
     return parser
 
