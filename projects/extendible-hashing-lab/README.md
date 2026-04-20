@@ -1,6 +1,6 @@
 # extendible-hashing-lab
 
-A portfolio-friendly Python lab that implements an extendible hash index with dynamic bucket splitting, persisted snapshots, workload traces, and deterministic tests.
+A portfolio-friendly Python lab that implements an extendible hash index with dynamic bucket splitting/merging, persisted snapshots, workload traces, and deterministic tests.
 
 ## Why it is interesting
 - demonstrates a classic database indexing technique that grows one bucket at a time instead of rehashing the full table
@@ -11,10 +11,11 @@ A portfolio-friendly Python lab that implements an extendible hash index with dy
 ## Features
 - deterministic 64-bit FNV-1a hashing for reproducible demos and tests
 - extendible directory growth with per-bucket local depth tracking
+- bucket merge and directory shrink support so delete-heavy runs can demonstrate the full lifecycle
 - JSON snapshot save/load support for resumable inspection workflows
 - workload runner that records per-step growth and can export a Markdown trace report
 - CLI commands for workload execution, snapshot inspection, lookups, and deletions
-- unit tests that cover bucket splits, directory doubling, snapshot validation, and CLI flows
+- unit tests that cover bucket splits, merges, directory shrinking, snapshot validation, and CLI flows
 
 ## Usage
 
@@ -47,6 +48,9 @@ See the committed demo outputs without rerunning anything:
 - `docs/artifacts/extendible-hashing-lab/sample_workload_snapshot.json`
 - `docs/artifacts/extendible-hashing-lab/sample_workload_report.md`
 - `docs/artifacts/extendible-hashing-lab/sample_snapshot_inspect.md`
+- `docs/artifacts/extendible-hashing-lab/delete_heavy_workload_snapshot.json`
+- `docs/artifacts/extendible-hashing-lab/delete_heavy_workload_report.md`
+- `docs/artifacts/extendible-hashing-lab/delete_heavy_snapshot_inspect.md`
 
 Delete a key and persist the updated snapshot:
 
@@ -57,6 +61,15 @@ python3 projects/extendible-hashing-lab/extendible_hashing_lab.py delete \
   user:1017
 ```
 
+Run the delete-heavy workload that grows to depth 2 and then shrinks back to depth 0:
+
+```bash
+python3 projects/extendible-hashing-lab/extendible_hashing_lab.py run \
+  --input projects/extendible-hashing-lab/delete_heavy_workload.json \
+  --output /tmp/extendible-delete-heavy.json \
+  --report /tmp/extendible-delete-heavy.md
+```
+
 ## Test
 
 ```bash
@@ -64,6 +77,5 @@ python3 -m unittest tests.test_extendible_hashing_lab -v
 ```
 
 ## Future improvements
-- add bucket-merge and directory-shrink logic so deletions can demonstrate the full lifecycle
 - benchmark extendible hashing against linear probing, cuckoo hashing, or B-tree pages under mixed workloads
-- export SVG or HTML visualizations that animate aliasing directory entries during repeated splits
+- export SVG or HTML visualizations that animate aliasing directory entries during repeated splits and merges

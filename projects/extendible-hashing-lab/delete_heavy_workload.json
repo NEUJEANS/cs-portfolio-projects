@@ -1,0 +1,33 @@
+{
+  "bucket_capacity": 2,
+  "operations": [
+    {
+      "op": "put",
+      "key": "collision:2:0:1",
+      "value": "zero-a"
+    },
+    {
+      "op": "put",
+      "key": "collision:2:1:3",
+      "value": "one"
+    },
+    {
+      "op": "put",
+      "key": "collision:2:0:5",
+      "value": "zero-b"
+    },
+    {
+      "op": "put",
+      "key": "collision:2:2:1",
+      "value": "two"
+    },
+    {
+      "op": "delete",
+      "key": "collision:2:2:1"
+    },
+    {
+      "op": "delete",
+      "key": "collision:2:1:3"
+    }
+  ]
+}

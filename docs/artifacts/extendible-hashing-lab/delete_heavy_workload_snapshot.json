@@ -1,0 +1,24 @@
+{
+  "bucket_capacity": 2,
+  "global_depth": 0,
+  "next_bucket_id": 3,
+  "directory": [
+    0
+  ],
+  "buckets": [
+    {
+      "bucket_id": 0,
+      "local_depth": 0,
+      "entries": [
+        {
+          "key": "collision:2:0:1",
+          "value": "zero-a"
+        },
+        {
+          "key": "collision:2:0:5",
+          "value": "zero-b"
+        }
+      ]
+    }
+  ]
+}

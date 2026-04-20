@@ -8,6 +8,6 @@
 - [x] add automated tests for splitting behavior, snapshot round-trips, validation failures, and CLI flows
 - [x] complete at least 3 review passes and fix issues found
 - [x] run tests, secret scan, commit, push, and wrap up the slice
-- [ ] add bucket merge / directory shrink support for delete-heavy scenarios
+- [x] add bucket merge / directory shrink support for delete-heavy scenarios
 - [ ] add benchmark comparisons against cuckoo hashing or B-tree lookup/update workloads
 - [ ] add HTML/SVG visualization exports for split sequences and directory aliasing

@@ -139,6 +139,19 @@ class ExtendibleHashTable:
             table.directory.append(pointer)
 
         for bucket_id, bucket in table.buckets.items():
+            bucket_indices = table._bucket_directory_indices(bucket_id)
+            expected_aliases = 1 << (global_depth - bucket.local_depth)
+            if len(bucket_indices) != expected_aliases:
+                raise SnapshotError(
+                    f"bucket {bucket_id} should have {expected_aliases} directory aliases but has {len(bucket_indices)}"
+                )
+            if bucket.local_depth:
+                suffix_mask = (1 << bucket.local_depth) - 1
+                suffixes = {index & suffix_mask for index in bucket_indices}
+                if len(suffixes) != 1:
+                    raise SnapshotError(
+                        f"bucket {bucket_id} directory aliases do not share a consistent local-depth suffix"
+                    )
             for key in bucket.entries:
                 directory_bucket_id = table.directory[table._directory_index_for_key(key)]
                 if directory_bucket_id != bucket_id:
@@ -163,6 +176,15 @@ class ExtendibleHashTable:
         bucket_id = self.directory[self._directory_index_for_key(key)]
         return self.buckets[bucket_id]
 
+    def _bucket_directory_indices(self, bucket_id: int) -> list[int]:
+        return [index for index, pointer in enumerate(self.directory) if pointer == bucket_id]
+
+    def _bucket_representative_index(self, bucket_id: int) -> int:
+        indices = self._bucket_directory_indices(bucket_id)
+        if not indices:
+            raise SnapshotError(f"bucket {bucket_id} is not referenced by the directory")
+        return min(indices)
+
     def put(self, key: str, value: str) -> str:
         while True:
             bucket = self._get_bucket_for_key(key)
@@ -183,6 +205,7 @@ class ExtendibleHashTable:
         if key not in bucket.entries:
             return False
         del bucket.entries[key]
+        self._rebalance_after_delete(bucket.bucket_id)
         return True
 
     def _split_bucket(self, bucket_id: int) -> None:
@@ -208,6 +231,63 @@ class ExtendibleHashTable:
         for entry_key, entry_value in existing_items:
             target_bucket = self._get_bucket_for_key(entry_key)
             target_bucket.entries[entry_key] = entry_value
+
+    def _rebalance_after_delete(self, bucket_id: int) -> None:
+        current_bucket_id = bucket_id
+        while True:
+            merged_bucket_id = self._merge_bucket_if_possible(current_bucket_id)
+            if merged_bucket_id is None:
+                break
+            current_bucket_id = merged_bucket_id
+        self._shrink_directory()
+
+    def _merge_bucket_if_possible(self, bucket_id: int) -> int | None:
+        bucket = self.buckets.get(bucket_id)
+        if bucket is None or bucket.local_depth == 0:
+            return None
+
+        representative_index = self._bucket_representative_index(bucket_id)
+        buddy_index = representative_index ^ (1 << (bucket.local_depth - 1))
+        buddy_bucket_id = self.directory[buddy_index]
+        if buddy_bucket_id == bucket_id:
+            return None
+
+        buddy_bucket = self.buckets[buddy_bucket_id]
+        if buddy_bucket.local_depth != bucket.local_depth:
+            return None
+        if len(bucket.entries) + len(buddy_bucket.entries) > self.bucket_capacity:
+            return None
+
+        bucket_rep_index = representative_index
+        buddy_rep_index = self._bucket_representative_index(buddy_bucket_id)
+        if bucket_rep_index <= buddy_rep_index:
+            survivor = bucket
+            retired = buddy_bucket
+        else:
+            survivor = buddy_bucket
+            retired = bucket
+
+        merged_entries = dict(survivor.entries)
+        merged_entries.update(retired.entries)
+        survivor.entries = merged_entries
+        survivor.local_depth -= 1
+
+        for index, pointer in enumerate(self.directory):
+            if pointer == retired.bucket_id:
+                self.directory[index] = survivor.bucket_id
+
+        del self.buckets[retired.bucket_id]
+        return survivor.bucket_id
+
+    def _shrink_directory(self) -> None:
+        while self.global_depth > 0:
+            if any(bucket.local_depth == self.global_depth for bucket in self.buckets.values()):
+                return
+            half = len(self.directory) // 2
+            if self.directory[:half] != self.directory[half:]:
+                return
+            self.directory = self.directory[:half]
+            self.global_depth -= 1
 
     def stats(self) -> dict[str, Any]:
         bucket_aliases: list[dict[str, Any]] = []

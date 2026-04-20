@@ -64,6 +64,69 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertFalse(table.delete("beta"))
         self.assertIsNone(table.get("beta"))
 
+    def test_delete_merges_buddy_bucket_and_shrinks_directory(self) -> None:
+        table = ExtendibleHashTable(bucket_capacity=2)
+        suffix_zero_keys = colliding_keys(depth=1, count=2, suffix=0)
+        suffix_one_key = colliding_keys(depth=1, count=1, suffix=1)[0]
+
+        table.put(suffix_zero_keys[0], "a")
+        table.put(suffix_one_key, "b")
+        table.put(suffix_zero_keys[1], "c")
+        self.assertEqual(table.global_depth, 1)
+        self.assertEqual(len(table.buckets), 2)
+
+        self.assertTrue(table.delete(suffix_one_key))
+        self.assertEqual(table.global_depth, 0)
+        self.assertEqual(len(table.buckets), 1)
+        only_bucket = next(iter(table.buckets.values()))
+        self.assertEqual(only_bucket.local_depth, 0)
+        self.assertEqual(only_bucket.entries, {suffix_zero_keys[0]: "a", suffix_zero_keys[1]: "c"})
+
+    def test_delete_can_cascade_merges_across_multiple_levels(self) -> None:
+        table = ExtendibleHashTable(bucket_capacity=2)
+        suffix_zero_keys = colliding_keys(depth=2, count=2, suffix=0)
+        suffix_one_key = colliding_keys(depth=2, count=1, suffix=1)[0]
+        suffix_two_key = colliding_keys(depth=2, count=1, suffix=2)[0]
+
+        table.put(suffix_zero_keys[0], "zero-a")
+        table.put(suffix_one_key, "one")
+        table.put(suffix_zero_keys[1], "zero-b")
+        table.put(suffix_two_key, "two")
+
+        self.assertEqual(table.global_depth, 2)
+        self.assertEqual(len(table.buckets), 3)
+
+        self.assertTrue(table.delete(suffix_two_key))
+        self.assertEqual(table.global_depth, 1)
+        self.assertEqual(len(table.buckets), 2)
+        self.assertEqual(table.get(suffix_zero_keys[0]), "zero-a")
+        self.assertEqual(table.get(suffix_zero_keys[1]), "zero-b")
+        self.assertEqual(table.get(suffix_one_key), "one")
+
+        self.assertTrue(table.delete(suffix_one_key))
+        self.assertEqual(table.global_depth, 0)
+        self.assertEqual(len(table.buckets), 1)
+        self.assertEqual(table.get(suffix_zero_keys[0]), "zero-a")
+        self.assertEqual(table.get(suffix_zero_keys[1]), "zero-b")
+
+    def test_delete_does_not_merge_when_buddy_depth_differs(self) -> None:
+        table = ExtendibleHashTable(bucket_capacity=2)
+        suffix_zero_keys = colliding_keys(depth=2, count=2, suffix=0)
+        suffix_one_key = colliding_keys(depth=2, count=1, suffix=1)[0]
+        suffix_two_key = colliding_keys(depth=2, count=1, suffix=2)[0]
+
+        table.put(suffix_zero_keys[0], "zero-a")
+        table.put(suffix_one_key, "one")
+        table.put(suffix_zero_keys[1], "zero-b")
+        table.put(suffix_two_key, "two")
+
+        self.assertTrue(table.delete(suffix_one_key))
+        self.assertEqual(table.global_depth, 2)
+        self.assertEqual(len(table.buckets), 3)
+        self.assertEqual(table.get(suffix_zero_keys[0]), "zero-a")
+        self.assertEqual(table.get(suffix_zero_keys[1]), "zero-b")
+        self.assertEqual(table.get(suffix_two_key), "two")
+
     def test_snapshot_round_trip_preserves_directory(self) -> None:
         table = ExtendibleHashTable(bucket_capacity=2)
         for index, key in enumerate(colliding_keys(depth=3, count=4, suffix=0)):
@@ -71,6 +134,22 @@ class ExtendibleHashingLabTests(unittest.TestCase):
 
         restored = ExtendibleHashTable.from_snapshot(table.to_snapshot())
         self.assertEqual(restored.to_snapshot(), table.to_snapshot())
+
+    def test_snapshot_round_trip_preserves_merged_directory_state(self) -> None:
+        table = ExtendibleHashTable(bucket_capacity=2)
+        suffix_zero_keys = colliding_keys(depth=2, count=2, suffix=0)
+        suffix_one_key = colliding_keys(depth=2, count=1, suffix=1)[0]
+        suffix_two_key = colliding_keys(depth=2, count=1, suffix=2)[0]
+
+        table.put(suffix_zero_keys[0], "zero-a")
+        table.put(suffix_one_key, "one")
+        table.put(suffix_zero_keys[1], "zero-b")
+        table.put(suffix_two_key, "two")
+        table.delete(suffix_two_key)
+
+        restored = ExtendibleHashTable.from_snapshot(table.to_snapshot())
+        self.assertEqual(restored.to_snapshot(), table.to_snapshot())
+        self.assertEqual(restored.global_depth, 1)
 
     def test_snapshot_loader_rejects_unknown_bucket_reference(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -91,6 +170,21 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             )
             with self.assertRaises(SnapshotError):
                 load_snapshot(snapshot_path)
+
+    def test_snapshot_loader_rejects_bucket_alias_count_mismatch_after_merge(self) -> None:
+        table = ExtendibleHashTable(bucket_capacity=2)
+        suffix_zero_keys = colliding_keys(depth=1, count=2, suffix=0)
+        suffix_one_key = colliding_keys(depth=1, count=1, suffix=1)[0]
+
+        table.put(suffix_zero_keys[0], "zero-a")
+        table.put(suffix_one_key, "one")
+        table.put(suffix_zero_keys[1], "zero-b")
+
+        payload = table.to_snapshot()
+        payload["directory"] = [0, 0]
+
+        with self.assertRaises(SnapshotError):
+            ExtendibleHashTable.from_snapshot(payload)
 
     def test_snapshot_loader_rejects_duplicate_bucket_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -173,6 +267,26 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertEqual([item.outcome for item in result.history], ["inserted", "found:1", "deleted"])
         self.assertIsNone(result.table.get("alpha"))
 
+    def test_run_workload_records_directory_shrink_after_deletes(self) -> None:
+        suffix_zero_keys = colliding_keys(depth=2, count=2, suffix=0)
+        suffix_one_key = colliding_keys(depth=2, count=1, suffix=1)[0]
+        suffix_two_key = colliding_keys(depth=2, count=1, suffix=2)[0]
+        payload = {
+            "bucket_capacity": 2,
+            "operations": [
+                {"op": "put", "key": suffix_zero_keys[0], "value": "zero-a"},
+                {"op": "put", "key": suffix_one_key, "value": "one"},
+                {"op": "put", "key": suffix_zero_keys[1], "value": "zero-b"},
+                {"op": "put", "key": suffix_two_key, "value": "two"},
+                {"op": "delete", "key": suffix_two_key},
+                {"op": "delete", "key": suffix_one_key},
+            ],
+        }
+        result = run_workload(payload)
+        self.assertEqual([item.global_depth for item in result.history], [0, 0, 1, 2, 1, 0])
+        self.assertEqual([item.bucket_count for item in result.history], [1, 1, 2, 3, 2, 1])
+        self.assertEqual(result.table.global_depth, 0)
+
     def test_cli_run_inspect_lookup_and_delete(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -248,6 +362,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             )
             self.assertIn("deleted", delete_process.stdout)
             self.assertTrue(updated_snapshot_path.exists())
+            self.assertIsNotNone(load_snapshot(updated_snapshot_path))
 
 
 if __name__ == "__main__":
