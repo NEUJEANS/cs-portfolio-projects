@@ -1,10 +1,12 @@
 import argparse
 import csv
 import json
+import os
 import sys
-from io import StringIO
 from collections import deque
 from dataclasses import dataclass
+from html import escape
+from io import StringIO
 from pathlib import Path
 from time import perf_counter
 
@@ -415,6 +417,26 @@ def _display_graph_path(path: str | Path) -> str:
     return candidate.as_posix() if not candidate.is_absolute() else candidate.name
 
 
+def _html_escape(value: object) -> str:
+    return escape(str(value), quote=True)
+
+
+def relative_href(target: str | Path, html_output: str | Path) -> str:
+    return Path(os.path.relpath(Path(target), start=Path(html_output).parent)).as_posix()
+
+
+def _friendly_faster_algorithm(value: str) -> str:
+    if value == 'tie':
+        return 'Tie'
+    return value.title()
+
+
+def _trial_winner_heading(value: str) -> str:
+    if value == 'tie':
+        return 'Tie on timing'
+    return f'{value.title()} wins'
+
+
 def _comparison_trial_rows(comparison: dict[str, object]) -> list[dict[str, object]]:
     tarjan_timings = [float(value) for value in comparison['timings_ms']['tarjan']]
     kosaraju_timings = [float(value) for value in comparison['timings_ms']['kosaraju']]
@@ -455,7 +477,7 @@ def render_compare_csv(comparison: dict[str, object]) -> str:
         'component_count',
     ]
     output = StringIO()
-    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator='\n')
     writer.writeheader()
     writer.writerows(rows)
     return output.getvalue()
@@ -511,6 +533,216 @@ def render_compare_markdown(graph_path: str | Path, comparison: dict[str, object
     return "\n".join(lines) + "\n"
 
 
+def render_compare_html(
+    graph_path: str | Path,
+    comparison: dict[str, object],
+    *,
+    html_output_path: str | Path | None = None,
+    json_output_path: str | Path | None = None,
+    csv_output_path: str | Path | None = None,
+    markdown_output_path: str | Path | None = None,
+) -> str:
+    trial_rows = _comparison_trial_rows(comparison)
+    component_cards = []
+    largest_component_size = max((len(component) for component in comparison['components']), default=0)
+    max_trial_ms = max(
+        [row['tarjan_ms'] for row in trial_rows] + [row['kosaraju_ms'] for row in trial_rows],
+        default=0.0,
+    ) or 1.0
+
+    summary_cards = [
+        (
+            'Graph footprint',
+            f"{comparison['node_count']} nodes · {comparison['edge_count']} edges",
+            'Quick sizing context for the SCC benchmark input.',
+        ),
+        (
+            'Strongly connected components',
+            str(comparison['component_count']),
+            f'Largest SCC size is {largest_component_size}.',
+        ),
+        (
+            'Repeated timings',
+            str(comparison['repeat']),
+            'Each trial reruns both linear-time SCC algorithms on the same graph.',
+        ),
+        (
+            'Agreement',
+            'Yes' if comparison['algorithms_match'] else 'No',
+            'Checks whether Tarjan and Kosaraju produced the same deterministic SCC grouping.',
+        ),
+        (
+            'Average winner',
+            _friendly_faster_algorithm(str(comparison['faster_algorithm'])),
+            'Average timing leader across all recorded trials.',
+        ),
+    ]
+    summary_cards_html = ''.join(
+        f'''<article class="summary-card">
+      <p class="eyebrow">{_html_escape(label)}</p>
+      <strong>{_html_escape(value)}</strong>
+      <p>{_html_escape(description)}</p>
+    </article>'''
+        for label, value, description in summary_cards
+    )
+
+    average_rows_html = ''.join(
+        f'''<tr>
+        <th scope="row">{_html_escape(algorithm)}</th>
+        <td>{average_ms:.6f}</td>
+      </tr>'''
+        for algorithm, average_ms in (
+            ('Tarjan', float(comparison['average_ms']['tarjan'])),
+            ('Kosaraju', float(comparison['average_ms']['kosaraju'])),
+        )
+    )
+
+    trial_cards_html = []
+    for row in trial_rows:
+        tarjan_width = min(100.0, (float(row['tarjan_ms']) / max_trial_ms) * 100)
+        kosaraju_width = min(100.0, (float(row['kosaraju_ms']) / max_trial_ms) * 100)
+        trial_cards_html.append(
+            f'''<article class="trial-card">
+      <div class="trial-card__header">
+        <div>
+          <p class="eyebrow">Trial {row['trial']}</p>
+          <h3>{_html_escape(_trial_winner_heading(str(row['winner'])))}</h3>
+        </div>
+        <span class="pill">Δ {float(row['delta_ms']):.6f} ms</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Tarjan</span><code>{float(row['tarjan_ms']):.6f} ms</code></div>
+        <div class="bar-track"><span class="bar bar--tarjan" style="width: {tarjan_width:.2f}%"></span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Kosaraju</span><code>{float(row['kosaraju_ms']):.6f} ms</code></div>
+        <div class="bar-track"><span class="bar bar--kosaraju" style="width: {kosaraju_width:.2f}%"></span></div>
+      </div>
+    </article>'''
+        )
+
+    for index, component in enumerate(comparison['components']):
+        component_cards.append(
+            f'''<article class="component-card">
+      <div class="component-card__header">
+        <h3>C{index}</h3>
+        <span class="pill">size {len(component)}</span>
+      </div>
+      <p>{_html_escape(', '.join(component))}</p>
+    </article>'''
+        )
+
+    artifact_links = []
+    if html_output_path is not None:
+        for label, target in (
+            ('JSON payload', json_output_path),
+            ('CSV timings', csv_output_path),
+            ('Markdown report', markdown_output_path),
+        ):
+            if target is None:
+                continue
+            artifact_links.append(
+                f'<li><a href="{_html_escape(relative_href(target, html_output_path))}">{_html_escape(label)}</a></li>'
+            )
+    artifact_links_html = ''.join(artifact_links) or '<li>No sibling artifact links were supplied for this HTML export.</li>'
+
+    graph_label = _display_graph_path(graph_path)
+    average_winner = _friendly_faster_algorithm(str(comparison['faster_algorithm']))
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tarjan vs Kosaraju benchmark dashboard</title>
+  <style>
+    :root {{ color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }}
+    body {{ margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+    h1, h2, h3 {{ line-height: 1.15; }}
+    p, li, td, th {{ line-height: 1.55; }}
+    code {{ font-family: "SFMono-Regular", ui-monospace, monospace; }}
+    a {{ color: #1d4ed8; }}
+    .hero {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.96), rgba(240, 253, 250, 0.96)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }}
+    .hero p {{ max-width: 74ch; }}
+    .eyebrow {{ margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }}
+    .hero-meta, .artifact-links {{ display: flex; flex-wrap: wrap; gap: 0.65rem; }}
+    .hero-meta {{ margin-top: 1rem; }}
+    .chip, .pill {{ display: inline-flex; align-items: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: 0.92rem; }}
+    .chip {{ background: rgba(224, 231, 255, 0.85); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; }}
+    .pill {{ background: rgba(219, 234, 254, 0.95); color: #1d4ed8; font-weight: 700; }}
+    .summary-grid, .trial-grid, .component-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.4rem; }}
+    .summary-card, .trial-card, .component-card, .table-card {{ border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.2rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }}
+    .summary-card, .trial-card, .component-card, .table-card {{ padding: 1rem; }}
+    .summary-card strong {{ display: block; margin-top: 0.3rem; font-size: 1.18rem; }}
+    .section-title {{ margin: 1.8rem 0 0.8rem; }}
+    .table-card table {{ width: 100%; border-collapse: collapse; }}
+    .table-card th, .table-card td {{ padding: 0.65rem 0.2rem; border-bottom: 1px solid rgba(148, 163, 184, 0.24); text-align: left; }}
+    .table-card tr:last-child th, .table-card tr:last-child td {{ border-bottom: none; }}
+    .trial-card__header, .component-card__header {{ display: flex; gap: 0.75rem; align-items: start; justify-content: space-between; }}
+    .trial-card__header h3, .component-card__header h3 {{ margin: 0.15rem 0 0; }}
+    .bar-row + .bar-row {{ margin-top: 0.8rem; }}
+    .bar-row__label {{ display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.92rem; margin-bottom: 0.3rem; }}
+    .bar-track {{ background: rgba(226, 232, 240, 0.95); border-radius: 999px; overflow: hidden; height: 0.85rem; }}
+    .bar {{ display: block; height: 100%; border-radius: 999px; }}
+    .bar--tarjan {{ background: linear-gradient(90deg, #2563eb, #38bdf8); }}
+    .bar--kosaraju {{ background: linear-gradient(90deg, #7c3aed, #c084fc); }}
+    .artifact-card ul {{ margin: 0.8rem 0 0; padding-left: 1.15rem; }}
+    @media (max-width: 760px) {{
+      main {{ padding: 1rem 0.75rem 2rem; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Tarjan SCC lab</p>
+      <h1>Tarjan vs. Kosaraju benchmark dashboard</h1>
+      <p>Static HTML artifact for portfolio screenshots and GitHub Pages demos. It reuses the same benchmark payload that powers the JSON, CSV, and Markdown exports, then turns the SCC comparison into summary cards, trial-level timing bars, and a quick component gallery.</p>
+      <div class="hero-meta">
+        <span class="chip">Graph {_html_escape(graph_label)}</span>
+        <span class="chip">Algorithms match {'yes' if comparison['algorithms_match'] else 'no'}</span>
+        <span class="chip">Average winner {_html_escape(average_winner)}</span>
+        <span class="chip">Trials {_html_escape(comparison['repeat'])}</span>
+      </div>
+    </section>
+    <section class="summary-grid">
+{summary_cards_html}
+    </section>
+    <h2 class="section-title">Average timings</h2>
+    <section class="summary-grid">
+      <article class="table-card">
+        <table>
+          <thead>
+            <tr><th>Algorithm</th><th>Average time (ms)</th></tr>
+          </thead>
+          <tbody>
+{average_rows_html}
+          </tbody>
+        </table>
+      </article>
+      <article class="table-card artifact-card">
+        <p class="eyebrow">Artifact bundle</p>
+        <h3>Linked companions</h3>
+        <p>Use the sibling exports for spreadsheet charts, Markdown embeds, or raw machine-readable analysis.</p>
+        <ul>
+          {artifact_links_html}
+        </ul>
+      </article>
+    </section>
+    <h2 class="section-title">Per-trial timing gallery</h2>
+    <section class="trial-grid">
+{''.join(trial_cards_html)}
+    </section>
+    <h2 class="section-title">Component roster</h2>
+    <section class="component-grid">
+{''.join(component_cards)}
+    </section>
+  </main>
+</body>
+</html>
+'''
+
+
 def maybe_write_text(path: Path | None, content: str) -> None:
     if path is None:
         return
@@ -529,8 +761,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser('mermaid', help='Print the condensation DAG as Mermaid flowchart markup')
     compare = subparsers.add_parser('compare', help='Compare Tarjan and Kosaraju SCC results and timings')
     compare.add_argument('--repeat', type=int, default=5, help='Number of timing runs to average per algorithm')
+    compare.add_argument('--json-output', type=Path, help='Optional JSON artifact path for the compare payload')
     compare.add_argument('--csv-output', type=Path, help='Optional CSV export path for per-run timing rows')
     compare.add_argument('--markdown-output', type=Path, help='Optional Markdown report path for a portfolio-ready summary')
+    compare.add_argument('--html-output', type=Path, help='Optional HTML dashboard path for a portfolio-ready benchmark card/gallery')
     explain = subparsers.add_parser('explain', help='Print a concise text explanation')
     explain.add_argument('--limit', type=int, default=5, help='Maximum number of components to describe')
     return parser
@@ -543,9 +777,27 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == 'compare':
         comparison = compare_algorithms(graph, repeat=args.repeat)
+        json_text = json.dumps(comparison, indent=2)
+        maybe_write_text(args.json_output, json_text + '\n')
         maybe_write_text(args.csv_output, render_compare_csv(comparison))
         maybe_write_text(args.markdown_output, render_compare_markdown(args.graph_path, comparison))
-        print(json.dumps(comparison, indent=2))
+        maybe_write_text(
+            args.html_output,
+            render_compare_html(
+                args.graph_path,
+                comparison,
+                html_output_path=args.html_output,
+                json_output_path=args.json_output,
+                csv_output_path=args.csv_output,
+                markdown_output_path=args.markdown_output,
+            ),
+        )
+        compare_payload = dict(comparison)
+        for field_name in ('json_output', 'csv_output', 'markdown_output', 'html_output'):
+            field_value = getattr(args, field_name)
+            if field_value is not None:
+                compare_payload[field_name] = str(field_value)
+        print(json.dumps(compare_payload, indent=2))
         return 0
 
     components = tarjan_strongly_connected_components(graph)

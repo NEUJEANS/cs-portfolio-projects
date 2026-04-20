@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tarjan vs Kosaraju benchmark dashboard</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    h1, h2, h3 { line-height: 1.15; }
+    p, li, td, th { line-height: 1.55; }
+    code { font-family: "SFMono-Regular", ui-monospace, monospace; }
+    a { color: #1d4ed8; }
+    .hero { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.4rem; padding: 1.4rem; background: linear-gradient(135deg, rgba(224, 231, 255, 0.96), rgba(240, 253, 250, 0.96)); box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08); }
+    .hero p { max-width: 74ch; }
+    .eyebrow { margin: 0; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4338ca; }
+    .hero-meta, .artifact-links { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+    .hero-meta { margin-top: 1rem; }
+    .chip, .pill { display: inline-flex; align-items: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: 0.92rem; }
+    .chip { background: rgba(224, 231, 255, 0.85); border: 1px solid rgba(129, 140, 248, 0.28); color: #3730a3; }
+    .pill { background: rgba(219, 234, 254, 0.95); color: #1d4ed8; font-weight: 700; }
+    .summary-grid, .trial-grid, .component-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.4rem; }
+    .summary-card, .trial-card, .component-card, .table-card { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 1.2rem; background: rgba(255, 255, 255, 0.92); box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06); }
+    .summary-card, .trial-card, .component-card, .table-card { padding: 1rem; }
+    .summary-card strong { display: block; margin-top: 0.3rem; font-size: 1.18rem; }
+    .section-title { margin: 1.8rem 0 0.8rem; }
+    .table-card table { width: 100%; border-collapse: collapse; }
+    .table-card th, .table-card td { padding: 0.65rem 0.2rem; border-bottom: 1px solid rgba(148, 163, 184, 0.24); text-align: left; }
+    .table-card tr:last-child th, .table-card tr:last-child td { border-bottom: none; }
+    .trial-card__header, .component-card__header { display: flex; gap: 0.75rem; align-items: start; justify-content: space-between; }
+    .trial-card__header h3, .component-card__header h3 { margin: 0.15rem 0 0; }
+    .bar-row + .bar-row { margin-top: 0.8rem; }
+    .bar-row__label { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.92rem; margin-bottom: 0.3rem; }
+    .bar-track { background: rgba(226, 232, 240, 0.95); border-radius: 999px; overflow: hidden; height: 0.85rem; }
+    .bar { display: block; height: 100%; border-radius: 999px; }
+    .bar--tarjan { background: linear-gradient(90deg, #2563eb, #38bdf8); }
+    .bar--kosaraju { background: linear-gradient(90deg, #7c3aed, #c084fc); }
+    .artifact-card ul { margin: 0.8rem 0 0; padding-left: 1.15rem; }
+    @media (max-width: 760px) {
+      main { padding: 1rem 0.75rem 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Tarjan SCC lab</p>
+      <h1>Tarjan vs. Kosaraju benchmark dashboard</h1>
+      <p>Static HTML artifact for portfolio screenshots and GitHub Pages demos. It reuses the same benchmark payload that powers the JSON, CSV, and Markdown exports, then turns the SCC comparison into summary cards, trial-level timing bars, and a quick component gallery.</p>
+      <div class="hero-meta">
+        <span class="chip">Graph sample_graph.json</span>
+        <span class="chip">Algorithms match yes</span>
+        <span class="chip">Average winner Tarjan</span>
+        <span class="chip">Trials 5</span>
+      </div>
+    </section>
+    <section class="summary-grid">
+<article class="summary-card">
+      <p class="eyebrow">Graph footprint</p>
+      <strong>8 nodes · 10 edges</strong>
+      <p>Quick sizing context for the SCC benchmark input.</p>
+    </article><article class="summary-card">
+      <p class="eyebrow">Strongly connected components</p>
+      <strong>4</strong>
+      <p>Largest SCC size is 3.</p>
+    </article><article class="summary-card">
+      <p class="eyebrow">Repeated timings</p>
+      <strong>5</strong>
+      <p>Each trial reruns both linear-time SCC algorithms on the same graph.</p>
+    </article><article class="summary-card">
+      <p class="eyebrow">Agreement</p>
+      <strong>Yes</strong>
+      <p>Checks whether Tarjan and Kosaraju produced the same deterministic SCC grouping.</p>
+    </article><article class="summary-card">
+      <p class="eyebrow">Average winner</p>
+      <strong>Tarjan</strong>
+      <p>Average timing leader across all recorded trials.</p>
+    </article>
+    </section>
+    <h2 class="section-title">Average timings</h2>
+    <section class="summary-grid">
+      <article class="table-card">
+        <table>
+          <thead>
+            <tr><th>Algorithm</th><th>Average time (ms)</th></tr>
+          </thead>
+          <tbody>
+<tr>
+        <th scope="row">Tarjan</th>
+        <td>0.008829</td>
+      </tr><tr>
+        <th scope="row">Kosaraju</th>
+        <td>0.013374</td>
+      </tr>
+          </tbody>
+        </table>
+      </article>
+      <article class="table-card artifact-card">
+        <p class="eyebrow">Artifact bundle</p>
+        <h3>Linked companions</h3>
+        <p>Use the sibling exports for spreadsheet charts, Markdown embeds, or raw machine-readable analysis.</p>
+        <ul>
+          <li><a href="sample-compare.json">JSON payload</a></li><li><a href="sample-compare.csv">CSV timings</a></li><li><a href="sample-compare.md">Markdown report</a></li>
+        </ul>
+      </article>
+    </section>
+    <h2 class="section-title">Per-trial timing gallery</h2>
+    <section class="trial-grid">
+<article class="trial-card">
+      <div class="trial-card__header">
+        <div>
+          <p class="eyebrow">Trial 1</p>
+          <h3>Tarjan wins</h3>
+        </div>
+        <span class="pill">Δ 0.004950 ms</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Tarjan</span><code>0.010500 ms</code></div>
+        <div class="bar-track"><span class="bar bar--tarjan" style="width: 67.96%"></span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Kosaraju</span><code>0.015450 ms</code></div>
+        <div class="bar-track"><span class="bar bar--kosaraju" style="width: 100.00%"></span></div>
+      </div>
+    </article><article class="trial-card">
+      <div class="trial-card__header">
+        <div>
+          <p class="eyebrow">Trial 2</p>
+          <h3>Tarjan wins</h3>
+        </div>
+        <span class="pill">Δ 0.001463 ms</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Tarjan</span><code>0.011692 ms</code></div>
+        <div class="bar-track"><span class="bar bar--tarjan" style="width: 75.68%"></span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Kosaraju</span><code>0.013155 ms</code></div>
+        <div class="bar-track"><span class="bar bar--kosaraju" style="width: 85.15%"></span></div>
+      </div>
+    </article><article class="trial-card">
+      <div class="trial-card__header">
+        <div>
+          <p class="eyebrow">Trial 3</p>
+          <h3>Tarjan wins</h3>
+        </div>
+        <span class="pill">Δ 0.003907 ms</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Tarjan</span><code>0.007535 ms</code></div>
+        <div class="bar-track"><span class="bar bar--tarjan" style="width: 48.77%"></span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Kosaraju</span><code>0.011442 ms</code></div>
+        <div class="bar-track"><span class="bar bar--kosaraju" style="width: 74.06%"></span></div>
+      </div>
+    </article><article class="trial-card">
+      <div class="trial-card__header">
+        <div>
+          <p class="eyebrow">Trial 4</p>
+          <h3>Tarjan wins</h3>
+        </div>
+        <span class="pill">Δ 0.006783 ms</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Tarjan</span><code>0.006823 ms</code></div>
+        <div class="bar-track"><span class="bar bar--tarjan" style="width: 44.16%"></span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Kosaraju</span><code>0.013606 ms</code></div>
+        <div class="bar-track"><span class="bar bar--kosaraju" style="width: 88.06%"></span></div>
+      </div>
+    </article><article class="trial-card">
+      <div class="trial-card__header">
+        <div>
+          <p class="eyebrow">Trial 5</p>
+          <h3>Tarjan wins</h3>
+        </div>
+        <span class="pill">Δ 0.005620 ms</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Tarjan</span><code>0.007595 ms</code></div>
+        <div class="bar-track"><span class="bar bar--tarjan" style="width: 49.16%"></span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-row__label"><span>Kosaraju</span><code>0.013215 ms</code></div>
+        <div class="bar-track"><span class="bar bar--kosaraju" style="width: 85.53%"></span></div>
+      </div>
+    </article>
+    </section>
+    <h2 class="section-title">Component roster</h2>
+    <section class="component-grid">
+<article class="component-card">
+      <div class="component-card__header">
+        <h3>C0</h3>
+        <span class="pill">size 3</span>
+      </div>
+      <p>A, B, C</p>
+    </article><article class="component-card">
+      <div class="component-card__header">
+        <h3>C1</h3>
+        <span class="pill">size 2</span>
+      </div>
+      <p>D, E</p>
+    </article><article class="component-card">
+      <div class="component-card__header">
+        <h3>C2</h3>
+        <span class="pill">size 2</span>
+      </div>
+      <p>F, G</p>
+    </article><article class="component-card">
+      <div class="component-card__header">
+        <h3>C3</h3>
+        <span class="pill">size 1</span>
+      </div>
+      <p>H</p>
+    </article>
+    </section>
+  </main>
+</body>
+</html>

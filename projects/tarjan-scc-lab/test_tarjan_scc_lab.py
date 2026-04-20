@@ -16,6 +16,7 @@ from tarjan_scc_lab import (
     load_graph,
     main,
     render_compare_csv,
+    render_compare_html,
     render_compare_markdown,
     summarize_components,
     tarjan_strongly_connected_components,
@@ -239,6 +240,32 @@ def test_render_compare_markdown_includes_tables_and_component_roster():
     assert '| trial | tarjan_ms | kosaraju_ms | delta_ms | winner |' in report
     assert '- C0: A, B, C' in report
     assert '## Interview talking points' in report
+
+
+def test_render_compare_html_includes_trial_gallery_component_cards_and_relative_links(tmp_path: Path):
+    graph = load_graph(FIXTURE_PATH)
+    comparison = compare_algorithms(graph, repeat=2)
+    html_output = tmp_path / 'site' / 'reports' / 'benchmark.html'
+    json_output = tmp_path / 'artifacts' / 'benchmark.json'
+    csv_output = tmp_path / 'artifacts' / 'benchmark.csv'
+    markdown_output = tmp_path / 'artifacts' / 'benchmark.md'
+    html = render_compare_html(
+        FIXTURE_PATH,
+        comparison,
+        html_output_path=html_output,
+        json_output_path=json_output,
+        csv_output_path=csv_output,
+        markdown_output_path=markdown_output,
+    )
+    assert '<h1>Tarjan vs. Kosaraju benchmark dashboard</h1>' in html
+    assert 'Per-trial timing gallery' in html
+    assert 'Component roster' in html
+    assert 'Trial 1' in html
+    assert 'href="../../artifacts/benchmark.json"' in html
+    assert 'href="../../artifacts/benchmark.csv"' in html
+    assert 'href="../../artifacts/benchmark.md"' in html
+    assert 'C0' in html
+    assert 'A, B, C' in html
 
 
 def test_condensation_mermaid_groups_components_by_topology_level():
@@ -497,9 +524,11 @@ def test_cli_compare_outputs_matching_algorithms_and_timings():
     assert len(payload['timings_ms']['kosaraju']) == 2
 
 
-def test_cli_compare_can_write_csv_and_markdown_artifacts(tmp_path: Path):
+def test_cli_compare_can_write_json_csv_markdown_and_html_artifacts(tmp_path: Path):
+    json_path = tmp_path / 'benchmark.json'
     csv_path = tmp_path / 'benchmark.csv'
     markdown_path = tmp_path / 'benchmark.md'
+    html_path = tmp_path / 'benchmark.html'
     result = subprocess.run(
         [
             sys.executable,
@@ -508,10 +537,14 @@ def test_cli_compare_can_write_csv_and_markdown_artifacts(tmp_path: Path):
             'compare',
             '--repeat',
             '2',
+            '--json-output',
+            str(json_path),
             '--csv-output',
             str(csv_path),
             '--markdown-output',
             str(markdown_path),
+            '--html-output',
+            str(html_path),
         ],
         check=True,
         capture_output=True,
@@ -519,14 +552,25 @@ def test_cli_compare_can_write_csv_and_markdown_artifacts(tmp_path: Path):
     )
     payload = json.loads(result.stdout)
     assert payload['repeat'] == 2
+    assert payload['json_output'] == str(json_path)
+    assert payload['html_output'] == str(html_path)
+    assert json_path.exists()
     assert csv_path.exists()
     assert markdown_path.exists()
+    assert html_path.exists()
+    json_payload = json.loads(json_path.read_text())
+    assert json_payload['repeat'] == 2
     csv_rows = list(csv.DictReader(csv_path.read_text().splitlines()))
     assert len(csv_rows) == 2
     assert csv_rows[0]['trial'] == '1'
     markdown_text = markdown_path.read_text()
     assert '# Tarjan vs Kosaraju benchmark report' in markdown_text
     assert '## Component roster' in markdown_text
+    html_text = html_path.read_text()
+    assert 'Tarjan vs. Kosaraju benchmark dashboard' in html_text
+    assert 'href="benchmark.json"' in html_text
+    assert 'href="benchmark.csv"' in html_text
+    assert 'href="benchmark.md"' in html_text
 
 
 def test_cli_dot_outputs_graphviz_condensation_graph():
