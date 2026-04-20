@@ -10,3 +10,4 @@
 - [x] add timeline/SVG schedule exports for version visibility and commit ordering
 - [x] add predicate/range-query phantom scenarios beyond key-based read/write validation
 - [x] add lock-based serializable comparison for contrast with optimistic validation
+- [x] add a static HTML dashboard export so recruiters can browse compare results and timelines without reading raw markdown first

@@ -18,17 +18,18 @@ A compact Python simulator that compares `read-committed`, `snapshot`, optimisti
 - invariant checks that make schedule-level correctness visible in the final output
 - comparison mode that replays the same scenario across all supported isolation levels
 - Markdown comparison export for recruiter-friendly artifact snapshots in `docs/artifacts/`
+- static HTML comparison dashboard export that links the Markdown summary and per-isolation timelines in one browseable page
 - self-contained SVG schedule exports that show begin/read/write/commit ordering plus committed version changes without needing a browser app or external assets
 - committed sample scenarios for write skew, repeatable-read drift, and predicate/range-query phantom behavior
 
 ## Project structure
-- `mvcc_isolation_lab.py` - scenario validation, simulator, trace generation, Markdown/SVG rendering, and CLI entrypoint
+- `mvcc_isolation_lab.py` - scenario validation, simulator, Markdown/HTML/SVG artifact rendering, and CLI entrypoint
 - `doctor_on_call.json` - classic write-skew scenario where two doctors each sign off based on the same stale snapshot
 - `repeatable_read_window.json` - compact scenario that shows a long-running reader under a concurrent writer
 - `conference_room_booking_phantom.json` - booking-slot scan scenario where predicate conflicts matter more than key-based overlap
 - `CHECKLIST.md` - resumable project checklist for future slices
 - `tests/test_mvcc_isolation_lab.py` - regression tests for validation, isolation semantics, and CLI exports
-- `docs/artifacts/mvcc-isolation-lab/` - committed Markdown comparison artifacts plus SVG schedule timelines generated from the sample scenarios
+- `docs/artifacts/mvcc-isolation-lab/` - committed Markdown/HTML comparison artifacts plus SVG schedule timelines generated from the sample scenarios
 
 ## Scenario format
 ```json
@@ -111,6 +112,15 @@ python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py run \
   --timeline-svg-out docs/artifacts/mvcc-isolation-lab/doctor_on_call_serializable_timeline.svg
 ```
 
+### Export a browsable HTML dashboard with companion Markdown and timelines
+```bash
+python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
+  projects/mvcc-isolation-lab/doctor_on_call.json \
+  --markdown-out docs/artifacts/mvcc-isolation-lab/doctor_on_call_compare.md \
+  --timeline-svg-dir docs/artifacts/mvcc-isolation-lab \
+  --html-out docs/artifacts/mvcc-isolation-lab/doctor_on_call_dashboard.html
+```
+
 ### Export all isolation timelines for the same scenario
 ```bash
 python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
@@ -124,6 +134,7 @@ python3 projects/mvcc-isolation-lab/mvcc_isolation_lab.py compare \
   - `serializable` aborts one doctor because its read set overlaps with a key changed after its snapshot
   - `strict-2pl` also preserves the invariant, but it does so earlier by aborting a writer on a lock-upgrade conflict caused by the other doctor's shared read lock
   - the committed SVG exports make the overlap visible by showing both transactions starting from version `v0`, then only one committed version row landing in the stricter modes
+  - the committed HTML dashboard links the summary card, final-state diff, and timeline SVGs from one recruiter-friendly page
 - `repeatable_read_window.json`
   - `read-committed` lets the reader observe different values across its two reads, causing the transaction's repeatable-read assertion to fail
   - `snapshot` keeps the reader on a stable snapshot so the reader commits cleanly
@@ -143,6 +154,6 @@ python3 -m unittest tests.test_mvcc_isolation_lab -v
 ```
 
 ## Future ideas
-- add lock-based strict two-phase locking as another comparison mode for contrast with the optimistic validator
 - add richer scan payloads (for example exposing matched key previews directly to expressions) while keeping the DSL compact
-- add a browser-friendly HTML gallery page that embeds the committed Markdown and SVG artifacts together
+- add a deadlock/waiting-mode variant that contrasts deterministic aborts with queue-based lock scheduling
+- add a multi-scenario landing page that links the committed per-scenario HTML dashboards together

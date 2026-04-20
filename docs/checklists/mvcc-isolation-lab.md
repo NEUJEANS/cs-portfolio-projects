@@ -11,4 +11,5 @@
 - [x] run tests, secret scan, commit, push, and wrap up the slice
 - [x] add timeline/SVG artifacts for transaction windows and version changes
 - [x] add predicate/range-query phantom examples
-- [ ] add lock-based serialization mode for contrast with optimistic validation
+- [x] add lock-based serialization mode for contrast with optimistic validation
+- [x] add a static HTML dashboard export that summarizes scenario footprint, abort causes, and links to Markdown/SVG artifacts

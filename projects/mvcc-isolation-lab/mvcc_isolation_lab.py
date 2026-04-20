@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 from dataclasses import dataclass, field
 from html import escape
 from pathlib import Path
@@ -947,6 +948,309 @@ def render_compare_markdown(results: Dict[str, SimulationResult]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def relative_href(target: str | Path, html_output: str | Path) -> str:
+    return Path(os.path.relpath(Path(target), start=Path(html_output).parent)).as_posix()
+
+
+def render_compare_html(
+    results: Dict[str, SimulationResult],
+    *,
+    markdown_href: Optional[str] = None,
+    timeline_hrefs: Optional[Dict[str, str]] = None,
+) -> str:
+    scenario = next(iter(results.values()))
+    timeline_hrefs = timeline_hrefs or {}
+    transaction_count = len(scenario.transactions)
+    trace_tick_count = max((event["tick"] for event in scenario.trace), default=0)
+    invariant_count = len(scenario.invariants)
+
+    def transaction_failed_assertion(result: SimulationResult, transaction_name: str) -> bool:
+        return any(
+            event.get("transaction") == transaction_name
+            and event.get("op") == "assert"
+            and event.get("result") is False
+            for event in result.trace
+        )
+
+    invariant_safe_modes = sum(1 for result in results.values() if not result.invariant_violations)
+    anomaly_modes = len(results) - invariant_safe_modes
+    total_aborts = sum(
+        1 for result in results.values() for transaction in result.transactions if transaction["status"] == "aborted"
+    )
+    aborting_modes = sum(
+        1 for result in results.values() if any(transaction["status"] == "aborted" for transaction in result.transactions)
+    )
+    optimistic_abort_modes = int(
+        any(transaction["status"] == "aborted" for transaction in results["serializable"].transactions)
+    )
+    locking_abort_modes = int(
+        any(transaction["status"] == "aborted" for transaction in results["strict-2pl"].transactions)
+    )
+    assertion_aborts = sum(
+        1
+        for result in results.values()
+        for transaction in result.transactions
+        if transaction["status"] == "aborted" and transaction_failed_assertion(result, transaction["name"])
+    )
+    conflict_aborts = total_aborts - assertion_aborts
+
+    summary_cards = [
+        (
+            "Scenario footprint",
+            f"{transaction_count} tx · {trace_tick_count} ticks · {invariant_count} invariants",
+            "Quick sizing context for the replayed schedule before you inspect each isolation mode.",
+        ),
+        ("Isolation modes", str(len(results)), "Side-by-side replay count for this schedule."),
+        (
+            "Invariant-safe modes",
+            str(invariant_safe_modes),
+            "Modes that preserved every declared invariant in the final state.",
+        ),
+        (
+            "Anomaly-exposing modes",
+            str(anomaly_modes),
+            "Modes whose final state still violates at least one scenario invariant.",
+        ),
+        (
+            "Aborting modes",
+            str(aborting_modes),
+            "Modes that rejected at least one transaction instead of letting the anomaly land.",
+        ),
+    ]
+    if optimistic_abort_modes or locking_abort_modes:
+        summary_cards.append(
+            (
+                "Abort styles",
+                f"optimistic {optimistic_abort_modes} · locks {locking_abort_modes}",
+                "Quick contrast between validation-time aborts and lock-conflict aborts.",
+            )
+        )
+    if total_aborts:
+        summary_cards.append(
+            (
+                "Abort causes",
+                f"assertions {assertion_aborts} · conflicts {conflict_aborts}",
+                "Separates scenario-level assertion failures from concurrency-control conflict aborts.",
+            )
+        )
+        summary_cards.append(
+            (
+                "Total aborted txs",
+                str(total_aborts),
+                "Across all compared isolation levels for this one schedule.",
+            )
+        )
+
+    summary_cards_html = "".join(
+        f'''<article class="summary-card">
+      <p class="summary-label">{escape(label)}</p>
+      <strong>{escape(value)}</strong>
+      <p>{escape(description)}</p>
+    </article>'''
+        for label, value, description in summary_cards
+    )
+
+    mode_cards_html: List[str] = []
+    for level in SUPPORTED_ISOLATION_LEVELS:
+        result = results[level]
+        aborted = sum(1 for item in result.transactions if item["status"] == "aborted")
+        invariant_failures = result.invariant_violations
+        status_label = "Invariant-safe" if not invariant_failures else "Anomaly visible"
+        card_class = "mode-card mode-card--safe" if not invariant_failures else "mode-card mode-card--risk"
+        if aborted:
+            card_class += " mode-card--abort"
+
+        invariant_items: List[str] = []
+        for invariant in result.invariants:
+            badge_class = "badge badge--ok" if invariant["ok"] else "badge badge--bad"
+            badge_text = "pass" if invariant["ok"] else "failed"
+            detail = invariant["message"] or invariant["expr"]
+            invariant_items.append(
+                "<li>"
+                f'<span class="{badge_class}">{escape(badge_text)}</span>'
+                f'<code>{escape(invariant["name"])}</code>'
+                f'<span>{escape(detail)}</span>'
+                "</li>"
+            )
+        invariant_html = "".join(invariant_items) or (
+            '<li><span class="badge">n/a</span><span>No invariants declared for this scenario.</span></li>'
+        )
+
+        transaction_items: List[str] = []
+        for transaction in result.transactions:
+            pill_variant = (
+                "abort"
+                if transaction["status"] == "aborted"
+                else "commit"
+                if transaction["status"] == "committed"
+                else "neutral"
+            )
+            details: List[str] = [
+                '<div class="tx-line">'
+                f'<strong>{escape(transaction["name"])}</strong>'
+                f'<span class="pill pill--{pill_variant}">{escape(transaction["status"])}</span>'
+                "</div>"
+            ]
+            if transaction["status"] == "aborted":
+                abort_class = (
+                    "scenario assertion failed"
+                    if transaction_failed_assertion(result, transaction["name"])
+                    else "validation or lock conflict"
+                )
+                details.append(f'<p><strong>Abort class:</strong> {escape(abort_class)}</p>')
+            if transaction["abort_reason"]:
+                details.append(f'<p>{escape(transaction["abort_reason"])}</p>')
+            if transaction["predicate_reads"]:
+                details.append(
+                    f'<p><strong>Predicate reads:</strong> {escape(", ".join(transaction["predicate_reads"]))}</p>'
+                )
+            if transaction["writes"]:
+                write_label = "Writes" if transaction["status"] == "committed" else "Buffered writes"
+                details.append(
+                    f'<p><strong>{escape(write_label)}:</strong> <code>{escape(json.dumps(transaction["writes"], sort_keys=True))}</code></p>'
+                )
+            transaction_items.append("<li>" + "".join(details) + "</li>")
+        transaction_html = "".join(transaction_items)
+
+        companion_links: List[str] = []
+        if markdown_href:
+            companion_links.append(f'<a href="{escape(markdown_href)}">Markdown comparison</a>')
+        if level in timeline_hrefs:
+            companion_links.append(f'<a href="{escape(timeline_hrefs[level])}">{escape(level)} timeline SVG</a>')
+        companion_links_html = (
+            '<div class="companion-links">' + "".join(companion_links) + '</div>' if companion_links else ""
+        )
+
+        mode_cards_html.append(
+            f'''<article class="{card_class}">
+      <div class="mode-card-header">
+        <div>
+          <p class="eyebrow">{escape(level)}</p>
+          <h2>{escape(status_label)}</h2>
+        </div>
+        <div class="mode-metrics">
+          <span><strong>v{result.final_version}</strong> final version</span>
+          <span><strong>{aborted}</strong> aborted</span>
+        </div>
+      </div>
+      <p class="mode-state-label">Final state</p>
+      <pre>{escape(json.dumps(result.final_state, indent=2, sort_keys=True))}</pre>
+      <div class="mode-columns">
+        <section>
+          <h3>Transactions</h3>
+          <ul class="detail-list">{transaction_html}</ul>
+        </section>
+        <section>
+          <h3>Invariant checks</h3>
+          <ul class="detail-list detail-list--compact">{invariant_html}</ul>
+        </section>
+      </div>
+      {companion_links_html}
+    </article>'''
+        )
+
+    lede = scenario.description or "Isolation-level comparison across the same hand-authored schedule."
+    hero_links_html = (
+        f'<div class="hero-links"><a href="{escape(markdown_href)}">Open Markdown comparison</a></div>'
+        if markdown_href
+        else ""
+    )
+    hero_facts = [
+        ("Transactions", str(transaction_count)),
+        ("Schedule ticks", str(trace_tick_count)),
+        ("Invariants", str(invariant_count)),
+    ]
+    hero_facts_html = "".join(
+        f'''<li>
+          <span>{escape(label)}</span>
+          <strong>{escape(value)}</strong>
+        </li>'''
+        for label, value in hero_facts
+    )
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{escape(scenario.title)} isolation dashboard</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #d9e2ec;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --safe: #15803d;
+        --safe-soft: #dcfce7;
+        --risk: #b91c1c;
+        --risk-soft: #fee2e2;
+        --abort: #7c3aed;
+        --abort-soft: #ede9fe;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 18rem); color: var(--text); }}
+      main {{ max-width: 1200px; margin: 0 auto; padding: 32px 20px 56px; }}
+      .hero, .summary-card, .mode-card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06); }}
+      .hero {{ padding: 28px; margin-bottom: 20px; }}
+      .eyebrow {{ margin: 0 0 8px; color: var(--accent); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      .lede {{ margin: 14px 0 0; max-width: 72ch; line-height: 1.6; color: var(--muted); }}
+      .hero-facts {{ list-style: none; display: flex; flex-wrap: wrap; gap: 12px; padding: 0; margin: 18px 0 0; }}
+      .hero-facts li {{ min-width: 120px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,0.7); }}
+      .hero-facts span {{ display: block; color: var(--muted); font-size: 0.82rem; }}
+      .hero-facts strong {{ display: block; margin-top: 4px; font-size: 1rem; }}
+      .hero-links {{ display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }}
+      .hero-links a, .companion-links a {{ color: var(--accent); text-decoration-thickness: 1.5px; text-underline-offset: 0.18em; font-weight: 600; }}
+      .hero-links a:hover, .hero-links a:focus-visible, .companion-links a:hover, .companion-links a:focus-visible {{ text-decoration: underline; outline: 2px solid rgba(37, 99, 235, 0.18); outline-offset: 3px; border-radius: 6px; }}
+      .summary-grid, .mode-grid {{ display: grid; gap: 16px; }}
+      .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px; }}
+      .summary-card {{ padding: 18px; }}
+      .summary-card strong {{ display: block; margin-top: 6px; font-size: 1.8rem; }}
+      .summary-label, .mode-state-label {{ margin-bottom: 0; color: var(--muted); font-size: 0.92rem; }}
+      .summary-card p:last-child {{ margin-bottom: 0; color: var(--muted); line-height: 1.5; }}
+      .mode-grid {{ grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+      .mode-card {{ padding: 22px; }}
+      .mode-card--safe {{ border-color: #bbf7d0; background: linear-gradient(180deg, #ffffff 0%, #f6fff8 100%); }}
+      .mode-card--risk {{ border-color: #fecaca; background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%); }}
+      .mode-card--abort {{ box-shadow: 0 18px 40px rgba(124, 58, 237, 0.08); }}
+      .mode-card-header {{ display: flex; justify-content: space-between; gap: 14px; align-items: start; margin-bottom: 14px; }}
+      .mode-card-header h2 {{ font-size: 1.15rem; }}
+      .mode-metrics {{ display: grid; gap: 6px; justify-items: end; color: var(--muted); font-size: 0.95rem; }}
+      pre {{ margin: 8px 0 18px; padding: 14px; background: #0f172a; color: #e2e8f0; border-radius: 14px; overflow-x: auto; font-size: 0.84rem; line-height: 1.5; }}
+      .mode-columns {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
+      .detail-list {{ list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }}
+      .detail-list li {{ border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; background: rgba(255,255,255,0.75); }}
+      .detail-list--compact li {{ display: grid; gap: 6px; }}
+      .tx-line {{ display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 8px; }}
+      .pill, .badge {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 9px; font-size: 0.78rem; font-weight: 700; }}
+      .pill--commit {{ background: var(--safe-soft); color: var(--safe); }}
+      .pill--abort {{ background: var(--abort-soft); color: var(--abort); }}
+      .pill--neutral, .badge {{ background: #e2e8f0; color: #334155; }}
+      .badge--ok {{ background: var(--safe-soft); color: var(--safe); }}
+      .badge--bad {{ background: var(--risk-soft); color: var(--risk); }}
+      code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+      .companion-links {{ display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }}
+      @media (min-width: 900px) {{ .mode-columns {{ grid-template-columns: 1.15fr 1fr; }} }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">MVCC isolation lab</p>
+        <h1>{escape(scenario.title)}</h1>
+        <p class="lede">{escape(lede)}</p>
+        <ul class="hero-facts">{hero_facts_html}</ul>
+        {hero_links_html}
+      </section>
+      <section class="summary-grid">{summary_cards_html}</section>
+      <section class="mode-grid">{"".join(mode_cards_html)}</section>
+    </main>
+  </body>
+</html>
+'''
+
 def truncate_text(value: Any, limit: int = 42) -> str:
     text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
     if len(text) <= limit:
@@ -1165,8 +1469,9 @@ def command_run(args: argparse.Namespace) -> int:
 def command_compare(args: argparse.Namespace) -> int:
     scenario = load_scenario(args.scenario)
     results = compare_scenario(scenario)
+    markdown_output: Optional[Path] = None
     if args.markdown_out:
-        write_text_output(args.markdown_out, render_compare_markdown(results))
+        markdown_output = write_text_output(args.markdown_out, render_compare_markdown(results))
     timeline_outputs: Dict[str, str] = {}
     if args.timeline_svg_dir:
         output_dir = Path(args.timeline_svg_dir)
@@ -1176,9 +1481,30 @@ def command_compare(args: argparse.Namespace) -> int:
             filename = f"{scenario_stem}_{level.replace('-', '_')}_timeline.svg"
             output_path = write_text_output(output_dir / filename, render_timeline_svg(result))
             timeline_outputs[level] = str(output_path)
+    html_output: Optional[Path] = None
+    if args.html_out:
+        markdown_href = relative_href(markdown_output, args.html_out) if markdown_output else None
+        timeline_hrefs = {
+            level: relative_href(output_path, args.html_out) for level, output_path in timeline_outputs.items()
+        }
+        html_output = write_text_output(
+            args.html_out,
+            render_compare_html(
+                results,
+                markdown_href=markdown_href,
+                timeline_hrefs=timeline_hrefs,
+            ),
+        )
     payload = {level: result.to_dict() for level, result in results.items()}
+    meta: Dict[str, Any] = {}
+    if markdown_output:
+        meta["markdown_output"] = str(markdown_output)
     if timeline_outputs:
-        payload["_meta"] = {"timeline_svg_outputs": timeline_outputs}
+        meta["timeline_svg_outputs"] = timeline_outputs
+    if html_output:
+        meta["html_output"] = str(html_output)
+    if meta:
+        payload["_meta"] = meta
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
@@ -1187,6 +1513,8 @@ def command_compare(args: argparse.Namespace) -> int:
             print("Timeline SVGs:")
             for level in SUPPORTED_ISOLATION_LEVELS:
                 print(f"- {level}: {timeline_outputs[level]}")
+        if html_output:
+            print(f"HTML dashboard: {html_output}")
     return 0
 
 
@@ -1225,6 +1553,10 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument(
         "--timeline-svg-dir",
         help="optional directory for per-isolation SVG schedule exports",
+    )
+    compare_parser.add_argument(
+        "--html-out",
+        help="optional path for a static HTML comparison dashboard",
     )
     compare_parser.set_defaults(func=command_compare)
 

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Repeatable read window isolation dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #d9e2ec;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+        --safe: #15803d;
+        --safe-soft: #dcfce7;
+        --risk: #b91c1c;
+        --risk-soft: #fee2e2;
+        --abort: #7c3aed;
+        --abort-soft: #ede9fe;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 18rem); color: var(--text); }
+      main { max-width: 1200px; margin: 0 auto; padding: 32px 20px 56px; }
+      .hero, .summary-card, .mode-card { background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06); }
+      .hero { padding: 28px; margin-bottom: 20px; }
+      .eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+      h1, h2, h3, p { margin-top: 0; }
+      .lede { margin: 14px 0 0; max-width: 72ch; line-height: 1.6; color: var(--muted); }
+      .hero-facts { list-style: none; display: flex; flex-wrap: wrap; gap: 12px; padding: 0; margin: 18px 0 0; }
+      .hero-facts li { min-width: 120px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,0.7); }
+      .hero-facts span { display: block; color: var(--muted); font-size: 0.82rem; }
+      .hero-facts strong { display: block; margin-top: 4px; font-size: 1rem; }
+      .hero-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+      .hero-links a, .companion-links a { color: var(--accent); text-decoration-thickness: 1.5px; text-underline-offset: 0.18em; font-weight: 600; }
+      .hero-links a:hover, .hero-links a:focus-visible, .companion-links a:hover, .companion-links a:focus-visible { text-decoration: underline; outline: 2px solid rgba(37, 99, 235, 0.18); outline-offset: 3px; border-radius: 6px; }
+      .summary-grid, .mode-grid { display: grid; gap: 16px; }
+      .summary-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px; }
+      .summary-card { padding: 18px; }
+      .summary-card strong { display: block; margin-top: 6px; font-size: 1.8rem; }
+      .summary-label, .mode-state-label { margin-bottom: 0; color: var(--muted); font-size: 0.92rem; }
+      .summary-card p:last-child { margin-bottom: 0; color: var(--muted); line-height: 1.5; }
+      .mode-grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+      .mode-card { padding: 22px; }
+      .mode-card--safe { border-color: #bbf7d0; background: linear-gradient(180deg, #ffffff 0%, #f6fff8 100%); }
+      .mode-card--risk { border-color: #fecaca; background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%); }
+      .mode-card--abort { box-shadow: 0 18px 40px rgba(124, 58, 237, 0.08); }
+      .mode-card-header { display: flex; justify-content: space-between; gap: 14px; align-items: start; margin-bottom: 14px; }
+      .mode-card-header h2 { font-size: 1.15rem; }
+      .mode-metrics { display: grid; gap: 6px; justify-items: end; color: var(--muted); font-size: 0.95rem; }
+      pre { margin: 8px 0 18px; padding: 14px; background: #0f172a; color: #e2e8f0; border-radius: 14px; overflow-x: auto; font-size: 0.84rem; line-height: 1.5; }
+      .mode-columns { display: grid; grid-template-columns: 1fr; gap: 16px; }
+      .detail-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+      .detail-list li { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; background: rgba(255,255,255,0.75); }
+      .detail-list--compact li { display: grid; gap: 6px; }
+      .tx-line { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 8px; }
+      .pill, .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 9px; font-size: 0.78rem; font-weight: 700; }
+      .pill--commit { background: var(--safe-soft); color: var(--safe); }
+      .pill--abort { background: var(--abort-soft); color: var(--abort); }
+      .pill--neutral, .badge { background: #e2e8f0; color: #334155; }
+      .badge--ok { background: var(--safe-soft); color: var(--safe); }
+      .badge--bad { background: var(--risk-soft); color: var(--risk); }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .companion-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+      @media (min-width: 900px) { .mode-columns { grid-template-columns: 1.15fr 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">MVCC isolation lab</p>
+        <h1>Repeatable read window</h1>
+        <p class="lede">A long-running reader observes a value twice while a concurrent writer increments it in the middle of the schedule.</p>
+        <ul class="hero-facts"><li>
+          <span>Transactions</span>
+          <strong>2</strong>
+        </li><li>
+          <span>Schedule ticks</span>
+          <strong>5</strong>
+        </li><li>
+          <span>Invariants</span>
+          <strong>1</strong>
+        </li></ul>
+        <div class="hero-links"><a href="repeatable_read_window_compare.md">Open Markdown comparison</a></div>
+      </section>
+      <section class="summary-grid"><article class="summary-card">
+      <p class="summary-label">Scenario footprint</p>
+      <strong>2 tx · 5 ticks · 1 invariants</strong>
+      <p>Quick sizing context for the replayed schedule before you inspect each isolation mode.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Isolation modes</p>
+      <strong>4</strong>
+      <p>Side-by-side replay count for this schedule.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Invariant-safe modes</p>
+      <strong>4</strong>
+      <p>Modes that preserved every declared invariant in the final state.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Anomaly-exposing modes</p>
+      <strong>0</strong>
+      <p>Modes whose final state still violates at least one scenario invariant.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Aborting modes</p>
+      <strong>3</strong>
+      <p>Modes that rejected at least one transaction instead of letting the anomaly land.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Abort styles</p>
+      <strong>optimistic 1 · locks 1</strong>
+      <p>Quick contrast between validation-time aborts and lock-conflict aborts.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Abort causes</p>
+      <strong>assertions 1 · conflicts 2</strong>
+      <p>Separates scenario-level assertion failures from concurrency-control conflict aborts.</p>
+    </article><article class="summary-card">
+      <p class="summary-label">Total aborted txs</p>
+      <strong>3</strong>
+      <p>Across all compared isolation levels for this one schedule.</p>
+    </article></section>
+      <section class="mode-grid"><article class="mode-card mode-card--safe mode-card--abort">
+      <div class="mode-card-header">
+        <div>
+          <p class="eyebrow">read-committed</p>
+          <h2>Invariant-safe</h2>
+        </div>
+        <div class="mode-metrics">
+          <span><strong>v1</strong> final version</span>
+          <span><strong>1</strong> aborted</span>
+        </div>
+      </div>
+      <p class="mode-state-label">Final state</p>
+      <pre>{
+  &quot;inventory&quot;: 8
+}</pre>
+      <div class="mode-columns">
+        <section>
+          <h3>Transactions</h3>
+          <ul class="detail-list"><li><div class="tx-line"><strong>Reader</strong><span class="pill pill--abort">aborted</span></div><p><strong>Abort class:</strong> scenario assertion failed</p><p>The reader expected a repeatable value across both reads.</p></li><li><div class="tx-line"><strong>Writer</strong><span class="pill pill--commit">committed</span></div><p><strong>Writes:</strong> <code>{&quot;inventory&quot;: 8}</code></p></li></ul>
+        </section>
+        <section>
+          <h3>Invariant checks</h3>
+          <ul class="detail-list detail-list--compact"><li><span class="badge badge--ok">pass</span><code>inventory_non_negative</code><span>Inventory should stay non-negative after the update.</span></li></ul>
+        </section>
+      </div>
+      <div class="companion-links"><a href="repeatable_read_window_compare.md">Markdown comparison</a><a href="repeatable_read_window_read_committed_timeline.svg">read-committed timeline SVG</a></div>
+    </article><article class="mode-card mode-card--safe">
+      <div class="mode-card-header">
+        <div>
+          <p class="eyebrow">snapshot</p>
+          <h2>Invariant-safe</h2>
+        </div>
+        <div class="mode-metrics">
+          <span><strong>v1</strong> final version</span>
+          <span><strong>0</strong> aborted</span>
+        </div>
+      </div>
+      <p class="mode-state-label">Final state</p>
+      <pre>{
+  &quot;inventory&quot;: 8
+}</pre>
+      <div class="mode-columns">
+        <section>
+          <h3>Transactions</h3>
+          <ul class="detail-list"><li><div class="tx-line"><strong>Reader</strong><span class="pill pill--commit">committed</span></div></li><li><div class="tx-line"><strong>Writer</strong><span class="pill pill--commit">committed</span></div><p><strong>Writes:</strong> <code>{&quot;inventory&quot;: 8}</code></p></li></ul>
+        </section>
+        <section>
+          <h3>Invariant checks</h3>
+          <ul class="detail-list detail-list--compact"><li><span class="badge badge--ok">pass</span><code>inventory_non_negative</code><span>Inventory should stay non-negative after the update.</span></li></ul>
+        </section>
+      </div>
+      <div class="companion-links"><a href="repeatable_read_window_compare.md">Markdown comparison</a><a href="repeatable_read_window_snapshot_timeline.svg">snapshot timeline SVG</a></div>
+    </article><article class="mode-card mode-card--safe mode-card--abort">
+      <div class="mode-card-header">
+        <div>
+          <p class="eyebrow">serializable</p>
+          <h2>Invariant-safe</h2>
+        </div>
+        <div class="mode-metrics">
+          <span><strong>v1</strong> final version</span>
+          <span><strong>1</strong> aborted</span>
+        </div>
+      </div>
+      <p class="mode-state-label">Final state</p>
+      <pre>{
+  &quot;inventory&quot;: 8
+}</pre>
+      <div class="mode-columns">
+        <section>
+          <h3>Transactions</h3>
+          <ul class="detail-list"><li><div class="tx-line"><strong>Reader</strong><span class="pill pill--abort">aborted</span></div><p><strong>Abort class:</strong> validation or lock conflict</p><p>serializable validation conflict on inventory</p></li><li><div class="tx-line"><strong>Writer</strong><span class="pill pill--commit">committed</span></div><p><strong>Writes:</strong> <code>{&quot;inventory&quot;: 8}</code></p></li></ul>
+        </section>
+        <section>
+          <h3>Invariant checks</h3>
+          <ul class="detail-list detail-list--compact"><li><span class="badge badge--ok">pass</span><code>inventory_non_negative</code><span>Inventory should stay non-negative after the update.</span></li></ul>
+        </section>
+      </div>
+      <div class="companion-links"><a href="repeatable_read_window_compare.md">Markdown comparison</a><a href="repeatable_read_window_serializable_timeline.svg">serializable timeline SVG</a></div>
+    </article><article class="mode-card mode-card--safe mode-card--abort">
+      <div class="mode-card-header">
+        <div>
+          <p class="eyebrow">strict-2pl</p>
+          <h2>Invariant-safe</h2>
+        </div>
+        <div class="mode-metrics">
+          <span><strong>v0</strong> final version</span>
+          <span><strong>1</strong> aborted</span>
+        </div>
+      </div>
+      <p class="mode-state-label">Final state</p>
+      <pre>{
+  &quot;inventory&quot;: 5
+}</pre>
+      <div class="mode-columns">
+        <section>
+          <h3>Transactions</h3>
+          <ul class="detail-list"><li><div class="tx-line"><strong>Reader</strong><span class="pill pill--commit">committed</span></div></li><li><div class="tx-line"><strong>Writer</strong><span class="pill pill--abort">aborted</span></div><p><strong>Abort class:</strong> validation or lock conflict</p><p>strict-2pl write lock conflict on inventory held by shared lock(s) Reader</p></li></ul>
+        </section>
+        <section>
+          <h3>Invariant checks</h3>
+          <ul class="detail-list detail-list--compact"><li><span class="badge badge--ok">pass</span><code>inventory_non_negative</code><span>Inventory should stay non-negative after the update.</span></li></ul>
+        </section>
+      </div>
+      <div class="companion-links"><a href="repeatable_read_window_compare.md">Markdown comparison</a><a href="repeatable_read_window_strict_2pl_timeline.svg">strict-2pl timeline SVG</a></div>
+    </article></section>
+    </main>
+  </body>
+</html>

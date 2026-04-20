@@ -23,6 +23,7 @@ ScenarioError = MODULE.ScenarioError
 compare_scenario = MODULE.compare_scenario
 load_scenario = MODULE.load_scenario
 run_simulation = MODULE.run_simulation
+render_compare_html = MODULE.render_compare_html
 render_timeline_svg = MODULE.render_timeline_svg
 validate_scenario = MODULE.validate_scenario
 
@@ -189,6 +190,35 @@ class MvccIsolationLabTests(unittest.TestCase):
             self.assertIn("serializable", report)
             self.assertIn("strict-2pl", report)
 
+    def test_render_compare_html_links_markdown_and_timelines(self) -> None:
+        results = compare_scenario(load_scenario(DOCTOR_SCENARIO))
+        html = render_compare_html(
+            results,
+            markdown_href="doctor_on_call_compare.md",
+            timeline_hrefs={
+                "serializable": "doctor_on_call_serializable_timeline.svg",
+                "strict-2pl": "doctor_on_call_strict_2pl_timeline.svg",
+            },
+        )
+        self.assertIn("Doctor on-call write skew", html)
+        self.assertIn("Open Markdown comparison", html)
+        self.assertIn("doctor_on_call_compare.md", html)
+        self.assertIn("doctor_on_call_serializable_timeline.svg", html)
+        self.assertIn("doctor_on_call_strict_2pl_timeline.svg", html)
+        self.assertIn("Invariant-safe", html)
+        self.assertIn("Anomaly visible", html)
+        self.assertIn("Scenario footprint", html)
+        self.assertIn("Transactions", html)
+        self.assertIn("Abort causes", html)
+
+    def test_render_compare_html_distinguishes_assertion_abort_causes(self) -> None:
+        results = compare_scenario(load_scenario(REPEATABLE_SCENARIO))
+        html = render_compare_html(results, markdown_href="repeatable_read_window_compare.md")
+        self.assertIn("assertions 1 · conflicts 2", html)
+        self.assertIn("Abort class:</strong> scenario assertion failed", html)
+        self.assertIn("Abort class:</strong> validation or lock conflict", html)
+        self.assertIn("Schedule ticks", html)
+
     def test_run_json_output_contains_trace_and_invariants(self) -> None:
         completed = subprocess.run(
             [
@@ -320,8 +350,36 @@ class MvccIsolationLabTests(unittest.TestCase):
                 ],
             )
 
+    def test_compare_cli_can_emit_html_dashboard(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            html_path = Path(temp_dir) / "doctor_dashboard.html"
+            completed = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "compare",
+                    str(DOCTOR_SCENARIO),
+                    "--markdown-out",
+                    str(Path(temp_dir) / "doctor_compare.md"),
+                    "--timeline-svg-dir",
+                    temp_dir,
+                    "--html-out",
+                    str(html_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            )
+            self.assertIn("HTML dashboard:", completed.stdout)
+            html = html_path.read_text()
+            self.assertIn("doctor_compare.md", html)
+            self.assertIn("doctor_on_call_serializable_timeline.svg", html)
+            self.assertIn("doctor_on_call_strict_2pl_timeline.svg", html)
+
     def test_compare_json_output_includes_timeline_meta_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
+            html_path = Path(temp_dir) / "doctor_dashboard.html"
             completed = subprocess.run(
                 [
                     "python3",
@@ -330,6 +388,8 @@ class MvccIsolationLabTests(unittest.TestCase):
                     str(DOCTOR_SCENARIO),
                     "--timeline-svg-dir",
                     temp_dir,
+                    "--html-out",
+                    str(html_path),
                     "--json",
                 ],
                 check=True,
@@ -346,6 +406,7 @@ class MvccIsolationLabTests(unittest.TestCase):
                 payload["_meta"]["timeline_svg_outputs"]["strict-2pl"],
                 str(Path(temp_dir) / "doctor_on_call_strict_2pl_timeline.svg"),
             )
+            self.assertEqual(payload["_meta"]["html_output"], str(html_path))
 
 
 if __name__ == "__main__":
