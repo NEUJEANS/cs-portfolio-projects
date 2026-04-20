@@ -1,0 +1,75 @@
+digraph DependencyGraph {
+  rankdir=LR;
+  label="Dependency graph (makespan=16)";
+  labelloc=t;
+  node [shape=box, style="rounded", fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  subgraph layer_0 {
+    rank=same;
+    "checkout" [label="checkout\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_1 {
+    rank=same;
+    "install-deps" [label="install-deps\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_2 {
+    rank=same;
+    "build-app" [label="build-app\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+    "lint" [label="lint\nd=1, slack=4"];
+    "typecheck" [label="typecheck\nd=1, slack=4"];
+  }
+  subgraph layer_3 {
+    rank=same;
+    "unit-shard-01" [label="unit-shard-01\nd=3, slack=0", color="firebrick", penwidth=2, peripheries=2];
+    "unit-shard-02" [label="unit-shard-02\nd=2, slack=1"];
+    "unit-shard-03" [label="unit-shard-03\nd=3, slack=0"];
+    "unit-shard-04" [label="unit-shard-04\nd=2, slack=1"];
+  }
+  subgraph layer_4 {
+    rank=same;
+    "package-artifact" [label="package-artifact\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_5 {
+    rank=same;
+    "build-container" [label="build-container\nd=2, slack=0\nresources=docker-builder", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_6 {
+    rank=same;
+    "publish-preview-image" [label="publish-preview-image\nd=1, slack=0\nresources=docker-builder", color="firebrick", penwidth=2, peripheries=2];
+    "security-scan" [label="security-scan\nd=2, slack=2"];
+  }
+  subgraph layer_7 {
+    rank=same;
+    "deploy-preview" [label="deploy-preview\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_8 {
+    rank=same;
+    "smoke-preview" [label="smoke-preview\nd=2, slack=0\nresources=browser-lab", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_9 {
+    rank=same;
+    "promote-mainline" [label="promote-mainline\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  "checkout" -> "install-deps" [color="firebrick", penwidth=2];
+  "install-deps" -> "build-app" [color="firebrick", penwidth=2];
+  "install-deps" -> "lint";
+  "install-deps" -> "typecheck";
+  "build-app" -> "unit-shard-01" [color="firebrick", penwidth=2];
+  "build-app" -> "unit-shard-02";
+  "build-app" -> "unit-shard-03";
+  "build-app" -> "unit-shard-04";
+  "lint" -> "package-artifact";
+  "typecheck" -> "package-artifact";
+  "build-app" -> "package-artifact";
+  "unit-shard-01" -> "package-artifact" [color="firebrick", penwidth=2];
+  "unit-shard-02" -> "package-artifact";
+  "unit-shard-03" -> "package-artifact";
+  "unit-shard-04" -> "package-artifact";
+  "package-artifact" -> "build-container" [color="firebrick", penwidth=2];
+  "build-container" -> "publish-preview-image" [color="firebrick", penwidth=2];
+  "publish-preview-image" -> "deploy-preview" [color="firebrick", penwidth=2];
+  "build-container" -> "security-scan";
+  "deploy-preview" -> "smoke-preview" [color="firebrick", penwidth=2];
+  "smoke-preview" -> "promote-mainline" [color="firebrick", penwidth=2];
+  "security-scan" -> "promote-mainline";
+}

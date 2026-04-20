@@ -23,7 +23,8 @@ A compact Python project that models a build or delivery workflow as a directed 
 - recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, worker/resource comparisons, and linked diagram/schedule artifacts
 - compact static HTML dashboards that turn each report bundle into a README-friendly landing page with relative links and embedded schedule previews
 - GitHub-friendly SVG schedule timelines for constrained runs so reviewers can inspect worker/resource bottlenecks without opening raw JSON
-- batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary
+- synthetic manifest generators for CI, release, and data-pipeline bottleneck stories so the project can showcase multiple workload families without hand-authoring every DAG
+- batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary across both hand-authored and generated manifests
 
 ## Project structure
 - `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, scheduler, CLI, diagram export helpers, walkthrough-report generation, HTML dashboard rendering, and schedule SVG export
@@ -32,6 +33,9 @@ A compact Python project that models a build or delivery workflow as a directed 
 - `strategy_graph.json` - example manifest that makes scheduling-strategy tradeoffs visible under a fixed worker cap
 - `multi_resource_graph.json` - example manifest showing tasks that need multiple renewable resources at once
 - `portfolio_benchmark_suite.json` - example benchmark suite that replays the committed showcase manifests in one batch
+- `generated_ci_pipeline.json` - generated CI-style showcase manifest with matrix-like unit-test fan-out, artifact packaging, preview deploy, and smoke coverage
+- `generated_release_pipeline.json` - generated release-engineering showcase manifest with platform builds, serialized signing, and progressive canary rollout
+- `generated_data_pipeline.json` - generated warehouse/ML showcase manifest with partition fan-out, bottlenecked transforms, feature building, and GPU training
 - `test_dependency_graph_planner.py` - unit and CLI tests
 - `CHECKLIST.md` - resumable slice tracker for future portfolio work on this project
 - `docs/artifacts/dependency-graph-planner/` - committed Mermaid, DOT, report, and schedule outputs from the sample manifests
@@ -257,7 +261,26 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py benchmark 
   projects/dependency-graph-planner/portfolio_benchmark_suite.json \
   --benchmark-markdown-out docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md
 ```
-This emits a scoreboard-style Markdown report that compares scheduling strategies across the committed sample, strategy, resource, and multi-resource manifests in one batch.
+This emits a scoreboard-style Markdown report that compares scheduling strategies across the committed sample, strategy, resource, multi-resource, and generated showcase manifests in one batch.
+
+### Generate a synthetic CI / release / data-pipeline manifest
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py generate ci \
+  --generator-width 4 \
+  --generated-manifest-out projects/dependency-graph-planner/generated_ci_pipeline.json
+```
+Swap `ci` for `release` or `data-pipeline` to generate the other workload families. `--generator-width` scales unit-test shards, canary phases, or transform partitions depending on the selected generator.
+
+### Export a generated manifest as a full recruiter-friendly artifact bundle
+```bash
+python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
+  projects/dependency-graph-planner/generated_release_pipeline.json \
+  --worker-limit 3 \
+  --report-markdown-out docs/artifacts/dependency-graph-planner/generated_release_pipeline_report.md \
+  --report-html-out docs/artifacts/dependency-graph-planner/generated_release_pipeline_report_dashboard.html \
+  --diagram-output-dir docs/artifacts/dependency-graph-planner
+```
+This emits the generated release manifest's walkthrough report plus diagram, JSON, and SVG schedule artifacts.
 
 Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/sample_graph.mmd`
@@ -300,6 +323,27 @@ Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_3_workers_schedule.json`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_3_workers_schedule.svg`
+- `docs/artifacts/dependency-graph-planner/generated_ci_pipeline.mmd`
+- `docs/artifacts/dependency-graph-planner/generated_ci_pipeline_mermaid.md`
+- `docs/artifacts/dependency-graph-planner/generated_ci_pipeline.dot`
+- `docs/artifacts/dependency-graph-planner/generated_ci_pipeline_report.md`
+- `docs/artifacts/dependency-graph-planner/generated_ci_pipeline_report_dashboard.html`
+- `docs/artifacts/dependency-graph-planner/generated_ci_pipeline_4_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/generated_ci_pipeline_4_workers_schedule.svg`
+- `docs/artifacts/dependency-graph-planner/generated_release_pipeline.mmd`
+- `docs/artifacts/dependency-graph-planner/generated_release_pipeline_mermaid.md`
+- `docs/artifacts/dependency-graph-planner/generated_release_pipeline.dot`
+- `docs/artifacts/dependency-graph-planner/generated_release_pipeline_report.md`
+- `docs/artifacts/dependency-graph-planner/generated_release_pipeline_report_dashboard.html`
+- `docs/artifacts/dependency-graph-planner/generated_release_pipeline_3_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/generated_release_pipeline_3_workers_schedule.svg`
+- `docs/artifacts/dependency-graph-planner/generated_data_pipeline.mmd`
+- `docs/artifacts/dependency-graph-planner/generated_data_pipeline_mermaid.md`
+- `docs/artifacts/dependency-graph-planner/generated_data_pipeline.dot`
+- `docs/artifacts/dependency-graph-planner/generated_data_pipeline_report.md`
+- `docs/artifacts/dependency-graph-planner/generated_data_pipeline_report_dashboard.html`
+- `docs/artifacts/dependency-graph-planner/generated_data_pipeline_4_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/generated_data_pipeline_4_workers_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md`
 
 ## Testing
@@ -315,10 +359,11 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - how renewable resource constraints extend a plain worker-cap demo toward real runner pools such as GPUs, signing hosts, or browser labs
 - why multi-resource demand vectors are closer to real release engineering than a single-label toy scheduler
 - how a benchmark suite makes it obvious when one heuristic wins, ties, or loses across different workload shapes
+- why synthetic CI, release, and data-pipeline generators make the scheduler story broader without burying the repo in hand-authored DAGs
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
-- add synthetic manifest generators for CI, release, and data-pipeline scheduling patterns
 - simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
 - add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
 - export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis
+- use manifest metadata automatically for default report/dashboard titles and richer artifact subtitles

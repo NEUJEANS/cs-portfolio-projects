@@ -1,0 +1,504 @@
+{
+  "worker_limit": 4,
+  "strategy": "critical-first",
+  "makespan": 16,
+  "unlimited_makespan": 16,
+  "theoretical_lower_bound": 16,
+  "total_work": 27,
+  "idle_capacity": 37,
+  "utilization": 0.421875,
+  "resource_capacities": {
+    "browser-lab": 1,
+    "docker-builder": 1
+  },
+  "resource_summaries": [
+    {
+      "resource_class": "browser-lab",
+      "capacity": 1,
+      "task_count": 1,
+      "total_reserved_units": 2,
+      "peak_concurrent_usage": 1,
+      "utilization": 0.125,
+      "idle_capacity": 14,
+      "delayed_tasks": 0,
+      "max_queue_delay": 0
+    },
+    {
+      "resource_class": "docker-builder",
+      "capacity": 1,
+      "task_count": 2,
+      "total_reserved_units": 3,
+      "peak_concurrent_usage": 1,
+      "utilization": 0.1875,
+      "idle_capacity": 13,
+      "delayed_tasks": 0,
+      "max_queue_delay": 0
+    }
+  ],
+  "dispatch_order": [
+    "checkout",
+    "install-deps",
+    "build-app",
+    "lint",
+    "typecheck",
+    "unit-shard-01",
+    "unit-shard-03",
+    "unit-shard-02",
+    "unit-shard-04",
+    "package-artifact",
+    "build-container",
+    "publish-preview-image",
+    "security-scan",
+    "deploy-preview",
+    "smoke-preview",
+    "promote-mainline"
+  ],
+  "assignments": [
+    {
+      "name": "checkout",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 1,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "install-deps",
+      "worker": 1,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 3,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "build-app",
+      "worker": 1,
+      "ready_at": 3,
+      "start": 3,
+      "finish": 5,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "lint",
+      "worker": 2,
+      "ready_at": 3,
+      "start": 3,
+      "finish": 4,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "typecheck",
+      "worker": 3,
+      "ready_at": 3,
+      "start": 3,
+      "finish": 4,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "unit-shard-01",
+      "worker": 1,
+      "ready_at": 5,
+      "start": 5,
+      "finish": 8,
+      "queue_delay": 0,
+      "duration": 3,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "unit-shard-03",
+      "worker": 2,
+      "ready_at": 5,
+      "start": 5,
+      "finish": 8,
+      "queue_delay": 0,
+      "duration": 3,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "unit-shard-02",
+      "worker": 3,
+      "ready_at": 5,
+      "start": 5,
+      "finish": 7,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "unit-shard-04",
+      "worker": 4,
+      "ready_at": 5,
+      "start": 5,
+      "finish": 7,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "package-artifact",
+      "worker": 1,
+      "ready_at": 8,
+      "start": 8,
+      "finish": 9,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "build-container",
+      "worker": 1,
+      "ready_at": 9,
+      "start": 9,
+      "finish": 11,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": "docker-builder",
+      "resource_slot": 1,
+      "resource_demands": {
+        "docker-builder": 1
+      },
+      "resource_allocations": {
+        "docker-builder": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "publish-preview-image",
+      "worker": 1,
+      "ready_at": 11,
+      "start": 11,
+      "finish": 12,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": "docker-builder",
+      "resource_slot": 1,
+      "resource_demands": {
+        "docker-builder": 1
+      },
+      "resource_allocations": {
+        "docker-builder": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "security-scan",
+      "worker": 2,
+      "ready_at": 11,
+      "start": 11,
+      "finish": 13,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "deploy-preview",
+      "worker": 1,
+      "ready_at": 12,
+      "start": 12,
+      "finish": 13,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "smoke-preview",
+      "worker": 1,
+      "ready_at": 13,
+      "start": 13,
+      "finish": 15,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": "browser-lab",
+      "resource_slot": 1,
+      "resource_demands": {
+        "browser-lab": 1
+      },
+      "resource_allocations": {
+        "browser-lab": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "promote-mainline",
+      "worker": 1,
+      "ready_at": 15,
+      "start": 15,
+      "finish": 16,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    }
+  ],
+  "worker_timelines": [
+    [
+      {
+        "name": "checkout",
+        "start": 0,
+        "finish": 1,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "install-deps",
+        "start": 1,
+        "finish": 3,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "build-app",
+        "start": 3,
+        "finish": 5,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "unit-shard-01",
+        "start": 5,
+        "finish": 8,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "package-artifact",
+        "start": 8,
+        "finish": 9,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "build-container",
+        "start": 9,
+        "finish": 11,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "docker-builder",
+        "resource_slot": 1,
+        "resource_demands": {
+          "docker-builder": 1
+        },
+        "resource_allocations": {
+          "docker-builder": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "publish-preview-image",
+        "start": 11,
+        "finish": 12,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "docker-builder",
+        "resource_slot": 1,
+        "resource_demands": {
+          "docker-builder": 1
+        },
+        "resource_allocations": {
+          "docker-builder": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "deploy-preview",
+        "start": 12,
+        "finish": 13,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "smoke-preview",
+        "start": 13,
+        "finish": 15,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "browser-lab",
+        "resource_slot": 1,
+        "resource_demands": {
+          "browser-lab": 1
+        },
+        "resource_allocations": {
+          "browser-lab": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "promote-mainline",
+        "start": 15,
+        "finish": 16,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    [
+      {
+        "name": "lint",
+        "start": 3,
+        "finish": 4,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "unit-shard-03",
+        "start": 5,
+        "finish": 8,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "security-scan",
+        "start": 11,
+        "finish": 13,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    [
+      {
+        "name": "typecheck",
+        "start": 3,
+        "finish": 4,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "unit-shard-02",
+        "start": 5,
+        "finish": 7,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    [
+      {
+        "name": "unit-shard-04",
+        "start": 5,
+        "finish": 7,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ]
+  ]
+}

@@ -34,6 +34,21 @@
         "gpu": 1,
         "signing": 1
       }
+    },
+    {
+      "label": "generated-ci-4-workers",
+      "graph": "generated_ci_pipeline.json",
+      "worker_limit": 4
+    },
+    {
+      "label": "generated-release-3-workers",
+      "graph": "generated_release_pipeline.json",
+      "worker_limit": 3
+    },
+    {
+      "label": "generated-data-pipeline-4-workers",
+      "graph": "generated_data_pipeline.json",
+      "worker_limit": 4
     }
   ]
 }

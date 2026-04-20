@@ -1,16 +1,16 @@
 # Dependency graph strategy benchmark suite
 
 - Suite source: `projects/dependency-graph-planner/portfolio_benchmark_suite.json`
-- Scenario count: `5`
+- Scenario count: `8`
 - Strategies covered: `fifo, critical-first, longest-processing-time`
 
 ## Aggregate strategy scoreboard
 
 | Strategy | Scenarios | Rank-1 finishes | Best-makespan finishes | Avg makespan | Avg Δ vs best | Avg total queue delay | Avg max queue delay | Avg utilization |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| fifo | 5 | 4 | 4 | 10.00 | 0.60 | 3.00 | 3.00 | 55.2% |
-| critical-first | 5 | 3 | 4 | 9.60 | 0.20 | 3.80 | 3.80 | 57.0% |
-| longest-processing-time | 4 | 2 | 3 | 10.50 | 0.75 | 3.75 | 3.75 | 54.4% |
+| fifo | 8 | 7 | 7 | 13.75 | 0.38 | 4.00 | 2.88 | 50.4% |
+| critical-first | 8 | 4 | 7 | 13.50 | 0.12 | 5.00 | 3.62 | 51.6% |
+| longest-processing-time | 7 | 3 | 6 | 14.57 | 0.43 | 5.14 | 3.43 | 49.3% |
 
 ## Scenario — sample-2-workers
 
@@ -88,3 +88,51 @@
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | 1 | fifo | 8 | 1 | 0 | 2 | 2 | 10 | 58.3% | prep, browser-matrix, cross-platform-cert, gpu-train, sign, package |
 | 2 | critical-first | 9 | 2 | 1 | 4 | 4 | 13 | 51.9% | prep, browser-matrix, gpu-train, cross-platform-cert, sign, package |
+
+## Scenario — generated-ci-4-workers
+
+- Manifest: `generated_ci_pipeline.json`
+- Worker limit: `4 workers`
+- Task count: `16`
+- Unlimited makespan: `16`
+- Best scenario makespan: `16` via `critical-first, fifo, longest-processing-time`
+- Rank-1 strategies after queue-delay tie-breaks: `critical-first, fifo, longest-processing-time`
+- Resource capacities: `browser-lab=1, docker-builder=1`
+
+| Rank | Strategy | Makespan | Δ vs unlimited | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | critical-first | 16 | 0 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |
+| 1 | fifo | 16 | 0 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-02, unit-shard-03, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline |
+| 1 | longest-processing-time | 16 | 0 | 0 | 0 | 0 | 37 | 42.2% | checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, security-scan, publish-preview-image, deploy-preview, smoke-preview, promote-mainline |
+
+## Scenario — generated-release-3-workers
+
+- Manifest: `generated_release_pipeline.json`
+- Worker limit: `3 workers`
+- Task count: `19`
+- Unlimited makespan: `21`
+- Best scenario makespan: `24` via `fifo, longest-processing-time, critical-first`
+- Rank-1 strategies after queue-delay tie-breaks: `fifo`
+- Resource capacities: `prod-slot=1, signing=1`
+
+| Rank | Strategy | Makespan | Δ vs unlimited | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | fifo | 24 | 3 | 0 | 5 | 3 | 42 | 41.7% | freeze-release-branch, assemble-release-notes, build-linux, build-macos, build-windows, sign-linux, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |
+| 2 | longest-processing-time | 24 | 3 | 0 | 7 | 3 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-windows, sign-macos, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |
+| 3 | critical-first | 24 | 3 | 0 | 7 | 4 | 42 | 41.7% | freeze-release-branch, build-macos, build-linux, build-windows, sign-linux, assemble-release-notes, sign-macos, sign-windows, publish-candidates, deploy-staging, verify-staging, canary-10pct, verify-canary-01, canary-50pct, verify-canary-02, canary-90pct, verify-canary-03, full-rollout, announce-release |
+
+## Scenario — generated-data-pipeline-4-workers
+
+- Manifest: `generated_data_pipeline.json`
+- Worker limit: `4 workers`
+- Task count: `16`
+- Unlimited makespan: `15`
+- Best scenario makespan: `20` via `fifo, critical-first, longest-processing-time`
+- Rank-1 strategies after queue-delay tie-breaks: `fifo`
+- Resource capacities: `gpu=1, warehouse=2`
+
+| Rank | Strategy | Makespan | Δ vs unlimited | Δ vs best | Total queue delay | Max queue delay | Idle capacity | Utilization | Dispatch order |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | fifo | 20 | 5 | 0 | 12 | 5 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-02, transform-partition-03, transform-partition-04, transform-partition-05, build-features, backfill-marts, train-model, publish-dashboard, publish-model, notify-ops |
+| 2 | critical-first | 20 | 5 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, schema-validate, quality-profile, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |
+| 2 | longest-processing-time | 20 | 5 | 0 | 14 | 6 | 45 | 43.8% | ingest-events, ingest-orders, ingest-payments, quality-profile, schema-validate, transform-partition-01, transform-partition-03, transform-partition-05, transform-partition-02, transform-partition-04, build-features, train-model, backfill-marts, publish-dashboard, publish-model, notify-ops |

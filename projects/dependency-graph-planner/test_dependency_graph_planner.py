@@ -639,6 +639,66 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             self.assertEqual(aggregate_by_strategy["fifo"]["scenario_count"], 5)
             self.assertEqual(aggregate_by_strategy["longest-processing-time"]["scenario_count"], 4)
 
+    def test_run_command_benchmark_relativizes_repo_local_suite_source_label(self) -> None:
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmpdir:
+            suite_path = self._write_benchmark_suite_files(tmpdir)
+            payload = json.loads(run_command("benchmark", str(suite_path), as_json=True))
+
+            expected_label = Path(suite_path).relative_to(Path.cwd()).as_posix()
+            self.assertEqual(payload["source_label"], expected_label)
+            self.assertIn(f"- Suite source: `{expected_label}`", payload["benchmark_markdown"])
+
+    def test_run_command_generate_ci_manifest_writes_file_and_scales_shards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "generated_ci_manifest.json"
+            payload = json.loads(
+                run_command(
+                    "generate",
+                    "ci",
+                    generated_manifest_out=str(output_path),
+                    generator_width=4,
+                )
+            )
+
+            self.assertTrue(output_path.exists())
+            self.assertEqual(payload["metadata"]["generator"], "ci")
+            self.assertEqual(payload["metadata"]["generator_width"], 4)
+            self.assertEqual(payload["resource_capacities"], {"browser-lab": 1, "docker-builder": 1})
+            task_names = [item["name"] for item in payload["tasks"]]
+            self.assertIn("unit-shard-04", task_names)
+            package_task = next(item for item in payload["tasks"] if item["name"] == "package-artifact")
+            self.assertEqual(package_task["deps"][-1], "unit-shard-04")
+            plan = build_plan(parse_tasks(payload))
+            self.assertEqual(plan.order[-1], "promote-mainline")
+
+    def test_run_command_generate_release_manifest_includes_progressive_canaries(self) -> None:
+        payload = json.loads(run_command("generate", "release", generator_width=3))
+
+        self.assertEqual(payload["metadata"]["generator"], "release")
+        canary_names = [item["name"] for item in payload["tasks"] if item["name"].startswith("canary-")]
+        self.assertEqual(canary_names, ["canary-10pct", "canary-50pct", "canary-90pct"])
+        full_rollout = next(item for item in payload["tasks"] if item["name"] == "full-rollout")
+        self.assertEqual(full_rollout["deps"], ["verify-canary-03"])
+        plan = build_plan(parse_tasks(payload))
+        self.assertEqual(plan.order[-1], "announce-release")
+
+    def test_run_command_generate_data_pipeline_manifest_includes_partition_fanout(self) -> None:
+        payload = json.loads(run_command("generate", "data-pipeline", generator_width=5))
+
+        self.assertEqual(payload["metadata"]["generator"], "data-pipeline")
+        self.assertEqual(payload["metadata"]["generator_width"], 5)
+        partition_names = [item["name"] for item in payload["tasks"] if item["name"].startswith("transform-partition-")]
+        self.assertEqual(len(partition_names), 5)
+        self.assertEqual(partition_names[-1], "transform-partition-05")
+        build_features = next(item for item in payload["tasks"] if item["name"] == "build-features")
+        self.assertEqual(build_features["resources"], {"warehouse": 2})
+        plan = build_plan(parse_tasks(payload))
+        self.assertEqual(plan.order[-1], "notify-ops")
+
+    def test_run_command_generate_rejects_non_positive_width(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--generator-width must be a positive integer"):
+            run_command("generate", "ci", generator_width=0)
+
     def test_run_command_benchmark_rejects_schedule_flags(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             suite_path = self._write_benchmark_suite_files(tmpdir)
@@ -698,6 +758,43 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("requires --worker-limit", result.stderr)
+
+    def test_cli_generate_rejects_report_flags(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "projects/dependency-graph-planner/dependency_graph_planner.py",
+                "generate",
+                "ci",
+                "--report-markdown-out",
+                "bad.md",
+            ],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("schedule/report/benchmark flags are not valid on the generate command", result.stderr)
+
+    def test_cli_plan_rejects_generator_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph_path = Path(tmpdir) / "graph.json"
+            graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "projects/dependency-graph-planner/dependency_graph_planner.py",
+                    "plan",
+                    str(graph_path),
+                    "--generator-width",
+                    "4",
+                ],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("generator-specific flags require the generate command", result.stderr)
 
     def test_cli_report_rejects_report_flags_on_non_report_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

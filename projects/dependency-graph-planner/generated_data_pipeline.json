@@ -1,0 +1,154 @@
+{
+  "metadata": {
+    "generator": "data-pipeline",
+    "generator_width": 5,
+    "title": "Synthetic data pipeline (5 transform partitions)",
+    "description": "Airflow-style batch DAG with warehouse bottlenecks, feature building, GPU training, and downstream publishing tasks."
+  },
+  "resource_capacities": {
+    "gpu": 1,
+    "warehouse": 2
+  },
+  "tasks": [
+    {
+      "name": "ingest-orders",
+      "duration": 2,
+      "command": "spark-submit jobs/ingest_orders.py"
+    },
+    {
+      "name": "ingest-events",
+      "duration": 2,
+      "command": "spark-submit jobs/ingest_events.py"
+    },
+    {
+      "name": "ingest-payments",
+      "duration": 2,
+      "command": "spark-submit jobs/ingest_payments.py"
+    },
+    {
+      "name": "schema-validate",
+      "duration": 1,
+      "deps": [
+        "ingest-orders",
+        "ingest-events",
+        "ingest-payments"
+      ],
+      "command": "great_expectations checkpoint run bronze"
+    },
+    {
+      "name": "quality-profile",
+      "duration": 2,
+      "deps": [
+        "ingest-orders",
+        "ingest-events",
+        "ingest-payments"
+      ],
+      "command": "dbt run --select quality_profile",
+      "resource_class": "warehouse"
+    },
+    {
+      "name": "transform-partition-01",
+      "duration": 3,
+      "deps": [
+        "schema-validate"
+      ],
+      "command": "dbt run --select fact_orders_partition_1",
+      "resource_class": "warehouse"
+    },
+    {
+      "name": "transform-partition-02",
+      "duration": 2,
+      "deps": [
+        "schema-validate"
+      ],
+      "command": "dbt run --select fact_orders_partition_2",
+      "resource_class": "warehouse"
+    },
+    {
+      "name": "transform-partition-03",
+      "duration": 3,
+      "deps": [
+        "schema-validate"
+      ],
+      "command": "dbt run --select fact_orders_partition_3",
+      "resource_class": "warehouse"
+    },
+    {
+      "name": "transform-partition-04",
+      "duration": 2,
+      "deps": [
+        "schema-validate"
+      ],
+      "command": "dbt run --select fact_orders_partition_4",
+      "resource_class": "warehouse"
+    },
+    {
+      "name": "transform-partition-05",
+      "duration": 3,
+      "deps": [
+        "schema-validate"
+      ],
+      "command": "dbt run --select fact_orders_partition_5",
+      "resource_class": "warehouse"
+    },
+    {
+      "name": "build-features",
+      "duration": 3,
+      "deps": [
+        "quality-profile",
+        "transform-partition-01",
+        "transform-partition-02",
+        "transform-partition-03",
+        "transform-partition-04",
+        "transform-partition-05"
+      ],
+      "command": "dbt run --select feature_store",
+      "resources": {
+        "warehouse": 2
+      }
+    },
+    {
+      "name": "train-model",
+      "duration": 4,
+      "deps": [
+        "build-features"
+      ],
+      "command": "python jobs/train_model.py",
+      "resource_class": "gpu"
+    },
+    {
+      "name": "backfill-marts",
+      "duration": 3,
+      "deps": [
+        "build-features"
+      ],
+      "command": "dbt run --select marts.fct_revenue",
+      "resource_class": "warehouse"
+    },
+    {
+      "name": "publish-dashboard",
+      "duration": 1,
+      "deps": [
+        "backfill-marts"
+      ],
+      "command": "python jobs/publish_dashboard.py"
+    },
+    {
+      "name": "publish-model",
+      "duration": 1,
+      "deps": [
+        "train-model"
+      ],
+      "command": "python jobs/register_model.py"
+    },
+    {
+      "name": "notify-ops",
+      "duration": 1,
+      "deps": [
+        "publish-dashboard",
+        "publish-model"
+      ],
+      "command": "python jobs/notify_ops.py"
+    }
+  ]
+}

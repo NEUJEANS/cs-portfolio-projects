@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="634" viewBox="0 0 1280 634" role="img" aria-labelledby="schedule-title schedule-desc">
+  <title id="schedule-title">Dependency graph schedule — Generated Ci Pipeline — 4 workers — critical-first</title>
+  <desc id="schedule-desc">Worker timeline for Dependency graph schedule — Generated Ci Pipeline — 4 workers — critical-first with 4 workers, strategy critical-first, and makespan 16.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="20" y="20" width="1240" height="594" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="48" y="62" font-size="30" font-weight="700" fill="#0f172a">Dependency graph schedule — Generated Ci Pipeline — 4 workers — critical-first</text>
+  <text x="48" y="92" font-size="16" fill="#475569">4 workers · critical-first · makespan 16 · utilization 42.2% · idle capacity 37</text>
+  <text x="48" y="118" font-size="14" fill="#64748b">Unlimited bound 16 · theoretical lower bound 16 · dispatch order checkout, install-deps, build-app, lint, typecheck, unit-shard-01, unit-shard-03, unit-shard-02, unit-shard-04, package-artifact, build-container, publish-preview-image, security-scan, deploy-preview, smoke-preview, promote-mainline</text>
+  <line x1="190" y1="138" x2="190" y2="420" stroke="#0f172a" stroke-width="2" />
+  <line x1="190" y1="420" x2="1240" y2="420" stroke="#0f172a" stroke-width="2" />
+  <line x1="190.00" y1="138" x2="190.00" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="190.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">0</text>
+  <line x1="321.25" y1="138" x2="321.25" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="321.25" y="130" font-size="13" text-anchor="middle" fill="#64748b">2</text>
+  <line x1="452.50" y1="138" x2="452.50" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="452.50" y="130" font-size="13" text-anchor="middle" fill="#64748b">4</text>
+  <line x1="583.75" y1="138" x2="583.75" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="583.75" y="130" font-size="13" text-anchor="middle" fill="#64748b">6</text>
+  <line x1="715.00" y1="138" x2="715.00" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="715.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">8</text>
+  <line x1="846.25" y1="138" x2="846.25" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="846.25" y="130" font-size="13" text-anchor="middle" fill="#64748b">10</text>
+  <line x1="977.50" y1="138" x2="977.50" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="977.50" y="130" font-size="13" text-anchor="middle" fill="#64748b">12</text>
+  <line x1="1108.75" y1="138" x2="1108.75" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="1108.75" y="130" font-size="13" text-anchor="middle" fill="#64748b">14</text>
+  <line x1="1240.00" y1="138" x2="1240.00" y2="420" stroke="#dbe4f0" stroke-width="1" />
+  <text x="1240.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">16</text>
+  <rect x="32" y="150" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="181" font-size="15" font-weight="600" fill="#0f172a">Worker 1</text>
+  <g>
+    <title>checkout — worker 1, 0→1, duration 1</title>
+    <rect x="190.00" y="161.00" width="65.62" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="261.62" y="180.00" font-size="12" fill="#475569">checkout</text>
+  </g>
+  <g>
+    <title>install-deps — worker 1, 1→3, duration 2</title>
+    <rect x="255.62" y="161.00" width="131.25" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="263.62" y="180.00" font-size="13" fill="#0f172a">install-deps</text>
+  </g>
+  <g>
+    <title>build-app — worker 1, 3→5, duration 2</title>
+    <rect x="386.88" y="161.00" width="131.25" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="394.88" y="180.00" font-size="13" fill="#0f172a">build-app</text>
+  </g>
+  <g>
+    <title>unit-shard-01 — worker 1, 5→8, duration 3</title>
+    <rect x="518.12" y="161.00" width="196.88" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="526.12" y="180.00" font-size="13" fill="#0f172a">unit-shard-01</text>
+  </g>
+  <g>
+    <title>package-artifact — worker 1, 8→9, duration 1</title>
+    <rect x="715.00" y="161.00" width="65.62" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="786.62" y="180.00" font-size="12" fill="#475569">package-artifact</text>
+  </g>
+  <g>
+    <title>build-container — worker 1, 9→11, duration 2; resources docker-builder#1</title>
+    <rect x="780.62" y="161.00" width="131.25" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="788.62" y="180.00" font-size="13" fill="#0f172a">build-container</text>
+  </g>
+  <g>
+    <title>publish-preview-image — worker 1, 11→12, duration 1; resources docker-builder#1</title>
+    <rect x="911.88" y="161.00" width="65.62" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="983.50" y="180.00" font-size="12" fill="#475569">publish-preview-image</text>
+  </g>
+  <g>
+    <title>deploy-preview — worker 1, 12→13, duration 1</title>
+    <rect x="977.50" y="161.00" width="65.62" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="1049.12" y="180.00" font-size="12" fill="#475569">deploy-preview</text>
+  </g>
+  <g>
+    <title>smoke-preview — worker 1, 13→15, duration 2; resources browser-lab#1</title>
+    <rect x="1043.12" y="161.00" width="131.25" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="1051.12" y="180.00" font-size="13" fill="#0f172a">smoke-preview</text>
+  </g>
+  <g>
+    <title>promote-mainline — worker 1, 15→16, duration 1</title>
+    <rect x="1174.38" y="161.00" width="65.62" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="1246.00" y="180.00" font-size="12" fill="#475569">promote-mainline</text>
+  </g>
+  <rect x="32" y="220" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="251" font-size="15" font-weight="600" fill="#0f172a">Worker 2</text>
+  <g>
+    <title>lint — worker 2, 3→4, duration 1</title>
+    <rect x="386.88" y="231.00" width="65.62" height="30" rx="10" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2" />
+    <text x="458.50" y="250.00" font-size="12" fill="#475569">lint</text>
+  </g>
+  <g>
+    <title>unit-shard-03 — worker 2, 5→8, duration 3</title>
+    <rect x="518.12" y="231.00" width="196.88" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="526.12" y="250.00" font-size="13" fill="#0f172a">unit-shard-03</text>
+  </g>
+  <g>
+    <title>security-scan — worker 2, 11→13, duration 2</title>
+    <rect x="911.88" y="231.00" width="131.25" height="30" rx="10" fill="#fae8ff" stroke="#a21caf" stroke-width="2" />
+    <text x="919.88" y="250.00" font-size="13" fill="#0f172a">security-scan</text>
+  </g>
+  <rect x="32" y="290" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="321" font-size="15" font-weight="600" fill="#0f172a">Worker 3</text>
+  <g>
+    <title>typecheck — worker 3, 3→4, duration 1</title>
+    <rect x="386.88" y="301.00" width="65.62" height="30" rx="10" fill="#e0f2fe" stroke="#0369a1" stroke-width="2" />
+    <text x="458.50" y="320.00" font-size="12" fill="#475569">typecheck</text>
+  </g>
+  <g>
+    <title>unit-shard-02 — worker 3, 5→7, duration 2</title>
+    <rect x="518.12" y="301.00" width="131.25" height="30" rx="10" fill="#fef3c7" stroke="#b45309" stroke-width="2" />
+    <text x="526.12" y="320.00" font-size="13" fill="#0f172a">unit-shard-02</text>
+  </g>
+  <rect x="32" y="360" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="391" font-size="15" font-weight="600" fill="#0f172a">Worker 4</text>
+  <g>
+    <title>unit-shard-04 — worker 4, 5→7, duration 2</title>
+    <rect x="518.12" y="371.00" width="131.25" height="30" rx="10" fill="#fae8ff" stroke="#a21caf" stroke-width="2" />
+    <text x="526.12" y="390.00" font-size="13" fill="#0f172a">unit-shard-04</text>
+  </g>
+  <rect x="40" y="446" width="1200" height="76" rx="22" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+  <text x="64" y="474" font-size="18" font-weight="700" fill="#312e81">Schedule summary</text>
+  <text x="64" y="500" font-size="14" fill="#4338ca">Critical tasks are highlighted in red. Worker lanes show deterministic dispatch over 4 workers.</text>
+  <text x="64" y="522" font-size="13" fill="#475569">Renewable resource caps: browser-lab=1, docker-builder=1</text>
+  <text x="48" y="556" font-size="18" font-weight="700" fill="#0f172a">Resource utilization</text>
+  <text x="64" y="578" font-size="13" fill="#475569">browser-lab: capacity 1, peak 1, utilization 12.5%, delayed tasks 0, max queue delay 0</text>
+  <text x="64" y="600" font-size="13" fill="#475569">docker-builder: capacity 1, peak 1, utilization 18.8%, delayed tasks 0, max queue delay 0</text>
+</svg>

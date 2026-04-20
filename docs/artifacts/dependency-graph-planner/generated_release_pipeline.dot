@@ -1,0 +1,89 @@
+digraph DependencyGraph {
+  rankdir=LR;
+  label="Dependency graph (makespan=21)";
+  labelloc=t;
+  node [shape=box, style="rounded", fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  subgraph layer_0 {
+    rank=same;
+    "freeze-release-branch" [label="freeze-release-branch\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_1 {
+    rank=same;
+    "assemble-release-notes" [label="assemble-release-notes\nd=1, slack=4"];
+    "build-linux" [label="build-linux\nd=2, slack=1"];
+    "build-macos" [label="build-macos\nd=3, slack=0", color="firebrick", penwidth=2, peripheries=2];
+    "build-windows" [label="build-windows\nd=2, slack=1"];
+  }
+  subgraph layer_2 {
+    rank=same;
+    "sign-linux" [label="sign-linux\nd=2, slack=1\nresources=signing"];
+    "sign-macos" [label="sign-macos\nd=2, slack=0\nresources=signing", color="firebrick", penwidth=2, peripheries=2];
+    "sign-windows" [label="sign-windows\nd=2, slack=1\nresources=signing"];
+  }
+  subgraph layer_3 {
+    rank=same;
+    "publish-candidates" [label="publish-candidates\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_4 {
+    rank=same;
+    "deploy-staging" [label="deploy-staging\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_5 {
+    rank=same;
+    "verify-staging" [label="verify-staging\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_6 {
+    rank=same;
+    "canary-10pct" [label="canary-10pct\nd=1, slack=0\nresources=prod-slot", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_7 {
+    rank=same;
+    "verify-canary-01" [label="verify-canary-01\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_8 {
+    rank=same;
+    "canary-50pct" [label="canary-50pct\nd=1, slack=0\nresources=prod-slot", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_9 {
+    rank=same;
+    "verify-canary-02" [label="verify-canary-02\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_10 {
+    rank=same;
+    "canary-90pct" [label="canary-90pct\nd=1, slack=0\nresources=prod-slot", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_11 {
+    rank=same;
+    "verify-canary-03" [label="verify-canary-03\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_12 {
+    rank=same;
+    "full-rollout" [label="full-rollout\nd=1, slack=0\nresources=prod-slot", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_13 {
+    rank=same;
+    "announce-release" [label="announce-release\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  "freeze-release-branch" -> "assemble-release-notes";
+  "freeze-release-branch" -> "build-linux";
+  "freeze-release-branch" -> "build-macos" [color="firebrick", penwidth=2];
+  "freeze-release-branch" -> "build-windows";
+  "build-linux" -> "sign-linux";
+  "build-macos" -> "sign-macos" [color="firebrick", penwidth=2];
+  "build-windows" -> "sign-windows";
+  "assemble-release-notes" -> "publish-candidates";
+  "sign-linux" -> "publish-candidates";
+  "sign-macos" -> "publish-candidates" [color="firebrick", penwidth=2];
+  "sign-windows" -> "publish-candidates";
+  "publish-candidates" -> "deploy-staging" [color="firebrick", penwidth=2];
+  "deploy-staging" -> "verify-staging" [color="firebrick", penwidth=2];
+  "verify-staging" -> "canary-10pct" [color="firebrick", penwidth=2];
+  "canary-10pct" -> "verify-canary-01" [color="firebrick", penwidth=2];
+  "verify-canary-01" -> "canary-50pct" [color="firebrick", penwidth=2];
+  "canary-50pct" -> "verify-canary-02" [color="firebrick", penwidth=2];
+  "verify-canary-02" -> "canary-90pct" [color="firebrick", penwidth=2];
+  "canary-90pct" -> "verify-canary-03" [color="firebrick", penwidth=2];
+  "verify-canary-03" -> "full-rollout" [color="firebrick", penwidth=2];
+  "full-rollout" -> "announce-release" [color="firebrick", penwidth=2];
+}

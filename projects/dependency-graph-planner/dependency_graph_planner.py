@@ -15,6 +15,8 @@ from typing import Any, Sequence
 
 DEFAULT_SCHEDULE_STRATEGY = "critical-first"
 SCHEDULE_STRATEGIES = ("critical-first", "fifo", "longest-processing-time")
+SYNTHETIC_GENERATORS = ("ci", "release", "data-pipeline")
+DEFAULT_GENERATOR_WIDTH = 3
 
 
 class GraphValidationError(ValueError):
@@ -593,7 +595,7 @@ def build_benchmark_suite_result(
     )
     return BenchmarkSuiteResult(
         title=resolved_title,
-        source_label=str(suite_path),
+        source_label=_display_path_label(suite_path),
         scenarios=scenario_results,
         aggregates=aggregates,
     )
@@ -1564,6 +1566,17 @@ def _ordered_report_strategy_schedules(
     return ordered
 
 
+def _display_path_label(path: str | Path) -> str:
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        return candidate.as_posix()
+    try:
+        return candidate.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        return candidate.as_posix()
+
+
+
 def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
     if explicit_title:
         return explicit_title
@@ -2464,6 +2477,355 @@ def render_benchmark_suite_markdown(result: BenchmarkSuiteResult) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+
+
+def _resolve_synthetic_generator_name(name: str) -> str:
+    normalized = name.strip().lower().replace("_", "-")
+    aliases = {
+        "ci-pipeline": "ci",
+        "pipeline-ci": "ci",
+        "release-pipeline": "release",
+        "data": "data-pipeline",
+        "data-pipeline-bottleneck": "data-pipeline",
+        "data-pipeline-bottlenecks": "data-pipeline",
+        "data-pipeline-bottleneck-lab": "data-pipeline",
+    }
+    resolved = aliases.get(normalized, normalized)
+    if resolved not in SYNTHETIC_GENERATORS:
+        raise ValueError(
+            f"unknown generator {name!r}; expected one of: {', '.join(SYNTHETIC_GENERATORS)}"
+        )
+    return resolved
+
+
+
+def _build_synthetic_task(
+    name: str,
+    *,
+    deps: Sequence[str] | None = None,
+    duration: int = 1,
+    command: str | None = None,
+    resource_class: str | None = None,
+    resources: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    task: dict[str, Any] = {"name": name, "duration": duration}
+    if deps:
+        task["deps"] = list(deps)
+    if command:
+        task["command"] = command
+    if resources:
+        task["resources"] = dict(sorted(resources.items()))
+    elif resource_class:
+        task["resource_class"] = resource_class
+    return task
+
+
+
+def _build_progressive_canary_percentages(width: int) -> list[int]:
+    if width <= 0:
+        raise ValueError("--generator-width must be a positive integer")
+    if width == 1:
+        return [25]
+    if width == 2:
+        return [10, 50]
+    return [10 + round(index * 80 / (width - 1)) for index in range(width)]
+
+
+
+def _synthetic_sequence_name(prefix: str, index: int, width: int) -> str:
+    digits = max(2, len(str(width)))
+    return f"{prefix}-{index:0{digits}d}"
+
+
+
+def build_synthetic_manifest(generator_name: str, *, width: int = DEFAULT_GENERATOR_WIDTH) -> dict[str, Any]:
+    resolved_name = _resolve_synthetic_generator_name(generator_name)
+    if width <= 0:
+        raise ValueError("--generator-width must be a positive integer")
+    if resolved_name == "ci":
+        return _build_ci_pipeline_manifest(width)
+    if resolved_name == "release":
+        return _build_release_pipeline_manifest(width)
+    return _build_data_pipeline_manifest(width)
+
+
+
+def _build_ci_pipeline_manifest(width: int) -> dict[str, Any]:
+    shard_names = [_synthetic_sequence_name("unit-shard", index, width) for index in range(1, width + 1)]
+    tasks = [
+        _build_synthetic_task("checkout", duration=1, command="git checkout <git-sha>"),
+        _build_synthetic_task("install-deps", deps=["checkout"], duration=2, command="pnpm install --frozen-lockfile"),
+        _build_synthetic_task("lint", deps=["install-deps"], duration=1, command="pnpm lint"),
+        _build_synthetic_task("typecheck", deps=["install-deps"], duration=1, command="pnpm typecheck"),
+        _build_synthetic_task("build-app", deps=["install-deps"], duration=2, command="pnpm build"),
+    ]
+    for index, shard_name in enumerate(shard_names, start=1):
+        tasks.append(
+            _build_synthetic_task(
+                shard_name,
+                deps=["build-app"],
+                duration=2 + (index % 2),
+                command=f"pnpm test:unit -- --shard={index}/{width}",
+            )
+        )
+    tasks.extend(
+        [
+            _build_synthetic_task(
+                "package-artifact",
+                deps=["lint", "typecheck", "build-app", *shard_names],
+                duration=1,
+                command="tar -czf dist/app.tgz dist/",
+            ),
+            _build_synthetic_task(
+                "build-container",
+                deps=["package-artifact"],
+                duration=2,
+                resources={"docker-builder": 1},
+                command="docker build -t example/app:<git-sha> .",
+            ),
+            _build_synthetic_task(
+                "publish-preview-image",
+                deps=["build-container"],
+                duration=1,
+                resources={"docker-builder": 1},
+                command="docker push registry.example/app:<git-sha>",
+            ),
+            _build_synthetic_task(
+                "security-scan",
+                deps=["build-container"],
+                duration=2,
+                command="trivy image registry.example/app:<git-sha>",
+            ),
+            _build_synthetic_task(
+                "deploy-preview",
+                deps=["publish-preview-image"],
+                duration=1,
+                command="kubectl apply -f deploy/preview.yaml",
+            ),
+            _build_synthetic_task(
+                "smoke-preview",
+                deps=["deploy-preview"],
+                duration=2,
+                resource_class="browser-lab",
+                command="pnpm exec playwright test --config preview",
+            ),
+            _build_synthetic_task(
+                "promote-mainline",
+                deps=["smoke-preview", "security-scan"],
+                duration=1,
+                command="gh pr merge --auto --squash",
+            ),
+        ]
+    )
+    return {
+        "metadata": {
+            "generator": "ci",
+            "generator_width": width,
+            "title": f"Synthetic CI pipeline ({width} unit-test shards)",
+            "description": "GitHub Actions style fan-out/fan-in workflow with artifact packaging, image publish, preview deploy, and smoke coverage.",
+        },
+        "resource_capacities": {"browser-lab": 1, "docker-builder": 1},
+        "tasks": tasks,
+    }
+
+
+
+def _build_release_pipeline_manifest(width: int) -> dict[str, Any]:
+    canary_percentages = _build_progressive_canary_percentages(width)
+    build_targets = [
+        ("linux", "python -m build --wheel"),
+        ("macos", "python -m build --wheel --plat-name macosx_14_0_arm64"),
+        ("windows", "python -m build --wheel --plat-name win_amd64"),
+    ]
+    tasks = [
+        _build_synthetic_task("freeze-release-branch", duration=1, command="gh release create --draft vNEXT"),
+        _build_synthetic_task(
+            "assemble-release-notes",
+            deps=["freeze-release-branch"],
+            duration=1,
+            command="gh release view --json body",
+        ),
+    ]
+    sign_tasks: list[str] = []
+    for platform_name, command in build_targets:
+        build_name = f"build-{platform_name}"
+        sign_name = f"sign-{platform_name}"
+        sign_tasks.append(sign_name)
+        tasks.append(
+            _build_synthetic_task(
+                build_name,
+                deps=["freeze-release-branch"],
+                duration=2 if platform_name != "macos" else 3,
+                command=command,
+            )
+        )
+        tasks.append(
+            _build_synthetic_task(
+                sign_name,
+                deps=[build_name],
+                duration=2,
+                resource_class="signing",
+                command=f"cosign sign dist/{platform_name}/*",
+            )
+        )
+    tasks.extend(
+        [
+            _build_synthetic_task(
+                "publish-candidates",
+                deps=["assemble-release-notes", *sign_tasks],
+                duration=1,
+                command="gh release upload vNEXT dist/* --clobber",
+            ),
+            _build_synthetic_task(
+                "deploy-staging",
+                deps=["publish-candidates"],
+                duration=1,
+                command="kubectl apply -f deploy/staging.yaml",
+            ),
+            _build_synthetic_task(
+                "verify-staging",
+                deps=["deploy-staging"],
+                duration=2,
+                command="pytest tests/smoke/test_release_candidate.py",
+            ),
+        ]
+    )
+    previous = "verify-staging"
+    for index, percentage in enumerate(canary_percentages, start=1):
+        deploy_name = f"canary-{percentage:02d}pct"
+        verify_name = f"verify-canary-{index:02d}"
+        tasks.append(
+            _build_synthetic_task(
+                deploy_name,
+                deps=[previous],
+                duration=1,
+                resource_class="prod-slot",
+                command=f"gcloud deploy releases promote --percent={percentage}",
+            )
+        )
+        tasks.append(
+            _build_synthetic_task(
+                verify_name,
+                deps=[deploy_name],
+                duration=2,
+                command=f"check error budget after {percentage}% traffic",
+            )
+        )
+        previous = verify_name
+    tasks.extend(
+        [
+            _build_synthetic_task(
+                "full-rollout",
+                deps=[previous],
+                duration=1,
+                resource_class="prod-slot",
+                command="gcloud deploy releases promote --to-target=prod",
+            ),
+            _build_synthetic_task(
+                "announce-release",
+                deps=["full-rollout"],
+                duration=1,
+                command="gh release edit vNEXT --draft=false",
+            ),
+        ]
+    )
+    return {
+        "metadata": {
+            "generator": "release",
+            "generator_width": width,
+            "title": f"Synthetic release pipeline ({width} canary phases)",
+            "description": "Release-engineering workflow with per-platform builds, serialized signing, staging validation, and progressive canary rollout.",
+        },
+        "resource_capacities": {"prod-slot": 1, "signing": 1},
+        "tasks": tasks,
+    }
+
+
+
+def _build_data_pipeline_manifest(width: int) -> dict[str, Any]:
+    partition_names = [_synthetic_sequence_name("transform-partition", index, width) for index in range(1, width + 1)]
+    tasks = [
+        _build_synthetic_task("ingest-orders", duration=2, command="spark-submit jobs/ingest_orders.py"),
+        _build_synthetic_task("ingest-events", duration=2, command="spark-submit jobs/ingest_events.py"),
+        _build_synthetic_task("ingest-payments", duration=2, command="spark-submit jobs/ingest_payments.py"),
+        _build_synthetic_task(
+            "schema-validate",
+            deps=["ingest-orders", "ingest-events", "ingest-payments"],
+            duration=1,
+            command="great_expectations checkpoint run bronze",
+        ),
+        _build_synthetic_task(
+            "quality-profile",
+            deps=["ingest-orders", "ingest-events", "ingest-payments"],
+            duration=2,
+            resource_class="warehouse",
+            command="dbt run --select quality_profile",
+        ),
+    ]
+    for index, partition_name in enumerate(partition_names, start=1):
+        tasks.append(
+            _build_synthetic_task(
+                partition_name,
+                deps=["schema-validate"],
+                duration=2 + (index % 2),
+                resource_class="warehouse",
+                command=f"dbt run --select fact_orders_partition_{index}",
+            )
+        )
+    tasks.extend(
+        [
+            _build_synthetic_task(
+                "build-features",
+                deps=["quality-profile", *partition_names],
+                duration=3,
+                resources={"warehouse": 2},
+                command="dbt run --select feature_store",
+            ),
+            _build_synthetic_task(
+                "train-model",
+                deps=["build-features"],
+                duration=4,
+                resource_class="gpu",
+                command="python jobs/train_model.py",
+            ),
+            _build_synthetic_task(
+                "backfill-marts",
+                deps=["build-features"],
+                duration=3,
+                resource_class="warehouse",
+                command="dbt run --select marts.fct_revenue",
+            ),
+            _build_synthetic_task(
+                "publish-dashboard",
+                deps=["backfill-marts"],
+                duration=1,
+                command="python jobs/publish_dashboard.py",
+            ),
+            _build_synthetic_task(
+                "publish-model",
+                deps=["train-model"],
+                duration=1,
+                command="python jobs/register_model.py",
+            ),
+            _build_synthetic_task(
+                "notify-ops",
+                deps=["publish-dashboard", "publish-model"],
+                duration=1,
+                command="python jobs/notify_ops.py",
+            ),
+        ]
+    )
+    return {
+        "metadata": {
+            "generator": "data-pipeline",
+            "generator_width": width,
+            "title": f"Synthetic data pipeline ({width} transform partitions)",
+            "description": "Airflow-style batch DAG with warehouse bottlenecks, feature building, GPU training, and downstream publishing tasks.",
+        },
+        "resource_capacities": {"gpu": 1, "warehouse": 2},
+        "tasks": tasks,
+    }
+
 def _ensure_command_flags_are_valid(
     command: str,
     *,
@@ -2478,11 +2840,26 @@ def _ensure_command_flags_are_valid(
     resource_capacity_overrides: Sequence[str] | None,
     benchmark_markdown_out: str | None,
     benchmark_title: str | None,
+    generated_manifest_out: str | None,
+    generator_width: int | None,
 ) -> None:
-    if command != "report" and any(value is not None for value in (report_markdown_out, report_html_out, report_title, diagram_output_dir)):
-        raise ValueError("report-specific flags require the report command")
-    if command != "benchmark" and any(value is not None for value in (benchmark_markdown_out, benchmark_title)):
-        raise ValueError("benchmark-specific flags require the benchmark command")
+    if command == "generate" and any(
+        value is not None
+        for value in (
+            report_markdown_out,
+            report_html_out,
+            report_title,
+            diagram_output_dir,
+            worker_limit,
+            compare_worker_limits,
+            strategy,
+            compare_strategies,
+            resource_capacity_overrides,
+            benchmark_markdown_out,
+            benchmark_title,
+        )
+    ):
+        raise ValueError("schedule/report/benchmark flags are not valid on the generate command")
     if command == "benchmark" and any(
         value is not None
         for value in (
@@ -2498,6 +2875,12 @@ def _ensure_command_flags_are_valid(
         )
     ):
         raise ValueError("schedule/report flags are not valid on the benchmark command")
+    if command != "report" and any(value is not None for value in (report_markdown_out, report_html_out, report_title, diagram_output_dir)):
+        raise ValueError("report-specific flags require the report command")
+    if command != "benchmark" and any(value is not None for value in (benchmark_markdown_out, benchmark_title)):
+        raise ValueError("benchmark-specific flags require the benchmark command")
+    if command != "generate" and any(value is not None for value in (generated_manifest_out, generator_width)):
+        raise ValueError("generator-specific flags require the generate command")
     if command not in {"report", "schedule"} and worker_limit is not None:
         raise ValueError("--worker-limit requires the schedule or report command")
     if command != "report" and compare_worker_limits:
@@ -2516,6 +2899,8 @@ def _ensure_command_flags_are_valid(
         raise ValueError("--compare-strategy requires --worker-limit on the report command")
     if worker_limit is not None and worker_limit <= 0:
         raise ValueError("--worker-limit must be a positive integer")
+    if generator_width is not None and generator_width <= 0:
+        raise ValueError("--generator-width must be a positive integer")
     if compare_worker_limits and any(limit <= 0 for limit in compare_worker_limits):
         raise ValueError("--compare-worker-limit values must be positive integers")
     if strategy is not None:
@@ -2529,10 +2914,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect and plan dependency graphs")
     parser.add_argument(
         "command",
-        choices=["validate", "plan", "critical-path", "layers", "diagram", "report", "schedule", "benchmark"],
+        choices=["validate", "plan", "critical-path", "layers", "diagram", "report", "schedule", "benchmark", "generate"],
         help="command to run",
     )
-    parser.add_argument("graph", help="path to a JSON manifest or benchmark suite")
+    parser.add_argument("graph", help="path to a JSON manifest or benchmark suite, or a generator name for generate")
     parser.add_argument("--json", action="store_true", dest="as_json", help="render machine-readable JSON output")
     parser.add_argument(
         "--format",
@@ -2550,6 +2935,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--benchmark-markdown-out", help="write a Markdown summary for the benchmark command")
     parser.add_argument("--benchmark-title", help="optional title for the benchmark command")
+    parser.add_argument("--generated-manifest-out", help="write generated manifest JSON to a file for the generate command")
+    parser.add_argument(
+        "--generator-width",
+        type=int,
+        help="positive integer scale factor used by the generate command (unit-test shards, canary phases, or transform partitions)",
+    )
     parser.add_argument(
         "--worker-limit",
         type=int,
@@ -2599,6 +2990,8 @@ def run_command(
     resource_capacity_overrides: Sequence[str] | None = None,
     benchmark_markdown_out: str | None = None,
     benchmark_title: str | None = None,
+    generated_manifest_out: str | None = None,
+    generator_width: int | None = None,
 ) -> str:
     _ensure_command_flags_are_valid(
         command,
@@ -2613,7 +3006,16 @@ def run_command(
         resource_capacity_overrides=resource_capacity_overrides,
         benchmark_markdown_out=benchmark_markdown_out,
         benchmark_title=benchmark_title,
+        generated_manifest_out=generated_manifest_out,
+        generator_width=generator_width,
     )
+    if command == "generate":
+        manifest = build_synthetic_manifest(graph_path, width=generator_width or DEFAULT_GENERATOR_WIDTH)
+        rendered_manifest = json.dumps(manifest, indent=2)
+        if generated_manifest_out:
+            _write_text(generated_manifest_out, rendered_manifest + "\n")
+        return rendered_manifest + "\n"
+
     if command == "benchmark":
         result = build_benchmark_suite_result(graph_path, title=benchmark_title)
         report = render_benchmark_suite_markdown(result)
@@ -2716,10 +3118,11 @@ def run_command(
             if artifacts or report_html_out
             else None
         )
+        display_graph_label = _display_path_label(graph_path)
         report = render_report_markdown(
             tasks,
             plan,
-            source_label=graph_path,
+            source_label=display_graph_label,
             title=report_title,
             diagram_links=diagram_links,
             worker_limited_schedule=schedule,
@@ -2734,7 +3137,7 @@ def run_command(
                 render_report_dashboard_html(
                     tasks,
                     plan,
-                    source_label=graph_path,
+                    source_label=display_graph_label,
                     html_output_path=report_html_out,
                     title=report_title,
                     report_markdown_out=report_markdown_out,
@@ -2751,7 +3154,7 @@ def run_command(
                     "worker_limited_schedule": schedule_to_dict(schedule) if schedule else None,
                     "worker_limited_schedule_comparisons": [schedule_to_dict(item) for item in comparison_schedules],
                     "worker_limited_strategy_comparisons": [schedule_to_dict(item) for item in strategy_comparison_schedules],
-                    "report_title": build_report_title(source_label=graph_path, explicit_title=report_title),
+                    "report_title": build_report_title(source_label=display_graph_label, explicit_title=report_title),
                     "report_markdown": report,
                     "artifacts": artifacts,
                     "report_markdown_out": report_markdown_out,
@@ -2794,6 +3197,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             resource_capacity_overrides=args.resource_capacity_overrides,
             benchmark_markdown_out=args.benchmark_markdown_out,
             benchmark_title=args.benchmark_title,
+            generated_manifest_out=args.generated_manifest_out,
+            generator_width=args.generator_width,
         )
     except (GraphValidationError, CycleError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(1, f"error: {exc}\n")

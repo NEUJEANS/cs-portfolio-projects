@@ -137,3 +137,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 synthetic generator slice
+- [x] confirm the repo was still synced with `origin/main` before continuing from the dirty local dependency-graph-planner slice
+- [x] do brief workflow-shape research on matrix CI fan-out, progressive canaries, and dbt-style warehouse/model pipelines
+- [x] refresh generator-shape expectations and capture a short self-test note
+- [x] update the project checklist, README, benchmark suite, and artifact references for generated showcase manifests
+- [x] implement `generate` support for CI, release, and data-pipeline synthetic manifests with width scaling
+- [x] add regression coverage for generated manifests, invalid generator flag usage, and repo-relative source labels in committed reports
+- [x] commit generated manifest JSON files plus report/dashboard/diagram/schedule artifacts for the new showcase families
+- [x] rerun the benchmark suite so the scoreboard now includes both hand-authored and generated workload families
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

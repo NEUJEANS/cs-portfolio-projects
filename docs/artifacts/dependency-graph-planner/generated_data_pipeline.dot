@@ -1,0 +1,67 @@
+digraph DependencyGraph {
+  rankdir=LR;
+  label="Dependency graph (makespan=15)";
+  labelloc=t;
+  node [shape=box, style="rounded", fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  subgraph layer_0 {
+    rank=same;
+    "ingest-events" [label="ingest-events\nd=2, slack=0", color="firebrick", penwidth=2, peripheries=2];
+    "ingest-orders" [label="ingest-orders\nd=2, slack=0"];
+    "ingest-payments" [label="ingest-payments\nd=2, slack=0"];
+  }
+  subgraph layer_1 {
+    rank=same;
+    "quality-profile" [label="quality-profile\nd=2, slack=2\nresources=warehouse"];
+    "schema-validate" [label="schema-validate\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_2 {
+    rank=same;
+    "transform-partition-01" [label="transform-partition-01\nd=3, slack=0\nresources=warehouse", color="firebrick", penwidth=2, peripheries=2];
+    "transform-partition-02" [label="transform-partition-02\nd=2, slack=1\nresources=warehouse"];
+    "transform-partition-03" [label="transform-partition-03\nd=3, slack=0\nresources=warehouse"];
+    "transform-partition-04" [label="transform-partition-04\nd=2, slack=1\nresources=warehouse"];
+    "transform-partition-05" [label="transform-partition-05\nd=3, slack=0\nresources=warehouse"];
+  }
+  subgraph layer_3 {
+    rank=same;
+    "build-features" [label="build-features\nd=3, slack=0\nresources=warehouse×2", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_4 {
+    rank=same;
+    "backfill-marts" [label="backfill-marts\nd=3, slack=1\nresources=warehouse"];
+    "train-model" [label="train-model\nd=4, slack=0\nresources=gpu", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_5 {
+    rank=same;
+    "publish-dashboard" [label="publish-dashboard\nd=1, slack=1"];
+    "publish-model" [label="publish-model\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  subgraph layer_6 {
+    rank=same;
+    "notify-ops" [label="notify-ops\nd=1, slack=0", color="firebrick", penwidth=2, peripheries=2];
+  }
+  "ingest-orders" -> "quality-profile";
+  "ingest-events" -> "quality-profile";
+  "ingest-payments" -> "quality-profile";
+  "ingest-orders" -> "schema-validate";
+  "ingest-events" -> "schema-validate" [color="firebrick", penwidth=2];
+  "ingest-payments" -> "schema-validate";
+  "schema-validate" -> "transform-partition-01" [color="firebrick", penwidth=2];
+  "schema-validate" -> "transform-partition-02";
+  "schema-validate" -> "transform-partition-03";
+  "schema-validate" -> "transform-partition-04";
+  "schema-validate" -> "transform-partition-05";
+  "quality-profile" -> "build-features";
+  "transform-partition-01" -> "build-features" [color="firebrick", penwidth=2];
+  "transform-partition-02" -> "build-features";
+  "transform-partition-03" -> "build-features";
+  "transform-partition-04" -> "build-features";
+  "transform-partition-05" -> "build-features";
+  "build-features" -> "backfill-marts";
+  "backfill-marts" -> "publish-dashboard";
+  "build-features" -> "train-model" [color="firebrick", penwidth=2];
+  "train-model" -> "publish-model" [color="firebrick", penwidth=2];
+  "publish-dashboard" -> "notify-ops";
+  "publish-model" -> "notify-ops" [color="firebrick", penwidth=2];
+}

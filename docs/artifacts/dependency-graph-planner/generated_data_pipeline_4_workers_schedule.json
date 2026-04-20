@@ -1,0 +1,577 @@
+{
+  "worker_limit": 4,
+  "strategy": "critical-first",
+  "makespan": 20,
+  "unlimited_makespan": 15,
+  "theoretical_lower_bound": 15,
+  "total_work": 35,
+  "idle_capacity": 45,
+  "utilization": 0.4375,
+  "resource_capacities": {
+    "gpu": 1,
+    "warehouse": 2
+  },
+  "resource_summaries": [
+    {
+      "resource_class": "gpu",
+      "capacity": 1,
+      "task_count": 1,
+      "total_reserved_units": 4,
+      "peak_concurrent_usage": 1,
+      "utilization": 0.2,
+      "idle_capacity": 16,
+      "delayed_tasks": 0,
+      "max_queue_delay": 0
+    },
+    {
+      "resource_class": "warehouse",
+      "capacity": 2,
+      "task_count": 8,
+      "total_reserved_units": 24,
+      "peak_concurrent_usage": 2,
+      "utilization": 0.6,
+      "idle_capacity": 16,
+      "delayed_tasks": 4,
+      "max_queue_delay": 6
+    }
+  ],
+  "dispatch_order": [
+    "ingest-events",
+    "ingest-orders",
+    "ingest-payments",
+    "schema-validate",
+    "quality-profile",
+    "transform-partition-01",
+    "transform-partition-03",
+    "transform-partition-05",
+    "transform-partition-02",
+    "transform-partition-04",
+    "build-features",
+    "train-model",
+    "backfill-marts",
+    "publish-dashboard",
+    "publish-model",
+    "notify-ops"
+  ],
+  "assignments": [
+    {
+      "name": "ingest-events",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 2,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "ingest-orders",
+      "worker": 2,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 2,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "ingest-payments",
+      "worker": 3,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 2,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "schema-validate",
+      "worker": 1,
+      "ready_at": 2,
+      "start": 2,
+      "finish": 3,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "quality-profile",
+      "worker": 2,
+      "ready_at": 2,
+      "start": 2,
+      "finish": 4,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": false,
+      "resource_class": "warehouse",
+      "resource_slot": 1,
+      "resource_demands": {
+        "warehouse": 1
+      },
+      "resource_allocations": {
+        "warehouse": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "transform-partition-01",
+      "worker": 1,
+      "ready_at": 3,
+      "start": 3,
+      "finish": 6,
+      "queue_delay": 0,
+      "duration": 3,
+      "critical": true,
+      "resource_class": "warehouse",
+      "resource_slot": 2,
+      "resource_demands": {
+        "warehouse": 1
+      },
+      "resource_allocations": {
+        "warehouse": [
+          2
+        ]
+      }
+    },
+    {
+      "name": "transform-partition-03",
+      "worker": 2,
+      "ready_at": 3,
+      "start": 4,
+      "finish": 7,
+      "queue_delay": 1,
+      "duration": 3,
+      "critical": true,
+      "resource_class": "warehouse",
+      "resource_slot": 1,
+      "resource_demands": {
+        "warehouse": 1
+      },
+      "resource_allocations": {
+        "warehouse": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "transform-partition-05",
+      "worker": 1,
+      "ready_at": 3,
+      "start": 6,
+      "finish": 9,
+      "queue_delay": 3,
+      "duration": 3,
+      "critical": true,
+      "resource_class": "warehouse",
+      "resource_slot": 2,
+      "resource_demands": {
+        "warehouse": 1
+      },
+      "resource_allocations": {
+        "warehouse": [
+          2
+        ]
+      }
+    },
+    {
+      "name": "transform-partition-02",
+      "worker": 2,
+      "ready_at": 3,
+      "start": 7,
+      "finish": 9,
+      "queue_delay": 4,
+      "duration": 2,
+      "critical": false,
+      "resource_class": "warehouse",
+      "resource_slot": 1,
+      "resource_demands": {
+        "warehouse": 1
+      },
+      "resource_allocations": {
+        "warehouse": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "transform-partition-04",
+      "worker": 1,
+      "ready_at": 3,
+      "start": 9,
+      "finish": 11,
+      "queue_delay": 6,
+      "duration": 2,
+      "critical": false,
+      "resource_class": "warehouse",
+      "resource_slot": 1,
+      "resource_demands": {
+        "warehouse": 1
+      },
+      "resource_allocations": {
+        "warehouse": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "build-features",
+      "worker": 1,
+      "ready_at": 11,
+      "start": 11,
+      "finish": 14,
+      "queue_delay": 0,
+      "duration": 3,
+      "critical": true,
+      "resource_class": "warehouse",
+      "resource_slot": null,
+      "resource_demands": {
+        "warehouse": 2
+      },
+      "resource_allocations": {
+        "warehouse": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "name": "train-model",
+      "worker": 1,
+      "ready_at": 14,
+      "start": 14,
+      "finish": 18,
+      "queue_delay": 0,
+      "duration": 4,
+      "critical": true,
+      "resource_class": "gpu",
+      "resource_slot": 1,
+      "resource_demands": {
+        "gpu": 1
+      },
+      "resource_allocations": {
+        "gpu": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "backfill-marts",
+      "worker": 2,
+      "ready_at": 14,
+      "start": 14,
+      "finish": 17,
+      "queue_delay": 0,
+      "duration": 3,
+      "critical": false,
+      "resource_class": "warehouse",
+      "resource_slot": 1,
+      "resource_demands": {
+        "warehouse": 1
+      },
+      "resource_allocations": {
+        "warehouse": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "publish-dashboard",
+      "worker": 2,
+      "ready_at": 17,
+      "start": 17,
+      "finish": 18,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "publish-model",
+      "worker": 1,
+      "ready_at": 18,
+      "start": 18,
+      "finish": 19,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "notify-ops",
+      "worker": 1,
+      "ready_at": 19,
+      "start": 19,
+      "finish": 20,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    }
+  ],
+  "worker_timelines": [
+    [
+      {
+        "name": "ingest-events",
+        "start": 0,
+        "finish": 2,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "schema-validate",
+        "start": 2,
+        "finish": 3,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "transform-partition-01",
+        "start": 3,
+        "finish": 6,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "warehouse",
+        "resource_slot": 2,
+        "resource_demands": {
+          "warehouse": 1
+        },
+        "resource_allocations": {
+          "warehouse": [
+            2
+          ]
+        }
+      },
+      {
+        "name": "transform-partition-05",
+        "start": 6,
+        "finish": 9,
+        "queue_delay": 3,
+        "critical": true,
+        "resource_class": "warehouse",
+        "resource_slot": 2,
+        "resource_demands": {
+          "warehouse": 1
+        },
+        "resource_allocations": {
+          "warehouse": [
+            2
+          ]
+        }
+      },
+      {
+        "name": "transform-partition-04",
+        "start": 9,
+        "finish": 11,
+        "queue_delay": 6,
+        "critical": false,
+        "resource_class": "warehouse",
+        "resource_slot": 1,
+        "resource_demands": {
+          "warehouse": 1
+        },
+        "resource_allocations": {
+          "warehouse": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "build-features",
+        "start": 11,
+        "finish": 14,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "warehouse",
+        "resource_slot": null,
+        "resource_demands": {
+          "warehouse": 2
+        },
+        "resource_allocations": {
+          "warehouse": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "name": "train-model",
+        "start": 14,
+        "finish": 18,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "gpu",
+        "resource_slot": 1,
+        "resource_demands": {
+          "gpu": 1
+        },
+        "resource_allocations": {
+          "gpu": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "publish-model",
+        "start": 18,
+        "finish": 19,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "notify-ops",
+        "start": 19,
+        "finish": 20,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    [
+      {
+        "name": "ingest-orders",
+        "start": 0,
+        "finish": 2,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "quality-profile",
+        "start": 2,
+        "finish": 4,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": "warehouse",
+        "resource_slot": 1,
+        "resource_demands": {
+          "warehouse": 1
+        },
+        "resource_allocations": {
+          "warehouse": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "transform-partition-03",
+        "start": 4,
+        "finish": 7,
+        "queue_delay": 1,
+        "critical": true,
+        "resource_class": "warehouse",
+        "resource_slot": 1,
+        "resource_demands": {
+          "warehouse": 1
+        },
+        "resource_allocations": {
+          "warehouse": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "transform-partition-02",
+        "start": 7,
+        "finish": 9,
+        "queue_delay": 4,
+        "critical": false,
+        "resource_class": "warehouse",
+        "resource_slot": 1,
+        "resource_demands": {
+          "warehouse": 1
+        },
+        "resource_allocations": {
+          "warehouse": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "backfill-marts",
+        "start": 14,
+        "finish": 17,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": "warehouse",
+        "resource_slot": 1,
+        "resource_demands": {
+          "warehouse": 1
+        },
+        "resource_allocations": {
+          "warehouse": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "publish-dashboard",
+        "start": 17,
+        "finish": 18,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    [
+      {
+        "name": "ingest-payments",
+        "start": 0,
+        "finish": 2,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    []
+  ]
+}

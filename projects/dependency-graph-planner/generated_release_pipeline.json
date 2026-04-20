@@ -1,0 +1,173 @@
+{
+  "metadata": {
+    "generator": "release",
+    "generator_width": 3,
+    "title": "Synthetic release pipeline (3 canary phases)",
+    "description": "Release-engineering workflow with per-platform builds, serialized signing, staging validation, and progressive canary rollout."
+  },
+  "resource_capacities": {
+    "prod-slot": 1,
+    "signing": 1
+  },
+  "tasks": [
+    {
+      "name": "freeze-release-branch",
+      "duration": 1,
+      "command": "gh release create --draft vNEXT"
+    },
+    {
+      "name": "assemble-release-notes",
+      "duration": 1,
+      "deps": [
+        "freeze-release-branch"
+      ],
+      "command": "gh release view --json body"
+    },
+    {
+      "name": "build-linux",
+      "duration": 2,
+      "deps": [
+        "freeze-release-branch"
+      ],
+      "command": "python -m build --wheel"
+    },
+    {
+      "name": "sign-linux",
+      "duration": 2,
+      "deps": [
+        "build-linux"
+      ],
+      "command": "cosign sign dist/linux/*",
+      "resource_class": "signing"
+    },
+    {
+      "name": "build-macos",
+      "duration": 3,
+      "deps": [
+        "freeze-release-branch"
+      ],
+      "command": "python -m build --wheel --plat-name macosx_14_0_arm64"
+    },
+    {
+      "name": "sign-macos",
+      "duration": 2,
+      "deps": [
+        "build-macos"
+      ],
+      "command": "cosign sign dist/macos/*",
+      "resource_class": "signing"
+    },
+    {
+      "name": "build-windows",
+      "duration": 2,
+      "deps": [
+        "freeze-release-branch"
+      ],
+      "command": "python -m build --wheel --plat-name win_amd64"
+    },
+    {
+      "name": "sign-windows",
+      "duration": 2,
+      "deps": [
+        "build-windows"
+      ],
+      "command": "cosign sign dist/windows/*",
+      "resource_class": "signing"
+    },
+    {
+      "name": "publish-candidates",
+      "duration": 1,
+      "deps": [
+        "assemble-release-notes",
+        "sign-linux",
+        "sign-macos",
+        "sign-windows"
+      ],
+      "command": "gh release upload vNEXT dist/* --clobber"
+    },
+    {
+      "name": "deploy-staging",
+      "duration": 1,
+      "deps": [
+        "publish-candidates"
+      ],
+      "command": "kubectl apply -f deploy/staging.yaml"
+    },
+    {
+      "name": "verify-staging",
+      "duration": 2,
+      "deps": [
+        "deploy-staging"
+      ],
+      "command": "pytest tests/smoke/test_release_candidate.py"
+    },
+    {
+      "name": "canary-10pct",
+      "duration": 1,
+      "deps": [
+        "verify-staging"
+      ],
+      "command": "gcloud deploy releases promote --percent=10",
+      "resource_class": "prod-slot"
+    },
+    {
+      "name": "verify-canary-01",
+      "duration": 2,
+      "deps": [
+        "canary-10pct"
+      ],
+      "command": "check error budget after 10% traffic"
+    },
+    {
+      "name": "canary-50pct",
+      "duration": 1,
+      "deps": [
+        "verify-canary-01"
+      ],
+      "command": "gcloud deploy releases promote --percent=50",
+      "resource_class": "prod-slot"
+    },
+    {
+      "name": "verify-canary-02",
+      "duration": 2,
+      "deps": [
+        "canary-50pct"
+      ],
+      "command": "check error budget after 50% traffic"
+    },
+    {
+      "name": "canary-90pct",
+      "duration": 1,
+      "deps": [
+        "verify-canary-02"
+      ],
+      "command": "gcloud deploy releases promote --percent=90",
+      "resource_class": "prod-slot"
+    },
+    {
+      "name": "verify-canary-03",
+      "duration": 2,
+      "deps": [
+        "canary-90pct"
+      ],
+      "command": "check error budget after 90% traffic"
+    },
+    {
+      "name": "full-rollout",
+      "duration": 1,
+      "deps": [
+        "verify-canary-03"
+      ],
+      "command": "gcloud deploy releases promote --to-target=prod",
+      "resource_class": "prod-slot"
+    },
+    {
+      "name": "announce-release",
+      "duration": 1,
+      "deps": [
+        "full-rollout"
+      ],
+      "command": "gh release edit vNEXT --draft=false"
+    }
+  ]
+}

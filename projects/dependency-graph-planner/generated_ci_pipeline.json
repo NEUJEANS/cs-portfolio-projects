@@ -1,0 +1,153 @@
+{
+  "metadata": {
+    "generator": "ci",
+    "generator_width": 4,
+    "title": "Synthetic CI pipeline (4 unit-test shards)",
+    "description": "GitHub Actions style fan-out/fan-in workflow with artifact packaging, image publish, preview deploy, and smoke coverage."
+  },
+  "resource_capacities": {
+    "browser-lab": 1,
+    "docker-builder": 1
+  },
+  "tasks": [
+    {
+      "name": "checkout",
+      "duration": 1,
+      "command": "git checkout <git-sha>"
+    },
+    {
+      "name": "install-deps",
+      "duration": 2,
+      "deps": [
+        "checkout"
+      ],
+      "command": "pnpm install --frozen-lockfile"
+    },
+    {
+      "name": "lint",
+      "duration": 1,
+      "deps": [
+        "install-deps"
+      ],
+      "command": "pnpm lint"
+    },
+    {
+      "name": "typecheck",
+      "duration": 1,
+      "deps": [
+        "install-deps"
+      ],
+      "command": "pnpm typecheck"
+    },
+    {
+      "name": "build-app",
+      "duration": 2,
+      "deps": [
+        "install-deps"
+      ],
+      "command": "pnpm build"
+    },
+    {
+      "name": "unit-shard-01",
+      "duration": 3,
+      "deps": [
+        "build-app"
+      ],
+      "command": "pnpm test:unit -- --shard=1/4"
+    },
+    {
+      "name": "unit-shard-02",
+      "duration": 2,
+      "deps": [
+        "build-app"
+      ],
+      "command": "pnpm test:unit -- --shard=2/4"
+    },
+    {
+      "name": "unit-shard-03",
+      "duration": 3,
+      "deps": [
+        "build-app"
+      ],
+      "command": "pnpm test:unit -- --shard=3/4"
+    },
+    {
+      "name": "unit-shard-04",
+      "duration": 2,
+      "deps": [
+        "build-app"
+      ],
+      "command": "pnpm test:unit -- --shard=4/4"
+    },
+    {
+      "name": "package-artifact",
+      "duration": 1,
+      "deps": [
+        "lint",
+        "typecheck",
+        "build-app",
+        "unit-shard-01",
+        "unit-shard-02",
+        "unit-shard-03",
+        "unit-shard-04"
+      ],
+      "command": "tar -czf dist/app.tgz dist/"
+    },
+    {
+      "name": "build-container",
+      "duration": 2,
+      "deps": [
+        "package-artifact"
+      ],
+      "command": "docker build -t example/app:<git-sha> .",
+      "resources": {
+        "docker-builder": 1
+      }
+    },
+    {
+      "name": "publish-preview-image",
+      "duration": 1,
+      "deps": [
+        "build-container"
+      ],
+      "command": "docker push registry.example/app:<git-sha>",
+      "resources": {
+        "docker-builder": 1
+      }
+    },
+    {
+      "name": "security-scan",
+      "duration": 2,
+      "deps": [
+        "build-container"
+      ],
+      "command": "trivy image registry.example/app:<git-sha>"
+    },
+    {
+      "name": "deploy-preview",
+      "duration": 1,
+      "deps": [
+        "publish-preview-image"
+      ],
+      "command": "kubectl apply -f deploy/preview.yaml"
+    },
+    {
+      "name": "smoke-preview",
+      "duration": 2,
+      "deps": [
+        "deploy-preview"
+      ],
+      "command": "pnpm exec playwright test --config preview",
+      "resource_class": "browser-lab"
+    },
+    {
+      "name": "promote-mainline",
+      "duration": 1,
+      "deps": [
+        "smoke-preview",
+        "security-scan"
+      ],
+      "command": "gh pr merge --auto --squash"
+    }
+  ]
+}

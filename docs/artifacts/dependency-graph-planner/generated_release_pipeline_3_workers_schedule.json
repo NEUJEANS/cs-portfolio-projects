@@ -1,0 +1,628 @@
+{
+  "worker_limit": 3,
+  "strategy": "critical-first",
+  "makespan": 24,
+  "unlimited_makespan": 21,
+  "theoretical_lower_bound": 21,
+  "total_work": 30,
+  "idle_capacity": 42,
+  "utilization": 0.416667,
+  "resource_capacities": {
+    "prod-slot": 1,
+    "signing": 1
+  },
+  "resource_summaries": [
+    {
+      "resource_class": "prod-slot",
+      "capacity": 1,
+      "task_count": 4,
+      "total_reserved_units": 4,
+      "peak_concurrent_usage": 1,
+      "utilization": 0.166667,
+      "idle_capacity": 20,
+      "delayed_tasks": 0,
+      "max_queue_delay": 0
+    },
+    {
+      "resource_class": "signing",
+      "capacity": 1,
+      "task_count": 3,
+      "total_reserved_units": 6,
+      "peak_concurrent_usage": 1,
+      "utilization": 0.25,
+      "idle_capacity": 18,
+      "delayed_tasks": 2,
+      "max_queue_delay": 4
+    }
+  ],
+  "dispatch_order": [
+    "freeze-release-branch",
+    "build-macos",
+    "build-linux",
+    "build-windows",
+    "sign-linux",
+    "assemble-release-notes",
+    "sign-macos",
+    "sign-windows",
+    "publish-candidates",
+    "deploy-staging",
+    "verify-staging",
+    "canary-10pct",
+    "verify-canary-01",
+    "canary-50pct",
+    "verify-canary-02",
+    "canary-90pct",
+    "verify-canary-03",
+    "full-rollout",
+    "announce-release"
+  ],
+  "assignments": [
+    {
+      "name": "freeze-release-branch",
+      "worker": 1,
+      "ready_at": 0,
+      "start": 0,
+      "finish": 1,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "build-macos",
+      "worker": 1,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 4,
+      "queue_delay": 0,
+      "duration": 3,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "build-linux",
+      "worker": 2,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 3,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "build-windows",
+      "worker": 3,
+      "ready_at": 1,
+      "start": 1,
+      "finish": 3,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "sign-linux",
+      "worker": 2,
+      "ready_at": 3,
+      "start": 3,
+      "finish": 5,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": false,
+      "resource_class": "signing",
+      "resource_slot": 1,
+      "resource_demands": {
+        "signing": 1
+      },
+      "resource_allocations": {
+        "signing": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "assemble-release-notes",
+      "worker": 3,
+      "ready_at": 1,
+      "start": 3,
+      "finish": 4,
+      "queue_delay": 2,
+      "duration": 1,
+      "critical": false,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "sign-macos",
+      "worker": 1,
+      "ready_at": 4,
+      "start": 5,
+      "finish": 7,
+      "queue_delay": 1,
+      "duration": 2,
+      "critical": true,
+      "resource_class": "signing",
+      "resource_slot": 1,
+      "resource_demands": {
+        "signing": 1
+      },
+      "resource_allocations": {
+        "signing": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "sign-windows",
+      "worker": 1,
+      "ready_at": 3,
+      "start": 7,
+      "finish": 9,
+      "queue_delay": 4,
+      "duration": 2,
+      "critical": false,
+      "resource_class": "signing",
+      "resource_slot": 1,
+      "resource_demands": {
+        "signing": 1
+      },
+      "resource_allocations": {
+        "signing": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "publish-candidates",
+      "worker": 1,
+      "ready_at": 9,
+      "start": 9,
+      "finish": 10,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "deploy-staging",
+      "worker": 1,
+      "ready_at": 10,
+      "start": 10,
+      "finish": 11,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "verify-staging",
+      "worker": 1,
+      "ready_at": 11,
+      "start": 11,
+      "finish": 13,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "canary-10pct",
+      "worker": 1,
+      "ready_at": 13,
+      "start": 13,
+      "finish": 14,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": "prod-slot",
+      "resource_slot": 1,
+      "resource_demands": {
+        "prod-slot": 1
+      },
+      "resource_allocations": {
+        "prod-slot": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "verify-canary-01",
+      "worker": 1,
+      "ready_at": 14,
+      "start": 14,
+      "finish": 16,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "canary-50pct",
+      "worker": 1,
+      "ready_at": 16,
+      "start": 16,
+      "finish": 17,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": "prod-slot",
+      "resource_slot": 1,
+      "resource_demands": {
+        "prod-slot": 1
+      },
+      "resource_allocations": {
+        "prod-slot": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "verify-canary-02",
+      "worker": 1,
+      "ready_at": 17,
+      "start": 17,
+      "finish": 19,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "canary-90pct",
+      "worker": 1,
+      "ready_at": 19,
+      "start": 19,
+      "finish": 20,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": "prod-slot",
+      "resource_slot": 1,
+      "resource_demands": {
+        "prod-slot": 1
+      },
+      "resource_allocations": {
+        "prod-slot": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "verify-canary-03",
+      "worker": 1,
+      "ready_at": 20,
+      "start": 20,
+      "finish": 22,
+      "queue_delay": 0,
+      "duration": 2,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    },
+    {
+      "name": "full-rollout",
+      "worker": 1,
+      "ready_at": 22,
+      "start": 22,
+      "finish": 23,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": "prod-slot",
+      "resource_slot": 1,
+      "resource_demands": {
+        "prod-slot": 1
+      },
+      "resource_allocations": {
+        "prod-slot": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "announce-release",
+      "worker": 1,
+      "ready_at": 23,
+      "start": 23,
+      "finish": 24,
+      "queue_delay": 0,
+      "duration": 1,
+      "critical": true,
+      "resource_class": null,
+      "resource_slot": null,
+      "resource_demands": {},
+      "resource_allocations": {}
+    }
+  ],
+  "worker_timelines": [
+    [
+      {
+        "name": "freeze-release-branch",
+        "start": 0,
+        "finish": 1,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "build-macos",
+        "start": 1,
+        "finish": 4,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "sign-macos",
+        "start": 5,
+        "finish": 7,
+        "queue_delay": 1,
+        "critical": true,
+        "resource_class": "signing",
+        "resource_slot": 1,
+        "resource_demands": {
+          "signing": 1
+        },
+        "resource_allocations": {
+          "signing": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "sign-windows",
+        "start": 7,
+        "finish": 9,
+        "queue_delay": 4,
+        "critical": false,
+        "resource_class": "signing",
+        "resource_slot": 1,
+        "resource_demands": {
+          "signing": 1
+        },
+        "resource_allocations": {
+          "signing": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "publish-candidates",
+        "start": 9,
+        "finish": 10,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "deploy-staging",
+        "start": 10,
+        "finish": 11,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "verify-staging",
+        "start": 11,
+        "finish": 13,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "canary-10pct",
+        "start": 13,
+        "finish": 14,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "prod-slot",
+        "resource_slot": 1,
+        "resource_demands": {
+          "prod-slot": 1
+        },
+        "resource_allocations": {
+          "prod-slot": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "verify-canary-01",
+        "start": 14,
+        "finish": 16,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "canary-50pct",
+        "start": 16,
+        "finish": 17,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "prod-slot",
+        "resource_slot": 1,
+        "resource_demands": {
+          "prod-slot": 1
+        },
+        "resource_allocations": {
+          "prod-slot": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "verify-canary-02",
+        "start": 17,
+        "finish": 19,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "canary-90pct",
+        "start": 19,
+        "finish": 20,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "prod-slot",
+        "resource_slot": 1,
+        "resource_demands": {
+          "prod-slot": 1
+        },
+        "resource_allocations": {
+          "prod-slot": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "verify-canary-03",
+        "start": 20,
+        "finish": 22,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "full-rollout",
+        "start": 22,
+        "finish": 23,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": "prod-slot",
+        "resource_slot": 1,
+        "resource_demands": {
+          "prod-slot": 1
+        },
+        "resource_allocations": {
+          "prod-slot": [
+            1
+          ]
+        }
+      },
+      {
+        "name": "announce-release",
+        "start": 23,
+        "finish": 24,
+        "queue_delay": 0,
+        "critical": true,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ],
+    [
+      {
+        "name": "build-linux",
+        "start": 1,
+        "finish": 3,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "sign-linux",
+        "start": 3,
+        "finish": 5,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": "signing",
+        "resource_slot": 1,
+        "resource_demands": {
+          "signing": 1
+        },
+        "resource_allocations": {
+          "signing": [
+            1
+          ]
+        }
+      }
+    ],
+    [
+      {
+        "name": "build-windows",
+        "start": 1,
+        "finish": 3,
+        "queue_delay": 0,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      },
+      {
+        "name": "assemble-release-notes",
+        "start": 3,
+        "finish": 4,
+        "queue_delay": 2,
+        "critical": false,
+        "resource_class": null,
+        "resource_slot": null,
+        "resource_demands": {},
+        "resource_allocations": {}
+      }
+    ]
+  ]
+}
