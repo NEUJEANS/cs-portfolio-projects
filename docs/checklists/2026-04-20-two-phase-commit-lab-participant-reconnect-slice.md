@@ -9,4 +9,4 @@
 - [x] add a committed participant-reconnect scenario plus refreshed report/catalog artifacts
 - [x] add regression tests for validation, reconnect recovery, and catalog rendering
 - [x] review the slice at least 3 times, fix issues found, then rerun verification
-- [ ] run secret scan, commit, push, and append a wrap-up
+- [x] run secret scan, commit, push, and append a wrap-up

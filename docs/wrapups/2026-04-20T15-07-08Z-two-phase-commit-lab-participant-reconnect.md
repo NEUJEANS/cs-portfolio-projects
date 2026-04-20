@@ -1,0 +1,25 @@
+# Wrap-up — 2026-04-20 15:07 UTC
+
+- Project: `two-phase-commit-lab`
+- Slice: added participant-side reconnect recovery after a missed second-phase delivery so the lab now covers more than coordinator-only recovery
+- What changed:
+  - extended the scenario schema and simulator with participant-level `second_phase_delivery` + `reconnect_after_missed_decision` handling, plus trace/report fields for missed delivery and reconnect recovery
+  - added the committed `participant_reconnect_commit.json` scenario and regenerated the report/catalog artifact bundle so GitHub viewers can see the reconnect story without reading source first
+  - refreshed README/checklists/research/learning docs and added a 3-pass review log; review fixes tightened invalid schema handling, removed noisy `0/0` reconnect cells, and made reconnect-specific takeaways primary in the catalog
+- Tests run:
+  - `python3 -m py_compile projects/two-phase-commit-lab/two_phase_commit_lab.py tests/test_two_phase_commit_lab.py`
+  - `python3 -m unittest tests.test_two_phase_commit_lab -v`
+  - `python3 projects/two-phase-commit-lab/two_phase_commit_lab.py run projects/two-phase-commit-lab/participant_reconnect_commit.json --markdown-out docs/artifacts/two-phase-commit-lab/participant_reconnect_commit_report.md --json`
+  - `python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog projects/two-phase-commit-lab --markdown-out docs/artifacts/two-phase-commit-lab/scenario_catalog.md --report-dir docs/artifacts/two-phase-commit-lab`
+  - deterministic double-export hash check for `scenario_catalog.md` using two fresh temp roots with the same `reports/` layout
+  - `python3 projects/two-phase-commit-lab/two_phase_commit_lab.py validate projects/two-phase-commit-lab/participant_reconnect_commit.json`
+  - `git diff --check`
+- Reviews run:
+  - review 1: rejected invalid `second_phase_delivery: "miss"` configs for non-commit voters and added regression coverage
+  - review 2: replaced noisy non-reconnect `0/0` catalog cells with `-` plus explanatory snapshot copy
+  - review 3: promoted reconnect-specific takeaways over generic commit copy and fixed singular/plural grammar in generated artifacts
+- Secret scan:
+  - `/home/user1_admin/.openclaw/workspace/.bin/trufflehog git "file://$PWD" --results=verified,unknown --fail` → passed with 0 verified and 0 unverified secrets
+- Commit: `2988190`
+- Next step:
+  - add participant-to-participant termination-protocol hints for the blocked coordinator-unavailable case so the lab shows what operators can still ask peers while waiting on recovery
