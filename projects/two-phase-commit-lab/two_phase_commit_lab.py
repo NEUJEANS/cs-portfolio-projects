@@ -5,6 +5,7 @@ import html
 import json
 import os
 import sys
+import textwrap
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,8 @@ class CatalogEntry:
     comparison_markdown_path: str | None = None
     comparison_html_path: str | None = None
     termination_markdown_path: str | None = None
+    termination_timeline_svg_path: str | None = None
+    termination_timeline_html_path: str | None = None
 
 
 @dataclass
@@ -1155,6 +1158,355 @@ def render_termination_resolution_markdown(result: TerminationResolutionResult) 
     return "\n".join(lines)
 
 
+def render_termination_resolution_timeline_svg(result: TerminationResolutionResult) -> str:
+    cards = _build_termination_timeline_cards(result)
+    width = 1200
+    margin_x = 48
+    timeline_x = 110
+    card_x = 160
+    card_width = width - card_x - margin_x
+    header_height = 186
+    gap = 22
+
+    layout_cards: list[dict[str, Any]] = []
+    current_y = header_height
+    for index, card in enumerate(cards, start=1):
+        title_lines = _wrap_svg_text(card["title"], 34)
+        body_lines = _wrap_svg_text(card["body"], 78)
+        footer_lines = _wrap_svg_text(card["footer"], 78)
+        card_height = 96 + (len(body_lines) * 22) + max(0, len(footer_lines) - 1) * 20
+        layout_cards.append(
+            {
+                "index": index,
+                "tone": card["tone"],
+                "y": current_y,
+                "height": card_height,
+                "title_lines": title_lines,
+                "body_lines": body_lines,
+                "footer_lines": footer_lines,
+            }
+        )
+        current_y += card_height + gap
+
+    unresolved_label = _format_name_list(result.unresolved_participants) or "none"
+    summary_cards = [
+        (
+            "Baseline",
+            result.baseline_outcome.upper(),
+            "warning" if result.baseline_outcome == "blocked" else _timeline_tone_for_state(result.baseline_outcome),
+            f"Hint: {result.baseline_termination_hint_summary or 'none'}",
+        ),
+        (
+            "Resolved decision",
+            (result.resolved_decision or result.baseline_decision or "none").upper(),
+            _timeline_tone_for_state(result.resolved_decision or result.baseline_decision or result.resolution_outcome),
+            f"Outcome: {result.resolution_outcome}",
+        ),
+        (
+            "Unresolved after peer exchange",
+            unresolved_label,
+            "warning" if result.unresolved_participants else "success",
+            f"Participants still waiting: {len(result.unresolved_participants)}",
+        ),
+    ]
+
+    bottom_height = 84 + (len(result.takeaways) * 20)
+    total_height = current_y + bottom_height
+    svg_parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{total_height}" viewBox="0 0 {width} {total_height}" role="img" aria-labelledby="title desc">',
+        f'  <title id="title">{_html_escape(result.title)} peer termination timeline</title>',
+        f'  <desc id="desc">{_html_escape(result.description)}</desc>',
+        '  <defs>',
+        '    <style>',
+        '      .title { font: 700 30px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }',
+        '      .subtitle { font: 400 15px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }',
+        '      .summary-label { font: 600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: 0.08em; fill: #475569; }',
+        '      .summary-value { font: 700 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }',
+        '      .summary-help { font: 400 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }',
+        '      .step-label { font: 600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: 0.08em; fill: #475569; }',
+        '      .step-title { font: 700 20px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }',
+        '      .step-body { font: 400 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }',
+        '      .step-footer { font: 600 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }',
+        '      .step-number { font: 700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: white; text-anchor: middle; dominant-baseline: middle; }',
+        '      .takeaway-label { font: 700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }',
+        '      .takeaway-text { font: 400 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }',
+        '    </style>',
+        '  </defs>',
+        '  <rect width="100%" height="100%" fill="#f8fafc" rx="28" ry="28" />',
+        f'  <text class="title" x="{margin_x}" y="54">{_html_escape(result.title)} — peer termination timeline</text>',
+        f'  <text class="subtitle" x="{margin_x}" y="84">transaction {_html_escape(result.transaction_id)} • baseline {_html_escape(result.baseline_outcome)} • peer resolution {_html_escape(result.resolution_outcome)}</text>',
+        f'  <text class="subtitle" x="{margin_x}" y="110">{_html_escape(result.description)}</text>',
+    ]
+
+    summary_x = margin_x
+    summary_y = 132
+    summary_width = 344
+    for label, value, tone, help_text in summary_cards:
+        fill, border = _timeline_box_colors(tone)
+        svg_parts.extend(
+            [
+                f'  <rect x="{summary_x}" y="{summary_y}" width="{summary_width}" height="80" rx="18" ry="18" fill="{fill}" stroke="{border}" stroke-width="2" />',
+                f'  <text class="summary-label" x="{summary_x + 20}" y="{summary_y + 26}">{_html_escape(label)}</text>',
+                f'  <text class="summary-value" x="{summary_x + 20}" y="{summary_y + 52}">{_html_escape(value)}</text>',
+                f'  <text class="summary-help" x="{summary_x + 20}" y="{summary_y + 70}">{_html_escape(help_text)}</text>',
+            ]
+        )
+        summary_x += summary_width + 12
+
+    if layout_cards:
+        first_center = layout_cards[0]["y"] + 24
+        last_center = layout_cards[-1]["y"] + 24
+        svg_parts.append(
+            f'  <line x1="{timeline_x}" y1="{first_center}" x2="{timeline_x}" y2="{last_center}" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round" />'
+        )
+
+    for card in layout_cards:
+        fill, border = _timeline_box_colors(card["tone"])
+        circle_fill = border
+        top = card["y"]
+        circle_y = top + 24
+        svg_parts.extend(
+            [
+                f'  <circle cx="{timeline_x}" cy="{circle_y}" r="20" fill="{circle_fill}" />',
+                f'  <text class="step-number" x="{timeline_x}" y="{circle_y}">{card["index"]}</text>',
+                f'  <rect x="{card_x}" y="{top}" width="{card_width}" height="{card["height"]}" rx="22" ry="22" fill="{fill}" stroke="{border}" stroke-width="2" />',
+            ]
+        )
+        text_x = card_x + 24
+        text_y = top + 30
+        svg_parts.append(f'  <text class="step-label" x="{text_x}" y="{text_y}">Step {card["index"]}</text>')
+        text_y += 28
+        for line in card["title_lines"]:
+            svg_parts.append(f'  <text class="step-title" x="{text_x}" y="{text_y}">{_html_escape(line)}</text>')
+            text_y += 24
+        text_y += 8
+        for line in card["body_lines"]:
+            svg_parts.append(f'  <text class="step-body" x="{text_x}" y="{text_y}">{_html_escape(line)}</text>')
+            text_y += 22
+        text_y += 8
+        for line in card["footer_lines"]:
+            svg_parts.append(f'  <text class="step-footer" x="{text_x}" y="{text_y}">{_html_escape(line)}</text>')
+            text_y += 20
+
+    takeaway_y = current_y + 14
+    svg_parts.append(
+        f'  <text class="takeaway-label" x="{margin_x}" y="{takeaway_y}">Why this incident still teaches something</text>'
+    )
+    takeaway_y += 24
+    for takeaway in result.takeaways:
+        wrapped = _wrap_svg_text(f"• {takeaway}", 126)
+        for line in wrapped:
+            svg_parts.append(
+                f'  <text class="takeaway-text" x="{margin_x}" y="{takeaway_y}">{_html_escape(line)}</text>'
+            )
+            takeaway_y += 18
+
+    svg_parts.append('</svg>')
+    return "\n".join(svg_parts)
+
+
+def render_termination_resolution_timeline_html(result: TerminationResolutionResult) -> str:
+    svg = render_termination_resolution_timeline_svg(result)
+    participant_rows = []
+    for participant in result.participants:
+        participant_rows.append(
+            "<tr>"
+            f"<td>{_html_escape(participant.participant)}</td>"
+            f"<td>{_html_escape(participant.role)}</td>"
+            f"<td>{_html_escape(participant.initial_state)}</td>"
+            f"<td>{_html_escape(participant.peer_query)}</td>"
+            f"<td>{_html_escape(participant.evidence)}</td>"
+            f"<td>{_html_escape(participant.final_state)}</td>"
+            f"<td>{'yes' if participant.resolved else 'no'}</td>"
+            "</tr>"
+        )
+    trace_items = "".join(f"<li>{_html_escape(item)}</li>" for item in result.trace)
+    takeaway_items = "".join(f"<li>{_html_escape(item)}</li>" for item in result.takeaways)
+    unresolved_label = _format_name_list(result.unresolved_participants) or "none"
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_html_escape(result.title)} peer termination timeline</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #dbeafe;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #1d4ed8;
+        --success: #166534;
+        --warning: #9a3412;
+        --danger: #991b1b;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 220px); color: var(--text); font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+      main {{ max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .eyebrow {{ margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; color: var(--accent); font-weight: 700; }}
+      h1, h2 {{ margin: 0 0 12px; line-height: 1.2; }}
+      .lede {{ margin: 0; color: var(--muted); max-width: 88ch; }}
+      .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }}
+      .stat {{ border: 1px solid #dbeafe; border-radius: 18px; padding: 16px; background: #f8fbff; }}
+      .stat strong {{ display: block; font-size: 1.25rem; margin-top: 4px; }}
+      .grid {{ display: grid; gap: 24px; }}
+      .panel {{ padding: 24px; }}
+      .graphic svg {{ width: 100%; height: auto; display: block; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ text-align: left; vertical-align: top; border-bottom: 1px solid #e2e8f0; padding: 10px 8px; font-size: 0.95rem; }}
+      th {{ color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }}
+      ul, ol {{ margin: 0; padding-left: 20px; }}
+      li + li {{ margin-top: 8px; }}
+      code {{ background: #eff6ff; padding: 0.08rem 0.36rem; border-radius: 999px; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Two-phase commit termination timeline</p>
+        <h1>{_html_escape(result.title)}</h1>
+        <p class="lede">{_html_escape(result.description)} This static artifact keeps the peer-assisted termination story readable in one place: where the baseline 2PC run got stuck, which peers could answer, what evidence they shared, and whether the blocked participants converged on COMMIT/ABORT or stayed stuck.</p>
+        <div class="stats">
+          <article class="stat"><span>Baseline outcome</span><strong>{_html_escape(result.baseline_outcome)}</strong><div>Hint: {_html_escape(result.baseline_termination_hint_summary or 'none')}</div></article>
+          <article class="stat"><span>Peer-resolution outcome</span><strong>{_html_escape(result.resolution_outcome)}</strong><div>Resolved decision: {_html_escape(result.resolved_decision or result.baseline_decision or 'none')}</div></article>
+          <article class="stat"><span>Unresolved after exchange</span><strong>{_html_escape(unresolved_label)}</strong><div>{len(result.unresolved_participants)} participant(s) still waiting</div></article>
+        </div>
+      </section>
+      <div class="grid">
+        <section class="panel graphic">
+          <h2>Timeline graphic</h2>
+          {svg}
+        </section>
+        <section class="panel">
+          <h2>Participant actions</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Participant</th>
+                <th>Role</th>
+                <th>Initial</th>
+                <th>Peer query</th>
+                <th>Evidence</th>
+                <th>Final</th>
+                <th>Resolved</th>
+              </tr>
+            </thead>
+            <tbody>
+              {''.join(participant_rows)}
+            </tbody>
+          </table>
+        </section>
+        <section class="panel">
+          <h2>Resolution trace</h2>
+          <ol>{trace_items}</ol>
+        </section>
+        <section class="panel">
+          <h2>Interview takeaways</h2>
+          <ul>{takeaway_items}</ul>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
+'''
+
+
+def _build_termination_timeline_cards(result: TerminationResolutionResult) -> list[dict[str, str]]:
+    baseline_decision = (result.baseline_decision or "none").upper()
+    unresolved_label = _format_name_list(result.unresolved_participants) or "none"
+    baseline_unresolved = [
+        participant.participant
+        for participant in result.participants
+        if participant.initial_state.startswith("prepared")
+    ]
+    baseline_unresolved_label = _format_name_list(baseline_unresolved) or "none"
+    cards: list[dict[str, str]] = [
+        {
+            "tone": "warning" if result.baseline_outcome == "blocked" else _timeline_tone_for_state(result.baseline_outcome),
+            "title": "Baseline incident state",
+            "body": (
+                f"The baseline 2PC run ends as {result.baseline_outcome}. Durable decision: {baseline_decision}. "
+                f"Termination hint: {result.baseline_termination_hint_summary or 'none'}. Unresolved after the plain run: {baseline_unresolved_label}."
+            ),
+            "footer": "Peer-assisted termination starts from these exact facts; it never invents a brand-new global outcome.",
+        }
+    ]
+    for participant in result.participants:
+        if participant.peer_query == "not needed":
+            title = f"{participant.participant} needs no peer exchange"
+            body = "The scenario already completed without extra peer-to-peer termination work for this participant."
+        elif participant.peer_query.startswith("answer"):
+            title = f"{participant.participant} acts as an evidence source"
+            body = participant.evidence
+        else:
+            title = f"{participant.participant} starts a peer check"
+            body = f"Query: {participant.peer_query}. Evidence: {participant.evidence}."
+        cards.append(
+            {
+                "tone": _timeline_tone_for_step(participant),
+                "title": title,
+                "body": body,
+                "footer": (
+                    f"{participant.role}: {participant.initial_state} -> {participant.final_state} "
+                    f"(resolved: {'yes' if participant.resolved else 'no'})."
+                ),
+            }
+        )
+    final_decision = (result.resolved_decision or result.baseline_decision or "none").upper()
+    final_body = (
+        f"Peer exchange finishes with outcome {result.resolution_outcome}. Final decision: {final_decision}. "
+        f"Participants still blocked after the exchange: {unresolved_label}."
+    )
+    cards.append(
+        {
+            "tone": _timeline_tone_for_state(result.resolution_outcome),
+            "title": "Resolution summary",
+            "body": final_body,
+            "footer": result.takeaways[0],
+        }
+    )
+    return cards
+
+
+def _timeline_tone_for_step(step: TerminationResolutionStep) -> str:
+    if not step.resolved:
+        return "warning"
+    return _timeline_tone_for_state(step.final_state)
+
+
+def _timeline_tone_for_state(state: str | None) -> str:
+    lowered = (state or "none").lower()
+    if "abort" in lowered:
+        return "danger"
+    if "commit" in lowered:
+        return "success"
+    if "block" in lowered or "prepare" in lowered or "wait" in lowered or lowered == "none":
+        return "warning"
+    return "accent"
+
+
+def _timeline_box_colors(tone: str) -> tuple[str, str]:
+    palette = {
+        "success": ("#ecfdf5", "#16a34a"),
+        "warning": ("#fff7ed", "#ea580c"),
+        "danger": ("#fef2f2", "#dc2626"),
+        "accent": ("#eff6ff", "#2563eb"),
+    }
+    return palette.get(tone, palette["accent"])
+
+
+def _wrap_svg_text(text: str, width: int) -> list[str]:
+    lines: list[str] = []
+    for paragraph in str(text).splitlines() or [""]:
+        wrapped = textwrap.wrap(paragraph, width=width) or [""]
+        lines.extend(wrapped)
+    return lines
+
+
 def render_catalog_markdown(
     entries: list[CatalogEntry],
     incident_dashboard_path: str | None = None,
@@ -1189,10 +1541,15 @@ def render_catalog_markdown(
     )
     comparison_dashboard_count = sum(1 for entry in entries if entry.comparison_html_path)
     termination_artifact_count = sum(1 for entry in entries if entry.termination_markdown_path)
+    termination_timeline_count = sum(
+        1
+        for entry in entries
+        if entry.termination_timeline_svg_path or entry.termination_timeline_html_path
+    )
 
     comparison_lines = [
-        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     snapshot_lines: list[str] = []
     for entry in entries:
@@ -1218,12 +1575,18 @@ def render_catalog_markdown(
         termination_links: list[str] = []
         if entry.termination_markdown_path:
             termination_links.append(f"[md]({entry.termination_markdown_path})")
+        timeline_links: list[str] = []
+        if entry.termination_timeline_html_path:
+            timeline_links.append(f"[html]({entry.termination_timeline_html_path})")
+        if entry.termination_timeline_svg_path:
+            timeline_links.append(f"[svg]({entry.termination_timeline_svg_path})")
         compare_cell = " / ".join(compare_links) if compare_links else "-"
         termination_artifact_cell = " / ".join(termination_links) if termination_links else "-"
+        timeline_cell = " / ".join(timeline_links) if timeline_links else "-"
         reconnect_cell = f"`{recovered_count}/{missed_count}`" if missed_count else "`-`"
         termination_cell = result.termination_hint_summary or "-"
         comparison_lines.append(
-            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {termination} | {report} | {compare} | {termination_artifact} |".format(
+            "| {title} | `{outcome}` | `{decision}` | `{durable}` | `{crash}` | `{recovery}` | `{prepared}/{total}` | `{acked}/{total}` | {reconnect} | {termination} | {report} | {compare} | {termination_artifact} | {timeline} |".format(
                 title=title_cell,
                 outcome=result.outcome,
                 decision=result.decision or "none",
@@ -1238,6 +1601,7 @@ def render_catalog_markdown(
                 report=report_cell,
                 compare=compare_cell,
                 termination_artifact=termination_artifact_cell,
+                timeline=timeline_cell,
             )
         )
 
@@ -1255,6 +1619,10 @@ def render_catalog_markdown(
             related_artifacts.append(f"[compare md]({entry.comparison_markdown_path})")
         if entry.termination_markdown_path:
             related_artifacts.append(f"[termination md]({entry.termination_markdown_path})")
+        if entry.termination_timeline_html_path:
+            related_artifacts.append(f"[timeline html]({entry.termination_timeline_html_path})")
+        if entry.termination_timeline_svg_path:
+            related_artifacts.append(f"[timeline svg]({entry.termination_timeline_svg_path})")
         snapshot_lines.extend(
             [
                 f"### {result.title}",
@@ -1294,6 +1662,7 @@ def render_catalog_markdown(
         f"- blocked scenarios with actionable peer hints: `{actionable_termination_hint_count}`",
         f"- scenarios with protocol-comparison dashboards: `{comparison_dashboard_count}`",
         f"- scenarios with peer-termination walkthroughs: `{termination_artifact_count}`",
+        f"- scenarios with peer-termination timeline visuals: `{termination_timeline_count}`",
         "",
         "## Scenario comparison",
         *comparison_lines,
@@ -1625,6 +1994,10 @@ def _render_incident_response_card_html(entry: CatalogEntry) -> str:
         links.append(("report", entry.report_path))
     if entry.termination_markdown_path:
         links.append(("termination md", entry.termination_markdown_path))
+    if entry.termination_timeline_html_path:
+        links.append(("timeline html", entry.termination_timeline_html_path))
+    if entry.termination_timeline_svg_path:
+        links.append(("timeline svg", entry.termination_timeline_svg_path))
     if entry.comparison_html_path:
         links.append(("compare html", entry.comparison_html_path))
     if entry.comparison_markdown_path:
@@ -1689,6 +2062,24 @@ def write_termination_resolution_markdown(
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(render_termination_resolution_markdown(result))
+
+
+def write_termination_timeline_svg(
+    path: str | Path,
+    result: TerminationResolutionResult,
+) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_termination_resolution_timeline_svg(result))
+
+
+def write_termination_timeline_html(
+    path: str | Path,
+    result: TerminationResolutionResult,
+) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_termination_resolution_timeline_html(result))
 
 
 def write_incident_response_dashboard(
@@ -1762,11 +2153,29 @@ def build_catalog_entries(
     entries: list[CatalogEntry] = []
     artifact_dir = report_dir or catalog_path.parent
     for scenario_path in scenario_paths:
-        result = simulate_two_phase_commit(load_scenario(scenario_path))
+        scenario = load_scenario(scenario_path)
+        result = simulate_two_phase_commit(scenario)
         report_path: str | None = None
         report_file = artifact_dir / f"{scenario_path.stem}_report.md"
+        termination_markdown_file = artifact_dir / f"{scenario_path.stem}_termination.md"
+        termination_timeline_svg_file = artifact_dir / f"{scenario_path.stem}_termination_timeline.svg"
+        termination_timeline_html_file = artifact_dir / f"{scenario_path.stem}_termination_timeline.html"
         if report_dir is not None:
             write_markdown_report(report_file, result)
+            if result.outcome == "blocked":
+                termination_result = build_peer_termination_resolution(scenario)
+                write_termination_resolution_markdown(
+                    termination_markdown_file,
+                    termination_result,
+                )
+                write_termination_timeline_svg(
+                    termination_timeline_svg_file,
+                    termination_result,
+                )
+                write_termination_timeline_html(
+                    termination_timeline_html_file,
+                    termination_result,
+                )
         report_path = _relative_artifact_path(report_file, start=catalog_path.parent)
         comparison_markdown_path = _relative_artifact_path(
             artifact_dir / f"{scenario_path.stem}_protocol_compare.md",
@@ -1777,7 +2186,15 @@ def build_catalog_entries(
             start=catalog_path.parent,
         )
         termination_markdown_path = _relative_artifact_path(
-            artifact_dir / f"{scenario_path.stem}_termination.md",
+            termination_markdown_file,
+            start=catalog_path.parent,
+        )
+        termination_timeline_svg_path = _relative_artifact_path(
+            termination_timeline_svg_file,
+            start=catalog_path.parent,
+        )
+        termination_timeline_html_path = _relative_artifact_path(
+            termination_timeline_html_file,
             start=catalog_path.parent,
         )
         entries.append(
@@ -1787,6 +2204,8 @@ def build_catalog_entries(
                 comparison_markdown_path=comparison_markdown_path,
                 comparison_html_path=comparison_html_path,
                 termination_markdown_path=termination_markdown_path,
+                termination_timeline_svg_path=termination_timeline_svg_path,
+                termination_timeline_html_path=termination_timeline_html_path,
                 result=result,
             )
         )
@@ -1836,6 +2255,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--markdown-out",
         type=Path,
         help="optional path for a Markdown peer-resolution artifact",
+    )
+    terminate_parser.add_argument(
+        "--timeline-svg-out",
+        type=Path,
+        help="optional path for a standalone SVG peer-resolution timeline artifact",
+    )
+    terminate_parser.add_argument(
+        "--timeline-html-out",
+        type=Path,
+        help="optional path for a standalone HTML peer-resolution timeline artifact",
     )
 
     catalog_parser = subparsers.add_parser(
@@ -1912,10 +2341,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "terminate":
         result = build_peer_termination_resolution(load_scenario(args.scenario))
+        stream = sys.stderr if args.json else sys.stdout
         if args.markdown_out:
             write_termination_resolution_markdown(args.markdown_out, result)
-            stream = sys.stderr if args.json else sys.stdout
             print(f"wrote Markdown peer-resolution artifact to {args.markdown_out}", file=stream)
+        if args.timeline_svg_out:
+            write_termination_timeline_svg(args.timeline_svg_out, result)
+            print(f"wrote SVG peer-resolution timeline to {args.timeline_svg_out}", file=stream)
+        if args.timeline_html_out:
+            write_termination_timeline_html(args.timeline_html_out, result)
+            print(f"wrote HTML peer-resolution timeline to {args.timeline_html_out}", file=stream)
         if args.json:
             print(json.dumps(result.to_dict(), indent=2))
         else:

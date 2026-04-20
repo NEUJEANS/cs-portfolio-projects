@@ -17,6 +17,7 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - protocol comparison mode that contrasts the same business incident as plain 2PC versus an orchestrated saga, making the blocking-vs-compensation trade-off visible in Markdown, JSON, and static HTML dashboard artifacts
 - Markdown report export for recruiter-friendly artifacts under `docs/artifacts/two-phase-commit-lab/`
 - static HTML comparison dashboards for recruiter screenshots, GitHub Pages browsing, or interview walkthrough links
+- standalone SVG and HTML timeline exports for peer-termination walkthroughs, so blocked incidents have a visual sequence artifact as well as Markdown
 - a compact incident-response HTML dashboard that groups blocked scenarios by recovery-required cases, peer-visible `COMMIT` evidence, and safe-`ABORT` evidence
 - multi-scenario catalog generation that regenerates per-scenario reports and writes a portfolio-friendly landing page comparing outcomes, reconnect recoveries, termination hints, and any committed comparison/termination companion artifacts in one place
 - clean CLI commands for validation, single-scenario simulation, protocol comparison, termination walkthroughs, and bundle generation
@@ -31,8 +32,8 @@ A compact Python simulator that turns the classic distributed-transaction 2PC pr
 - `coordinator_recovery_commit.json` - the coordinator logs COMMIT, crashes, then replays the decision during recovery
 - `participant_reconnect_commit.json` - a prepared participant misses the first `COMMIT`, reconnects, and resolves the durable outcome safely
 - `CHECKLIST.md` - resumable slice history plus next ideas
-- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, HTML/Markdown CLI output, the incident-response dashboard, and catalog generation
-- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, peer-resolution artifacts, the scenario catalog landing page, the blocked-case incident-response dashboard, and protocol-comparison Markdown/JSON/HTML artifacts with cross-links between them when the companion files exist
+- `tests/test_two_phase_commit_lab.py` - regression tests for validation, simulation, comparison mode, termination timeline exports, HTML/Markdown CLI output, the incident-response dashboard, and catalog generation
+- `docs/artifacts/two-phase-commit-lab/` - committed per-scenario reports, peer-resolution Markdown/timeline artifacts, the scenario catalog landing page, the blocked-case incident-response dashboard, and protocol-comparison Markdown/JSON/HTML artifacts with cross-links between them when the companion files exist
 
 ## Scenario format
 ```json
@@ -123,6 +124,8 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py compare \
 python3 projects/two-phase-commit-lab/two_phase_commit_lab.py terminate \
   projects/two-phase-commit-lab/coordinator_crash_partial_commit_delivery.json \
   --markdown-out docs/artifacts/two-phase-commit-lab/coordinator_crash_partial_commit_delivery_termination.md \
+  --timeline-svg-out docs/artifacts/two-phase-commit-lab/coordinator_crash_partial_commit_delivery_termination_timeline.svg \
+  --timeline-html-out docs/artifacts/two-phase-commit-lab/coordinator_crash_partial_commit_delivery_termination_timeline.html \
   --json
 ```
 
@@ -130,6 +133,8 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py terminate \
 python3 projects/two-phase-commit-lab/two_phase_commit_lab.py terminate \
   projects/two-phase-commit-lab/coordinator_crash_durable_abort.json \
   --markdown-out docs/artifacts/two-phase-commit-lab/coordinator_crash_durable_abort_termination.md \
+  --timeline-svg-out docs/artifacts/two-phase-commit-lab/coordinator_crash_durable_abort_termination_timeline.svg \
+  --timeline-html-out docs/artifacts/two-phase-commit-lab/coordinator_crash_durable_abort_termination_timeline.html \
   --json
 ```
 
@@ -141,7 +146,7 @@ python3 projects/two-phase-commit-lab/two_phase_commit_lab.py catalog \
   --report-dir docs/artifacts/two-phase-commit-lab
 ```
 
-That bundle command also refreshes `incident_response_dashboard.html`, a compact blocked-case triage page that deep-links back into the full scenario catalog and per-scenario artifacts.
+That bundle command also refreshes `incident_response_dashboard.html`, the peer-termination timeline HTML/SVG artifacts for blocked scenarios, and the scenario catalog links that point to those visual companions.
 
 ## What the committed samples show
 - `order_success.json`
@@ -159,7 +164,7 @@ That bundle command also refreshes `incident_response_dashboard.html`, a compact
 - `participant_reconnect_commit.json`
   - a prepared participant can still end up temporarily in doubt after missing the first second-phase message, then safely finish by reconnecting to learn the durable decision
 - `scenario_catalog.md`
-  - one landing page compares all committed scenarios and now deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, and the blocked-case incident dashboard
+  - one landing page compares all committed scenarios and now deep-links into per-scenario reports, protocol-comparison dashboards/Markdown, peer-termination walkthroughs, timeline visuals, and the blocked-case incident dashboard
 - `incident_response_dashboard.html`
   - a compact on-call style triage view for only the blocked scenarios, grouped into recovery-required, peer-visible `COMMIT`, and safe-`ABORT` evidence buckets
 - `coordinator_crash_before_decision_protocol_compare.md` / `.html`
@@ -168,10 +173,16 @@ That bundle command also refreshes `incident_response_dashboard.html`, a compact
   - a peer-visible-decision comparison artifact showing that some blocked 2PC incidents still have an actionable termination-protocol story before coordinator recovery
 - `coordinator_crash_partial_commit_delivery_termination.md`
   - the blocked-after-decision case fully resolves via peer queries because `inventory` already knows the durable `COMMIT`
+- `coordinator_crash_partial_commit_delivery_termination_timeline.svg` / `.html`
+  - a visual sequence artifact for the peer-visible `COMMIT` case, showing exactly which blocked participants query `inventory` and when they converge
 - `coordinator_crash_before_decision_termination.md`
   - the classic all-prepared crash still cannot resolve through peers alone, which keeps the blocking limitation obvious in artifact form
+- `coordinator_crash_before_decision_termination_timeline.svg` / `.html`
+  - a visual sequence artifact for the still-blocked case, useful when explaining why plain 2PC sometimes needs coordinator recovery rather than peer evidence
 - `coordinator_crash_durable_abort_termination.md`
   - the blocked-after-ABORT case resolves safely because `risk` never reached `PREPARED`, so it can prove rollback to the waiting peers
+- `coordinator_crash_durable_abort_termination_timeline.svg` / `.html`
+  - a visual sequence artifact for the safe-`ABORT` termination path, useful for showing how a non-prepared peer acts as decisive evidence
 
 ## Testing
 ```bash
@@ -181,4 +192,4 @@ python3 -m unittest tests.test_two_phase_commit_lab -v
 ## Future ideas
 - add a side-by-side 2PC vs 3PC comparison mode to explain why non-blocking atomic commit is harder
 - add scenario tags or thematic groupings (happy path, blocking, coordinator recovery, participant reconnect, peer hints, peer-assisted commit, peer-assisted abort) inside the catalog if the sample set grows larger
-- consider a small incident-response timeline or sequence diagram export for the termination-resolution flow
+- add PNG/social-preview export for the timeline artifacts so the visuals are easy to drop into README thumbnails or slide decks

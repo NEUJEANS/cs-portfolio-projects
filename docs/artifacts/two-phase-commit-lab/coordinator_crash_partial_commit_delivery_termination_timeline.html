@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coordinator crash after one COMMIT delivery peer termination timeline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --border: #dbeafe;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #1d4ed8;
+        --success: #166534;
+        --warning: #9a3412;
+        --danger: #991b1b;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 220px); color: var(--text); font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .eyebrow { margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; color: var(--accent); font-weight: 700; }
+      h1, h2 { margin: 0 0 12px; line-height: 1.2; }
+      .lede { margin: 0; color: var(--muted); max-width: 88ch; }
+      .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }
+      .stat { border: 1px solid #dbeafe; border-radius: 18px; padding: 16px; background: #f8fbff; }
+      .stat strong { display: block; font-size: 1.25rem; margin-top: 4px; }
+      .grid { display: grid; gap: 24px; }
+      .panel { padding: 24px; }
+      .graphic svg { width: 100%; height: auto; display: block; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; vertical-align: top; border-bottom: 1px solid #e2e8f0; padding: 10px 8px; font-size: 0.95rem; }
+      th { color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }
+      ul, ol { margin: 0; padding-left: 20px; }
+      li + li { margin-top: 8px; }
+      code { background: #eff6ff; padding: 0.08rem 0.36rem; border-radius: 999px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Two-phase commit termination timeline</p>
+        <h1>Coordinator crash after one COMMIT delivery</h1>
+        <p class="lede">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery. This static artifact keeps the peer-assisted termination story readable in one place: where the baseline 2PC run got stuck, which peers could answer, what evidence they shared, and whether the blocked participants converged on COMMIT/ABORT or stayed stuck.</p>
+        <div class="stats">
+          <article class="stat"><span>Baseline outcome</span><strong>blocked</strong><div>Hint: COMMIT visible via inventory</div></article>
+          <article class="stat"><span>Peer-resolution outcome</span><strong>commit</strong><div>Resolved decision: commit</div></article>
+          <article class="stat"><span>Unresolved after exchange</span><strong>none</strong><div>0 participant(s) still waiting</div></article>
+        </div>
+      </section>
+      <div class="grid">
+        <section class="panel graphic">
+          <h2>Timeline graphic</h2>
+          <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1180" viewBox="0 0 1200 1180" role="img" aria-labelledby="title desc">
+  <title id="title">Coordinator crash after one COMMIT delivery peer termination timeline</title>
+  <desc id="desc">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery.</desc>
+  <defs>
+    <style>
+      .title { font: 700 30px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .summary-label { font: 600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: 0.08em; fill: #475569; }
+      .summary-value { font: 700 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .summary-help { font: 400 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .step-label { font: 600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: 0.08em; fill: #475569; }
+      .step-title { font: 700 20px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .step-body { font: 400 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .step-footer { font: 600 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .step-number { font: 700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: white; text-anchor: middle; dominant-baseline: middle; }
+      .takeaway-label { font: 700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .takeaway-text { font: 400 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+    </style>
+  </defs>
+  <rect width="100%" height="100%" fill="#f8fafc" rx="28" ry="28" />
+  <text class="title" x="48" y="54">Coordinator crash after one COMMIT delivery — peer termination timeline</text>
+  <text class="subtitle" x="48" y="84">transaction order-5120 • baseline blocked • peer resolution commit</text>
+  <text class="subtitle" x="48" y="110">All participants vote YES and the coordinator durably logs COMMIT. Inventory hears the second-phase COMMIT first, then the coordinator crashes before billing and shipping hear it. The remaining prepared participants are blocked, but a peer-to-peer termination check can still learn COMMIT from inventory while waiting for recovery.</text>
+  <rect x="48" y="132" width="344" height="80" rx="18" ry="18" fill="#fff7ed" stroke="#ea580c" stroke-width="2" />
+  <text class="summary-label" x="68" y="158">Baseline</text>
+  <text class="summary-value" x="68" y="184">BLOCKED</text>
+  <text class="summary-help" x="68" y="202">Hint: COMMIT visible via inventory</text>
+  <rect x="404" y="132" width="344" height="80" rx="18" ry="18" fill="#ecfdf5" stroke="#16a34a" stroke-width="2" />
+  <text class="summary-label" x="424" y="158">Resolved decision</text>
+  <text class="summary-value" x="424" y="184">COMMIT</text>
+  <text class="summary-help" x="424" y="202">Outcome: commit</text>
+  <rect x="760" y="132" width="344" height="80" rx="18" ry="18" fill="#ecfdf5" stroke="#16a34a" stroke-width="2" />
+  <text class="summary-label" x="780" y="158">Unresolved after peer exchange</text>
+  <text class="summary-value" x="780" y="184">none</text>
+  <text class="summary-help" x="780" y="202">Participants still waiting: 0</text>
+  <line x1="110" y1="210" x2="110" y2="878" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round" />
+  <circle cx="110" cy="210" r="20" fill="#ea580c" />
+  <text class="step-number" x="110" y="210">1</text>
+  <rect x="160" y="186" width="992" height="182" rx="22" ry="22" fill="#fff7ed" stroke="#ea580c" stroke-width="2" />
+  <text class="step-label" x="184" y="216">Step 1</text>
+  <text class="step-title" x="184" y="244">Baseline incident state</text>
+  <text class="step-body" x="184" y="276">The baseline 2PC run ends as blocked. Durable decision: COMMIT. Termination</text>
+  <text class="step-body" x="184" y="298">hint: COMMIT visible via inventory. Unresolved after the plain run: billing</text>
+  <text class="step-body" x="184" y="320">and shipping.</text>
+  <text class="step-footer" x="184" y="350">Peer-assisted termination starts from these exact facts; it never invents a</text>
+  <text class="step-footer" x="184" y="370">brand-new global outcome.</text>
+  <circle cx="110" cy="414" r="20" fill="#16a34a" />
+  <text class="step-number" x="110" y="414">2</text>
+  <rect x="160" y="390" width="992" height="118" rx="22" ry="22" fill="#ecfdf5" stroke="#16a34a" stroke-width="2" />
+  <text class="step-label" x="184" y="420">Step 2</text>
+  <text class="step-title" x="184" y="448">inventory acts as an evidence</text>
+  <text class="step-title" x="184" y="472">source</text>
+  <text class="step-body" x="184" y="504">already knows the durable COMMIT decision</text>
+  <text class="step-footer" x="184" y="534">reserve stock: committed -&gt; committed (resolved: yes).</text>
+  <circle cx="110" cy="554" r="20" fill="#16a34a" />
+  <text class="step-number" x="110" y="554">3</text>
+  <rect x="160" y="530" width="992" height="140" rx="22" ry="22" fill="#ecfdf5" stroke="#16a34a" stroke-width="2" />
+  <text class="step-label" x="184" y="560">Step 3</text>
+  <text class="step-title" x="184" y="588">billing starts a peer check</text>
+  <text class="step-body" x="184" y="620">Query: ask inventory for the final decision. Evidence: inventory already knows</text>
+  <text class="step-body" x="184" y="642">the durable COMMIT decision.</text>
+  <text class="step-footer" x="184" y="672">capture payment: prepared -&gt; committed (resolved: yes).</text>
+  <circle cx="110" cy="716" r="20" fill="#16a34a" />
+  <text class="step-number" x="110" y="716">4</text>
+  <rect x="160" y="692" width="992" height="140" rx="22" ry="22" fill="#ecfdf5" stroke="#16a34a" stroke-width="2" />
+  <text class="step-label" x="184" y="722">Step 4</text>
+  <text class="step-title" x="184" y="750">shipping starts a peer check</text>
+  <text class="step-body" x="184" y="782">Query: ask inventory for the final decision. Evidence: inventory already knows</text>
+  <text class="step-body" x="184" y="804">the durable COMMIT decision.</text>
+  <text class="step-footer" x="184" y="834">create shipment: prepared -&gt; committed (resolved: yes).</text>
+  <circle cx="110" cy="878" r="20" fill="#16a34a" />
+  <text class="step-number" x="110" y="878">5</text>
+  <rect x="160" y="854" width="992" height="160" rx="22" ry="22" fill="#ecfdf5" stroke="#16a34a" stroke-width="2" />
+  <text class="step-label" x="184" y="884">Step 5</text>
+  <text class="step-title" x="184" y="912">Resolution summary</text>
+  <text class="step-body" x="184" y="944">Peer exchange finishes with outcome commit. Final decision: COMMIT.</text>
+  <text class="step-body" x="184" y="966">Participants still blocked after the exchange: none.</text>
+  <text class="step-footer" x="184" y="996">Classic 2PC remains blocking until a PREPARED participant either reaches the</text>
+  <text class="step-footer" x="184" y="1016">coordinator or learns an authoritative fact from a peer.</text>
+  <text class="takeaway-label" x="48" y="1050">Why this incident still teaches something</text>
+  <text class="takeaway-text" x="48" y="1074">• Classic 2PC remains blocking until a PREPARED participant either reaches the coordinator or learns an authoritative fact</text>
+  <text class="takeaway-text" x="48" y="1092">from a peer.</text>
+  <text class="takeaway-text" x="48" y="1110">• This scenario&#x27;s peer-to-peer termination exchange resolves the blocked participants to `commit` without inventing a brand-</text>
+  <text class="takeaway-text" x="48" y="1128">new outcome locally.</text>
+  <text class="takeaway-text" x="48" y="1146">• Once inventory already knows `COMMIT`, that peer can act as the decisive witness for the remaining PREPARED participants.</text>
+</svg>
+        </section>
+        <section class="panel">
+          <h2>Participant actions</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Participant</th>
+                <th>Role</th>
+                <th>Initial</th>
+                <th>Peer query</th>
+                <th>Evidence</th>
+                <th>Final</th>
+                <th>Resolved</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>inventory</td><td>reserve stock</td><td>committed</td><td>answer peer termination requests</td><td>already knows the durable COMMIT decision</td><td>committed</td><td>yes</td></tr><tr><td>billing</td><td>capture payment</td><td>prepared</td><td>ask inventory for the final decision</td><td>inventory already knows the durable COMMIT decision</td><td>committed</td><td>yes</td></tr><tr><td>shipping</td><td>create shipment</td><td>prepared</td><td>ask inventory for the final decision</td><td>inventory already knows the durable COMMIT decision</td><td>committed</td><td>yes</td></tr>
+            </tbody>
+          </table>
+        </section>
+        <section class="panel">
+          <h2>Resolution trace</h2>
+          <ol><li>billing: asks inventory about the missing outcome, learns COMMIT, and finishes as COMMITTED</li><li>shipping: asks inventory about the missing outcome, learns COMMIT, and finishes as COMMITTED</li></ol>
+        </section>
+        <section class="panel">
+          <h2>Interview takeaways</h2>
+          <ul><li>Classic 2PC remains blocking until a PREPARED participant either reaches the coordinator or learns an authoritative fact from a peer.</li><li>This scenario&#x27;s peer-to-peer termination exchange resolves the blocked participants to `commit` without inventing a brand-new outcome locally.</li><li>Once inventory already knows `COMMIT`, that peer can act as the decisive witness for the remaining PREPARED participants.</li></ul>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

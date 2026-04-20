@@ -13,17 +13,18 @@ Need the blocked-case triage view first? Open the [incident-response dashboard](
 - blocked scenarios with actionable peer hints: `2`
 - scenarios with protocol-comparison dashboards: `2`
 - scenarios with peer-termination walkthroughs: `3`
+- scenarios with peer-termination timeline visuals: `3`
 
 ## Scenario comparison
-| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [Coordinator crash before durable decision](coordinator_crash_before_decision_report.md) | `blocked` | `none` | `no` | `before-decision` | `no` | `3/3` | `0/3` | `-` | wait: all prepared peers are still uncertain | [report](coordinator_crash_before_decision_report.md) | [html](coordinator_crash_before_decision_protocol_compare.html) / [md](coordinator_crash_before_decision_protocol_compare.md) | [md](coordinator_crash_before_decision_termination.md) |
-| [Coordinator crash after durable ABORT](coordinator_crash_durable_abort_report.md) | `blocked` | `abort` | `yes` | `after-decision-log` | `no` | `2/3` | `0/3` | `-` | ABORT safe via risk | [report](coordinator_crash_durable_abort_report.md) | - | [md](coordinator_crash_durable_abort_termination.md) |
-| [Coordinator crash after one COMMIT delivery](coordinator_crash_partial_commit_delivery_report.md) | `blocked` | `commit` | `yes` | `after-decision-log` | `no` | `3/3` | `1/3` | `-` | COMMIT visible via inventory | [report](coordinator_crash_partial_commit_delivery_report.md) | [html](coordinator_crash_partial_commit_delivery_protocol_compare.html) / [md](coordinator_crash_partial_commit_delivery_protocol_compare.md) | [md](coordinator_crash_partial_commit_delivery_termination.md) |
-| [Recovery replays a durable commit](coordinator_recovery_commit_report.md) | `commit` | `commit` | `yes` | `after-decision-log` | `yes` | `3/3` | `3/3` | `-` | - | [report](coordinator_recovery_commit_report.md) | - | - |
-| [Order service happy-path commit](order_success_report.md) | `commit` | `commit` | `yes` | `none` | `no` | `3/3` | `3/3` | `-` | - | [report](order_success_report.md) | - | - |
-| [Participant reconnect resolves a missed COMMIT](participant_reconnect_commit_report.md) | `commit` | `commit` | `yes` | `none` | `no` | `3/3` | `3/3` | `1/1` | - | [report](participant_reconnect_commit_report.md) | - | - |
-| [Fraud check forces global abort](payment_validation_abort_report.md) | `abort` | `abort` | `yes` | `none` | `no` | `2/3` | `2/3` | `-` | - | [report](payment_validation_abort_report.md) | - | - |
+| Scenario | Outcome | Decision | Durable decision | Crash point | Recovery | Prepared | Acked | Recovered after reconnect | Termination hint | Report | Compare | Termination | Timeline |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [Coordinator crash before durable decision](coordinator_crash_before_decision_report.md) | `blocked` | `none` | `no` | `before-decision` | `no` | `3/3` | `0/3` | `-` | wait: all prepared peers are still uncertain | [report](coordinator_crash_before_decision_report.md) | [html](coordinator_crash_before_decision_protocol_compare.html) / [md](coordinator_crash_before_decision_protocol_compare.md) | [md](coordinator_crash_before_decision_termination.md) | [html](coordinator_crash_before_decision_termination_timeline.html) / [svg](coordinator_crash_before_decision_termination_timeline.svg) |
+| [Coordinator crash after durable ABORT](coordinator_crash_durable_abort_report.md) | `blocked` | `abort` | `yes` | `after-decision-log` | `no` | `2/3` | `0/3` | `-` | ABORT safe via risk | [report](coordinator_crash_durable_abort_report.md) | - | [md](coordinator_crash_durable_abort_termination.md) | [html](coordinator_crash_durable_abort_termination_timeline.html) / [svg](coordinator_crash_durable_abort_termination_timeline.svg) |
+| [Coordinator crash after one COMMIT delivery](coordinator_crash_partial_commit_delivery_report.md) | `blocked` | `commit` | `yes` | `after-decision-log` | `no` | `3/3` | `1/3` | `-` | COMMIT visible via inventory | [report](coordinator_crash_partial_commit_delivery_report.md) | [html](coordinator_crash_partial_commit_delivery_protocol_compare.html) / [md](coordinator_crash_partial_commit_delivery_protocol_compare.md) | [md](coordinator_crash_partial_commit_delivery_termination.md) | [html](coordinator_crash_partial_commit_delivery_termination_timeline.html) / [svg](coordinator_crash_partial_commit_delivery_termination_timeline.svg) |
+| [Recovery replays a durable commit](coordinator_recovery_commit_report.md) | `commit` | `commit` | `yes` | `after-decision-log` | `yes` | `3/3` | `3/3` | `-` | - | [report](coordinator_recovery_commit_report.md) | - | - | - |
+| [Order service happy-path commit](order_success_report.md) | `commit` | `commit` | `yes` | `none` | `no` | `3/3` | `3/3` | `-` | - | [report](order_success_report.md) | - | - | - |
+| [Participant reconnect resolves a missed COMMIT](participant_reconnect_commit_report.md) | `commit` | `commit` | `yes` | `none` | `no` | `3/3` | `3/3` | `1/1` | - | [report](participant_reconnect_commit_report.md) | - | - | - |
+| [Fraud check forces global abort](payment_validation_abort_report.md) | `abort` | `abort` | `yes` | `none` | `no` | `2/3` | `2/3` | `-` | - | [report](payment_validation_abort_report.md) | - | - | - |
 
 ## Interview talking points
 - plain 2PC is easy to explain because every scenario pivots on the coordinator's durable decision log.
@@ -41,7 +42,7 @@ Need the blocked-case triage view first? Open the [incident-response dashboard](
 - participant reconnect recovery: `-` (no participant missed the first second-phase delivery)
 - termination hint: wait: all prepared peers are still uncertain
 - why it matters: all participants are prepared, but the coordinator crashed before a durable decision was recorded; prepared participants remain blocked awaiting recovery
-- related artifacts: [report](coordinator_crash_before_decision_report.md) / [compare html](coordinator_crash_before_decision_protocol_compare.html) / [compare md](coordinator_crash_before_decision_protocol_compare.md) / [termination md](coordinator_crash_before_decision_termination.md)
+- related artifacts: [report](coordinator_crash_before_decision_report.md) / [compare html](coordinator_crash_before_decision_protocol_compare.html) / [compare md](coordinator_crash_before_decision_protocol_compare.md) / [termination md](coordinator_crash_before_decision_termination.md) / [timeline html](coordinator_crash_before_decision_termination_timeline.html) / [timeline svg](coordinator_crash_before_decision_termination_timeline.svg)
 
 ### Coordinator crash after durable ABORT
 - source: `projects/two-phase-commit-lab/coordinator_crash_durable_abort.json`
@@ -51,7 +52,7 @@ Need the blocked-case triage view first? Open the [incident-response dashboard](
 - participant reconnect recovery: `-` (no participant missed the first second-phase delivery)
 - termination hint: ABORT safe via risk
 - why it matters: blocked does not always mean blind waiting: ABORT safe via risk.
-- related artifacts: [report](coordinator_crash_durable_abort_report.md) / [termination md](coordinator_crash_durable_abort_termination.md)
+- related artifacts: [report](coordinator_crash_durable_abort_report.md) / [termination md](coordinator_crash_durable_abort_termination.md) / [timeline html](coordinator_crash_durable_abort_termination_timeline.html) / [timeline svg](coordinator_crash_durable_abort_termination_timeline.svg)
 
 ### Coordinator crash after one COMMIT delivery
 - source: `projects/two-phase-commit-lab/coordinator_crash_partial_commit_delivery.json`
@@ -61,7 +62,7 @@ Need the blocked-case triage view first? Open the [incident-response dashboard](
 - participant reconnect recovery: `-` (no participant missed the first second-phase delivery)
 - termination hint: COMMIT visible via inventory
 - why it matters: blocked does not always mean blind waiting: COMMIT visible via inventory.
-- related artifacts: [report](coordinator_crash_partial_commit_delivery_report.md) / [compare html](coordinator_crash_partial_commit_delivery_protocol_compare.html) / [compare md](coordinator_crash_partial_commit_delivery_protocol_compare.md) / [termination md](coordinator_crash_partial_commit_delivery_termination.md)
+- related artifacts: [report](coordinator_crash_partial_commit_delivery_report.md) / [compare html](coordinator_crash_partial_commit_delivery_protocol_compare.html) / [compare md](coordinator_crash_partial_commit_delivery_protocol_compare.md) / [termination md](coordinator_crash_partial_commit_delivery_termination.md) / [timeline html](coordinator_crash_partial_commit_delivery_termination_timeline.html) / [timeline svg](coordinator_crash_partial_commit_delivery_termination_timeline.svg)
 
 ### Recovery replays a durable commit
 - source: `projects/two-phase-commit-lab/coordinator_recovery_commit.json`
