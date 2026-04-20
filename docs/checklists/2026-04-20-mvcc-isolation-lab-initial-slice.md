@@ -11,6 +11,6 @@
 - [x] complete review pass 1 and fix issues found
 - [x] complete review pass 2 and fix issues found
 - [x] complete review pass 3 and fix issues found
-- [ ] run secret scan
-- [ ] commit and push
-- [ ] append a timestamped wrap-up under `docs/wrapups/`
+- [x] run secret scan
+- [x] commit and push
+- [x] append a timestamped wrap-up under `docs/wrapups/`
