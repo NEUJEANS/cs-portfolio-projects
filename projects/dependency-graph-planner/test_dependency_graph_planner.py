@@ -13,7 +13,9 @@ from dependency_graph_planner import (
     build_worker_limited_schedule,
     parse_tasks,
     render_dependency_diagram,
+    render_report_dashboard_html,
     render_report_markdown,
+    render_schedule_timeline_svg,
     run_command,
 )
 
@@ -313,6 +315,48 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         self.assertIn('| gpu-train | 1 | prep | 4 | gpu | 1 | 5 | 1 | 5 | 0 | yes | — |', report)
         self.assertIn('- Resources: `gpu`', report)
 
+    def test_render_schedule_timeline_svg_includes_delay_and_resource_summary(self) -> None:
+        tasks = parse_tasks(self.multi_resource_graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(
+            tasks,
+            plan,
+            worker_limit=3,
+            resource_capacities={"browser-lab": 2, "gpu": 1, "signing": 1},
+        )
+        svg = render_schedule_timeline_svg(schedule, title="Dependency graph schedule preview")
+        self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', svg)
+        self.assertIn('Dependency graph schedule preview', svg)
+        self.assertIn('Critical tasks are highlighted in red.', svg)
+        self.assertIn('delay 5', svg)
+        self.assertIn('browser-lab: capacity 2, peak 2, utilization 60.0%, delayed tasks 1, max queue delay 5', svg)
+
+    def test_render_report_dashboard_html_links_markdown_and_schedule_svg(self) -> None:
+        tasks = parse_tasks(self.graph)
+        plan = build_plan(tasks)
+        schedule = build_worker_limited_schedule(tasks, plan, worker_limit=1)
+        html = render_report_dashboard_html(
+            tasks,
+            plan,
+            source_label="projects/dependency-graph-planner/sample_graph.json",
+            html_output_path="/tmp/reports/sample_graph_dashboard.html",
+            report_markdown_out="/tmp/reports/sample_graph_report.md",
+            artifacts={
+                "mermaid_preview": "/tmp/artifacts/sample_graph_mermaid.md",
+                "mermaid_source": "/tmp/artifacts/sample_graph.mmd",
+                "dot_source": "/tmp/artifacts/sample_graph.dot",
+                "worker_limited_schedule_jsons": {"1": "/tmp/artifacts/sample_graph_single_worker_schedule.json"},
+                "worker_limited_schedule_svgs": {"1": "/tmp/artifacts/sample_graph_single_worker_schedule.svg"},
+                "worker_limited_schedule_svg": "/tmp/artifacts/sample_graph_single_worker_schedule.svg",
+            },
+            worker_limited_schedule=schedule,
+        )
+        self.assertIn('href="sample_graph_report.md"', html)
+        self.assertIn('href="../artifacts/sample_graph_single_worker_schedule.svg"', html)
+        self.assertIn('src="../artifacts/sample_graph_single_worker_schedule.svg"', html)
+        self.assertIn('Schedule comparison snapshot', html)
+        self.assertIn('Schedule SVG — 1 worker / critical-first', html)
+
     def test_unknown_dependency_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "unknown dependencies"):
             parse_tasks({"tasks": [{"name": "deploy", "deps": ["missing"]}]})
@@ -414,6 +458,7 @@ class DependencyGraphPlannerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             graph_path = Path(tmpdir) / "graph.json"
             report_path = Path(tmpdir) / "reports" / "graph_report.md"
+            dashboard_path = Path(tmpdir) / "reports" / "graph_dashboard.html"
             artifact_dir = Path(tmpdir) / "artifacts"
             graph_path.write_text(json.dumps(self.graph), encoding="utf-8")
             payload = json.loads(
@@ -422,26 +467,37 @@ class DependencyGraphPlannerTests(unittest.TestCase):
                     str(graph_path),
                     as_json=True,
                     report_markdown_out=str(report_path),
+                    report_html_out=str(dashboard_path),
                     diagram_output_dir=str(artifact_dir),
                     worker_limit=1,
                 )
             )
 
             written_report = report_path.read_text(encoding="utf-8")
+            written_dashboard = dashboard_path.read_text(encoding="utf-8")
             mermaid_preview_path = Path(payload["artifacts"]["mermaid_preview"])
             dot_path = Path(payload["artifacts"]["dot_source"])
             schedule_json_path = Path(payload["artifacts"]["worker_limited_schedule_json"])
+            schedule_svg_path = Path(payload["artifacts"]["worker_limited_schedule_svg"])
 
             self.assertTrue(report_path.exists())
+            self.assertTrue(dashboard_path.exists())
             self.assertTrue(mermaid_preview_path.exists())
             self.assertTrue(dot_path.exists())
             self.assertTrue(schedule_json_path.exists())
+            self.assertTrue(schedule_svg_path.exists())
             self.assertIn('[GitHub-friendly Mermaid preview](../artifacts/graph_mermaid.md)', written_report)
+            self.assertIn('[Report dashboard HTML](graph_dashboard.html)', written_report)
+            self.assertIn('[Worker-limited schedule SVG](../artifacts/graph_single_worker_schedule.svg)', written_report)
             self.assertIn('[Worker-limited schedule JSON](../artifacts/graph_single_worker_schedule.json)', written_report)
             self.assertIn('## Worker-limited comparison', written_report)
             self.assertIn('```mermaid', mermaid_preview_path.read_text(encoding="utf-8"))
+            self.assertIn('href="graph_report.md"', written_dashboard)
+            self.assertIn('src="../artifacts/graph_single_worker_schedule.svg"', written_dashboard)
             self.assertEqual(json.loads(schedule_json_path.read_text(encoding="utf-8"))["makespan"], 9)
+            self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', schedule_svg_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["report_markdown_out"], str(report_path))
+            self.assertEqual(payload["report_html_out"], str(dashboard_path))
             self.assertEqual(payload["worker_limited_schedule"]["makespan"], 9)
             self.assertIn('## Task timing table', payload["report_markdown"])
 
@@ -468,12 +524,18 @@ class DependencyGraphPlannerTests(unittest.TestCase):
 
             self.assertEqual(sorted(schedule_paths), ["1", "2", "3"])
             self.assertEqual(len(payload["worker_limited_schedule_comparisons"]), 3)
+            self.assertIn('[Worker-limited schedule SVG (1 worker)](../artifacts/graph_single_worker_schedule.svg)', written_report)
             self.assertIn('[Worker-limited schedule JSON (1 worker)](../artifacts/graph_single_worker_schedule.json)', written_report)
+            self.assertIn('[Worker-limited schedule SVG (2 workers)](../artifacts/graph_2_workers_schedule.svg)', written_report)
             self.assertIn('[Worker-limited schedule JSON (2 workers)](../artifacts/graph_2_workers_schedule.json)', written_report)
+            self.assertIn('[Worker-limited schedule SVG (3 workers)](../artifacts/graph_3_workers_schedule.svg)', written_report)
             self.assertIn('[Worker-limited schedule JSON (3 workers)](../artifacts/graph_3_workers_schedule.json)', written_report)
             self.assertIn('## Worker-capacity comparison', written_report)
             self.assertEqual(json.loads(Path(schedule_paths["2"]).read_text(encoding="utf-8"))["worker_limit"], 2)
-            self.assertEqual(json.loads(Path(schedule_paths["3"]).read_text(encoding="utf-8"))["worker_limit"], 3)
+            self.assertIn(
+                '<svg xmlns="http://www.w3.org/2000/svg"',
+                Path(payload["artifacts"]["worker_limited_schedule_svgs"]["3"]).read_text(encoding="utf-8"),
+            )
 
     def test_run_command_report_json_writes_strategy_comparison_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -502,11 +564,23 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
             self.assertEqual(len(payload["worker_limited_strategy_comparisons"]), 3)
             self.assertIn(
+                '[Worker-limited schedule SVG (2 workers, critical-first)](../artifacts/strategy_graph_2_workers_critical_first_schedule.svg)',
+                written_report,
+            )
+            self.assertIn(
                 '[Worker-limited schedule JSON (2 workers, critical-first)](../artifacts/strategy_graph_2_workers_critical_first_schedule.json)',
                 written_report,
             )
             self.assertIn(
+                '[Worker-limited schedule SVG (2 workers, fifo)](../artifacts/strategy_graph_2_workers_fifo_schedule.svg)',
+                written_report,
+            )
+            self.assertIn(
                 '[Worker-limited schedule JSON (2 workers, fifo)](../artifacts/strategy_graph_2_workers_fifo_schedule.json)',
+                written_report,
+            )
+            self.assertIn(
+                '[Worker-limited schedule SVG (2 workers, longest-processing-time)](../artifacts/strategy_graph_2_workers_longest_processing_time_schedule.svg)',
                 written_report,
             )
             self.assertIn(
@@ -515,6 +589,7 @@ class DependencyGraphPlannerTests(unittest.TestCase):
             )
             self.assertIn('## Scheduling-strategy comparison', written_report)
             self.assertEqual(json.loads(Path(schedule_paths["2:fifo"]).read_text(encoding="utf-8"))["strategy"], "fifo")
+            self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', Path(payload["artifacts"]["worker_limited_schedule_svgs"]["2:fifo"]).read_text(encoding="utf-8"))
             self.assertEqual(
                 json.loads(Path(schedule_paths["2:longest-processing-time"]).read_text(encoding="utf-8"))["strategy"],
                 "longest-processing-time",

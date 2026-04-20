@@ -13,8 +13,12 @@
 - [GitHub-friendly Mermaid preview](sample_graph_mermaid.md)
 - [Mermaid source](sample_graph.mmd)
 - [Graphviz DOT source](sample_graph.dot)
+- [Report dashboard HTML](sample_graph_worker_comparison_report_dashboard.html)
+- [Worker-limited schedule SVG (1 worker)](sample_graph_single_worker_schedule.svg)
 - [Worker-limited schedule JSON (1 worker)](sample_graph_single_worker_schedule.json)
+- [Worker-limited schedule SVG (2 workers)](sample_graph_2_workers_schedule.svg)
 - [Worker-limited schedule JSON (2 workers)](sample_graph_2_workers_schedule.json)
+- [Worker-limited schedule SVG (3 workers)](sample_graph_3_workers_schedule.svg)
 - [Worker-limited schedule JSON (3 workers)](sample_graph_3_workers_schedule.json)
 
 ## Portfolio summary

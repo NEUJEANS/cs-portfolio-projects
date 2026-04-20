@@ -13,6 +13,8 @@
 - [GitHub-friendly Mermaid preview](sample_graph_mermaid.md)
 - [Mermaid source](sample_graph.mmd)
 - [Graphviz DOT source](sample_graph.dot)
+- [Report dashboard HTML](sample_graph_single_worker_report_dashboard.html)
+- [Worker-limited schedule SVG](sample_graph_single_worker_schedule.svg)
 - [Worker-limited schedule JSON](sample_graph_single_worker_schedule.json)
 
 ## Portfolio summary

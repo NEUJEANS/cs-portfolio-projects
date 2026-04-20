@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="416" viewBox="0 0 1280 416" role="img" aria-labelledby="schedule-title schedule-desc">
+  <title id="schedule-title">Dependency graph schedule — Strategy Graph — 2 workers — critical-first</title>
+  <desc id="schedule-desc">Worker timeline for Dependency graph schedule — Strategy Graph — 2 workers — critical-first with 2 workers, strategy critical-first, and makespan 13.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="20" y="20" width="1240" height="376" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="48" y="62" font-size="30" font-weight="700" fill="#0f172a">Dependency graph schedule — Strategy Graph — 2 workers — critical-first</text>
+  <text x="48" y="92" font-size="16" fill="#475569">2 workers · critical-first · makespan 13 · utilization 84.6% · idle capacity 4</text>
+  <text x="48" y="118" font-size="14" fill="#64748b">Unlimited bound 10 · theoretical lower bound 11 · dispatch order core-seed, alpha-long, core-stage-1, core-stage-2, beta-long, ship</text>
+  <line x1="190" y1="138" x2="190" y2="280" stroke="#0f172a" stroke-width="2" />
+  <line x1="190" y1="280" x2="1240" y2="280" stroke="#0f172a" stroke-width="2" />
+  <line x1="190.00" y1="138" x2="190.00" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="190.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">0</text>
+  <line x1="351.54" y1="138" x2="351.54" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="351.54" y="130" font-size="13" text-anchor="middle" fill="#64748b">2</text>
+  <line x1="513.08" y1="138" x2="513.08" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="513.08" y="130" font-size="13" text-anchor="middle" fill="#64748b">4</text>
+  <line x1="674.62" y1="138" x2="674.62" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="674.62" y="130" font-size="13" text-anchor="middle" fill="#64748b">6</text>
+  <line x1="836.15" y1="138" x2="836.15" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="836.15" y="130" font-size="13" text-anchor="middle" fill="#64748b">8</text>
+  <line x1="997.69" y1="138" x2="997.69" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="997.69" y="130" font-size="13" text-anchor="middle" fill="#64748b">10</text>
+  <line x1="1159.23" y1="138" x2="1159.23" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="1159.23" y="130" font-size="13" text-anchor="middle" fill="#64748b">12</text>
+  <line x1="1240.00" y1="138" x2="1240.00" y2="280" stroke="#dbe4f0" stroke-width="1" />
+  <text x="1240.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">13</text>
+  <rect x="32" y="150" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="181" font-size="15" font-weight="600" fill="#0f172a">Worker 1</text>
+  <g>
+    <title>core-seed — worker 1, 0→1, duration 1</title>
+    <rect x="190.00" y="161.00" width="80.77" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="198.00" y="180.00" font-size="13" fill="#0f172a">core-seed</text>
+  </g>
+  <g>
+    <title>core-stage-1 — worker 1, 1→5, duration 4</title>
+    <rect x="270.77" y="161.00" width="323.08" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="278.77" y="180.00" font-size="13" fill="#0f172a">core-stage-1</text>
+  </g>
+  <g>
+    <title>core-stage-2 — worker 1, 5→9, duration 4</title>
+    <rect x="593.85" y="161.00" width="323.08" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="601.85" y="180.00" font-size="13" fill="#0f172a">core-stage-2</text>
+  </g>
+  <g>
+    <title>ship — worker 1, 12→13, duration 1</title>
+    <rect x="1159.23" y="161.00" width="80.77" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="1167.23" y="180.00" font-size="13" fill="#0f172a">ship</text>
+  </g>
+  <rect x="32" y="220" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="251" font-size="15" font-weight="600" fill="#0f172a">Worker 2</text>
+  <g>
+    <title>alpha-long — worker 2, 0→6, duration 6</title>
+    <rect x="190.00" y="231.00" width="484.62" height="30" rx="10" fill="#fae8ff" stroke="#a21caf" stroke-width="2" />
+    <text x="198.00" y="250.00" font-size="13" fill="#0f172a">alpha-long</text>
+  </g>
+  <g>
+    <title>beta-long — worker 2, 6→12, duration 6; queue delay 6</title>
+    <rect x="674.62" y="231.00" width="484.62" height="30" rx="10" fill="#cffafe" stroke="#0f766e" stroke-width="2" />
+    <text x="682.62" y="250.00" font-size="13" fill="#0f172a">beta-long</text>
+  </g>
+  <text x="916.92" y="275.00" font-size="11" text-anchor="middle" fill="#b45309">delay 6</text>
+  <rect x="40" y="306" width="1200" height="76" rx="22" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+  <text x="64" y="334" font-size="18" font-weight="700" fill="#312e81">Schedule summary</text>
+  <text x="64" y="360" font-size="14" fill="#4338ca">Critical tasks are highlighted in red. Worker lanes show deterministic dispatch over 2 workers.</text>
+  <text x="64" y="382" font-size="13" fill="#475569">No renewable resource caps were required for this schedule.</text>
+</svg>

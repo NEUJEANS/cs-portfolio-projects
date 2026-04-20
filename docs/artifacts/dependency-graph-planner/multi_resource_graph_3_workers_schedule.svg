@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="586" viewBox="0 0 1280 586" role="img" aria-labelledby="schedule-title schedule-desc">
+  <title id="schedule-title">Dependency graph schedule — Multi Resource Graph — 3 workers — critical-first</title>
+  <desc id="schedule-desc">Worker timeline for Dependency graph schedule — Multi Resource Graph — 3 workers — critical-first with 3 workers, strategy critical-first, and makespan 10.</desc>
+  <rect width="100%" height="100%" fill="#f8fafc" />
+  <rect x="20" y="20" width="1240" height="546" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />
+  <text x="48" y="62" font-size="30" font-weight="700" fill="#0f172a">Dependency graph schedule — Multi Resource Graph — 3 workers — critical-first</text>
+  <text x="48" y="92" font-size="16" fill="#475569">3 workers · critical-first · makespan 10 · utilization 46.7% · idle capacity 16</text>
+  <text x="48" y="118" font-size="14" fill="#64748b">Unlimited bound 7 · theoretical lower bound 7 · dispatch order prep, browser-matrix, gpu-train, cross-platform-cert, sign, package</text>
+  <line x1="190" y1="138" x2="190" y2="350" stroke="#0f172a" stroke-width="2" />
+  <line x1="190" y1="350" x2="1240" y2="350" stroke="#0f172a" stroke-width="2" />
+  <line x1="190.00" y1="138" x2="190.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="190.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">0</text>
+  <line x1="295.00" y1="138" x2="295.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="295.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">1</text>
+  <line x1="400.00" y1="138" x2="400.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="400.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">2</text>
+  <line x1="505.00" y1="138" x2="505.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="505.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">3</text>
+  <line x1="610.00" y1="138" x2="610.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="610.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">4</text>
+  <line x1="715.00" y1="138" x2="715.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="715.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">5</text>
+  <line x1="820.00" y1="138" x2="820.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="820.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">6</text>
+  <line x1="925.00" y1="138" x2="925.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="925.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">7</text>
+  <line x1="1030.00" y1="138" x2="1030.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="1030.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">8</text>
+  <line x1="1135.00" y1="138" x2="1135.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="1135.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">9</text>
+  <line x1="1240.00" y1="138" x2="1240.00" y2="350" stroke="#dbe4f0" stroke-width="1" />
+  <text x="1240.00" y="130" font-size="13" text-anchor="middle" fill="#64748b">10</text>
+  <rect x="32" y="150" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="181" font-size="15" font-weight="600" fill="#0f172a">Worker 1</text>
+  <g>
+    <title>prep — worker 1, 0→1, duration 1</title>
+    <rect x="190.00" y="161.00" width="105.00" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="198.00" y="180.00" font-size="13" fill="#0f172a">prep</text>
+  </g>
+  <g>
+    <title>browser-matrix — worker 1, 1→6, duration 5; resources browser-lab#{1,2}</title>
+    <rect x="295.00" y="161.00" width="525.00" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="303.00" y="180.00" font-size="13" fill="#0f172a">browser-matrix</text>
+  </g>
+  <g>
+    <title>cross-platform-cert — worker 1, 6→8, duration 2; queue delay 5; resources browser-lab#1 + gpu#1</title>
+    <rect x="820.00" y="161.00" width="210.00" height="30" rx="10" fill="#fae8ff" stroke="#a21caf" stroke-width="2" />
+    <text x="828.00" y="180.00" font-size="13" fill="#0f172a">cross-platform-cert</text>
+  </g>
+  <text x="925.00" y="205.00" font-size="11" text-anchor="middle" fill="#b45309">delay 5</text>
+  <g>
+    <title>sign — worker 1, 8→9, duration 1; resources signing#1</title>
+    <rect x="1030.00" y="161.00" width="105.00" height="30" rx="10" fill="#fef3c7" stroke="#b45309" stroke-width="2" />
+    <text x="1038.00" y="180.00" font-size="13" fill="#0f172a">sign</text>
+  </g>
+  <g>
+    <title>package — worker 1, 9→10, duration 1</title>
+    <rect x="1135.00" y="161.00" width="105.00" height="30" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+    <text x="1143.00" y="180.00" font-size="13" fill="#0f172a">package</text>
+  </g>
+  <rect x="32" y="220" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="251" font-size="15" font-weight="600" fill="#0f172a">Worker 2</text>
+  <g>
+    <title>gpu-train — worker 2, 1→5, duration 4; resources gpu#1</title>
+    <rect x="295.00" y="231.00" width="420.00" height="30" rx="10" fill="#e0f2fe" stroke="#0369a1" stroke-width="2" />
+    <text x="303.00" y="250.00" font-size="13" fill="#0f172a">gpu-train</text>
+  </g>
+  <rect x="32" y="290" width="1216" height="52" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+  <text x="56" y="321" font-size="15" font-weight="600" fill="#0f172a">Worker 3</text>
+  <text x="206" y="321" font-size="14" fill="#94a3b8">idle for entire schedule</text>
+  <rect x="40" y="376" width="1200" height="76" rx="22" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />
+  <text x="64" y="404" font-size="18" font-weight="700" fill="#312e81">Schedule summary</text>
+  <text x="64" y="430" font-size="14" fill="#4338ca">Critical tasks are highlighted in red. Worker lanes show deterministic dispatch over 3 workers.</text>
+  <text x="64" y="452" font-size="13" fill="#475569">Renewable resource caps: browser-lab=2, gpu=1, signing=1</text>
+  <text x="48" y="486" font-size="18" font-weight="700" fill="#0f172a">Resource utilization</text>
+  <text x="64" y="508" font-size="13" fill="#475569">browser-lab: capacity 2, peak 2, utilization 60.0%, delayed tasks 1, max queue delay 5</text>
+  <text x="64" y="530" font-size="13" fill="#475569">gpu: capacity 1, peak 1, utilization 60.0%, delayed tasks 1, max queue delay 5</text>
+  <text x="64" y="552" font-size="13" fill="#475569">signing: capacity 1, peak 1, utilization 10.0%, delayed tasks 0, max queue delay 0</text>
+</svg>

@@ -13,6 +13,8 @@
 - [GitHub-friendly Mermaid preview](resource_graph_mermaid.md)
 - [Mermaid source](resource_graph.mmd)
 - [Graphviz DOT source](resource_graph.dot)
+- [Report dashboard HTML](resource_graph_resource_report_dashboard.html)
+- [Worker-limited schedule SVG](resource_graph_3_workers_schedule.svg)
 - [Worker-limited schedule JSON](resource_graph_3_workers_schedule.json)
 
 ## Portfolio summary

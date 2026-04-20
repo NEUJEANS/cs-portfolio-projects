@@ -120,3 +120,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-20 report dashboard + SVG artifact slice
+- [x] confirm the repo was still synced with `origin/main` before continuing from the locally modified planner file
+- [x] capture a brief note explaining why extra external web research was not needed for this incremental report/dashboard follow-up
+- [x] refresh deterministic artifact-linking and schedule-SVG naming expectations before editing
+- [x] update the project checklist, README, and artifact references for report dashboards and schedule SVG outputs
+- [x] implement `--report-html-out` plus compact static dashboard rendering for committed walkthrough bundles
+- [x] export GitHub-friendly SVG schedule timelines alongside the existing schedule JSON artifacts
+- [x] expand regression coverage for dashboard rendering, SVG generation, artifact writing, and relative-link handling
+- [x] regenerate committed report/dashboard/schedule artifacts for the sample, comparison, resource, strategy, and multi-resource showcase manifests
+- [x] run tests and command-line smoke checks
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

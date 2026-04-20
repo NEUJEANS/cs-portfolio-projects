@@ -8,6 +8,7 @@ import heapq
 import json
 import os
 from dataclasses import dataclass, field
+from html import escape as _html_escape
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -1266,6 +1267,199 @@ def _escape_markdown_table_cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\n", "<br/>")
 
 
+def _format_percent(value: float) -> str:
+    return f"{value * 100:.1f}%"
+
+
+def _truncate_display(value: str, *, limit: int = 22) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1] + "…"
+
+
+def _build_schedule_artifact_filename(
+    stem: str,
+    schedule: WorkerLimitedSchedule,
+    *,
+    include_strategy_in_key: bool,
+) -> str:
+    filename = f"{stem}_{_worker_limit_slug(schedule.worker_limit)}"
+    if include_strategy_in_key or schedule.strategy != DEFAULT_SCHEDULE_STRATEGY:
+        filename += f"_{_strategy_slug(schedule.strategy)}"
+    return filename
+
+
+def _parse_schedule_artifact_entries(schedule_paths: dict[str, str]) -> list[tuple[str, int, str | None, str]]:
+    parsed_schedule_paths: list[tuple[str, int, str | None, str]] = []
+    for raw_key, path in schedule_paths.items():
+        if ":" in raw_key:
+            raw_limit, strategy = raw_key.split(":", maxsplit=1)
+            parsed_schedule_paths.append((raw_key, int(raw_limit), strategy, path))
+        else:
+            parsed_schedule_paths.append((raw_key, int(raw_key), None, path))
+    parsed_schedule_paths.sort(
+        key=lambda item: (item[1], SCHEDULE_STRATEGIES.index(item[2]) if item[2] else -1)
+    )
+    return parsed_schedule_paths
+
+
+def _stable_svg_color(value: str) -> tuple[str, str]:
+    palette = [
+        ("#dbeafe", "#1d4ed8"),
+        ("#dcfce7", "#15803d"),
+        ("#fef3c7", "#b45309"),
+        ("#ede9fe", "#6d28d9"),
+        ("#fae8ff", "#a21caf"),
+        ("#cffafe", "#0f766e"),
+        ("#fee2e2", "#b91c1c"),
+        ("#e0f2fe", "#0369a1"),
+    ]
+    index = sum((idx + 1) * ord(char) for idx, char in enumerate(value)) % len(palette)
+    return palette[index]
+
+
+def render_schedule_timeline_svg(schedule: WorkerLimitedSchedule, *, title: str) -> str:
+    title_id = "schedule-title"
+    desc_id = "schedule-desc"
+    width = 1280
+    chart_left = 190
+    chart_right = width - 40
+    chart_width = chart_right - chart_left
+    chart_top = 150
+    lane_height = 52
+    lane_gap = 18
+    bar_height = 30
+    makespan = max(schedule.makespan, 1)
+    tick_step = max(1, (makespan + 11) // 12)
+    unit_width = chart_width / makespan
+    resource_section_height = 34 + 22 * len(schedule.resource_summaries) if schedule.resource_summaries else 0
+    chart_bottom = chart_top + len(schedule.worker_timelines) * (lane_height + lane_gap) - lane_gap
+    footer_top = chart_bottom + 34
+    height = footer_top + 110 + resource_section_height
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+        f'  <title id="{title_id}">{_html_escape(title)}</title>',
+        (
+            f'  <desc id="{desc_id}">Worker timeline for {_html_escape(title)} '
+            f'with {_html_escape(_format_worker_limit_label(schedule.worker_limit))}, '
+            f'strategy {_html_escape(_format_schedule_strategy_label(schedule.strategy))}, and makespan {schedule.makespan}.</desc>'
+        ),
+        '  <rect width="100%" height="100%" fill="#f8fafc" />',
+        f'  <rect x="20" y="20" width="{width - 40}" height="{height - 40}" rx="28" fill="#ffffff" stroke="#d7dde8" stroke-width="2" />',
+        f'  <text x="48" y="62" font-size="30" font-weight="700" fill="#0f172a">{_html_escape(title)}</text>',
+        (
+            '  <text x="48" y="92" font-size="16" fill="#475569">'
+            f'{_html_escape(_format_worker_limit_label(schedule.worker_limit))} · '
+            f'{_html_escape(_format_schedule_strategy_label(schedule.strategy))} · '
+            f'makespan {schedule.makespan} · utilization {_format_percent(schedule.utilization)} · '
+            f'idle capacity {schedule.idle_capacity}</text>'
+        ),
+        (
+            '  <text x="48" y="118" font-size="14" fill="#64748b">'
+            f'Unlimited bound {schedule.unlimited_makespan} · theoretical lower bound {schedule.theoretical_lower_bound} · '
+            f'dispatch order {_html_escape(", ".join(schedule.dispatch_order))}</text>'
+        ),
+        f'  <line x1="{chart_left}" y1="{chart_top - 12}" x2="{chart_left}" y2="{chart_bottom + 8}" stroke="#0f172a" stroke-width="2" />',
+        f'  <line x1="{chart_left}" y1="{chart_bottom + 8}" x2="{chart_right}" y2="{chart_bottom + 8}" stroke="#0f172a" stroke-width="2" />',
+    ]
+
+    ticks = list(range(0, makespan + 1, tick_step))
+    if ticks[-1] != makespan:
+        ticks.append(makespan)
+    for tick in ticks:
+        x = chart_left + tick * unit_width
+        lines.append(
+            f'  <line x1="{x:.2f}" y1="{chart_top - 12}" x2="{x:.2f}" y2="{chart_bottom + 8}" stroke="#dbe4f0" stroke-width="1" />'
+        )
+        lines.append(
+            f'  <text x="{x:.2f}" y="{chart_top - 20}" font-size="13" text-anchor="middle" fill="#64748b">{tick}</text>'
+        )
+
+    for index, timeline in enumerate(schedule.worker_timelines, start=1):
+        lane_y = chart_top + (index - 1) * (lane_height + lane_gap)
+        bar_y = lane_y + (lane_height - bar_height) / 2
+        lines.append(
+            f'  <rect x="32" y="{lane_y}" width="{width - 64}" height="{lane_height}" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />'
+        )
+        lines.append(
+            f'  <text x="56" y="{lane_y + 31}" font-size="15" font-weight="600" fill="#0f172a">Worker {index}</text>'
+        )
+        if not timeline:
+            lines.append(
+                f'  <text x="{chart_left + 16}" y="{lane_y + 31}" font-size="14" fill="#94a3b8">idle for entire schedule</text>'
+            )
+            continue
+        for item in timeline:
+            fill, stroke = ("#fee2e2", "#b91c1c") if item.critical else _stable_svg_color(item.name)
+            x = chart_left + item.start * unit_width
+            width_value = max((item.finish - item.start) * unit_width, 14)
+            label = _truncate_display(item.name, limit=24)
+            queue_suffix = f"; queue delay {item.queue_delay}" if item.queue_delay else ""
+            resource_text = _format_resource_allocations(item.resource_allocations)
+            resource_suffix = f"; resources {resource_text}" if resource_text else ""
+            lines.extend(
+                [
+                    '  <g>',
+                    f'    <title>{_html_escape(item.name)} — worker {item.worker}, {item.start}→{item.finish}, duration {item.duration}{queue_suffix}{resource_suffix}</title>',
+                    (
+                        f'    <rect x="{x:.2f}" y="{bar_y:.2f}" width="{width_value:.2f}" height="{bar_height}" '
+                        f'rx="10" fill="{fill}" stroke="{stroke}" stroke-width="2" />'
+                    ),
+                ]
+            )
+            if width_value >= 74:
+                lines.append(
+                    f'    <text x="{x + 8:.2f}" y="{bar_y + 19:.2f}" font-size="13" fill="#0f172a">{_html_escape(label)}</text>'
+                )
+            else:
+                lines.append(
+                    f'    <text x="{x + width_value + 6:.2f}" y="{bar_y + 19:.2f}" font-size="12" fill="#475569">{_html_escape(label)}</text>'
+                )
+            lines.append('  </g>')
+            if item.queue_delay:
+                lines.append(
+                    f'  <text x="{x + width_value / 2:.2f}" y="{bar_y + bar_height + 14:.2f}" font-size="11" text-anchor="middle" fill="#b45309">delay {item.queue_delay}</text>'
+                )
+
+    summary_y = footer_top
+    lines.extend(
+        [
+            f'  <rect x="40" y="{summary_y}" width="{width - 80}" height="76" rx="22" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" />',
+            f'  <text x="64" y="{summary_y + 28}" font-size="18" font-weight="700" fill="#312e81">Schedule summary</text>',
+            (
+                f'  <text x="64" y="{summary_y + 54}" font-size="14" fill="#4338ca">'
+                f'Critical tasks are highlighted in red. Worker lanes show deterministic dispatch over {_html_escape(_format_worker_limit_label(schedule.worker_limit))}.</text>'
+            ),
+        ]
+    )
+    if schedule.resource_capacities:
+        rendered_caps = ", ".join(
+            f"{resource_class}={capacity}" for resource_class, capacity in schedule.resource_capacities.items()
+        )
+        lines.append(
+            f'  <text x="64" y="{summary_y + 76}" font-size="13" fill="#475569">Renewable resource caps: {_html_escape(rendered_caps)}</text>'
+        )
+    else:
+        lines.append(
+            f'  <text x="64" y="{summary_y + 76}" font-size="13" fill="#475569">No renewable resource caps were required for this schedule.</text>'
+        )
+
+    if schedule.resource_summaries:
+        resource_y = summary_y + 110
+        lines.append(
+            f'  <text x="48" y="{resource_y}" font-size="18" font-weight="700" fill="#0f172a">Resource utilization</text>'
+        )
+        for offset, item in enumerate(schedule.resource_summaries, start=1):
+            y = resource_y + offset * 22
+            lines.append(
+                f'  <text x="64" y="{y}" font-size="13" fill="#475569">{_html_escape(item.resource_class)}: capacity {item.capacity}, peak {item.peak_concurrent_usage}, utilization {_format_percent(item.utilization)}, delayed tasks {item.delayed_tasks}, max queue delay {item.max_queue_delay}</text>'
+            )
+
+    lines.append('</svg>')
+    return "\n".join(lines)
+
+
 def _humanize_stem(value: str) -> str:
     return value.replace("-", " ").replace("_", " ").strip() or value
 
@@ -1341,6 +1535,35 @@ def _collect_report_strategies(
     return unique
 
 
+def _ordered_report_comparison_schedules(
+    *,
+    worker_limited_schedule: WorkerLimitedSchedule | None,
+    comparison_schedules: Sequence[WorkerLimitedSchedule] | None,
+) -> list[WorkerLimitedSchedule]:
+    comparison_schedule_lookup = {schedule.worker_limit: schedule for schedule in comparison_schedules or ()}
+    if worker_limited_schedule is not None:
+        comparison_schedule_lookup.setdefault(worker_limited_schedule.worker_limit, worker_limited_schedule)
+    return [comparison_schedule_lookup[limit] for limit in sorted(comparison_schedule_lookup)]
+
+
+def _ordered_report_strategy_schedules(
+    *,
+    worker_limited_schedule: WorkerLimitedSchedule | None,
+    strategy_comparison_schedules: Sequence[WorkerLimitedSchedule] | None,
+) -> list[WorkerLimitedSchedule]:
+    ordered: list[WorkerLimitedSchedule] = []
+    seen_strategies: set[str] = set()
+    if worker_limited_schedule is not None:
+        ordered.append(worker_limited_schedule)
+        seen_strategies.add(worker_limited_schedule.strategy)
+    for schedule in strategy_comparison_schedules or ():
+        if schedule.strategy in seen_strategies:
+            continue
+        ordered.append(schedule)
+        seen_strategies.add(schedule.strategy)
+    return ordered
+
+
 def build_report_title(*, source_label: str, explicit_title: str | None = None) -> str:
     if explicit_title:
         return explicit_title
@@ -1411,6 +1634,7 @@ def write_report_supporting_artifacts(
 
     if schedule_lookup:
         schedule_paths: dict[str, str] = {}
+        schedule_svg_paths: dict[str, str] = {}
         include_strategy_in_key = len({schedule.strategy for schedule in schedule_lookup.values()}) > 1 or any(
             schedule.strategy != DEFAULT_SCHEDULE_STRATEGY for schedule in schedule_lookup.values()
         )
@@ -1418,19 +1642,36 @@ def write_report_supporting_artifacts(
             schedule_lookup.values(),
             key=lambda item: (item.worker_limit, SCHEDULE_STRATEGIES.index(item.strategy), item.dispatch_order),
         )
+        base_title = _humanize_stem(stem).title()
         for schedule in ordered_schedules:
             key = (
                 f"{schedule.worker_limit}:{schedule.strategy}"
                 if include_strategy_in_key
                 else str(schedule.worker_limit)
             )
-            filename = f"{stem}_{_worker_limit_slug(schedule.worker_limit)}"
-            if include_strategy_in_key or schedule.strategy != DEFAULT_SCHEDULE_STRATEGY:
-                filename += f"_{_strategy_slug(schedule.strategy)}"
+            filename = _build_schedule_artifact_filename(
+                stem,
+                schedule,
+                include_strategy_in_key=include_strategy_in_key,
+            )
             schedule_json_path = output_dir / f"{filename}_schedule.json"
+            schedule_svg_path = output_dir / f"{filename}_schedule.svg"
             _write_text(schedule_json_path, json.dumps(schedule_to_dict(schedule), indent=2) + "\n")
+            _write_text(
+                schedule_svg_path,
+                render_schedule_timeline_svg(
+                    schedule,
+                    title=(
+                        f"Dependency graph schedule — {base_title} — "
+                        f"{_format_worker_limit_label(schedule.worker_limit)} — "
+                        f"{_format_schedule_strategy_label(schedule.strategy)}"
+                    ),
+                ),
+            )
             schedule_paths[key] = str(schedule_json_path)
+            schedule_svg_paths[key] = str(schedule_svg_path)
         artifacts["worker_limited_schedule_jsons"] = schedule_paths
+        artifacts["worker_limited_schedule_svgs"] = schedule_svg_paths
         if worker_limited_schedule is not None:
             primary_key = (
                 f"{worker_limited_schedule.worker_limit}:{worker_limited_schedule.strategy}"
@@ -1438,11 +1679,12 @@ def write_report_supporting_artifacts(
                 else str(worker_limited_schedule.worker_limit)
             )
             artifacts["worker_limited_schedule_json"] = schedule_paths[primary_key]
+            artifacts["worker_limited_schedule_svg"] = schedule_svg_paths[primary_key]
         elif len(schedule_paths) == 1:
             artifacts["worker_limited_schedule_json"] = next(iter(schedule_paths.values()))
+            artifacts["worker_limited_schedule_svg"] = next(iter(schedule_svg_paths.values()))
 
     return artifacts
-
 
 def render_report_markdown(
     tasks: dict[str, Task],
@@ -1465,21 +1707,14 @@ def render_report_markdown(
         default=(0, []),
     )
     critical_path_rendered = " -> ".join(plan.critical_path) if plan.critical_path else "(none)"
-    comparison_schedule_lookup = {schedule.worker_limit: schedule for schedule in comparison_schedules or ()}
-    if worker_limited_schedule is not None:
-        comparison_schedule_lookup.setdefault(worker_limited_schedule.worker_limit, worker_limited_schedule)
-    ordered_comparison_schedules = [comparison_schedule_lookup[limit] for limit in sorted(comparison_schedule_lookup)]
-
-    ordered_strategy_schedules: list[WorkerLimitedSchedule] = []
-    seen_strategies: set[str] = set()
-    if worker_limited_schedule is not None:
-        ordered_strategy_schedules.append(worker_limited_schedule)
-        seen_strategies.add(worker_limited_schedule.strategy)
-    for schedule in strategy_comparison_schedules or ():
-        if schedule.strategy in seen_strategies:
-            continue
-        ordered_strategy_schedules.append(schedule)
-        seen_strategies.add(schedule.strategy)
+    ordered_comparison_schedules = _ordered_report_comparison_schedules(
+        worker_limited_schedule=worker_limited_schedule,
+        comparison_schedules=comparison_schedules,
+    )
+    ordered_strategy_schedules = _ordered_report_strategy_schedules(
+        worker_limited_schedule=worker_limited_schedule,
+        strategy_comparison_schedules=strategy_comparison_schedules,
+    )
 
     lines = [f"# {resolved_title}", ""]
     lines.extend(
@@ -1802,39 +2037,282 @@ def render_report_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def render_report_dashboard_html(
+    tasks: dict[str, Task],
+    plan: PlanResult,
+    *,
+    source_label: str,
+    html_output_path: str,
+    title: str | None = None,
+    report_markdown_out: str | None = None,
+    artifacts: dict[str, Any] | None = None,
+    worker_limited_schedule: WorkerLimitedSchedule | None = None,
+    comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
+    strategy_comparison_schedules: Sequence[WorkerLimitedSchedule] | None = None,
+) -> str:
+    resolved_title = build_report_title(source_label=source_label, explicit_title=title)
+    artifacts = artifacts or {}
+    critical_path_text = " → ".join(plan.critical_path) if plan.critical_path else "(none)"
+    ordered_comparison_schedules = _ordered_report_comparison_schedules(
+        worker_limited_schedule=worker_limited_schedule,
+        comparison_schedules=comparison_schedules,
+    )
+    ordered_strategy_schedules = _ordered_report_strategy_schedules(
+        worker_limited_schedule=worker_limited_schedule,
+        strategy_comparison_schedules=strategy_comparison_schedules,
+    )
+
+    summary_cards = [
+        ("Tasks", str(len(tasks))),
+        ("Parallel layers", str(len(plan.layers))),
+        ("Unlimited makespan", str(plan.total_duration)),
+        ("Critical path", critical_path_text),
+    ]
+    if worker_limited_schedule is not None:
+        summary_cards.extend(
+            [
+                ("Worker cap", _format_worker_limit_label(worker_limited_schedule.worker_limit)),
+                ("Constrained makespan", str(worker_limited_schedule.makespan)),
+                ("Strategy", _format_schedule_strategy_label(worker_limited_schedule.strategy)),
+                ("Utilization", _format_percent(worker_limited_schedule.utilization)),
+            ]
+        )
+    elif ordered_comparison_schedules:
+        summary_cards.append(("Compared worker caps", str(len(ordered_comparison_schedules))))
+
+    summary_html = "".join(
+        f'<li><strong>{_html_escape(value)}</strong>{_html_escape(label)}</li>' for label, value in summary_cards
+    )
+
+    artifact_rows: list[str] = []
+    if report_markdown_out:
+        href = _relative_markdown_link(report_markdown_out, from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">Markdown walkthrough</a><span class="muted"><code>{_html_escape(Path(report_markdown_out).name)}</code></span></li>'
+        )
+    if artifacts.get("mermaid_preview"):
+        href = _relative_markdown_link(artifacts["mermaid_preview"], from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">GitHub-friendly Mermaid preview</a><span class="muted"><code>{_html_escape(Path(artifacts["mermaid_preview"]).name)}</code></span></li>'
+        )
+    if artifacts.get("mermaid_source"):
+        href = _relative_markdown_link(artifacts["mermaid_source"], from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">Mermaid source</a><span class="muted"><code>{_html_escape(Path(artifacts["mermaid_source"]).name)}</code></span></li>'
+        )
+    if artifacts.get("dot_source"):
+        href = _relative_markdown_link(artifacts["dot_source"], from_path=html_output_path)
+        artifact_rows.append(
+            f'<li><a href="{_html_escape(href)}">Graphviz DOT source</a><span class="muted"><code>{_html_escape(Path(artifacts["dot_source"]).name)}</code></span></li>'
+        )
+
+    schedule_json_paths = artifacts.get("worker_limited_schedule_jsons") or {}
+    schedule_svg_paths = artifacts.get("worker_limited_schedule_svgs") or {}
+    include_strategy_in_key = any(":" in key for key in set(schedule_json_paths) | set(schedule_svg_paths))
+    schedule_entries: dict[tuple[int, str], WorkerLimitedSchedule] = {}
+    for schedule in ordered_comparison_schedules:
+        schedule_entries[(schedule.worker_limit, schedule.strategy)] = schedule
+    for schedule in ordered_strategy_schedules:
+        schedule_entries[(schedule.worker_limit, schedule.strategy)] = schedule
+
+    schedule_rows: list[str] = []
+    for _, schedule in sorted(
+        schedule_entries.items(),
+        key=lambda item: (item[0][0], SCHEDULE_STRATEGIES.index(item[0][1]), item[1].makespan),
+    ):
+        raw_key = (
+            f"{schedule.worker_limit}:{schedule.strategy}"
+            if include_strategy_in_key
+            else str(schedule.worker_limit)
+        )
+        delayed_count = sum(1 for item in schedule.assignments if item.queue_delay > 0)
+        links: list[str] = []
+        if raw_key in schedule_svg_paths:
+            href = _relative_markdown_link(schedule_svg_paths[raw_key], from_path=html_output_path)
+            links.append(f'<a href="{_html_escape(href)}">SVG timeline</a>')
+        if raw_key in schedule_json_paths:
+            href = _relative_markdown_link(schedule_json_paths[raw_key], from_path=html_output_path)
+            links.append(f'<a href="{_html_escape(href)}">JSON payload</a>')
+        link_html = " · ".join(links) if links else '<span class="muted">No exported files</span>'
+        schedule_rows.append(
+            "<tr>"
+            f"<td>{_html_escape(_format_worker_limit_label(schedule.worker_limit))}</td>"
+            f"<td><code>{_html_escape(_format_schedule_strategy_label(schedule.strategy))}</code></td>"
+            f"<td>{schedule.makespan}</td>"
+            f"<td>{schedule.makespan - schedule.unlimited_makespan}</td>"
+            f"<td>{_html_escape(_format_percent(schedule.utilization))}</td>"
+            f"<td>{delayed_count}</td>"
+            f"<td>{link_html}</td>"
+            "</tr>"
+        )
+        if raw_key in schedule_svg_paths:
+            href = _relative_markdown_link(schedule_svg_paths[raw_key], from_path=html_output_path)
+            artifact_rows.append(
+                f'<li><a href="{_html_escape(href)}">Schedule SVG — {_html_escape(_format_worker_limit_label(schedule.worker_limit))} / {_html_escape(_format_schedule_strategy_label(schedule.strategy))}</a><span class="muted"><code>{_html_escape(Path(schedule_svg_paths[raw_key]).name)}</code></span></li>'
+            )
+        if raw_key in schedule_json_paths:
+            href = _relative_markdown_link(schedule_json_paths[raw_key], from_path=html_output_path)
+            artifact_rows.append(
+                f'<li><a href="{_html_escape(href)}">Schedule JSON — {_html_escape(_format_worker_limit_label(schedule.worker_limit))} / {_html_escape(_format_schedule_strategy_label(schedule.strategy))}</a><span class="muted"><code>{_html_escape(Path(schedule_json_paths[raw_key]).name)}</code></span></li>'
+            )
+
+    primary_schedule_svg = artifacts.get("worker_limited_schedule_svg")
+    primary_schedule_img = ""
+    if primary_schedule_svg:
+        href = _relative_markdown_link(primary_schedule_svg, from_path=html_output_path)
+        primary_schedule_img = f'''
+      <section class="panel chart">
+        <h2>Primary schedule preview</h2>
+        <p class="muted">GitHub-friendly SVG timeline for the primary constrained schedule.</p>
+        <a href="{_html_escape(href)}"><img src="{_html_escape(href)}" alt="Primary schedule SVG timeline" /></a>
+      </section>'''
+
+    worker_comparison_section = ""
+    if schedule_rows:
+        worker_comparison_section = f'''
+      <section class="panel">
+        <h2>Schedule comparison snapshot</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Worker limit</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Utilization</th>
+              <th>Delayed tasks</th>
+              <th>Artifacts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {"".join(schedule_rows)}
+          </tbody>
+        </table>
+      </section>'''
+
+    strategy_note = ""
+    if len(ordered_strategy_schedules) > 1:
+        strategy_note = (
+            '<p class="muted">This report also includes a fixed-worker strategy comparison so reviewers can see '
+            'how queue policy changes the same DAG under identical constraints.</p>'
+        )
+
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_html_escape(resolved_title)} — dashboard</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }}
+      main {{ max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }}
+      h1, h2, h3, p {{ margin-top: 0; }}
+      a {{ color: var(--accent); }}
+      code {{ font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; word-break: break-word; }}
+      .hero, .panel {{ background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }}
+      .hero {{ padding: 28px; margin-bottom: 24px; }}
+      .hero p {{ color: var(--muted); max-width: 980px; }}
+      .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; padding: 0; }}
+      .summary-grid li {{ list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }}
+      .summary-grid strong {{ display: block; font-size: 1.25rem; margin-bottom: 6px; }}
+      .panel {{ padding: 20px; margin-bottom: 24px; overflow: auto; }}
+      .artifact-list {{ margin: 0; padding-left: 1.1rem; }}
+      .artifact-list li {{ margin: 0.6rem 0; }}
+      .muted {{ color: var(--muted); display: block; margin-top: 4px; font-size: 0.92rem; }}
+      .chart img {{ width: 100%; height: auto; min-width: 880px; display: block; border-radius: 18px; border: 1px solid var(--border); background: #fff; }}
+      table {{ width: 100%; border-collapse: collapse; min-width: 760px; }}
+      th, td {{ padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }}
+      th {{ font-size: 0.92rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }}
+      .chips {{ display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1rem; }}
+      .chip {{ display: inline-flex; align-items: center; padding: 0.45rem 0.75rem; border-radius: 999px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="chip">Dependency graph planner</p>
+        <h1>{_html_escape(resolved_title)} — dashboard</h1>
+        <p>Browser-friendly landing page for the committed walkthrough artifacts. Start here when you want the dependency graph story, the constrained schedule evidence, and the export bundle links without opening raw JSON first.</p>
+        <div class="chips">
+          <span class="chip">Source <code>{_html_escape(source_label)}</code></span>
+          <span class="chip">Critical path <code>{_html_escape(critical_path_text)}</code></span>
+        </div>
+        <ul class="summary-grid">
+          {summary_html}
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Artifact bundle</h2>
+        <p class="muted">Stable, relative links make this dashboard safe to commit alongside the Markdown walkthrough and schedule exports.</p>
+        <ul class="artifact-list">
+          {"".join(artifact_rows) if artifact_rows else '<li>No companion artifacts were exported for this view yet.</li>'}
+        </ul>
+      </section>
+      {primary_schedule_img}
+      {worker_comparison_section}
+      <section class="panel">
+        <h2>Portfolio talking points</h2>
+        <p>This project demonstrates deterministic DAG planning, critical-path timing, and realistic worker/resource bottlenecks in one small Python program. The linked Markdown walkthrough explains the reasoning, while the SVG timeline helps reviewers see the constrained schedule at a glance.</p>
+        {strategy_note}
+      </section>
+    </main>
+  </body>
+</html>
+'''
+
+
 def _build_report_artifact_links(
     artifacts: dict[str, Any],
     *,
     report_markdown_out: str | None,
+    report_html_out: str | None = None,
 ) -> list[tuple[str, str]]:
-    ordered = [
-        ("GitHub-friendly Mermaid preview", artifacts["mermaid_preview"]),
-        ("Mermaid source", artifacts["mermaid_source"]),
-        ("Graphviz DOT source", artifacts["dot_source"]),
-    ]
-    schedule_paths = artifacts.get("worker_limited_schedule_jsons") or {}
-    if isinstance(schedule_paths, dict) and schedule_paths:
-        parsed_schedule_paths: list[tuple[int, str | None, str]] = []
-        for raw_key, path in schedule_paths.items():
-            if ":" in raw_key:
-                raw_limit, strategy = raw_key.split(":", maxsplit=1)
-                parsed_schedule_paths.append((int(raw_limit), strategy, path))
-            else:
-                parsed_schedule_paths.append((int(raw_key), None, path))
+    ordered: list[tuple[str, str]] = []
+    if artifacts.get("mermaid_preview"):
+        ordered.append(("GitHub-friendly Mermaid preview", artifacts["mermaid_preview"]))
+    if artifacts.get("mermaid_source"):
+        ordered.append(("Mermaid source", artifacts["mermaid_source"]))
+    if artifacts.get("dot_source"):
+        ordered.append(("Graphviz DOT source", artifacts["dot_source"]))
+    if report_html_out:
+        ordered.append(("Report dashboard HTML", report_html_out))
 
-        parsed_schedule_paths.sort(
-            key=lambda item: (item[0], SCHEDULE_STRATEGIES.index(item[1]) if item[1] else -1)
-        )
-
-        if len(parsed_schedule_paths) == 1 and parsed_schedule_paths[0][1] is None:
-            ordered.append(("Worker-limited schedule JSON", parsed_schedule_paths[0][2]))
+    schedule_json_paths = artifacts.get("worker_limited_schedule_jsons") or {}
+    schedule_svg_paths = artifacts.get("worker_limited_schedule_svgs") or {}
+    parsed_schedule_entries = _parse_schedule_artifact_entries(
+        {
+            key: schedule_json_paths.get(key) or schedule_svg_paths.get(key) or ""
+            for key in set(schedule_json_paths) | set(schedule_svg_paths)
+        }
+    )
+    if parsed_schedule_entries:
+        if len(parsed_schedule_entries) == 1 and parsed_schedule_entries[0][2] is None:
+            raw_key = parsed_schedule_entries[0][0]
+            if raw_key in schedule_svg_paths:
+                ordered.append(("Worker-limited schedule SVG", schedule_svg_paths[raw_key]))
+            if raw_key in schedule_json_paths:
+                ordered.append(("Worker-limited schedule JSON", schedule_json_paths[raw_key]))
         else:
-            for worker_limit, strategy, path in parsed_schedule_paths:
-                label = f"Worker-limited schedule JSON ({_format_worker_limit_label(worker_limit)}"
+            for raw_key, worker_limit, strategy, _ in parsed_schedule_entries:
+                suffix = f" ({_format_worker_limit_label(worker_limit)}"
                 if strategy is not None:
-                    label += f", {_format_schedule_strategy_label(strategy)}"
-                label += ")"
-                ordered.append((label, path))
+                    suffix += f", {_format_schedule_strategy_label(strategy)}"
+                suffix += ")"
+                if raw_key in schedule_svg_paths:
+                    ordered.append((f"Worker-limited schedule SVG{suffix}", schedule_svg_paths[raw_key]))
+                if raw_key in schedule_json_paths:
+                    ordered.append((f"Worker-limited schedule JSON{suffix}", schedule_json_paths[raw_key]))
     if report_markdown_out:
         return [
             (label, _relative_markdown_link(target, from_path=report_markdown_out))
@@ -1990,6 +2468,7 @@ def _ensure_command_flags_are_valid(
     command: str,
     *,
     report_markdown_out: str | None,
+    report_html_out: str | None,
     report_title: str | None,
     diagram_output_dir: str | None,
     worker_limit: int | None,
@@ -2000,7 +2479,7 @@ def _ensure_command_flags_are_valid(
     benchmark_markdown_out: str | None,
     benchmark_title: str | None,
 ) -> None:
-    if command != "report" and any(value is not None for value in (report_markdown_out, report_title, diagram_output_dir)):
+    if command != "report" and any(value is not None for value in (report_markdown_out, report_html_out, report_title, diagram_output_dir)):
         raise ValueError("report-specific flags require the report command")
     if command != "benchmark" and any(value is not None for value in (benchmark_markdown_out, benchmark_title)):
         raise ValueError("benchmark-specific flags require the benchmark command")
@@ -2008,6 +2487,7 @@ def _ensure_command_flags_are_valid(
         value is not None
         for value in (
             report_markdown_out,
+            report_html_out,
             report_title,
             diagram_output_dir,
             worker_limit,
@@ -2062,6 +2542,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="diagram output format for the diagram command",
     )
     parser.add_argument("--report-markdown-out", help="write a recruiter-friendly Markdown walkthrough report")
+    parser.add_argument("--report-html-out", help="write a compact static HTML dashboard for the report bundle")
     parser.add_argument("--report-title", help="optional title for the report command")
     parser.add_argument(
         "--diagram-output-dir",
@@ -2108,6 +2589,7 @@ def run_command(
     as_json: bool = False,
     diagram_format: str = "mermaid",
     report_markdown_out: str | None = None,
+    report_html_out: str | None = None,
     report_title: str | None = None,
     diagram_output_dir: str | None = None,
     worker_limit: int | None = None,
@@ -2121,6 +2603,7 @@ def run_command(
     _ensure_command_flags_are_valid(
         command,
         report_markdown_out=report_markdown_out,
+        report_html_out=report_html_out,
         report_title=report_title,
         diagram_output_dir=diagram_output_dir,
         worker_limit=worker_limit,
@@ -2224,7 +2707,15 @@ def run_command(
             if diagram_output_dir
             else {}
         )
-        diagram_links = _build_report_artifact_links(artifacts, report_markdown_out=report_markdown_out) if artifacts else None
+        diagram_links = (
+            _build_report_artifact_links(
+                artifacts,
+                report_markdown_out=report_markdown_out,
+                report_html_out=report_html_out,
+            )
+            if artifacts or report_html_out
+            else None
+        )
         report = render_report_markdown(
             tasks,
             plan,
@@ -2237,6 +2728,22 @@ def run_command(
         )
         if report_markdown_out:
             _write_text(report_markdown_out, report)
+        if report_html_out:
+            _write_text(
+                report_html_out,
+                render_report_dashboard_html(
+                    tasks,
+                    plan,
+                    source_label=graph_path,
+                    html_output_path=report_html_out,
+                    title=report_title,
+                    report_markdown_out=report_markdown_out,
+                    artifacts=artifacts,
+                    worker_limited_schedule=schedule,
+                    comparison_schedules=comparison_schedules,
+                    strategy_comparison_schedules=strategy_comparison_schedules,
+                ),
+            )
         if as_json:
             return json.dumps(
                 {
@@ -2248,6 +2755,7 @@ def run_command(
                     "report_markdown": report,
                     "artifacts": artifacts,
                     "report_markdown_out": report_markdown_out,
+                    "report_html_out": report_html_out,
                 },
                 indent=2,
             )
@@ -2276,6 +2784,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             as_json=args.as_json,
             diagram_format=args.diagram_format,
             report_markdown_out=args.report_markdown_out,
+            report_html_out=args.report_html_out,
             report_title=args.report_title,
             diagram_output_dir=args.diagram_output_dir,
             worker_limit=args.worker_limit,

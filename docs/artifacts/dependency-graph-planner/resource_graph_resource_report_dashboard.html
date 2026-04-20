@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dependency graph walkthrough — Resource Graph — dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --panel-alt: #eef2ff;
+        --border: #d7dde8;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 1440px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1, h2, h3, p { margin-top: 0; }
+      a { color: var(--accent); }
+      code { font-family: "SFMono-Regular", SFMono-Regular, ui-monospace, monospace; word-break: break-word; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05); }
+      .hero { padding: 28px; margin-bottom: 24px; }
+      .hero p { color: var(--muted); max-width: 980px; }
+      .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; padding: 0; }
+      .summary-grid li { list-style: none; margin: 0; padding: 16px 18px; border-radius: 18px; background: var(--panel-alt); border: 1px solid #c7d2fe; }
+      .summary-grid strong { display: block; font-size: 1.25rem; margin-bottom: 6px; }
+      .panel { padding: 20px; margin-bottom: 24px; overflow: auto; }
+      .artifact-list { margin: 0; padding-left: 1.1rem; }
+      .artifact-list li { margin: 0.6rem 0; }
+      .muted { color: var(--muted); display: block; margin-top: 4px; font-size: 0.92rem; }
+      .chart img { width: 100%; height: auto; min-width: 880px; display: block; border-radius: 18px; border: 1px solid var(--border); background: #fff; }
+      table { width: 100%; border-collapse: collapse; min-width: 760px; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th { font-size: 0.92rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1rem; }
+      .chip { display: inline-flex; align-items: center; padding: 0.45rem 0.75rem; border-radius: 999px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="chip">Dependency graph planner</p>
+        <h1>Dependency graph walkthrough — Resource Graph — dashboard</h1>
+        <p>Browser-friendly landing page for the committed walkthrough artifacts. Start here when you want the dependency graph story, the constrained schedule evidence, and the export bundle links without opening raw JSON first.</p>
+        <div class="chips">
+          <span class="chip">Source <code>projects/dependency-graph-planner/resource_graph.json</code></span>
+          <span class="chip">Critical path <code>prep → gpu-train → package</code></span>
+        </div>
+        <ul class="summary-grid">
+          <li><strong>5</strong>Tasks</li><li><strong>3</strong>Parallel layers</li><li><strong>6</strong>Unlimited makespan</li><li><strong>prep → gpu-train → package</strong>Critical path</li><li><strong>3 workers</strong>Worker cap</li><li><strong>8</strong>Constrained makespan</li><li><strong>critical-first</strong>Strategy</li><li><strong>45.8%</strong>Utilization</li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Artifact bundle</h2>
+        <p class="muted">Stable, relative links make this dashboard safe to commit alongside the Markdown walkthrough and schedule exports.</p>
+        <ul class="artifact-list">
+          <li><a href="resource_graph_resource_report.md">Markdown walkthrough</a><span class="muted"><code>resource_graph_resource_report.md</code></span></li><li><a href="resource_graph_mermaid.md">GitHub-friendly Mermaid preview</a><span class="muted"><code>resource_graph_mermaid.md</code></span></li><li><a href="resource_graph.mmd">Mermaid source</a><span class="muted"><code>resource_graph.mmd</code></span></li><li><a href="resource_graph.dot">Graphviz DOT source</a><span class="muted"><code>resource_graph.dot</code></span></li><li><a href="resource_graph_3_workers_schedule.svg">Schedule SVG — 3 workers / critical-first</a><span class="muted"><code>resource_graph_3_workers_schedule.svg</code></span></li><li><a href="resource_graph_3_workers_schedule.json">Schedule JSON — 3 workers / critical-first</a><span class="muted"><code>resource_graph_3_workers_schedule.json</code></span></li>
+        </ul>
+      </section>
+      
+      <section class="panel chart">
+        <h2>Primary schedule preview</h2>
+        <p class="muted">GitHub-friendly SVG timeline for the primary constrained schedule.</p>
+        <a href="resource_graph_3_workers_schedule.svg"><img src="resource_graph_3_workers_schedule.svg" alt="Primary schedule SVG timeline" /></a>
+      </section>
+      
+      <section class="panel">
+        <h2>Schedule comparison snapshot</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Worker limit</th>
+              <th>Strategy</th>
+              <th>Makespan</th>
+              <th>Δ vs unlimited</th>
+              <th>Utilization</th>
+              <th>Delayed tasks</th>
+              <th>Artifacts</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>3 workers</td><td><code>critical-first</code></td><td>8</td><td>2</td><td>45.8%</td><td>1</td><td><a href="resource_graph_3_workers_schedule.svg">SVG timeline</a> · <a href="resource_graph_3_workers_schedule.json">JSON payload</a></td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h2>Portfolio talking points</h2>
+        <p>This project demonstrates deterministic DAG planning, critical-path timing, and realistic worker/resource bottlenecks in one small Python program. The linked Markdown walkthrough explains the reasoning, while the SVG timeline helps reviewers see the constrained schedule at a glance.</p>
+        
+      </section>
+    </main>
+  </body>
+</html>

@@ -13,8 +13,12 @@
 - [GitHub-friendly Mermaid preview](strategy_graph_mermaid.md)
 - [Mermaid source](strategy_graph.mmd)
 - [Graphviz DOT source](strategy_graph.dot)
+- [Report dashboard HTML](strategy_graph_strategy_report_dashboard.html)
+- [Worker-limited schedule SVG (2 workers, critical-first)](strategy_graph_2_workers_critical_first_schedule.svg)
 - [Worker-limited schedule JSON (2 workers, critical-first)](strategy_graph_2_workers_critical_first_schedule.json)
+- [Worker-limited schedule SVG (2 workers, fifo)](strategy_graph_2_workers_fifo_schedule.svg)
 - [Worker-limited schedule JSON (2 workers, fifo)](strategy_graph_2_workers_fifo_schedule.json)
+- [Worker-limited schedule SVG (2 workers, longest-processing-time)](strategy_graph_2_workers_longest_processing_time_schedule.svg)
 - [Worker-limited schedule JSON (2 workers, longest-processing-time)](strategy_graph_2_workers_longest_processing_time_schedule.json)
 
 ## Portfolio summary

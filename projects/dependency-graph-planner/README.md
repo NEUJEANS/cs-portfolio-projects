@@ -21,10 +21,12 @@ A compact Python project that models a build or delivery workflow as a directed 
 - CLI output in text or JSON form for scripting
 - Mermaid and Graphviz DOT diagram export with per-layer grouping and critical-path highlighting
 - recruiter-friendly Markdown walkthrough reports that bundle layer windows, timing tables, deterministic order, worker/resource comparisons, and linked diagram/schedule artifacts
+- compact static HTML dashboards that turn each report bundle into a README-friendly landing page with relative links and embedded schedule previews
+- GitHub-friendly SVG schedule timelines for constrained runs so reviewers can inspect worker/resource bottlenecks without opening raw JSON
 - batch benchmark-suite mode that replays many manifests, ranks scheduling strategies, and emits a scoreboard-style Markdown summary
 
 ## Project structure
-- `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, scheduler, CLI, diagram export helpers, and walkthrough-report generation
+- `dependency_graph_planner.py` - parser, graph algorithms, timing analysis, scheduler, CLI, diagram export helpers, walkthrough-report generation, HTML dashboard rendering, and schedule SVG export
 - `sample_graph.json` - example build-style workflow manifest
 - `resource_graph.json` - example manifest showing how a single scarce renewable resource serializes otherwise parallel-ready work
 - `strategy_graph.json` - example manifest that makes scheduling-strategy tradeoffs visible under a fixed worker cap
@@ -185,8 +187,10 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py diagram \
 python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
   projects/dependency-graph-planner/sample_graph.json \
   --report-markdown-out docs/artifacts/dependency-graph-planner/sample_graph_report.md \
+  --report-html-out docs/artifacts/dependency-graph-planner/sample_graph_report_dashboard.html \
   --diagram-output-dir docs/artifacts/dependency-graph-planner
 ```
+This emits the linked Markdown walkthrough plus a compact HTML landing page for the same artifact bundle.
 
 ### Compare unlimited execution against a constrained single-worker run
 ```bash
@@ -194,9 +198,10 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
   projects/dependency-graph-planner/sample_graph.json \
   --worker-limit 1 \
   --report-markdown-out docs/artifacts/dependency-graph-planner/sample_graph_single_worker_report.md \
+  --report-html-out docs/artifacts/dependency-graph-planner/sample_graph_single_worker_report_dashboard.html \
   --diagram-output-dir docs/artifacts/dependency-graph-planner
 ```
-This emits the linked report plus `sample_graph_single_worker_schedule.json` in the same artifact directory.
+This emits the linked report plus `sample_graph_single_worker_schedule.json` and `sample_graph_single_worker_schedule.svg` in the same artifact directory.
 
 ### Compare 1-worker, 2-worker, and 3-worker scenarios in one report
 ```bash
@@ -206,9 +211,10 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
   --compare-worker-limit 2 \
   --compare-worker-limit 3 \
   --report-markdown-out docs/artifacts/dependency-graph-planner/sample_graph_worker_comparison_report.md \
+  --report-html-out docs/artifacts/dependency-graph-planner/sample_graph_worker_comparison_report_dashboard.html \
   --diagram-output-dir docs/artifacts/dependency-graph-planner
 ```
-This emits the linked comparison report plus `sample_graph_single_worker_schedule.json`, `sample_graph_2_workers_schedule.json`, and `sample_graph_3_workers_schedule.json`.
+This emits the linked comparison report plus JSON and SVG schedule snapshots for `1`, `2`, and `3` workers.
 
 ### Report a worker-limited run with renewable resource summaries
 ```bash
@@ -216,9 +222,10 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
   projects/dependency-graph-planner/resource_graph.json \
   --worker-limit 3 \
   --report-markdown-out docs/artifacts/dependency-graph-planner/resource_graph_resource_report.md \
+  --report-html-out docs/artifacts/dependency-graph-planner/resource_graph_resource_report_dashboard.html \
   --diagram-output-dir docs/artifacts/dependency-graph-planner
 ```
-This emits the linked report plus `resource_graph_3_workers_schedule.json` with per-task resource allocations and resource-utilization summaries.
+This emits the linked report plus `resource_graph_3_workers_schedule.json` / `.svg` with per-task resource allocations and resource-utilization summaries.
 
 ### Report a multi-resource constrained run
 ```bash
@@ -226,9 +233,10 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
   projects/dependency-graph-planner/multi_resource_graph.json \
   --worker-limit 3 \
   --report-markdown-out docs/artifacts/dependency-graph-planner/multi_resource_graph_report.md \
+  --report-html-out docs/artifacts/dependency-graph-planner/multi_resource_graph_report_dashboard.html \
   --diagram-output-dir docs/artifacts/dependency-graph-planner
 ```
-This emits the linked report plus `multi_resource_graph_3_workers_schedule.json` with per-task demand vectors, concrete slot allocations, and resource summary tables.
+This emits the linked report plus `multi_resource_graph_3_workers_schedule.json` / `.svg` with per-task demand vectors, concrete slot allocations, and resource summary tables.
 
 ### Compare scheduling strategies at a fixed worker cap
 ```bash
@@ -238,9 +246,10 @@ python3 projects/dependency-graph-planner/dependency_graph_planner.py report \
   --compare-strategy fifo \
   --compare-strategy longest-processing-time \
   --report-markdown-out docs/artifacts/dependency-graph-planner/strategy_graph_strategy_report.md \
+  --report-html-out docs/artifacts/dependency-graph-planner/strategy_graph_strategy_report_dashboard.html \
   --diagram-output-dir docs/artifacts/dependency-graph-planner
 ```
-This emits the linked strategy-comparison report plus `strategy_graph_2_workers_critical_first_schedule.json`, `strategy_graph_2_workers_fifo_schedule.json`, and `strategy_graph_2_workers_longest_processing_time_schedule.json`.
+This emits the linked strategy-comparison report plus JSON and SVG schedule snapshots for each compared strategy.
 
 ### Benchmark a suite of manifests
 ```bash
@@ -255,28 +264,42 @@ Committed example artifacts:
 - `docs/artifacts/dependency-graph-planner/sample_graph_mermaid.md`
 - `docs/artifacts/dependency-graph-planner/sample_graph.dot`
 - `docs/artifacts/dependency-graph-planner/sample_graph_report.md`
+- `docs/artifacts/dependency-graph-planner/sample_graph_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/sample_graph_single_worker_report.md`
+- `docs/artifacts/dependency-graph-planner/sample_graph_single_worker_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/sample_graph_worker_comparison_report.md`
+- `docs/artifacts/dependency-graph-planner/sample_graph_worker_comparison_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/sample_graph_single_worker_schedule.json`
+- `docs/artifacts/dependency-graph-planner/sample_graph_single_worker_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/sample_graph_2_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/sample_graph_2_workers_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/sample_graph_3_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/sample_graph_3_workers_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/resource_graph.mmd`
 - `docs/artifacts/dependency-graph-planner/resource_graph_mermaid.md`
 - `docs/artifacts/dependency-graph-planner/resource_graph.dot`
 - `docs/artifacts/dependency-graph-planner/resource_graph_resource_report.md`
+- `docs/artifacts/dependency-graph-planner/resource_graph_resource_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/resource_graph_3_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/resource_graph_3_workers_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/strategy_graph.mmd`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_mermaid.md`
 - `docs/artifacts/dependency-graph-planner/strategy_graph.dot`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_strategy_report.md`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_strategy_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_critical_first_schedule.json`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_critical_first_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_fifo_schedule.json`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_fifo_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_longest_processing_time_schedule.json`
+- `docs/artifacts/dependency-graph-planner/strategy_graph_2_workers_longest_processing_time_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph.mmd`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_mermaid.md`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph.dot`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_report.md`
+- `docs/artifacts/dependency-graph-planner/multi_resource_graph_report_dashboard.html`
 - `docs/artifacts/dependency-graph-planner/multi_resource_graph_3_workers_schedule.json`
+- `docs/artifacts/dependency-graph-planner/multi_resource_graph_3_workers_schedule.svg`
 - `docs/artifacts/dependency-graph-planner/portfolio_benchmark_suite_report.md`
 
 ## Testing
@@ -295,7 +318,7 @@ python3 -m unittest discover -s projects/dependency-graph-planner -p 'test_*.py'
 - what kinds of product choices can change slack, bottlenecks, or scheduling fairness
 
 ## Future improvements
-- export compact HTML/SVG dashboards for README-first browsing without opening raw schedule JSON
-- simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
 - add synthetic manifest generators for CI, release, and data-pipeline scheduling patterns
+- simulate execution traces or stochastic duration changes to compare heuristic robustness under uncertainty
+- add optional randomized stress tests that compare heuristic schedules against the critical-path lower bound
 - export CSV/JSON leaderboard snapshots for downstream plotting or notebook analysis
