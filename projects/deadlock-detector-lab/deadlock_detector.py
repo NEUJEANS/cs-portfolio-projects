@@ -136,6 +136,25 @@ class BankerRequestAnalysis:
         }
 
 
+@dataclass(slots=True)
+class DetectionAvoidanceDashboard:
+    wait_for: WaitForAnalysis
+    allocation: AllocationAnalysis
+    banker_safety: BankerSafetyAnalysis
+    banker_request: BankerRequestAnalysis | None
+    key_takeaways: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model": "deadlock-detection-vs-avoidance",
+            "key_takeaways": self.key_takeaways,
+            "wait_for": self.wait_for.to_dict(),
+            "allocation": self.allocation.to_dict(),
+            "banker_safety": self.banker_safety.to_dict(),
+            "banker_request": self.banker_request.to_dict() if self.banker_request else None,
+        }
+
+
 def stable_unique(values: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -547,6 +566,53 @@ def analyze_banker_request(payload: dict[str, object]) -> BankerRequestAnalysis:
         trial_need=trial_need,
         blocking=safety.blocking,
         trace_steps=safety.trace_steps,
+    )
+
+
+def build_detection_avoidance_dashboard(
+    wait_for: WaitForAnalysis,
+    allocation: AllocationAnalysis,
+    banker_safety: BankerSafetyAnalysis,
+    banker_request: BankerRequestAnalysis | None,
+) -> DetectionAvoidanceDashboard:
+    wait_takeaway = (
+        f"Wait-for detection finds a concrete cycle among {', '.join(wait_for.blocked_processes)}."
+        if wait_for.deadlocked and wait_for.blocked_processes
+        else "Wait-for detection does not find a cycle in this process-only view."
+    )
+    allocation_takeaway = (
+        "Resource-allocation detection still leaves "
+        + ", ".join(allocation.deadlocked_processes)
+        + (
+            f" blocked after only {', '.join(allocation.finish_order)} can finish."
+            if allocation.finish_order
+            else " blocked with no runnable finish order."
+        )
+        if allocation.deadlocked and allocation.deadlocked_processes
+        else "Resource-allocation detection finds a safe finish order once currently runnable processes release what they hold."
+    )
+    banker_takeaway = (
+        f"Banker's avoidance keeps the system safe with sequence {', '.join(banker_safety.safe_sequence)}."
+        if banker_safety.safe
+        else "Banker's safety check shows the state is already unsafe, so avoidance would reject further risky moves."
+    )
+    takeaways = [wait_takeaway, allocation_takeaway, banker_takeaway]
+    if banker_request is not None:
+        request_text = _format_resource_vector(banker_request.request)
+        request_sequence = _format_process_list(banker_request.safe_sequence)
+        takeaways.append(
+            (
+                f"The sample request from {banker_request.process} ({request_text}) is granted and still leaves safe sequence {request_sequence}."
+                if banker_request.granted
+                else f"The sample request from {banker_request.process} ({request_text}) is denied because {banker_request.reason}."
+            )
+        )
+    return DetectionAvoidanceDashboard(
+        wait_for=wait_for,
+        allocation=allocation,
+        banker_safety=banker_safety,
+        banker_request=banker_request,
+        key_takeaways=takeaways,
     )
 
 
@@ -1016,6 +1082,260 @@ def render_banker_request_markdown(analysis: BankerRequestAnalysis, source_label
     return "\n".join(lines) + "\n"
 
 
+def _format_process_list(processes: list[str]) -> str:
+    return ", ".join(processes) if processes else "none"
+
+
+def _format_blocking_summary(blocking: dict[str, dict[str, int]]) -> str:
+    if not blocking:
+        return "none"
+    parts: list[str] = []
+    for process, shortage in blocking.items():
+        shortage_text = _format_resource_vector(shortage) if shortage else "none"
+        parts.append(f"{process}: {shortage_text}")
+    return "; ".join(parts)
+
+
+def _render_trace_steps_html_table(steps: list[BankerTraceStep]) -> str:
+    if not steps:
+        return "<p>No runnable trace steps were found for this state.</p>"
+    rows = "\n".join(
+        "<tr>"
+        f"<td>{step.step}</td>"
+        f"<td><code>{html.escape(step.process)}</code></td>"
+        f"<td><code>{html.escape(_format_process_list(step.runnable_processes))}</code></td>"
+        f"<td><code>{html.escape(_format_resource_vector(step.work_before))}</code></td>"
+        f"<td><code>{html.escape(_format_resource_vector(step.need))}</code></td>"
+        f"<td><code>{html.escape(_format_resource_vector(step.allocation_released))}</code></td>"
+        f"<td><code>{html.escape(_format_resource_vector(step.work_after))}</code></td>"
+        "</tr>"
+        for step in steps
+    )
+    return (
+        "<table>"
+        "<thead><tr><th>Step</th><th>Chosen process</th><th>Runnable set</th><th>Work before</th><th>Remaining need</th><th>Allocation released</th><th>Work after</th></tr></thead>"
+        f"<tbody>{rows}</tbody>"
+        "</table>"
+    )
+
+
+def render_detection_avoidance_markdown(
+    dashboard: DetectionAvoidanceDashboard,
+    wait_source: str,
+    allocation_source: str,
+    banker_source: str,
+    banker_request_source: str | None,
+) -> str:
+    lines = [
+        "# Deadlock detection vs avoidance dashboard",
+        "",
+        f"- Wait-for graph source: `{wait_source}`",
+        f"- Allocation snapshot source: `{allocation_source}`",
+        f"- Banker's safety source: `{banker_source}`",
+    ]
+    if banker_request_source:
+        lines.append(f"- Banker's request source: `{banker_request_source}`")
+    lines.extend(["", "## Key takeaways", ""])
+    lines.extend(f"- {takeaway}" for takeaway in dashboard.key_takeaways)
+    lines.extend(
+        [
+            "",
+            "## Detection models",
+            "",
+            "### Wait-for graph",
+            "- Question answered: is there already a cycle among the waiting processes?",
+            f"- Deadlocked: {'yes' if dashboard.wait_for.deadlocked else 'no'}",
+            f"- Cycle: `{ ' -> '.join(dashboard.wait_for.cycle) if dashboard.wait_for.cycle else 'none' }`",
+            f"- Blocked processes: `{_format_process_list(dashboard.wait_for.blocked_processes)}`",
+            "",
+            "### Resource-allocation snapshot",
+            "- Question answered: can the current work vector still finish anyone and free resources?",
+            f"- Deadlocked: {'yes' if dashboard.allocation.deadlocked else 'no'}",
+            f"- Finish order: `{_format_process_list(dashboard.allocation.finish_order)}`",
+            f"- Deadlocked processes: `{_format_process_list(dashboard.allocation.deadlocked_processes)}`",
+            f"- Blocking summary: `{_format_blocking_summary(dashboard.allocation.blocking)}`",
+            "",
+            "## Avoidance model",
+            "",
+            "### Banker's safety check",
+            "- Question answered: is the current state safe before any new request is granted?",
+            f"- Safe: {'yes' if dashboard.banker_safety.safe else 'no'}",
+            f"- Safe sequence: `{_format_process_list(dashboard.banker_safety.safe_sequence)}`",
+            f"- Final work: `{_format_resource_vector(dashboard.banker_safety.work)}`",
+            f"- Blocking summary: `{_format_blocking_summary(dashboard.banker_safety.blocking)}`",
+            "",
+            "| Step | Chosen process | Runnable set | Work before | Remaining need | Allocation released | Work after |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    if dashboard.banker_safety.trace_steps:
+        for step in dashboard.banker_safety.trace_steps:
+            lines.append(
+                f"| {step.step} | `{step.process}` | `{_format_process_list(step.runnable_processes)}` | `{_format_resource_vector(step.work_before)}` | `{_format_resource_vector(step.need)}` | `{_format_resource_vector(step.allocation_released)}` | `{_format_resource_vector(step.work_after)}` |"
+            )
+    else:
+        lines.append("| 0 | none | none | n/a | n/a | n/a | n/a |")
+
+    if dashboard.banker_request is not None:
+        request = dashboard.banker_request
+        lines.extend(
+            [
+                "",
+                "### Banker's request trial",
+                "- Question answered: should this new request be granted while keeping the system safe?",
+                f"- Process: `{request.process}`",
+                f"- Request: `{_format_resource_vector(request.request)}`",
+                f"- Granted: {'yes' if request.granted else 'no'}",
+                f"- Reason: {request.reason}",
+                f"- Safe after trial: {'yes' if request.safe else 'no'}",
+                f"- Safe sequence: `{_format_process_list(request.safe_sequence)}`",
+                f"- Evaluated available vector: `{_format_resource_vector(request.trial_available if request.trial_available is not None else request.available)}`",
+                f"- Blocking summary: `{_format_blocking_summary(request.blocking)}`",
+                "",
+                "| Step | Chosen process | Runnable set | Work before | Remaining need | Allocation released | Work after |",
+                "| --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        if request.trace_steps:
+            for step in request.trace_steps:
+                lines.append(
+                    f"| {step.step} | `{step.process}` | `{_format_process_list(step.runnable_processes)}` | `{_format_resource_vector(step.work_before)}` | `{_format_resource_vector(step.need)}` | `{_format_resource_vector(step.allocation_released)}` | `{_format_resource_vector(step.work_after)}` |"
+                )
+        else:
+            lines.append("| 0 | none | none | n/a | n/a | n/a | n/a |")
+
+    return "\n".join(lines) + "\n"
+
+
+def render_detection_avoidance_html(
+    dashboard: DetectionAvoidanceDashboard,
+    wait_source: str,
+    allocation_source: str,
+    banker_source: str,
+    banker_request_source: str | None,
+    wait_edges: list[tuple[str, str]],
+    allocation_available: dict[str, int],
+    allocation_map: dict[str, dict[str, int]],
+    request_map: dict[str, dict[str, int]],
+) -> str:
+    wait_svg = render_wait_graph_svg(dashboard.wait_for, wait_source, wait_edges).strip()
+    allocation_svg = render_allocation_svg(
+        dashboard.allocation,
+        allocation_source,
+        allocation_available,
+        allocation_map,
+        request_map,
+    ).strip()
+    takeaway_items = "\n".join(f"<li>{html.escape(takeaway)}</li>" for takeaway in dashboard.key_takeaways)
+    request_metric = (
+        f"<div class=\"metric\"><strong>Sample request</strong><br />{'granted' if dashboard.banker_request.granted else 'denied'}</div>"
+        if dashboard.banker_request is not None
+        else ""
+    )
+    banker_request_section = ""
+    if dashboard.banker_request is not None:
+        request = dashboard.banker_request
+        banker_request_section = f"""
+      <section class="card">
+        <h2>Banker's request trial</h2>
+        <p>Source: <code>{html.escape(banker_request_source or 'n/a')}</code></p>
+        <p><strong>Question answered:</strong> should this new request be granted while keeping the system safe?</p>
+        <div class="grid compact-grid">
+          <div class="metric"><strong>Process</strong><br /><code>{html.escape(request.process)}</code></div>
+          <div class="metric"><strong>Request</strong><br /><code>{html.escape(_format_resource_vector(request.request))}</code></div>
+          <div class="metric"><strong>Granted</strong><br />{'yes' if request.granted else 'no'}</div>
+          <div class="metric"><strong>Safe after trial</strong><br />{'yes' if request.safe else 'no'}</div>
+        </div>
+        <p><strong>Reason:</strong> {html.escape(request.reason)}</p>
+        <p><strong>Safe sequence:</strong> <code>{html.escape(_format_process_list(request.safe_sequence))}</code></p>
+        <p><strong>Evaluated available vector:</strong> <code>{html.escape(_format_resource_vector(request.trial_available if request.trial_available is not None else request.available))}</code></p>
+        <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(request.blocking))}</code></p>
+        <div class="table-wrap">{_render_trace_steps_html_table(request.trace_steps)}</div>
+      </section>
+"""
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <title>Deadlock detection vs avoidance dashboard</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }}
+    main {{ max-width: 1320px; margin: 0 auto; padding: 32px 24px 56px; }}
+    h1, h2, h3 {{ margin-top: 0; }}
+    .card {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 20px; margin-top: 20px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }}
+    .compact-grid {{ grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }}
+    .split {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 20px; align-items: start; }}
+    .metric {{ background: #eff6ff; border-radius: 14px; padding: 14px; }}
+    .tag {{ display: inline-block; margin-right: 8px; margin-bottom: 8px; padding: 6px 10px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 13px; }}
+    ul {{ margin: 12px 0 0 20px; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }}
+    th, td {{ border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; vertical-align: top; }}
+    th {{ font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }}
+    code {{ font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.95em; }}
+    .table-wrap {{ overflow-x: auto; }}
+    .source-list code {{ word-break: break-all; }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Deadlock detection vs avoidance dashboard</h1>
+      <p>This portfolio report contrasts two detection views, wait-for graphs and resource-allocation progress, with one avoidance view based on Banker's algorithm.</p>
+      <div class="grid">
+        <div class="metric"><strong>Wait-for graph</strong><br />{'deadlocked' if dashboard.wait_for.deadlocked else 'clear'}</div>
+        <div class="metric"><strong>Allocation snapshot</strong><br />{'deadlocked' if dashboard.allocation.deadlocked else 'safe'}</div>
+        <div class="metric"><strong>Banker safety</strong><br />{'safe' if dashboard.banker_safety.safe else 'unsafe'}</div>
+        {request_metric}
+      </div>
+      <div class="card source-list">
+        <h2>Inputs</h2>
+        <p><span class="tag">wait-for</span><code>{html.escape(wait_source)}</code></p>
+        <p><span class="tag">allocation</span><code>{html.escape(allocation_source)}</code></p>
+        <p><span class="tag">banker safety</span><code>{html.escape(banker_source)}</code></p>
+        {f'<p><span class="tag">banker request</span><code>{html.escape(banker_request_source)}</code></p>' if banker_request_source else ''}
+      </div>
+      <h2>Key takeaways</h2>
+      <ul>{takeaway_items}</ul>
+    </section>
+
+    <section class="split">
+      <article class="card">
+        <h2>Wait-for graph detection</h2>
+        <p><strong>Question answered:</strong> is there already a cycle among the waiting processes?</p>
+        <p><strong>Cycle:</strong> <code>{html.escape(' -> '.join(dashboard.wait_for.cycle) if dashboard.wait_for.cycle else 'none')}</code></p>
+        <p><strong>Blocked processes:</strong> <code>{html.escape(_format_process_list(dashboard.wait_for.blocked_processes))}</code></p>
+        {wait_svg}
+      </article>
+
+      <article class="card">
+        <h2>Resource-allocation detection</h2>
+        <p><strong>Question answered:</strong> can the current work vector still finish anyone and free resources?</p>
+        <p><strong>Finish order:</strong> <code>{html.escape(_format_process_list(dashboard.allocation.finish_order))}</code></p>
+        <p><strong>Deadlocked processes:</strong> <code>{html.escape(_format_process_list(dashboard.allocation.deadlocked_processes))}</code></p>
+        <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(dashboard.allocation.blocking))}</code></p>
+        {allocation_svg}
+      </article>
+    </section>
+
+    <section class="split">
+      <section class="card">
+        <h2>Banker's safety analysis</h2>
+        <p><strong>Question answered:</strong> is the current state safe before any new request is granted?</p>
+        <p><strong>Safe:</strong> {'yes' if dashboard.banker_safety.safe else 'no'}</p>
+        <p><strong>Safe sequence:</strong> <code>{html.escape(_format_process_list(dashboard.banker_safety.safe_sequence))}</code></p>
+        <p><strong>Final work:</strong> <code>{html.escape(_format_resource_vector(dashboard.banker_safety.work))}</code></p>
+        <p><strong>Blocking summary:</strong> <code>{html.escape(_format_blocking_summary(dashboard.banker_safety.blocking))}</code></p>
+        <div class="table-wrap">{_render_trace_steps_html_table(dashboard.banker_safety.trace_steps)}</div>
+      </section>
+{banker_request_section}
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze deadlocks using wait-for, allocation, or Banker's algorithm models")
@@ -1075,6 +1395,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional path for a Banker's request evaluation markdown trace export",
     )
 
+    dashboard_parser = subparsers.add_parser(
+        "dashboard",
+        help="build a combined deadlock detection vs avoidance dashboard from sample inputs",
+    )
+    dashboard_parser.add_argument("--wait-input", required=True, help="path to a wait-for graph JSON file")
+    dashboard_parser.add_argument(
+        "--allocation-input",
+        required=True,
+        help="path to an allocation/request snapshot JSON file",
+    )
+    dashboard_parser.add_argument(
+        "--banker-input",
+        required=True,
+        help="path to a Banker's safety-state JSON file",
+    )
+    dashboard_parser.add_argument(
+        "--banker-request-input",
+        help="optional path to a Banker's request JSON file to include in the dashboard",
+    )
+    dashboard_parser.add_argument(
+        "--markdown-out",
+        help="optional path for a combined Markdown dashboard export",
+    )
+    dashboard_parser.add_argument(
+        "--html-out",
+        help="optional path for a combined HTML dashboard export",
+    )
+
     return parser
 
 
@@ -1084,11 +1432,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        payload = load_json(Path(args.input))
         markdown: str | None = None
         svg: str | None = None
         html_report: str | None = None
         if args.command == "analyze-wait":
+            payload = load_json(Path(args.input))
             analysis = analyze_wait_for_graph(payload)
             result = analysis.to_dict()
             edges = [
@@ -1101,6 +1449,7 @@ def main(argv: list[str] | None = None) -> int:
             if getattr(args, "html_out", None):
                 html_report = render_wait_graph_html(analysis, args.input, edges)
         elif args.command == "analyze-allocations":
+            payload = load_json(Path(args.input))
             analysis = analyze_allocations(payload)
             result = analysis.to_dict()
             available = payload.get("available")
@@ -1112,15 +1461,71 @@ def main(argv: list[str] | None = None) -> int:
                 if getattr(args, "html_out", None):
                     html_report = render_allocation_html(analysis, args.input, available, allocation, request)
         elif args.command == "analyze-banker":
+            payload = load_json(Path(args.input))
             analysis = analyze_banker_state(payload)
             result = analysis.to_dict()
             if getattr(args, "markdown_out", None):
                 markdown = render_banker_safety_markdown(analysis, args.input)
         elif args.command == "request-banker":
+            payload = load_json(Path(args.input))
             analysis = analyze_banker_request(payload)
             result = analysis.to_dict()
             if getattr(args, "markdown_out", None):
                 markdown = render_banker_request_markdown(analysis, args.input)
+        elif args.command == "dashboard":
+            wait_payload = load_json(Path(args.wait_input))
+            allocation_payload = load_json(Path(args.allocation_input))
+            banker_payload = load_json(Path(args.banker_input))
+            banker_request_payload = (
+                load_json(Path(args.banker_request_input)) if getattr(args, "banker_request_input", None) else None
+            )
+
+            wait_analysis = analyze_wait_for_graph(wait_payload)
+            allocation_analysis = analyze_allocations(allocation_payload)
+            banker_analysis = analyze_banker_state(banker_payload)
+            banker_request_analysis = (
+                analyze_banker_request(banker_request_payload) if banker_request_payload is not None else None
+            )
+            dashboard = build_detection_avoidance_dashboard(
+                wait_analysis,
+                allocation_analysis,
+                banker_analysis,
+                banker_request_analysis,
+            )
+            result = dashboard.to_dict()
+            wait_edges = [
+                (str(item["from"]), str(item["to"]))
+                for item in wait_payload.get("edges", [])
+                if isinstance(item, dict) and isinstance(item.get("from"), str) and isinstance(item.get("to"), str)
+            ]
+            allocation_available = allocation_payload.get("available")
+            allocation_map = allocation_payload.get("allocation")
+            request_map = allocation_payload.get("request")
+            if getattr(args, "markdown_out", None):
+                markdown = render_detection_avoidance_markdown(
+                    dashboard,
+                    args.wait_input,
+                    args.allocation_input,
+                    args.banker_input,
+                    getattr(args, "banker_request_input", None),
+                )
+            if (
+                getattr(args, "html_out", None)
+                and isinstance(allocation_available, dict)
+                and isinstance(allocation_map, dict)
+                and isinstance(request_map, dict)
+            ):
+                html_report = render_detection_avoidance_html(
+                    dashboard,
+                    args.wait_input,
+                    args.allocation_input,
+                    args.banker_input,
+                    getattr(args, "banker_request_input", None),
+                    wait_edges,
+                    allocation_available,
+                    allocation_map,
+                    request_map,
+                )
         else:
             parser.error("unsupported command")
             return 2

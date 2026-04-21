@@ -7,6 +7,7 @@ A compact operating-systems portfolio project that detects deadlocks from either
 - includes graph-based cycle detection, multi-resource progress simulation, and Banker's algorithm safety checks
 - adds step-by-step Banker's safety and request traces for portfolio demos
 - exports SVG and HTML visuals for wait-for and resource-allocation walkthroughs
+- builds one combined detection-vs-avoidance dashboard so the two detection models and Banker's traces can be shown together
 - produces machine-readable JSON output that is easy to test, demo, and extend
 
 ## Features
@@ -84,6 +85,18 @@ python3 projects/deadlock-detector-lab/deadlock_detector.py request-banker \
   --markdown-out docs/artifacts/deadlock-detector-lab/sample_banker_request_trace.md
 ```
 
+Build one combined dashboard for the wait-for graph, allocation snapshot, and Banker's traces:
+
+```bash
+python3 projects/deadlock-detector-lab/deadlock_detector.py dashboard \
+  --wait-input projects/deadlock-detector-lab/sample_wait_graph.json \
+  --allocation-input projects/deadlock-detector-lab/sample_allocation_state.json \
+  --banker-input projects/deadlock-detector-lab/sample_banker_state.json \
+  --banker-request-input projects/deadlock-detector-lab/sample_banker_request.json \
+  --markdown-out docs/artifacts/deadlock-detector-lab/sample_detection_vs_avoidance_dashboard.md \
+  --html-out docs/artifacts/deadlock-detector-lab/sample_detection_vs_avoidance_dashboard.html
+```
+
 ## JSON formats
 
 Banker's algorithm safety analysis expects:
@@ -118,6 +131,5 @@ python3 -m unittest projects/deadlock-detector-lab/test_deadlock_detector.py
 ```
 
 ## Future improvements
-- compare deadlock detection and avoidance results side-by-side in one report
-- add SVG or HTML visual summaries on top of the new Banker's trace exports
+- add dedicated SVG or HTML visual summaries on top of the new Banker's trace exports
 - export Graphviz `.dot` output for teams that want to post-process the same layouts externally

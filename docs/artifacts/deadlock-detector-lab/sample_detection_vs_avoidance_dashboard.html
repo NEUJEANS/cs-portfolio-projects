@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Deadlock detection vs avoidance dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1320px; margin: 0 auto; padding: 32px 24px 56px; }
+    h1, h2, h3 { margin-top: 0; }
+    .card { background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 20px; margin-top: 20px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .compact-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 20px; align-items: start; }
+    .metric { background: #eff6ff; border-radius: 14px; padding: 14px; }
+    .tag { display: inline-block; margin-right: 8px; margin-bottom: 8px; padding: 6px 10px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 13px; }
+    ul { margin: 12px 0 0 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; vertical-align: top; }
+    th { font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.95em; }
+    .table-wrap { overflow-x: auto; }
+    .source-list code { word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Deadlock detection vs avoidance dashboard</h1>
+      <p>This portfolio report contrasts two detection views, wait-for graphs and resource-allocation progress, with one avoidance view based on Banker's algorithm.</p>
+      <div class="grid">
+        <div class="metric"><strong>Wait-for graph</strong><br />deadlocked</div>
+        <div class="metric"><strong>Allocation snapshot</strong><br />deadlocked</div>
+        <div class="metric"><strong>Banker safety</strong><br />safe</div>
+        <div class="metric"><strong>Sample request</strong><br />granted</div>
+      </div>
+      <div class="card source-list">
+        <h2>Inputs</h2>
+        <p><span class="tag">wait-for</span><code>projects/deadlock-detector-lab/sample_wait_graph.json</code></p>
+        <p><span class="tag">allocation</span><code>projects/deadlock-detector-lab/sample_allocation_state.json</code></p>
+        <p><span class="tag">banker safety</span><code>projects/deadlock-detector-lab/sample_banker_state.json</code></p>
+        <p><span class="tag">banker request</span><code>projects/deadlock-detector-lab/sample_banker_request.json</code></p>
+      </div>
+      <h2>Key takeaways</h2>
+      <ul><li>Wait-for detection finds a concrete cycle among P1, P2, P3.</li>
+<li>Resource-allocation detection still leaves P1, P2 blocked after only P3 can finish.</li>
+<li>Banker&#x27;s avoidance keeps the system safe with sequence P1, P3, P4, P0, P2.</li>
+<li>The sample request from P1 (A=1, B=0, C=2) is granted and still leaves safe sequence P1, P3, P4, P0, P2.</li></ul>
+    </section>
+
+    <section class="split">
+      <article class="card">
+        <h2>Wait-for graph detection</h2>
+        <p><strong>Question answered:</strong> is there already a cycle among the waiting processes?</p>
+        <p><strong>Cycle:</strong> <code>P1 -&gt; P2 -&gt; P3 -&gt; P1</code></p>
+        <p><strong>Blocked processes:</strong> <code>P1, P2, P3</code></p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" role="img" aria-labelledby="wait-projects-deadlock-detector-lab-sample-wait-graph-json-title wait-projects-deadlock-detector-lab-sample-wait-graph-json-desc">
+  <title id="wait-projects-deadlock-detector-lab-sample-wait-graph-json-title">Wait-for graph visualization for projects/deadlock-detector-lab/sample_wait_graph.json</title>
+  <desc id="wait-projects-deadlock-detector-lab-sample-wait-graph-json-desc">Processes arranged in a ring, with deadlocked cycle edges highlighted in red.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 15px; }
+    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }
+    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
+  </style>
+  <defs>
+    <marker id="arrow-slate" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626" />
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" />
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="760" height="560" rx="24" />
+  <rect class="card" x="24" y="24" width="712" height="512" rx="20" />
+<text x="52.0" y="58.0" text-anchor="start" class="label">Deadlock wait-for graph</text>
+<text x="52.0" y="82.0" text-anchor="start" class="muted">Source: projects/deadlock-detector-lab/sample_wait_graph.json</text>
+<text x="708.0" y="58.0" text-anchor="end" class="muted">cycle highlighted</text>
+  <line x1="401.2" y1="165.2" x2="494.8" y2="258.8" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+  <line x1="494.8" y1="301.2" x2="401.2" y2="394.8" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+  <line x1="380.0" y1="386.0" x2="380.0" y2="174.0" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+  <line x1="274.0" y1="280.0" x2="486.0" y2="280.0" stroke="#475569" stroke-width="2" marker-end="url(#arrow-slate)" />
+  <circle cx="380.0" cy="144.0" r="30.0" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="380.0" y="149.0" text-anchor="middle" class="label">P1</text>
+  <circle cx="516.0" cy="280.0" r="30.0" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="516.0" y="285.0" text-anchor="middle" class="label">P2</text>
+  <circle cx="380.0" cy="416.0" r="30.0" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="380.0" y="421.0" text-anchor="middle" class="label">P3</text>
+  <circle cx="244.0" cy="280.0" r="30.0" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.5" />
+<text x="244.0" y="285.0" text-anchor="middle" class="label">P4</text>
+  <rect x="52" y="472.0" width="18" height="18" rx="5" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+<text x="80.0" y="486.0" text-anchor="start" class="tiny">blocked process</text>
+  <line x1="220" y1="481.0" x2="254" y2="481.0" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+<text x="264.0" y="486.0" text-anchor="start" class="tiny">cycle edge</text>
+  <line x1="360" y1="481.0" x2="394" y2="481.0" stroke="#475569" stroke-width="2" marker-end="url(#arrow-slate)" />
+<text x="404.0" y="486.0" text-anchor="start" class="tiny">waiting edge</text>
+</svg>
+      </article>
+
+      <article class="card">
+        <h2>Resource-allocation detection</h2>
+        <p><strong>Question answered:</strong> can the current work vector still finish anyone and free resources?</p>
+        <p><strong>Finish order:</strong> <code>P3</code></p>
+        <p><strong>Deadlocked processes:</strong> <code>P1, P2</code></p>
+        <p><strong>Blocking summary:</strong> <code>P1: scanner=1; P2: printer=1</code></p>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 520" role="img" aria-labelledby="allocation-projects-deadlock-detector-lab-sample-allocation-state-json-title allocation-projects-deadlock-detector-lab-sample-allocation-state-json-desc">
+  <title id="allocation-projects-deadlock-detector-lab-sample-allocation-state-json-title">Resource allocation visualization for projects/deadlock-detector-lab/sample_allocation_state.json</title>
+  <desc id="allocation-projects-deadlock-detector-lab-sample-allocation-state-json-desc">Processes on the left, resources on the right, with held edges from resources to processes and request edges from processes to resources.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 15px; }
+    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }
+    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
+  </style>
+  <defs>
+    <marker id="arrow-slate" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626" />
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" />
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="980" height="520" rx="24" />
+  <rect class="card" x="24" y="24" width="932" height="472" rx="20" />
+<text x="52.0" y="58.0" text-anchor="start" class="label">Deadlock resource-allocation view</text>
+<text x="52.0" y="82.0" text-anchor="start" class="muted">Source: projects/deadlock-detector-lab/sample_allocation_state.json</text>
+<text x="928.0" y="58.0" text-anchor="end" class="muted">deadlock detected</text>
+<text x="220.0" y="112.0" text-anchor="middle" class="muted">Processes</text>
+<text x="760.0" y="112.0" text-anchor="middle" class="muted">Resources</text>
+  <line x1="726.0" y1="150.0" x2="278.0" y2="150.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)" />
+<text x="500.0" y="142.0" text-anchor="middle" class="tiny">held 1</text>
+  <line x1="726.0" y1="246.0" x2="278.0" y2="246.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)" />
+<text x="500.0" y="238.0" text-anchor="middle" class="tiny">held 1</text>
+  <line x1="726.0" y1="342.0" x2="278.0" y2="342.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)" />
+<text x="500.0" y="334.0" text-anchor="middle" class="tiny">held 1</text>
+  <line x1="278.0" y1="150.0" x2="726.0" y2="246.0" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrow-red)" />
+<text x="482.0" y="222.0" text-anchor="middle" class="tiny">needs 1 (short 1)</text>
+  <line x1="278.0" y1="246.0" x2="726.0" y2="150.0" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrow-red)" />
+<text x="482.0" y="186.0" text-anchor="middle" class="tiny">needs 1 (short 1)</text>
+  <rect x="162.0" y="126.0" width="116" height="48" rx="16" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="220.0" y="155.0" text-anchor="middle" class="label">P1</text>
+  <rect x="162.0" y="222.0" width="116" height="48" rx="16" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="220.0" y="251.0" text-anchor="middle" class="label">P2</text>
+  <rect x="162.0" y="318.0" width="116" height="48" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.5" />
+<text x="220.0" y="347.0" text-anchor="middle" class="label">P3</text>
+  <circle cx="760.0" cy="150.0" r="30" fill="#fef3c7" stroke="#d97706" stroke-width="2.5" />
+<text x="760.0" y="153.0" text-anchor="middle" class="label">printer</text>
+<text x="760.0" y="197.0" text-anchor="middle" class="tiny">available 0</text>
+  <circle cx="760.0" cy="246.0" r="30" fill="#fef3c7" stroke="#d97706" stroke-width="2.5" />
+<text x="760.0" y="249.0" text-anchor="middle" class="label">scanner</text>
+<text x="760.0" y="293.0" text-anchor="middle" class="tiny">available 0</text>
+  <circle cx="760.0" cy="342.0" r="30" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5" />
+<text x="760.0" y="345.0" text-anchor="middle" class="label">tape</text>
+<text x="760.0" y="389.0" text-anchor="middle" class="tiny">available 1</text>
+<text x="52.0" y="424.0" text-anchor="start" class="tiny">Finish order: P3</text>
+<text x="52.0" y="446.0" text-anchor="start" class="tiny">Deadlocked processes: P1, P2</text>
+</svg>
+      </article>
+    </section>
+
+    <section class="split">
+      <section class="card">
+        <h2>Banker's safety analysis</h2>
+        <p><strong>Question answered:</strong> is the current state safe before any new request is granted?</p>
+        <p><strong>Safe:</strong> yes</p>
+        <p><strong>Safe sequence:</strong> <code>P1, P3, P4, P0, P2</code></p>
+        <p><strong>Final work:</strong> <code>A=10, B=5, C=7</code></p>
+        <p><strong>Blocking summary:</strong> <code>none</code></p>
+        <div class="table-wrap"><table><thead><tr><th>Step</th><th>Chosen process</th><th>Runnable set</th><th>Work before</th><th>Remaining need</th><th>Allocation released</th><th>Work after</th></tr></thead><tbody><tr><td>1</td><td><code>P1</code></td><td><code>P1, P3</code></td><td><code>A=3, B=3, C=2</code></td><td><code>A=1, B=2, C=2</code></td><td><code>A=2, B=0, C=0</code></td><td><code>A=5, B=3, C=2</code></td></tr>
+<tr><td>2</td><td><code>P3</code></td><td><code>P3, P4</code></td><td><code>A=5, B=3, C=2</code></td><td><code>A=0, B=1, C=1</code></td><td><code>A=2, B=1, C=1</code></td><td><code>A=7, B=4, C=3</code></td></tr>
+<tr><td>3</td><td><code>P4</code></td><td><code>P0, P2, P4</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=4, B=3, C=1</code></td><td><code>A=0, B=0, C=2</code></td><td><code>A=7, B=4, C=5</code></td></tr>
+<tr><td>4</td><td><code>P0</code></td><td><code>P0, P2</code></td><td><code>A=7, B=4, C=5</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=0, B=1, C=0</code></td><td><code>A=7, B=5, C=5</code></td></tr>
+<tr><td>5</td><td><code>P2</code></td><td><code>P2</code></td><td><code>A=7, B=5, C=5</code></td><td><code>A=6, B=0, C=0</code></td><td><code>A=3, B=0, C=2</code></td><td><code>A=10, B=5, C=7</code></td></tr></tbody></table></div>
+      </section>
+
+      <section class="card">
+        <h2>Banker's request trial</h2>
+        <p>Source: <code>projects/deadlock-detector-lab/sample_banker_request.json</code></p>
+        <p><strong>Question answered:</strong> should this new request be granted while keeping the system safe?</p>
+        <div class="grid compact-grid">
+          <div class="metric"><strong>Process</strong><br /><code>P1</code></div>
+          <div class="metric"><strong>Request</strong><br /><code>A=1, B=0, C=2</code></div>
+          <div class="metric"><strong>Granted</strong><br />yes</div>
+          <div class="metric"><strong>Safe after trial</strong><br />yes</div>
+        </div>
+        <p><strong>Reason:</strong> request can be granted safely</p>
+        <p><strong>Safe sequence:</strong> <code>P1, P3, P4, P0, P2</code></p>
+        <p><strong>Evaluated available vector:</strong> <code>A=2, B=3, C=0</code></p>
+        <p><strong>Blocking summary:</strong> <code>none</code></p>
+        <div class="table-wrap"><table><thead><tr><th>Step</th><th>Chosen process</th><th>Runnable set</th><th>Work before</th><th>Remaining need</th><th>Allocation released</th><th>Work after</th></tr></thead><tbody><tr><td>1</td><td><code>P1</code></td><td><code>P1</code></td><td><code>A=2, B=3, C=0</code></td><td><code>A=0, B=2, C=0</code></td><td><code>A=3, B=0, C=2</code></td><td><code>A=5, B=3, C=2</code></td></tr>
+<tr><td>2</td><td><code>P3</code></td><td><code>P3, P4</code></td><td><code>A=5, B=3, C=2</code></td><td><code>A=0, B=1, C=1</code></td><td><code>A=2, B=1, C=1</code></td><td><code>A=7, B=4, C=3</code></td></tr>
+<tr><td>3</td><td><code>P4</code></td><td><code>P0, P2, P4</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=4, B=3, C=1</code></td><td><code>A=0, B=0, C=2</code></td><td><code>A=7, B=4, C=5</code></td></tr>
+<tr><td>4</td><td><code>P0</code></td><td><code>P0, P2</code></td><td><code>A=7, B=4, C=5</code></td><td><code>A=7, B=4, C=3</code></td><td><code>A=0, B=1, C=0</code></td><td><code>A=7, B=5, C=5</code></td></tr>
+<tr><td>5</td><td><code>P2</code></td><td><code>P2</code></td><td><code>A=7, B=5, C=5</code></td><td><code>A=6, B=0, C=0</code></td><td><code>A=3, B=0, C=2</code></td><td><code>A=10, B=5, C=7</code></td></tr></tbody></table></div>
+      </section>
+
+    </section>
+  </main>
+</body>
+</html>
