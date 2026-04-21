@@ -10,6 +10,6 @@
 - [x] expand repo-level tests for the benchmark-pack writer, force-safety, and CLI JSON flow
 - [x] run targeted validation and regenerate the checked-in artifact bundle
 - [x] complete at least 3 review passes and fix issues found
-- [ ] run secret scan before push
-- [ ] commit, push, and add wrap-up
+- [x] run secret scan before push
+- [x] commit, push, and add wrap-up
 - [ ] next: add language-aware literal buckets for lists, dicts, template strings, and JSX inline objects in code mode
