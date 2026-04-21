@@ -9,4 +9,5 @@
 - [x] add chunked file scanning that preserves cross-boundary matches
 - [x] add sampled context windows for chunked searches without loading the full file
 - [x] export Markdown/HTML match reports for portfolio screenshots while preserving JSON stdout automation
-- [ ] next: add grouped incident/category presets so one report can summarize related keyword packs
+- [x] add grouped incident/category presets so one report can summarize related keyword packs
+- [ ] next: add preset-hit threshold rules or severity scoring so grouped packs can drive lightweight alert prioritization

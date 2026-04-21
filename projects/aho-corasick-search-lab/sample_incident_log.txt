@@ -1,0 +1,5 @@
+2026-04-21T09:00:00Z info worker heartbeat stable
+2026-04-21T09:02:14Z warning checkout latency crossed 450ms for eu-west
+2026-04-21T09:03:55Z critical api timeout caused degraded search responses
+2026-04-21T09:05:10Z error possible credential leak while rotating support token
+2026-04-21T09:07:42Z info mitigation cleared outage banner after restart

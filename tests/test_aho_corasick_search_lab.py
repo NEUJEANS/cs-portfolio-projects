@@ -19,6 +19,8 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 AhoCorasickAutomaton = module.AhoCorasickAutomaton
+load_pattern_preset = module.load_pattern_preset
+patterns_from_preset = module.patterns_from_preset
 render_report_html = module.render_report_html
 render_report_markdown = module.render_report_markdown
 search_chunks = module.search_chunks
@@ -27,6 +29,51 @@ search_text = module.search_text
 
 
 class AhoCorasickSearchLabTests(unittest.TestCase):
+    def test_load_pattern_preset_keeps_group_order_and_dedupes_patterns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_file = Path(tmpdir) / "presets.json"
+            preset_file.write_text(
+                json.dumps(
+                    {
+                        "presets": [
+                            {
+                                "name": "incident-triage",
+                                "title": "Incident triage pack",
+                                "groups": [
+                                    {"name": "severity", "patterns": ["critical", "warning", "critical"]},
+                                    {"name": "impact", "patterns": ["latency", "outage"]},
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            preset = load_pattern_preset(preset_file)
+            self.assertEqual(preset.name, "incident-triage")
+            self.assertEqual(patterns_from_preset(preset), ["critical", "warning", "latency", "outage"])
+
+    def test_search_text_reports_group_counts_and_match_group_membership(self) -> None:
+        preset = module.PatternPreset(
+            name="incident-triage",
+            title="Incident triage pack",
+            groups=[
+                module.PatternGroup(name="severity", patterns=["critical", "warning"]),
+                module.PatternGroup(name="impact", patterns=["latency", "outage"]),
+            ],
+        )
+        result = search_text(
+            "critical latency warning",
+            patterns_from_preset(preset),
+            group_definitions=preset.groups,
+            preset=preset,
+        )
+        self.assertEqual(result["preset"]["name"], "incident-triage")
+        self.assertEqual(result["groups"][0]["match_count"], 2)
+        self.assertEqual(result["groups"][1]["match_count"], 1)
+        self.assertEqual(result["matches"][0]["groups"], ["severity"])
+        self.assertEqual(result["matches"][1]["groups"], ["impact"])
+
     def test_search_text_finds_suffix_and_overlap_matches(self) -> None:
         result = search_text("ushers", ["he", "she", "hers"])
         self.assertEqual(result["match_count"], 3)
@@ -148,11 +195,18 @@ class AhoCorasickSearchLabTests(unittest.TestCase):
         self.assertIn("context='e ⟦warning⟧ a'", completed.stdout)
 
     def test_report_renderers_include_stream_context_metadata(self) -> None:
+        preset = module.PatternPreset(
+            name="incident-triage",
+            title="Chunked demo",
+            groups=[module.PatternGroup(name="severity", patterns=["warning", "critical"])],
+        )
         result = search_chunks(
             ["error wa", "rning\ncr", "itical"],
             ["warning", "critical"],
             chunk_size=8,
             context_chars=2,
+            group_definitions=preset.groups,
+            preset=preset,
         )
         markdown = render_report_markdown(
             result,
@@ -168,10 +222,53 @@ class AhoCorasickSearchLabTests(unittest.TestCase):
         )
         self.assertIn("# Chunked demo", markdown)
         self.assertIn("stream (3 chunks @ 8 chars, boundary overlap 7)", markdown)
+        self.assertIn("## Group counts", markdown)
         self.assertIn("```text\nr ⟦warning⟧\nc\n```", markdown)
         self.assertIn("<title>Chunked demo</title>", html)
         self.assertIn("sample.log", html)
+        self.assertIn("Grouped keyword packs", html)
         self.assertIn("r ⟦warning⟧\nc", html)
+
+    def test_cli_preset_json_output_includes_group_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_file = Path(tmpdir) / "presets.json"
+            preset_file.write_text(
+                json.dumps(
+                    {
+                        "presets": [
+                            {
+                                "name": "incident-triage",
+                                "groups": [
+                                    {"name": "severity", "patterns": ["critical", "warning"]},
+                                    {"name": "impact", "patterns": ["latency", "outage"]},
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--preset-file",
+                    str(preset_file),
+                    "--preset",
+                    "incident-triage",
+                    "--text",
+                    "critical latency warning",
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["preset"]["name"], "incident-triage")
+            self.assertEqual(payload["groups"][0]["name"], "severity")
+            self.assertEqual(payload["groups"][0]["match_count"], 2)
+            self.assertEqual(payload["matches"][0]["groups"], ["severity"])
 
     def test_cli_report_exports_write_deterministic_markdown_and_html(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

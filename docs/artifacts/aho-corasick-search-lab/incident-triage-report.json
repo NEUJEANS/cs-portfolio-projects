@@ -1,0 +1,214 @@
+{
+  "pattern_count": 12,
+  "match_count": 9,
+  "case_sensitive": true,
+  "counts": {
+    "critical": 1,
+    "warning": 1,
+    "error": 1,
+    "sev1": 0,
+    "latency": 1,
+    "timeout": 1,
+    "degraded": 1,
+    "outage": 1,
+    "breach": 0,
+    "exfiltration": 0,
+    "credential": 1,
+    "leak": 1
+  },
+  "matches": [
+    {
+      "pattern": "warning",
+      "start": 71,
+      "end": 78,
+      "line": 2,
+      "column": 22,
+      "context": {
+        "before": "09:02:14Z ",
+        "match": "warning",
+        "after": " checkout ",
+        "excerpt": "09:02:14Z \u27e6warning\u27e7 checkout "
+      },
+      "groups": [
+        "severity"
+      ]
+    },
+    {
+      "pattern": "latency",
+      "start": 88,
+      "end": 95,
+      "line": 2,
+      "column": 39,
+      "context": {
+        "before": " checkout ",
+        "match": "latency",
+        "after": " crossed 4",
+        "excerpt": " checkout \u27e6latency\u27e7 crossed 4"
+      },
+      "groups": [
+        "customer-impact"
+      ]
+    },
+    {
+      "pattern": "critical",
+      "start": 143,
+      "end": 151,
+      "line": 3,
+      "column": 22,
+      "context": {
+        "before": "09:03:55Z ",
+        "match": "critical",
+        "after": " api timeo",
+        "excerpt": "09:03:55Z \u27e6critical\u27e7 api timeo"
+      },
+      "groups": [
+        "severity"
+      ]
+    },
+    {
+      "pattern": "timeout",
+      "start": 156,
+      "end": 163,
+      "line": 3,
+      "column": 35,
+      "context": {
+        "before": "tical api ",
+        "match": "timeout",
+        "after": " caused de",
+        "excerpt": "tical api \u27e6timeout\u27e7 caused de"
+      },
+      "groups": [
+        "customer-impact"
+      ]
+    },
+    {
+      "pattern": "degraded",
+      "start": 171,
+      "end": 179,
+      "line": 3,
+      "column": 50,
+      "context": {
+        "before": "ut caused ",
+        "match": "degraded",
+        "after": " search re",
+        "excerpt": "ut caused \u27e6degraded\u27e7 search re"
+      },
+      "groups": [
+        "customer-impact"
+      ]
+    },
+    {
+      "pattern": "error",
+      "start": 218,
+      "end": 223,
+      "line": 4,
+      "column": 22,
+      "context": {
+        "before": "09:05:10Z ",
+        "match": "error",
+        "after": " possible ",
+        "excerpt": "09:05:10Z \u27e6error\u27e7 possible "
+      },
+      "groups": [
+        "severity"
+      ]
+    },
+    {
+      "pattern": "credential",
+      "start": 233,
+      "end": 243,
+      "line": 4,
+      "column": 37,
+      "context": {
+        "before": " possible ",
+        "match": "credential",
+        "after": " leak whil",
+        "excerpt": " possible \u27e6credential\u27e7 leak whil"
+      },
+      "groups": [
+        "security"
+      ]
+    },
+    {
+      "pattern": "leak",
+      "start": 244,
+      "end": 248,
+      "line": 4,
+      "column": 48,
+      "context": {
+        "before": "redential ",
+        "match": "leak",
+        "after": " while rot",
+        "excerpt": "redential \u27e6leak\u27e7 while rot"
+      },
+      "groups": [
+        "security"
+      ]
+    },
+    {
+      "pattern": "outage",
+      "start": 323,
+      "end": 329,
+      "line": 5,
+      "column": 46,
+      "context": {
+        "before": "n cleared ",
+        "match": "outage",
+        "after": " banner af",
+        "excerpt": "n cleared \u27e6outage\u27e7 banner af"
+      },
+      "groups": [
+        "customer-impact"
+      ]
+    }
+  ],
+  "input": {
+    "mode": "stream",
+    "characters_processed": 351,
+    "chunk_count": 20,
+    "chunk_size": 18,
+    "boundary_overlap": 11,
+    "context_chars": 10,
+    "context_mode": "sampled"
+  },
+  "groups": [
+    {
+      "name": "severity",
+      "description": "How urgent the event sounds on first read.",
+      "patterns": [
+        "critical",
+        "warning",
+        "error",
+        "sev1"
+      ],
+      "match_count": 3
+    },
+    {
+      "name": "customer-impact",
+      "description": "Keywords that hint at user-facing degradation or outage symptoms.",
+      "patterns": [
+        "latency",
+        "timeout",
+        "degraded",
+        "outage"
+      ],
+      "match_count": 4
+    },
+    {
+      "name": "security",
+      "description": "Security-response indicators worth escalating quickly.",
+      "patterns": [
+        "breach",
+        "exfiltration",
+        "credential",
+        "leak"
+      ],
+      "match_count": 2
+    }
+  ],
+  "preset": {
+    "name": "incident-triage",
+    "title": "Incident triage keyword report",
+    "description": "Grouped severity, customer-impact, and security keywords for one-pass incident log triage."
+  }
+}

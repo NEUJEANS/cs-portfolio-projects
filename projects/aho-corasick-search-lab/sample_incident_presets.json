@@ -1,0 +1,26 @@
+{
+  "presets": [
+    {
+      "name": "incident-triage",
+      "title": "Incident triage keyword report",
+      "description": "Grouped severity, customer-impact, and security keywords for one-pass incident log triage.",
+      "groups": [
+        {
+          "name": "severity",
+          "description": "How urgent the event sounds on first read.",
+          "patterns": ["critical", "warning", "error", "sev1"]
+        },
+        {
+          "name": "customer-impact",
+          "description": "Keywords that hint at user-facing degradation or outage symptoms.",
+          "patterns": ["latency", "timeout", "degraded", "outage"]
+        },
+        {
+          "name": "security",
+          "description": "Security-response indicators worth escalating quickly.",
+          "patterns": ["breach", "exfiltration", "credential", "leak"]
+        }
+      ]
+    }
+  ]
+}
