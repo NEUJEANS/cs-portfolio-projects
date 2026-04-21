@@ -18,13 +18,19 @@ assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
+BenchmarkRow = MODULE.BenchmarkRow
 InputDataError = MODULE.InputDataError
+LinearProbingHashTable = MODULE.LinearProbingHashTable
 RobinHoodHashTable = MODULE.RobinHoodHashTable
 SnapshotError = MODULE.SnapshotError
 load_snapshot = MODULE.load_snapshot
 parse_load_factors = MODULE.parse_load_factors
 parse_pairs_input = MODULE.parse_pairs_input
+parse_strategies = MODULE.parse_strategies
+save_benchmark = MODULE.save_benchmark
 stable_hash = MODULE.stable_hash
+summarize_benchmark = MODULE.summarize_benchmark
+run_benchmark = MODULE.run_benchmark
 
 
 def keys_for_home(capacity: int, home_slot: int, count: int) -> list[str]:
@@ -85,6 +91,17 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         self.assertEqual(stats["size"], 3)
         self.assertEqual(stats["max_probe_distance"], 2)
 
+    def test_linear_probing_tracks_probe_distance_dispersion(self) -> None:
+        table = LinearProbingHashTable(capacity=11, auto_resize=False)
+        for index, key in enumerate(keys_for_home(11, 4, 4)):
+            table.put(key, f"value-{index}")
+
+        stats = table.stats()
+        self.assertEqual(stats["max_probe_distance"], 3)
+        self.assertGreater(stats["probe_distance_stddev"], 0)
+        self.assertEqual(stats["cluster_lengths"], [4])
+        self.assertEqual(stats["probe_distance_histogram"], {0: 1, 1: 1, 2: 1, 3: 1})
+
     def test_snapshot_round_trip_preserves_entries(self) -> None:
         table = RobinHoodHashTable(capacity=11, auto_resize=False)
         for index, key in enumerate(keys_for_home(11, 5, 3)):
@@ -125,6 +142,99 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         with self.assertRaises(InputDataError):
             parse_load_factors("0,1.2")
 
+    def test_parse_strategies_normalizes_aliases(self) -> None:
+        self.assertEqual(parse_strategies("robin_hood, linear"), ["robin-hood", "linear-probing"])
+        with self.assertRaises(InputDataError):
+            parse_strategies("quadratic")
+
+    def test_benchmark_summary_includes_linear_comparison_takeaways(self) -> None:
+        rows = run_benchmark(
+            capacity=31,
+            load_factors=[0.5],
+            trials=2,
+            seed=17,
+            strategies=["robin-hood", "linear-probing"],
+        )
+        summary = summarize_benchmark(
+            rows,
+            capacity=31,
+            strategies=["robin-hood", "linear-probing"],
+            trials=2,
+            title="Test benchmark",
+        )
+        self.assertEqual(len(summary["comparisons"]), 1)
+        self.assertEqual(summary["comparisons"][0]["load_factor"], 0.5)
+        strategies = {row["strategy"] for row in summary["results"]}
+        self.assertEqual(strategies, {"robin-hood", "linear-probing"})
+        self.assertTrue(all(row["probe_distance_histogram"] for row in summary["results"]))
+
+    def test_benchmark_summary_uses_pooled_histogram_stddev(self) -> None:
+        rows = [
+            BenchmarkRow(
+                strategy="robin-hood",
+                trial=1,
+                load_factor=0.5,
+                entry_count=2,
+                average_insert_probes=1.0,
+                average_successful_lookup_probes=1.0,
+                average_probe_distance=1.0,
+                probe_distance_stddev=1.0,
+                max_probe_distance=2,
+                max_cluster_length=2,
+                swap_count=0,
+                probe_distance_histogram={0: 1, 2: 1},
+            ),
+            BenchmarkRow(
+                strategy="robin-hood",
+                trial=2,
+                load_factor=0.5,
+                entry_count=2,
+                average_insert_probes=1.0,
+                average_successful_lookup_probes=1.0,
+                average_probe_distance=2.0,
+                probe_distance_stddev=2.0,
+                max_probe_distance=4,
+                max_cluster_length=2,
+                swap_count=0,
+                probe_distance_histogram={0: 1, 4: 1},
+            ),
+        ]
+        summary = summarize_benchmark(
+            rows,
+            capacity=7,
+            strategies=["robin-hood"],
+            trials=2,
+            title="Robin Hood hashing benchmark summary",
+        )
+        result = summary["results"][0]
+        self.assertEqual(result["average_probe_distance"], 1.5)
+        self.assertEqual(result["probe_distance_stddev"], 1.6583)
+        self.assertEqual(result["probe_distance_histogram"][2]["distance"], 4)
+        self.assertEqual(result["probe_distance_histogram"][2]["share"], 0.25)
+
+    def test_save_benchmark_csv_preserves_numeric_histogram_key_order(self) -> None:
+        row = BenchmarkRow(
+            strategy="robin-hood",
+            trial=1,
+            load_factor=0.5,
+            entry_count=3,
+            average_insert_probes=1.0,
+            average_successful_lookup_probes=1.0,
+            average_probe_distance=4.0,
+            probe_distance_stddev=0.0,
+            max_probe_distance=10,
+            max_cluster_length=3,
+            swap_count=0,
+            probe_distance_histogram={0: 1, 2: 1, 10: 1},
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "benchmark.csv"
+            save_benchmark([row], path, capacity=31)
+            text = path.read_text(encoding="utf-8")
+        histogram_cell = next(csv.DictReader(text.splitlines()))["probe_distance_histogram"]
+        self.assertEqual(histogram_cell, '{"0": 1, "2": 1, "10": 1}')
+        self.assertNotEqual(histogram_cell, '{"0": 1, "10": 1, "2": 1}')
+
     def test_cli_build_stats_export_remove_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -133,6 +243,8 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             export_path = tmp_path / "table.csv"
             benchmark_path = tmp_path / "benchmark.csv"
             benchmark_json_path = tmp_path / "benchmark.json"
+            benchmark_markdown_path = tmp_path / "benchmark.md"
+            benchmark_html_path = tmp_path / "benchmark.html"
 
             subprocess.run(
                 [
@@ -160,6 +272,8 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             )
             stats_payload = json.loads(stats.stdout)
             self.assertEqual(stats_payload["size"], 5)
+            self.assertIn("probe_distance_stddev", stats_payload)
+            self.assertIn("probe_distance_histogram", stats_payload)
 
             subprocess.run(
                 [sys.executable, str(SCRIPT), "export", "--snapshot", str(snapshot_path), "--output", str(export_path)],
@@ -205,6 +319,12 @@ class RobinHoodHashingLabTests(unittest.TestCase):
                     "2",
                     "--seed",
                     "17",
+                    "--strategies",
+                    "robin-hood,linear",
+                    "--markdown-out",
+                    str(benchmark_markdown_path),
+                    "--html-out",
+                    str(benchmark_html_path),
                     "--output",
                     str(benchmark_path),
                 ],
@@ -214,8 +334,19 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             )
             with benchmark_path.open("r", encoding="utf-8", newline="") as handle:
                 benchmark_rows = list(csv.DictReader(handle))
-            self.assertEqual(len(benchmark_rows), 4)
+            self.assertEqual(len(benchmark_rows), 8)
             self.assertEqual({row["load_factor"] for row in benchmark_rows}, {"0.25", "0.5"})
+            self.assertEqual({row["strategy"] for row in benchmark_rows}, {"robin-hood", "linear-probing"})
+            self.assertTrue(all(row["probe_distance_histogram"] for row in benchmark_rows))
+            self.assertTrue(benchmark_markdown_path.exists())
+            markdown = benchmark_markdown_path.read_text(encoding="utf-8")
+            self.assertIn("Headline comparisons", markdown)
+            self.assertIn("Probe-distance histograms", markdown)
+            self.assertTrue(benchmark_html_path.exists())
+            html = benchmark_html_path.read_text(encoding="utf-8")
+            self.assertIn("Robin Hood hashing benchmark comparison", html)
+            self.assertIn("Per-load-factor winners and deltas against the linear-probing baseline.", html)
+            self.assertIn("Probe-distance histogram · load factor 0.25", html)
 
             subprocess.run(
                 [
@@ -238,8 +369,53 @@ class RobinHoodHashingLabTests(unittest.TestCase):
                 text=True,
             )
             benchmark_json = json.loads(benchmark_json_path.read_text(encoding="utf-8"))
-            self.assertEqual(len(benchmark_json), 1)
-            self.assertEqual(benchmark_json[0]["capacity"], 31)
+            self.assertEqual(len(benchmark_json), 2)
+            self.assertEqual({row["strategy"] for row in benchmark_json}, {"robin-hood", "linear-probing"})
+            self.assertTrue(all(row["capacity"] == 31 for row in benchmark_json))
+            self.assertTrue(all("probe_distance_histogram" in row for row in benchmark_json))
+
+    def test_single_strategy_reports_use_single_strategy_default_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            benchmark_json_path = tmp_path / "benchmark.json"
+            benchmark_markdown_path = tmp_path / "benchmark.md"
+            benchmark_html_path = tmp_path / "benchmark.html"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "benchmark",
+                    "--capacity",
+                    "31",
+                    "--load-factors",
+                    "0.5",
+                    "--trials",
+                    "1",
+                    "--seed",
+                    "17",
+                    "--strategies",
+                    "robin-hood",
+                    "--markdown-out",
+                    str(benchmark_markdown_path),
+                    "--html-out",
+                    str(benchmark_html_path),
+                    "--output",
+                    str(benchmark_json_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            markdown = benchmark_markdown_path.read_text(encoding="utf-8")
+            self.assertTrue(markdown.startswith("# Robin Hood hashing benchmark summary"))
+            self.assertIn("Deterministic benchmark report for Robin Hood hashing", markdown)
+            self.assertNotIn("against a linear-probing baseline", markdown)
+
+            html = benchmark_html_path.read_text(encoding="utf-8")
+            self.assertIn("<title>Robin Hood hashing benchmark summary</title>", html)
+            self.assertIn("Deterministic benchmark report for Robin Hood hashing", html)
+            self.assertNotIn("against a linear-probing baseline", html)
 
 
 if __name__ == "__main__":

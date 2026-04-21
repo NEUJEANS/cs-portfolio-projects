@@ -7,3 +7,6 @@
 - [x] add sample input data plus committed sample benchmark artifacts
 - [x] add automated tests for swaps, deletion invariants, snapshots, and CLI/benchmark flows
 - [x] log at least 3 review passes with fixes applied
+- [x] compare Robin Hood hashing against a linear-probing baseline with Markdown/HTML benchmark artifacts
+- [x] add probe-distribution histograms so the variance story is visible without reading raw tables
+- [ ] add delete-heavy benchmark workloads so the compare dashboard covers post-removal behavior too

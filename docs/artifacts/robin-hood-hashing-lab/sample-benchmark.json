@@ -1,92 +1,343 @@
 [
   {
     "capacity": 31,
+    "strategy": "robin-hood",
     "trial": 1,
+    "load_factor": 0.25,
+    "entry_count": 8,
+    "average_insert_probes": 1.25,
+    "average_successful_lookup_probes": 1.25,
+    "average_probe_distance": 0.25,
+    "probe_distance_stddev": 0.433,
+    "max_probe_distance": 1,
+    "max_cluster_length": 5,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 6,
+      "1": 2
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "linear-probing",
+    "trial": 1,
+    "load_factor": 0.25,
+    "entry_count": 8,
+    "average_insert_probes": 1.25,
+    "average_successful_lookup_probes": 1.25,
+    "average_probe_distance": 0.25,
+    "probe_distance_stddev": 0.433,
+    "max_probe_distance": 1,
+    "max_cluster_length": 5,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 6,
+      "1": 2
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "robin-hood",
+    "trial": 2,
     "load_factor": 0.25,
     "entry_count": 8,
     "average_insert_probes": 1.0,
     "average_successful_lookup_probes": 1.0,
+    "average_probe_distance": 0.0,
+    "probe_distance_stddev": 0.0,
     "max_probe_distance": 0,
-    "swap_count": 0
+    "max_cluster_length": 3,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 8
+    }
   },
   {
     "capacity": 31,
+    "strategy": "linear-probing",
     "trial": 2,
     "load_factor": 0.25,
     "entry_count": 8,
-    "average_insert_probes": 1.5,
-    "average_successful_lookup_probes": 1.5,
-    "max_probe_distance": 1,
-    "swap_count": 2
+    "average_insert_probes": 1.0,
+    "average_successful_lookup_probes": 1.0,
+    "average_probe_distance": 0.0,
+    "probe_distance_stddev": 0.0,
+    "max_probe_distance": 0,
+    "max_cluster_length": 3,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 8
+    }
   },
   {
     "capacity": 31,
+    "strategy": "robin-hood",
     "trial": 3,
     "load_factor": 0.25,
     "entry_count": 8,
     "average_insert_probes": 1.125,
     "average_successful_lookup_probes": 1.125,
+    "average_probe_distance": 0.125,
+    "probe_distance_stddev": 0.3307,
     "max_probe_distance": 1,
-    "swap_count": 0
+    "max_cluster_length": 4,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 7,
+      "1": 1
+    }
   },
   {
     "capacity": 31,
+    "strategy": "linear-probing",
+    "trial": 3,
+    "load_factor": 0.25,
+    "entry_count": 8,
+    "average_insert_probes": 1.125,
+    "average_successful_lookup_probes": 1.125,
+    "average_probe_distance": 0.125,
+    "probe_distance_stddev": 0.3307,
+    "max_probe_distance": 1,
+    "max_cluster_length": 4,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 7,
+      "1": 1
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "robin-hood",
     "trial": 1,
     "load_factor": 0.5,
     "entry_count": 16,
-    "average_insert_probes": 1.1875,
-    "average_successful_lookup_probes": 1.1875,
+    "average_insert_probes": 1.3125,
+    "average_successful_lookup_probes": 1.3125,
+    "average_probe_distance": 0.3125,
+    "probe_distance_stddev": 0.4635,
     "max_probe_distance": 1,
-    "swap_count": 0
+    "max_cluster_length": 5,
+    "swap_count": 2,
+    "probe_distance_histogram": {
+      "0": 11,
+      "1": 5
+    }
   },
   {
     "capacity": 31,
+    "strategy": "linear-probing",
+    "trial": 1,
+    "load_factor": 0.5,
+    "entry_count": 16,
+    "average_insert_probes": 1.3125,
+    "average_successful_lookup_probes": 1.3125,
+    "average_probe_distance": 0.3125,
+    "probe_distance_stddev": 0.6818,
+    "max_probe_distance": 2,
+    "max_cluster_length": 5,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 13,
+      "1": 1,
+      "2": 2
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "robin-hood",
     "trial": 2,
     "load_factor": 0.5,
     "entry_count": 16,
-    "average_insert_probes": 1.25,
-    "average_successful_lookup_probes": 1.25,
-    "max_probe_distance": 2,
-    "swap_count": 1
+    "average_insert_probes": 1.125,
+    "average_successful_lookup_probes": 1.125,
+    "average_probe_distance": 0.125,
+    "probe_distance_stddev": 0.3307,
+    "max_probe_distance": 1,
+    "max_cluster_length": 7,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 14,
+      "1": 2
+    }
   },
   {
     "capacity": 31,
+    "strategy": "linear-probing",
+    "trial": 2,
+    "load_factor": 0.5,
+    "entry_count": 16,
+    "average_insert_probes": 1.125,
+    "average_successful_lookup_probes": 1.125,
+    "average_probe_distance": 0.125,
+    "probe_distance_stddev": 0.3307,
+    "max_probe_distance": 1,
+    "max_cluster_length": 7,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 14,
+      "1": 2
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "robin-hood",
     "trial": 3,
     "load_factor": 0.5,
     "entry_count": 16,
     "average_insert_probes": 1.1875,
     "average_successful_lookup_probes": 1.1875,
-    "max_probe_distance": 2,
-    "swap_count": 0
+    "average_probe_distance": 0.1875,
+    "probe_distance_stddev": 0.3903,
+    "max_probe_distance": 1,
+    "max_cluster_length": 5,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 13,
+      "1": 3
+    }
   },
   {
     "capacity": 31,
+    "strategy": "linear-probing",
+    "trial": 3,
+    "load_factor": 0.5,
+    "entry_count": 16,
+    "average_insert_probes": 1.1875,
+    "average_successful_lookup_probes": 1.1875,
+    "average_probe_distance": 0.1875,
+    "probe_distance_stddev": 0.3903,
+    "max_probe_distance": 1,
+    "max_cluster_length": 5,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 13,
+      "1": 3
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "robin-hood",
     "trial": 1,
     "load_factor": 0.75,
     "entry_count": 23,
-    "average_insert_probes": 1.7826,
-    "average_successful_lookup_probes": 1.7826,
+    "average_insert_probes": 1.7391,
+    "average_successful_lookup_probes": 1.7391,
+    "average_probe_distance": 0.7391,
+    "probe_distance_stddev": 0.7922,
     "max_probe_distance": 2,
-    "swap_count": 6
+    "max_cluster_length": 14,
+    "swap_count": 10,
+    "probe_distance_histogram": {
+      "0": 11,
+      "1": 7,
+      "2": 5
+    }
   },
   {
     "capacity": 31,
-    "trial": 2,
+    "strategy": "linear-probing",
+    "trial": 1,
     "load_factor": 0.75,
     "entry_count": 23,
-    "average_insert_probes": 1.8696,
-    "average_successful_lookup_probes": 1.8696,
-    "max_probe_distance": 2,
-    "swap_count": 8
+    "average_insert_probes": 1.7391,
+    "average_successful_lookup_probes": 1.7391,
+    "average_probe_distance": 0.7391,
+    "probe_distance_stddev": 1.6995,
+    "max_probe_distance": 7,
+    "max_cluster_length": 14,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 18,
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1,
+      "7": 1
+    }
   },
   {
     "capacity": 31,
-    "trial": 3,
+    "strategy": "robin-hood",
+    "trial": 2,
     "load_factor": 0.75,
     "entry_count": 23,
     "average_insert_probes": 2.3478,
     "average_successful_lookup_probes": 2.3478,
-    "max_probe_distance": 4,
-    "swap_count": 13
+    "average_probe_distance": 1.3478,
+    "probe_distance_stddev": 1.4021,
+    "max_probe_distance": 5,
+    "max_cluster_length": 8,
+    "swap_count": 5,
+    "probe_distance_histogram": {
+      "0": 9,
+      "1": 4,
+      "2": 6,
+      "3": 2,
+      "4": 1,
+      "5": 1
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "linear-probing",
+    "trial": 2,
+    "load_factor": 0.75,
+    "entry_count": 23,
+    "average_insert_probes": 2.3478,
+    "average_successful_lookup_probes": 2.3478,
+    "average_probe_distance": 1.3478,
+    "probe_distance_stddev": 1.7348,
+    "max_probe_distance": 6,
+    "max_cluster_length": 8,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 11,
+      "1": 4,
+      "2": 3,
+      "3": 2,
+      "4": 1,
+      "5": 1,
+      "6": 1
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "robin-hood",
+    "trial": 3,
+    "load_factor": 0.75,
+    "entry_count": 23,
+    "average_insert_probes": 1.6087,
+    "average_successful_lookup_probes": 1.6087,
+    "average_probe_distance": 0.6087,
+    "probe_distance_stddev": 0.6419,
+    "max_probe_distance": 2,
+    "max_cluster_length": 7,
+    "swap_count": 5,
+    "probe_distance_histogram": {
+      "0": 11,
+      "1": 10,
+      "2": 2
+    }
+  },
+  {
+    "capacity": 31,
+    "strategy": "linear-probing",
+    "trial": 3,
+    "load_factor": 0.75,
+    "entry_count": 23,
+    "average_insert_probes": 1.6087,
+    "average_successful_lookup_probes": 1.6087,
+    "average_probe_distance": 0.6087,
+    "probe_distance_stddev": 1.2065,
+    "max_probe_distance": 5,
+    "max_cluster_length": 7,
+    "swap_count": 0,
+    "probe_distance_histogram": {
+      "0": 16,
+      "1": 4,
+      "2": 1,
+      "3": 1,
+      "5": 1
+    }
   }
 ]
