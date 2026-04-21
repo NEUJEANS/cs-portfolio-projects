@@ -9,4 +9,5 @@
 - [x] log at least 3 review passes with fixes applied
 - [x] compare Robin Hood hashing against a linear-probing baseline with Markdown/HTML benchmark artifacts
 - [x] add probe-distribution histograms so the variance story is visible without reading raw tables
-- [ ] add delete-heavy benchmark workloads so the compare dashboard covers post-removal behavior too
+- [x] add delete-heavy benchmark workloads so the compare dashboard covers post-removal behavior too
+- [ ] add unsuccessful-lookup benchmark workloads/histograms so misses become part of the interview story

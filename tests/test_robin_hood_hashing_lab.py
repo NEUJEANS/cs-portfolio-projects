@@ -24,9 +24,11 @@ LinearProbingHashTable = MODULE.LinearProbingHashTable
 RobinHoodHashTable = MODULE.RobinHoodHashTable
 SnapshotError = MODULE.SnapshotError
 load_snapshot = MODULE.load_snapshot
+benchmark_delete_count = MODULE.benchmark_delete_count
 parse_load_factors = MODULE.parse_load_factors
 parse_pairs_input = MODULE.parse_pairs_input
 parse_strategies = MODULE.parse_strategies
+parse_workloads = MODULE.parse_workloads
 save_benchmark = MODULE.save_benchmark
 stable_hash = MODULE.stable_hash
 summarize_benchmark = MODULE.summarize_benchmark
@@ -102,6 +104,23 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         self.assertEqual(stats["cluster_lengths"], [4])
         self.assertEqual(stats["probe_distance_histogram"], {0: 1, 1: 1, 2: 1, 3: 1})
 
+    def test_linear_probing_delete_keeps_later_wrapped_keys_searchable(self) -> None:
+        table = LinearProbingHashTable(capacity=17, auto_resize=False)
+        home_eleven = keys_for_home(17, 11, 3)
+        home_thirteen = keys_for_home(17, 13, 1)[0]
+
+        table.put(home_eleven[0], "a")
+        table.put(home_eleven[1], "b")
+        table.put(home_thirteen, "c")
+        table.put(home_eleven[2], "d")
+
+        self.assertTrue(table.delete(home_eleven[1]))
+        self.assertEqual(table.get(home_eleven[2]), "d")
+        slot_twelve = table.slots[12]
+        assert slot_twelve is not None
+        self.assertEqual(slot_twelve.key, home_eleven[2])
+        self.assertEqual(slot_twelve.probe_distance, 1)
+
     def test_snapshot_round_trip_preserves_entries(self) -> None:
         table = RobinHoodHashTable(capacity=11, auto_resize=False)
         for index, key in enumerate(keys_for_home(11, 5, 3)):
@@ -147,6 +166,16 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         with self.assertRaises(InputDataError):
             parse_strategies("quadratic")
 
+    def test_parse_workloads_normalizes_aliases(self) -> None:
+        self.assertEqual(parse_workloads("fill, deleteheavy"), ["fill-only", "delete-heavy"])
+        with self.assertRaises(InputDataError):
+            parse_workloads("random-mix")
+
+    def test_benchmark_delete_count_keeps_at_least_one_survivor(self) -> None:
+        self.assertEqual(benchmark_delete_count(3, 0.8), 2)
+        with self.assertRaises(InputDataError):
+            benchmark_delete_count(1, 0.3)
+
     def test_benchmark_summary_includes_linear_comparison_takeaways(self) -> None:
         rows = run_benchmark(
             capacity=31,
@@ -154,28 +183,42 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             trials=2,
             seed=17,
             strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only", "delete-heavy"],
+            delete_fraction=0.3,
         )
         summary = summarize_benchmark(
             rows,
             capacity=31,
             strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only", "delete-heavy"],
             trials=2,
             title="Test benchmark",
+            delete_fraction=0.3,
         )
-        self.assertEqual(len(summary["comparisons"]), 1)
-        self.assertEqual(summary["comparisons"][0]["load_factor"], 0.5)
+        self.assertEqual(len(summary["comparisons"]), 2)
+        self.assertEqual({row["workload"] for row in summary["comparisons"]}, {"fill-only", "delete-heavy"})
         strategies = {row["strategy"] for row in summary["results"]}
+        workloads = {row["workload"] for row in summary["results"]}
         self.assertEqual(strategies, {"robin-hood", "linear-probing"})
+        self.assertEqual(workloads, {"fill-only", "delete-heavy"})
+        delete_heavy = [row for row in summary["results"] if row["workload"] == "delete-heavy"]
+        self.assertTrue(all(row["deleted_entry_count"] > 0 for row in delete_heavy))
+        self.assertTrue(all(row["average_delete_probes"] > 0 for row in delete_heavy))
         self.assertTrue(all(row["probe_distance_histogram"] for row in summary["results"]))
 
     def test_benchmark_summary_uses_pooled_histogram_stddev(self) -> None:
         rows = [
             BenchmarkRow(
                 strategy="robin-hood",
+                workload="fill-only",
                 trial=1,
                 load_factor=0.5,
+                effective_load_factor=0.2857,
                 entry_count=2,
+                remaining_entry_count=2,
+                deleted_entry_count=0,
                 average_insert_probes=1.0,
+                average_delete_probes=0.0,
                 average_successful_lookup_probes=1.0,
                 average_probe_distance=1.0,
                 probe_distance_stddev=1.0,
@@ -186,10 +229,15 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             ),
             BenchmarkRow(
                 strategy="robin-hood",
+                workload="fill-only",
                 trial=2,
                 load_factor=0.5,
+                effective_load_factor=0.2857,
                 entry_count=2,
+                remaining_entry_count=2,
+                deleted_entry_count=0,
                 average_insert_probes=1.0,
+                average_delete_probes=0.0,
                 average_successful_lookup_probes=1.0,
                 average_probe_distance=2.0,
                 probe_distance_stddev=2.0,
@@ -203,8 +251,10 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             rows,
             capacity=7,
             strategies=["robin-hood"],
+            workloads=["fill-only"],
             trials=2,
             title="Robin Hood hashing benchmark summary",
+            delete_fraction=0.3,
         )
         result = summary["results"][0]
         self.assertEqual(result["average_probe_distance"], 1.5)
@@ -215,10 +265,15 @@ class RobinHoodHashingLabTests(unittest.TestCase):
     def test_save_benchmark_csv_preserves_numeric_histogram_key_order(self) -> None:
         row = BenchmarkRow(
             strategy="robin-hood",
+            workload="fill-only",
             trial=1,
             load_factor=0.5,
+            effective_load_factor=0.5,
             entry_count=3,
+            remaining_entry_count=3,
+            deleted_entry_count=0,
             average_insert_probes=1.0,
+            average_delete_probes=0.0,
             average_successful_lookup_probes=1.0,
             average_probe_distance=4.0,
             probe_distance_stddev=0.0,
@@ -334,19 +389,23 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             )
             with benchmark_path.open("r", encoding="utf-8", newline="") as handle:
                 benchmark_rows = list(csv.DictReader(handle))
-            self.assertEqual(len(benchmark_rows), 8)
+            self.assertEqual(len(benchmark_rows), 16)
             self.assertEqual({row["load_factor"] for row in benchmark_rows}, {"0.25", "0.5"})
             self.assertEqual({row["strategy"] for row in benchmark_rows}, {"robin-hood", "linear-probing"})
+            self.assertEqual({row["workload"] for row in benchmark_rows}, {"fill-only", "delete-heavy"})
+            delete_heavy_rows = [row for row in benchmark_rows if row["workload"] == "delete-heavy"]
+            self.assertTrue(all(float(row["average_delete_probes"]) > 0 for row in delete_heavy_rows))
             self.assertTrue(all(row["probe_distance_histogram"] for row in benchmark_rows))
             self.assertTrue(benchmark_markdown_path.exists())
             markdown = benchmark_markdown_path.read_text(encoding="utf-8")
             self.assertIn("Headline comparisons", markdown)
+            self.assertIn("Delete-heavy (30.0% removals)", markdown)
             self.assertIn("Probe-distance histograms", markdown)
             self.assertTrue(benchmark_html_path.exists())
             html = benchmark_html_path.read_text(encoding="utf-8")
-            self.assertIn("Robin Hood hashing benchmark comparison", html)
-            self.assertIn("Per-load-factor winners and deltas against the linear-probing baseline.", html)
-            self.assertIn("Probe-distance histogram · load factor 0.25", html)
+            self.assertIn("Robin Hood hashing benchmark comparison with delete-heavy workloads", html)
+            self.assertIn("Per-workload winners and deltas against the linear-probing baseline.", html)
+            self.assertIn("Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.25", html)
 
             subprocess.run(
                 [
@@ -369,8 +428,9 @@ class RobinHoodHashingLabTests(unittest.TestCase):
                 text=True,
             )
             benchmark_json = json.loads(benchmark_json_path.read_text(encoding="utf-8"))
-            self.assertEqual(len(benchmark_json), 2)
+            self.assertEqual(len(benchmark_json), 4)
             self.assertEqual({row["strategy"] for row in benchmark_json}, {"robin-hood", "linear-probing"})
+            self.assertEqual({row["workload"] for row in benchmark_json}, {"fill-only", "delete-heavy"})
             self.assertTrue(all(row["capacity"] == 31 for row in benchmark_json))
             self.assertTrue(all("probe_distance_histogram" in row for row in benchmark_json))
 
@@ -408,13 +468,15 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             )
 
             markdown = benchmark_markdown_path.read_text(encoding="utf-8")
-            self.assertTrue(markdown.startswith("# Robin Hood hashing benchmark summary"))
+            self.assertTrue(markdown.startswith("# Robin Hood hashing fill vs delete-heavy benchmark summary"))
             self.assertIn("Deterministic benchmark report for Robin Hood hashing", markdown)
+            self.assertIn("delete-heavy workload that removes 30.0% of keys", markdown)
             self.assertNotIn("against a linear-probing baseline", markdown)
 
             html = benchmark_html_path.read_text(encoding="utf-8")
-            self.assertIn("<title>Robin Hood hashing benchmark summary</title>", html)
+            self.assertIn("<title>Robin Hood hashing fill vs delete-heavy benchmark summary</title>", html)
             self.assertIn("Deterministic benchmark report for Robin Hood hashing", html)
+            self.assertIn("delete-heavy workload that removes 30.0% of keys", html)
             self.assertNotIn("against a linear-probing baseline", html)
 
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Robin Hood hashing benchmark comparison</title>
+  <title>Robin Hood hashing benchmark comparison with delete-heavy workloads</title>
   <style>
     :root {
       color-scheme: light;
@@ -21,13 +21,13 @@
       color: var(--text);
       font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    main { max-width: 1180px; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }
+    main { max-width: 1280px; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }
     h1, h2 { margin: 0 0 0.75rem; line-height: 1.2; }
     p { margin: 0 0 1rem; color: var(--muted); }
     .hero { margin-bottom: 1.5rem; }
     .grid { display: grid; gap: 1rem; }
     .summary-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 1.5rem 0; }
-    .detail-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .detail-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     .summary-card, .panel, .detail-card {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -38,7 +38,7 @@
     .summary-card strong { display: block; font-size: 1.5rem; margin-bottom: 0.35rem; }
     .panel { padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
     .detail-card { padding: 1rem 1.1rem; }
-    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    table { width: 100%; border-collapse: collapse; min-width: 860px; }
     caption { text-align: left; font-weight: 600; margin-bottom: 0.7rem; }
     th, td { padding: 0.75rem 0.65rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: left; }
     thead th { background: #eff6ff; }
@@ -53,8 +53,8 @@
 <body>
   <main>
     <section class="hero">
-      <h1>Robin Hood hashing benchmark comparison</h1>
-      <p>Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, now with probe-distance histograms that make dispersion visible at a glance.</p>
+      <h1>Robin Hood hashing benchmark comparison with delete-heavy workloads</h1>
+      <p>Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, with probe-distance histograms that make dispersion visible at a glance. It also includes a delete-heavy workload that removes 30.0% of keys before the final lookup + histogram pass, so post-removal clustering is visible too.</p>
     </section>
     <section class="grid summary-grid">
       <article class="summary-card">
@@ -64,53 +64,107 @@
 </article><article class="summary-card">
   <h2>Trials</h2>
   <strong>3</strong>
-  <p>repeated runs per load factor</p>
+  <p>repeated runs per workload/load factor</p>
 </article><article class="summary-card">
   <h2>Load factors</h2>
   <strong>0.25, 0.5, 0.75</strong>
-  <p>benchmarked fill levels</p>
+  <p>starting fill levels</p>
+</article><article class="summary-card">
+  <h2>Workloads</h2>
+  <strong>2</strong>
+  <p>Fill-only, Delete-heavy (30.0% removals)</p>
 </article><article class="summary-card">
   <h2>Strategies</h2>
   <strong>2</strong>
   <p>Robin Hood hashing, Linear probing</p>
 </article>
     </section>
+    <p>Requested load factors are rounded to whole entry counts, so the effective fill level can differ slightly from the requested target.</p>
     <section class="panel">
   <h2>Robin Hood vs linear probing</h2>
   <table>
-    <caption>Per-load-factor winners and deltas against the linear-probing baseline.</caption>
+    <caption>Per-workload winners and deltas against the linear-probing baseline.</caption>
     <thead>
       <tr>
-        <th scope="col">Load factor</th>
-        <th scope="col">Entries</th>
+        <th scope="col">Workload</th>
+        <th scope="col">Requested load factor</th>
+        <th scope="col">Remaining load factor</th>
+        <th scope="col">Remaining entries</th>
         <th scope="col">Lookup winner</th>
         <th scope="col">Lookup delta vs linear</th>
         <th scope="col">Lower probe stddev</th>
         <th scope="col">Stddev delta vs linear</th>
+        <th scope="col">Lower delete probes</th>
+        <th scope="col">Delete delta vs linear</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-  <th scope="row">0.25</th>
+  <th scope="row">Fill-only</th>
+  <td>0.25</td>
+  <td>0.2581</td>
   <td>8</td>
   <td>Tie</td>
   <td>0</td>
   <td>Tie</td>
   <td>0</td>
+  <td>—</td>
+  <td>—</td>
 </tr><tr>
-  <th scope="row">0.5</th>
+  <th scope="row">Fill-only</th>
+  <td>0.5</td>
+  <td>0.5161</td>
   <td>16</td>
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
   <td>0.0922</td>
+  <td>—</td>
+  <td>—</td>
 </tr><tr>
-  <th scope="row">0.75</th>
+  <th scope="row">Fill-only</th>
+  <td>0.75</td>
+  <td>0.7419</td>
   <td>23</td>
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
   <td>0.5469</td>
+  <td>—</td>
+  <td>—</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.25</td>
+  <td>0.1935</td>
+  <td>6</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Tie</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.5</td>
+  <td>0.3548</td>
+  <td>11</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>0.0719</td>
+  <td>Tie</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.75</td>
+  <td>0.5161</td>
+  <td>16</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>0.1413</td>
+  <td>Tie</td>
+  <td>0</td>
 </tr>
     </tbody>
   </table>
@@ -118,23 +172,30 @@
     <section class="panel">
       <h2>Aggregate metrics</h2>
       <table>
-        <caption>Average metrics aggregated across deterministic trials for each load factor and strategy.</caption>
+        <caption>Average metrics aggregated across deterministic trials for each workload, load factor, and strategy.</caption>
         <thead>
           <tr>
-            <th scope="col">Load factor</th>
+            <th scope="col">Workload</th>
+            <th scope="col">Requested load factor</th>
+            <th scope="col">Remaining load factor</th>
             <th scope="col">Strategy</th>
+            <th scope="col">Deleted entries</th>
             <th scope="col">Avg successful lookup probes</th>
             <th scope="col">Probe-distance stddev</th>
             <th scope="col">Max cluster length</th>
             <th scope="col">Avg insert probes</th>
+            <th scope="col">Avg delete probes</th>
             <th scope="col">Max probe distance</th>
             <th scope="col">Avg swaps</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-  <th scope="row">0.25</th>
+  <th scope="row">Fill-only</th>
+  <td>0.25</td>
+  <td>0.2581</td>
   <td>Robin Hood hashing</td>
+  <td>0</td>
   <td>
     <strong>1.125</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:59.3%;background:#7c3aed;"></span></div>
@@ -148,11 +209,15 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:35.7%;background:#ea580c;"></span></div>
   </td>
   <td>1.125</td>
+  <td>0</td>
   <td>1</td>
   <td>0</td>
 </tr><tr>
-  <th scope="row">0.25</th>
+  <th scope="row">Fill-only</th>
+  <td>0.25</td>
+  <td>0.2581</td>
   <td>Linear probing</td>
+  <td>0</td>
   <td>
     <strong>1.125</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:59.3%;background:#7c3aed;"></span></div>
@@ -166,11 +231,15 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:35.7%;background:#ea580c;"></span></div>
   </td>
   <td>1.125</td>
+  <td>0</td>
   <td>1</td>
   <td>0</td>
 </tr><tr>
-  <th scope="row">0.5</th>
+  <th scope="row">Fill-only</th>
+  <td>0.5</td>
+  <td>0.5161</td>
   <td>Robin Hood hashing</td>
+  <td>0</td>
   <td>
     <strong>1.2083</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:63.6%;background:#7c3aed;"></span></div>
@@ -184,11 +253,15 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:50.0%;background:#ea580c;"></span></div>
   </td>
   <td>1.2083</td>
+  <td>0</td>
   <td>1</td>
   <td>0.6667</td>
 </tr><tr>
-  <th scope="row">0.5</th>
+  <th scope="row">Fill-only</th>
+  <td>0.5</td>
+  <td>0.5161</td>
   <td>Linear probing</td>
+  <td>0</td>
   <td>
     <strong>1.2083</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:63.6%;background:#7c3aed;"></span></div>
@@ -202,11 +275,15 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:50.0%;background:#ea580c;"></span></div>
   </td>
   <td>1.2083</td>
+  <td>0</td>
   <td>2</td>
   <td>0</td>
 </tr><tr>
-  <th scope="row">0.75</th>
+  <th scope="row">Fill-only</th>
+  <td>0.75</td>
+  <td>0.7419</td>
   <td>Robin Hood hashing</td>
+  <td>0</td>
   <td>
     <strong>1.8986</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#7c3aed;"></span></div>
@@ -220,11 +297,15 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#ea580c;"></span></div>
   </td>
   <td>1.8986</td>
+  <td>0</td>
   <td>5</td>
   <td>6.6667</td>
 </tr><tr>
-  <th scope="row">0.75</th>
+  <th scope="row">Fill-only</th>
+  <td>0.75</td>
+  <td>0.7419</td>
   <td>Linear probing</td>
+  <td>0</td>
   <td>
     <strong>1.8986</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#7c3aed;"></span></div>
@@ -238,7 +319,140 @@
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#ea580c;"></span></div>
   </td>
   <td>1.8986</td>
+  <td>0</td>
   <td>7</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.25</td>
+  <td>0.1935</td>
+  <td>Robin Hood hashing</td>
+  <td>2</td>
+  <td>
+    <strong>1.0556</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:55.6%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>0.2291</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>4</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:28.6%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.125</td>
+  <td>1.1667</td>
+  <td>1</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.25</td>
+  <td>0.1935</td>
+  <td>Linear probing</td>
+  <td>2</td>
+  <td>
+    <strong>1.0556</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:55.6%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>0.2291</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>4</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:28.6%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.125</td>
+  <td>1.1667</td>
+  <td>1</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.5</td>
+  <td>0.3548</td>
+  <td>Robin Hood hashing</td>
+  <td>5</td>
+  <td>
+    <strong>1.1818</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:62.2%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>0.3857</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:24.1%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>3</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:21.4%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.2083</td>
+  <td>1.0667</td>
+  <td>1</td>
+  <td>0.6667</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.5</td>
+  <td>0.3548</td>
+  <td>Linear probing</td>
+  <td>5</td>
+  <td>
+    <strong>1.1818</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:62.2%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>0.4576</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:28.6%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>3</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:21.4%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.2083</td>
+  <td>1.0667</td>
+  <td>2</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.75</td>
+  <td>0.5161</td>
+  <td>Robin Hood hashing</td>
+  <td>7</td>
+  <td>
+    <strong>1.4375</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:75.7%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>0.8141</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:50.9%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>6</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:42.9%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.8986</td>
+  <td>1.619</td>
+  <td>4</td>
+  <td>6.6667</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.75</td>
+  <td>0.5161</td>
+  <td>Linear probing</td>
+  <td>7</td>
+  <td>
+    <strong>1.4375</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:75.7%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>0.9554</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:59.8%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>6</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:42.9%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.8986</td>
+  <td>1.619</td>
+  <td>4</td>
   <td>0</td>
 </tr>
         </tbody>
@@ -246,12 +460,12 @@
     </section>
     <section>
       <h2>Probe-distance histograms</h2>
-      <p>Aggregated histograms keep the report screenshot-friendly while showing how quickly each strategy spills into longer probe chains.</p>
+      <p>Aggregated histograms keep the report screenshot-friendly while showing how quickly each strategy spills into longer probe chains after fill-only and delete-heavy runs.</p>
       <section class="panel histogram-panel">
-  <h2>Probe-distance histogram · load factor 0.25</h2>
-  <p>8 entries per trial across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <h2>Probe-distance histogram · Fill-only · requested load factor 0.25</h2>
+  <p>8 starting entries per trial; 8 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
-    <caption>Aggregated probe-distance counts by strategy.</caption>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
     <thead>
       <tr>
         <th scope="col">Probe distance</th>
@@ -285,10 +499,10 @@
     </tbody>
   </table>
 </section><section class="panel histogram-panel">
-  <h2>Probe-distance histogram · load factor 0.5</h2>
-  <p>16 entries per trial across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <h2>Probe-distance histogram · Fill-only · requested load factor 0.5</h2>
+  <p>16 starting entries per trial; 16 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
-    <caption>Aggregated probe-distance counts by strategy.</caption>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
     <thead>
       <tr>
         <th scope="col">Probe distance</th>
@@ -333,10 +547,10 @@
     </tbody>
   </table>
 </section><section class="panel histogram-panel">
-  <h2>Probe-distance histogram · load factor 0.75</h2>
-  <p>23 entries per trial across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <h2>Probe-distance histogram · Fill-only · requested load factor 0.75</h2>
+  <p>23 starting entries per trial; 23 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
-    <caption>Aggregated probe-distance counts by strategy.</caption>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
     <thead>
       <tr>
         <th scope="col">Probe distance</th>
@@ -435,16 +649,172 @@
 </tr>
     </tbody>
   </table>
+</section><section class="panel histogram-panel">
+  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.25</h2>
+  <p>8 starting entries per trial; 6 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>17</strong>
+  <span class="histogram-meta">94.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>17</strong>
+  <span class="histogram-meta">94.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">5.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.9%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">5.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.9%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel">
+  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.5</h2>
+  <p>16 starting entries per trial; 11 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>27</strong>
+  <span class="histogram-meta">81.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:96.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>28</strong>
+  <span class="histogram-meta">84.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>6</strong>
+  <span class="histogram-meta">18.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:21.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">12.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">3.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.6%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel">
+  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.75</h2>
+  <p>23 starting entries per trial; 16 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>33</strong>
+  <span class="histogram-meta">68.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:89.2%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>37</strong>
+  <span class="histogram-meta">77.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>12</strong>
+  <span class="histogram-meta">25.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:32.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">12.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:16.2%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">6.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:8.1%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">2.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
 </section>
     </section>
     <section>
       <h2>Per-slice detail cards</h2>
       <div class="grid detail-grid">
         <article class="detail-card">
-  <h2>0.25 load factor · Robin Hood hashing</h2>
-  <p>8 entries across 3 deterministic trial(s).</p>
+  <h2>Fill-only · start 0.25 · Robin Hood hashing</h2>
+  <p>8 starting entries across 3 deterministic trial(s); 8 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.125</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.125</strong></li>
     <li>Probe-distance stddev: <strong>0.3307</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
@@ -452,10 +822,11 @@
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>0.25 load factor · Linear probing</h2>
-  <p>8 entries across 3 deterministic trial(s).</p>
+  <h2>Fill-only · start 0.25 · Linear probing</h2>
+  <p>8 starting entries across 3 deterministic trial(s); 8 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.125</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.125</strong></li>
     <li>Probe-distance stddev: <strong>0.3307</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
@@ -463,10 +834,11 @@
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>0.5 load factor · Robin Hood hashing</h2>
-  <p>16 entries across 3 deterministic trial(s).</p>
+  <h2>Fill-only · start 0.5 · Robin Hood hashing</h2>
+  <p>16 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.2083</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.2083</strong></li>
     <li>Probe-distance stddev: <strong>0.4061</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
@@ -474,10 +846,11 @@
     <li>Avg swaps: <strong>0.6667</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>0.5 load factor · Linear probing</h2>
-  <p>16 entries across 3 deterministic trial(s).</p>
+  <h2>Fill-only · start 0.5 · Linear probing</h2>
+  <p>16 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.2083</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.2083</strong></li>
     <li>Probe-distance stddev: <strong>0.4983</strong></li>
     <li>Max probe distance: <strong>2</strong></li>
@@ -485,10 +858,11 @@
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>0.75 load factor · Robin Hood hashing</h2>
-  <p>23 entries across 3 deterministic trial(s).</p>
+  <h2>Fill-only · start 0.75 · Robin Hood hashing</h2>
+  <p>23 starting entries across 3 deterministic trial(s); 23 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.8986</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.8986</strong></li>
     <li>Probe-distance stddev: <strong>1.0515</strong></li>
     <li>Max probe distance: <strong>5</strong></li>
@@ -496,14 +870,87 @@
     <li>Avg swaps: <strong>6.6667</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>0.75 load factor · Linear probing</h2>
-  <p>23 entries across 3 deterministic trial(s).</p>
+  <h2>Fill-only · start 0.75 · Linear probing</h2>
+  <p>23 starting entries across 3 deterministic trial(s); 23 remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>1.8986</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
     <li>Avg probe distance: <strong>0.8986</strong></li>
     <li>Probe-distance stddev: <strong>1.5984</strong></li>
     <li>Max probe distance: <strong>7</strong></li>
     <li>Max cluster length: <strong>14</strong></li>
+    <li>Avg swaps: <strong>0</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.25 · Robin Hood hashing</h2>
+  <p>8 starting entries across 3 deterministic trial(s); 6 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.0556</strong></li>
+    <li>Avg delete probes: <strong>1.1667</strong></li>
+    <li>Avg probe distance: <strong>0.0556</strong></li>
+    <li>Probe-distance stddev: <strong>0.2291</strong></li>
+    <li>Max probe distance: <strong>1</strong></li>
+    <li>Max cluster length: <strong>4</strong></li>
+    <li>Avg swaps: <strong>0</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.25 · Linear probing</h2>
+  <p>8 starting entries across 3 deterministic trial(s); 6 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.0556</strong></li>
+    <li>Avg delete probes: <strong>1.1667</strong></li>
+    <li>Avg probe distance: <strong>0.0556</strong></li>
+    <li>Probe-distance stddev: <strong>0.2291</strong></li>
+    <li>Max probe distance: <strong>1</strong></li>
+    <li>Max cluster length: <strong>4</strong></li>
+    <li>Avg swaps: <strong>0</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.5 · Robin Hood hashing</h2>
+  <p>16 starting entries across 3 deterministic trial(s); 11 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.1818</strong></li>
+    <li>Avg delete probes: <strong>1.0667</strong></li>
+    <li>Avg probe distance: <strong>0.1818</strong></li>
+    <li>Probe-distance stddev: <strong>0.3857</strong></li>
+    <li>Max probe distance: <strong>1</strong></li>
+    <li>Max cluster length: <strong>3</strong></li>
+    <li>Avg swaps: <strong>0.6667</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.5 · Linear probing</h2>
+  <p>16 starting entries across 3 deterministic trial(s); 11 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.1818</strong></li>
+    <li>Avg delete probes: <strong>1.0667</strong></li>
+    <li>Avg probe distance: <strong>0.1818</strong></li>
+    <li>Probe-distance stddev: <strong>0.4576</strong></li>
+    <li>Max probe distance: <strong>2</strong></li>
+    <li>Max cluster length: <strong>3</strong></li>
+    <li>Avg swaps: <strong>0</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.75 · Robin Hood hashing</h2>
+  <p>23 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.4375</strong></li>
+    <li>Avg delete probes: <strong>1.619</strong></li>
+    <li>Avg probe distance: <strong>0.4375</strong></li>
+    <li>Probe-distance stddev: <strong>0.8141</strong></li>
+    <li>Max probe distance: <strong>4</strong></li>
+    <li>Max cluster length: <strong>6</strong></li>
+    <li>Avg swaps: <strong>6.6667</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.75 · Linear probing</h2>
+  <p>23 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.4375</strong></li>
+    <li>Avg delete probes: <strong>1.619</strong></li>
+    <li>Avg probe distance: <strong>0.4375</strong></li>
+    <li>Probe-distance stddev: <strong>0.9554</strong></li>
+    <li>Max probe distance: <strong>4</strong></li>
+    <li>Max cluster length: <strong>6</strong></li>
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article>

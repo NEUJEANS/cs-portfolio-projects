@@ -47,10 +47,15 @@ class OperationResult:
 @dataclass(slots=True)
 class BenchmarkRow:
     strategy: str
+    workload: str
     trial: int
     load_factor: float
+    effective_load_factor: float
     entry_count: int
+    remaining_entry_count: int
+    deleted_entry_count: int
     average_insert_probes: float
+    average_delete_probes: float
     average_successful_lookup_probes: float
     average_probe_distance: float
     probe_distance_stddev: float
@@ -63,10 +68,15 @@ class BenchmarkRow:
         return {
             "capacity": capacity,
             "strategy": self.strategy,
+            "workload": self.workload,
             "trial": self.trial,
             "load_factor": round(self.load_factor, 4),
+            "effective_load_factor": round(self.effective_load_factor, 4),
             "entry_count": self.entry_count,
+            "remaining_entry_count": self.remaining_entry_count,
+            "deleted_entry_count": self.deleted_entry_count,
             "average_insert_probes": round(self.average_insert_probes, 4),
+            "average_delete_probes": round(self.average_delete_probes, 4),
             "average_successful_lookup_probes": round(self.average_successful_lookup_probes, 4),
             "average_probe_distance": round(self.average_probe_distance, 4),
             "probe_distance_stddev": round(self.probe_distance_stddev, 4),
@@ -82,6 +92,11 @@ class BenchmarkRow:
 STRATEGY_LABELS = {
     "robin-hood": "Robin Hood hashing",
     "linear-probing": "Linear probing",
+}
+
+WORKLOAD_LABELS = {
+    "fill-only": "Fill-only",
+    "delete-heavy": "Delete-heavy",
 }
 
 
@@ -242,23 +257,28 @@ class RobinHoodHashTable:
             probe_distance += 1
         return None, probes
 
-    def delete(self, key: str) -> bool:
+    def delete_with_metrics(self, key: str) -> OperationResult:
         hash_value = stable_hash(key)
         index = hash_value % self.capacity
         probe_distance = 0
+        probes = 0
         while probe_distance < self.capacity:
+            probes += 1
             resident = self.slots[index]
             if resident is None:
-                return False
+                return OperationResult(action="missing", probes=probes)
             if resident.probe_distance < probe_distance:
-                return False
+                return OperationResult(action="missing", probes=probes)
             if resident.key == key:
                 self._delete_at_index(index)
                 self.size -= 1
-                return True
+                return OperationResult(action="deleted", probes=probes, probe_distance=resident.probe_distance)
             index = (index + 1) % self.capacity
             probe_distance += 1
-        return False
+        return OperationResult(action="missing", probes=probes)
+
+    def delete(self, key: str) -> bool:
+        return self.delete_with_metrics(key).action == "deleted"
 
     def _delete_at_index(self, index: int) -> None:
         hole = index
@@ -431,6 +451,46 @@ class LinearProbingHashTable:
                 return resident.value, probes
         return None, probes
 
+    def delete_with_metrics(self, key: str) -> OperationResult:
+        hash_value = stable_hash(key)
+        home_slot = hash_value % self.capacity
+        probes = 0
+        for offset in range(self.capacity):
+            probes += 1
+            index = (home_slot + offset) % self.capacity
+            resident = self.slots[index]
+            if resident is None:
+                return OperationResult(action="missing", probes=probes)
+            if resident.key == key:
+                self._delete_at_index(index)
+                self.size -= 1
+                return OperationResult(action="deleted", probes=probes, probe_distance=resident.probe_distance)
+        return OperationResult(action="missing", probes=probes)
+
+    def delete(self, key: str) -> bool:
+        return self.delete_with_metrics(key).action == "deleted"
+
+    def _delete_at_index(self, index: int) -> None:
+        hole = index
+        cursor = (index + 1) % self.capacity
+        while True:
+            resident = self.slots[cursor]
+            if resident is None:
+                self.slots[hole] = None
+                return
+            home_slot = resident.hash_value % self.capacity
+            current_distance = (cursor - home_slot) % self.capacity
+            hole_distance = (hole - home_slot) % self.capacity
+            if hole_distance < current_distance:
+                self.slots[hole] = Entry(
+                    key=resident.key,
+                    value=resident.value,
+                    hash_value=resident.hash_value,
+                    probe_distance=hole_distance,
+                )
+                hole = cursor
+            cursor = (cursor + 1) % self.capacity
+
     def cluster_lengths(self) -> list[int]:
         return _cluster_lengths(self.slots)
 
@@ -530,6 +590,41 @@ def parse_strategies(raw: str) -> list[str]:
     return strategies
 
 
+def normalize_workload(raw: str) -> str:
+    key = raw.strip().lower().replace("_", "-")
+    if key in {"fill", "fill-only", "fillonly", "baseline"}:
+        return "fill-only"
+    if key in {"delete", "delete-heavy", "deleteheavy", "post-delete"}:
+        return "delete-heavy"
+    raise InputDataError(f"unknown benchmark workload: {raw}")
+
+
+def parse_workloads(raw: str) -> list[str]:
+    workloads: list[str] = []
+    seen: set[str] = set()
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        workload = normalize_workload(chunk)
+        if workload in seen:
+            continue
+        workloads.append(workload)
+        seen.add(workload)
+    if not workloads:
+        raise InputDataError("at least one benchmark workload is required")
+    return workloads
+
+
+def benchmark_delete_count(entry_count: int, delete_fraction: float) -> int:
+    if not 0 < delete_fraction < 1:
+        raise InputDataError("delete fraction must be between 0 and 1")
+    if entry_count < 2:
+        raise InputDataError("delete-heavy workloads require at least 2 entries")
+    requested = max(1, int(round(entry_count * delete_fraction)))
+    return min(entry_count - 1, requested)
+
+
 def create_benchmark_table(strategy: str, capacity: int) -> RobinHoodHashTable | LinearProbingHashTable:
     if strategy == "robin-hood":
         return RobinHoodHashTable(capacity=capacity, max_load_factor=0.95, auto_resize=False)
@@ -545,15 +640,22 @@ def run_benchmark(
     trials: int,
     seed: int,
     strategies: Iterable[str],
+    workloads: Iterable[str],
+    delete_fraction: float,
 ) -> list[BenchmarkRow]:
     if capacity < 3:
         raise InputDataError("benchmark capacity must be at least 3")
     if trials < 1:
         raise InputDataError("trials must be at least 1")
+    if not 0 < delete_fraction < 1:
+        raise InputDataError("delete fraction must be between 0 and 1")
 
     strategy_list = list(strategies)
     if not strategy_list:
         raise InputDataError("at least one benchmark strategy is required")
+    workload_list = list(workloads)
+    if not workload_list:
+        raise InputDataError("at least one benchmark workload is required")
 
     rows: list[BenchmarkRow] = []
     for load_factor in load_factors:
@@ -564,32 +666,59 @@ def run_benchmark(
             rng = random.Random(f"robin-hood-benchmark:{capacity}:{load_factor}:{trial}:{seed}")
             keys = [f"key-{trial}-{index}-{rng.randrange(10**9)}" for index in range(target_count)]
             values = [f"value-{rng.randrange(10**9)}" for _ in range(target_count)]
+            delete_order = list(keys)
+            rng.shuffle(delete_order)
             for strategy in strategy_list:
-                table = create_benchmark_table(strategy, capacity)
-                insert_probe_counts: list[int] = []
-                swap_total = 0
-                for key, value in zip(keys, values, strict=True):
-                    result = table.put(key, value)
-                    insert_probe_counts.append(result.probes)
-                    swap_total += result.swaps
-                lookup_probe_counts = [table.get_with_metrics(key)[1] for key in keys]
-                stats = table.stats()
-                rows.append(
-                    BenchmarkRow(
-                        strategy=strategy,
-                        trial=trial,
-                        load_factor=load_factor,
-                        entry_count=target_count,
-                        average_insert_probes=statistics.fmean(insert_probe_counts),
-                        average_successful_lookup_probes=statistics.fmean(lookup_probe_counts),
-                        average_probe_distance=stats["average_probe_distance"],
-                        probe_distance_stddev=stats["probe_distance_stddev"],
-                        max_probe_distance=stats["max_probe_distance"],
-                        max_cluster_length=max(stats["cluster_lengths"], default=0),
-                        swap_count=swap_total,
-                        probe_distance_histogram=stats["probe_distance_histogram"],
+                for workload in workload_list:
+                    table = create_benchmark_table(strategy, capacity)
+                    insert_probe_counts: list[int] = []
+                    swap_total = 0
+                    for key, value in zip(keys, values, strict=True):
+                        result = table.put(key, value)
+                        insert_probe_counts.append(result.probes)
+                        swap_total += result.swaps
+
+                    delete_probe_counts: list[int] = []
+                    surviving_keys = list(keys)
+                    if workload == "delete-heavy":
+                        delete_count = benchmark_delete_count(target_count, delete_fraction)
+                        deleted_keys = delete_order[:delete_count]
+                        deleted_lookup = set(deleted_keys)
+                        surviving_keys = [key for key in keys if key not in deleted_lookup]
+                        for key in deleted_keys:
+                            result = table.delete_with_metrics(key)
+                            if result.action != "deleted":
+                                raise RuntimeError(f"failed to delete benchmark key: {key}")
+                            delete_probe_counts.append(result.probes)
+                    else:
+                        delete_count = 0
+
+                    if not surviving_keys:
+                        raise RuntimeError("benchmark workload must leave at least one surviving key")
+
+                    lookup_probe_counts = [table.get_with_metrics(key)[1] for key in surviving_keys]
+                    stats = table.stats()
+                    rows.append(
+                        BenchmarkRow(
+                            strategy=strategy,
+                            workload=workload,
+                            trial=trial,
+                            load_factor=load_factor,
+                            effective_load_factor=round(len(surviving_keys) / capacity, 4),
+                            entry_count=target_count,
+                            remaining_entry_count=len(surviving_keys),
+                            deleted_entry_count=delete_count,
+                            average_insert_probes=statistics.fmean(insert_probe_counts),
+                            average_delete_probes=statistics.fmean(delete_probe_counts) if delete_probe_counts else 0.0,
+                            average_successful_lookup_probes=statistics.fmean(lookup_probe_counts),
+                            average_probe_distance=stats["average_probe_distance"],
+                            probe_distance_stddev=stats["probe_distance_stddev"],
+                            max_probe_distance=stats["max_probe_distance"],
+                            max_cluster_length=max(stats["cluster_lengths"], default=0),
+                            swap_count=swap_total,
+                            probe_distance_histogram=stats["probe_distance_histogram"],
+                        )
                     )
-                )
     return rows
 
 
@@ -606,10 +735,15 @@ def save_benchmark(rows: list[BenchmarkRow], output_path: Path, *, capacity: int
             fieldnames=[
                 "capacity",
                 "strategy",
+                "workload",
                 "trial",
                 "load_factor",
+                "effective_load_factor",
                 "entry_count",
+                "remaining_entry_count",
+                "deleted_entry_count",
                 "average_insert_probes",
+                "average_delete_probes",
                 "average_successful_lookup_probes",
                 "average_probe_distance",
                 "probe_distance_stddev",
@@ -663,80 +797,127 @@ def _histogram_stats(histogram: dict[int, int]) -> tuple[float, float]:
     return round(mean, 4), round(variance**0.5, 4)
 
 
-def summarize_benchmark(rows: list[BenchmarkRow], *, capacity: int, strategies: list[str], trials: int, title: str) -> dict[str, Any]:
-    grouped: dict[tuple[float, str], list[BenchmarkRow]] = {}
+def summarize_benchmark(
+    rows: list[BenchmarkRow],
+    *,
+    capacity: int,
+    strategies: list[str],
+    workloads: list[str],
+    trials: int,
+    title: str,
+    delete_fraction: float,
+) -> dict[str, Any]:
+    grouped: dict[tuple[str, float, str], list[BenchmarkRow]] = {}
     for row in rows:
-        grouped.setdefault((row.load_factor, row.strategy), []).append(row)
+        grouped.setdefault((row.workload, row.load_factor, row.strategy), []).append(row)
 
     load_factors = sorted({row.load_factor for row in rows})
     results: list[dict[str, Any]] = []
-    for load_factor in load_factors:
-        for strategy in strategies:
-            bucket = grouped.get((load_factor, strategy), [])
-            if not bucket:
-                continue
-            merged_histogram = _merge_histogram_counts(row.probe_distance_histogram for row in bucket)
-            average_probe_distance, probe_distance_stddev = _histogram_stats(merged_histogram)
-            results.append(
-                {
-                    "load_factor": load_factor,
-                    "strategy": strategy,
-                    "strategy_label": STRATEGY_LABELS[strategy],
-                    "trial_count": len(bucket),
-                    "entry_count": bucket[0].entry_count,
-                    "average_insert_probes": round(_mean([row.average_insert_probes for row in bucket]), 4),
-                    "average_successful_lookup_probes": round(
-                        _mean([row.average_successful_lookup_probes for row in bucket]), 4
-                    ),
-                    "average_probe_distance": average_probe_distance,
-                    "probe_distance_stddev": probe_distance_stddev,
-                    "max_probe_distance": max(row.max_probe_distance for row in bucket),
-                    "max_cluster_length": max(row.max_cluster_length for row in bucket),
-                    "average_swap_count": round(_mean([row.swap_count for row in bucket]), 4),
-                    "probe_distance_histogram": _histogram_rows(merged_histogram),
-                }
-            )
+    for workload in workloads:
+        for load_factor in load_factors:
+            for strategy in strategies:
+                bucket = grouped.get((workload, load_factor, strategy), [])
+                if not bucket:
+                    continue
+                merged_histogram = _merge_histogram_counts(row.probe_distance_histogram for row in bucket)
+                average_probe_distance, probe_distance_stddev = _histogram_stats(merged_histogram)
+                results.append(
+                    {
+                        "workload": workload,
+                        "workload_label": workload_label(workload, delete_fraction=delete_fraction),
+                        "load_factor": load_factor,
+                        "strategy": strategy,
+                        "strategy_label": STRATEGY_LABELS[strategy],
+                        "trial_count": len(bucket),
+                        "entry_count": bucket[0].entry_count,
+                        "remaining_entry_count": bucket[0].remaining_entry_count,
+                        "deleted_entry_count": bucket[0].deleted_entry_count,
+                        "effective_load_factor": round(_mean([row.effective_load_factor for row in bucket]), 4),
+                        "average_insert_probes": round(_mean([row.average_insert_probes for row in bucket]), 4),
+                        "average_delete_probes": round(_mean([row.average_delete_probes for row in bucket]), 4),
+                        "average_successful_lookup_probes": round(
+                            _mean([row.average_successful_lookup_probes for row in bucket]), 4
+                        ),
+                        "average_probe_distance": average_probe_distance,
+                        "probe_distance_stddev": probe_distance_stddev,
+                        "max_probe_distance": max(row.max_probe_distance for row in bucket),
+                        "max_cluster_length": max(row.max_cluster_length for row in bucket),
+                        "average_swap_count": round(_mean([row.swap_count for row in bucket]), 4),
+                        "probe_distance_histogram": _histogram_rows(merged_histogram),
+                    }
+                )
 
     comparisons: list[dict[str, Any]] = []
-    for load_factor in load_factors:
-        robin = next((row for row in results if row["load_factor"] == load_factor and row["strategy"] == "robin-hood"), None)
-        linear = next(
-            (row for row in results if row["load_factor"] == load_factor and row["strategy"] == "linear-probing"),
-            None,
-        )
-        if robin and linear:
-            lookup_delta = round(linear["average_successful_lookup_probes"] - robin["average_successful_lookup_probes"], 4)
-            dispersion_delta = round(linear["probe_distance_stddev"] - robin["probe_distance_stddev"], 4)
-            if abs(lookup_delta) < 1e-9:
-                lookup_winner = "Tie"
-            elif robin["average_successful_lookup_probes"] < linear["average_successful_lookup_probes"]:
-                lookup_winner = robin["strategy_label"]
-            else:
-                lookup_winner = linear["strategy_label"]
-
-            if abs(dispersion_delta) < 1e-9:
-                dispersion_winner = "Tie"
-            elif robin["probe_distance_stddev"] < linear["probe_distance_stddev"]:
-                dispersion_winner = robin["strategy_label"]
-            else:
-                dispersion_winner = linear["strategy_label"]
-
-            comparisons.append(
-                {
-                    "load_factor": load_factor,
-                    "entry_count": robin["entry_count"],
-                    "lookup_delta_vs_linear": lookup_delta,
-                    "probe_stddev_delta_vs_linear": dispersion_delta,
-                    "lookup_winner": lookup_winner,
-                    "dispersion_winner": dispersion_winner,
-                }
+    for workload in workloads:
+        for load_factor in load_factors:
+            robin = next(
+                (
+                    row
+                    for row in results
+                    if row["workload"] == workload and row["load_factor"] == load_factor and row["strategy"] == "robin-hood"
+                ),
+                None,
             )
+            linear = next(
+                (
+                    row
+                    for row in results
+                    if row["workload"] == workload and row["load_factor"] == load_factor and row["strategy"] == "linear-probing"
+                ),
+                None,
+            )
+            if robin and linear:
+                lookup_delta = round(linear["average_successful_lookup_probes"] - robin["average_successful_lookup_probes"], 4)
+                dispersion_delta = round(linear["probe_distance_stddev"] - robin["probe_distance_stddev"], 4)
+                delete_delta = round(linear["average_delete_probes"] - robin["average_delete_probes"], 4)
+                if abs(lookup_delta) < 1e-9:
+                    lookup_winner = "Tie"
+                elif robin["average_successful_lookup_probes"] < linear["average_successful_lookup_probes"]:
+                    lookup_winner = robin["strategy_label"]
+                else:
+                    lookup_winner = linear["strategy_label"]
+
+                if abs(dispersion_delta) < 1e-9:
+                    dispersion_winner = "Tie"
+                elif robin["probe_distance_stddev"] < linear["probe_distance_stddev"]:
+                    dispersion_winner = robin["strategy_label"]
+                else:
+                    dispersion_winner = linear["strategy_label"]
+
+                if robin["deleted_entry_count"] == 0:
+                    delete_winner = "—"
+                elif abs(delete_delta) < 1e-9:
+                    delete_winner = "Tie"
+                elif robin["average_delete_probes"] < linear["average_delete_probes"]:
+                    delete_winner = robin["strategy_label"]
+                else:
+                    delete_winner = linear["strategy_label"]
+
+                comparisons.append(
+                    {
+                        "workload": workload,
+                        "workload_label": workload_label(workload, delete_fraction=delete_fraction),
+                        "load_factor": load_factor,
+                        "effective_load_factor": robin["effective_load_factor"],
+                        "entry_count": robin["entry_count"],
+                        "remaining_entry_count": robin["remaining_entry_count"],
+                        "deleted_entry_count": robin["deleted_entry_count"],
+                        "lookup_delta_vs_linear": lookup_delta,
+                        "probe_stddev_delta_vs_linear": dispersion_delta,
+                        "delete_delta_vs_linear": delete_delta if robin["deleted_entry_count"] else None,
+                        "lookup_winner": lookup_winner,
+                        "dispersion_winner": dispersion_winner,
+                        "delete_winner": delete_winner,
+                    }
+                )
 
     return {
         "title": title,
         "capacity": capacity,
         "trials": trials,
         "strategies": strategies,
+        "workloads": workloads,
+        "delete_fraction": delete_fraction,
         "load_factors": load_factors,
         "results": results,
         "comparisons": comparisons,
@@ -759,42 +940,76 @@ def _markdown_histogram_bar(share: float, *, width: int = 12) -> str:
     return "█" * units
 
 
-def _result_lookup(summary: dict[str, Any]) -> dict[tuple[float, str], dict[str, Any]]:
-    return {(row["load_factor"], row["strategy"]): row for row in summary["results"]}
+def _result_lookup(summary: dict[str, Any]) -> dict[tuple[str, float, str], dict[str, Any]]:
+    return {(row["workload"], row["load_factor"], row["strategy"]): row for row in summary["results"]}
 
 
-def default_benchmark_title(strategies: list[str]) -> str:
+def workload_label(workload: str, *, delete_fraction: float) -> str:
+    base = WORKLOAD_LABELS.get(workload, workload.replace("-", " ").title())
+    if workload == "delete-heavy":
+        return f"{base} ({_format_percentage(delete_fraction)} removals)"
+    return base
+
+
+def default_benchmark_title(strategies: list[str], workloads: list[str], *, delete_fraction: float) -> str:
     labels = [STRATEGY_LABELS[name] for name in strategies]
+    include_delete_heavy = "delete-heavy" in workloads
     if not labels:
         return "Hash-table benchmark summary"
     if len(labels) == 1:
+        if include_delete_heavy:
+            return f"{labels[0]} fill vs delete-heavy benchmark summary"
         return f"{labels[0]} benchmark summary"
     if strategies == ["robin-hood", "linear-probing"]:
+        if include_delete_heavy:
+            return "Robin Hood hashing benchmark comparison with delete-heavy workloads"
         return "Robin Hood hashing benchmark comparison"
     if len(labels) == 2:
-        return f"{labels[0]} vs {labels[1]} benchmark comparison"
-    return f"{' vs '.join(labels)} benchmark comparison"
+        suffix = " with delete-heavy workloads" if include_delete_heavy else ""
+        return f"{labels[0]} vs {labels[1]} benchmark comparison{suffix}"
+    suffix = " with delete-heavy workloads" if include_delete_heavy else ""
+    return f"{' vs '.join(labels)} benchmark comparison{suffix}"
 
 
 def _benchmark_intro(summary: dict[str, Any]) -> str:
     labels = [STRATEGY_LABELS[name] for name in summary["strategies"]]
+    include_delete_heavy = "delete-heavy" in summary["workloads"]
+    delete_note = ""
+    if include_delete_heavy:
+        delete_note = (
+            f" It also includes a delete-heavy workload that removes {_format_percentage(summary['delete_fraction'])} "
+            "of keys before the final lookup + histogram pass, so post-removal clustering is visible too."
+        )
     if len(labels) == 1:
-        return f"Deterministic benchmark report for {labels[0]}, with probe-distance histograms that make dispersion visible at a glance."
+        return (
+            f"Deterministic benchmark report for {labels[0]}, with probe-distance histograms that make dispersion visible at a glance."
+            f"{delete_note}"
+        )
     if summary["strategies"] == ["robin-hood", "linear-probing"]:
-        return "Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, now with probe-distance histograms that make dispersion visible at a glance."
-    return f"Deterministic benchmark report comparing {' vs '.join(labels)}, with probe-distance histograms that make dispersion visible at a glance."
+        return (
+            "Deterministic benchmark report comparing Robin Hood hashing against a linear-probing baseline, "
+            "with probe-distance histograms that make dispersion visible at a glance."
+            f"{delete_note}"
+        )
+    return (
+        f"Deterministic benchmark report comparing {' vs '.join(labels)}, with probe-distance histograms that make dispersion visible at a glance."
+        f"{delete_note}"
+    )
 
 
 def render_benchmark_markdown(summary: dict[str, Any]) -> str:
     lines = [f"# {summary['title']}", "", _benchmark_intro(summary), ""]
     strategies = ", ".join(STRATEGY_LABELS[name] for name in summary["strategies"])
+    workloads = ", ".join(workload_label(name, delete_fraction=summary["delete_fraction"]) for name in summary["workloads"])
     load_factors = ", ".join(_format_number(value) for value in summary["load_factors"])
     lines.extend(
         [
             f"- Capacity: {summary['capacity']}",
-            f"- Trials per load factor: {summary['trials']}",
+            f"- Trials per workload/load factor: {summary['trials']}",
             f"- Strategies: {strategies}",
-            f"- Load factors: {load_factors}",
+            f"- Workloads: {workloads}",
+            f"- Requested load factors: {load_factors}",
+            "- Note: requested load factors are rounded to whole entry counts, so the effective fill level can differ slightly from the requested target.",
             "",
         ]
     )
@@ -804,8 +1019,8 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             [
                 "## Headline comparisons",
                 "",
-                "| Load factor | Entries | Lookup winner | Lookup delta vs linear | Lower probe-distance stddev | Stddev delta vs linear |",
-                "| --- | ---: | --- | ---: | --- | ---: |",
+                "| Workload | Requested load factor | Remaining load factor | Remaining entries | Lookup winner | Lookup delta vs linear | Lower probe-distance stddev | Stddev delta vs linear | Lower delete probes | Delete delta vs linear |",
+                "| --- | ---: | ---: | ---: | --- | ---: | --- | ---: | --- | ---: |",
             ]
         )
         for row in summary["comparisons"]:
@@ -813,12 +1028,16 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
                 "| "
                 + " | ".join(
                     [
+                        row["workload_label"],
                         _format_number(row["load_factor"]),
-                        str(row["entry_count"]),
+                        _format_number(row["effective_load_factor"]),
+                        str(row["remaining_entry_count"]),
                         row["lookup_winner"],
                         _format_number(row["lookup_delta_vs_linear"]),
                         row["dispersion_winner"],
                         _format_number(row["probe_stddev_delta_vs_linear"]),
+                        row["delete_winner"],
+                        "—" if row["delete_delta_vs_linear"] is None else _format_number(row["delete_delta_vs_linear"]),
                     ]
                 )
                 + " |"
@@ -829,8 +1048,8 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
         [
             "## Aggregate metrics",
             "",
-            "| Load factor | Strategy | Avg insert probes | Avg successful lookup probes | Avg probe distance | Probe-distance stddev | Max probe distance | Max cluster length | Avg swaps |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Workload | Requested load factor | Remaining load factor | Strategy | Deleted entries | Avg insert probes | Avg delete probes | Avg successful lookup probes | Avg probe distance | Probe-distance stddev | Max probe distance | Max cluster length | Avg swaps |",
+            "| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in summary["results"]:
@@ -838,9 +1057,13 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
             "| "
             + " | ".join(
                 [
+                    row["workload_label"],
                     _format_number(row["load_factor"]),
+                    _format_number(row["effective_load_factor"]),
                     row["strategy_label"],
+                    str(row["deleted_entry_count"]),
                     _format_number(row["average_insert_probes"]),
+                    _format_number(row["average_delete_probes"]),
                     _format_number(row["average_successful_lookup_probes"]),
                     _format_number(row["average_probe_distance"]),
                     _format_number(row["probe_distance_stddev"]),
@@ -858,45 +1081,55 @@ def render_benchmark_markdown(summary: dict[str, Any]) -> str:
         [
             "## Probe-distance histograms",
             "",
-            "Counts are aggregated across deterministic trials so the variance story is visible without digging through the raw CSV/JSON exports; the key thing to watch is how far each strategy spills into the longer-distance tail.",
+            "Counts are aggregated across deterministic trials so the variance story is visible without digging through the raw CSV/JSON exports; for delete-heavy runs, the histograms are captured after the deterministic removal pass.",
             "",
         ]
     )
-    for load_factor in summary["load_factors"]:
-        present_rows = [results_by_key[(load_factor, strategy)] for strategy in summary["strategies"] if (load_factor, strategy) in results_by_key]
-        if not present_rows:
-            continue
-        distances = sorted(
-            {
-                bucket["distance"]
-                for row in present_rows
-                for bucket in row["probe_distance_histogram"]
-            }
-        )
-        lines.extend(
-            [
-                f"### Load factor {_format_number(load_factor)}",
-                "",
-                f"{present_rows[0]['entry_count']} entries per trial across {present_rows[0]['trial_count']} deterministic trial(s).",
-                "",
-                "| Probe distance | " + " | ".join(row["strategy_label"] for row in present_rows) + " |",
-                "| --- | " + " | ".join(["---"] * len(present_rows)) + " |",
-            ]
-        )
-        for distance in distances:
-            cells = []
-            for row in present_rows:
-                bucket = next(
-                    (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
-                    {"count": 0, "share": 0.0},
-                )
-                cell = f"{bucket['count']} ({_format_percentage(bucket['share'])})"
-                bar = _markdown_histogram_bar(bucket["share"])
-                if bar:
-                    cell = f"{cell} {bar}"
-                cells.append(cell)
-            lines.append("| " + " | ".join([str(distance), *cells]) + " |")
+    for workload in summary["workloads"]:
+        lines.append(f"### {workload_label(workload, delete_fraction=summary['delete_fraction'])}")
         lines.append("")
+        for load_factor in summary["load_factors"]:
+            present_rows = [
+                results_by_key[(workload, load_factor, strategy)]
+                for strategy in summary["strategies"]
+                if (workload, load_factor, strategy) in results_by_key
+            ]
+            if not present_rows:
+                continue
+            distances = sorted(
+                {
+                    bucket["distance"]
+                    for row in present_rows
+                    for bucket in row["probe_distance_histogram"]
+                }
+            )
+            lines.extend(
+                [
+                    f"#### Requested load factor {_format_number(load_factor)} → remaining {_format_number(present_rows[0]['effective_load_factor'])}",
+                    "",
+                    (
+                        f"{present_rows[0]['entry_count']} starting entries per trial; "
+                        f"{present_rows[0]['remaining_entry_count']} remain after the workload across {present_rows[0]['trial_count']} deterministic trial(s)."
+                    ),
+                    "",
+                    "| Probe distance | " + " | ".join(row["strategy_label"] for row in present_rows) + " |",
+                    "| --- | " + " | ".join(["---"] * len(present_rows)) + " |",
+                ]
+            )
+            for distance in distances:
+                cells = []
+                for row in present_rows:
+                    bucket = next(
+                        (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
+                        {"count": 0, "share": 0.0},
+                    )
+                    cell = f"{bucket['count']} ({_format_percentage(bucket['share'])})"
+                    bar = _markdown_histogram_bar(bucket["share"])
+                    if bar:
+                        cell = f"{cell} {bar}"
+                    cells.append(cell)
+                lines.append("| " + " | ".join([str(distance), *cells]) + " |")
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -916,8 +1149,13 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     summary_cards = [
         ("Capacity", str(summary["capacity"]), "slots in each deterministic run"),
-        ("Trials", str(summary["trials"]), "repeated runs per load factor"),
-        ("Load factors", ", ".join(_format_number(value) for value in summary["load_factors"]), "benchmarked fill levels"),
+        ("Trials", str(summary["trials"]), "repeated runs per workload/load factor"),
+        ("Load factors", ", ".join(_format_number(value) for value in summary["load_factors"]), "starting fill levels"),
+        (
+            "Workloads",
+            str(len(summary["workloads"])),
+            ", ".join(workload_label(name, delete_fraction=summary["delete_fraction"]) for name in summary["workloads"]),
+        ),
         (
             "Strategies",
             str(len(summary["strategies"])),
@@ -935,20 +1173,27 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     comparison_rows_html = "".join(
         f'''<tr>
-  <th scope="row">{escape(_format_number(row['load_factor']))}</th>
-  <td>{row['entry_count']}</td>
+  <th scope="row">{escape(row['workload_label'])}</th>
+  <td>{escape(_format_number(row['load_factor']))}</td>
+  <td>{escape(_format_number(row['effective_load_factor']))}</td>
+  <td>{row['remaining_entry_count']}</td>
   <td>{escape(row['lookup_winner'])}</td>
   <td>{escape(_format_number(row['lookup_delta_vs_linear']))}</td>
   <td>{escape(row['dispersion_winner'])}</td>
   <td>{escape(_format_number(row['probe_stddev_delta_vs_linear']))}</td>
+  <td>{escape(row['delete_winner'])}</td>
+  <td>{'—' if row['delete_delta_vs_linear'] is None else escape(_format_number(row['delete_delta_vs_linear']))}</td>
 </tr>'''
         for row in comparisons
     )
 
     aggregate_rows_html = "".join(
         f'''<tr>
-  <th scope="row">{escape(_format_number(row['load_factor']))}</th>
+  <th scope="row">{escape(row['workload_label'])}</th>
+  <td>{escape(_format_number(row['load_factor']))}</td>
+  <td>{escape(_format_number(row['effective_load_factor']))}</td>
   <td>{escape(row['strategy_label'])}</td>
+  <td>{row['deleted_entry_count']}</td>
   <td>
     <strong>{escape(_format_number(row['average_successful_lookup_probes']))}</strong>
     {metric_bar(row['average_successful_lookup_probes'], max_lookup, '#7c3aed')}
@@ -962,6 +1207,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     {metric_bar(float(row['max_cluster_length']), float(max_cluster), '#ea580c')}
   </td>
   <td>{escape(_format_number(row['average_insert_probes']))}</td>
+  <td>{escape(_format_number(row['average_delete_probes']))}</td>
   <td>{row['max_probe_distance']}</td>
   <td>{escape(_format_number(row['average_swap_count']))}</td>
 </tr>'''
@@ -970,10 +1216,11 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 
     detail_cards_html = "".join(
         f'''<article class="detail-card">
-  <h2>{escape(_format_number(row['load_factor']))} load factor · {escape(row['strategy_label'])}</h2>
-  <p>{row['entry_count']} entries across {row['trial_count']} deterministic trial(s).</p>
+  <h2>{escape(row['workload_label'])} · start {escape(_format_number(row['load_factor']))} · {escape(row['strategy_label'])}</h2>
+  <p>{row['entry_count']} starting entries across {row['trial_count']} deterministic trial(s); {row['remaining_entry_count']} remain after the workload.</p>
   <ul>
     <li>Avg successful lookup probes: <strong>{escape(_format_number(row['average_successful_lookup_probes']))}</strong></li>
+    <li>Avg delete probes: <strong>{escape(_format_number(row['average_delete_probes']))}</strong></li>
     <li>Avg probe distance: <strong>{escape(_format_number(row['average_probe_distance']))}</strong></li>
     <li>Probe-distance stddev: <strong>{escape(_format_number(row['probe_distance_stddev']))}</strong></li>
     <li>Max probe distance: <strong>{row['max_probe_distance']}</strong></li>
@@ -985,53 +1232,58 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     )
 
     histogram_sections: list[str] = []
-    for load_factor in summary["load_factors"]:
-        present_rows = [results_by_key[(load_factor, strategy)] for strategy in summary["strategies"] if (load_factor, strategy) in results_by_key]
-        if not present_rows:
-            continue
-        distances = sorted(
-            {
-                bucket["distance"]
-                for row in present_rows
-                for bucket in row["probe_distance_histogram"]
-            }
-        )
-        max_share = max(
-            (
-                bucket["share"]
-                for row in present_rows
-                for bucket in row["probe_distance_histogram"]
-            ),
-            default=1.0,
-        )
-        header_html = "".join(f"<th scope=\"col\">{escape(row['strategy_label'])}</th>" for row in present_rows)
-        body_rows: list[str] = []
-        for distance in distances:
-            cells: list[str] = []
-            for row in present_rows:
-                bucket = next(
-                    (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
-                    {"count": 0, "share": 0.0},
-                )
-                cells.append(
-                    f'''<td>
+    for workload in summary["workloads"]:
+        for load_factor in summary["load_factors"]:
+            present_rows = [
+                results_by_key[(workload, load_factor, strategy)]
+                for strategy in summary["strategies"]
+                if (workload, load_factor, strategy) in results_by_key
+            ]
+            if not present_rows:
+                continue
+            distances = sorted(
+                {
+                    bucket["distance"]
+                    for row in present_rows
+                    for bucket in row["probe_distance_histogram"]
+                }
+            )
+            max_share = max(
+                (
+                    bucket["share"]
+                    for row in present_rows
+                    for bucket in row["probe_distance_histogram"]
+                ),
+                default=1.0,
+            )
+            header_html = "".join(f"<th scope=\"col\">{escape(row['strategy_label'])}</th>" for row in present_rows)
+            body_rows: list[str] = []
+            for distance in distances:
+                cells: list[str] = []
+                for row in present_rows:
+                    bucket = next(
+                        (item for item in row["probe_distance_histogram"] if item["distance"] == distance),
+                        {"count": 0, "share": 0.0},
+                    )
+                    cells.append(
+                        f'''<td>
   <strong>{bucket['count']}</strong>
   <span class="histogram-meta">{escape(_format_percentage(bucket['share']))}</span>
   {metric_bar(bucket['share'], max_share, '#2563eb' if row['strategy'] == 'robin-hood' else '#d97706')}
 </td>'''
-                )
-            body_rows.append(
-                f'''<tr>
+                    )
+                body_rows.append(
+                    f'''<tr>
   <th scope="row">{distance}</th>
   {"".join(cells)}
 </tr>'''
-            )
-        histogram_sections.append(
-            f'''<section class="panel histogram-panel">
-  <h2>Probe-distance histogram · load factor {escape(_format_number(load_factor))}</h2>
-  <p>{present_rows[0]['entry_count']} entries per trial across {present_rows[0]['trial_count']} deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+                )
+            histogram_sections.append(
+                f'''<section class="panel histogram-panel">
+  <h2>Probe-distance histogram · {escape(workload_label(workload, delete_fraction=summary['delete_fraction']))} · requested load factor {escape(_format_number(load_factor))}</h2>
+  <p>{present_rows[0]['entry_count']} starting entries per trial; {present_rows[0]['remaining_entry_count']} remain after the workload across {present_rows[0]['trial_count']} deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
-    <caption>Aggregated probe-distance counts by strategy.</caption>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
     <thead>
       <tr>
         <th scope="col">Probe distance</th>
@@ -1043,7 +1295,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     </tbody>
   </table>
 </section>'''
-        )
+            )
     histogram_sections_html = "".join(histogram_sections)
 
     comparison_table_html = ""
@@ -1051,15 +1303,19 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
         comparison_table_html = f'''<section class="panel">
   <h2>Robin Hood vs linear probing</h2>
   <table>
-    <caption>Per-load-factor winners and deltas against the linear-probing baseline.</caption>
+    <caption>Per-workload winners and deltas against the linear-probing baseline.</caption>
     <thead>
       <tr>
-        <th scope="col">Load factor</th>
-        <th scope="col">Entries</th>
+        <th scope="col">Workload</th>
+        <th scope="col">Requested load factor</th>
+        <th scope="col">Remaining load factor</th>
+        <th scope="col">Remaining entries</th>
         <th scope="col">Lookup winner</th>
         <th scope="col">Lookup delta vs linear</th>
         <th scope="col">Lower probe stddev</th>
         <th scope="col">Stddev delta vs linear</th>
+        <th scope="col">Lower delete probes</th>
+        <th scope="col">Delete delta vs linear</th>
       </tr>
     </thead>
     <tbody>
@@ -1091,13 +1347,13 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
       color: var(--text);
       font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }}
-    main {{ max-width: 1180px; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }}
+    main {{ max-width: 1280px; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }}
     h1, h2 {{ margin: 0 0 0.75rem; line-height: 1.2; }}
     p {{ margin: 0 0 1rem; color: var(--muted); }}
     .hero {{ margin-bottom: 1.5rem; }}
     .grid {{ display: grid; gap: 1rem; }}
     .summary-grid {{ grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 1.5rem 0; }}
-    .detail-grid {{ grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }}
+    .detail-grid {{ grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }}
     .summary-card, .panel, .detail-card {{
       background: var(--panel);
       border: 1px solid var(--border);
@@ -1108,7 +1364,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     .summary-card strong {{ display: block; font-size: 1.5rem; margin-bottom: 0.35rem; }}
     .panel {{ padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }}
     .detail-card {{ padding: 1rem 1.1rem; }}
-    table {{ width: 100%; border-collapse: collapse; min-width: 720px; }}
+    table {{ width: 100%; border-collapse: collapse; min-width: 860px; }}
     caption {{ text-align: left; font-weight: 600; margin-bottom: 0.7rem; }}
     th, td {{ padding: 0.75rem 0.65rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: left; }}
     thead th {{ background: #eff6ff; }}
@@ -1129,19 +1385,24 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     <section class="grid summary-grid">
       {summary_cards_html}
     </section>
+    <p>Requested load factors are rounded to whole entry counts, so the effective fill level can differ slightly from the requested target.</p>
     {comparison_table_html}
     <section class="panel">
       <h2>Aggregate metrics</h2>
       <table>
-        <caption>Average metrics aggregated across deterministic trials for each load factor and strategy.</caption>
+        <caption>Average metrics aggregated across deterministic trials for each workload, load factor, and strategy.</caption>
         <thead>
           <tr>
-            <th scope="col">Load factor</th>
+            <th scope="col">Workload</th>
+            <th scope="col">Requested load factor</th>
+            <th scope="col">Remaining load factor</th>
             <th scope="col">Strategy</th>
+            <th scope="col">Deleted entries</th>
             <th scope="col">Avg successful lookup probes</th>
             <th scope="col">Probe-distance stddev</th>
             <th scope="col">Max cluster length</th>
             <th scope="col">Avg insert probes</th>
+            <th scope="col">Avg delete probes</th>
             <th scope="col">Max probe distance</th>
             <th scope="col">Avg swaps</th>
           </tr>
@@ -1153,7 +1414,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     </section>
     <section>
       <h2>Probe-distance histograms</h2>
-      <p>Aggregated histograms keep the report screenshot-friendly while showing how quickly each strategy spills into longer probe chains.</p>
+      <p>Aggregated histograms keep the report screenshot-friendly while showing how quickly each strategy spills into longer probe chains after fill-only and delete-heavy runs.</p>
       {histogram_sections_html}
     </section>
     <section>
@@ -1203,6 +1464,8 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--trials", type=int, default=5)
     benchmark_parser.add_argument("--seed", type=int, default=17)
     benchmark_parser.add_argument("--strategies", default="robin-hood,linear-probing")
+    benchmark_parser.add_argument("--workloads", default="fill-only,delete-heavy")
+    benchmark_parser.add_argument("--delete-fraction", type=float, default=0.3)
     benchmark_parser.add_argument("--markdown-out", type=Path, help="optional Markdown benchmark summary output")
     benchmark_parser.add_argument("--html-out", type=Path, help="optional self-contained HTML benchmark dashboard")
     benchmark_parser.add_argument("--title", help="optional benchmark title override")
@@ -1256,20 +1519,25 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "benchmark":
             strategies = parse_strategies(args.strategies)
+            workloads = parse_workloads(args.workloads)
             rows = run_benchmark(
                 capacity=args.capacity,
                 load_factors=parse_load_factors(args.load_factors),
                 trials=args.trials,
                 seed=args.seed,
                 strategies=strategies,
+                workloads=workloads,
+                delete_fraction=args.delete_fraction,
             )
             save_benchmark(rows, args.output, capacity=args.capacity)
             summary = summarize_benchmark(
                 rows,
                 capacity=args.capacity,
                 strategies=strategies,
+                workloads=workloads,
                 trials=args.trials,
-                title=args.title or default_benchmark_title(strategies),
+                title=args.title or default_benchmark_title(strategies, workloads, delete_fraction=args.delete_fraction),
+                delete_fraction=args.delete_fraction,
             )
             if args.markdown_out:
                 args.markdown_out.parent.mkdir(parents=True, exist_ok=True)
