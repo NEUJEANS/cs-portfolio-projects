@@ -32,3 +32,20 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 wait-for and allocation visual export slice
+- [x] review the prior deadlock-detector wrap-up and confirm the next weak spot is missing visual exports
+- [x] capture short notes for static SVG and HTML deadlock storytelling
+- [x] refresh the SVG/HTML export approach and do a quick self-test for the process/resource visual vocabulary
+- [x] implement wait-for graph SVG and HTML exports
+- [x] implement resource-allocation SVG and HTML exports
+- [x] commit deterministic sample visual artifacts under `docs/artifacts/deadlock-detector-lab/`
+- [x] update the project README usage examples for the new visual commands
+- [x] extend automated tests for the new CLI export paths
+- [x] run project tests and artifact-generation smoke commands
+- [x] complete review pass 1 and fix issues found
+- [x] complete review pass 2 and fix issues found
+- [x] complete review pass 3 and fix issues found
+- [x] run secret scan
+- [x] commit and push
+- [x] append wrap-up

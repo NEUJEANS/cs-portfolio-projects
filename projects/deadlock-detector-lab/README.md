@@ -6,12 +6,14 @@ A compact operating-systems portfolio project that detects deadlocks from either
 - demonstrates classic OS concepts that come up in systems and interview discussions
 - includes graph-based cycle detection, multi-resource progress simulation, and Banker's algorithm safety checks
 - adds step-by-step Banker's safety and request traces for portfolio demos
+- exports SVG and HTML visuals for wait-for and resource-allocation walkthroughs
 - produces machine-readable JSON output that is easy to test, demo, and extend
 
 ## Features
 - analyze a wait-for graph with one concrete deadlock cycle
 - analyze multi-instance resource allocation states using `available`, `allocation`, and `request` vectors
 - report finish order for safe processes and resource shortages for blocked ones
+- export wait-for and resource-allocation visuals as SVG and HTML artifacts
 - analyze a Banker's algorithm state using `available`, `allocation`, and `max`
 - emit step-by-step Banker's trace steps with runnable sets, `work` vectors, and released allocations
 - export Banker's safety and request demos as Markdown artifacts with `--markdown-out`
@@ -27,11 +29,29 @@ python3 projects/deadlock-detector-lab/deadlock_detector.py analyze-wait \
   projects/deadlock-detector-lab/sample_wait_graph.json
 ```
 
+Export wait-for visuals:
+
+```bash
+python3 projects/deadlock-detector-lab/deadlock_detector.py analyze-wait \
+  projects/deadlock-detector-lab/sample_wait_graph.json \
+  --svg-out docs/artifacts/deadlock-detector-lab/sample_wait_graph.svg \
+  --html-out docs/artifacts/deadlock-detector-lab/sample_wait_graph.html
+```
+
 Analyze a resource-allocation snapshot:
 
 ```bash
 python3 projects/deadlock-detector-lab/deadlock_detector.py analyze-allocations \
   projects/deadlock-detector-lab/sample_allocation_state.json
+```
+
+Export resource-allocation visuals:
+
+```bash
+python3 projects/deadlock-detector-lab/deadlock_detector.py analyze-allocations \
+  projects/deadlock-detector-lab/sample_allocation_state.json \
+  --svg-out docs/artifacts/deadlock-detector-lab/sample_allocation_state.svg \
+  --html-out docs/artifacts/deadlock-detector-lab/sample_allocation_state.html
 ```
 
 Analyze whether a Banker's algorithm state is safe:
@@ -98,6 +118,6 @@ python3 -m unittest projects/deadlock-detector-lab/test_deadlock_detector.py
 ```
 
 ## Future improvements
-- export Graphviz `.dot` output for wait-for and resource-allocation visualization
 - compare deadlock detection and avoidance results side-by-side in one report
 - add SVG or HTML visual summaries on top of the new Banker's trace exports
+- export Graphviz `.dot` output for teams that want to post-process the same layouts externally

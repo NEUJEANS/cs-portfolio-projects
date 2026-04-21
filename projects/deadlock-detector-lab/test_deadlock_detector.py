@@ -246,6 +246,94 @@ class DeadlockDetectorTests(unittest.TestCase):
             self.assertEqual(result["safe_sequence"], ["P1"])
             self.assertEqual(result["trace_steps"][0]["work_before"], {"A": 1, "B": 1})
 
+    def test_cli_writes_wait_graph_visual_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload = Path(tmpdir) / "graph.json"
+            svg_out = Path(tmpdir) / "graph.svg"
+            html_out = Path(tmpdir) / "graph.html"
+            payload.write_text(
+                json.dumps(
+                    {
+                        "edges": [
+                            {"from": "P1", "to": "P2"},
+                            {"from": "P2", "to": "P1"},
+                            {"from": "P3", "to": "P2"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/deadlock-detector-lab/deadlock_detector.py",
+                    "analyze-wait",
+                    str(payload),
+                    "--svg-out",
+                    str(svg_out),
+                    "--html-out",
+                    str(html_out),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            svg = svg_out.read_text(encoding="utf-8")
+            html_report = html_out.read_text(encoding="utf-8")
+            self.assertIn("Deadlock wait-for graph", svg)
+            self.assertIn("cycle highlighted", svg)
+            self.assertIn("<svg", html_report)
+            self.assertIn("P1 → P2 → P1", html_report)
+
+    def test_cli_writes_allocation_visual_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload = Path(tmpdir) / "alloc.json"
+            svg_out = Path(tmpdir) / "alloc.svg"
+            html_out = Path(tmpdir) / "alloc.html"
+            payload.write_text(
+                json.dumps(
+                    {
+                        "available": {"printer": 0, "scanner": 0},
+                        "allocation": {
+                            "P1": {"printer": 1},
+                            "P2": {"scanner": 1},
+                        },
+                        "request": {
+                            "P1": {"scanner": 1},
+                            "P2": {"printer": 1},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            subprocess.run(
+                [
+                    "python3",
+                    "projects/deadlock-detector-lab/deadlock_detector.py",
+                    "analyze-allocations",
+                    str(payload),
+                    "--svg-out",
+                    str(svg_out),
+                    "--html-out",
+                    str(html_out),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=Path(__file__).resolve().parents[2],
+            )
+
+            svg = svg_out.read_text(encoding="utf-8")
+            html_report = html_out.read_text(encoding="utf-8")
+            self.assertIn("Deadlock resource-allocation view", svg)
+            self.assertIn("needs 1 (short 1)", svg)
+            self.assertIn("Deadlock allocation report", html_report)
+            self.assertIn("printer", html_report)
+
     def test_cli_writes_banker_markdown_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             payload = Path(tmpdir) / "banker.json"

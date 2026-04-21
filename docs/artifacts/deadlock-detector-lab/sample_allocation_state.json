@@ -1,0 +1,34 @@
+{
+  "blocking": {
+    "P1": {
+      "scanner": 1
+    },
+    "P2": {
+      "printer": 1
+    }
+  },
+  "deadlocked": true,
+  "deadlocked_processes": [
+    "P1",
+    "P2"
+  ],
+  "finish_order": [
+    "P3"
+  ],
+  "model": "resource-allocation",
+  "processes": [
+    "P1",
+    "P2",
+    "P3"
+  ],
+  "resources": [
+    "printer",
+    "scanner",
+    "tape"
+  ],
+  "work": {
+    "printer": 0,
+    "scanner": 0,
+    "tape": 2
+  }
+}

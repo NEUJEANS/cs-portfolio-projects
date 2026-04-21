@@ -1,0 +1,21 @@
+{
+  "blocked_processes": [
+    "P1",
+    "P2",
+    "P3"
+  ],
+  "cycle": [
+    "P1",
+    "P2",
+    "P3",
+    "P1"
+  ],
+  "deadlocked": true,
+  "model": "wait-for-graph",
+  "processes": [
+    "P1",
+    "P2",
+    "P3",
+    "P4"
+  ]
+}

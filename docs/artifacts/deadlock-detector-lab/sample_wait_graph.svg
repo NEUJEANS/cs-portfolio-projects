@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" role="img" aria-labelledby="wait-projects-deadlock-detector-lab-sample-wait-graph-json-title wait-projects-deadlock-detector-lab-sample-wait-graph-json-desc">
+  <title id="wait-projects-deadlock-detector-lab-sample-wait-graph-json-title">Wait-for graph visualization for projects/deadlock-detector-lab/sample_wait_graph.json</title>
+  <desc id="wait-projects-deadlock-detector-lab-sample-wait-graph-json-desc">Processes arranged in a ring, with deadlocked cycle edges highlighted in red.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 15px; }
+    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }
+    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
+  </style>
+  <defs>
+    <marker id="arrow-slate" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626" />
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" />
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="760" height="560" rx="24" />
+  <rect class="card" x="24" y="24" width="712" height="512" rx="20" />
+<text x="52.0" y="58.0" text-anchor="start" class="label">Deadlock wait-for graph</text>
+<text x="52.0" y="82.0" text-anchor="start" class="muted">Source: projects/deadlock-detector-lab/sample_wait_graph.json</text>
+<text x="708.0" y="58.0" text-anchor="end" class="muted">cycle highlighted</text>
+  <line x1="401.2" y1="165.2" x2="494.8" y2="258.8" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+  <line x1="494.8" y1="301.2" x2="401.2" y2="394.8" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+  <line x1="380.0" y1="386.0" x2="380.0" y2="174.0" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+  <line x1="274.0" y1="280.0" x2="486.0" y2="280.0" stroke="#475569" stroke-width="2" marker-end="url(#arrow-slate)" />
+  <circle cx="380.0" cy="144.0" r="30.0" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="380.0" y="149.0" text-anchor="middle" class="label">P1</text>
+  <circle cx="516.0" cy="280.0" r="30.0" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="516.0" y="285.0" text-anchor="middle" class="label">P2</text>
+  <circle cx="380.0" cy="416.0" r="30.0" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="380.0" y="421.0" text-anchor="middle" class="label">P3</text>
+  <circle cx="244.0" cy="280.0" r="30.0" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.5" />
+<text x="244.0" y="285.0" text-anchor="middle" class="label">P4</text>
+  <rect x="52" y="472.0" width="18" height="18" rx="5" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" />
+<text x="80.0" y="486.0" text-anchor="start" class="tiny">blocked process</text>
+  <line x1="220" y1="481.0" x2="254" y2="481.0" stroke="#dc2626" stroke-width="3" marker-end="url(#arrow-red)" />
+<text x="264.0" y="486.0" text-anchor="start" class="tiny">cycle edge</text>
+  <line x1="360" y1="481.0" x2="394" y2="481.0" stroke="#475569" stroke-width="2" marker-end="url(#arrow-slate)" />
+<text x="404.0" y="486.0" text-anchor="start" class="tiny">waiting edge</text>
+</svg>

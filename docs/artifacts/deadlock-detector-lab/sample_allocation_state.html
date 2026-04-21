@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Deadlock allocation report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 1160px; margin: 0 auto; padding: 32px 24px 48px; }
+    .card { background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 20px; margin-top: 20px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .metric { background: #eff6ff; border-radius: 14px; padding: 14px; }
+    .tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; vertical-align: top; }
+    th { font-size: 13px; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Deadlock allocation report</h1>
+    <p>Source: <code>projects/deadlock-detector-lab/sample_allocation_state.json</code></p>
+    <section class="grid">
+      <div class="metric"><strong>Deadlocked</strong><br />yes</div>
+      <div class="metric"><strong>Finish order</strong><br />P3</div>
+      <div class="metric"><strong>Deadlocked processes</strong><br />P1, P2</div>
+    </section>
+    <section class="card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 520" role="img" aria-labelledby="allocation-projects-deadlock-detector-lab-sample-allocation-state-json-title allocation-projects-deadlock-detector-lab-sample-allocation-state-json-desc">
+  <title id="allocation-projects-deadlock-detector-lab-sample-allocation-state-json-title">Resource allocation visualization for projects/deadlock-detector-lab/sample_allocation_state.json</title>
+  <desc id="allocation-projects-deadlock-detector-lab-sample-allocation-state-json-desc">Processes on the left, resources on the right, with held edges from resources to processes and request edges from processes to resources.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+    .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 15px; }
+    .muted { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; }
+    .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
+  </style>
+  <defs>
+    <marker id="arrow-slate" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626" />
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" />
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="980" height="520" rx="24" />
+  <rect class="card" x="24" y="24" width="932" height="472" rx="20" />
+<text x="52.0" y="58.0" text-anchor="start" class="label">Deadlock resource-allocation view</text>
+<text x="52.0" y="82.0" text-anchor="start" class="muted">Source: projects/deadlock-detector-lab/sample_allocation_state.json</text>
+<text x="928.0" y="58.0" text-anchor="end" class="muted">deadlock detected</text>
+<text x="220.0" y="112.0" text-anchor="middle" class="muted">Processes</text>
+<text x="760.0" y="112.0" text-anchor="middle" class="muted">Resources</text>
+  <line x1="726.0" y1="150.0" x2="278.0" y2="150.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)" />
+<text x="500.0" y="142.0" text-anchor="middle" class="tiny">held 1</text>
+  <line x1="726.0" y1="246.0" x2="278.0" y2="246.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)" />
+<text x="500.0" y="238.0" text-anchor="middle" class="tiny">held 1</text>
+  <line x1="726.0" y1="342.0" x2="278.0" y2="342.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)" />
+<text x="500.0" y="334.0" text-anchor="middle" class="tiny">held 1</text>
+  <line x1="278.0" y1="150.0" x2="726.0" y2="246.0" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrow-red)" />
+<text x="482.0" y="222.0" text-anchor="middle" class="tiny">needs 1 (short 1)</text>
+  <line x1="278.0" y1="246.0" x2="726.0" y2="150.0" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrow-red)" />
+<text x="482.0" y="186.0" text-anchor="middle" class="tiny">needs 1 (short 1)</text>
+  <rect x="162.0" y="126.0" width="116" height="48" rx="16" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="220.0" y="155.0" text-anchor="middle" class="label">P1</text>
+  <rect x="162.0" y="222.0" width="116" height="48" rx="16" fill="#fee2e2" stroke="#b91c1c" stroke-width="2.5" />
+<text x="220.0" y="251.0" text-anchor="middle" class="label">P2</text>
+  <rect x="162.0" y="318.0" width="116" height="48" rx="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.5" />
+<text x="220.0" y="347.0" text-anchor="middle" class="label">P3</text>
+  <circle cx="760.0" cy="150.0" r="30" fill="#fef3c7" stroke="#d97706" stroke-width="2.5" />
+<text x="760.0" y="153.0" text-anchor="middle" class="label">printer</text>
+<text x="760.0" y="197.0" text-anchor="middle" class="tiny">available 0</text>
+  <circle cx="760.0" cy="246.0" r="30" fill="#fef3c7" stroke="#d97706" stroke-width="2.5" />
+<text x="760.0" y="249.0" text-anchor="middle" class="label">scanner</text>
+<text x="760.0" y="293.0" text-anchor="middle" class="tiny">available 0</text>
+  <circle cx="760.0" cy="342.0" r="30" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5" />
+<text x="760.0" y="345.0" text-anchor="middle" class="label">tape</text>
+<text x="760.0" y="389.0" text-anchor="middle" class="tiny">available 1</text>
+<text x="52.0" y="424.0" text-anchor="start" class="tiny">Finish order: P3</text>
+<text x="52.0" y="446.0" text-anchor="start" class="tiny">Deadlocked processes: P1, P2</text>
+</svg></section>
+    <section class="tables">
+      <div class="card">
+        <h2>Available resources</h2>
+        <table>
+          <thead><tr><th>Resource</th><th>Available</th></tr></thead>
+          <tbody><tr><td>printer</td><td>0</td></tr>
+<tr><td>scanner</td><td>0</td></tr>
+<tr><td>tape</td><td>1</td></tr></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Blocking summary</h2>
+        <table>
+          <thead><tr><th>Process</th><th>Shortage</th></tr></thead>
+          <tbody><tr><td>P1</td><td>scanner=1</td></tr>
+<tr><td>P2</td><td>printer=1</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
