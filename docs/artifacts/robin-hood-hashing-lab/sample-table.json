@@ -1,0 +1,44 @@
+{
+  "capacity": 11,
+  "size": 5,
+  "max_load_factor": 0.75,
+  "auto_resize": true,
+  "slots": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      "key": "user:1005",
+      "value": "Radia Perlman",
+      "hash_value": 11454107942311997297,
+      "probe_distance": 0
+    },
+    null,
+    {
+      "key": "user:1002",
+      "value": "Donald Knuth",
+      "hash_value": 17446661942092149070,
+      "probe_distance": 0
+    },
+    {
+      "key": "user:1001",
+      "value": "Ada Lovelace",
+      "hash_value": 5218452873497947608,
+      "probe_distance": 0
+    },
+    {
+      "key": "user:1003",
+      "value": "Edsger Dijkstra",
+      "hash_value": 18416472908720798525,
+      "probe_distance": 0
+    },
+    {
+      "key": "user:1004",
+      "value": "Barbara Liskov",
+      "hash_value": 1431157033072097494,
+      "probe_distance": 1
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+[
+  {
+    "capacity": 31,
+    "trial": 1,
+    "load_factor": 0.25,
+    "entry_count": 8,
+    "average_insert_probes": 1.0,
+    "average_successful_lookup_probes": 1.0,
+    "max_probe_distance": 0,
+    "swap_count": 0
+  },
+  {
+    "capacity": 31,
+    "trial": 2,
+    "load_factor": 0.25,
+    "entry_count": 8,
+    "average_insert_probes": 1.5,
+    "average_successful_lookup_probes": 1.5,
+    "max_probe_distance": 1,
+    "swap_count": 2
+  },
+  {
+    "capacity": 31,
+    "trial": 3,
+    "load_factor": 0.25,
+    "entry_count": 8,
+    "average_insert_probes": 1.125,
+    "average_successful_lookup_probes": 1.125,
+    "max_probe_distance": 1,
+    "swap_count": 0
+  },
+  {
+    "capacity": 31,
+    "trial": 1,
+    "load_factor": 0.5,
+    "entry_count": 16,
+    "average_insert_probes": 1.1875,
+    "average_successful_lookup_probes": 1.1875,
+    "max_probe_distance": 1,
+    "swap_count": 0
+  },
+  {
+    "capacity": 31,
+    "trial": 2,
+    "load_factor": 0.5,
+    "entry_count": 16,
+    "average_insert_probes": 1.25,
+    "average_successful_lookup_probes": 1.25,
+    "max_probe_distance": 2,
+    "swap_count": 1
+  },
+  {
+    "capacity": 31,
+    "trial": 3,
+    "load_factor": 0.5,
+    "entry_count": 16,
+    "average_insert_probes": 1.1875,
+    "average_successful_lookup_probes": 1.1875,
+    "max_probe_distance": 2,
+    "swap_count": 0
+  },
+  {
+    "capacity": 31,
+    "trial": 1,
+    "load_factor": 0.75,
+    "entry_count": 23,
+    "average_insert_probes": 1.7826,
+    "average_successful_lookup_probes": 1.7826,
+    "max_probe_distance": 2,
+    "swap_count": 6
+  },
+  {
+    "capacity": 31,
+    "trial": 2,
+    "load_factor": 0.75,
+    "entry_count": 23,
+    "average_insert_probes": 1.8696,
+    "average_successful_lookup_probes": 1.8696,
+    "max_probe_distance": 2,
+    "swap_count": 8
+  },
+  {
+    "capacity": 31,
+    "trial": 3,
+    "load_factor": 0.75,
+    "entry_count": 23,
+    "average_insert_probes": 2.3478,
+    "average_successful_lookup_probes": 2.3478,
+    "max_probe_distance": 4,
+    "swap_count": 13
+  }
+]
