@@ -46,8 +46,8 @@
   <div class="cards">
     <div class="card"><h3>Family</h3><p>classic preset stories plus deterministic generated workload families for broader scheduler comparisons</p></div>
     <div class="card"><h3>Scenarios</h3><p>6</p></div>
-    <div class="card"><h3>Algorithms</h3><p>FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2)</p></div>
-    <div class="card"><h3>Run settings</h3><p>q=2, aging=2, switch cost=1</p></div>
+    <div class="card"><h3>Algorithms</h3><p>FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2), MLFQ (q=2/4/8, boost=12)</p></div>
+    <div class="card"><h3>Run settings</h3><p>q=2, aging=2, mlfq q=2/4/8, mlfq boost=12, switch cost=1</p></div>
   </div>
 
   <h2>Scenario roster</h2>
@@ -59,19 +59,19 @@
   <h2>Aggregate scoreboard</h2>
   <table>
     <thead><tr><th>Algorithm</th><th>Avg turnaround</th><th>Avg waiting</th><th>Avg response</th><th>Avg slowdown</th><th>Slowdown stddev</th><th>Avg overhead %</th><th>Avg throughput</th><th>Max wait seen</th><th>Max slowdown seen</th><th>Score points</th></tr></thead>
-    <tbody><tr><td>FCFS</td><td>12.38</td><td>9.1</td><td>9.1</td><td>6.61</td><td>4.17</td><td>20.72</td><td>0.2563</td><td>23</td><td>19.0</td><td>5.5</td></tr><tr><td>SJF</td><td>9.81</td><td>6.52</td><td>6.52</td><td>4.21</td><td>2.26</td><td>20.72</td><td>0.2563</td><td>22</td><td>11.0</td><td>16.5</td></tr><tr><td>SRTF</td><td>9.22</td><td>5.93</td><td>4.86</td><td>3.07</td><td>1.4</td><td>24.74</td><td>0.2417</td><td>23</td><td>7.0</td><td>19.5</td></tr><tr><td>PRIORITY (aging=2)</td><td>11.11</td><td>7.83</td><td>7.83</td><td>5.57</td><td>3.43</td><td>20.72</td><td>0.2563</td><td>23</td><td>14.0</td><td>5.5</td></tr><tr><td>RR (q=2)</td><td>14.66</td><td>11.38</td><td>5.31</td><td>5.52</td><td>2.73</td><td>32.12</td><td>0.2223</td><td>33</td><td>13.0</td><td>1.0</td></tr></tbody>
+    <tbody><tr><td>FCFS</td><td>12.38</td><td>9.1</td><td>9.1</td><td>6.61</td><td>4.17</td><td>20.72</td><td>0.2563</td><td>23</td><td>19.0</td><td>5.5</td></tr><tr><td>SJF</td><td>9.81</td><td>6.52</td><td>6.52</td><td>4.21</td><td>2.26</td><td>20.72</td><td>0.2563</td><td>22</td><td>11.0</td><td>16.0</td></tr><tr><td>SRTF</td><td>9.22</td><td>5.93</td><td>4.86</td><td>3.07</td><td>1.4</td><td>24.74</td><td>0.2417</td><td>23</td><td>7.0</td><td>15.0</td></tr><tr><td>PRIORITY (aging=2)</td><td>11.11</td><td>7.83</td><td>7.83</td><td>5.57</td><td>3.43</td><td>20.72</td><td>0.2563</td><td>23</td><td>14.0</td><td>5.5</td></tr><tr><td>RR (q=2)</td><td>14.66</td><td>11.38</td><td>5.31</td><td>5.52</td><td>2.73</td><td>32.12</td><td>0.2223</td><td>33</td><td>13.0</td><td>0.0</td></tr><tr><td>MLFQ (q=2/4/8, boost=12)</td><td>13.68</td><td>10.4</td><td>3.69</td><td>4.58</td><td>1.66</td><td>30.12</td><td>0.2295</td><td>33</td><td>10.0</td><td>6.0</td></tr></tbody>
   </table>
 
   <h2>Win counts</h2>
   <table>
     <thead><tr><th>Algorithm</th><th>Turnaround wins</th><th>Waiting wins</th><th>Response wins</th><th>Slowdown wins</th><th>Even-slowdown wins</th><th>Throughput wins</th><th>Overhead wins</th><th>Completion wins</th><th>Total wins</th></tr></thead>
-    <tbody><tr><td>FCFS</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>6</td><td>6</td><td>6</td><td>18</td></tr><tr><td>SJF</td><td>4</td><td>4</td><td>2</td><td>3</td><td>3</td><td>6</td><td>6</td><td>6</td><td>34</td></tr><tr><td>SRTF</td><td>4</td><td>4</td><td>5</td><td>5</td><td>5</td><td>2</td><td>2</td><td>2</td><td>29</td></tr><tr><td>PRIORITY (aging=2)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>6</td><td>6</td><td>6</td><td>18</td></tr><tr><td>RR (q=2)</td><td>0</td><td>0</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td></tr></tbody>
+    <tbody><tr><td>FCFS</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>6</td><td>6</td><td>6</td><td>18</td></tr><tr><td>SJF</td><td>4</td><td>4</td><td>1</td><td>3</td><td>3</td><td>6</td><td>6</td><td>6</td><td>33</td></tr><tr><td>SRTF</td><td>4</td><td>4</td><td>3</td><td>4</td><td>3</td><td>2</td><td>2</td><td>2</td><td>24</td></tr><tr><td>PRIORITY (aging=2)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>6</td><td>6</td><td>6</td><td>18</td></tr><tr><td>RR (q=2)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr><tr><td>MLFQ (q=2/4/8, boost=12)</td><td>0</td><td>0</td><td>3</td><td>1</td><td>2</td><td>0</td><td>0</td><td>0</td><td>6</td></tr></tbody>
   </table>
 
   <h2>Scenario highlights</h2>
   <table>
     <thead><tr><th>Scenario</th><th>Best response</th><th>Best waiting</th><th>Best fairness</th><th>Best throughput</th></tr></thead>
-    <tbody><tr><td>convoy-mix</td><td>SRTF</td><td>SRTF</td><td>SRTF</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>interactive-bursts</td><td>SRTF</td><td>SJF</td><td>SRTF</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>aging-pressure</td><td>SRTF</td><td>SRTF</td><td>SRTF</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>balanced-seed-17</td><td>RR (q=2)</td><td>SJF</td><td>SJF</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>convoy-spike-seed-23</td><td>SJF, SRTF</td><td>SJF, SRTF</td><td>SJF, SRTF</td><td>FCFS, SJF, SRTF, PRIORITY (aging=2)</td></tr><tr><td>latency-burst-seed-31</td><td>SJF, SRTF</td><td>SJF, SRTF</td><td>SJF, SRTF</td><td>FCFS, SJF, SRTF, PRIORITY (aging=2)</td></tr></tbody>
+    <tbody><tr><td>convoy-mix</td><td>SRTF</td><td>SRTF</td><td>SRTF</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>interactive-bursts</td><td>MLFQ (q=2/4/8, boost=12)</td><td>SJF</td><td>MLFQ (q=2/4/8, boost=12)</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>aging-pressure</td><td>SRTF</td><td>SRTF</td><td>MLFQ (q=2/4/8, boost=12)</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>balanced-seed-17</td><td>MLFQ (q=2/4/8, boost=12)</td><td>SJF</td><td>SJF</td><td>FCFS, SJF, PRIORITY (aging=2)</td></tr><tr><td>convoy-spike-seed-23</td><td>MLFQ (q=2/4/8, boost=12)</td><td>SJF, SRTF</td><td>SJF, SRTF</td><td>FCFS, SJF, SRTF, PRIORITY (aging=2)</td></tr><tr><td>latency-burst-seed-31</td><td>SJF, SRTF</td><td>SJF, SRTF</td><td>SJF, SRTF</td><td>FCFS, SJF, SRTF, PRIORITY (aging=2)</td></tr></tbody>
   </table>
 </body>
 </html>

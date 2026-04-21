@@ -3,10 +3,12 @@
 - preset: `interactive-bursts` — staggered short requests compete with a background batch job, making response-time tradeoffs visible
 - workload source: `artifacts/cpu-scheduler-simulator/presets/interactive-bursts.json`
 - processes: 6
-- algorithms: FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2)
+- algorithms: FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2), MLFQ (q=2/4/8, boost=12)
 - round-robin quantum: 2
 - priority aging interval: 2
 - context-switch cost: 1
+- mlfq quantums: 2/4/8
+- mlfq boost interval: 12
 
 | Algorithm | Avg turnaround | Avg waiting | Avg response | Max wait | CPU util % | Throughput | Overhead % | Total time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -15,6 +17,7 @@
 | SRTF | 9.0 | 6.5 | 4.5 | 13 | 65.22 | 0.2609 | 34.78 | 23 |
 | PRIORITY (aging=2) | 8.33 | 5.83 | 5.83 | 10 | 75.0 | 0.3 | 25.0 | 20 |
 | RR (q=2) | 10.17 | 7.67 | 5.67 | 13 | 65.22 | 0.2609 | 34.78 | 23 |
+| MLFQ (q=2/4/8, boost=12) | 9.17 | 6.67 | 2.67 | 17 | 65.22 | 0.2609 | 34.78 | 23 |
 
 ## Fairness and slowdown snapshot
 | Algorithm | Avg slowdown | Max slowdown | Slowdown spread | Slowdown stddev | Waiting stddev | Most delayed process |
@@ -24,6 +27,7 @@
 | SRTF | 3.96 | 7.0 | 5.0 | 1.7 | 4.5 | P6 slowdown=7, wait=6 |
 | PRIORITY (aging=2) | 5.08 | 8.0 | 7.0 | 2.46 | 2.97 | P4 slowdown=8, wait=7 |
 | RR (q=2) | 5.38 | 12.0 | 9.5 | 3.3 | 3.73 | P6 slowdown=12, wait=11 |
+| MLFQ (q=2/4/8, boost=12) | 3.76 | 6.0 | 4.0 | 1.21 | 5.56 | P6 slowdown=6, wait=5 |
 
 ## Per-process experience
 | Algorithm | PID | Waiting | Response | Turnaround | Slowdown |
@@ -58,15 +62,21 @@
 | RR (q=2) | P4 | 6 | 6 | 7 | 7 |
 | RR (q=2) | P5 | 13 | 10 | 17 | 4.25 |
 | RR (q=2) | P6 | 11 | 11 | 12 | 12 |
+| MLFQ (q=2/4/8, boost=12) | P1 | 17 | 0 | 23 | 3.83 |
+| MLFQ (q=2/4/8, boost=12) | P2 | 2 | 2 | 3 | 3 |
+| MLFQ (q=2/4/8, boost=12) | P3 | 2 | 2 | 4 | 2 |
+| MLFQ (q=2/4/8, boost=12) | P4 | 3 | 3 | 4 | 4 |
+| MLFQ (q=2/4/8, boost=12) | P5 | 11 | 4 | 15 | 3.75 |
+| MLFQ (q=2/4/8, boost=12) | P6 | 5 | 5 | 6 | 6 |
 
 ## Takeaways
 - lowest average turnaround: SJF
 - lowest average waiting: SJF
-- lowest average response: SRTF
+- lowest average response: MLFQ (q=2/4/8, boost=12)
 - lowest worst-case waiting time: SJF, PRIORITY (aging=2)
-- lowest average slowdown: SRTF
-- lowest worst slowdown: SJF, SRTF
-- most even slowdown distribution: SRTF
+- lowest average slowdown: MLFQ (q=2/4/8, boost=12)
+- lowest worst slowdown: MLFQ (q=2/4/8, boost=12)
+- most even slowdown distribution: MLFQ (q=2/4/8, boost=12)
 - highest useful CPU utilization: FCFS, SJF, PRIORITY (aging=2)
 - highest throughput: FCFS, SJF, PRIORITY (aging=2)
 - lowest scheduler overhead: FCFS, SJF, PRIORITY (aging=2)

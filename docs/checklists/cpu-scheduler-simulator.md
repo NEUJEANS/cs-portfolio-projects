@@ -104,3 +104,19 @@
 - [x] run secret scan
 - [x] commit and push
 - [x] append wrap-up
+
+## 2026-04-21 vertical slice, MLFQ scheduling and benchmark integration
+- [x] inspect the current scheduler project and confirm the next weak spot is missing MLFQ support after the benchmark family pack
+- [x] do brief MLFQ research and capture a short self-test note
+- [x] add a resumable slice checklist entry
+- [x] implement a preemptive MLFQ algorithm with configurable queue quantums and periodic priority boosts
+- [x] thread MLFQ through compare and benchmark flows plus recruiter-facing metadata
+- [x] refresh the README and committed artifact generation commands for the new scheduler path
+- [x] add unit and CLI tests for MLFQ scheduling, boost behavior, validation, and reporting
+- [x] run tests
+- [x] complete review pass 1 and fix issues
+- [x] complete review pass 2 and fix issues
+- [x] complete review pass 3 and fix issues
+- [x] run secret scan
+- [ ] commit and push
+- [ ] append wrap-up

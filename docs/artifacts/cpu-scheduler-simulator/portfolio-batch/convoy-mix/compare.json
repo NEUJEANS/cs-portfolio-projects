@@ -181,7 +181,12 @@
           "scheduler_overhead_pct": 21.05
         },
         "total_time": 19,
-        "context_switch_cost": 1
+        "context_switch_cost": 1,
+        "algorithm": "fcfs",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": null,
+        "mlfq_boost_interval": null
       }
     },
     {
@@ -360,7 +365,12 @@
           "scheduler_overhead_pct": 21.05
         },
         "total_time": 19,
-        "context_switch_cost": 1
+        "context_switch_cost": 1,
+        "algorithm": "sjf",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": null,
+        "mlfq_boost_interval": null
       }
     },
     {
@@ -549,7 +559,12 @@
           "scheduler_overhead_pct": 25.0
         },
         "total_time": 20,
-        "context_switch_cost": 1
+        "context_switch_cost": 1,
+        "algorithm": "srtf",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": null,
+        "mlfq_boost_interval": null
       }
     },
     {
@@ -728,7 +743,12 @@
           "scheduler_overhead_pct": 21.05
         },
         "total_time": 19,
-        "context_switch_cost": 1
+        "context_switch_cost": 1,
+        "algorithm": "priority",
+        "quantum": null,
+        "aging_interval": 2,
+        "mlfq_quantums": null,
+        "mlfq_boost_interval": null
       }
     },
     {
@@ -927,13 +947,222 @@
           "scheduler_overhead_pct": 28.57
         },
         "total_time": 21,
-        "context_switch_cost": 1
+        "context_switch_cost": 1,
+        "algorithm": "rr",
+        "quantum": 2,
+        "aging_interval": 0,
+        "mlfq_quantums": null,
+        "mlfq_boost_interval": null
+      }
+    },
+    {
+      "algorithm": "mlfq",
+      "label": "MLFQ (q=2/4/8, boost=12)",
+      "summary": {
+        "avg_turnaround": 8.4,
+        "avg_waiting": 5.4,
+        "avg_response": 3.2,
+        "max_waiting": 11,
+        "waiting_spread": 9,
+        "response_spread": 6,
+        "waiting_stddev": 3.14,
+        "avg_slowdown": 3.54,
+        "max_slowdown": 6.0,
+        "slowdown_spread": 3.78,
+        "slowdown_stddev": 1.37,
+        "cpu_utilization": 75.0,
+        "throughput": 0.25,
+        "context_switches": 5,
+        "context_switch_overhead_time": 5,
+        "scheduler_overhead_pct": 25.0,
+        "total_time": 20,
+        "timeline_slices": 11
+      },
+      "experience": [
+        {
+          "pid": "P1",
+          "waiting": 11,
+          "response": 0,
+          "turnaround": 20,
+          "slowdown": 2.22
+        },
+        {
+          "pid": "P2",
+          "waiting": 2,
+          "response": 2,
+          "turnaround": 3,
+          "slowdown": 3.0
+        },
+        {
+          "pid": "P3",
+          "waiting": 3,
+          "response": 3,
+          "turnaround": 5,
+          "slowdown": 2.5
+        },
+        {
+          "pid": "P4",
+          "waiting": 5,
+          "response": 5,
+          "turnaround": 6,
+          "slowdown": 6.0
+        },
+        {
+          "pid": "P5",
+          "waiting": 6,
+          "response": 6,
+          "turnaround": 8,
+          "slowdown": 4.0
+        }
+      ],
+      "result": {
+        "processes": [
+          {
+            "pid": "P1",
+            "arrival": 0,
+            "burst": 9,
+            "priority": 4,
+            "start": 0,
+            "completion": 20,
+            "turnaround": 20,
+            "waiting": 11,
+            "response": 0
+          },
+          {
+            "pid": "P2",
+            "arrival": 1,
+            "burst": 1,
+            "priority": 0,
+            "start": 3,
+            "completion": 4,
+            "turnaround": 3,
+            "waiting": 2,
+            "response": 2
+          },
+          {
+            "pid": "P3",
+            "arrival": 2,
+            "burst": 2,
+            "priority": 1,
+            "start": 5,
+            "completion": 7,
+            "turnaround": 5,
+            "waiting": 3,
+            "response": 3
+          },
+          {
+            "pid": "P4",
+            "arrival": 3,
+            "burst": 1,
+            "priority": 0,
+            "start": 8,
+            "completion": 9,
+            "turnaround": 6,
+            "waiting": 5,
+            "response": 5
+          },
+          {
+            "pid": "P5",
+            "arrival": 4,
+            "burst": 2,
+            "priority": 2,
+            "start": 10,
+            "completion": 12,
+            "turnaround": 8,
+            "waiting": 6,
+            "response": 6
+          }
+        ],
+        "timeline": [
+          {
+            "start": 0,
+            "end": 2,
+            "pid": "P1"
+          },
+          {
+            "start": 2,
+            "end": 3,
+            "pid": "CS"
+          },
+          {
+            "start": 3,
+            "end": 4,
+            "pid": "P2"
+          },
+          {
+            "start": 4,
+            "end": 5,
+            "pid": "CS"
+          },
+          {
+            "start": 5,
+            "end": 7,
+            "pid": "P3"
+          },
+          {
+            "start": 7,
+            "end": 8,
+            "pid": "CS"
+          },
+          {
+            "start": 8,
+            "end": 9,
+            "pid": "P4"
+          },
+          {
+            "start": 9,
+            "end": 10,
+            "pid": "CS"
+          },
+          {
+            "start": 10,
+            "end": 12,
+            "pid": "P5"
+          },
+          {
+            "start": 12,
+            "end": 13,
+            "pid": "CS"
+          },
+          {
+            "start": 13,
+            "end": 20,
+            "pid": "P1"
+          }
+        ],
+        "averages": {
+          "turnaround": 8.4,
+          "waiting": 5.4,
+          "response": 3.2,
+          "cpu_utilization": 75.0,
+          "throughput": 0.25,
+          "context_switches": 5,
+          "context_switch_overhead_time": 5,
+          "scheduler_overhead_pct": 25.0
+        },
+        "total_time": 20,
+        "context_switch_cost": 1,
+        "algorithm": "mlfq",
+        "quantum": null,
+        "aging_interval": 0,
+        "mlfq_quantums": [
+          2,
+          4,
+          8
+        ],
+        "mlfq_boost_interval": 12
       }
     }
   ],
   "quantum": 2,
   "aging_interval": 2,
   "context_switch_cost": 1,
+  "mlfq_quantums": [
+    2,
+    4,
+    8
+  ],
+  "mlfq_boost_interval": 12,
   "winners": {
     "avg_turnaround": [
       "srtf"
@@ -945,7 +1174,8 @@
       "srtf"
     ],
     "max_waiting": [
-      "srtf"
+      "srtf",
+      "mlfq"
     ],
     "avg_slowdown": [
       "srtf"

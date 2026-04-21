@@ -98,6 +98,50 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(by_pid["P2"]["completion"], 8)
         self.assertEqual(by_pid["P3"]["response"], 2)
 
+    def test_mlfq_demotes_long_jobs_and_favors_new_arrivals(self):
+        result = simulate(
+            [
+                Process("P1", arrival=0, burst=8),
+                Process("P2", arrival=1, burst=1),
+                Process("P3", arrival=2, burst=1),
+            ],
+            "mlfq",
+            mlfq_quantums=[1, 2, 4],
+            mlfq_boost_interval=0,
+        )
+        self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
+            ("P1", 0, 1),
+            ("P2", 1, 2),
+            ("P3", 2, 3),
+            ("P1", 3, 10),
+        ])
+        by_pid = {row["pid"]: row for row in result["processes"]}
+        self.assertEqual(by_pid["P2"]["response"], 0)
+        self.assertEqual(by_pid["P3"]["response"], 0)
+        self.assertEqual(by_pid["P1"]["completion"], 10)
+
+    def test_mlfq_boost_repromotes_demoted_work(self):
+        result = simulate(
+            [
+                Process("P1", arrival=0, burst=9),
+                Process("P2", arrival=1, burst=1),
+                Process("P3", arrival=6, burst=1),
+            ],
+            "mlfq",
+            mlfq_quantums=[1, 2, 4],
+            mlfq_boost_interval=6,
+        )
+        self.assertEqual([(s["pid"], s["start"], s["end"]) for s in result["timeline"]], [
+            ("P1", 0, 1),
+            ("P2", 1, 2),
+            ("P1", 2, 6),
+            ("P3", 6, 7),
+            ("P1", 7, 11),
+        ])
+        by_pid = {row["pid"]: row for row in result["processes"]}
+        self.assertEqual(by_pid["P3"]["response"], 0)
+        self.assertEqual(result["total_time"], 11)
+
     def test_priority_uses_lower_numbers_first(self):
         result = simulate([
             Process("P1", arrival=0, burst=4, priority=4),
@@ -171,6 +215,17 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn("context_switch_cost=2", report)
         self.assertIn("Context-switch overhead time: 2", report)
 
+    def test_format_report_mentions_mlfq_settings(self):
+        result = simulate(
+            [Process("P1", arrival=0, burst=3), Process("P2", arrival=1, burst=1)],
+            "mlfq",
+            mlfq_quantums=[1, 2, 4],
+            mlfq_boost_interval=6,
+        )
+        report = format_report(result, "mlfq")
+        self.assertIn("quantums=1/2/4", report)
+        self.assertIn("boost_interval=6", report)
+
     def test_round_robin_context_switch_cost_counts_repeated_dispatches(self):
         result = simulate([
             Process("P1", arrival=0, burst=3),
@@ -207,6 +262,14 @@ class SchedulerTests(unittest.TestCase):
     def test_priority_rejects_negative_aging_interval(self):
         with self.assertRaises(ValueError):
             simulate(self.workload, "priority", aging_interval=-1)
+
+    def test_mlfq_rejects_non_positive_quantums(self):
+        with self.assertRaises(ValueError):
+            simulate(self.workload, "mlfq", mlfq_quantums=[1, 0, 4])
+
+    def test_mlfq_rejects_negative_boost_interval(self):
+        with self.assertRaises(ValueError):
+            simulate(self.workload, "mlfq", mlfq_quantums=[1, 2, 4], mlfq_boost_interval=-1)
 
     def test_context_switch_cost_rejects_negative_value(self):
         with self.assertRaises(ValueError):
@@ -278,6 +341,17 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn("| Algorithm | Avg slowdown | Max slowdown | Slowdown spread | Slowdown stddev | Waiting stddev | Most delayed process |", report)
         self.assertIn("lowest average waiting", report)
         self.assertIn("most even slowdown distribution", report)
+
+    def test_format_compare_markdown_skips_mlfq_metadata_when_not_selected(self):
+        comparison = compare_algorithms(
+            [Process("P1", arrival=0, burst=4), Process("P2", arrival=1, burst=1)],
+            algorithms=["fcfs", "sjf"],
+            workload_label="tiny",
+            workload_source="tiny.json",
+        )
+        report = format_compare_markdown(comparison)
+        self.assertNotIn("mlfq quantums", report)
+        self.assertNotIn("mlfq boost interval", report)
 
     def test_format_compare_svg_contains_dashboard_markup(self):
         comparison = compare_algorithms(
@@ -425,7 +499,39 @@ class SchedulerTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["mode"], "compare")
         self.assertEqual(payload["preset"], "interactive-bursts")
-        self.assertEqual(len(payload["algorithms"]), 5)
+        self.assertEqual(len(payload["algorithms"]), 6)
+        self.assertIn("mlfq", [entry["algorithm"] for entry in payload["algorithms"]])
+
+    def test_cli_json_output_for_mlfq(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workload.json"
+            path.write_text(json.dumps([
+                {"pid": "P1", "arrival": 0, "burst": 5},
+                {"pid": "P2", "arrival": 1, "burst": 1},
+            ]))
+            completed = subprocess.run(
+                [
+                    "python3",
+                    "scheduler.py",
+                    "mlfq",
+                    str(path),
+                    "--mlfq-quantums",
+                    "1,2,4",
+                    "--mlfq-boost-interval",
+                    "0",
+                    "--json",
+                ],
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["timeline"][0]["pid"], "P1")
+            self.assertEqual(payload["timeline"][1]["pid"], "P2")
+            self.assertEqual(payload["processes"][1]["response"], 0)
+            self.assertEqual(payload["mlfq_quantums"], [1, 2, 4])
+            self.assertEqual(payload["mlfq_boost_interval"], 0)
 
     def test_cli_run_supports_preset_workload(self):
         completed = subprocess.run(

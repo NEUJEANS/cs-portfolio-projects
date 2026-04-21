@@ -2,10 +2,12 @@
 
 - workload source: `generated/latency-burst/seed-31`
 - processes: 7
-- algorithms: FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2)
+- algorithms: FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2), MLFQ (q=2/4/8, boost=12)
 - round-robin quantum: 2
 - priority aging interval: 2
 - context-switch cost: 1
+- mlfq quantums: 2/4/8
+- mlfq boost interval: 12
 
 | Algorithm | Avg turnaround | Avg waiting | Avg response | Max wait | CPU util % | Throughput | Overhead % | Total time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -14,6 +16,7 @@
 | SRTF | 7.43 | 5.14 | 5.14 | 14 | 72.73 | 0.3182 | 27.27 | 22 |
 | PRIORITY (aging=2) | 9.57 | 7.29 | 7.29 | 13 | 72.73 | 0.3182 | 27.27 | 22 |
 | RR (q=2) | 11.0 | 8.71 | 6.43 | 17 | 64.0 | 0.28 | 36.0 | 25 |
+| MLFQ (q=2/4/8, boost=12) | 10.43 | 8.14 | 5.43 | 16 | 66.67 | 0.2917 | 33.33 | 24 |
 
 ## Fairness and slowdown snapshot
 | Algorithm | Avg slowdown | Max slowdown | Slowdown spread | Slowdown stddev | Waiting stddev | Most delayed process |
@@ -23,6 +26,7 @@
 | SRTF | 3.62 | 6.0 | 5.0 | 1.75 | 4.19 | P4 slowdown=6, wait=5 |
 | PRIORITY (aging=2) | 6.59 | 14.0 | 13.0 | 5.11 | 4.62 | P4 slowdown=14, wait=13 |
 | RR (q=2) | 6.59 | 13.0 | 12.0 | 4.07 | 5.26 | P4 slowdown=13, wait=12 |
+| MLFQ (q=2/4/8, boost=12) | 5.76 | 10.0 | 9.0 | 2.93 | 5.41 | P5 slowdown=10, wait=9 |
 
 ## Per-process experience
 | Algorithm | PID | Waiting | Response | Turnaround | Slowdown |
@@ -62,6 +66,13 @@
 | RR (q=2) | P5 | 9 | 9 | 10 | 10 |
 | RR (q=2) | P6 | 11 | 5 | 14 | 4.67 |
 | RR (q=2) | P7 | 17 | 7 | 24 | 3.43 |
+| MLFQ (q=2/4/8, boost=12) | P1 | 0 | 0 | 2 | 1 |
+| MLFQ (q=2/4/8, boost=12) | P2 | 7 | 7 | 8 | 8 |
+| MLFQ (q=2/4/8, boost=12) | P3 | 3 | 3 | 4 | 4 |
+| MLFQ (q=2/4/8, boost=12) | P4 | 7 | 7 | 8 | 8 |
+| MLFQ (q=2/4/8, boost=12) | P5 | 9 | 9 | 10 | 10 |
+| MLFQ (q=2/4/8, boost=12) | P6 | 15 | 5 | 18 | 6 |
+| MLFQ (q=2/4/8, boost=12) | P7 | 16 | 7 | 23 | 3.29 |
 
 ## Takeaways
 - lowest average turnaround: SJF, SRTF

@@ -34,8 +34,11 @@ class TimelineSlice:
         return self.end - self.start
 
 
-SUPPORTED_ALGORITHMS = {"fcfs", "priority", "sjf", "srtf", "rr"}
-ALGORITHM_ORDER = ["fcfs", "sjf", "srtf", "priority", "rr"]
+DEFAULT_MLFQ_QUANTUMS = (2, 4, 8)
+DEFAULT_MLFQ_BOOST_INTERVAL = 12
+
+SUPPORTED_ALGORITHMS = {"fcfs", "priority", "sjf", "srtf", "rr", "mlfq"}
+ALGORITHM_ORDER = ["fcfs", "sjf", "srtf", "priority", "rr", "mlfq"]
 SUPPORTED_COMMANDS = SUPPORTED_ALGORITHMS | {"benchmark", "compare", "list-presets"}
 IDLE_PID = "IDLE"
 CONTEXT_SWITCH_PID = "CS"
@@ -124,13 +127,49 @@ def repo_relative(path: Path) -> str:
         return str(path)
 
 
-def format_algorithm_label(algorithm: str, quantum: int = 2, aging_interval: int = 0) -> str:
+def normalize_mlfq_quantums(quantums: Optional[Sequence[int]] = None) -> List[int]:
+    values = list(DEFAULT_MLFQ_QUANTUMS if quantums is None else quantums)
+    if not values:
+        raise ValueError("mlfq quantums must include at least one queue")
+    normalized = [int(value) for value in values]
+    if any(value <= 0 for value in normalized):
+        raise ValueError("mlfq quantums must all be > 0")
+    return normalized
+
+
+def parse_mlfq_quantums(value: str) -> List[int]:
+    try:
+        return normalize_mlfq_quantums(
+            [int(part.strip()) for part in value.split(",") if part.strip()]
+        )
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def format_mlfq_quantums(quantums: Optional[Sequence[int]] = None) -> str:
+    return "/".join(str(value) for value in normalize_mlfq_quantums(quantums))
+
+
+def format_mlfq_boost_interval(boost_interval: int) -> str:
+    return str(boost_interval) if boost_interval > 0 else "off"
+
+
+def format_algorithm_label(
+    algorithm: str,
+    quantum: int = 2,
+    aging_interval: int = 0,
+    mlfq_quantums: Optional[Sequence[int]] = None,
+    mlfq_boost_interval: int = DEFAULT_MLFQ_BOOST_INTERVAL,
+) -> str:
     label = algorithm.upper()
     modifiers = []
     if algorithm == "rr":
         modifiers.append(f"q={quantum}")
     if algorithm == "priority" and aging_interval > 0:
         modifiers.append(f"aging={aging_interval}")
+    if algorithm == "mlfq":
+        modifiers.append(f"q={format_mlfq_quantums(mlfq_quantums)}")
+        modifiers.append(f"boost={format_mlfq_boost_interval(mlfq_boost_interval)}")
     if modifiers:
         label += f" ({', '.join(modifiers)})"
     return label
@@ -649,17 +688,134 @@ def simulate_round_robin(processes: Iterable[Process], quantum: int) -> Dict:
     return finalize(processes, timeline, first_start, completion)
 
 
+def next_mlfq_boost_time(time: int, boost_interval: int) -> Optional[int]:
+    if boost_interval <= 0:
+        return None
+    return ((time // boost_interval) + 1) * boost_interval
+
+
+def promote_mlfq_ready_processes(
+    ready: Sequence[deque],
+    queue_level: Dict[str, int],
+    used_in_level: Dict[str, int],
+    current_pid: Optional[str] = None,
+) -> None:
+    promoted = deque()
+    for queue in ready:
+        while queue:
+            promoted.append(queue.popleft())
+    if current_pid is not None:
+        promoted.append(current_pid)
+
+    ready[0].extend(promoted)
+    for pid in promoted:
+        queue_level[pid] = 0
+        used_in_level[pid] = 0
+
+
+def simulate_mlfq(
+    processes: Iterable[Process],
+    quantums: Optional[Sequence[int]] = None,
+    boost_interval: int = DEFAULT_MLFQ_BOOST_INTERVAL,
+) -> Dict:
+    if boost_interval < 0:
+        raise ValueError("mlfq boost interval must be >= 0")
+
+    queue_quantums = normalize_mlfq_quantums(quantums)
+    processes = normalize_processes(processes)
+    process_map = {proc.pid: proc for proc in processes}
+    last_level = len(queue_quantums) - 1
+
+    time = 0
+    index = 0
+    ready = [deque() for _ in queue_quantums]
+    remaining = {proc.pid: proc.burst for proc in processes}
+    queue_level = {proc.pid: 0 for proc in processes}
+    used_in_level = {proc.pid: 0 for proc in processes}
+    timeline: List[TimelineSlice] = []
+    first_start: Dict[str, int] = {}
+    completion: Dict[str, int] = {}
+
+    def enqueue_arrivals(current_time: int) -> None:
+        nonlocal index
+        while index < len(processes) and processes[index].arrival <= current_time:
+            proc = processes[index]
+            ready[0].append(proc.pid)
+            queue_level[proc.pid] = 0
+            used_in_level[proc.pid] = 0
+            index += 1
+
+    enqueue_arrivals(time)
+
+    while index < len(processes) or any(ready_queue for ready_queue in ready):
+        if not any(ready_queue for ready_queue in ready):
+            next_arrival = processes[index].arrival
+            append_slice(timeline, time, next_arrival, IDLE_PID)
+            time = next_arrival
+            enqueue_arrivals(time)
+            continue
+
+        level = next(level for level, queue in enumerate(ready) if queue)
+        pid = ready[level].popleft()
+        proc = process_map[pid]
+        first_start.setdefault(pid, time)
+
+        run_for = min(remaining[pid], queue_quantums[level] - used_in_level[pid])
+        next_arrival = processes[index].arrival if index < len(processes) else None
+        if next_arrival is not None and level > 0:
+            run_for = min(run_for, next_arrival - time)
+        next_boost = next_mlfq_boost_time(time, boost_interval)
+        if next_boost is not None:
+            run_for = min(run_for, next_boost - time)
+
+        end = time + run_for
+        append_slice(timeline, time, end, pid)
+        time = end
+        remaining[pid] -= run_for
+        used_in_level[pid] += run_for
+
+        enqueue_arrivals(time)
+
+        if remaining[pid] == 0:
+            completion[pid] = time
+            continue
+
+        boost_triggered = boost_interval > 0 and time > 0 and time % boost_interval == 0
+        if boost_triggered:
+            promote_mlfq_ready_processes(
+                ready,
+                queue_level,
+                used_in_level,
+                current_pid=pid,
+            )
+            continue
+
+        if used_in_level[pid] >= queue_quantums[level]:
+            next_level = min(level + 1, last_level)
+            queue_level[pid] = next_level
+            used_in_level[pid] = 0
+            ready[next_level].append(pid)
+            continue
+
+        ready[level].append(pid)
+
+    return finalize(processes, timeline, first_start, completion)
+
+
 def simulate(
     processes: Iterable[Process],
     algorithm: str,
     quantum: int = 2,
     aging_interval: int = 0,
     context_switch_cost: int = 0,
+    mlfq_quantums: Optional[Sequence[int]] = None,
+    mlfq_boost_interval: int = DEFAULT_MLFQ_BOOST_INTERVAL,
 ) -> Dict:
     if context_switch_cost < 0:
         raise ValueError("context switch cost must be >= 0")
 
     process_list = list(processes)
+    queue_quantums = normalize_mlfq_quantums(mlfq_quantums)
     algorithm = algorithm.lower()
     if algorithm == "fcfs":
         result = simulate_fcfs(process_list)
@@ -671,17 +827,32 @@ def simulate(
         result = simulate_srtf(process_list)
     elif algorithm == "rr":
         result = simulate_round_robin(process_list, quantum=quantum)
+    elif algorithm == "mlfq":
+        result = simulate_mlfq(
+            process_list,
+            quantums=mlfq_quantums,
+            boost_interval=mlfq_boost_interval,
+        )
     else:
         raise ValueError(f"unsupported algorithm: {algorithm}")
 
-    if context_switch_cost == 0:
-        return result
+    if context_switch_cost > 0:
+        result = apply_context_switch_overhead(
+            process_list,
+            [TimelineSlice(**slice_) for slice_ in result["timeline"]],
+            context_switch_cost,
+        )
 
-    return apply_context_switch_overhead(
-        process_list,
-        [TimelineSlice(**slice_) for slice_ in result["timeline"]],
-        context_switch_cost,
+    result.update(
+        {
+            "algorithm": algorithm,
+            "quantum": quantum if algorithm == "rr" else None,
+            "aging_interval": aging_interval if algorithm == "priority" else 0,
+            "mlfq_quantums": queue_quantums if algorithm == "mlfq" else None,
+            "mlfq_boost_interval": mlfq_boost_interval if algorithm == "mlfq" else None,
+        }
     )
+    return result
 
 
 def summarize_result(result: Dict) -> Dict:
@@ -742,12 +913,15 @@ def compare_algorithms(
     quantum: int = 2,
     aging_interval: int = 0,
     context_switch_cost: int = 0,
+    mlfq_quantums: Optional[Sequence[int]] = None,
+    mlfq_boost_interval: int = DEFAULT_MLFQ_BOOST_INTERVAL,
     workload_label: str = "workload",
     workload_source: Optional[str] = None,
     preset: Optional[str] = None,
 ) -> Dict:
     process_list = normalize_processes(processes)
     selected_algorithms = ordered_algorithms(algorithms or ALGORITHM_ORDER)
+    queue_quantums = normalize_mlfq_quantums(mlfq_quantums)
     if not selected_algorithms:
         raise ValueError("at least one algorithm is required for compare mode")
 
@@ -759,11 +933,19 @@ def compare_algorithms(
             quantum=quantum,
             aging_interval=aging_interval,
             context_switch_cost=context_switch_cost,
+            mlfq_quantums=queue_quantums,
+            mlfq_boost_interval=mlfq_boost_interval,
         )
         comparison_entries.append(
             {
                 "algorithm": algorithm,
-                "label": format_algorithm_label(algorithm, quantum=quantum, aging_interval=aging_interval),
+                "label": format_algorithm_label(
+                    algorithm,
+                    quantum=quantum,
+                    aging_interval=aging_interval,
+                    mlfq_quantums=queue_quantums,
+                    mlfq_boost_interval=mlfq_boost_interval,
+                ),
                 "summary": summarize_result(result),
                 "experience": build_experience_rows(result),
                 "result": result,
@@ -794,6 +976,8 @@ def compare_algorithms(
         "quantum": quantum,
         "aging_interval": aging_interval,
         "context_switch_cost": context_switch_cost,
+        "mlfq_quantums": queue_quantums,
+        "mlfq_boost_interval": mlfq_boost_interval,
         "winners": winners,
     }
 
@@ -804,16 +988,25 @@ def benchmark_algorithm_family(
     quantum: int = 2,
     aging_interval: int = 0,
     context_switch_cost: int = 0,
+    mlfq_quantums: Optional[Sequence[int]] = None,
+    mlfq_boost_interval: int = DEFAULT_MLFQ_BOOST_INTERVAL,
 ) -> Dict:
     family = resolve_benchmark_family(family_name)
     selected_algorithms = ordered_algorithms(algorithms or ALGORITHM_ORDER)
+    queue_quantums = normalize_mlfq_quantums(mlfq_quantums)
     if not selected_algorithms:
         raise ValueError("at least one algorithm is required for benchmark mode")
 
     aggregate = {
         algorithm: {
             "algorithm": algorithm,
-            "label": format_algorithm_label(algorithm, quantum=quantum, aging_interval=aging_interval),
+            "label": format_algorithm_label(
+                algorithm,
+                quantum=quantum,
+                aging_interval=aging_interval,
+                mlfq_quantums=queue_quantums,
+                mlfq_boost_interval=mlfq_boost_interval,
+            ),
             "scenario_count": 0,
             "totals": {
                 "avg_turnaround": 0.0,
@@ -843,6 +1036,8 @@ def benchmark_algorithm_family(
             quantum=quantum,
             aging_interval=aging_interval,
             context_switch_cost=context_switch_cost,
+            mlfq_quantums=queue_quantums,
+            mlfq_boost_interval=mlfq_boost_interval,
             workload_label=scenario["name"],
             workload_source=scenario["workload_source"],
             preset=scenario.get("preset"),
@@ -915,6 +1110,8 @@ def benchmark_algorithm_family(
         "quantum": quantum,
         "aging_interval": aging_interval,
         "context_switch_cost": context_switch_cost,
+        "mlfq_quantums": queue_quantums,
+        "mlfq_boost_interval": mlfq_boost_interval,
     }
 
 
@@ -924,14 +1121,25 @@ def format_report(
     quantum: Optional[int] = None,
     aging_interval: int = 0,
     context_switch_cost: int = 0,
+    mlfq_quantums: Optional[Sequence[int]] = None,
+    mlfq_boost_interval: int = DEFAULT_MLFQ_BOOST_INTERVAL,
 ) -> str:
     effective_context_switch_cost = context_switch_cost or result.get("context_switch_cost", 0)
+    effective_mlfq_quantums = result.get("mlfq_quantums") or mlfq_quantums or DEFAULT_MLFQ_QUANTUMS
+    effective_mlfq_boost_interval = (
+        result.get("mlfq_boost_interval")
+        if result.get("mlfq_boost_interval") is not None
+        else mlfq_boost_interval
+    )
     header = f"Algorithm: {algorithm.upper()}"
     modifiers = []
     if algorithm == "rr" and quantum is not None:
         modifiers.append(f"quantum={quantum}")
     if algorithm == "priority" and aging_interval > 0:
         modifiers.append(f"aging_interval={aging_interval}")
+    if algorithm == "mlfq":
+        modifiers.append(f"quantums={format_mlfq_quantums(effective_mlfq_quantums)}")
+        modifiers.append(f"boost_interval={format_mlfq_boost_interval(effective_mlfq_boost_interval)}")
     if effective_context_switch_cost > 0:
         modifiers.append(f"context_switch_cost={effective_context_switch_cost}")
     if modifiers:
@@ -966,8 +1174,17 @@ def format_report(
     )
 
 
+def comparison_includes_mlfq(comparison: Dict) -> bool:
+    return any(entry["algorithm"] == "mlfq" for entry in comparison["algorithms"])
+
+
+def benchmark_includes_mlfq(benchmark: Dict) -> bool:
+    return any(entry["algorithm"] == "mlfq" for entry in benchmark["algorithms"])
+
+
 def format_compare_markdown(comparison: Dict) -> str:
     lines = [f"# CPU Scheduler Comparison — {comparison['workload_label']}", ""]
+    includes_mlfq = comparison_includes_mlfq(comparison)
     if comparison.get("preset"):
         lines.append(
             f"- preset: `{comparison['preset']}` — {WORKLOAD_PRESETS[comparison['preset']]['description']}"
@@ -986,6 +1203,9 @@ def format_compare_markdown(comparison: Dict) -> str:
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
+    if includes_mlfq:
+        lines.insert(-3, f"- mlfq quantums: {format_mlfq_quantums(comparison['mlfq_quantums'])}")
+        lines.insert(-3, f"- mlfq boost interval: {format_mlfq_boost_interval(comparison['mlfq_boost_interval'])}")
     for entry in comparison["algorithms"]:
         summary = entry["summary"]
         lines.append(
@@ -1024,7 +1244,10 @@ def format_compare_markdown(comparison: Dict) -> str:
             )
 
     def describe(metric: str, label: str) -> str:
-        return f"- {label}: {', '.join(format_algorithm_label(name, comparison['quantum'], comparison['aging_interval']) for name in comparison['winners'][metric])}"
+        return (
+            f"- {label}: "
+            f"{', '.join(format_algorithm_label(name, comparison['quantum'], comparison['aging_interval'], comparison['mlfq_quantums'], comparison['mlfq_boost_interval']) for name in comparison['winners'][metric])}"
+        )
 
     lines.extend(
         [
@@ -1047,6 +1270,7 @@ def format_compare_markdown(comparison: Dict) -> str:
 
 
 def format_compare_html(comparison: Dict) -> str:
+    includes_mlfq = comparison_includes_mlfq(comparison)
     rows = []
     for entry in comparison["algorithms"]:
         summary = entry["summary"]
@@ -1119,7 +1343,13 @@ def format_compare_html(comparison: Dict) -> str:
     }
     for key, title in labels.items():
         winners = ", ".join(
-            format_algorithm_label(name, comparison["quantum"], comparison["aging_interval"])
+            format_algorithm_label(
+                name,
+                comparison["quantum"],
+                comparison["aging_interval"],
+                comparison["mlfq_quantums"],
+                comparison["mlfq_boost_interval"],
+            )
             for name in comparison["winners"][key]
         )
         cards.append(
@@ -1147,6 +1377,15 @@ def format_compare_html(comparison: Dict) -> str:
             f"<li><strong>Context-switch cost:</strong> {comparison['context_switch_cost']}</li>",
         ]
     )
+    if includes_mlfq:
+        metadata.insert(
+            len(metadata) - 1,
+            f"<li><strong>MLFQ quantums:</strong> {html.escape(format_mlfq_quantums(comparison['mlfq_quantums']))}</li>",
+        )
+        metadata.insert(
+            len(metadata) - 1,
+            f"<li><strong>MLFQ boost interval:</strong> {html.escape(format_mlfq_boost_interval(comparison['mlfq_boost_interval']))}</li>",
+        )
 
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -1261,6 +1500,7 @@ def format_compare_html(comparison: Dict) -> str:
 
 def format_compare_svg(comparison: Dict) -> str:
     entries = comparison["algorithms"]
+    includes_mlfq = comparison_includes_mlfq(comparison)
     process_ids = sorted(
         {row["pid"] for entry in entries for row in entry["experience"]}
     )
@@ -1356,6 +1596,9 @@ def format_compare_svg(comparison: Dict) -> str:
         f"aging={comparison['aging_interval']}",
         f"context_switch_cost={comparison['context_switch_cost']}",
     ]
+    if includes_mlfq:
+        subtitle.insert(3, f"mlfq_q={format_mlfq_quantums(comparison['mlfq_quantums'])}")
+        subtitle.insert(4, f"mlfq_boost={format_mlfq_boost_interval(comparison['mlfq_boost_interval'])}")
     if comparison.get("preset"):
         subtitle.insert(1, f"preset={comparison['preset']}")
 
@@ -1374,6 +1617,7 @@ def format_compare_svg(comparison: Dict) -> str:
 
 def format_benchmark_markdown(benchmark: Dict) -> str:
     lines = [f"# CPU Scheduler Benchmark Pack — {benchmark['family']}", ""]
+    includes_mlfq = benchmark_includes_mlfq(benchmark)
     lines.extend(
         [
             f"- family: `{benchmark['family']}` — {benchmark['family_description']}",
@@ -1388,6 +1632,9 @@ def format_benchmark_markdown(benchmark: Dict) -> str:
             "| --- | --- | ---: | --- | --- |",
         ]
     )
+    if includes_mlfq:
+        lines.insert(-4, f"- mlfq quantums: {format_mlfq_quantums(benchmark['mlfq_quantums'])}")
+        lines.insert(-4, f"- mlfq boost interval: {format_mlfq_boost_interval(benchmark['mlfq_boost_interval'])}")
     for scenario in benchmark["scenarios"]:
         lines.append(
             f"| {scenario['name']} | {scenario['kind']} | {scenario['process_count']} | {scenario['description']} | {scenario['workload_source']} |"
@@ -1434,7 +1681,13 @@ def format_benchmark_markdown(benchmark: Dict) -> str:
 
         def labels_for(metric: str) -> str:
             return ", ".join(
-                format_algorithm_label(name, benchmark["quantum"], benchmark["aging_interval"])
+                format_algorithm_label(
+                    name,
+                    benchmark["quantum"],
+                    benchmark["aging_interval"],
+                    benchmark["mlfq_quantums"],
+                    benchmark["mlfq_boost_interval"],
+                )
                 for name in comparison["winners"][metric]
             )
 
@@ -1446,6 +1699,7 @@ def format_benchmark_markdown(benchmark: Dict) -> str:
 
 
 def format_benchmark_html(benchmark: Dict) -> str:
+    includes_mlfq = benchmark_includes_mlfq(benchmark)
     roster_rows = []
     for scenario in benchmark["scenarios"]:
         roster_rows.append(
@@ -1501,7 +1755,13 @@ def format_benchmark_html(benchmark: Dict) -> str:
 
         def labels_for(metric: str) -> str:
             return ", ".join(
-                format_algorithm_label(name, benchmark["quantum"], benchmark["aging_interval"])
+                format_algorithm_label(
+                    name,
+                    benchmark["quantum"],
+                    benchmark["aging_interval"],
+                    benchmark["mlfq_quantums"],
+                    benchmark["mlfq_boost_interval"],
+                )
                 for name in comparison["winners"][metric]
             )
 
@@ -1514,6 +1774,15 @@ def format_benchmark_html(benchmark: Dict) -> str:
             f"<td>{html.escape(labels_for('throughput'))}</td>"
             "</tr>"
         )
+
+    run_settings = [
+        f"q={benchmark['quantum']}",
+        f"aging={benchmark['aging_interval']}",
+        f"switch cost={benchmark['context_switch_cost']}",
+    ]
+    if includes_mlfq:
+        run_settings.insert(2, f"mlfq q={format_mlfq_quantums(benchmark['mlfq_quantums'])}")
+        run_settings.insert(3, f"mlfq boost={format_mlfq_boost_interval(benchmark['mlfq_boost_interval'])}")
 
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -1564,7 +1833,7 @@ def format_benchmark_html(benchmark: Dict) -> str:
     <div class=\"card\"><h3>Family</h3><p>{html.escape(benchmark['family_description'])}</p></div>
     <div class=\"card\"><h3>Scenarios</h3><p>{benchmark['scenario_count']}</p></div>
     <div class=\"card\"><h3>Algorithms</h3><p>{html.escape(', '.join(entry['label'] for entry in benchmark['algorithms']))}</p></div>
-    <div class=\"card\"><h3>Run settings</h3><p>q={benchmark['quantum']}, aging={benchmark['aging_interval']}, switch cost={benchmark['context_switch_cost']}</p></div>
+    <div class=\"card\"><h3>Run settings</h3><p>{html.escape(', '.join(run_settings))}</p></div>
   </div>
 
   <h2>Scenario roster</h2>
@@ -1640,6 +1909,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="priority boost interval for priority scheduling (0 disables aging)",
     )
     parser.add_argument(
+        "--mlfq-quantums",
+        type=parse_mlfq_quantums,
+        default=list(DEFAULT_MLFQ_QUANTUMS),
+        help="comma-separated per-queue time quanta for MLFQ, from highest to lowest priority (default: 2,4,8)",
+    )
+    parser.add_argument(
+        "--mlfq-boost-interval",
+        type=int,
+        default=DEFAULT_MLFQ_BOOST_INTERVAL,
+        help="global priority-boost interval for MLFQ (0 disables boosts)",
+    )
+    parser.add_argument(
         "--context-switch-cost",
         type=int,
         default=0,
@@ -1693,6 +1974,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             quantum=args.quantum,
             aging_interval=args.aging_interval,
             context_switch_cost=args.context_switch_cost,
+            mlfq_quantums=args.mlfq_quantums,
+            mlfq_boost_interval=args.mlfq_boost_interval,
         )
         if args.output_dir:
             write_benchmark_bundle(args.output_dir, benchmark)
@@ -1725,6 +2008,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             quantum=args.quantum,
             aging_interval=args.aging_interval,
             context_switch_cost=args.context_switch_cost,
+            mlfq_quantums=args.mlfq_quantums,
+            mlfq_boost_interval=args.mlfq_boost_interval,
             workload_label=workload_label,
             workload_source=workload_source,
             preset=preset_name,
@@ -1752,6 +2037,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         quantum=args.quantum,
         aging_interval=args.aging_interval,
         context_switch_cost=args.context_switch_cost,
+        mlfq_quantums=args.mlfq_quantums,
+        mlfq_boost_interval=args.mlfq_boost_interval,
     )
     if args.markdown_out:
         write_text(
@@ -1762,6 +2049,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.quantum if args.command == "rr" else None,
                 aging_interval=args.aging_interval,
                 context_switch_cost=args.context_switch_cost,
+                mlfq_quantums=args.mlfq_quantums,
+                mlfq_boost_interval=args.mlfq_boost_interval,
             ),
         )
     if args.json_out:
@@ -1776,6 +2065,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.quantum if args.command == "rr" else None,
                 aging_interval=args.aging_interval,
                 context_switch_cost=args.context_switch_cost,
+                mlfq_quantums=args.mlfq_quantums,
+                mlfq_boost_interval=args.mlfq_boost_interval,
             )
         )
     return 0

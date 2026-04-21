@@ -2,10 +2,12 @@
 
 - family: `portfolio-batch` — classic preset stories plus deterministic generated workload families for broader scheduler comparisons
 - scenarios: 6
-- algorithms: FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2)
+- algorithms: FCFS, SJF, SRTF, PRIORITY (aging=2), RR (q=2), MLFQ (q=2/4/8, boost=12)
 - round-robin quantum: 2
 - priority aging interval: 2
 - context-switch cost: 1
+- mlfq quantums: 2/4/8
+- mlfq boost interval: 12
 
 ## Scenario roster
 | Scenario | Kind | Processes | Description | Source |
@@ -21,26 +23,28 @@
 | Algorithm | Avg turnaround | Avg waiting | Avg response | Avg slowdown | Slowdown stddev | Avg overhead % | Avg throughput | Max wait seen | Max slowdown seen | Score points |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | FCFS | 12.38 | 9.1 | 9.1 | 6.61 | 4.17 | 20.72 | 0.2563 | 23 | 19.0 | 5.5 |
-| SJF | 9.81 | 6.52 | 6.52 | 4.21 | 2.26 | 20.72 | 0.2563 | 22 | 11.0 | 16.5 |
-| SRTF | 9.22 | 5.93 | 4.86 | 3.07 | 1.4 | 24.74 | 0.2417 | 23 | 7.0 | 19.5 |
+| SJF | 9.81 | 6.52 | 6.52 | 4.21 | 2.26 | 20.72 | 0.2563 | 22 | 11.0 | 16.0 |
+| SRTF | 9.22 | 5.93 | 4.86 | 3.07 | 1.4 | 24.74 | 0.2417 | 23 | 7.0 | 15.0 |
 | PRIORITY (aging=2) | 11.11 | 7.83 | 7.83 | 5.57 | 3.43 | 20.72 | 0.2563 | 23 | 14.0 | 5.5 |
-| RR (q=2) | 14.66 | 11.38 | 5.31 | 5.52 | 2.73 | 32.12 | 0.2223 | 33 | 13.0 | 1.0 |
+| RR (q=2) | 14.66 | 11.38 | 5.31 | 5.52 | 2.73 | 32.12 | 0.2223 | 33 | 13.0 | 0.0 |
+| MLFQ (q=2/4/8, boost=12) | 13.68 | 10.4 | 3.69 | 4.58 | 1.66 | 30.12 | 0.2295 | 33 | 10.0 | 6.0 |
 
 ## Win counts
 | Algorithm | Turnaround wins | Waiting wins | Response wins | Slowdown wins | Even-slowdown wins | Throughput wins | Overhead wins | Completion wins | Total wins |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | FCFS | 0 | 0 | 0 | 0 | 0 | 6 | 6 | 6 | 18 |
-| SJF | 4 | 4 | 2 | 3 | 3 | 6 | 6 | 6 | 34 |
-| SRTF | 4 | 4 | 5 | 5 | 5 | 2 | 2 | 2 | 29 |
+| SJF | 4 | 4 | 1 | 3 | 3 | 6 | 6 | 6 | 33 |
+| SRTF | 4 | 4 | 3 | 4 | 3 | 2 | 2 | 2 | 24 |
 | PRIORITY (aging=2) | 0 | 0 | 0 | 0 | 0 | 6 | 6 | 6 | 18 |
-| RR (q=2) | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
+| RR (q=2) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| MLFQ (q=2/4/8, boost=12) | 0 | 0 | 3 | 1 | 2 | 0 | 0 | 0 | 6 |
 
 ## Scenario highlights
 | Scenario | Best response | Best waiting | Best fairness | Best throughput |
 | --- | --- | --- | --- | --- |
 | convoy-mix | SRTF | SRTF | SRTF | FCFS, SJF, PRIORITY (aging=2) |
-| interactive-bursts | SRTF | SJF | SRTF | FCFS, SJF, PRIORITY (aging=2) |
-| aging-pressure | SRTF | SRTF | SRTF | FCFS, SJF, PRIORITY (aging=2) |
-| balanced-seed-17 | RR (q=2) | SJF | SJF | FCFS, SJF, PRIORITY (aging=2) |
-| convoy-spike-seed-23 | SJF, SRTF | SJF, SRTF | SJF, SRTF | FCFS, SJF, SRTF, PRIORITY (aging=2) |
+| interactive-bursts | MLFQ (q=2/4/8, boost=12) | SJF | MLFQ (q=2/4/8, boost=12) | FCFS, SJF, PRIORITY (aging=2) |
+| aging-pressure | SRTF | SRTF | MLFQ (q=2/4/8, boost=12) | FCFS, SJF, PRIORITY (aging=2) |
+| balanced-seed-17 | MLFQ (q=2/4/8, boost=12) | SJF | SJF | FCFS, SJF, PRIORITY (aging=2) |
+| convoy-spike-seed-23 | MLFQ (q=2/4/8, boost=12) | SJF, SRTF | SJF, SRTF | FCFS, SJF, SRTF, PRIORITY (aging=2) |
 | latency-burst-seed-31 | SJF, SRTF | SJF, SRTF | SJF, SRTF | FCFS, SJF, SRTF, PRIORITY (aging=2) |
