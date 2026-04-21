@@ -16,7 +16,7 @@ A portfolio-friendly Python project that implements a Robin Hood hash table with
 - benchmark mode for comparing Robin Hood hashing against a linear-probing baseline across load factors and workload shapes
 - optional fill-only and delete-heavy workloads so post-removal clustering/backward-shift behavior is visible in the exported metrics
 - benchmark output now includes unsuccessful-lookup probe metrics plus failed-search histograms, so misses are part of the same interview story as successful lookups and resident probe distances
-- optional Markdown and self-contained HTML benchmark artifacts with probe-distance and unsuccessful-lookup histograms for portfolio-ready writeups
+- optional Markdown, self-contained HTML, and slide-ready PNG benchmark artifacts with probe-distance and unsuccessful-lookup histograms for portfolio-ready writeups
 - committed sample artifacts under `docs/artifacts/robin-hood-hashing-lab/`
 - regression tests covering swaps, deletions, snapshots, CLI flows, and comparison/report generation
 
@@ -78,10 +78,13 @@ python3 robin_hood_hashing_lab.py benchmark \
   --delete-fraction 0.3 \
   --markdown-out artifacts/robin-hood-benchmark-report.md \
   --html-out artifacts/robin-hood-benchmark-dashboard.html \
+  --png-out artifacts/robin-hood-benchmark-dashboard.png \
   --output artifacts/robin-hood-benchmark.json
 ```
 
 Requested load factors are rounded to whole entry counts for the chosen capacity, so the reports show both the requested target and the effective post-workload load factor.
+
+`--png-out` captures a Chrome/Chromium headless screenshot from a compact screenshot mode of the generated HTML dashboard, hiding lower-priority sections so the exported image stays slide-friendly. Pair it with `--html-out` and optionally pass `--chrome-binary` when the browser is not already on `PATH`.
 
 ## Sample committed artifacts
 - `docs/artifacts/robin-hood-hashing-lab/sample-table.json`
@@ -90,6 +93,7 @@ Requested load factors are rounded to whole entry counts for the chosen capacity
 - `docs/artifacts/robin-hood-hashing-lab/sample-benchmark.json`
 - `docs/artifacts/robin-hood-hashing-lab/sample-benchmark-report.md`
 - `docs/artifacts/robin-hood-hashing-lab/sample-benchmark-dashboard.html`
+- `docs/artifacts/robin-hood-hashing-lab/sample-benchmark-dashboard.png`
 
 ## Test
 
@@ -99,5 +103,4 @@ python3 -m unittest tests.test_robin_hood_hashing_lab -v
 
 ## Future improvements
 - support string and integer key generators for more workload shapes
-- add a compact PNG export path for the benchmark dashboard so portfolio screenshots can be regenerated automatically
 - add side-by-side lookup percentile callouts so the report can compare hit and miss tails without reading the full histograms

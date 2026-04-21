@@ -5,7 +5,10 @@ import csv
 import hashlib
 import json
 import random
+import shutil
 import statistics
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -1248,6 +1251,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
     results = summary["results"]
     comparisons = summary["comparisons"]
     results_by_key = _result_lookup(summary)
+    max_requested_load_factor = max(summary["load_factors"], default=0.0)
     max_lookup = max((row["average_successful_lookup_probes"] for row in results), default=1.0)
     max_miss_lookup = max((row["average_unsuccessful_lookup_probes"] for row in results), default=1.0)
     max_stddev = max((row["probe_distance_stddev"] for row in results), default=1.0)
@@ -1399,7 +1403,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 </tr>'''
                 )
             histogram_sections.append(
-                f'''<section class="panel histogram-panel">
+                f'''<section class="panel histogram-panel metric-probe-distance workload-{escape(workload)} {'highlight-panel' if load_factor == max_requested_load_factor else 'secondary-panel'}">
   <h2>Probe-distance histogram · {escape(workload_label(workload, delete_fraction=summary['delete_fraction']))} · requested load factor {escape(_format_number(load_factor))}</h2>
   <p>{present_rows[0]['entry_count']} starting entries per trial; {present_rows[0]['remaining_entry_count']} remain after the workload across {present_rows[0]['trial_count']} deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
@@ -1468,7 +1472,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 </tr>'''
                 )
             unsuccessful_lookup_sections.append(
-                f'''<section class="panel histogram-panel">
+                f'''<section class="panel histogram-panel metric-unsuccessful-lookup workload-{escape(workload)} {'highlight-panel' if load_factor == max_requested_load_factor else 'secondary-panel'}">
   <h2>Unsuccessful-lookup histogram · {escape(workload_label(workload, delete_fraction=summary['delete_fraction']))} · requested load factor {escape(_format_number(load_factor))}</h2>
   <p>{samples_per_trial} deterministic missing-key lookup(s) per trial were issued after the workload; {present_rows[0]['remaining_entry_count']} resident entries remained across {present_rows[0]['trial_count']} deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
   <table>
@@ -1614,7 +1618,7 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
       <p>Aggregated miss histograms keep the report screenshot-friendly while showing how far each strategy must walk when a key is absent after fill-only and delete-heavy runs.</p>
       {unsuccessful_lookup_sections_html}
     </section>
-    <section>
+    <section class="detail-section">
       <h2>Per-slice detail cards</h2>
       <div class="grid detail-grid">
         {detail_cards_html}
@@ -1624,6 +1628,131 @@ def render_benchmark_html(summary: dict[str, Any]) -> str:
 </body>
 </html>
 '''
+
+
+def resolve_chrome_binary(preferred: str | Path | None = None) -> str:
+    candidates: list[str] = []
+    if preferred is not None:
+        candidates.append(str(preferred))
+    candidates.extend(["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"])
+    for candidate in candidates:
+        candidate_path = Path(candidate).expanduser()
+        if candidate_path.is_absolute() and candidate_path.exists():
+            return str(candidate_path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise RuntimeError(
+        "Could not find a Chrome/Chromium binary for PNG capture. Pass --chrome-binary or install google-chrome/chromium."
+    )
+
+
+def default_benchmark_png_height(summary: dict[str, Any], width: int) -> int:
+    normalized_width = max(720, width)
+    comparison_count = len(summary["comparisons"])
+    result_count = len(summary["results"])
+    histogram_count = len(summary["workloads"]) * 2
+    if normalized_width >= 1280:
+        aggregate_row_height = 62
+    elif normalized_width >= 900:
+        aggregate_row_height = 68
+    else:
+        aggregate_row_height = 74
+    estimated_height = (
+        1600
+        + max(1, comparison_count) * 68
+        + max(1, result_count) * aggregate_row_height
+        + histogram_count * 320
+    )
+    return max(2200, min(estimated_height, 5200))
+
+
+def build_benchmark_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    resolved_html = Path(html_output_path).resolve()
+    resolved_png = Path(png_output_path).resolve()
+    return [
+        resolve_chrome_binary(chrome_binary),
+        "--headless",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        f"--window-size={width},{height}",
+        f"--virtual-time-budget={capture_ms}",
+        f"--screenshot={resolved_png}",
+        resolved_html.as_uri(),
+    ]
+
+
+def render_benchmark_png(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    summary: dict[str, Any],
+    *,
+    width: int = 1440,
+    height: int | None = None,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> Path:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        raise RuntimeError(f"HTML dashboard not found for PNG capture: {html_path}")
+    png_path = Path(png_output_path)
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    html_text = html_path.read_text(encoding="utf-8")
+    compact_rules = [
+        ".secondary-panel { display: none !important; }",
+        ".detail-section { display: none !important; }",
+    ]
+    if "delete-heavy" in summary["workloads"]:
+        compact_rules.append(".workload-fill-only { display: none !important; }")
+    compact_css = """
+body { font-size: 14px; line-height: 1.35; }
+main { max-width: 1360px; padding: 1.5rem 1rem 1.75rem; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.15rem; }
+p { margin: 0 0 0.7rem; }
+.summary-grid { margin: 1rem 0; }
+.summary-card { padding: 0.8rem 0.9rem; }
+.panel { padding: 0.8rem 0.9rem; margin: 0.8rem 0; }
+th, td { padding: 0.45rem 0.4rem; }
+caption { margin-bottom: 0.45rem; }
+.histogram-panel td { min-width: 150px; }
+""".strip()
+    compact_css = "\n".join(compact_rules + [compact_css])
+    if "</style>" in html_text:
+        html_text = html_text.replace("</style>", f"\n{compact_css}\n</style>", 1)
+    else:
+        html_text = html_text.replace("</head>", f"<style>{compact_css}</style>\n</head>", 1)
+    with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as handle:
+        handle.write(html_text)
+        capture_html_path = Path(handle.name)
+    effective_width = max(720, width)
+    effective_height = height if height is not None else default_benchmark_png_height(summary, effective_width)
+    try:
+        command = build_benchmark_png_command(
+            capture_html_path,
+            png_path,
+            width=effective_width,
+            height=max(900, effective_height),
+            capture_ms=max(0, capture_ms),
+            chrome_binary=chrome_binary,
+        )
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    finally:
+        capture_html_path.unlink(missing_ok=True)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown Chrome headless error"
+        raise RuntimeError(f"PNG capture failed: {detail}")
+    if not png_path.exists():
+        raise RuntimeError(f"PNG capture did not create the expected output file: {png_path}")
+    return png_path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1665,6 +1794,11 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--delete-fraction", type=float, default=0.3)
     benchmark_parser.add_argument("--markdown-out", type=Path, help="optional Markdown benchmark summary output")
     benchmark_parser.add_argument("--html-out", type=Path, help="optional self-contained HTML benchmark dashboard")
+    benchmark_parser.add_argument("--png-out", type=Path, help="optional PNG screenshot captured from the HTML dashboard")
+    benchmark_parser.add_argument("--png-width", type=int, default=1440, help="viewport width in pixels for PNG capture")
+    benchmark_parser.add_argument("--png-height", type=int, help="optional viewport height override for PNG capture")
+    benchmark_parser.add_argument("--png-capture-ms", type=int, default=1500, help="virtual time budget in milliseconds before capturing the PNG screenshot")
+    benchmark_parser.add_argument("--chrome-binary", type=Path, help="optional Chrome/Chromium binary for PNG capture")
     benchmark_parser.add_argument("--title", help="optional benchmark title override")
     benchmark_parser.add_argument("--output", required=True, type=Path)
 
@@ -1715,6 +1849,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "benchmark":
+            if args.png_out is not None and args.html_out is None:
+                parser.error("--png-out requires --html-out because the PNG is captured from the generated HTML dashboard")
             strategies = parse_strategies(args.strategies)
             workloads = parse_workloads(args.workloads)
             rows = run_benchmark(
@@ -1742,6 +1878,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.html_out:
                 args.html_out.parent.mkdir(parents=True, exist_ok=True)
                 args.html_out.write_text(render_benchmark_html(summary), encoding="utf-8")
+            if args.png_out:
+                render_benchmark_png(
+                    args.html_out,
+                    args.png_out,
+                    summary,
+                    width=args.png_width,
+                    height=args.png_height,
+                    capture_ms=args.png_capture_ms,
+                    chrome_binary=args.chrome_binary,
+                )
             return 0
     except (InputDataError, SnapshotError, RuntimeError, ValueError) as exc:
         parser.error(str(exc))

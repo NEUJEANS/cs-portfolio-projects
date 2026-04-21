@@ -59,15 +59,15 @@
     <section class="grid summary-grid">
       <article class="summary-card">
   <h2>Capacity</h2>
-  <strong>31</strong>
+  <strong>127</strong>
   <p>slots in each deterministic run</p>
 </article><article class="summary-card">
   <h2>Trials</h2>
-  <strong>3</strong>
+  <strong>5</strong>
   <p>repeated runs per workload/load factor</p>
 </article><article class="summary-card">
   <h2>Load factors</h2>
-  <strong>0.25, 0.5, 0.75</strong>
+  <strong>0.25, 0.5, 0.7, 0.85</strong>
   <p>starting fill levels</p>
 </article><article class="summary-card">
   <h2>Workloads</h2>
@@ -104,81 +104,107 @@
       <tr>
   <th scope="row">Fill-only</th>
   <td>0.25</td>
-  <td>0.2581</td>
-  <td>8</td>
+  <td>0.252</td>
+  <td>32</td>
   <td>Tie</td>
   <td>0</td>
-  <td>Linear probing</td>
-  <td>-0.1667</td>
-  <td>Tie</td>
-  <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>0.0812</td>
+  <td>Robin Hood hashing</td>
+  <td>0.0927</td>
   <td>—</td>
   <td>—</td>
 </tr><tr>
   <th scope="row">Fill-only</th>
   <td>0.5</td>
-  <td>0.5161</td>
-  <td>16</td>
+  <td>0.5039</td>
+  <td>64</td>
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
-  <td>0.4584</td>
+  <td>0.7719</td>
   <td>Robin Hood hashing</td>
-  <td>0.0922</td>
+  <td>0.3354</td>
   <td>—</td>
   <td>—</td>
 </tr><tr>
   <th scope="row">Fill-only</th>
-  <td>0.75</td>
-  <td>0.7419</td>
-  <td>23</td>
+  <td>0.7</td>
+  <td>0.7008</td>
+  <td>89</td>
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
-  <td>1.6377</td>
+  <td>2.4449</td>
   <td>Robin Hood hashing</td>
-  <td>0.5469</td>
+  <td>1.078</td>
+  <td>—</td>
+  <td>—</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.85</td>
+  <td>0.8504</td>
+  <td>108</td>
+  <td>Tie</td>
+  <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>10.3203</td>
+  <td>Robin Hood hashing</td>
+  <td>4.3104</td>
   <td>—</td>
   <td>—</td>
 </tr><tr>
   <th scope="row">Delete-heavy (30.0% removals)</th>
   <td>0.25</td>
-  <td>0.1935</td>
-  <td>6</td>
+  <td>0.1732</td>
+  <td>22</td>
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
-  <td>0.2222</td>
-  <td>Tie</td>
-  <td>0</td>
-  <td>Tie</td>
-  <td>0</td>
+  <td>0.091</td>
+  <td>Robin Hood hashing</td>
+  <td>0.0262</td>
+  <td>Linear probing</td>
+  <td>-0.06</td>
 </tr><tr>
   <th scope="row">Delete-heavy (30.0% removals)</th>
   <td>0.5</td>
-  <td>0.3548</td>
-  <td>11</td>
+  <td>0.3543</td>
+  <td>45</td>
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
-  <td>0.1516</td>
+  <td>0.3155</td>
   <td>Robin Hood hashing</td>
-  <td>0.0719</td>
-  <td>Tie</td>
-  <td>0</td>
+  <td>0.0864</td>
+  <td>Robin Hood hashing</td>
+  <td>0.0527</td>
 </tr><tr>
   <th scope="row">Delete-heavy (30.0% removals)</th>
-  <td>0.75</td>
-  <td>0.5161</td>
-  <td>16</td>
+  <td>0.7</td>
+  <td>0.4882</td>
+  <td>62</td>
   <td>Tie</td>
   <td>0</td>
   <td>Robin Hood hashing</td>
-  <td>0.5834</td>
+  <td>0.8259</td>
   <td>Robin Hood hashing</td>
-  <td>0.1413</td>
+  <td>0.3074</td>
+  <td>Linear probing</td>
+  <td>-0.1037</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.85</td>
+  <td>0.5984</td>
+  <td>76</td>
   <td>Tie</td>
   <td>0</td>
+  <td>Robin Hood hashing</td>
+  <td>1.2079</td>
+  <td>Robin Hood hashing</td>
+  <td>0.5856</td>
+  <td>Robin Hood hashing</td>
+  <td>0.7125</td>
 </tr>
     </tbody>
   </table>
@@ -208,314 +234,418 @@
           <tr>
   <th scope="row">Fill-only</th>
   <td>0.25</td>
-  <td>0.2581</td>
+  <td>0.252</td>
   <td>Robin Hood hashing</td>
   <td>0</td>
   <td>
-    <strong>1.125</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:59.3%;background:#7c3aed;"></span></div>
+    <strong>1.1938</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:36.0%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>1.375</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:34.1%;background:#0f766e;"></span></div>
+    <strong>1.325</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:9.4%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.3307</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:20.7%;background:#0891b2;"></span></div>
+    <strong>0.4257</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:6.4%;background:#0891b2;"></span></div>
   </td>
   <td>
     <strong>5</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:35.7%;background:#ea580c;"></span></div>
+    <div class="metric-bar" aria-hidden="true"><span style="width:6.9%;background:#ea580c;"></span></div>
   </td>
-  <td>1.125</td>
+  <td>1.1938</td>
   <td>0</td>
+  <td>2</td>
   <td>1</td>
-  <td>0</td>
 </tr><tr>
   <th scope="row">Fill-only</th>
   <td>0.25</td>
-  <td>0.2581</td>
+  <td>0.252</td>
   <td>Linear probing</td>
   <td>0</td>
   <td>
-    <strong>1.125</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:59.3%;background:#7c3aed;"></span></div>
+    <strong>1.1938</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:36.0%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>1.2083</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:30.0%;background:#0f766e;"></span></div>
+    <strong>1.4062</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:10.0%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.3307</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:20.7%;background:#0891b2;"></span></div>
+    <strong>0.5184</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:7.8%;background:#0891b2;"></span></div>
   </td>
   <td>
     <strong>5</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:35.7%;background:#ea580c;"></span></div>
+    <div class="metric-bar" aria-hidden="true"><span style="width:6.9%;background:#ea580c;"></span></div>
   </td>
-  <td>1.125</td>
+  <td>1.1938</td>
   <td>0</td>
-  <td>1</td>
+  <td>3</td>
   <td>0</td>
 </tr><tr>
   <th scope="row">Fill-only</th>
   <td>0.5</td>
-  <td>0.5161</td>
+  <td>0.5039</td>
   <td>Robin Hood hashing</td>
   <td>0</td>
   <td>
-    <strong>1.2083</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:63.6%;background:#7c3aed;"></span></div>
+    <strong>1.5469</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:46.7%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>1.7708</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:44.0%;background:#0f766e;"></span></div>
+    <strong>1.7906</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:12.8%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.4061</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:25.4%;background:#0891b2;"></span></div>
+    <strong>0.8202</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:12.4%;background:#0891b2;"></span></div>
   </td>
   <td>
-    <strong>7</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:50.0%;background:#ea580c;"></span></div>
+    <strong>11</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:15.3%;background:#ea580c;"></span></div>
   </td>
-  <td>1.2083</td>
+  <td>1.5469</td>
   <td>0</td>
-  <td>1</td>
-  <td>0.6667</td>
+  <td>4</td>
+  <td>9</td>
 </tr><tr>
   <th scope="row">Fill-only</th>
   <td>0.5</td>
-  <td>0.5161</td>
+  <td>0.5039</td>
   <td>Linear probing</td>
   <td>0</td>
   <td>
-    <strong>1.2083</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:63.6%;background:#7c3aed;"></span></div>
+    <strong>1.5469</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:46.7%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>2.2292</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:55.3%;background:#0f766e;"></span></div>
+    <strong>2.5625</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:18.3%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.4983</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:31.2%;background:#0891b2;"></span></div>
+    <strong>1.1556</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:17.4%;background:#0891b2;"></span></div>
   </td>
   <td>
-    <strong>7</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:50.0%;background:#ea580c;"></span></div>
+    <strong>11</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:15.3%;background:#ea580c;"></span></div>
   </td>
-  <td>1.2083</td>
+  <td>1.5469</td>
   <td>0</td>
-  <td>2</td>
+  <td>9</td>
   <td>0</td>
 </tr><tr>
   <th scope="row">Fill-only</th>
-  <td>0.75</td>
-  <td>0.7419</td>
+  <td>0.7</td>
+  <td>0.7008</td>
   <td>Robin Hood hashing</td>
   <td>0</td>
   <td>
-    <strong>1.8986</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#7c3aed;"></span></div>
+    <strong>1.9326</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:58.3%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>2.3913</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:59.4%;background:#0f766e;"></span></div>
+    <strong>2.3596</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:16.8%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>1.0515</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:65.8%;background:#0891b2;"></span></div>
+    <strong>1.1475</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:17.3%;background:#0891b2;"></span></div>
   </td>
   <td>
-    <strong>14</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#ea580c;"></span></div>
+    <strong>24</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:33.3%;background:#ea580c;"></span></div>
   </td>
-  <td>1.8986</td>
+  <td>1.9326</td>
   <td>0</td>
   <td>5</td>
-  <td>6.6667</td>
+  <td>35.6</td>
 </tr><tr>
   <th scope="row">Fill-only</th>
-  <td>0.75</td>
-  <td>0.7419</td>
+  <td>0.7</td>
+  <td>0.7008</td>
   <td>Linear probing</td>
   <td>0</td>
   <td>
-    <strong>1.8986</strong>
+    <strong>1.9326</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:58.3%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>4.8045</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:34.2%;background:#0f766e;"></span></div>
+  </td>
+  <td>
+    <strong>2.2255</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:33.6%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>24</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:33.3%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.9326</td>
+  <td>0</td>
+  <td>17</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.85</td>
+  <td>0.8504</td>
+  <td>Robin Hood hashing</td>
+  <td>0</td>
+  <td>
+    <strong>3.3148</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>4.029</strong>
+    <strong>3.7167</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:26.5%;background:#0f766e;"></span></div>
+  </td>
+  <td>
+    <strong>2.3176</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:35.0%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>72</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#ea580c;"></span></div>
+  </td>
+  <td>3.3148</td>
+  <td>0</td>
+  <td>11</td>
+  <td>127.8</td>
+</tr><tr>
+  <th scope="row">Fill-only</th>
+  <td>0.85</td>
+  <td>0.8504</td>
+  <td>Linear probing</td>
+  <td>0</td>
+  <td>
+    <strong>3.3148</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>14.037</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>1.5984</strong>
+    <strong>6.628</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0891b2;"></span></div>
   </td>
   <td>
-    <strong>14</strong>
+    <strong>72</strong>
     <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#ea580c;"></span></div>
   </td>
-  <td>1.8986</td>
+  <td>3.3148</td>
   <td>0</td>
-  <td>7</td>
-  <td>0</td>
-</tr><tr>
-  <th scope="row">Delete-heavy (30.0% removals)</th>
-  <td>0.25</td>
-  <td>0.1935</td>
-  <td>Robin Hood hashing</td>
-  <td>2</td>
-  <td>
-    <strong>1.0556</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:55.6%;background:#7c3aed;"></span></div>
-  </td>
-  <td>
-    <strong>1.1111</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:27.6%;background:#0f766e;"></span></div>
-  </td>
-  <td>
-    <strong>0.2291</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#0891b2;"></span></div>
-  </td>
-  <td>
-    <strong>4</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:28.6%;background:#ea580c;"></span></div>
-  </td>
-  <td>1.125</td>
-  <td>1.1667</td>
-  <td>1</td>
+  <td>68</td>
   <td>0</td>
 </tr><tr>
   <th scope="row">Delete-heavy (30.0% removals)</th>
   <td>0.25</td>
-  <td>0.1935</td>
-  <td>Linear probing</td>
-  <td>2</td>
+  <td>0.1732</td>
+  <td>Robin Hood hashing</td>
+  <td>10</td>
   <td>
-    <strong>1.0556</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:55.6%;background:#7c3aed;"></span></div>
+    <strong>1.1273</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:34.0%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>1.3333</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:33.1%;background:#0f766e;"></span></div>
+    <strong>1.1545</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:8.2%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.2291</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#0891b2;"></span></div>
+    <strong>0.3333</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:5.0%;background:#0891b2;"></span></div>
   </td>
   <td>
     <strong>4</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:28.6%;background:#ea580c;"></span></div>
+    <div class="metric-bar" aria-hidden="true"><span style="width:5.6%;background:#ea580c;"></span></div>
   </td>
-  <td>1.125</td>
-  <td>1.1667</td>
+  <td>1.1938</td>
+  <td>1.16</td>
   <td>1</td>
-  <td>0</td>
+  <td>1</td>
 </tr><tr>
   <th scope="row">Delete-heavy (30.0% removals)</th>
-  <td>0.5</td>
-  <td>0.3548</td>
-  <td>Robin Hood hashing</td>
-  <td>5</td>
-  <td>
-    <strong>1.1818</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:62.2%;background:#7c3aed;"></span></div>
-  </td>
-  <td>
-    <strong>1.3939</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:34.6%;background:#0f766e;"></span></div>
-  </td>
-  <td>
-    <strong>0.3857</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:24.1%;background:#0891b2;"></span></div>
-  </td>
-  <td>
-    <strong>3</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:21.4%;background:#ea580c;"></span></div>
-  </td>
-  <td>1.2083</td>
-  <td>1.0667</td>
-  <td>1</td>
-  <td>0.6667</td>
-</tr><tr>
-  <th scope="row">Delete-heavy (30.0% removals)</th>
-  <td>0.5</td>
-  <td>0.3548</td>
+  <td>0.25</td>
+  <td>0.1732</td>
   <td>Linear probing</td>
-  <td>5</td>
+  <td>10</td>
   <td>
-    <strong>1.1818</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:62.2%;background:#7c3aed;"></span></div>
+    <strong>1.1273</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:34.0%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>1.5455</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:38.4%;background:#0f766e;"></span></div>
+    <strong>1.2455</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:8.9%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.4576</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:28.6%;background:#0891b2;"></span></div>
+    <strong>0.3595</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:5.4%;background:#0891b2;"></span></div>
   </td>
   <td>
-    <strong>3</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:21.4%;background:#ea580c;"></span></div>
+    <strong>4</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:5.6%;background:#ea580c;"></span></div>
   </td>
-  <td>1.2083</td>
-  <td>1.0667</td>
+  <td>1.1938</td>
+  <td>1.1</td>
   <td>2</td>
   <td>0</td>
 </tr><tr>
   <th scope="row">Delete-heavy (30.0% removals)</th>
-  <td>0.75</td>
-  <td>0.5161</td>
+  <td>0.5</td>
+  <td>0.3543</td>
   <td>Robin Hood hashing</td>
-  <td>7</td>
+  <td>19</td>
   <td>
-    <strong>1.4375</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:75.7%;background:#7c3aed;"></span></div>
+    <strong>1.2622</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:38.1%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>1.5833</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:39.3%;background:#0f766e;"></span></div>
+    <strong>1.4089</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:10.0%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.8141</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:50.9%;background:#0891b2;"></span></div>
+    <strong>0.5229</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:7.9%;background:#0891b2;"></span></div>
   </td>
   <td>
-    <strong>6</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:42.9%;background:#ea580c;"></span></div>
+    <strong>7</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:9.7%;background:#ea580c;"></span></div>
   </td>
-  <td>1.8986</td>
-  <td>1.619</td>
-  <td>4</td>
-  <td>6.6667</td>
+  <td>1.5469</td>
+  <td>1.4526</td>
+  <td>3</td>
+  <td>9</td>
 </tr><tr>
   <th scope="row">Delete-heavy (30.0% removals)</th>
-  <td>0.75</td>
-  <td>0.5161</td>
+  <td>0.5</td>
+  <td>0.3543</td>
   <td>Linear probing</td>
+  <td>19</td>
+  <td>
+    <strong>1.2622</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:38.1%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>1.7244</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:12.3%;background:#0f766e;"></span></div>
+  </td>
+  <td>
+    <strong>0.6093</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:9.2%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>7</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:9.7%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.5469</td>
+  <td>1.5053</td>
+  <td>3</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.7</td>
+  <td>0.4882</td>
+  <td>Robin Hood hashing</td>
+  <td>27</td>
+  <td>
+    <strong>1.4097</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:42.5%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>1.6806</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:12.0%;background:#0f766e;"></span></div>
+  </td>
+  <td>
+    <strong>0.6647</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:10.0%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>16</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:22.2%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.9326</td>
+  <td>1.5481</td>
+  <td>3</td>
+  <td>35.6</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.7</td>
+  <td>0.4882</td>
+  <td>Linear probing</td>
+  <td>27</td>
+  <td>
+    <strong>1.4097</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:42.5%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>2.5065</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:17.9%;background:#0f766e;"></span></div>
+  </td>
+  <td>
+    <strong>0.9721</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:14.7%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>16</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:22.2%;background:#ea580c;"></span></div>
+  </td>
+  <td>1.9326</td>
+  <td>1.4444</td>
   <td>7</td>
+  <td>0</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.85</td>
+  <td>0.5984</td>
+  <td>Robin Hood hashing</td>
+  <td>32</td>
   <td>
-    <strong>1.4375</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:75.7%;background:#7c3aed;"></span></div>
+    <strong>1.6395</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:49.5%;background:#7c3aed;"></span></div>
   </td>
   <td>
-    <strong>2.1667</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:53.8%;background:#0f766e;"></span></div>
+    <strong>1.9842</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:14.1%;background:#0f766e;"></span></div>
   </td>
   <td>
-    <strong>0.9554</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:59.8%;background:#0891b2;"></span></div>
+    <strong>0.9026</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:13.6%;background:#0891b2;"></span></div>
   </td>
   <td>
-    <strong>6</strong>
-    <div class="metric-bar" aria-hidden="true"><span style="width:42.9%;background:#ea580c;"></span></div>
+    <strong>20</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:27.8%;background:#ea580c;"></span></div>
   </td>
-  <td>1.8986</td>
-  <td>1.619</td>
-  <td>4</td>
+  <td>3.3148</td>
+  <td>2.25</td>
+  <td>5</td>
+  <td>127.8</td>
+</tr><tr>
+  <th scope="row">Delete-heavy (30.0% removals)</th>
+  <td>0.85</td>
+  <td>0.5984</td>
+  <td>Linear probing</td>
+  <td>32</td>
+  <td>
+    <strong>1.6395</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:49.5%;background:#7c3aed;"></span></div>
+  </td>
+  <td>
+    <strong>3.1921</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:22.7%;background:#0f766e;"></span></div>
+  </td>
+  <td>
+    <strong>1.4882</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:22.5%;background:#0891b2;"></span></div>
+  </td>
+  <td>
+    <strong>20</strong>
+    <div class="metric-bar" aria-hidden="true"><span style="width:27.8%;background:#ea580c;"></span></div>
+  </td>
+  <td>3.3148</td>
+  <td>2.9625</td>
+  <td>13</td>
   <td>0</td>
 </tr>
         </tbody>
@@ -524,9 +654,9 @@
     <section>
       <h2>Probe-distance histograms</h2>
       <p>Aggregated histograms keep the report screenshot-friendly while showing how quickly each strategy spills into longer probe chains after fill-only and delete-heavy runs.</p>
-      <section class="panel histogram-panel">
+      <section class="panel histogram-panel metric-probe-distance workload-fill-only secondary-panel">
   <h2>Probe-distance histogram · Fill-only · requested load factor 0.25</h2>
-  <p>8 starting entries per trial; 8 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <p>32 starting entries per trial; 32 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
     <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
     <thead>
@@ -539,79 +669,53 @@
       <tr>
   <th scope="row">0</th>
   <td>
-  <strong>21</strong>
-  <span class="histogram-meta">87.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#2563eb;"></span></div>
+  <strong>131</strong>
+  <span class="histogram-meta">81.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:96.3%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>21</strong>
-  <span class="histogram-meta">87.5%</span>
+  <strong>136</strong>
+  <span class="histogram-meta">85.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">1</th>
   <td>
-  <strong>3</strong>
-  <span class="histogram-meta">12.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#2563eb;"></span></div>
+  <strong>27</strong>
+  <span class="histogram-meta">16.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:19.9%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>3</strong>
-  <span class="histogram-meta">12.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#d97706;"></span></div>
-</td>
-</tr>
-    </tbody>
-  </table>
-</section><section class="panel histogram-panel">
-  <h2>Probe-distance histogram · Fill-only · requested load factor 0.5</h2>
-  <p>16 starting entries per trial; 16 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
-  <table>
-    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Probe distance</th>
-        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-  <th scope="row">0</th>
-  <td>
-  <strong>38</strong>
-  <span class="histogram-meta">79.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:95.0%;background:#2563eb;"></span></div>
-</td><td>
-  <strong>40</strong>
-  <span class="histogram-meta">83.3%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">1</th>
-  <td>
-  <strong>10</strong>
-  <span class="histogram-meta">20.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:25.0%;background:#2563eb;"></span></div>
-</td><td>
-  <strong>6</strong>
-  <span class="histogram-meta">12.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:15.0%;background:#d97706;"></span></div>
+  <strong>19</strong>
+  <span class="histogram-meta">11.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:14.0%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">2</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">1.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.5%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">1.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.2%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
   <td>
   <strong>0</strong>
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
   <strong>2</strong>
-  <span class="histogram-meta">4.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:5.0%;background:#d97706;"></span></div>
+  <span class="histogram-meta">1.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.5%;background:#d97706;"></span></div>
 </td>
 </tr>
     </tbody>
   </table>
-</section><section class="panel histogram-panel">
-  <h2>Probe-distance histogram · Fill-only · requested load factor 0.75</h2>
-  <p>23 starting entries per trial; 23 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+</section><section class="panel histogram-panel metric-probe-distance workload-fill-only secondary-panel">
+  <h2>Probe-distance histogram · Fill-only · requested load factor 0.5</h2>
+  <p>64 starting entries per trial; 64 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
     <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
     <thead>
@@ -624,68 +728,171 @@
       <tr>
   <th scope="row">0</th>
   <td>
-  <strong>31</strong>
-  <span class="histogram-meta">44.9%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:68.9%;background:#2563eb;"></span></div>
+  <strong>196</strong>
+  <span class="histogram-meta">61.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:87.1%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>45</strong>
-  <span class="histogram-meta">65.2%</span>
+  <strong>225</strong>
+  <span class="histogram-meta">70.3%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">1</th>
   <td>
-  <strong>21</strong>
-  <span class="histogram-meta">30.4%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:46.7%;background:#2563eb;"></span></div>
+  <strong>87</strong>
+  <span class="histogram-meta">27.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:38.7%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>9</strong>
-  <span class="histogram-meta">13.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:20.0%;background:#d97706;"></span></div>
+  <strong>57</strong>
+  <span class="histogram-meta">17.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:25.3%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">2</th>
   <td>
-  <strong>13</strong>
-  <span class="histogram-meta">18.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:28.9%;background:#2563eb;"></span></div>
+  <strong>26</strong>
+  <span class="histogram-meta">8.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:11.6%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>5</strong>
-  <span class="histogram-meta">7.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:11.1%;background:#d97706;"></span></div>
+  <strong>22</strong>
+  <span class="histogram-meta">6.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:9.8%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">3</th>
   <td>
-  <strong>2</strong>
-  <span class="histogram-meta">2.9%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:4.4%;background:#2563eb;"></span></div>
+  <strong>8</strong>
+  <span class="histogram-meta">2.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.6%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>4</strong>
-  <span class="histogram-meta">5.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:8.9%;background:#d97706;"></span></div>
+  <strong>3</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">4</th>
   <td>
-  <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.2%;background:#2563eb;"></span></div>
+  <strong>3</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>2</strong>
-  <span class="histogram-meta">2.9%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:4.4%;background:#d97706;"></span></div>
+  <strong>7</strong>
+  <span class="histogram-meta">2.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.1%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">5</th>
   <td>
-  <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.2%;background:#2563eb;"></span></div>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
   <strong>2</strong>
-  <span class="histogram-meta">2.9%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:4.4%;background:#d97706;"></span></div>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.4%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-probe-distance workload-fill-only secondary-panel">
+  <h2>Probe-distance histogram · Fill-only · requested load factor 0.7</h2>
+  <p>89 starting entries per trial; 89 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>214</strong>
+  <span class="histogram-meta">48.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:70.2%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>305</strong>
+  <span class="histogram-meta">68.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>119</strong>
+  <span class="histogram-meta">26.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:39.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>59</strong>
+  <span class="histogram-meta">13.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:19.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>61</strong>
+  <span class="histogram-meta">13.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:20.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>32</strong>
+  <span class="histogram-meta">7.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:10.5%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>32</strong>
+  <span class="histogram-meta">7.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:10.5%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>16</strong>
+  <span class="histogram-meta">3.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>17</strong>
+  <span class="histogram-meta">3.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.6%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>9</strong>
+  <span class="histogram-meta">2.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.3%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">6</th>
@@ -695,8 +902,651 @@
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
   <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.2%;background:#d97706;"></span></div>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">10</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">11</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">12</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">15</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">17</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-probe-distance workload-fill-only highlight-panel">
+  <h2>Probe-distance histogram · Fill-only · requested load factor 0.85</h2>
+  <p>108 starting entries per trial; 108 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>135</strong>
+  <span class="histogram-meta">25.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:41.7%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>324</strong>
+  <span class="histogram-meta">60.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>114</strong>
+  <span class="histogram-meta">21.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:35.2%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>73</strong>
+  <span class="histogram-meta">13.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:22.5%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>74</strong>
+  <span class="histogram-meta">13.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:22.8%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>32</strong>
+  <span class="histogram-meta">5.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:9.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>94</strong>
+  <span class="histogram-meta">17.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:29.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>24</strong>
+  <span class="histogram-meta">4.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.4%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>50</strong>
+  <span class="histogram-meta">9.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>19</strong>
+  <span class="histogram-meta">3.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>23</strong>
+  <span class="histogram-meta">4.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.1%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>12</strong>
+  <span class="histogram-meta">2.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.7%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>12</strong>
+  <span class="histogram-meta">2.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.7%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>10</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.1%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>11</strong>
+  <span class="histogram-meta">2.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.2%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>10</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.1%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>10</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.1%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">10</th>
+  <td>
+  <strong>5</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.6%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">11</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">12</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>5</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.6%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">13</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">14</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">15</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">16</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">17</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">18</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">19</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">20</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">22</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">26</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">27</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">28</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">30</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">33</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">37</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">40</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">53</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">67</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">68</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.3%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-probe-distance workload-delete-heavy secondary-panel">
+  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.25</h2>
+  <p>32 starting entries per trial; 22 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>96</strong>
+  <span class="histogram-meta">87.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:99.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>97</strong>
+  <span class="histogram-meta">88.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>14</strong>
+  <span class="histogram-meta">12.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:14.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>12</strong>
+  <span class="histogram-meta">10.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:12.4%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.0%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-probe-distance workload-delete-heavy secondary-panel">
+  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.5</h2>
+  <p>64 starting entries per trial; 45 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>174</strong>
+  <span class="histogram-meta">77.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:95.1%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>183</strong>
+  <span class="histogram-meta">81.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>44</strong>
+  <span class="histogram-meta">19.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:24.1%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>28</strong>
+  <span class="histogram-meta">12.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.3%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>6</strong>
+  <span class="histogram-meta">2.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.3%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>11</strong>
+  <span class="histogram-meta">4.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.5%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">1.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.6%;background:#d97706;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-probe-distance workload-delete-heavy secondary-panel">
+  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.7</h2>
+  <p>89 starting entries per trial; 62 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+  <table>
+    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probe distance</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">0</th>
+  <td>
+  <strong>211</strong>
+  <span class="histogram-meta">68.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:86.8%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>243</strong>
+  <span class="histogram-meta">78.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>74</strong>
+  <span class="histogram-meta">23.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:30.5%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>34</strong>
+  <span class="histogram-meta">11.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:14.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>22</strong>
+  <span class="histogram-meta">7.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:9.1%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>19</strong>
+  <span class="histogram-meta">6.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.8%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>3</strong>
+  <span class="histogram-meta">1.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.2%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">2.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.9%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">1.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.2%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">1.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.2%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">7</th>
@@ -706,15 +1556,15 @@
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
   <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.2%;background:#d97706;"></span></div>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.4%;background:#d97706;"></span></div>
 </td>
 </tr>
     </tbody>
   </table>
-</section><section class="panel histogram-panel">
-  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.25</h2>
-  <p>8 starting entries per trial; 6 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
+</section><section class="panel histogram-panel metric-probe-distance workload-delete-heavy highlight-panel">
+  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.85</h2>
+  <p>108 starting entries per trial; 76 remain after the workload across 5 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
   <table>
     <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
     <thead>
@@ -727,142 +1577,123 @@
       <tr>
   <th scope="row">0</th>
   <td>
-  <strong>17</strong>
-  <span class="histogram-meta">94.4%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#2563eb;"></span></div>
+  <strong>215</strong>
+  <span class="histogram-meta">56.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:78.8%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>17</strong>
-  <span class="histogram-meta">94.4%</span>
+  <strong>273</strong>
+  <span class="histogram-meta">71.8%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">1</th>
   <td>
-  <strong>1</strong>
-  <span class="histogram-meta">5.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:5.9%;background:#2563eb;"></span></div>
+  <strong>112</strong>
+  <span class="histogram-meta">29.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:41.0%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">5.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:5.9%;background:#d97706;"></span></div>
-</td>
-</tr>
-    </tbody>
-  </table>
-</section><section class="panel histogram-panel">
-  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.5</h2>
-  <p>16 starting entries per trial; 11 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
-  <table>
-    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Probe distance</th>
-        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-  <th scope="row">0</th>
-  <td>
-  <strong>27</strong>
-  <span class="histogram-meta">81.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:96.4%;background:#2563eb;"></span></div>
-</td><td>
-  <strong>28</strong>
-  <span class="histogram-meta">84.9%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">1</th>
-  <td>
-  <strong>6</strong>
-  <span class="histogram-meta">18.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:21.4%;background:#2563eb;"></span></div>
-</td><td>
-  <strong>4</strong>
-  <span class="histogram-meta">12.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#d97706;"></span></div>
+  <strong>56</strong>
+  <span class="histogram-meta">14.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:20.5%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">2</th>
+  <td>
+  <strong>35</strong>
+  <span class="histogram-meta">9.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:12.8%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>19</strong>
+  <span class="histogram-meta">5.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.0%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>12</strong>
+  <span class="histogram-meta">3.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>14</strong>
+  <span class="histogram-meta">3.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.1%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>5</strong>
+  <span class="histogram-meta">1.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.8%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.2%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.4%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.5%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.5%;background:#d97706;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
   <td>
   <strong>0</strong>
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
   <strong>1</strong>
-  <span class="histogram-meta">3.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.6%;background:#d97706;"></span></div>
-</td>
-</tr>
-    </tbody>
-  </table>
-</section><section class="panel histogram-panel">
-  <h2>Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.75</h2>
-  <p>23 starting entries per trial; 16 remain after the workload across 3 deterministic trial(s). Watch how much probability mass spills into the longer-distance tail for each strategy.</p>
-  <table>
-    <caption>Aggregated probe-distance counts by strategy after the workload completes.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Probe distance</th>
-        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-  <th scope="row">0</th>
-  <td>
-  <strong>33</strong>
-  <span class="histogram-meta">68.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:89.2%;background:#2563eb;"></span></div>
-</td><td>
-  <strong>37</strong>
-  <span class="histogram-meta">77.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#d97706;"></span></div>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.4%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
-  <th scope="row">1</th>
+  <th scope="row">9</th>
   <td>
-  <strong>12</strong>
-  <span class="histogram-meta">25.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:32.4%;background:#2563eb;"></span></div>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
-  <strong>6</strong>
-  <span class="histogram-meta">12.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:16.2%;background:#d97706;"></span></div>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.4%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
-  <th scope="row">2</th>
+  <th scope="row">10</th>
   <td>
-  <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#2563eb;"></span></div>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
   <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#d97706;"></span></div>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.4%;background:#d97706;"></span></div>
 </td>
 </tr><tr>
-  <th scope="row">3</th>
+  <th scope="row">13</th>
   <td>
-  <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#2563eb;"></span></div>
-</td><td>
-  <strong>3</strong>
-  <span class="histogram-meta">6.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:8.1%;background:#d97706;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">4</th>
-  <td>
-  <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#2563eb;"></span></div>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#2563eb;"></span></div>
 </td><td>
   <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#d97706;"></span></div>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.4%;background:#d97706;"></span></div>
 </td>
 </tr>
     </tbody>
@@ -872,9 +1703,9 @@
     <section>
       <h2>Unsuccessful lookup probe histograms</h2>
       <p>Aggregated miss histograms keep the report screenshot-friendly while showing how far each strategy must walk when a key is absent after fill-only and delete-heavy runs.</p>
-      <section class="panel histogram-panel">
+      <section class="panel histogram-panel metric-unsuccessful-lookup workload-fill-only secondary-panel">
   <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.25</h2>
-  <p>8 deterministic missing-key lookup(s) per trial were issued after the workload; 8 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <p>32 deterministic missing-key lookup(s) per trial were issued after the workload; 32 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
   <table>
     <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
     <thead>
@@ -887,83 +1718,35 @@
       <tr>
   <th scope="row">1</th>
   <td>
-  <strong>17</strong>
-  <span class="histogram-meta">70.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:85.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>20</strong>
-  <span class="histogram-meta">83.3%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">2</th>
-  <td>
-  <strong>5</strong>
-  <span class="histogram-meta">20.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:25.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>3</strong>
-  <span class="histogram-meta">12.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:15.0%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">3</th>
-  <td>
-  <strong>2</strong>
-  <span class="histogram-meta">8.3%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:10.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">4.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:5.0%;background:#b45309;"></span></div>
-</td>
-</tr>
-    </tbody>
-  </table>
-</section><section class="panel histogram-panel">
-  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.5</h2>
-  <p>16 deterministic missing-key lookup(s) per trial were issued after the workload; 16 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
-  <table>
-    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Probes for a miss</th>
-        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-  <th scope="row">1</th>
-  <td>
-  <strong>20</strong>
-  <span class="histogram-meta">41.7%</span>
+  <strong>117</strong>
+  <span class="histogram-meta">73.1%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>20</strong>
-  <span class="histogram-meta">41.7%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#b45309;"></span></div>
+  <strong>116</strong>
+  <span class="histogram-meta">72.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:99.2%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">2</th>
   <td>
-  <strong>19</strong>
-  <span class="histogram-meta">39.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:95.0%;background:#0f766e;"></span></div>
+  <strong>34</strong>
+  <span class="histogram-meta">21.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:29.1%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>12</strong>
-  <span class="histogram-meta">25.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:60.0%;background:#b45309;"></span></div>
+  <strong>32</strong>
+  <span class="histogram-meta">20.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:27.4%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">3</th>
   <td>
   <strong>9</strong>
-  <span class="histogram-meta">18.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:45.0%;background:#0f766e;"></span></div>
+  <span class="histogram-meta">5.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.7%;background:#0f766e;"></span></div>
 </td><td>
   <strong>6</strong>
-  <span class="histogram-meta">12.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:30.0%;background:#b45309;"></span></div>
+  <span class="histogram-meta">3.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.1%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">4</th>
@@ -972,9 +1755,9 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>7</strong>
-  <span class="histogram-meta">14.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:35.0%;background:#b45309;"></span></div>
+  <strong>3</strong>
+  <span class="histogram-meta">1.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">5</th>
@@ -983,27 +1766,16 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:5.0%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">6</th>
-  <td>
-  <strong>0</strong>
-  <span class="histogram-meta">0.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>2</strong>
-  <span class="histogram-meta">4.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:10.0%;background:#b45309;"></span></div>
+  <strong>3</strong>
+  <span class="histogram-meta">1.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
 </td>
 </tr>
     </tbody>
   </table>
-</section><section class="panel histogram-panel">
-  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.75</h2>
-  <p>23 deterministic missing-key lookup(s) per trial were issued after the workload; 23 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+</section><section class="panel histogram-panel metric-unsuccessful-lookup workload-fill-only secondary-panel">
+  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.5</h2>
+  <p>64 deterministic missing-key lookup(s) per trial were issued after the workload; 64 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
   <table>
     <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
     <thead>
@@ -1016,68 +1788,68 @@
       <tr>
   <th scope="row">1</th>
   <td>
-  <strong>20</strong>
-  <span class="histogram-meta">29.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:76.9%;background:#0f766e;"></span></div>
+  <strong>153</strong>
+  <span class="histogram-meta">47.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:96.8%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>26</strong>
-  <span class="histogram-meta">37.7%</span>
+  <strong>158</strong>
+  <span class="histogram-meta">49.4%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">2</th>
   <td>
-  <strong>17</strong>
-  <span class="histogram-meta">24.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:65.4%;background:#0f766e;"></span></div>
+  <strong>99</strong>
+  <span class="histogram-meta">30.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:62.7%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>5</strong>
-  <span class="histogram-meta">7.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:19.2%;background:#b45309;"></span></div>
+  <strong>61</strong>
+  <span class="histogram-meta">19.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:38.6%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">3</th>
   <td>
-  <strong>20</strong>
-  <span class="histogram-meta">29.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:76.9%;background:#0f766e;"></span></div>
+  <strong>53</strong>
+  <span class="histogram-meta">16.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:33.5%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>13</strong>
-  <span class="histogram-meta">18.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:50.0%;background:#b45309;"></span></div>
+  <strong>31</strong>
+  <span class="histogram-meta">9.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:19.6%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">4</th>
   <td>
-  <strong>10</strong>
-  <span class="histogram-meta">14.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:38.5%;background:#0f766e;"></span></div>
+  <strong>12</strong>
+  <span class="histogram-meta">3.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.6%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>0</strong>
-  <span class="histogram-meta">0.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#b45309;"></span></div>
+  <strong>19</strong>
+  <span class="histogram-meta">5.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:12.0%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">5</th>
   <td>
-  <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#0f766e;"></span></div>
+  <strong>3</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.9%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>7</strong>
-  <span class="histogram-meta">10.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:26.9%;background:#b45309;"></span></div>
+  <strong>14</strong>
+  <span class="histogram-meta">4.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:8.8%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">6</th>
   <td>
-  <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#0f766e;"></span></div>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>4</strong>
-  <span class="histogram-meta">5.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
+  <strong>8</strong>
+  <span class="histogram-meta">2.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.1%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">7</th>
@@ -1086,9 +1858,9 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>3</strong>
-  <span class="histogram-meta">4.3%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:11.5%;background:#b45309;"></span></div>
+  <strong>9</strong>
+  <span class="histogram-meta">2.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.7%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">8</th>
@@ -1097,9 +1869,20 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>4</strong>
-  <span class="histogram-meta">5.8%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
+  <strong>8</strong>
+  <span class="histogram-meta">2.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">10</th>
@@ -1108,9 +1891,9 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+  <strong>4</strong>
+  <span class="histogram-meta">1.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.5%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">11</th>
@@ -1119,9 +1902,9 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+  <strong>4</strong>
+  <span class="histogram-meta">1.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.5%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">12</th>
@@ -1130,9 +1913,167 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">1.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+  <strong>2</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-unsuccessful-lookup workload-fill-only secondary-panel">
+  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.7</h2>
+  <p>89 deterministic missing-key lookup(s) per trial were issued after the workload; 89 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>138</strong>
+  <span class="histogram-meta">31.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:92.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>122</strong>
+  <span class="histogram-meta">27.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:81.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>150</strong>
+  <span class="histogram-meta">33.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>76</strong>
+  <span class="histogram-meta">17.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:50.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>73</strong>
+  <span class="histogram-meta">16.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:48.7%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>55</strong>
+  <span class="histogram-meta">12.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:36.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>40</strong>
+  <span class="histogram-meta">9.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:26.7%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>41</strong>
+  <span class="histogram-meta">9.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:27.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>33</strong>
+  <span class="histogram-meta">7.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:22.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>22</strong>
+  <span class="histogram-meta">4.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:14.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>9</strong>
+  <span class="histogram-meta">2.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>30</strong>
+  <span class="histogram-meta">6.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:20.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>12</strong>
+  <span class="histogram-meta">2.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:8.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>9</strong>
+  <span class="histogram-meta">2.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>14</strong>
+  <span class="histogram-meta">3.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:9.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">10</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>5</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">11</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">12</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>8</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">13</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.7%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">14</th>
@@ -1141,9 +2082,1338 @@
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
+  <strong>8</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">15</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">16</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">17</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">18</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">19</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">20</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
   <strong>2</strong>
-  <span class="histogram-meta">2.9%</span>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">21</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">22</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">23</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">24</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-unsuccessful-lookup workload-fill-only highlight-panel">
+  <h2>Unsuccessful-lookup histogram · Fill-only · requested load factor 0.85</h2>
+  <p>108 deterministic missing-key lookup(s) per trial were issued after the workload; 108 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>92</strong>
+  <span class="histogram-meta">17.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:80.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>88</strong>
+  <span class="histogram-meta">16.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:76.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>115</strong>
+  <span class="histogram-meta">21.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>54</strong>
+  <span class="histogram-meta">10.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:46.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>89</strong>
+  <span class="histogram-meta">16.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:77.4%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>43</strong>
+  <span class="histogram-meta">8.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:37.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>68</strong>
+  <span class="histogram-meta">12.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:59.1%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>32</strong>
+  <span class="histogram-meta">5.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:27.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>70</strong>
+  <span class="histogram-meta">13.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:60.8%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>19</strong>
+  <span class="histogram-meta">3.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:16.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>46</strong>
+  <span class="histogram-meta">8.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:40.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>15</strong>
+  <span class="histogram-meta">2.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:13.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>24</strong>
+  <span class="histogram-meta">4.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:20.8%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>20</strong>
+  <span class="histogram-meta">3.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:17.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>8</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.9%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>18</strong>
+  <span class="histogram-meta">3.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>10</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:8.7%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>11</strong>
+  <span class="histogram-meta">2.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:9.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">10</th>
+  <td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.2%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>17</strong>
+  <span class="histogram-meta">3.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:14.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">11</th>
+  <td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.1%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>15</strong>
+  <span class="histogram-meta">2.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:13.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">12</th>
+  <td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.5%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>12</strong>
+  <span class="histogram-meta">2.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:10.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">13</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>16</strong>
+  <span class="histogram-meta">3.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:13.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">14</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>8</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">15</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">16</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">17</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>15</strong>
+  <span class="histogram-meta">2.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:13.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">18</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">19</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">20</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">21</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>10</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:8.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">22</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">23</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">24</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">25</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">26</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">27</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">28</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">29</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">30</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">31</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">32</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">33</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">34</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">35</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">36</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>8</strong>
+  <span class="histogram-meta">1.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">37</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">38</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">39</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">40</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">41</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">42</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">43</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">44</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">45</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">46</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">47</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">48</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>5</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">49</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">50</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">52</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">53</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">54</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">55</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">57</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">58</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">59</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">60</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">62</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">64</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">67</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">70</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">71</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">73</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.7%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-unsuccessful-lookup workload-delete-heavy secondary-panel">
+  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.25</h2>
+  <p>22 deterministic missing-key lookup(s) per trial were issued after the workload; 22 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>95</strong>
+  <span class="histogram-meta">86.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>86</strong>
+  <span class="histogram-meta">78.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:90.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>13</strong>
+  <span class="histogram-meta">11.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:13.7%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>21</strong>
+  <span class="histogram-meta">19.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:22.1%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.1%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">2.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.2%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-unsuccessful-lookup workload-delete-heavy secondary-panel">
+  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.5</h2>
+  <p>45 deterministic missing-key lookup(s) per trial were issued after the workload; 45 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>146</strong>
+  <span class="histogram-meta">64.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>131</strong>
+  <span class="histogram-meta">58.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:89.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>67</strong>
+  <span class="histogram-meta">29.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:45.9%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>55</strong>
+  <span class="histogram-meta">24.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:37.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>11</strong>
+  <span class="histogram-meta">4.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:7.5%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>23</strong>
+  <span class="histogram-meta">10.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>9</strong>
+  <span class="histogram-meta">4.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">1.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.7%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-unsuccessful-lookup workload-delete-heavy secondary-panel">
+  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.7</h2>
+  <p>62 deterministic missing-key lookup(s) per trial were issued after the workload; 62 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>168</strong>
+  <span class="histogram-meta">54.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>156</strong>
+  <span class="histogram-meta">50.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:92.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>94</strong>
+  <span class="histogram-meta">30.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:56.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>58</strong>
+  <span class="histogram-meta">18.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:34.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>32</strong>
+  <span class="histogram-meta">10.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:19.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>32</strong>
+  <span class="histogram-meta">10.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:19.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>11</strong>
+  <span class="histogram-meta">3.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.6%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>24</strong>
+  <span class="histogram-meta">7.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:14.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>5</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>13</strong>
+  <span class="histogram-meta">4.2%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:7.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>10</strong>
+  <span class="histogram-meta">3.2%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">10</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>5</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.0%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">11</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.7%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">13</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">1.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">14</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">15</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">16</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#b45309;"></span></div>
+</td>
+</tr>
+    </tbody>
+  </table>
+</section><section class="panel histogram-panel metric-unsuccessful-lookup workload-delete-heavy highlight-panel">
+  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.85</h2>
+  <p>76 deterministic missing-key lookup(s) per trial were issued after the workload; 76 resident entries remained across 5 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
+  <table>
+    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Probes for a miss</th>
+        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+  <th scope="row">1</th>
+  <td>
+  <strong>159</strong>
+  <span class="histogram-meta">41.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>153</strong>
+  <span class="histogram-meta">40.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:96.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">2</th>
+  <td>
+  <strong>121</strong>
+  <span class="histogram-meta">31.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:76.1%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>72</strong>
+  <span class="histogram-meta">18.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:45.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">3</th>
+  <td>
+  <strong>62</strong>
+  <span class="histogram-meta">16.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:39.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>49</strong>
+  <span class="histogram-meta">12.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:30.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">4</th>
+  <td>
+  <strong>25</strong>
+  <span class="histogram-meta">6.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:15.7%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>34</strong>
+  <span class="histogram-meta">8.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:21.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">5</th>
+  <td>
+  <strong>11</strong>
+  <span class="histogram-meta">2.9%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:6.9%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>15</strong>
+  <span class="histogram-meta">4.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:9.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">6</th>
+  <td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>9</strong>
+  <span class="histogram-meta">2.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:5.7%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">7</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>13</strong>
+  <span class="histogram-meta">3.4%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:8.2%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">8</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>7</strong>
+  <span class="histogram-meta">1.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:4.4%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">9</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>6</strong>
+  <span class="histogram-meta">1.6%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">10</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>2</strong>
+  <span class="histogram-meta">0.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">11</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">12</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>4</strong>
+  <span class="histogram-meta">1.1%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:2.5%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">13</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>3</strong>
+  <span class="histogram-meta">0.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.9%;background:#b45309;"></span></div>
+</td>
+</tr><tr>
+  <th scope="row">14</th>
+  <td>
+  <strong>0</strong>
+  <span class="histogram-meta">0.0%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
+</td><td>
+  <strong>1</strong>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
   <th scope="row">15</th>
@@ -1153,382 +3423,272 @@
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
   <strong>2</strong>
-  <span class="histogram-meta">2.9%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:7.7%;background:#b45309;"></span></div>
-</td>
-</tr>
-    </tbody>
-  </table>
-</section><section class="panel histogram-panel">
-  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.25</h2>
-  <p>6 deterministic missing-key lookup(s) per trial were issued after the workload; 6 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
-  <table>
-    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Probes for a miss</th>
-        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-  <th scope="row">1</th>
-  <td>
-  <strong>16</strong>
-  <span class="histogram-meta">88.9%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>15</strong>
-  <span class="histogram-meta">83.3%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:93.7%;background:#b45309;"></span></div>
+  <span class="histogram-meta">0.5%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.3%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
-  <th scope="row">2</th>
-  <td>
-  <strong>2</strong>
-  <span class="histogram-meta">11.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:12.5%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">5.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:6.3%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">3</th>
+  <th scope="row">16</th>
   <td>
   <strong>0</strong>
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">5.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:6.3%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">4</th>
-  <td>
-  <strong>0</strong>
-  <span class="histogram-meta">0.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">5.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:6.3%;background:#b45309;"></span></div>
-</td>
-</tr>
-    </tbody>
-  </table>
-</section><section class="panel histogram-panel">
-  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.5</h2>
-  <p>11 deterministic missing-key lookup(s) per trial were issued after the workload; 11 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
-  <table>
-    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Probes for a miss</th>
-        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-  <th scope="row">1</th>
-  <td>
-  <strong>23</strong>
-  <span class="histogram-meta">69.7%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>18</strong>
-  <span class="histogram-meta">54.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:78.3%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">2</th>
-  <td>
-  <strong>7</strong>
-  <span class="histogram-meta">21.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:30.4%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>13</strong>
-  <span class="histogram-meta">39.4%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:56.5%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">3</th>
-  <td>
   <strong>3</strong>
-  <span class="histogram-meta">9.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:13.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">3.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:4.3%;background:#b45309;"></span></div>
+  <span class="histogram-meta">0.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.9%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
-  <th scope="row">4</th>
+  <th scope="row">17</th>
   <td>
   <strong>0</strong>
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
-  <strong>1</strong>
-  <span class="histogram-meta">3.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:4.3%;background:#b45309;"></span></div>
-</td>
-</tr>
-    </tbody>
-  </table>
-</section><section class="panel histogram-panel">
-  <h2>Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.75</h2>
-  <p>16 deterministic missing-key lookup(s) per trial were issued after the workload; 16 resident entries remained across 3 deterministic trial(s). Watch how much probability mass spills into longer failed-search walks for each strategy.</p>
-  <table>
-    <caption>Aggregated unsuccessful-lookup probe counts by strategy after the workload completes.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Probes for a miss</th>
-        <th scope="col">Robin Hood hashing</th><th scope="col">Linear probing</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-  <th scope="row">1</th>
-  <td>
-  <strong>26</strong>
-  <span class="histogram-meta">54.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:100.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>24</strong>
-  <span class="histogram-meta">50.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:92.3%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">2</th>
-  <td>
-  <strong>18</strong>
-  <span class="histogram-meta">37.5%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:69.2%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>7</strong>
-  <span class="histogram-meta">14.6%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:26.9%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">3</th>
-  <td>
   <strong>3</strong>
-  <span class="histogram-meta">6.2%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:11.5%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>8</strong>
-  <span class="histogram-meta">16.7%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:30.8%;background:#b45309;"></span></div>
+  <span class="histogram-meta">0.8%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:1.9%;background:#b45309;"></span></div>
 </td>
 </tr><tr>
-  <th scope="row">4</th>
-  <td>
-  <strong>0</strong>
-  <span class="histogram-meta">0.0%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>4</strong>
-  <span class="histogram-meta">8.3%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">5</th>
-  <td>
-  <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#0f766e;"></span></div>
-</td><td>
-  <strong>4</strong>
-  <span class="histogram-meta">8.3%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:15.4%;background:#b45309;"></span></div>
-</td>
-</tr><tr>
-  <th scope="row">6</th>
+  <th scope="row">20</th>
   <td>
   <strong>0</strong>
   <span class="histogram-meta">0.0%</span>
   <div class="metric-bar" aria-hidden="true"><span style="width:0.0%;background:#0f766e;"></span></div>
 </td><td>
   <strong>1</strong>
-  <span class="histogram-meta">2.1%</span>
-  <div class="metric-bar" aria-hidden="true"><span style="width:3.8%;background:#b45309;"></span></div>
+  <span class="histogram-meta">0.3%</span>
+  <div class="metric-bar" aria-hidden="true"><span style="width:0.6%;background:#b45309;"></span></div>
 </td>
 </tr>
     </tbody>
   </table>
 </section>
     </section>
-    <section>
+    <section class="detail-section">
       <h2>Per-slice detail cards</h2>
       <div class="grid detail-grid">
         <article class="detail-card">
   <h2>Fill-only · start 0.25 · Robin Hood hashing</h2>
-  <p>8 starting entries across 3 deterministic trial(s); 8 remain after the workload.</p>
+  <p>32 starting entries across 5 deterministic trial(s); 32 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.125</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.375</strong></li>
+    <li>Avg successful lookup probes: <strong>1.1938</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.325</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
-    <li>Avg probe distance: <strong>0.125</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.6333</strong></li>
-    <li>Probe-distance stddev: <strong>0.3307</strong></li>
-    <li>Max probe distance: <strong>1</strong></li>
+    <li>Avg probe distance: <strong>0.1938</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.5761</strong></li>
+    <li>Probe-distance stddev: <strong>0.4257</strong></li>
+    <li>Max probe distance: <strong>2</strong></li>
     <li>Max cluster length: <strong>5</strong></li>
-    <li>Avg swaps: <strong>0</strong></li>
+    <li>Avg swaps: <strong>1</strong></li>
   </ul>
 </article><article class="detail-card">
   <h2>Fill-only · start 0.25 · Linear probing</h2>
-  <p>8 starting entries across 3 deterministic trial(s); 8 remain after the workload.</p>
+  <p>32 starting entries across 5 deterministic trial(s); 32 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.125</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.2083</strong></li>
+    <li>Avg successful lookup probes: <strong>1.1938</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.4062</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
-    <li>Avg probe distance: <strong>0.125</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.4983</strong></li>
-    <li>Probe-distance stddev: <strong>0.3307</strong></li>
-    <li>Max probe distance: <strong>1</strong></li>
+    <li>Avg probe distance: <strong>0.1938</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.8085</strong></li>
+    <li>Probe-distance stddev: <strong>0.5184</strong></li>
+    <li>Max probe distance: <strong>3</strong></li>
     <li>Max cluster length: <strong>5</strong></li>
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
   <h2>Fill-only · start 0.5 · Robin Hood hashing</h2>
-  <p>16 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
+  <p>64 starting entries across 5 deterministic trial(s); 64 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.2083</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.7708</strong></li>
+    <li>Avg successful lookup probes: <strong>1.5469</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.7906</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
-    <li>Avg probe distance: <strong>0.2083</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.7427</strong></li>
-    <li>Probe-distance stddev: <strong>0.4061</strong></li>
-    <li>Max probe distance: <strong>1</strong></li>
-    <li>Max cluster length: <strong>7</strong></li>
-    <li>Avg swaps: <strong>0.6667</strong></li>
+    <li>Avg probe distance: <strong>0.5469</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.9134</strong></li>
+    <li>Probe-distance stddev: <strong>0.8202</strong></li>
+    <li>Max probe distance: <strong>4</strong></li>
+    <li>Max cluster length: <strong>11</strong></li>
+    <li>Avg swaps: <strong>9</strong></li>
   </ul>
 </article><article class="detail-card">
   <h2>Fill-only · start 0.5 · Linear probing</h2>
-  <p>16 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
+  <p>64 starting entries across 5 deterministic trial(s); 64 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.2083</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>2.2292</strong></li>
+    <li>Avg successful lookup probes: <strong>1.5469</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>2.5625</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
-    <li>Avg probe distance: <strong>0.2083</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>1.388</strong></li>
-    <li>Probe-distance stddev: <strong>0.4983</strong></li>
-    <li>Max probe distance: <strong>2</strong></li>
-    <li>Max cluster length: <strong>7</strong></li>
+    <li>Avg probe distance: <strong>0.5469</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>2.3775</strong></li>
+    <li>Probe-distance stddev: <strong>1.1556</strong></li>
+    <li>Max probe distance: <strong>9</strong></li>
+    <li>Max cluster length: <strong>11</strong></li>
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>Fill-only · start 0.75 · Robin Hood hashing</h2>
-  <p>23 starting entries across 3 deterministic trial(s); 23 remain after the workload.</p>
+  <h2>Fill-only · start 0.7 · Robin Hood hashing</h2>
+  <p>89 starting entries across 5 deterministic trial(s); 89 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.8986</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>2.3913</strong></li>
+    <li>Avg successful lookup probes: <strong>1.9326</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>2.3596</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
-    <li>Avg probe distance: <strong>0.8986</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>1.1699</strong></li>
-    <li>Probe-distance stddev: <strong>1.0515</strong></li>
+    <li>Avg probe distance: <strong>0.9326</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>1.3445</strong></li>
+    <li>Probe-distance stddev: <strong>1.1475</strong></li>
     <li>Max probe distance: <strong>5</strong></li>
-    <li>Max cluster length: <strong>14</strong></li>
-    <li>Avg swaps: <strong>6.6667</strong></li>
+    <li>Max cluster length: <strong>24</strong></li>
+    <li>Avg swaps: <strong>35.6</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>Fill-only · start 0.75 · Linear probing</h2>
-  <p>23 starting entries across 3 deterministic trial(s); 23 remain after the workload.</p>
+  <h2>Fill-only · start 0.7 · Linear probing</h2>
+  <p>89 starting entries across 5 deterministic trial(s); 89 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.8986</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>4.029</strong></li>
+    <li>Avg successful lookup probes: <strong>1.9326</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>4.8045</strong></li>
     <li>Avg delete probes: <strong>0</strong></li>
-    <li>Avg probe distance: <strong>0.8986</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>3.7531</strong></li>
-    <li>Probe-distance stddev: <strong>1.5984</strong></li>
-    <li>Max probe distance: <strong>7</strong></li>
-    <li>Max cluster length: <strong>14</strong></li>
+    <li>Avg probe distance: <strong>0.9326</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>4.8962</strong></li>
+    <li>Probe-distance stddev: <strong>2.2255</strong></li>
+    <li>Max probe distance: <strong>17</strong></li>
+    <li>Max cluster length: <strong>24</strong></li>
+    <li>Avg swaps: <strong>0</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Fill-only · start 0.85 · Robin Hood hashing</h2>
+  <p>108 starting entries across 5 deterministic trial(s); 108 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>3.3148</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>3.7167</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
+    <li>Avg probe distance: <strong>2.3148</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>2.3873</strong></li>
+    <li>Probe-distance stddev: <strong>2.3176</strong></li>
+    <li>Max probe distance: <strong>11</strong></li>
+    <li>Max cluster length: <strong>72</strong></li>
+    <li>Avg swaps: <strong>127.8</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Fill-only · start 0.85 · Linear probing</h2>
+  <p>108 starting entries across 5 deterministic trial(s); 108 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>3.3148</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>14.037</strong></li>
+    <li>Avg delete probes: <strong>0</strong></li>
+    <li>Avg probe distance: <strong>2.3148</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>16.2011</strong></li>
+    <li>Probe-distance stddev: <strong>6.628</strong></li>
+    <li>Max probe distance: <strong>68</strong></li>
+    <li>Max cluster length: <strong>72</strong></li>
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
   <h2>Delete-heavy (30.0% removals) · start 0.25 · Robin Hood hashing</h2>
-  <p>8 starting entries across 3 deterministic trial(s); 6 remain after the workload.</p>
+  <p>32 starting entries across 5 deterministic trial(s); 22 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.0556</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.1111</strong></li>
-    <li>Avg delete probes: <strong>1.1667</strong></li>
-    <li>Avg probe distance: <strong>0.0556</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.3143</strong></li>
-    <li>Probe-distance stddev: <strong>0.2291</strong></li>
+    <li>Avg successful lookup probes: <strong>1.1273</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.1545</strong></li>
+    <li>Avg delete probes: <strong>1.16</strong></li>
+    <li>Avg probe distance: <strong>0.1273</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.4087</strong></li>
+    <li>Probe-distance stddev: <strong>0.3333</strong></li>
     <li>Max probe distance: <strong>1</strong></li>
     <li>Max cluster length: <strong>4</strong></li>
-    <li>Avg swaps: <strong>0</strong></li>
+    <li>Avg swaps: <strong>1</strong></li>
   </ul>
 </article><article class="detail-card">
   <h2>Delete-heavy (30.0% removals) · start 0.25 · Linear probing</h2>
-  <p>8 starting entries across 3 deterministic trial(s); 6 remain after the workload.</p>
+  <p>32 starting entries across 5 deterministic trial(s); 22 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.0556</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.3333</strong></li>
-    <li>Avg delete probes: <strong>1.1667</strong></li>
-    <li>Avg probe distance: <strong>0.0556</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.8165</strong></li>
-    <li>Probe-distance stddev: <strong>0.2291</strong></li>
-    <li>Max probe distance: <strong>1</strong></li>
+    <li>Avg successful lookup probes: <strong>1.1273</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.2455</strong></li>
+    <li>Avg delete probes: <strong>1.1</strong></li>
+    <li>Avg probe distance: <strong>0.1273</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.4896</strong></li>
+    <li>Probe-distance stddev: <strong>0.3595</strong></li>
+    <li>Max probe distance: <strong>2</strong></li>
     <li>Max cluster length: <strong>4</strong></li>
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
   <h2>Delete-heavy (30.0% removals) · start 0.5 · Robin Hood hashing</h2>
-  <p>16 starting entries across 3 deterministic trial(s); 11 remain after the workload.</p>
+  <p>64 starting entries across 5 deterministic trial(s); 45 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.1818</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.3939</strong></li>
-    <li>Avg delete probes: <strong>1.0667</strong></li>
-    <li>Avg probe distance: <strong>0.1818</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.6485</strong></li>
-    <li>Probe-distance stddev: <strong>0.3857</strong></li>
-    <li>Max probe distance: <strong>1</strong></li>
-    <li>Max cluster length: <strong>3</strong></li>
-    <li>Avg swaps: <strong>0.6667</strong></li>
+    <li>Avg successful lookup probes: <strong>1.2622</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.4089</strong></li>
+    <li>Avg delete probes: <strong>1.4526</strong></li>
+    <li>Avg probe distance: <strong>0.2622</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.6051</strong></li>
+    <li>Probe-distance stddev: <strong>0.5229</strong></li>
+    <li>Max probe distance: <strong>3</strong></li>
+    <li>Max cluster length: <strong>7</strong></li>
+    <li>Avg swaps: <strong>9</strong></li>
   </ul>
 </article><article class="detail-card">
   <h2>Delete-heavy (30.0% removals) · start 0.5 · Linear probing</h2>
-  <p>16 starting entries across 3 deterministic trial(s); 11 remain after the workload.</p>
+  <p>64 starting entries across 5 deterministic trial(s); 45 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.1818</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.5455</strong></li>
-    <li>Avg delete probes: <strong>1.0667</strong></li>
-    <li>Avg probe distance: <strong>0.1818</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.7003</strong></li>
-    <li>Probe-distance stddev: <strong>0.4576</strong></li>
-    <li>Max probe distance: <strong>2</strong></li>
-    <li>Max cluster length: <strong>3</strong></li>
+    <li>Avg successful lookup probes: <strong>1.2622</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.7244</strong></li>
+    <li>Avg delete probes: <strong>1.5053</strong></li>
+    <li>Avg probe distance: <strong>0.2622</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>1.141</strong></li>
+    <li>Probe-distance stddev: <strong>0.6093</strong></li>
+    <li>Max probe distance: <strong>3</strong></li>
+    <li>Max cluster length: <strong>7</strong></li>
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>Delete-heavy (30.0% removals) · start 0.75 · Robin Hood hashing</h2>
-  <p>23 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
+  <h2>Delete-heavy (30.0% removals) · start 0.7 · Robin Hood hashing</h2>
+  <p>89 starting entries across 5 deterministic trial(s); 62 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.4375</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>1.5833</strong></li>
-    <li>Avg delete probes: <strong>1.619</strong></li>
-    <li>Avg probe distance: <strong>0.4375</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>0.7862</strong></li>
-    <li>Probe-distance stddev: <strong>0.8141</strong></li>
-    <li>Max probe distance: <strong>4</strong></li>
-    <li>Max cluster length: <strong>6</strong></li>
-    <li>Avg swaps: <strong>6.6667</strong></li>
+    <li>Avg successful lookup probes: <strong>1.4097</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.6806</strong></li>
+    <li>Avg delete probes: <strong>1.5481</strong></li>
+    <li>Avg probe distance: <strong>0.4097</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>0.9112</strong></li>
+    <li>Probe-distance stddev: <strong>0.6647</strong></li>
+    <li>Max probe distance: <strong>3</strong></li>
+    <li>Max cluster length: <strong>16</strong></li>
+    <li>Avg swaps: <strong>35.6</strong></li>
   </ul>
 </article><article class="detail-card">
-  <h2>Delete-heavy (30.0% removals) · start 0.75 · Linear probing</h2>
-  <p>23 starting entries across 3 deterministic trial(s); 16 remain after the workload.</p>
+  <h2>Delete-heavy (30.0% removals) · start 0.7 · Linear probing</h2>
+  <p>89 starting entries across 5 deterministic trial(s); 62 remain after the workload.</p>
   <ul>
-    <li>Avg successful lookup probes: <strong>1.4375</strong></li>
-    <li>Avg unsuccessful lookup probes: <strong>2.1667</strong></li>
-    <li>Avg delete probes: <strong>1.619</strong></li>
-    <li>Avg probe distance: <strong>0.4375</strong></li>
-    <li>Unsuccessful lookup probe stddev: <strong>1.4337</strong></li>
-    <li>Probe-distance stddev: <strong>0.9554</strong></li>
-    <li>Max probe distance: <strong>4</strong></li>
-    <li>Max cluster length: <strong>6</strong></li>
+    <li>Avg successful lookup probes: <strong>1.4097</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>2.5065</strong></li>
+    <li>Avg delete probes: <strong>1.4444</strong></li>
+    <li>Avg probe distance: <strong>0.4097</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>2.5282</strong></li>
+    <li>Probe-distance stddev: <strong>0.9721</strong></li>
+    <li>Max probe distance: <strong>7</strong></li>
+    <li>Max cluster length: <strong>16</strong></li>
+    <li>Avg swaps: <strong>0</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.85 · Robin Hood hashing</h2>
+  <p>108 starting entries across 5 deterministic trial(s); 76 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.6395</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>1.9842</strong></li>
+    <li>Avg delete probes: <strong>2.25</strong></li>
+    <li>Avg probe distance: <strong>0.6395</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>1.0905</strong></li>
+    <li>Probe-distance stddev: <strong>0.9026</strong></li>
+    <li>Max probe distance: <strong>5</strong></li>
+    <li>Max cluster length: <strong>20</strong></li>
+    <li>Avg swaps: <strong>127.8</strong></li>
+  </ul>
+</article><article class="detail-card">
+  <h2>Delete-heavy (30.0% removals) · start 0.85 · Linear probing</h2>
+  <p>108 starting entries across 5 deterministic trial(s); 76 remain after the workload.</p>
+  <ul>
+    <li>Avg successful lookup probes: <strong>1.6395</strong></li>
+    <li>Avg unsuccessful lookup probes: <strong>3.1921</strong></li>
+    <li>Avg delete probes: <strong>2.9625</strong></li>
+    <li>Avg probe distance: <strong>0.6395</strong></li>
+    <li>Unsuccessful lookup probe stddev: <strong>3.3051</strong></li>
+    <li>Probe-distance stddev: <strong>1.4882</strong></li>
+    <li>Max probe distance: <strong>13</strong></li>
+    <li>Max cluster length: <strong>20</strong></li>
     <li>Avg swaps: <strong>0</strong></li>
   </ul>
 </article>

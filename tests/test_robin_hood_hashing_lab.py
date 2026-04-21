@@ -3,11 +3,16 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,10 +30,14 @@ RobinHoodHashTable = MODULE.RobinHoodHashTable
 SnapshotError = MODULE.SnapshotError
 load_snapshot = MODULE.load_snapshot
 benchmark_delete_count = MODULE.benchmark_delete_count
+build_benchmark_png_command = MODULE.build_benchmark_png_command
+default_benchmark_png_height = MODULE.default_benchmark_png_height
+main = MODULE.main
 parse_load_factors = MODULE.parse_load_factors
 parse_pairs_input = MODULE.parse_pairs_input
 parse_strategies = MODULE.parse_strategies
 parse_workloads = MODULE.parse_workloads
+render_benchmark_png = MODULE.render_benchmark_png
 save_benchmark = MODULE.save_benchmark
 stable_hash = MODULE.stable_hash
 summarize_benchmark = MODULE.summarize_benchmark
@@ -307,6 +316,117 @@ class RobinHoodHashingLabTests(unittest.TestCase):
         self.assertEqual(miss_histogram_cell, '{"1": 1, "2": 1, "11": 1}')
         self.assertNotEqual(miss_histogram_cell, '{"1": 1, "11": 1, "2": 1}')
 
+    def test_default_benchmark_png_height_grows_with_more_sections(self) -> None:
+        compact_rows = run_benchmark(
+            capacity=31,
+            load_factors=[0.5],
+            trials=1,
+            seed=17,
+            strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only"],
+            delete_fraction=0.3,
+        )
+        dense_rows = run_benchmark(
+            capacity=31,
+            load_factors=[0.25, 0.5],
+            trials=2,
+            seed=17,
+            strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only", "delete-heavy"],
+            delete_fraction=0.3,
+        )
+        compact_summary = summarize_benchmark(
+            compact_rows,
+            capacity=31,
+            strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only"],
+            trials=1,
+            title="Compact benchmark",
+            delete_fraction=0.3,
+        )
+        dense_summary = summarize_benchmark(
+            dense_rows,
+            capacity=31,
+            strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only", "delete-heavy"],
+            trials=2,
+            title="Dense benchmark",
+            delete_fraction=0.3,
+        )
+        compact_height = default_benchmark_png_height(compact_summary, 1440)
+        dense_height = default_benchmark_png_height(dense_summary, 1440)
+        self.assertGreaterEqual(compact_height, 1500)
+        self.assertGreater(dense_height, compact_height)
+
+    def test_build_benchmark_png_command_uses_headless_chrome_and_file_uri(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            html_path = tmp_path / "benchmark.html"
+            png_path = tmp_path / "benchmark.png"
+            with patch.object(MODULE, "resolve_chrome_binary", return_value="/usr/bin/google-chrome"):
+                command = build_benchmark_png_command(
+                    html_path,
+                    png_path,
+                    width=1600,
+                    height=2100,
+                    capture_ms=2200,
+                )
+        self.assertEqual(command[0], "/usr/bin/google-chrome")
+        self.assertIn("--headless", command)
+        self.assertIn("--window-size=1600,2100", command)
+        self.assertIn("--virtual-time-budget=2200", command)
+        self.assertIn(f"--screenshot={png_path.resolve()}", command)
+        self.assertEqual(command[-1], html_path.resolve().as_uri())
+
+    def test_render_benchmark_png_invokes_chrome_and_returns_output_path(self) -> None:
+        rows = run_benchmark(
+            capacity=31,
+            load_factors=[0.5],
+            trials=1,
+            seed=17,
+            strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only", "delete-heavy"],
+            delete_fraction=0.3,
+        )
+        summary = summarize_benchmark(
+            rows,
+            capacity=31,
+            strategies=["robin-hood", "linear-probing"],
+            workloads=["fill-only", "delete-heavy"],
+            trials=1,
+            title="Benchmark PNG",
+            delete_fraction=0.3,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            html_path = tmp_path / "benchmark.html"
+            html_path.write_text("<!doctype html><title>benchmark</title>", encoding="utf-8")
+            png_path = tmp_path / "captures" / "benchmark.png"
+
+            def fake_run(command: list[str], capture_output: bool, text: bool, check: bool):
+                self.assertIn("--headless", command)
+                self.assertIn(f"--screenshot={png_path.resolve()}", command)
+                png_path.parent.mkdir(parents=True, exist_ok=True)
+                png_path.write_bytes(b"fake-png")
+                return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+            with (
+                patch.object(MODULE, "resolve_chrome_binary", return_value="/usr/bin/google-chrome"),
+                patch.object(MODULE.subprocess, "run", side_effect=fake_run),
+            ):
+                output_path = render_benchmark_png(html_path, png_path, summary, width=1500, capture_ms=900)
+
+            self.assertEqual(output_path, png_path)
+            self.assertEqual(png_path.read_bytes(), b"fake-png")
+
+    def test_cli_benchmark_requires_html_output_when_png_is_requested(self) -> None:
+        stderr = StringIO()
+        with redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as excinfo:
+                main(["benchmark", "--output", "benchmark.json", "--png-out", "benchmark.png"])
+        self.assertEqual(excinfo.exception.code, 2)
+        self.assertIn("--png-out requires --html-out", stderr.getvalue())
+
     def test_cli_build_stats_export_remove_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -317,6 +437,13 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             benchmark_json_path = tmp_path / "benchmark.json"
             benchmark_markdown_path = tmp_path / "benchmark.md"
             benchmark_html_path = tmp_path / "benchmark.html"
+            benchmark_png_path = tmp_path / "benchmark.png"
+            chrome_binary = (
+                shutil.which("google-chrome")
+                or shutil.which("google-chrome-stable")
+                or shutil.which("chromium")
+                or shutil.which("chromium-browser")
+            )
 
             subprocess.run(
                 [
@@ -378,28 +505,31 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             updated_table = load_snapshot(updated_snapshot_path)
             self.assertIsNone(updated_table.get("user:1002"))
 
+            benchmark_command = [
+                sys.executable,
+                str(SCRIPT),
+                "benchmark",
+                "--capacity",
+                "31",
+                "--load-factors",
+                "0.25,0.5",
+                "--trials",
+                "2",
+                "--seed",
+                "17",
+                "--strategies",
+                "robin-hood,linear",
+                "--markdown-out",
+                str(benchmark_markdown_path),
+                "--html-out",
+                str(benchmark_html_path),
+                "--output",
+                str(benchmark_path),
+            ]
+            if chrome_binary:
+                benchmark_command.extend(["--png-out", str(benchmark_png_path), "--chrome-binary", chrome_binary])
             subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "benchmark",
-                    "--capacity",
-                    "31",
-                    "--load-factors",
-                    "0.25,0.5",
-                    "--trials",
-                    "2",
-                    "--seed",
-                    "17",
-                    "--strategies",
-                    "robin-hood,linear",
-                    "--markdown-out",
-                    str(benchmark_markdown_path),
-                    "--html-out",
-                    str(benchmark_html_path),
-                    "--output",
-                    str(benchmark_path),
-                ],
+                benchmark_command,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -427,6 +557,9 @@ class RobinHoodHashingLabTests(unittest.TestCase):
             self.assertIn("Per-workload winners and deltas against the linear-probing baseline for both successful and unsuccessful lookups.", html)
             self.assertIn("Probe-distance histogram · Delete-heavy (30.0% removals) · requested load factor 0.25", html)
             self.assertIn("Unsuccessful-lookup histogram · Delete-heavy (30.0% removals) · requested load factor 0.25", html)
+            if chrome_binary:
+                self.assertTrue(benchmark_png_path.exists())
+                self.assertGreater(benchmark_png_path.stat().st_size, 0)
 
             subprocess.run(
                 [
