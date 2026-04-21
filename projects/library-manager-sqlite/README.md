@@ -9,7 +9,7 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - models real state transitions instead of simple CRUD only
 - keeps an auditable borrower and loan-history trail instead of only the current checked-out row state
 - now includes ranked SQLite FTS5 search with prefix and phrase-query support
-- now includes genre metadata plus genre-level trend exports so the analytics pack can tell subject-level circulation stories
+- now includes genre metadata plus genre-level trend, heatmap, and share-composition exports so the analytics pack can tell subject-level circulation stories from multiple angles
 - exposes history, circulation analytics, and recruiter-friendly dashboard exports that are easy to demo in interviews
 - keeps the stack lightweight and easy to run locally
 
@@ -33,10 +33,12 @@ A SQLite-backed CLI for managing a small library catalog with real circulation f
 - `borrower-trends` exports top-borrower daily breakdowns as CSV plus a recruiter-friendly SVG cohort dashboard
 - `genre-trends` exports top-genre daily breakdowns as CSV plus a recruiter-friendly SVG cohort dashboard
 - `genre-heatmap` exports a one-glance genre/day activity heatmap as CSV plus an accessible SVG summary for portfolio screenshots
+- `genre-share` exports a stacked-share genre composition view as CSV plus an accessible SVG summary so recruiters can see how the subject mix shifts over time
 - dashboard snapshots respect the selected `--date`, so historical exports do not leak future checkouts or returns into earlier views
 - trend exports respect the requested date range so historical charts stay stable and repeatable in committed artifacts
 - borrower trend exports focus on the top borrower cohorts touching the selected range, so recruiter demos stay readable even as history grows
 - genre trend exports focus on the busiest genres touching the selected range, so recruiter demos can explain subject-level usage without opening SQLite manually
+- genre share exports keep the daily denominator explicit, so the composition view complements the heatmap instead of hiding total circulation load
 - migration path for older databases plus automatic backfill of the search index and any still-active legacy checkouts
 - automated tests for core workflows, migration safety, dashboard and trend rendering, and CLI behavior
 
@@ -69,6 +71,11 @@ python3 library_manager.py --db library.db genre-heatmap --start-date 2026-04-01
   --csv-out ../../docs/artifacts/library-manager-sqlite/sample_genre_heatmap.csv \
   --svg-out ../../docs/artifacts/library-manager-sqlite/sample_genre_heatmap.svg \
   --generated-at 2026-04-30T12:00:00Z
+python3 library_manager.py --db library.db genre-share --start-date 2026-04-01 --end-date 2026-04-30 \
+  --top 4 \
+  --csv-out ../../docs/artifacts/library-manager-sqlite/sample_genre_share.csv \
+  --svg-out ../../docs/artifacts/library-manager-sqlite/sample_genre_share.svg \
+  --generated-at 2026-04-30T12:00:00Z
 python3 library_manager.py --db library.db dashboard --date 2026-04-30 \
   --markdown-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.md \
   --html-out ../../docs/artifacts/library-manager-sqlite/sample_circulation_dashboard.html \
@@ -87,6 +94,8 @@ python3 library_manager.py --db library.db return 1
 - sample genre trends SVG: `docs/artifacts/library-manager-sqlite/sample_genre_trends.svg`
 - sample genre heatmap CSV: `docs/artifacts/library-manager-sqlite/sample_genre_heatmap.csv`
 - sample genre heatmap SVG: `docs/artifacts/library-manager-sqlite/sample_genre_heatmap.svg`
+- sample genre share CSV: `docs/artifacts/library-manager-sqlite/sample_genre_share.csv`
+- sample genre share SVG: `docs/artifacts/library-manager-sqlite/sample_genre_share.svg`
 
 ## Test
 ```bash
@@ -97,4 +106,3 @@ python3 -m unittest test_library_manager.py
 - support borrower borrowing limits or policy rules
 - add import/export for seed catalogs
 - package the project as an installable CLI
-- add a stacked-share export so the subject mix can also be shown as a compact composition view alongside the new heatmap

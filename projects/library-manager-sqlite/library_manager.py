@@ -1653,6 +1653,113 @@ def build_genre_heatmap_snapshot(
     }
 
 
+def build_genre_share_snapshot(
+    library,
+    start_date=None,
+    end_date=None,
+    top_limit=4,
+    title='Library genre share breakdown',
+    generated_at=None,
+):
+    snapshot = build_genre_heatmap_snapshot(
+        library,
+        start_date=start_date,
+        end_date=end_date,
+        top_limit=top_limit,
+        title=title,
+        generated_at=generated_at,
+    )
+    genre_order = {row['genre']: index for index, row in enumerate(snapshot['genres'])}
+    genre_metrics = {
+        row['genre']: {
+            'dominant_days': 0,
+            'max_daily_share': 0.0,
+        }
+        for row in snapshot['genres']
+    }
+    days_with_activity = 0
+    dominant_switches = 0
+    previous_dominant = None
+    max_total_active_selected = 0
+    max_daily_share = 0.0
+    points = []
+
+    for point in snapshot['points']:
+        total_active_selected = point['total_active_selected']
+        max_total_active_selected = max(max_total_active_selected, total_active_selected)
+        dominant_entry = None
+        if total_active_selected:
+            days_with_activity += 1
+            max_share_for_day = max(entry['active_share'] for entry in point['genres'])
+            max_daily_share = max(max_daily_share, max_share_for_day)
+            dominant_candidates = [
+                entry for entry in point['genres'] if abs(entry['active_share'] - max_share_for_day) < 1e-9
+            ]
+            if len(dominant_candidates) == 1:
+                dominant_entry = dominant_candidates[0]
+                dominant_genre = dominant_entry['genre']
+                genre_metrics[dominant_genre]['dominant_days'] += 1
+                if previous_dominant is not None and dominant_genre != previous_dominant:
+                    dominant_switches += 1
+                previous_dominant = dominant_genre
+
+        cumulative_share = 0.0
+        genre_segments = []
+        for entry in point['genres']:
+            share_start = cumulative_share
+            share_end = min(1.0, cumulative_share + entry['active_share'])
+            cumulative_share = share_end
+            genre_metrics[entry['genre']]['max_daily_share'] = max(
+                genre_metrics[entry['genre']]['max_daily_share'],
+                entry['active_share'],
+            )
+            genre_segments.append(
+                {
+                    **entry,
+                    'share_start': share_start,
+                    'share_end': share_end,
+                    'is_dominant': bool(dominant_entry and entry['genre'] == dominant_entry['genre']),
+                }
+            )
+
+        points.append(
+            {
+                'date': point['date'],
+                'total_active_selected': total_active_selected,
+                'dominant_genre': dominant_entry['genre'] if dominant_entry else None,
+                'genres': genre_segments,
+            }
+        )
+
+    genres = [
+        {
+            **row,
+            'dominant_days': genre_metrics[row['genre']]['dominant_days'],
+            'max_daily_share': genre_metrics[row['genre']]['max_daily_share'],
+        }
+        for row in snapshot['genres']
+    ]
+
+    return {
+        'title': title.strip() or 'Library genre share breakdown',
+        'generated_at': snapshot['generated_at'],
+        'start_date': snapshot['start_date'],
+        'end_date': snapshot['end_date'],
+        'days': snapshot['days'],
+        'top_limit': top_limit,
+        'genres': genres,
+        'points': points,
+        'summary': {
+            'selected_genres': len(genres),
+            'days_with_activity': days_with_activity,
+            'max_total_active_selected': max_total_active_selected,
+            'max_daily_share': max_daily_share,
+            'dominant_switches': dominant_switches,
+            'total_loans_touching_range': snapshot['summary']['total_loans_touching_range'],
+        },
+    }
+
+
 def render_trends_csv(snapshot):
     headers = [
         'date',
@@ -1743,6 +1850,42 @@ def render_genre_heatmap_csv(snapshot):
                     genre['active_loans'],
                     f'{genre["active_share"]:.4f}',
                     point['total_active_selected'],
+                    genre['overdue_loans'],
+                    genre['checkouts_started'],
+                    genre['returns_completed'],
+                ]
+            )
+    return buffer.getvalue().rstrip()
+
+
+def render_genre_share_csv(snapshot):
+    buffer = StringIO()
+    writer = csv.writer(buffer, lineterminator='\n')
+    writer.writerow([
+        'date',
+        'genre',
+        'active_loans',
+        'active_share',
+        'share_start',
+        'share_end',
+        'total_active_selected',
+        'is_dominant',
+        'overdue_loans',
+        'checkouts_started',
+        'returns_completed',
+    ])
+    for point in snapshot['points']:
+        for genre in point['genres']:
+            writer.writerow(
+                [
+                    point['date'],
+                    genre['genre'],
+                    genre['active_loans'],
+                    f'{genre["active_share"]:.4f}',
+                    f'{genre["share_start"]:.4f}',
+                    f'{genre["share_end"]:.4f}',
+                    point['total_active_selected'],
+                    1 if genre['is_dominant'] else 0,
                     genre['overdue_loans'],
                     genre['checkouts_started'],
                     genre['returns_completed'],
@@ -2283,6 +2426,150 @@ def render_genre_heatmap_svg(snapshot):
 </svg>'''
 
 
+def render_genre_share_svg(snapshot):
+    title_id = 'library-genre-share-title'
+    desc_id = 'library-genre-share-desc'
+    summary = snapshot['summary']
+    point_count = max(len(snapshot['points']), 1)
+    chart_left = 104
+    chart_top = 282
+    chart_width = 548
+    chart_height = 280
+    slot_width = chart_width / point_count
+    bar_width = min(24, max(min(slot_width - 4, slot_width), 3))
+    bar_offset = (slot_width - bar_width) / 2
+    header_step = max(1, (len(snapshot['points']) + 7) // 8)
+
+    metric_cards = [
+        ('Selected genres', summary['selected_genres'], f'top limit {snapshot["top_limit"]}'),
+        ('Days with activity', summary['days_with_activity'], f'{snapshot["start_date"]} → {snapshot["end_date"]}'),
+        ('Peak selected-day load', summary['max_total_active_selected'], 'active loans across the selected genres'),
+        ('Dominant switches', summary['dominant_switches'], f'peak daily share {_format_percent(summary["max_daily_share"])}'),
+    ]
+    card_markup = ''.join(
+        (
+            f'<g transform="translate({40 + index * 270}, 126)">'
+            '<rect width="240" height="88" rx="18" fill="#ffffff" stroke="#d6deeb" />'
+            f'<text x="18" y="30" font-size="13" fill="#64748b">{escape(label)}</text>'
+            f'<text x="18" y="64" font-size="30" font-weight="700" fill="#1d4ed8">{value}</text>'
+            f'<text x="18" y="80" font-size="12" fill="#64748b">{escape(subtitle)}</text>'
+            '</g>'
+        )
+        for index, (label, value, subtitle) in enumerate(metric_cards)
+    )
+    legend_markup = ''.join(
+        (
+            f'<rect x="{704 + (index % 2) * 190:.2f}" y="{294 + (index // 2) * 26:.2f}" width="16" height="16" rx="4" fill="{genre["color"]}" />'
+            f'<text x="{728 + (index % 2) * 190:.2f}" y="{307 + (index // 2) * 26:.2f}" font-size="14" fill="#334155">{escape(genre["genre"])}</text>'
+        )
+        for index, genre in enumerate(snapshot['genres'])
+    )
+    y_ticks = [0.0, 0.25, 0.5, 0.75, 1.0]
+    grid_lines = ''.join(
+        (
+            f'<line x1="{chart_left:.2f}" y1="{chart_top + chart_height * (1 - tick):.2f}" '
+            f'x2="{chart_left + chart_width:.2f}" y2="{chart_top + chart_height * (1 - tick):.2f}" '
+            'stroke="#dbe4f0" stroke-width="1" />'
+            f'<text x="{chart_left - 14:.2f}" y="{chart_top + chart_height * (1 - tick) + 4:.2f}" '
+            'font-size="12" fill="#64748b" text-anchor="end">'
+            f'{escape(_format_percent(tick))}'
+            '</text>'
+        )
+        for tick in y_ticks
+    )
+    bar_markup = ''.join(
+        ''.join(
+            [
+                ''.join(
+                    (
+                        f'<rect x="{chart_left + index * slot_width + bar_offset:.2f}" '
+                        f'y="{chart_top + chart_height * (1 - segment["share_end"]):.2f}" '
+                        f'width="{bar_width:.2f}" '
+                        f'height="{max(chart_height * (segment["share_end"] - segment["share_start"]), 1.5):.2f}" '
+                        f'fill="{next(row["color"] for row in snapshot["genres"] if row["genre"] == segment["genre"])}">'
+                        f'<title>{escape(segment["genre"])} on {escape(point["date"])}: {segment["active_loans"]} active loans, '
+                        f'{escape(_format_percent(segment["active_share"]))} of the selected-genre activity, '
+                        f'{segment["overdue_loans"]} overdue, {segment["checkouts_started"]} checkouts, '
+                        f'{segment["returns_completed"]} returns.</title>'
+                        '</rect>'
+                    )
+                    for segment in point['genres']
+                    if segment['active_share'] > 0
+                ),
+                f'<rect x="{chart_left + index * slot_width + bar_offset:.2f}" y="{chart_top:.2f}" '
+                f'width="{bar_width:.2f}" height="{chart_height:.2f}" rx="10" fill="none" stroke="#cbd5e1" />',
+                (
+                    f'<text x="{chart_left + index * slot_width + bar_offset + bar_width / 2:.2f}" y="{chart_top - 14:.2f}" '
+                    'font-size="11" fill="#475569" text-anchor="middle">'
+                    f'{point["total_active_selected"]}'
+                    '</text>'
+                    if index in {0, len(snapshot['points']) - 1} or index % header_step == 0
+                    else ''
+                ),
+                (
+                    f'<text x="{chart_left + index * slot_width + bar_offset + bar_width / 2:.2f}" y="{chart_top + chart_height + 20:.2f}" '
+                    'font-size="11" fill="#64748b" text-anchor="middle">'
+                    f'{escape(point["date"][5:])}'
+                    '</text>'
+                    if index in {0, len(snapshot['points']) - 1} or index % header_step == 0
+                    else ''
+                ),
+            ]
+        )
+        for index, point in enumerate(snapshot['points'])
+    )
+
+    summary_top = 612
+    row_height = 30
+    summary_rows = ''.join(
+        (
+            f'<rect x="40" y="{summary_top + 60 + index * row_height:.2f}" width="1080" height="{row_height:.2f}" rx="8" '
+            f'fill="{"#ffffff" if index % 2 == 0 else "#f8fafc"}" stroke="#e2e8f0" />'
+            f'<circle cx="58" cy="{summary_top + 79 + index * row_height:.2f}" r="6" fill="{genre["color"]}" />'
+            f'<text x="74" y="{summary_top + 83 + index * row_height:.2f}" font-size="13" fill="#0f172a">{escape(genre["genre"])}</text>'
+            f'<text x="366" y="{summary_top + 83 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["total_active_loan_days"]}</text>'
+            f'<text x="502" y="{summary_top + 83 + index * row_height:.2f}" font-size="13" fill="#0f172a">{escape(_format_percent(genre["average_active_share"]))}</text>'
+            f'<text x="646" y="{summary_top + 83 + index * row_height:.2f}" font-size="13" fill="#0f172a">{escape(_format_percent(genre["max_daily_share"]))}</text>'
+            f'<text x="804" y="{summary_top + 83 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["dominant_days"]}</text>'
+            f'<text x="958" y="{summary_top + 83 + index * row_height:.2f}" font-size="13" fill="#0f172a">{genre["last_checkout_at"] or "-"}</text>'
+        )
+        for index, genre in enumerate(snapshot['genres'])
+    )
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="820" viewBox="0 0 1160 820" role="img" aria-labelledby="{title_id}" aria-describedby="{desc_id}">
+  <title id="{title_id}">{escape(snapshot['title'])}</title>
+  <desc id="{desc_id}">Genre share breakdown from {escape(snapshot['start_date'])} to {escape(snapshot['end_date'])}. Each day is a normalized stacked column showing how the selected genres share that day's active circulation. Count labels above the chart show the absolute selected-genre load for the same day.</desc>
+  <rect width="1160" height="820" fill="#f4f7fb" />
+  <rect x="24" y="24" width="1112" height="772" rx="28" fill="#eef4ff" stroke="#d6deeb" />
+  <text x="40" y="68" font-size="30" font-weight="700" fill="#0f172a">{escape(snapshot['title'])}</text>
+  <text x="40" y="95" font-size="15" fill="#475569">Normalized stacked columns show how the genre mix shifts day by day, while the labels above the bars keep the absolute circulation load visible.</text>
+  <text x="40" y="116" font-size="14" fill="#475569">Range: {escape(snapshot['start_date'])} to {escape(snapshot['end_date'])} • Days: {snapshot['days']} • Generated at: {escape(snapshot['generated_at'])}</text>
+  {card_markup}
+  <text x="40" y="248" font-size="18" font-weight="700" fill="#0f172a">Genre composition share</text>
+  <text x="40" y="268" font-size="12" fill="#64748b">Bar height is normalized to 100%. The value above each labeled bar shows the day’s total active loans across the selected genres.</text>
+  {grid_lines}
+  {bar_markup}
+  <text x="704" y="248" font-size="18" font-weight="700" fill="#0f172a">Legend</text>
+  <text x="704" y="268" font-size="12" fill="#64748b">Top genres touching the selected range. Colors stay aligned with the existing genre trend and heatmap exports.</text>
+  {legend_markup}
+  <rect x="704" y="386" width="376" height="176" rx="22" fill="#ffffff" stroke="#d6deeb" />
+  <text x="728" y="418" font-size="18" font-weight="700" fill="#0f172a">Composition notes</text>
+  <text x="728" y="446" font-size="14" fill="#334155">• {summary['days_with_activity']} active day(s) had at least one selected-genre loan.</text>
+  <text x="728" y="474" font-size="14" fill="#334155">• Peak selected-day load was {summary['max_total_active_selected']} active loan(s).</text>
+  <text x="728" y="502" font-size="14" fill="#334155">• The most concentrated single-day share reached {escape(_format_percent(summary['max_daily_share']))}.</text>
+  <text x="728" y="530" font-size="14" fill="#334155">• The uniquely dominant genre changed {summary['dominant_switches']} time(s); tied days do not force a winner.</text>
+  <text x="40" y="630" font-size="18" font-weight="700" fill="#0f172a">Genre share summary</text>
+  <rect x="40" y="636" width="1080" height="30" rx="8" fill="#dbeafe" stroke="#bfdbfe" />
+  <text x="74" y="655" font-size="13" font-weight="700" fill="#1e3a8a">Genre</text>
+  <text x="366" y="655" font-size="13" font-weight="700" fill="#1e3a8a">Loan-days</text>
+  <text x="502" y="655" font-size="13" font-weight="700" fill="#1e3a8a">Avg share</text>
+  <text x="646" y="655" font-size="13" font-weight="700" fill="#1e3a8a">Max share</text>
+  <text x="804" y="655" font-size="13" font-weight="700" fill="#1e3a8a">Lead days</text>
+  <text x="958" y="655" font-size="13" font-weight="700" fill="#1e3a8a">Last checkout</text>
+  {summary_rows}
+</svg>'''
+
+
 def render_trends_svg(snapshot):
     summary = snapshot['summary']
     title_id = 'library-trends-title'
@@ -2419,6 +2706,15 @@ def main(argv=None):
     genre_heatmap_parser.add_argument('--svg-out', type=Path)
     genre_heatmap_parser.add_argument('--title', default='Library genre activity heatmap')
     genre_heatmap_parser.add_argument('--generated-at')
+
+    genre_share_parser = sub.add_parser('genre-share', help='Export a stacked-share genre composition view')
+    genre_share_parser.add_argument('--start-date')
+    genre_share_parser.add_argument('--end-date')
+    genre_share_parser.add_argument('--top', type=int, default=4)
+    genre_share_parser.add_argument('--csv-out', type=Path)
+    genre_share_parser.add_argument('--svg-out', type=Path)
+    genre_share_parser.add_argument('--title', default='Library genre share breakdown')
+    genre_share_parser.add_argument('--generated-at')
 
     dashboard_parser = sub.add_parser('dashboard', help='Export a recruiter-friendly circulation snapshot')
     dashboard_parser.add_argument('--date', dest='reference_date')
@@ -2566,6 +2862,30 @@ def main(argv=None):
                 written.append(str(args.svg_out))
             if written:
                 print('genre heatmap artifacts written: ' + ', '.join(written))
+            else:
+                print(csv_output)
+        elif args.cmd == 'genre-share':
+            start_day = parse_optional_date(args.start_date, 'start date')
+            end_day = parse_optional_date(args.end_date, 'end date')
+            generated_at = parse_optional_timestamp(args.generated_at, 'generated-at')
+            snapshot = build_genre_share_snapshot(
+                library,
+                start_date=start_day,
+                end_date=end_day,
+                top_limit=args.top,
+                title=args.title,
+                generated_at=generated_at,
+            )
+            csv_output = render_genre_share_csv(snapshot)
+            written = []
+            if args.csv_out:
+                _write_text_output(args.csv_out, csv_output + '\n')
+                written.append(str(args.csv_out))
+            if args.svg_out:
+                _write_text_output(args.svg_out, render_genre_share_svg(snapshot) + '\n')
+                written.append(str(args.svg_out))
+            if written:
+                print('genre share artifacts written: ' + ', '.join(written))
             else:
                 print(csv_output)
         elif args.cmd == 'dashboard':

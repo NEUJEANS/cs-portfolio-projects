@@ -16,3 +16,4 @@
 - [x] add borrower-level trend breakdown exports so the analytics pack can tell a stronger multi-borrower circulation story
 - [x] add genre metadata plus genre-level trend exports so the analytics pack can tell a subject-level circulation story
 - [x] add a genre/day heatmap export so the subject-level story is visible in one glance instead of separate cohort lines only
+- [x] add a stacked-share genre composition export so the portfolio pack shows both absolute intensity and relative subject mix
