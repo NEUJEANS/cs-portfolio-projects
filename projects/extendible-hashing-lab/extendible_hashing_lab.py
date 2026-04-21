@@ -5,6 +5,7 @@ import csv
 import importlib.util
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -1912,6 +1913,392 @@ def _render_benchmark_dashboard_metric(
 </div>'''
 
 
+def _require_overview_artifact(path: Path, description: str) -> Path:
+    if not path.exists():
+        raise FileNotFoundError(f"{description} not found: {path}")
+    return path
+
+
+def _relative_overview_href(output_html_path: Path, target_path: Path) -> str:
+    return Path(os.path.relpath(target_path.resolve(), start=output_html_path.resolve().parent)).as_posix()
+
+
+def _summarize_overview_case(
+    *,
+    label: str,
+    eyebrow: str,
+    headline: str,
+    description: str,
+    workload_path: Path,
+    artifacts_dir: Path,
+    output_html_path: Path,
+    report_name: str,
+    snapshot_name: str,
+    svg_name: str,
+    html_name: str,
+    png_name: str,
+    thumbnail_name: str,
+) -> dict[str, Any]:
+    _require_overview_artifact(workload_path, f"{label} workload")
+    report_path = _require_overview_artifact(artifacts_dir / report_name, f"{label} report")
+    snapshot_path = _require_overview_artifact(artifacts_dir / snapshot_name, f"{label} snapshot")
+    svg_path = _require_overview_artifact(artifacts_dir / svg_name, f"{label} SVG trace")
+    html_path = _require_overview_artifact(artifacts_dir / html_name, f"{label} HTML trace")
+    png_path = _require_overview_artifact(artifacts_dir / png_name, f"{label} PNG trace")
+    thumbnail_path = _require_overview_artifact(artifacts_dir / thumbnail_name, f"{label} thumbnail strip")
+
+    result = run_workload(load_json(workload_path))
+    stats = result.table.stats()
+    history = result.history
+    peak_depth = max((item.global_depth for item in history), default=stats["global_depth"])
+    peak_bucket_count = max((item.bucket_count for item in history), default=stats["bucket_count"])
+    split_steps = sum(1 for item in history if item.split_delta)
+    merge_steps = sum(1 for item in history if item.merge_delta)
+    directory_growth_steps = sum(1 for item in history if item.directory_growth_delta)
+    directory_shrink_steps = sum(1 for item in history if item.directory_shrink_delta)
+    op_mix = {
+        "put": sum(1 for item in history if item.op == "put"),
+        "get": sum(1 for item in history if item.op == "get"),
+        "delete": sum(1 for item in history if item.op == "delete"),
+    }
+    story_points = [
+        f"{len(history)} deterministic step(s) with {op_mix['put']} put / {op_mix['get']} get / {op_mix['delete']} delete operations",
+        f"peak global depth {peak_depth} and peak live bucket count {peak_bucket_count}",
+        f"split steps {split_steps}, merge steps {merge_steps}, directory grows {directory_growth_steps}, shrinks {directory_shrink_steps}",
+    ]
+    metric_chips = [
+        f"final depth {stats['global_depth']}",
+        f"final buckets {stats['bucket_count']}",
+        f"entries {stats['entry_count']}",
+        f"load {stats['load_factor']}",
+        f"peak depth {peak_depth}",
+    ]
+    links = [
+        ("HTML trace", html_path),
+        ("PNG screenshot", png_path),
+        ("SVG trace", svg_path),
+        ("thumbnail strip", thumbnail_path),
+        ("workload report", report_path),
+        ("snapshot JSON", snapshot_path),
+    ]
+    return {
+        "label": label,
+        "eyebrow": eyebrow,
+        "headline": headline,
+        "description": description,
+        "story_points": story_points,
+        "metric_chips": metric_chips,
+        "links": [(text, _relative_overview_href(output_html_path, path)) for text, path in links],
+        "trace_png_href": _relative_overview_href(output_html_path, png_path),
+        "thumbnail_href": _relative_overview_href(output_html_path, thumbnail_path),
+    }
+
+
+def render_portfolio_overview_html(
+    title: str,
+    artifacts_dir: Path,
+    output_html_path: Path,
+    *,
+    sample_workload_path: Path,
+    delete_workload_path: Path,
+    benchmark_summary_path: Path,
+) -> str:
+    display_artifacts_dir = artifacts_dir
+    artifacts_dir = artifacts_dir.resolve()
+    output_html_path = output_html_path.resolve()
+    benchmark_summary_path = _require_overview_artifact(benchmark_summary_path, "benchmark summary JSON")
+    benchmark_summary = load_json(benchmark_summary_path)
+    if not isinstance(benchmark_summary, dict) or not isinstance(benchmark_summary.get("results"), list) or not benchmark_summary["results"]:
+        raise BenchmarkError("benchmark summary JSON must contain a non-empty results list")
+
+    case_cards = [
+        _summarize_overview_case(
+            label="sample workload",
+            eyebrow="Growth story",
+            headline="Split-driven directory growth",
+            description="Starts small, triggers repeated bucket splits, and leaves a stable depth-3 directory that is easy to explain in interviews.",
+            workload_path=sample_workload_path,
+            artifacts_dir=artifacts_dir,
+            output_html_path=output_html_path,
+            report_name="sample_workload_report.md",
+            snapshot_name="sample_workload_snapshot.json",
+            svg_name="sample_workload_trace.svg",
+            html_name="sample_workload_trace.html",
+            png_name="sample_workload_trace.png",
+            thumbnail_name="sample_workload_trace_thumbnail_strip.svg",
+        ),
+        _summarize_overview_case(
+            label="delete-heavy workload",
+            eyebrow="Shrink story",
+            headline="Merge and directory shrink recovery",
+            description="Grows to demonstrate aliasing pressure, then merges back down to a single bucket so the full lifecycle is visible from one artifact set.",
+            workload_path=delete_workload_path,
+            artifacts_dir=artifacts_dir,
+            output_html_path=output_html_path,
+            report_name="delete_heavy_workload_report.md",
+            snapshot_name="delete_heavy_workload_snapshot.json",
+            svg_name="delete_heavy_workload_trace.svg",
+            html_name="delete_heavy_workload_trace.html",
+            png_name="delete_heavy_workload_trace.png",
+            thumbnail_name="delete_heavy_workload_trace_thumbnail_strip.svg",
+        ),
+    ]
+
+    benchmark_dashboard_html = _require_overview_artifact(artifacts_dir / "benchmark_suite_dashboard.html", "benchmark dashboard HTML")
+    benchmark_dashboard_png = _require_overview_artifact(artifacts_dir / "benchmark_suite_dashboard.png", "benchmark dashboard PNG")
+    benchmark_report = _require_overview_artifact(artifacts_dir / "benchmark_suite_report.md", "benchmark report")
+    benchmark_csv = _require_overview_artifact(artifacts_dir / "benchmark_suite_summary.csv", "benchmark CSV summary")
+
+    benchmark_results = benchmark_summary["results"]
+    max_peak_depth = max(row["extendible"]["peak_global_depth"] for row in benchmark_results)
+    max_split_count = max(row["extendible"]["split_count"] for row in benchmark_results)
+    max_merge_count = max(row["extendible"]["merge_count"] for row in benchmark_results)
+    scenario_names = [str(row["name"]) for row in benchmark_results]
+    clustering_row = next((row for row in benchmark_results if row.get("name") == "primary-clustering-tombstone-pressure"), benchmark_results[-1])
+    benchmark_cards = [
+        ("Scenarios", benchmark_summary["scenario_count"], f"{benchmark_summary['trials']} deterministic trial(s) per scenario"),
+        ("Peak extendible depth", max_peak_depth, "highest global-depth spike across the suite"),
+        ("Max split / merge story", f"{max_split_count} / {max_merge_count}", "worst-case structural churn committed in the benchmark bundle"),
+        (
+            "Linear miss pressure",
+            _format_dashboard_number(clustering_row["linear"]["lookup_probe_breakdown"]["unsuccessful"]["average_probe_count"]),
+            "avg unsuccessful linear-probing probes in the clustering-focused scenario",
+        ),
+    ]
+    benchmark_links = [
+        ("dashboard HTML", benchmark_dashboard_html),
+        ("dashboard PNG", benchmark_dashboard_png),
+        ("report Markdown", benchmark_report),
+        ("summary JSON", benchmark_summary_path),
+        ("summary CSV", benchmark_csv),
+    ]
+
+    summary_chips = [
+        f"2 workload stories",
+        f"{benchmark_summary['scenario_count']} benchmark scenarios",
+        f"peak depth {max_peak_depth}",
+        f"max split/merge {max_split_count}/{max_merge_count}",
+    ]
+    why_it_matters = [
+        "Lead with one screen that explains the problem, the artifact bundle, and the best recruiter-facing screenshots.",
+        "Use visuals first, then provide deep links for technical reviewers who want the HTML trace, snapshot JSON, and benchmark tables.",
+        "Keep the case study concise: one growth story, one shrink story, and one comparison dashboard are enough to orient a fast reviewer.",
+    ]
+    command_snippets = [
+        "python3 projects/extendible-hashing-lab/extendible_hashing_lab.py visualize --input projects/extendible-hashing-lab/sample_workload.json --svg-out docs/artifacts/extendible-hashing-lab/sample_workload_trace.svg --html-out docs/artifacts/extendible-hashing-lab/sample_workload_trace.html --png-out docs/artifacts/extendible-hashing-lab/sample_workload_trace.png --thumbnail-svg-out docs/artifacts/extendible-hashing-lab/sample_workload_trace_thumbnail_strip.svg --title 'Extendible hashing split and aliasing trace'",
+        "python3 projects/extendible-hashing-lab/extendible_hashing_lab.py visualize --input projects/extendible-hashing-lab/delete_heavy_workload.json --svg-out docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace.svg --html-out docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace.html --png-out docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace.png --thumbnail-svg-out docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace_thumbnail_strip.svg --title 'Extendible hashing delete-heavy split and shrink trace'",
+        "python3 projects/extendible-hashing-lab/extendible_hashing_lab.py benchmark --input projects/extendible-hashing-lab/benchmark_suite.json --json-out docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.json --markdown-out docs/artifacts/extendible-hashing-lab/benchmark_suite_report.md --html-out docs/artifacts/extendible-hashing-lab/benchmark_suite_dashboard.html --png-out docs/artifacts/extendible-hashing-lab/benchmark_suite_dashboard.png --csv-out docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.csv --title 'Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison'",
+        f"python3 projects/extendible-hashing-lab/extendible_hashing_lab.py overview --artifacts-dir {display_artifacts_dir} --html-out {display_artifacts_dir / 'portfolio_overview.html'} --png-out {display_artifacts_dir / 'portfolio_overview.png'} --title {title!r}",
+    ]
+
+    case_cards_html = "".join(
+        f'''<article class="case-card">
+  <p class="eyebrow">{escape(card['eyebrow'])}</p>
+  <h2>{escape(card['headline'])}</h2>
+  <p class="case-description">{escape(card['description'])}</p>
+  <div class="preview-stack">
+    <figure>
+      <img src="{escape(card['trace_png_href'])}" alt="{escape(card['label'])} PNG preview" loading="lazy" />
+      <figcaption>{escape(card['label']).capitalize()} PNG preview</figcaption>
+    </figure>
+    <figure class="thumb-strip">
+      <img src="{escape(card['thumbnail_href'])}" alt="{escape(card['label'])} thumbnail strip" loading="lazy" />
+      <figcaption>Compact thumbnail strip for README snippets or slides</figcaption>
+    </figure>
+  </div>
+  <ul class="chip-list">{"".join(f"<li>{escape(chip)}</li>" for chip in card['metric_chips'])}</ul>
+  <ul class="story-list">{"".join(f"<li>{escape(point)}</li>" for point in card['story_points'])}</ul>
+  <div class="link-grid">{"".join(f'<a href="{escape(href)}">{escape(text)}</a>' for text, href in card['links'])}</div>
+</article>'''
+        for card in case_cards
+    )
+    benchmark_cards_html = "".join(
+        f'''<article class="summary-card">
+  <h3>{escape(label)}</h3>
+  <strong>{escape(_format_dashboard_number(value) if isinstance(value, (int, float)) else str(value))}</strong>
+  <p>{escape(detail)}</p>
+</article>'''
+        for label, value, detail in benchmark_cards
+    )
+    benchmark_links_html = "".join(
+        f'<a href="{escape(_relative_overview_href(output_html_path, path))}">{escape(text)}</a>'
+        for text, path in benchmark_links
+    )
+    scenario_chips_html = "".join(f"<li>{escape(name)}</li>" for name in scenario_names)
+    why_it_matters_html = "".join(f"<li>{escape(item)}</li>" for item in why_it_matters)
+    summary_chips_html = "".join(f"<li>{escape(item)}</li>" for item in summary_chips)
+    command_sections_html = "".join(f"<pre><code>{escape(command)}</code></pre>" for command in command_snippets)
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{escape(title)}</title>
+<style>
+  :root {{ color-scheme: light; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; font-family: Inter, Segoe UI, Arial, sans-serif; background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 240px, #f8fafc 100%); color: #0f172a; }}
+  main {{ max-width: 1360px; margin: 0 auto; padding: 36px 20px 64px; }}
+  a {{ color: #1d4ed8; text-decoration: none; }}
+  a:hover {{ text-decoration: underline; }}
+  .hero, .section-card, .case-card, .summary-card {{ background: rgba(255, 255, 255, 0.96); border: 1px solid #cbd5e1; border-radius: 24px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06); }}
+  .hero {{ padding: 28px; }}
+  .hero h1 {{ margin: 0 0 10px; font-size: clamp(30px, 5vw, 46px); }}
+  .hero p {{ margin: 0; color: #334155; font-size: 18px; line-height: 1.6; }}
+  .eyebrow {{ margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.12em; font-size: 12px; font-weight: 700; color: #4338ca; }}
+  .chip-list {{ display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 18px 0 0; list-style: none; }}
+  .chip-list li {{ background: #dbeafe; color: #1e3a8a; border-radius: 999px; padding: 8px 12px; font-size: 14px; font-weight: 600; }}
+  .section-card {{ padding: 24px; margin-top: 24px; }}
+  .section-card h2 {{ margin-top: 0; }}
+  .case-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 20px; }}
+  .case-card {{ padding: 22px; }}
+  .case-card h2 {{ margin: 0 0 10px; font-size: 28px; }}
+  .case-description {{ margin: 0; color: #334155; line-height: 1.6; }}
+  .preview-stack {{ display: grid; gap: 14px; margin-top: 18px; }}
+  figure {{ margin: 0; }}
+  figure img {{ width: 100%; display: block; border-radius: 18px; border: 1px solid #cbd5e1; background: #fff; }}
+  figcaption {{ margin-top: 8px; color: #475569; font-size: 13px; }}
+  .preview-stack figure:first-child img {{ height: 460px; object-fit: cover; object-position: top center; }}
+  .thumb-strip img {{ height: 200px; object-fit: contain; background: linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%); padding: 10px; }}
+  .story-list {{ margin: 16px 0 0; padding-left: 18px; color: #1e293b; line-height: 1.6; }}
+  .link-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 18px; }}
+  .link-grid a {{ display: block; text-align: center; padding: 12px 14px; border-radius: 14px; border: 1px solid #bfdbfe; background: #eff6ff; font-weight: 600; }}
+  .benchmark-grid {{ display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; align-items: start; }}
+  .benchmark-grid img {{ width: 100%; height: 540px; object-fit: cover; object-position: top center; display: block; border-radius: 20px; border: 1px solid #cbd5e1; background: #fff; }}
+  .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }}
+  .summary-card {{ padding: 18px; }}
+  .summary-card h3 {{ margin: 0 0 8px; font-size: 16px; color: #334155; }}
+  .summary-card strong {{ display: block; font-size: 28px; margin-bottom: 8px; }}
+  .summary-card p {{ margin: 0; color: #475569; line-height: 1.5; }}
+  .plain-list {{ margin: 16px 0 0; padding-left: 18px; color: #1e293b; line-height: 1.7; }}
+  .scenario-list {{ display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 18px 0 0; list-style: none; }}
+  .scenario-list li {{ background: #ede9fe; color: #5b21b6; border-radius: 999px; padding: 8px 12px; font-size: 14px; font-weight: 600; }}
+  .command-grid {{ display: grid; gap: 14px; margin-top: 18px; }}
+  pre {{ margin: 0; padding: 16px 18px; border-radius: 16px; background: #0f172a; color: #e2e8f0; overflow-x: auto; font-size: 13px; line-height: 1.55; }}
+  code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+  @media (max-width: 960px) {{
+    .benchmark-grid {{ grid-template-columns: 1fr; }}
+  }}
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <p class="eyebrow">Recruiter-facing artifact bundle</p>
+    <h1>{escape(title)}</h1>
+    <p>This landing page puts the strongest extendible-hashing visuals in one place: a split-driven growth trace, a delete-heavy shrink trace, and a deterministic benchmark dashboard that compares extendible hashing against linear probing, cuckoo hashing, and a B-tree baseline.</p>
+    <ul class="chip-list">{summary_chips_html}</ul>
+  </section>
+
+  <section class="section-card">
+    <h2>Why this page exists</h2>
+    <ul class="plain-list">{why_it_matters_html}</ul>
+  </section>
+
+  <section class="section-card">
+    <h2>Case-study previews</h2>
+    <div class="case-grid">{case_cards_html}</div>
+  </section>
+
+  <section class="section-card">
+    <h2>Benchmark dashboard bundle</h2>
+    <div class="benchmark-grid">
+      <div>
+        <img src="{escape(_relative_overview_href(output_html_path, benchmark_dashboard_png))}" alt="Extendible hashing benchmark dashboard PNG preview" loading="lazy" />
+        <div class="link-grid" style="margin-top: 16px;">{benchmark_links_html}</div>
+      </div>
+      <div>
+        <div class="summary-grid">{benchmark_cards_html}</div>
+        <ul class="scenario-list">{scenario_chips_html}</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-card">
+    <h2>Reproduce the committed bundle</h2>
+    <div class="command-grid">{command_sections_html}</div>
+  </section>
+</main>
+</body>
+</html>
+'''
+
+
+def default_overview_png_height(case_count: int, scenario_count: int, width: int) -> int:
+    base_height = 1200 + case_count * 600 + scenario_count * 90
+    if width < 1200:
+        base_height += 320
+    return max(2200, base_height)
+
+
+def build_overview_png_command(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    width: int,
+    height: int,
+    capture_ms: int,
+    chrome_binary: str | Path | None = None,
+) -> list[str]:
+    return build_html_png_command(
+        html_output_path,
+        png_output_path,
+        width=width,
+        height=height,
+        capture_ms=capture_ms,
+        chrome_binary=chrome_binary,
+    )
+
+
+def render_overview_png(
+    html_output_path: str | Path,
+    png_output_path: str | Path,
+    *,
+    case_count: int,
+    scenario_count: int,
+    width: int = 1440,
+    height: int | None = None,
+    capture_ms: int = 1500,
+    chrome_binary: str | Path | None = None,
+) -> Path:
+    html_path = Path(html_output_path)
+    if not html_path.exists():
+        raise RuntimeError(f"HTML overview not found for PNG capture: {html_path}")
+    png_path = Path(png_output_path)
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    effective_width = max(960, width)
+    measured_height = None
+    if height is None:
+        measured_height = measure_html_document_height(
+            html_path,
+            capture_ms=max(0, capture_ms),
+            chrome_binary=chrome_binary,
+        )
+    heuristic_height = default_overview_png_height(case_count, scenario_count, effective_width)
+    if height is not None:
+        effective_height = height
+    elif measured_height is not None and measured_height > 0:
+        effective_height = max(1400, min(measured_height + 120, heuristic_height + 240))
+    else:
+        effective_height = heuristic_height
+    command = build_overview_png_command(
+        html_path,
+        png_path,
+        width=effective_width,
+        height=max(1400, effective_height),
+        capture_ms=max(0, capture_ms),
+        chrome_binary=chrome_binary,
+    )
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown Chrome headless error"
+        raise RuntimeError(f"Overview PNG capture failed: {detail}")
+    if not png_path.exists():
+        raise RuntimeError(f"Overview PNG capture did not create the expected output file: {png_path}")
+    return png_path
+
+
 def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_source: str | None = None) -> str:
     results = summary["results"]
     if not results:
@@ -2873,6 +3260,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="title to use for visualization artifacts",
     )
 
+    overview_parser = subparsers.add_parser(
+        "overview",
+        help="render a recruiter-friendly landing page for the committed extendible-hashing artifacts",
+    )
+    overview_parser.add_argument("--artifacts-dir", required=True, type=Path, help="directory containing the committed sample/delete-heavy/benchmark artifacts")
+    overview_parser.add_argument("--html-out", required=True, type=Path, help="output HTML path for the overview page")
+    overview_parser.add_argument("--png-out", type=Path, help="optional PNG screenshot captured from the generated overview page")
+    overview_parser.add_argument("--png-width", type=int, default=1440, help="viewport width in pixels for overview PNG capture (default: 1440)")
+    overview_parser.add_argument("--png-height", type=int, help="optional viewport height override for overview PNG capture; defaults to an auto-sized overview height")
+    overview_parser.add_argument("--png-capture-ms", type=int, default=1500, help="virtual time budget in milliseconds before capturing the overview PNG screenshot")
+    overview_parser.add_argument("--chrome-binary", type=Path, help="optional Chrome/Chromium binary for overview PNG capture")
+    overview_parser.add_argument(
+        "--sample-workload",
+        type=Path,
+        default=Path(__file__).resolve().with_name("sample_workload.json"),
+        help="source workload JSON for the growth-oriented case study card",
+    )
+    overview_parser.add_argument(
+        "--delete-workload",
+        type=Path,
+        default=Path(__file__).resolve().with_name("delete_heavy_workload.json"),
+        help="source workload JSON for the delete-heavy case study card",
+    )
+    overview_parser.add_argument(
+        "--benchmark-summary",
+        type=Path,
+        help="optional benchmark summary JSON path; defaults to <artifacts-dir>/benchmark_suite_summary.json",
+    )
+    overview_parser.add_argument(
+        "--title",
+        default="Extendible hashing recruiter-friendly artifact overview",
+        help="title to use for the overview artifacts",
+    )
+
     return parser
 
 
@@ -2915,6 +3336,47 @@ def command_delete(args: argparse.Namespace) -> int:
     save_snapshot(args.output, table)
     print(f"{args.key}: {'deleted' if removed else 'missing'}")
     return 0 if removed else 1
+
+
+def command_overview(args: argparse.Namespace) -> int:
+    benchmark_summary_path = args.benchmark_summary or (args.artifacts_dir / "benchmark_suite_summary.json")
+    html = render_portfolio_overview_html(
+        args.title,
+        args.artifacts_dir,
+        args.html_out,
+        sample_workload_path=args.sample_workload,
+        delete_workload_path=args.delete_workload,
+        benchmark_summary_path=benchmark_summary_path,
+    )
+    args.html_out.parent.mkdir(parents=True, exist_ok=True)
+    args.html_out.write_text(html + "\n", encoding="utf-8")
+    benchmark_summary = load_json(benchmark_summary_path)
+    scenario_count = benchmark_summary["scenario_count"] if isinstance(benchmark_summary, dict) and isinstance(benchmark_summary.get("scenario_count"), int) else len(benchmark_summary.get("results", []))
+    if args.png_out:
+        render_overview_png(
+            args.html_out,
+            args.png_out,
+            case_count=2,
+            scenario_count=scenario_count,
+            width=args.png_width,
+            height=args.png_height,
+            capture_ms=args.png_capture_ms,
+            chrome_binary=args.chrome_binary,
+        )
+    print(
+        json.dumps(
+            {
+                "artifacts_dir": str(args.artifacts_dir),
+                "benchmark_summary": str(benchmark_summary_path),
+                "html_out": str(args.html_out),
+                "png_out": str(args.png_out) if args.png_out else None,
+                "scenario_count": scenario_count,
+                "title": args.title,
+            },
+            indent=2,
+        )
+    )
+    return 0
 
 
 def command_benchmark(args: argparse.Namespace) -> int:
@@ -3008,6 +3470,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--png-out requires --html-out because the PNG is captured from the generated HTML dashboard")
     if args.command == "visualize" and args.png_out is not None and args.html_out is None:
         parser.error("--png-out requires --html-out because the PNG is captured from the generated HTML visualization")
+    if args.command == "overview" and args.png_out is not None and args.html_out is None:
+        parser.error("--png-out requires --html-out because the PNG is captured from the generated overview HTML page")
     if args.command == "run":
         return command_run(args)
     if args.command == "inspect":
@@ -3020,6 +3484,8 @@ def main(argv: list[str] | None = None) -> int:
         return command_benchmark(args)
     if args.command == "visualize":
         return command_visualize(args)
+    if args.command == "overview":
+        return command_overview(args)
     parser.error(f"unsupported command: {args.command}")
     return 2
 

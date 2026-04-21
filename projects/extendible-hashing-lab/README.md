@@ -17,6 +17,7 @@ A portfolio-friendly Python lab that implements an extendible hash index with dy
 - self-contained SVG/HTML visualization exports that show split sequences, directory aliasing, and bucket-local-depth changes per step while preserving full details through hover/tooltips
 - optional PNG capture for the workload visualization page so the same `visualize` run can emit recruiter-friendly screenshots without a manual browser round-trip
 - optional compact thumbnail-strip SVG export for the visualization workflow so README screenshots and slide snippets stay easy to embed
+- recruiter-friendly overview command that bundles the strongest sample/delete-heavy/benchmark artifacts into one HTML landing page with an optional PNG screenshot for README or portfolio index use
 - benchmark mode that compares extendible hashing against a simple linear-probing baseline, the repo's cuckoo-hashing lab, and the B-tree lab across JSON suite scenarios with JSON/Markdown/HTML/PNG/CSV outputs
 - committed benchmark suite now includes a clustering-focused `primary-clustering-tombstone-pressure` preset that exaggerates linear-probing probe growth, tombstones, and cleanup rebuilds
 - compact self-contained HTML benchmark dashboard export for recruiter-friendly browsing of the same deterministic benchmark suite
@@ -93,6 +94,16 @@ python3 projects/extendible-hashing-lab/extendible_hashing_lab.py visualize \
 
 `--png-out` captures a Chrome/Chromium headless screenshot from the generated HTML visualization, so pair it with `--html-out` and optionally pass `--chrome-binary` when the browser is not already on `PATH`.
 
+Bundle the committed sample, delete-heavy, and benchmark artifacts into a recruiter-friendly landing page:
+
+```bash
+python3 projects/extendible-hashing-lab/extendible_hashing_lab.py overview \
+  --artifacts-dir docs/artifacts/extendible-hashing-lab \
+  --html-out /tmp/extendible-overview.html \
+  --png-out /tmp/extendible-overview.png \
+  --title 'Extendible hashing recruiter-friendly artifact overview'
+```
+
 Compare extendible hashing against a simple linear-probing baseline, the repo's cuckoo-hashing lab, and the B-tree lab across the committed suite:
 
 ```bash
@@ -122,6 +133,8 @@ See the committed visualization + benchmark demo outputs without rerunning anyth
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_dashboard.html`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_dashboard.png`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.csv`
+- `docs/artifacts/extendible-hashing-lab/portfolio_overview.html`
+- `docs/artifacts/extendible-hashing-lab/portfolio_overview.png`
 
 ## Test
 
@@ -131,4 +144,4 @@ python3 -m unittest tests.test_extendible_hashing_lab -v
 
 ## Future improvements
 - consider a second ultra-wide thumbnail preset optimized for one-line hero banners in project index pages
-- consider a compact multi-workload landing page that places the sample, delete-heavy, PNG, and thumbnail artifacts on one recruiter-friendly overview page
+- consider a repo-level portfolio index that cross-links this overview with the strongest artifact pages from the other data-structures projects

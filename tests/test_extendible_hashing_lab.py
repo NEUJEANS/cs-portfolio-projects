@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "projects/extendible-hashing-lab/extendible_hashing_lab.py"
 SAMPLE_WORKLOAD = REPO_ROOT / "projects/extendible-hashing-lab/sample_workload.json"
+DELETE_HEAVY_WORKLOAD = REPO_ROOT / "projects/extendible-hashing-lab/delete_heavy_workload.json"
 BENCHMARK_SUITE = REPO_ROOT / "projects/extendible-hashing-lab/benchmark_suite.json"
 SPEC = importlib.util.spec_from_file_location("extendible_hashing_lab", SCRIPT)
 assert SPEC and SPEC.loader
@@ -22,8 +24,10 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 BenchmarkError = MODULE.BenchmarkError
 build_benchmark_png_command = MODULE.build_benchmark_png_command
+build_overview_png_command = MODULE.build_overview_png_command
 build_visualization_png_command = MODULE.build_visualization_png_command
 default_benchmark_png_height = MODULE.default_benchmark_png_height
+default_overview_png_height = MODULE.default_overview_png_height
 default_visualization_png_height = MODULE.default_visualization_png_height
 ExtendibleHashTable = MODULE.ExtendibleHashTable
 LinearProbingHashTable = MODULE.LinearProbingHashTable
@@ -32,6 +36,8 @@ WorkloadError = MODULE.WorkloadError
 load_snapshot = MODULE.load_snapshot
 render_benchmark_dashboard_html = MODULE.render_benchmark_dashboard_html
 render_benchmark_png = MODULE.render_benchmark_png
+render_overview_png = MODULE.render_overview_png
+render_portfolio_overview_html = MODULE.render_portfolio_overview_html
 render_visualization_html = MODULE.render_visualization_html
 render_visualization_png = MODULE.render_visualization_png
 render_visualization_svg = MODULE.render_visualization_svg
@@ -974,6 +980,131 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     step_count=7,
                 )
 
+    def test_build_overview_png_command_uses_headless_chrome_and_file_uri(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            html_path = tmp_path / 'overview.html'
+            png_path = tmp_path / 'overview.png'
+            html_path.write_text('<!doctype html><title>overview</title>', encoding='utf-8')
+            with mock.patch.object(MODULE, 'resolve_chrome_binary', return_value='/usr/bin/google-chrome'):
+                command = build_overview_png_command(
+                    html_path,
+                    png_path,
+                    width=1500,
+                    height=3200,
+                    capture_ms=900,
+                )
+            self.assertEqual(command[0], '/usr/bin/google-chrome')
+            self.assertIn('--headless', command)
+            self.assertIn('--window-size=1500,3200', command)
+            self.assertIn('--virtual-time-budget=900', command)
+            self.assertIn(f'--screenshot={png_path.resolve()}', command)
+            self.assertEqual(command[-1], html_path.resolve().as_uri())
+
+    def test_render_overview_html_links_expected_artifacts_and_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            artifacts_dir = tmp_path / 'artifacts'
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            (artifacts_dir / 'benchmark_suite_summary.json').write_text(
+                (REPO_ROOT / 'docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.json').read_text(encoding='utf-8'),
+                encoding='utf-8',
+            )
+            for name in [
+                'sample_workload_report.md',
+                'sample_workload_snapshot.json',
+                'sample_workload_trace.svg',
+                'sample_workload_trace.html',
+                'sample_workload_trace.png',
+                'sample_workload_trace_thumbnail_strip.svg',
+                'delete_heavy_workload_report.md',
+                'delete_heavy_workload_snapshot.json',
+                'delete_heavy_workload_trace.svg',
+                'delete_heavy_workload_trace.html',
+                'delete_heavy_workload_trace.png',
+                'delete_heavy_workload_trace_thumbnail_strip.svg',
+                'benchmark_suite_dashboard.html',
+                'benchmark_suite_dashboard.png',
+                'benchmark_suite_report.md',
+                'benchmark_suite_summary.csv',
+            ]:
+                (artifacts_dir / name).write_text(f'placeholder for {name}\n', encoding='utf-8')
+            html_path = artifacts_dir / 'portfolio_overview.html'
+            html = render_portfolio_overview_html(
+                'Extendible hashing recruiter-friendly artifact overview',
+                artifacts_dir,
+                html_path,
+                sample_workload_path=SAMPLE_WORKLOAD,
+                delete_workload_path=DELETE_HEAVY_WORKLOAD,
+                benchmark_summary_path=artifacts_dir / 'benchmark_suite_summary.json',
+            )
+            self.assertIn('Recruiter-facing artifact bundle', html)
+            self.assertIn('Split-driven directory growth', html)
+            self.assertIn('Merge and directory shrink recovery', html)
+            self.assertIn('primary-clustering-tombstone-pressure', html)
+            self.assertIn('sample_workload_trace.html', html)
+            self.assertIn('delete_heavy_workload_trace.png', html)
+            self.assertIn('benchmark_suite_dashboard.png', html)
+            self.assertIn('final depth 3', html)
+            self.assertIn('final depth 0', html)
+            self.assertIn('2 workload stories', html)
+            self.assertIn('4 benchmark scenarios', html)
+
+    def test_render_overview_html_reproduce_command_stays_portable_for_relative_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            artifacts_dir = tmp_path / 'artifacts'
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            (artifacts_dir / 'benchmark_suite_summary.json').write_text(
+                (REPO_ROOT / 'docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.json').read_text(encoding='utf-8'),
+                encoding='utf-8',
+            )
+            for name in [
+                'sample_workload_report.md',
+                'sample_workload_snapshot.json',
+                'sample_workload_trace.svg',
+                'sample_workload_trace.html',
+                'sample_workload_trace.png',
+                'sample_workload_trace_thumbnail_strip.svg',
+                'delete_heavy_workload_report.md',
+                'delete_heavy_workload_snapshot.json',
+                'delete_heavy_workload_trace.svg',
+                'delete_heavy_workload_trace.html',
+                'delete_heavy_workload_trace.png',
+                'delete_heavy_workload_trace_thumbnail_strip.svg',
+                'benchmark_suite_dashboard.html',
+                'benchmark_suite_dashboard.png',
+                'benchmark_suite_report.md',
+                'benchmark_suite_summary.csv',
+            ]:
+                (artifacts_dir / name).write_text(f'placeholder for {name}\n', encoding='utf-8')
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(tmp_path)
+                html = render_portfolio_overview_html(
+                    'Extendible hashing recruiter-friendly artifact overview',
+                    Path('artifacts'),
+                    Path('artifacts/portfolio_overview.html'),
+                    sample_workload_path=SAMPLE_WORKLOAD,
+                    delete_workload_path=DELETE_HEAVY_WORKLOAD,
+                    benchmark_summary_path=Path('artifacts/benchmark_suite_summary.json'),
+                )
+            finally:
+                os.chdir(previous_cwd)
+            self.assertIn('--artifacts-dir artifacts --html-out artifacts/portfolio_overview.html --png-out artifacts/portfolio_overview.png', html)
+            self.assertNotIn(str(tmp_path), html)
+
+    def test_render_overview_png_raises_when_html_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            with self.assertRaisesRegex(RuntimeError, 'HTML overview not found'):
+                render_overview_png(
+                    tmp_path / 'missing.html',
+                    tmp_path / 'out.png',
+                    case_count=2,
+                    scenario_count=4,
+                )
+
     def test_benchmark_cli_rejects_png_without_html_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             png_path = Path(tmp_dir) / 'dashboard.png'
@@ -1014,6 +1145,36 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertNotEqual(process.returncode, 0)
             self.assertIn('--png-out requires --html-out', process.stderr)
 
+    def test_overview_cli_reports_missing_benchmark_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifacts_dir = Path(tmp_dir) / 'artifacts'
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            png_path = Path(tmp_dir) / 'overview.png'
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    'overview',
+                    '--artifacts-dir',
+                    str(artifacts_dir),
+                    '--html-out',
+                    str(Path(tmp_dir) / 'overview.html'),
+                    '--png-out',
+                    str(png_path),
+                    '--benchmark-summary',
+                    str(artifacts_dir / 'benchmark_suite_summary.json'),
+                    '--sample-workload',
+                    str(SAMPLE_WORKLOAD),
+                    '--delete-workload',
+                    str(DELETE_HEAVY_WORKLOAD),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(process.returncode, 0)
+            self.assertIn('benchmark summary JSON not found', process.stderr)
+
     def test_cli_run_inspect_lookup_delete_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -1029,6 +1190,8 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             visualize_html = tmp_path / "trace.html"
             visualize_png = tmp_path / "trace.png"
             visualize_thumbnail = tmp_path / "trace-thumbnail.svg"
+            overview_html = tmp_path / "overview.html"
+            overview_png = tmp_path / "overview.png"
 
             run_process = subprocess.run(
                 [
@@ -1221,6 +1384,42 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn("Directory aliases", visualize_svg.read_text(encoding="utf-8"))
             self.assertIn("Step 1", visualize_html.read_text(encoding="utf-8"))
             self.assertIn("thumbnail strip", visualize_thumbnail.read_text(encoding="utf-8"))
+
+            overview_command = [
+                sys.executable,
+                str(SCRIPT),
+                'overview',
+                '--artifacts-dir',
+                str(REPO_ROOT / 'docs/artifacts/extendible-hashing-lab'),
+                '--html-out',
+                str(overview_html),
+                '--sample-workload',
+                str(SAMPLE_WORKLOAD),
+                '--delete-workload',
+                str(DELETE_HEAVY_WORKLOAD),
+                '--title',
+                'Extendible hashing recruiter-friendly artifact overview',
+            ]
+            if chrome_available:
+                overview_command.extend(['--png-out', str(overview_png)])
+            overview_process = subprocess.run(
+                overview_command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(overview_html.exists())
+            if chrome_available:
+                self.assertTrue(overview_png.exists())
+                self.assertIn(str(overview_png), overview_process.stdout)
+            overview_html_text = overview_html.read_text(encoding='utf-8')
+            self.assertIn('Recruiter-facing artifact bundle', overview_html_text)
+            self.assertIn('Split-driven directory growth', overview_html_text)
+            self.assertIn('Merge and directory shrink recovery', overview_html_text)
+            self.assertIn('benchmark_suite_dashboard.png', overview_html_text)
+            self.assertIn('sample_workload_trace.png', overview_html_text)
+            self.assertIn('4 benchmark scenarios', overview_html_text)
+            self.assertIn('primary-clustering-tombstone-pressure', overview_html_text)
 
 
 if __name__ == "__main__":
