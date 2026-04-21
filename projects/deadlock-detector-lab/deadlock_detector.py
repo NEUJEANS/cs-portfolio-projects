@@ -49,6 +49,28 @@ class AllocationAnalysis:
 
 
 @dataclass(slots=True)
+class BankerTraceStep:
+    step: int
+    process: str
+    runnable_processes: list[str]
+    work_before: dict[str, int]
+    need: dict[str, int]
+    allocation_released: dict[str, int]
+    work_after: dict[str, int]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "step": self.step,
+            "process": self.process,
+            "runnable_processes": self.runnable_processes,
+            "work_before": self.work_before,
+            "need": self.need,
+            "allocation_released": self.allocation_released,
+            "work_after": self.work_after,
+        }
+
+
+@dataclass(slots=True)
 class BankerSafetyAnalysis:
     resources: list[str]
     processes: list[str]
@@ -57,6 +79,8 @@ class BankerSafetyAnalysis:
     unfinished_processes: list[str]
     need: dict[str, dict[str, int]]
     work: dict[str, int]
+    blocking: dict[str, dict[str, int]]
+    trace_steps: list[BankerTraceStep]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -68,6 +92,8 @@ class BankerSafetyAnalysis:
             "unfinished_processes": self.unfinished_processes,
             "need": self.need,
             "work": self.work,
+            "blocking": self.blocking,
+            "trace_steps": [step.to_dict() for step in self.trace_steps],
         }
 
 
@@ -82,6 +108,11 @@ class BankerRequestAnalysis:
     available: dict[str, int]
     allocation: dict[str, dict[str, int]]
     need: dict[str, dict[str, int]]
+    trial_available: dict[str, int] | None
+    trial_allocation: dict[str, dict[str, int]] | None
+    trial_need: dict[str, dict[str, int]] | None
+    blocking: dict[str, dict[str, int]]
+    trace_steps: list[BankerTraceStep]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -95,6 +126,11 @@ class BankerRequestAnalysis:
             "available": self.available,
             "allocation": self.allocation,
             "need": self.need,
+            "trial_available": self.trial_available,
+            "trial_allocation": self.trial_allocation,
+            "trial_need": self.trial_need,
+            "blocking": self.blocking,
+            "trace_steps": [step.to_dict() for step in self.trace_steps],
         }
 
 
@@ -318,6 +354,32 @@ def validate_banker_state(
 
 
 
+def _resource_vector(resources: list[str], values: dict[str, int]) -> dict[str, int]:
+    return {resource: int(values.get(resource, 0)) for resource in resources}
+
+
+
+def _banker_blocking(
+    resources: list[str],
+    processes: list[str],
+    work: dict[str, int],
+    need: dict[str, dict[str, int]],
+    finished: dict[str, bool],
+) -> dict[str, dict[str, int]]:
+    blocking: dict[str, dict[str, int]] = {}
+    for process in processes:
+        if finished[process]:
+            continue
+        shortage: dict[str, int] = {}
+        for resource in resources:
+            missing = int(need[process].get(resource, 0)) - int(work.get(resource, 0))
+            if missing > 0:
+                shortage[resource] = missing
+        blocking[process] = shortage
+    return blocking
+
+
+
 def banker_safety_from_state(
     resources: list[str],
     processes: list[str],
@@ -325,9 +387,10 @@ def banker_safety_from_state(
     allocation: dict[str, dict[str, int]],
     need: dict[str, dict[str, int]],
 ) -> BankerSafetyAnalysis:
-    work = {resource: int(available.get(resource, 0)) for resource in resources}
+    work = _resource_vector(resources, available)
     finished = {process: False for process in processes}
     safe_sequence: list[str] = []
+    trace_steps: list[BankerTraceStep] = []
 
     progress = True
     while progress:
@@ -336,13 +399,33 @@ def banker_safety_from_state(
             if finished[process]:
                 continue
             if all(int(need[process].get(resource, 0)) <= work[resource] for resource in resources):
+                runnable_processes = [
+                    candidate
+                    for candidate in processes
+                    if not finished[candidate]
+                    and all(int(need[candidate].get(resource, 0)) <= work[resource] for resource in resources)
+                ]
+                work_before = dict(work)
+                allocation_released = _resource_vector(resources, allocation.get(process, {}))
                 finished[process] = True
                 safe_sequence.append(process)
                 for resource in resources:
-                    work[resource] += int(allocation.get(process, {}).get(resource, 0))
+                    work[resource] += allocation_released[resource]
+                trace_steps.append(
+                    BankerTraceStep(
+                        step=len(trace_steps) + 1,
+                        process=process,
+                        runnable_processes=runnable_processes,
+                        work_before=work_before,
+                        need=_resource_vector(resources, need[process]),
+                        allocation_released=allocation_released,
+                        work_after=dict(work),
+                    )
+                )
                 progress = True
 
     unfinished = [process for process in processes if not finished[process]]
+    blocking = _banker_blocking(resources, processes, work, need, finished)
     return BankerSafetyAnalysis(
         resources=resources,
         processes=processes,
@@ -351,6 +434,8 @@ def banker_safety_from_state(
         unfinished_processes=unfinished,
         need=need,
         work=work,
+        blocking=blocking,
+        trace_steps=trace_steps,
     )
 
 
@@ -393,6 +478,11 @@ def analyze_banker_request(payload: dict[str, object]) -> BankerRequestAnalysis:
                 available=available,
                 allocation=allocation,
                 need=need,
+                trial_available=None,
+                trial_allocation=None,
+                trial_need=None,
+                blocking={},
+                trace_steps=[],
             )
         if requested > int(available.get(resource, 0)):
             return BankerRequestAnalysis(
@@ -405,6 +495,11 @@ def analyze_banker_request(payload: dict[str, object]) -> BankerRequestAnalysis:
                 available=available,
                 allocation=allocation,
                 need=need,
+                trial_available=None,
+                trial_allocation=None,
+                trial_need=None,
+                blocking={},
+                trace_steps=[],
             )
 
     trial_available = dict(available)
@@ -428,6 +523,11 @@ def analyze_banker_request(payload: dict[str, object]) -> BankerRequestAnalysis:
             available=available,
             allocation=allocation,
             need=need,
+            trial_available=trial_available,
+            trial_allocation=trial_allocation,
+            trial_need=trial_need,
+            blocking=safety.blocking,
+            trace_steps=safety.trace_steps,
         )
 
     return BankerRequestAnalysis(
@@ -440,7 +540,90 @@ def analyze_banker_request(payload: dict[str, object]) -> BankerRequestAnalysis:
         available=trial_available,
         allocation=trial_allocation,
         need=trial_need,
+        trial_available=trial_available,
+        trial_allocation=trial_allocation,
+        trial_need=trial_need,
+        blocking=safety.blocking,
+        trace_steps=safety.trace_steps,
     )
+
+
+
+def _format_resource_vector(values: dict[str, int]) -> str:
+    return ", ".join(f"{resource}={count}" for resource, count in values.items())
+
+
+
+def render_banker_safety_markdown(analysis: BankerSafetyAnalysis, source_label: str) -> str:
+    lines = [
+        "# Banker's algorithm safety trace",
+        "",
+        f"- Source: `{source_label}`",
+        f"- Safe: {'yes' if analysis.safe else 'no'}",
+        f"- Safe sequence: `{', '.join(analysis.safe_sequence)}`" if analysis.safe_sequence else "- Safe sequence: none",
+        f"- Final work: `{_format_resource_vector(analysis.work)}`",
+    ]
+    if analysis.unfinished_processes:
+        lines.append(f"- Unfinished processes: `{', '.join(analysis.unfinished_processes)}`")
+    if analysis.blocking:
+        blocking_parts = []
+        for process, shortage in analysis.blocking.items():
+            blocking_parts.append(f"`{process}` needs {_format_resource_vector(shortage)}")
+        lines.append(f"- Blocking summary: {'; '.join(blocking_parts)}")
+    lines.extend(
+        [
+            "",
+            "## Safety trace steps",
+            "",
+            "| Step | Chosen process | Runnable set | Work before | Remaining need | Allocation released | Work after |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for step in analysis.trace_steps:
+        lines.append(
+            f"| {step.step} | `{step.process}` | `{', '.join(step.runnable_processes)}` | `{_format_resource_vector(step.work_before)}` | `{_format_resource_vector(step.need)}` | `{_format_resource_vector(step.allocation_released)}` | `{_format_resource_vector(step.work_after)}` |"
+        )
+    if not analysis.trace_steps:
+        lines.append("| 0 | none | none | n/a | n/a | n/a | n/a |")
+    return "\n".join(lines) + "\n"
+
+
+
+def render_banker_request_markdown(analysis: BankerRequestAnalysis, source_label: str) -> str:
+    lines = [
+        "# Banker's algorithm request trace",
+        "",
+        f"- Source: `{source_label}`",
+        f"- Process: `{analysis.process}`",
+        f"- Request: `{_format_resource_vector(analysis.request)}`",
+        f"- Granted: {'yes' if analysis.granted else 'no'}",
+        f"- Reason: {analysis.reason}",
+        f"- Safe after trial: {'yes' if analysis.safe else 'no'}",
+        f"- Safe sequence: `{', '.join(analysis.safe_sequence)}`" if analysis.safe_sequence else "- Safe sequence: none",
+    ]
+    trial_available = analysis.trial_available if analysis.trial_available is not None else analysis.available
+    lines.append(f"- Evaluated available vector: `{_format_resource_vector(trial_available)}`")
+    if analysis.blocking:
+        blocking_parts = []
+        for process, shortage in analysis.blocking.items():
+            blocking_parts.append(f"`{process}` needs {_format_resource_vector(shortage)}")
+        lines.append(f"- Blocking summary: {'; '.join(blocking_parts)}")
+    lines.extend(
+        [
+            "",
+            "## Trial safety trace",
+            "",
+            "| Step | Chosen process | Runnable set | Work before | Remaining need | Allocation released | Work after |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for step in analysis.trace_steps:
+        lines.append(
+            f"| {step.step} | `{step.process}` | `{', '.join(step.runnable_processes)}` | `{_format_resource_vector(step.work_before)}` | `{_format_resource_vector(step.need)}` | `{_format_resource_vector(step.allocation_released)}` | `{_format_resource_vector(step.work_after)}` |"
+        )
+    if not analysis.trace_steps:
+        lines.append("| 0 | none | none | n/a | n/a | n/a | n/a |")
+    return "\n".join(lines) + "\n"
 
 
 
@@ -468,6 +651,10 @@ def build_parser() -> argparse.ArgumentParser:
         "input",
         help="path to JSON file containing available/allocation/max objects",
     )
+    banker_parser.add_argument(
+        "--markdown-out",
+        help="optional path for a step-by-step Banker's safety trace markdown export",
+    )
 
     banker_request_parser = subparsers.add_parser(
         "request-banker",
@@ -476,6 +663,10 @@ def build_parser() -> argparse.ArgumentParser:
     banker_request_parser.add_argument(
         "input",
         help="path to JSON file containing available/allocation/max/process/request objects",
+    )
+    banker_request_parser.add_argument(
+        "--markdown-out",
+        help="optional path for a Banker's request evaluation markdown trace export",
     )
 
     return parser
@@ -488,17 +679,29 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         payload = load_json(Path(args.input))
+        markdown: str | None = None
         if args.command == "analyze-wait":
             result = analyze_wait_for_graph(payload).to_dict()
         elif args.command == "analyze-allocations":
             result = analyze_allocations(payload).to_dict()
         elif args.command == "analyze-banker":
-            result = analyze_banker_state(payload).to_dict()
+            analysis = analyze_banker_state(payload)
+            result = analysis.to_dict()
+            if getattr(args, "markdown_out", None):
+                markdown = render_banker_safety_markdown(analysis, args.input)
         elif args.command == "request-banker":
-            result = analyze_banker_request(payload).to_dict()
+            analysis = analyze_banker_request(payload)
+            result = analysis.to_dict()
+            if getattr(args, "markdown_out", None):
+                markdown = render_banker_request_markdown(analysis, args.input)
         else:
             parser.error("unsupported command")
             return 2
+
+        if markdown is not None and getattr(args, "markdown_out", None):
+            markdown_path = Path(args.markdown_out)
+            markdown_path.parent.mkdir(parents=True, exist_ok=True)
+            markdown_path.write_text(markdown, encoding="utf-8")
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         parser.exit(2, f"error: {exc}\n")
 

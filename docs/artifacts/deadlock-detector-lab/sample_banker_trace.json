@@ -1,0 +1,199 @@
+{
+  "blocking": {},
+  "model": "banker-safety",
+  "need": {
+    "P0": {
+      "A": 7,
+      "B": 4,
+      "C": 3
+    },
+    "P1": {
+      "A": 1,
+      "B": 2,
+      "C": 2
+    },
+    "P2": {
+      "A": 6,
+      "B": 0,
+      "C": 0
+    },
+    "P3": {
+      "A": 0,
+      "B": 1,
+      "C": 1
+    },
+    "P4": {
+      "A": 4,
+      "B": 3,
+      "C": 1
+    }
+  },
+  "processes": [
+    "P0",
+    "P1",
+    "P2",
+    "P3",
+    "P4"
+  ],
+  "resources": [
+    "A",
+    "B",
+    "C"
+  ],
+  "safe": true,
+  "safe_sequence": [
+    "P1",
+    "P3",
+    "P4",
+    "P0",
+    "P2"
+  ],
+  "trace_steps": [
+    {
+      "allocation_released": {
+        "A": 2,
+        "B": 0,
+        "C": 0
+      },
+      "need": {
+        "A": 1,
+        "B": 2,
+        "C": 2
+      },
+      "process": "P1",
+      "runnable_processes": [
+        "P1",
+        "P3"
+      ],
+      "step": 1,
+      "work_after": {
+        "A": 5,
+        "B": 3,
+        "C": 2
+      },
+      "work_before": {
+        "A": 3,
+        "B": 3,
+        "C": 2
+      }
+    },
+    {
+      "allocation_released": {
+        "A": 2,
+        "B": 1,
+        "C": 1
+      },
+      "need": {
+        "A": 0,
+        "B": 1,
+        "C": 1
+      },
+      "process": "P3",
+      "runnable_processes": [
+        "P3",
+        "P4"
+      ],
+      "step": 2,
+      "work_after": {
+        "A": 7,
+        "B": 4,
+        "C": 3
+      },
+      "work_before": {
+        "A": 5,
+        "B": 3,
+        "C": 2
+      }
+    },
+    {
+      "allocation_released": {
+        "A": 0,
+        "B": 0,
+        "C": 2
+      },
+      "need": {
+        "A": 4,
+        "B": 3,
+        "C": 1
+      },
+      "process": "P4",
+      "runnable_processes": [
+        "P0",
+        "P2",
+        "P4"
+      ],
+      "step": 3,
+      "work_after": {
+        "A": 7,
+        "B": 4,
+        "C": 5
+      },
+      "work_before": {
+        "A": 7,
+        "B": 4,
+        "C": 3
+      }
+    },
+    {
+      "allocation_released": {
+        "A": 0,
+        "B": 1,
+        "C": 0
+      },
+      "need": {
+        "A": 7,
+        "B": 4,
+        "C": 3
+      },
+      "process": "P0",
+      "runnable_processes": [
+        "P0",
+        "P2"
+      ],
+      "step": 4,
+      "work_after": {
+        "A": 7,
+        "B": 5,
+        "C": 5
+      },
+      "work_before": {
+        "A": 7,
+        "B": 4,
+        "C": 5
+      }
+    },
+    {
+      "allocation_released": {
+        "A": 3,
+        "B": 0,
+        "C": 2
+      },
+      "need": {
+        "A": 6,
+        "B": 0,
+        "C": 0
+      },
+      "process": "P2",
+      "runnable_processes": [
+        "P2"
+      ],
+      "step": 5,
+      "work_after": {
+        "A": 10,
+        "B": 5,
+        "C": 7
+      },
+      "work_before": {
+        "A": 7,
+        "B": 5,
+        "C": 5
+      }
+    }
+  ],
+  "unfinished_processes": [],
+  "work": {
+    "A": 10,
+    "B": 5,
+    "C": 7
+  }
+}
