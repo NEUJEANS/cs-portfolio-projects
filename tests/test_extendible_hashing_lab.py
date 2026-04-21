@@ -24,6 +24,7 @@ ExtendibleHashTable = MODULE.ExtendibleHashTable
 SnapshotError = MODULE.SnapshotError
 WorkloadError = MODULE.WorkloadError
 load_snapshot = MODULE.load_snapshot
+render_benchmark_dashboard_html = MODULE.render_benchmark_dashboard_html
 render_visualization_html = MODULE.render_visualization_html
 render_visualization_svg = MODULE.render_visualization_svg
 run_benchmark_suite = MODULE.run_benchmark_suite
@@ -477,6 +478,24 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         with self.assertRaises(BenchmarkError):
             summarize_benchmark_trials(scenario, trial_rows)
 
+
+    def test_render_benchmark_dashboard_html_uses_accessible_tables_and_escaped_content(self) -> None:
+        summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
+        html = render_benchmark_dashboard_html(
+            "Extendible hashing <dashboard>",
+            summary,
+            suite_source='projects/extendible-hashing-lab/benchmark_suite.json?x=<unsafe>',
+        )
+        self.assertIn('<title>Extendible hashing &lt;dashboard&gt;</title>', html)
+        self.assertIn('Scenario scoreboard with the headline metrics', html)
+        self.assertIn('<thead>', html)
+        self.assertIn('<tbody>', html)
+        self.assertIn('directory-friendly-read-heavy', html)
+        self.assertIn('B-tree page baseline', html)
+        self.assertIn('benchmark_suite.json?x=&lt;unsafe&gt;', html)
+        self.assertNotIn('benchmark_suite.json?x=<unsafe>', html)
+        self.assertIn('metric-bar', html)
+
     def test_summarize_benchmark_trials_rejects_inconsistent_btree_metrics(self) -> None:
         scenario = {
             "name": "nondeterministic-btree",
@@ -588,6 +607,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             updated_snapshot_path = tmp_path / "snapshot-updated.json"
             benchmark_json = tmp_path / "benchmark.json"
             benchmark_md = tmp_path / "benchmark.md"
+            benchmark_html = tmp_path / "benchmark.html"
             benchmark_csv = tmp_path / "benchmark.csv"
             visualize_svg = tmp_path / "trace.svg"
             visualize_html = tmp_path / "trace.html"
@@ -674,6 +694,8 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     str(benchmark_json),
                     "--markdown-out",
                     str(benchmark_md),
+                    "--html-out",
+                    str(benchmark_html),
                     "--csv-out",
                     str(benchmark_csv),
                     "--title",
@@ -685,6 +707,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             )
             self.assertTrue(benchmark_json.exists())
             self.assertTrue(benchmark_md.exists())
+            self.assertTrue(benchmark_html.exists())
             self.assertTrue(benchmark_csv.exists())
             self.assertIn('"scenario_count": 3', benchmark_process.stdout)
             self.assertIn('"btree_page_size": 512', benchmark_process.stdout)
@@ -695,6 +718,10 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn("B-tree page baseline", benchmark_md_text)
             benchmark_json_payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
             self.assertEqual(benchmark_json_payload["title"], benchmark_title)
+            benchmark_html_text = benchmark_html.read_text(encoding="utf-8")
+            self.assertIn(benchmark_title, benchmark_html_text)
+            self.assertIn("Scenario scoreboard", benchmark_html_text)
+            self.assertIn("directory-friendly-read-heavy", benchmark_html_text)
             benchmark_csv_text = benchmark_csv.read_text(encoding="utf-8")
             self.assertIn("btree_paged_file_bytes", benchmark_csv_text)
             self.assertNotIn("\r", benchmark_csv_text)

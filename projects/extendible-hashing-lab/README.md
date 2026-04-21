@@ -16,6 +16,7 @@ A portfolio-friendly Python lab that implements an extendible hash index with dy
 - workload runner that records per-step growth and can export a Markdown trace report
 - self-contained SVG/HTML visualization exports that show split sequences, directory aliasing, and bucket-local-depth changes per step while preserving full details through hover/tooltips
 - benchmark mode that compares extendible hashing against the repo's cuckoo-hashing and B-tree labs across JSON suite scenarios with JSON/Markdown/CSV outputs
+- compact self-contained HTML benchmark dashboard export for recruiter-friendly browsing of the same deterministic benchmark suite
 - CLI commands for workload execution, snapshot inspection, lookups, deletions, visualization exports, and benchmark exports
 - unit tests that cover bucket splits, merges, directory shrinking, visualization rendering, benchmark validation, and CLI flows
 
@@ -89,6 +90,7 @@ python3 projects/extendible-hashing-lab/extendible_hashing_lab.py benchmark \
   --input projects/extendible-hashing-lab/benchmark_suite.json \
   --json-out /tmp/extendible-benchmark.json \
   --markdown-out /tmp/extendible-benchmark.md \
+  --html-out /tmp/extendible-benchmark.html \
   --csv-out /tmp/extendible-benchmark.csv \
   --title 'Extendible hashing vs cuckoo hashing and B-tree benchmark comparison'
 ```
@@ -100,6 +102,7 @@ See the committed visualization + benchmark demo outputs without rerunning anyth
 - `docs/artifacts/extendible-hashing-lab/delete_heavy_workload_trace.html`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.json`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_report.md`
+- `docs/artifacts/extendible-hashing-lab/benchmark_suite_dashboard.html`
 - `docs/artifacts/extendible-hashing-lab/benchmark_suite_summary.csv`
 
 ## Test
@@ -109,5 +112,5 @@ python3 -m unittest tests.test_extendible_hashing_lab -v
 ```
 
 ## Future improvements
-- add a linear-probing baseline or small benchmark dashboard so the project can tell an even broader indexing-tradeoff story
-- add compact PNG export or thumbnail-strip generation for the visualization dashboard so README screenshots stay easy to embed
+- add a linear-probing baseline so the benchmark suite covers a simpler open-addressing comparison alongside cuckoo hashing
+- add compact PNG export or thumbnail-strip generation for the visualization and benchmark dashboards so README screenshots stay easy to embed

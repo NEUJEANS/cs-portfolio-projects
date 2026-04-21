@@ -1294,6 +1294,340 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
     return "\n".join(lines)
 
 
+def _format_dashboard_number(value: int | float) -> str:
+    if isinstance(value, int):
+        return str(value)
+    rounded = round(float(value), 4)
+    if rounded.is_integer():
+        return str(int(rounded))
+    return f"{rounded:.4f}".rstrip("0").rstrip(".")
+
+
+def _render_benchmark_dashboard_metric(
+    label: str,
+    value: int | float,
+    maximum: int | float,
+    *,
+    accent: str,
+    detail: str | None = None,
+) -> str:
+    numeric_value = float(value)
+    numeric_max = float(maximum)
+    width = 0.0 if numeric_max <= 0 else max(0.0, min(100.0, (numeric_value / numeric_max) * 100.0))
+    detail_html = f'<div class="metric-detail">{escape(detail)}</div>' if detail else ""
+    return f'''<div class="metric">
+  <div class="metric-head">
+    <span>{escape(label)}</span>
+    <strong>{escape(_format_dashboard_number(value))}</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: {width:.1f}%; background: {escape(accent)};"></span></div>
+  {detail_html}
+</div>'''
+
+
+def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_source: str | None = None) -> str:
+    results = summary["results"]
+    if not results:
+        raise BenchmarkError("benchmark summary must include at least one scenario result")
+
+    totals = {
+        "operation_count": sum(row["operation_count"] for row in results),
+        "max_final_entry_count": max(row["final_entry_count"] for row in results),
+        "max_extendible_peak_depth": max(row["extendible"]["peak_global_depth"] for row in results),
+        "max_btree_bytes": max(row["btree"]["paged_file_bytes"] for row in results),
+    }
+    maxima = {
+        "extendible_split_count": max(row["extendible"]["split_count"] for row in results),
+        "extendible_merge_count": max(row["extendible"]["merge_count"] for row in results),
+        "extendible_peak_global_depth": max(row["extendible"]["peak_global_depth"] for row in results),
+        "extendible_peak_directory_slots": max(row["extendible"]["peak_directory_slots"] for row in results),
+        "extendible_load_factor": max(row["extendible"]["load_factor"] for row in results),
+        "cuckoo_average_rehash_count": max(row["cuckoo"]["average_rehash_count"] for row in results),
+        "cuckoo_average_displacement_count": max(row["cuckoo"]["average_displacement_count"] for row in results),
+        "cuckoo_average_load_factor": max(row["cuckoo"]["average_load_factor"] for row in results),
+        "btree_final_height": max(row["btree"]["final_height"] for row in results),
+        "btree_final_node_count": max(row["btree"]["final_node_count"] for row in results),
+        "btree_paged_file_bytes": max(row["btree"]["paged_file_bytes"] for row in results),
+    }
+
+    summary_cards = [
+        ("Scenarios", summary["scenario_count"], f"{summary['trials']} deterministic trial(s) each"),
+        ("Operations", totals["operation_count"], f"largest final live set: {totals['max_final_entry_count']} entries"),
+        ("Peak extendible depth", totals["max_extendible_peak_depth"], "highest global-depth spike in the suite"),
+        ("Largest B-tree snapshot", totals["max_btree_bytes"], "max paged-file bytes across scenarios"),
+    ]
+    summary_cards_html = "".join(
+        f'''<article class="summary-card">
+  <h2>{escape(label)}</h2>
+  <strong>{escape(_format_dashboard_number(value))}</strong>
+  <p>{escape(detail)}</p>
+</article>'''
+        for label, value, detail in summary_cards
+    )
+
+    scoreboard_rows = "".join(
+        f'''<tr>
+  <th scope="row">{escape(row['name'])}</th>
+  <td>{row['operation_count']}</td>
+  <td>{row['final_entry_count']}</td>
+  <td>{row['extendible']['split_count']} / {row['extendible']['merge_count']}</td>
+  <td>{row['extendible']['peak_global_depth']} / {row['extendible']['peak_directory_slots']}</td>
+  <td>{escape(_format_dashboard_number(row['cuckoo']['average_rehash_count']))} / {escape(_format_dashboard_number(row['cuckoo']['average_displacement_count']))}</td>
+  <td>{row['btree']['final_height']} / {row['btree']['final_node_count']}</td>
+  <td>{row['btree']['paged_file_bytes']}</td>
+</tr>'''
+        for row in results
+    )
+
+    scenario_sections: list[str] = []
+    for row in results:
+        operation_mix = row["operation_mix"]
+        chips = [
+            f"ops {row['operation_count']}",
+            f"entries {row['final_entry_count']}",
+            f"puts {operation_mix['puts']}",
+            f"gets {operation_mix['gets']}",
+            f"deletes {operation_mix['deletes']}",
+            f"trials {row['validation']['trials']}",
+        ]
+        chip_html = "".join(f'<li>{escape(chip)}</li>' for chip in chips)
+        extendible_metrics = "".join(
+            [
+                _render_benchmark_dashboard_metric(
+                    "splits",
+                    row["extendible"]["split_count"],
+                    maxima["extendible_split_count"],
+                    accent="#2563eb",
+                    detail=f"final buckets {row['extendible']['final_bucket_count']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "merges",
+                    row["extendible"]["merge_count"],
+                    maxima["extendible_merge_count"],
+                    accent="#0f766e",
+                    detail=f"directory shrinks {row['extendible']['directory_shrink_count']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "peak depth",
+                    row["extendible"]["peak_global_depth"],
+                    maxima["extendible_peak_global_depth"],
+                    accent="#7c3aed",
+                    detail=f"final depth {row['extendible']['final_global_depth']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "peak directory slots",
+                    row["extendible"]["peak_directory_slots"],
+                    maxima["extendible_peak_directory_slots"],
+                    accent="#9333ea",
+                    detail=f"directory grows {row['extendible']['directory_growth_count']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "load factor",
+                    row["extendible"]["load_factor"],
+                    maxima["extendible_load_factor"],
+                    accent="#f59e0b",
+                    detail="final occupancy across live buckets",
+                ),
+            ]
+        )
+        cuckoo_metrics = "".join(
+            [
+                _render_benchmark_dashboard_metric(
+                    "avg rehashes",
+                    row["cuckoo"]["average_rehash_count"],
+                    maxima["cuckoo_average_rehash_count"],
+                    accent="#dc2626",
+                    detail=f"capacity range {row['cuckoo']['final_capacity_range'][0]}-{row['cuckoo']['final_capacity_range'][1]}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "avg displacements",
+                    row["cuckoo"]["average_displacement_count"],
+                    maxima["cuckoo_average_displacement_count"],
+                    accent="#ea580c",
+                    detail=f"empty slots {row['cuckoo']['empty_slot_range'][0]}-{row['cuckoo']['empty_slot_range'][1]}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "avg load factor",
+                    row["cuckoo"]["average_load_factor"],
+                    maxima["cuckoo_average_load_factor"],
+                    accent="#0891b2",
+                    detail="post-run table occupancy",
+                ),
+            ]
+        )
+        btree_metrics = "".join(
+            [
+                _render_benchmark_dashboard_metric(
+                    "final height",
+                    row["btree"]["final_height"],
+                    maxima["btree_final_height"],
+                    accent="#4f46e5",
+                    detail=f"peak height {row['btree']['peak_height']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "node count",
+                    row["btree"]["final_node_count"],
+                    maxima["btree_final_node_count"],
+                    accent="#9333ea",
+                    detail=f"root keys {row['btree']['root_keys']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "paged file bytes",
+                    row["btree"]["paged_file_bytes"],
+                    maxima["btree_paged_file_bytes"],
+                    accent="#16a34a",
+                    detail=f"padding per page {row['btree']['page_padding_bytes']} bytes",
+                ),
+            ]
+        )
+        trial_rows = "".join(
+            f'''<tr>
+  <td>{trial_row['trial']}</td>
+  <td>{trial_row['extendible']['split_count']}</td>
+  <td>{trial_row['extendible']['merge_count']}</td>
+  <td>{trial_row['extendible']['peak_global_depth']}</td>
+  <td>{trial_row['cuckoo']['rehash_count']}</td>
+  <td>{trial_row['cuckoo']['displacement_count']}</td>
+  <td>{trial_row['btree']['final_height']}</td>
+  <td>{trial_row['btree']['paged_file_bytes']}</td>
+</tr>'''
+            for trial_row in row["trial_rows"]
+        )
+        scenario_sections.append(
+            f'''<section class="scenario-card">
+  <header class="scenario-header">
+    <div>
+      <h2>{escape(row['name'])}</h2>
+      <p>{escape(row['description'] or 'No description provided.')}</p>
+    </div>
+    <ul class="chips">{chip_html}</ul>
+  </header>
+  <div class="metric-grid">
+    <article class="metric-panel">
+      <h3>Extendible hashing</h3>
+      <p>Directory growth and bucket-split behavior for the benchmark workload.</p>
+      {extendible_metrics}
+    </article>
+    <article class="metric-panel">
+      <h3>Cuckoo hashing</h3>
+      <p>Relocation pressure and occupancy characteristics across deterministic trials.</p>
+      {cuckoo_metrics}
+    </article>
+    <article class="metric-panel">
+      <h3>B-tree page baseline</h3>
+      <p>Tree-shape and paged-storage estimates for the same key stream.</p>
+      {btree_metrics}
+    </article>
+  </div>
+  <div class="trial-table-wrap">
+    <table>
+      <caption>Per-trial validation for {escape(row['name'])}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Trial</th>
+          <th scope="col">Ext splits</th>
+          <th scope="col">Ext merges</th>
+          <th scope="col">Peak depth</th>
+          <th scope="col">Cuckoo rehashes</th>
+          <th scope="col">Cuckoo displacements</th>
+          <th scope="col">B-tree height</th>
+          <th scope="col">B-tree bytes</th>
+        </tr>
+      </thead>
+      <tbody>{trial_rows}</tbody>
+    </table>
+  </div>
+</section>'''
+        )
+
+    suite_source_html = (
+        f'<p class="suite-source"><strong>Suite source:</strong> <code>{escape(suite_source)}</code></p>'
+        if suite_source
+        else ""
+    )
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{escape(title)}</title>
+<style>
+  :root {{ color-scheme: light; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; font-family: Inter, Segoe UI, Arial, sans-serif; background: #f8fafc; color: #0f172a; }}
+  main {{ max-width: 1380px; margin: 0 auto; padding: 32px 20px 56px; }}
+  h1 {{ margin-bottom: 10px; font-size: 2.2rem; }}
+  .lede {{ margin: 0; color: #334155; max-width: 78ch; }}
+  .suite-source {{ color: #475569; margin-top: 10px; }}
+  code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+  .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 24px 0; }}
+  .summary-card, .scoreboard, .scenario-card {{ background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); }}
+  .summary-card {{ padding: 18px 20px; }}
+  .summary-card h2 {{ margin: 0 0 8px; font-size: 0.95rem; color: #475569; }}
+  .summary-card strong {{ display: block; font-size: 1.9rem; color: #0f172a; }}
+  .summary-card p {{ margin: 8px 0 0; color: #475569; }}
+  .scoreboard {{ padding: 18px 20px; overflow-x: auto; }}
+  .scoreboard table, .trial-table-wrap table {{ width: 100%; border-collapse: collapse; }}
+  caption {{ text-align: left; font-weight: 700; padding-bottom: 12px; color: #0f172a; }}
+  thead th {{ background: #eff6ff; color: #1e3a8a; }}
+  th, td {{ padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }}
+  tbody tr:last-child td, tbody tr:last-child th {{ border-bottom: none; }}
+  .scenario-stack {{ display: grid; gap: 18px; margin-top: 20px; }}
+  .scenario-card {{ padding: 20px; }}
+  .scenario-header {{ display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }}
+  .scenario-header h2 {{ margin: 0 0 8px; font-size: 1.35rem; }}
+  .scenario-header p {{ margin: 0; color: #475569; max-width: 72ch; }}
+  .chips {{ list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; }}
+  .chips li {{ background: #e2e8f0; color: #1e293b; border-radius: 999px; padding: 6px 10px; font-size: 0.88rem; }}
+  .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 18px; }}
+  .metric-panel {{ background: #f8fafc; border: 1px solid #dbe4f0; border-radius: 18px; padding: 16px; }}
+  .metric-panel h3 {{ margin: 0 0 6px; font-size: 1rem; }}
+  .metric-panel p {{ margin: 0 0 16px; color: #475569; min-height: 38px; }}
+  .metric + .metric {{ margin-top: 12px; }}
+  .metric-head {{ display: flex; justify-content: space-between; gap: 12px; font-size: 0.92rem; }}
+  .metric-head strong {{ color: #0f172a; }}
+  .metric-bar {{ margin-top: 6px; width: 100%; height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }}
+  .metric-bar span {{ display: block; height: 100%; border-radius: 999px; }}
+  .metric-detail {{ margin-top: 6px; color: #475569; font-size: 0.84rem; }}
+  .trial-table-wrap {{ margin-top: 18px; overflow-x: auto; }}
+  @media (max-width: 720px) {{
+    main {{ padding-left: 14px; padding-right: 14px; }}
+    .scenario-card, .scoreboard {{ padding-left: 14px; padding-right: 14px; }}
+    th, td {{ padding-left: 8px; padding-right: 8px; }}
+  }}
+</style>
+</head>
+<body>
+<main>
+  <h1>{escape(title)}</h1>
+  <p class="lede">Compact benchmark dashboard for the extendible-hashing lab. It keeps the same deterministic benchmark data as the JSON, Markdown, and CSV exports while making the tradeoffs across extendible hashing, cuckoo hashing, and the B-tree page baseline easier to browse visually.</p>
+  {suite_source_html}
+  <section class="summary-grid">{summary_cards_html}</section>
+  <section class="scoreboard">
+    <table>
+      <caption>Scenario scoreboard with the headline metrics recruiters or reviewers usually compare first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Scenario</th>
+          <th scope="col">Ops</th>
+          <th scope="col">Final entries</th>
+          <th scope="col">Ext splits / merges</th>
+          <th scope="col">Ext depth / slots</th>
+          <th scope="col">Cuckoo rehash / displacements</th>
+          <th scope="col">B-tree height / nodes</th>
+          <th scope="col">B-tree bytes</th>
+        </tr>
+      </thead>
+      <tbody>{scoreboard_rows}</tbody>
+    </table>
+  </section>
+  <section class="scenario-stack">{''.join(scenario_sections)}</section>
+</main>
+</body>
+</html>
+'''
+
+
 def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -1428,6 +1762,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--input", required=True, type=Path, help="benchmark suite JSON file")
     benchmark_parser.add_argument("--json-out", type=Path, help="optional JSON summary output")
     benchmark_parser.add_argument("--markdown-out", type=Path, help="optional Markdown report output")
+    benchmark_parser.add_argument("--html-out", type=Path, help="optional self-contained HTML dashboard output")
     benchmark_parser.add_argument("--csv-out", type=Path, help="optional CSV summary output")
     benchmark_parser.add_argument(
         "--title",
@@ -1502,6 +1837,12 @@ def command_benchmark(args: argparse.Namespace) -> int:
         args.markdown_out.parent.mkdir(parents=True, exist_ok=True)
         args.markdown_out.write_text(
             render_benchmark_markdown_report(summary["title"], summary, suite_source=str(args.input)) + "\n",
+            encoding="utf-8",
+        )
+    if args.html_out:
+        args.html_out.parent.mkdir(parents=True, exist_ok=True)
+        args.html_out.write_text(
+            render_benchmark_dashboard_html(summary["title"], summary, suite_source=str(args.input)) + "\n",
             encoding="utf-8",
         )
     if args.csv_out:

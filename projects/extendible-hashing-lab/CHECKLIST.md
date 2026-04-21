@@ -12,4 +12,5 @@
 - [x] add benchmark comparisons against cuckoo hashing or B-tree lookup/update workloads
 - [x] add HTML/SVG visualization exports for split sequences and directory aliasing
 - [x] broaden the benchmark story with B-tree pages or linear probing as additional baselines
-- [ ] add a linear-probing baseline or compact benchmark dashboard for the artifact bundle
+- [x] add a linear-probing baseline or compact benchmark dashboard for the artifact bundle
+- [ ] add a linear-probing baseline so the benchmark suite covers a simpler open-addressing comparison alongside cuckoo hashing

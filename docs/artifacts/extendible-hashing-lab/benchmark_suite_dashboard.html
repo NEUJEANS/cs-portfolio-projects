@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Extendible hashing vs cuckoo hashing and B-tree benchmark comparison</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, Segoe UI, Arial, sans-serif; background: #f8fafc; color: #0f172a; }
+  main { max-width: 1380px; margin: 0 auto; padding: 32px 20px 56px; }
+  h1 { margin-bottom: 10px; font-size: 2.2rem; }
+  .lede { margin: 0; color: #334155; max-width: 78ch; }
+  .suite-source { color: #475569; margin-top: 10px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 24px 0; }
+  .summary-card, .scoreboard, .scenario-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04); }
+  .summary-card { padding: 18px 20px; }
+  .summary-card h2 { margin: 0 0 8px; font-size: 0.95rem; color: #475569; }
+  .summary-card strong { display: block; font-size: 1.9rem; color: #0f172a; }
+  .summary-card p { margin: 8px 0 0; color: #475569; }
+  .scoreboard { padding: 18px 20px; overflow-x: auto; }
+  .scoreboard table, .trial-table-wrap table { width: 100%; border-collapse: collapse; }
+  caption { text-align: left; font-weight: 700; padding-bottom: 12px; color: #0f172a; }
+  thead th { background: #eff6ff; color: #1e3a8a; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+  tbody tr:last-child td, tbody tr:last-child th { border-bottom: none; }
+  .scenario-stack { display: grid; gap: 18px; margin-top: 20px; }
+  .scenario-card { padding: 20px; }
+  .scenario-header { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
+  .scenario-header h2 { margin: 0 0 8px; font-size: 1.35rem; }
+  .scenario-header p { margin: 0; color: #475569; max-width: 72ch; }
+  .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; }
+  .chips li { background: #e2e8f0; color: #1e293b; border-radius: 999px; padding: 6px 10px; font-size: 0.88rem; }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 18px; }
+  .metric-panel { background: #f8fafc; border: 1px solid #dbe4f0; border-radius: 18px; padding: 16px; }
+  .metric-panel h3 { margin: 0 0 6px; font-size: 1rem; }
+  .metric-panel p { margin: 0 0 16px; color: #475569; min-height: 38px; }
+  .metric + .metric { margin-top: 12px; }
+  .metric-head { display: flex; justify-content: space-between; gap: 12px; font-size: 0.92rem; }
+  .metric-head strong { color: #0f172a; }
+  .metric-bar { margin-top: 6px; width: 100%; height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+  .metric-bar span { display: block; height: 100%; border-radius: 999px; }
+  .metric-detail { margin-top: 6px; color: #475569; font-size: 0.84rem; }
+  .trial-table-wrap { margin-top: 18px; overflow-x: auto; }
+  @media (max-width: 720px) {
+    main { padding-left: 14px; padding-right: 14px; }
+    .scenario-card, .scoreboard { padding-left: 14px; padding-right: 14px; }
+    th, td { padding-left: 8px; padding-right: 8px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Extendible hashing vs cuckoo hashing and B-tree benchmark comparison</h1>
+  <p class="lede">Compact benchmark dashboard for the extendible-hashing lab. It keeps the same deterministic benchmark data as the JSON, Markdown, and CSV exports while making the tradeoffs across extendible hashing, cuckoo hashing, and the B-tree page baseline easier to browse visually.</p>
+  <p class="suite-source"><strong>Suite source:</strong> <code>projects/extendible-hashing-lab/benchmark_suite.json</code></p>
+  <section class="summary-grid"><article class="summary-card">
+  <h2>Scenarios</h2>
+  <strong>3</strong>
+  <p>3 deterministic trial(s) each</p>
+</article><article class="summary-card">
+  <h2>Operations</h2>
+  <strong>41</strong>
+  <p>largest final live set: 10 entries</p>
+</article><article class="summary-card">
+  <h2>Peak extendible depth</h2>
+  <strong>3</strong>
+  <p>highest global-depth spike in the suite</p>
+</article><article class="summary-card">
+  <h2>Largest B-tree snapshot</h2>
+  <strong>2081</strong>
+  <p>max paged-file bytes across scenarios</p>
+</article></section>
+  <section class="scoreboard">
+    <table>
+      <caption>Scenario scoreboard with the headline metrics recruiters or reviewers usually compare first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Scenario</th>
+          <th scope="col">Ops</th>
+          <th scope="col">Final entries</th>
+          <th scope="col">Ext splits / merges</th>
+          <th scope="col">Ext depth / slots</th>
+          <th scope="col">Cuckoo rehash / displacements</th>
+          <th scope="col">B-tree height / nodes</th>
+          <th scope="col">B-tree bytes</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+  <th scope="row">directory-friendly-read-heavy</th>
+  <td>13</td>
+  <td>5</td>
+  <td>3 / 0</td>
+  <td>3 / 8</td>
+  <td>0.333 / 4</td>
+  <td>2 / 3</td>
+  <td>1569</td>
+</tr><tr>
+  <th scope="row">split-pressure-growth</th>
+  <td>14</td>
+  <td>10</td>
+  <td>5 / 0</td>
+  <td>3 / 8</td>
+  <td>1 / 11.333</td>
+  <td>2 / 4</td>
+  <td>2081</td>
+</tr><tr>
+  <th scope="row">delete-heavy-churn</th>
+  <td>14</td>
+  <td>5</td>
+  <td>4 / 1</td>
+  <td>3 / 8</td>
+  <td>0 / 2.333</td>
+  <td>2 / 3</td>
+  <td>1569</td>
+</tr></tbody>
+    </table>
+  </section>
+  <section class="scenario-stack"><section class="scenario-card">
+  <header class="scenario-header">
+    <div>
+      <h2>directory-friendly-read-heavy</h2>
+      <p>Warm up a small user cache, then mostly read/update the stable working set with a few misses and one delete.</p>
+    </div>
+    <ul class="chips"><li>ops 13</li><li>entries 5</li><li>puts 7</li><li>gets 5</li><li>deletes 1</li><li>trials 3</li></ul>
+  </header>
+  <div class="metric-grid">
+    <article class="metric-panel">
+      <h3>Extendible hashing</h3>
+      <p>Directory growth and bucket-split behavior for the benchmark workload.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>splits</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 60.0%; background: #2563eb;"></span></div>
+  <div class="metric-detail">final buckets 4</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>merges</span>
+    <strong>0</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 0.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">directory shrinks 0</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak depth</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">final depth 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak directory slots</span>
+    <strong>8</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">directory grows 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>load factor</span>
+    <strong>0.625</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">final occupancy across live buckets</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Cuckoo hashing</h3>
+      <p>Relocation pressure and occupancy characteristics across deterministic trials.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg rehashes</span>
+    <strong>0.333</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 33.3%; background: #dc2626;"></span></div>
+  <div class="metric-detail">capacity range 7-15</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg displacements</span>
+    <strong>4</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 35.3%; background: #ea580c;"></span></div>
+  <div class="metric-detail">empty slots 2-10</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg load factor</span>
+    <strong>0.5873</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 82.2%; background: #0891b2;"></span></div>
+  <div class="metric-detail">post-run table occupancy</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>B-tree page baseline</h3>
+      <p>Tree-shape and paged-storage estimates for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>final height</span>
+    <strong>2</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #4f46e5;"></span></div>
+  <div class="metric-detail">peak height 2</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>node count</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">root keys 1</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>paged file bytes</span>
+    <strong>1569</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 75.4%; background: #16a34a;"></span></div>
+  <div class="metric-detail">padding per page 359 bytes</div>
+</div>
+    </article>
+  </div>
+  <div class="trial-table-wrap">
+    <table>
+      <caption>Per-trial validation for directory-friendly-read-heavy</caption>
+      <thead>
+        <tr>
+          <th scope="col">Trial</th>
+          <th scope="col">Ext splits</th>
+          <th scope="col">Ext merges</th>
+          <th scope="col">Peak depth</th>
+          <th scope="col">Cuckoo rehashes</th>
+          <th scope="col">Cuckoo displacements</th>
+          <th scope="col">B-tree height</th>
+          <th scope="col">B-tree bytes</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+  <td>1</td>
+  <td>3</td>
+  <td>0</td>
+  <td>3</td>
+  <td>1</td>
+  <td>12</td>
+  <td>2</td>
+  <td>1569</td>
+</tr><tr>
+  <td>2</td>
+  <td>3</td>
+  <td>0</td>
+  <td>3</td>
+  <td>0</td>
+  <td>0</td>
+  <td>2</td>
+  <td>1569</td>
+</tr><tr>
+  <td>3</td>
+  <td>3</td>
+  <td>0</td>
+  <td>3</td>
+  <td>0</td>
+  <td>0</td>
+  <td>2</td>
+  <td>1569</td>
+</tr></tbody>
+    </table>
+  </div>
+</section><section class="scenario-card">
+  <header class="scenario-header">
+    <div>
+      <h2>split-pressure-growth</h2>
+      <p>Force repeated low-bit collisions so extendible hashing must split buckets while cuckoo hashing spends work on displacement and occasional rehashing.</p>
+    </div>
+    <ul class="chips"><li>ops 14</li><li>entries 10</li><li>puts 11</li><li>gets 3</li><li>deletes 0</li><li>trials 3</li></ul>
+  </header>
+  <div class="metric-grid">
+    <article class="metric-panel">
+      <h3>Extendible hashing</h3>
+      <p>Directory growth and bucket-split behavior for the benchmark workload.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>splits</span>
+    <strong>5</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #2563eb;"></span></div>
+  <div class="metric-detail">final buckets 6</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>merges</span>
+    <strong>0</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 0.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">directory shrinks 0</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak depth</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">final depth 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak directory slots</span>
+    <strong>8</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">directory grows 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>load factor</span>
+    <strong>0.8333</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">final occupancy across live buckets</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Cuckoo hashing</h3>
+      <p>Relocation pressure and occupancy characteristics across deterministic trials.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg rehashes</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #dc2626;"></span></div>
+  <div class="metric-detail">capacity range 15-15</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg displacements</span>
+    <strong>11.333</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #ea580c;"></span></div>
+  <div class="metric-detail">empty slots 5-5</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg load factor</span>
+    <strong>0.6667</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 93.3%; background: #0891b2;"></span></div>
+  <div class="metric-detail">post-run table occupancy</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>B-tree page baseline</h3>
+      <p>Tree-shape and paged-storage estimates for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>final height</span>
+    <strong>2</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #4f46e5;"></span></div>
+  <div class="metric-detail">peak height 2</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>node count</span>
+    <strong>4</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">root keys 2</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>paged file bytes</span>
+    <strong>2081</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #16a34a;"></span></div>
+  <div class="metric-detail">padding per page 359 bytes</div>
+</div>
+    </article>
+  </div>
+  <div class="trial-table-wrap">
+    <table>
+      <caption>Per-trial validation for split-pressure-growth</caption>
+      <thead>
+        <tr>
+          <th scope="col">Trial</th>
+          <th scope="col">Ext splits</th>
+          <th scope="col">Ext merges</th>
+          <th scope="col">Peak depth</th>
+          <th scope="col">Cuckoo rehashes</th>
+          <th scope="col">Cuckoo displacements</th>
+          <th scope="col">B-tree height</th>
+          <th scope="col">B-tree bytes</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+  <td>1</td>
+  <td>5</td>
+  <td>0</td>
+  <td>3</td>
+  <td>1</td>
+  <td>14</td>
+  <td>2</td>
+  <td>2081</td>
+</tr><tr>
+  <td>2</td>
+  <td>5</td>
+  <td>0</td>
+  <td>3</td>
+  <td>1</td>
+  <td>12</td>
+  <td>2</td>
+  <td>2081</td>
+</tr><tr>
+  <td>3</td>
+  <td>5</td>
+  <td>0</td>
+  <td>3</td>
+  <td>1</td>
+  <td>8</td>
+  <td>2</td>
+  <td>2081</td>
+</tr></tbody>
+    </table>
+  </div>
+</section><section class="scenario-card">
+  <header class="scenario-header">
+    <div>
+      <h2>delete-heavy-churn</h2>
+      <p>Grow a clustered directory, delete enough keys to trigger extendible merges and shrinks, then repopulate a smaller live set.</p>
+    </div>
+    <ul class="chips"><li>ops 14</li><li>entries 5</li><li>puts 8</li><li>gets 2</li><li>deletes 4</li><li>trials 3</li></ul>
+  </header>
+  <div class="metric-grid">
+    <article class="metric-panel">
+      <h3>Extendible hashing</h3>
+      <p>Directory growth and bucket-split behavior for the benchmark workload.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>splits</span>
+    <strong>4</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 80.0%; background: #2563eb;"></span></div>
+  <div class="metric-detail">final buckets 4</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>merges</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">directory shrinks 1</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak depth</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">final depth 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>peak directory slots</span>
+    <strong>8</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">directory grows 4</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>load factor</span>
+    <strong>0.625</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">final occupancy across live buckets</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Cuckoo hashing</h3>
+      <p>Relocation pressure and occupancy characteristics across deterministic trials.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg rehashes</span>
+    <strong>0</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 0.0%; background: #dc2626;"></span></div>
+  <div class="metric-detail">capacity range 7-7</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg displacements</span>
+    <strong>2.333</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 20.6%; background: #ea580c;"></span></div>
+  <div class="metric-detail">empty slots 2-2</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>avg load factor</span>
+    <strong>0.7143</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0891b2;"></span></div>
+  <div class="metric-detail">post-run table occupancy</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>B-tree page baseline</h3>
+      <p>Tree-shape and paged-storage estimates for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>final height</span>
+    <strong>2</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #4f46e5;"></span></div>
+  <div class="metric-detail">peak height 2</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>node count</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #9333ea;"></span></div>
+  <div class="metric-detail">root keys 1</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>paged file bytes</span>
+    <strong>1569</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 75.4%; background: #16a34a;"></span></div>
+  <div class="metric-detail">padding per page 359 bytes</div>
+</div>
+    </article>
+  </div>
+  <div class="trial-table-wrap">
+    <table>
+      <caption>Per-trial validation for delete-heavy-churn</caption>
+      <thead>
+        <tr>
+          <th scope="col">Trial</th>
+          <th scope="col">Ext splits</th>
+          <th scope="col">Ext merges</th>
+          <th scope="col">Peak depth</th>
+          <th scope="col">Cuckoo rehashes</th>
+          <th scope="col">Cuckoo displacements</th>
+          <th scope="col">B-tree height</th>
+          <th scope="col">B-tree bytes</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+  <td>1</td>
+  <td>4</td>
+  <td>1</td>
+  <td>3</td>
+  <td>0</td>
+  <td>4</td>
+  <td>2</td>
+  <td>1569</td>
+</tr><tr>
+  <td>2</td>
+  <td>4</td>
+  <td>1</td>
+  <td>3</td>
+  <td>0</td>
+  <td>2</td>
+  <td>2</td>
+  <td>1569</td>
+</tr><tr>
+  <td>3</td>
+  <td>4</td>
+  <td>1</td>
+  <td>3</td>
+  <td>0</td>
+  <td>1</td>
+  <td>2</td>
+  <td>1569</td>
+</tr></tbody>
+    </table>
+  </div>
+</section></section>
+</main>
+</body>
+</html>
+
