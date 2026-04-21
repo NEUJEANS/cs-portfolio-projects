@@ -2,7 +2,7 @@
 
 - **Timestamp:** 2026-04-21T11:08:00Z
 - **Project:** `extendible-hashing-lab`
-- **Feature commit:** `7479b7f` (`feat(extendible-hashing-lab): add visualization thumbnail strip`)
+- **Feature commit:** `1e3b7bd` (`feat(extendible-hashing-lab): add visualization thumbnail strip`)
 
 ## What changed
 - added an optional `visualize --thumbnail-svg-out` export that emits a compact self-contained SVG lifecycle strip for README thumbnails and slide snippets
