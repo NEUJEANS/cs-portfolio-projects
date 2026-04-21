@@ -14,5 +14,5 @@
 - [x] run review pass 3 and fix issues found
 - [x] run targeted tests, smoke checks, and `git diff --check`
 - [x] run secret scan before push
-- [ ] commit, push, and append wrap-up
+- [x] commit, push, and append wrap-up
 - [ ] next: add preset-hit threshold rules or severity scoring so grouped packs can drive lightweight alert prioritization
