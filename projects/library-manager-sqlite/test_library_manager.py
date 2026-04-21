@@ -16,7 +16,7 @@ class LibraryTests(unittest.TestCase):
         db = Path(tmp.name) / 'library.db'
         return Library(db), db
 
-    def test_add_checkout_return_and_clear_loan_metadata(self):
+    def test_add_checkout_return_and_persist_loan_history(self):
         lib, _ = self.make_library()
         lib.add_book('Clean Code', 'Robert C. Martin')
 
@@ -27,11 +27,18 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(checked_out['borrower'], 'Alex')
         self.assertEqual(checked_out['due_date'], '2026-04-21')
 
-        lib.return_book(1)
+        lib.return_book(1, return_date=date(2026, 4, 20))
         returned = lib.list_books()[0]
         self.assertTrue(returned['available'])
         self.assertIsNone(returned['borrower'])
         self.assertIsNone(returned['due_date'])
+
+        history = lib.loan_history(status='returned', reference_date=date(2026, 4, 21))
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]['borrower'], 'Alex')
+        self.assertEqual(history[0]['returned_at'], '2026-04-20')
+        self.assertEqual(history[0]['loan_status'], 'returned')
+        self.assertEqual(history[0]['lateness_days'], 0)
 
     def test_auto_search_uses_full_text_prefix_matching_and_preview(self):
         lib, _ = self.make_library()
@@ -79,7 +86,55 @@ class LibraryTests(unittest.TestCase):
         overdue = lib.overdue_books(date(2026, 4, 15))
         self.assertEqual([row['title'] for row in overdue], ['Clean Code'])
 
-    def test_rejects_invalid_checkout_return_and_search_requests(self):
+    def test_loan_history_filters_active_overdue_and_borrower(self):
+        lib, _ = self.make_library()
+        lib.add_book('Clean Code', 'Robert C. Martin')
+        lib.add_book('Refactoring', 'Martin Fowler')
+        lib.add_book('Designing Data-Intensive Applications', 'Martin Kleppmann')
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 10))
+        lib.checkout(3, 'Alex', loan_days=21, checkout_date=date(2026, 4, 12))
+        lib.return_book(3, return_date=date(2026, 4, 20))
+
+        overdue = lib.loan_history(status='overdue', reference_date=date(2026, 4, 15))
+        self.assertEqual([row['title'] for row in overdue], ['Clean Code'])
+        self.assertEqual(overdue[0]['loan_status'], 'overdue')
+        self.assertEqual(overdue[0]['lateness_days'], 7)
+
+        active = lib.loan_history(status='active', reference_date=date(2026, 4, 15))
+        self.assertEqual([row['title'] for row in active], ['Refactoring'])
+
+        borrower_history = lib.loan_history(borrower='alex', reference_date=date(2026, 4, 21))
+        self.assertEqual([row['title'] for row in borrower_history], ['Designing Data-Intensive Applications', 'Clean Code'])
+        self.assertEqual([row['loan_status'] for row in borrower_history], ['returned', 'overdue'])
+
+    def test_circulation_stats_summarize_loans_and_top_borrowers(self):
+        lib, _ = self.make_library()
+        lib.add_book('Clean Code', 'Robert C. Martin')
+        lib.add_book('Refactoring', 'Martin Fowler')
+        lib.add_book('DDIA', 'Martin Kleppmann')
+
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.return_book(1, return_date=date(2026, 4, 9))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 10))
+        lib.checkout(3, 'Alex', loan_days=21, checkout_date=date(2026, 4, 12))
+
+        stats = lib.circulation_stats(reference_date=date(2026, 4, 26), top_limit=2)
+
+        self.assertEqual(stats['total_books'], 3)
+        self.assertEqual(stats['total_borrowers'], 2)
+        self.assertEqual(stats['total_loans'], 3)
+        self.assertEqual(stats['active_loans'], 2)
+        self.assertEqual(stats['overdue_loans'], 1)
+        self.assertEqual(stats['completed_loans'], 1)
+        self.assertEqual(stats['late_returns'], 1)
+        self.assertEqual(stats['average_configured_loan_days'], 14.0)
+        self.assertEqual(stats['average_return_days'], 8.0)
+        self.assertEqual(stats['top_borrowers'][0]['borrower'], 'Alex')
+        self.assertEqual(stats['top_borrowers'][0]['total_loans'], 2)
+
+    def test_rejects_invalid_checkout_return_search_and_history_requests(self):
         lib, _ = self.make_library()
         lib.add_book('Clean Code', 'Robert C. Martin')
         lib.checkout(1, 'Alex')
@@ -94,12 +149,16 @@ class LibraryTests(unittest.TestCase):
             lib.list_books(query='clean', search_mode='regex')
         with self.assertRaises(LibraryError):
             lib.list_books(query='clean', limit=0)
+        with self.assertRaises(LibraryError):
+            lib.loan_history(status='late')
+        with self.assertRaises(LibraryError):
+            lib.circulation_stats(top_limit=0)
 
         lib.fts_enabled = False
         with self.assertRaisesRegex(LibraryError, 'full-text search is not available'):
             lib.list_books(query='clean', search_mode='fts')
 
-    def test_schema_migration_adds_new_columns_and_backfills_search_index(self):
+    def test_schema_migration_adds_new_columns_backfills_search_index_and_active_loans(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         db = Path(tmp.name) / 'library.db'
@@ -109,15 +168,53 @@ class LibraryTests(unittest.TestCase):
                 'INSERT INTO books(id, title, author, available) VALUES (?, ?, ?, ?)',
                 (1, 'Database Internals', 'Alex Petrov', 1),
             )
+            conn.execute('ALTER TABLE books ADD COLUMN borrower TEXT')
+            conn.execute('ALTER TABLE books ADD COLUMN checked_out_at TEXT')
+            conn.execute('ALTER TABLE books ADD COLUMN due_date TEXT')
+            conn.execute(
+                'INSERT INTO books(id, title, author, available, borrower, checked_out_at, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (2, 'Designing Data-Intensive Applications', 'Martin Kleppmann', 0, 'Alex', '2026-04-10', '2026-04-24'),
+            )
 
         lib = Library(db)
         with sqlite3.connect(db) as conn:
             columns = {row[1] for row in conn.execute('PRAGMA table_info(books)')}
             fts_count = conn.execute('SELECT COUNT(*) FROM books_fts').fetchone()[0]
+            borrower_count = conn.execute('SELECT COUNT(*) FROM borrowers').fetchone()[0]
+            active_loan_count = conn.execute('SELECT COUNT(*) FROM loans WHERE returned_at IS NULL').fetchone()[0]
         self.assertTrue({'borrower', 'checked_out_at', 'due_date'}.issubset(columns))
-        self.assertEqual(fts_count, 1)
+        self.assertEqual(fts_count, 2)
+        self.assertEqual(borrower_count, 1)
+        self.assertEqual(active_loan_count, 1)
         hits = lib.list_books(query='petrov', search_mode='fts')
         self.assertEqual([row['title'] for row in hits], ['Database Internals'])
+        history = lib.loan_history(status='active', reference_date=date(2026, 4, 20))
+        self.assertEqual([row['title'] for row in history], ['Designing Data-Intensive Applications'])
+
+    def test_cli_history_and_stats_output(self):
+        lib, db = self.make_library()
+        lib.add_book('Distributed Systems', 'Andrew S. Tanenbaum')
+        lib.add_book('Refactoring', 'Martin Fowler')
+        lib.checkout(1, 'Alex', loan_days=7, checkout_date=date(2026, 4, 1))
+        lib.checkout(2, 'Sam', loan_days=14, checkout_date=date(2026, 4, 10))
+        lib.return_book(2, return_date=date(2026, 4, 22))
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'history', '--status', 'returned', '--borrower', 'sam', '--date', '2026-04-23'])
+        history_output = buffer.getvalue()
+        self.assertIn('loan #', history_output)
+        self.assertIn('Refactoring', history_output)
+        self.assertIn('returned 2026-04-22 [returned on time]', history_output)
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            main(['--db', str(db), 'stats', '--date', '2026-04-23', '--top', '2'])
+        stats_output = buffer.getvalue()
+        self.assertIn('books: 2', stats_output)
+        self.assertIn('borrowers: 2', stats_output)
+        self.assertIn('loans: total 2 | active 1 | overdue 1 | returned 1', stats_output)
+        self.assertIn('Alex — loans 1', stats_output)
 
     def test_cli_search_and_overdue_output(self):
         lib, db = self.make_library()

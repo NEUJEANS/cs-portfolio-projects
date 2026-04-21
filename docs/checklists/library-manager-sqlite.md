@@ -8,4 +8,7 @@
 - [x] support migration/backfill so older catalog databases gain the search index without manual rebuild steps
 - [x] add fresh research and self-test notes for the search upgrade
 - [x] log review passes and follow-up notes so the FTS slice is resumable later
-- [ ] add a borrower/loan-history table so circulation analytics are auditable instead of stored only on the current book row
+- [x] add a borrower/loan-history table so circulation analytics are auditable instead of stored only on the current book row
+- [x] expose history and circulation analytics commands so the new audit trail is visible in CLI demos
+- [x] backfill still-active legacy checkouts into the normalized loan tables during migration
+- [ ] add a small HTML or Markdown circulation dashboard export for recruiter-friendly portfolio screenshots
