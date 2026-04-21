@@ -5,6 +5,7 @@ import csv
 import importlib.util
 import json
 import sys
+from html import escape
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,11 @@ class WorkloadOpResult:
     global_depth: int
     bucket_count: int
     entry_count: int
+    split_delta: int = 0
+    merge_delta: int = 0
+    directory_growth_delta: int = 0
+    directory_shrink_delta: int = 0
+    snapshot: dict[str, Any] | None = None
 
 
 @dataclass
@@ -409,13 +415,13 @@ def render_markdown_report(title: str, table: ExtendibleHashTable, history: list
         lines.extend(
             [
                 "## Workload trace",
-                "| step | op | key | value | outcome | global depth | bucket count | entry count |",
-                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| step | op | key | value | outcome | events | global depth | bucket count | entry count |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
             ]
         )
         for item in history:
             lines.append(
-                f"| {item.step} | {item.op} | `{item.key}` | `{item.value or ''}` | {item.outcome} | {item.global_depth} | {item.bucket_count} | {item.entry_count} |"
+                f"| {item.step} | {item.op} | `{item.key}` | `{item.value or ''}` | {item.outcome} | {_format_step_events(item)} | {item.global_depth} | {item.bucket_count} | {item.entry_count} |"
             )
         lines.append("")
 
@@ -433,6 +439,281 @@ def render_markdown_report(title: str, table: ExtendibleHashTable, history: list
         )
     lines.append("")
     return "\n".join(lines)
+
+
+def _truncate_text(value: str, limit: int = 52) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1] + "…"
+
+
+def _format_step_events(item: WorkloadOpResult) -> str:
+    events: list[str] = []
+    if item.split_delta:
+        label = "split" if item.split_delta == 1 else "splits"
+        events.append(f"{item.split_delta} {label}")
+    if item.merge_delta:
+        label = "merge" if item.merge_delta == 1 else "merges"
+        events.append(f"{item.merge_delta} {label}")
+    if item.directory_growth_delta:
+        label = "directory growth" if item.directory_growth_delta == 1 else "directory growths"
+        events.append(f"{item.directory_growth_delta} {label}")
+    if item.directory_shrink_delta:
+        label = "directory shrink" if item.directory_shrink_delta == 1 else "directory shrinks"
+        events.append(f"{item.directory_shrink_delta} {label}")
+    return ", ".join(events) if events else "steady-state"
+
+
+def _bucket_palette(bucket_id: int) -> str:
+    colors = [
+        "#dbeafe",
+        "#dcfce7",
+        "#fef3c7",
+        "#fae8ff",
+        "#fee2e2",
+        "#cffafe",
+        "#ede9fe",
+        "#e2e8f0",
+    ]
+    return colors[bucket_id % len(colors)]
+
+
+def _svg_text(x: float, y: float, text: str, *, size: int = 14, weight: str = "400", fill: str = "#0f172a") -> str:
+    return (
+        f'<text x="{x}" y="{y}" font-family="Inter,Segoe UI,Arial,sans-serif" '
+        f'font-size="{size}" font-weight="{weight}" fill="{fill}">{escape(text)}</text>'
+    )
+
+
+def _svg_group(*elements: str, tooltip: str | None = None) -> str:
+    parts = ["<g>"]
+    if tooltip:
+        parts.append(f"<title>{escape(tooltip)}</title>")
+    parts.extend(elements)
+    parts.append("</g>")
+    return "".join(parts)
+
+
+def _svg_reference_id(prefix: str, *parts: str) -> str:
+    seed = "|".join(parts)
+    return f"{prefix}-{stable_hash(seed):016x}"
+
+
+def render_visualization_svg(
+    title: str,
+    table: ExtendibleHashTable,
+    history: list[WorkloadOpResult],
+    source_label: str | None = None,
+) -> str:
+    card_width = 1240
+    row_height = 24
+    header_height = 64
+    card_gap = 18
+    y = 118
+    cards: list[str] = []
+
+    for item in history:
+        snapshot = item.snapshot or {"stats": {"buckets": []}, "directory_rows": []}
+        stats = snapshot["stats"]
+        directory_rows = snapshot["directory_rows"]
+        bucket_rows = stats["buckets"]
+        content_rows = max(len(directory_rows), len(bucket_rows), 1)
+        card_height = header_height + (content_rows + 2) * row_height + 34
+        card_top = y
+        cards.append(
+            f'<rect x="40" y="{card_top}" width="{card_width}" height="{card_height}" rx="20" fill="#ffffff" stroke="#cbd5e1" />'
+        )
+        cards.append(
+            _svg_group(
+                _svg_text(62, card_top + 30, f"Step {item.step} · {item.op.upper()} {_truncate_text(item.key, 28)}", size=22, weight="700"),
+                _svg_text(62, card_top + 54, f"Outcome: {item.outcome} · Events: {_format_step_events(item)}", size=13, fill="#334155"),
+                _svg_text(
+                    860,
+                    card_top + 30,
+                    f"depth {item.global_depth} · buckets {item.bucket_count} · entries {item.entry_count}",
+                    size=13,
+                    weight="600",
+                    fill="#1d4ed8",
+                ),
+                tooltip=(
+                    f"Step {item.step} · {item.op.upper()} {item.key} · Outcome: {item.outcome} · Events: {_format_step_events(item)} "
+                    f"· depth {item.global_depth} · buckets {item.bucket_count} · entries {item.entry_count}"
+                ),
+            )
+        )
+
+        grid_top = card_top + header_height
+        cards.append(_svg_text(62, grid_top + 18, "Directory aliases", size=15, weight="700"))
+        cards.append(_svg_text(474, grid_top + 18, "Bucket state", size=15, weight="700"))
+        cards.append(_svg_text(62, grid_top + 40, "idx / bits / bucket / entries", size=12, weight="600", fill="#475569"))
+        cards.append(_svg_text(474, grid_top + 40, "bucket / ld / aliases / size / keys", size=12, weight="600", fill="#475569"))
+
+        for row_index, row in enumerate(directory_rows):
+            row_y = grid_top + 52 + row_index * row_height
+            fill = _bucket_palette(int(row["bucket_id"]))
+            entry_text = ", ".join(value.split("=", 1)[0] for value in row["entries"]) or "empty"
+            full_directory_label = f"{row['index']:>2} · {row['bits']} · B{row['bucket_id']} · {entry_text}"
+            cards.append(
+                _svg_group(
+                    f'<rect x="58" y="{row_y - 15}" width="388" height="20" rx="10" fill="{fill}" stroke="#bfdbfe" />',
+                    _svg_text(
+                        68,
+                        row_y,
+                        f"{row['index']:>2} · {row['bits']} · B{row['bucket_id']} · {_truncate_text(entry_text, 32)}",
+                        size=12,
+                    ),
+                    tooltip=full_directory_label,
+                )
+            )
+
+        for row_index, bucket in enumerate(bucket_rows):
+            row_y = grid_top + 52 + row_index * row_height
+            fill = _bucket_palette(int(bucket["bucket_id"]))
+            key_text = ", ".join(bucket["keys"]) or "empty"
+            full_bucket_label = (
+                f"B{bucket['bucket_id']} · ld={bucket['local_depth']} · aliases={bucket['aliases']} "
+                f"· size={bucket['size']} · {key_text}"
+            )
+            cards.append(
+                _svg_group(
+                    f'<rect x="470" y="{row_y - 15}" width="770" height="20" rx="10" fill="{fill}" stroke="#cbd5e1" />',
+                    _svg_text(
+                        480,
+                        row_y,
+                        f"B{bucket['bucket_id']} · ld={bucket['local_depth']} · aliases={bucket['aliases']} · size={bucket['size']} · {_truncate_text(key_text, 84)}",
+                        size=12,
+                    ),
+                    tooltip=full_bucket_label,
+                )
+            )
+
+        y += card_height + card_gap
+
+    height = max(y + 24, 260)
+    subtitle = source_label or "Workload-driven extendible hashing aliasing trace"
+    summary_line = (
+        f"Final depth {table.global_depth} · buckets {len(table.buckets)} · splits {table.split_count} · merges {table.merge_count} "
+        f"· directory grows {table.directory_growth_count} · directory shrinks {table.directory_shrink_count}"
+    )
+    title_id = _svg_reference_id("viz-title", title, subtitle)
+    desc_id = _svg_reference_id("viz-desc", title, subtitle, summary_line)
+    return "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="{height}" viewBox="0 0 1320 {height}" role="img" aria-labelledby="{title_id} {desc_id}">',
+            f"<title id=\"{title_id}\">{escape(title)}</title>",
+            f"<desc id=\"{desc_id}\">{escape(subtitle + '. ' + summary_line)}</desc>",
+            '<rect width="1320" height="100%" fill="#f8fafc" />',
+            _svg_text(40, 42, title, size=30, weight="700"),
+            _svg_text(40, 68, subtitle, size=14, fill="#334155"),
+            _svg_text(40, 92, summary_line, size=14, weight="600", fill="#1d4ed8"),
+            *cards,
+            "</svg>",
+        ]
+    )
+
+
+def render_visualization_html(
+    title: str,
+    table: ExtendibleHashTable,
+    history: list[WorkloadOpResult],
+    source_label: str | None = None,
+) -> str:
+    svg = render_visualization_svg(title, table, history, source_label=source_label)
+    step_cards: list[str] = []
+    for item in history:
+        snapshot = item.snapshot or {"stats": {"buckets": []}, "directory_rows": []}
+        stats = snapshot["stats"]
+        directory_rows = snapshot["directory_rows"]
+        bucket_rows = stats["buckets"]
+        directory_html = "".join(
+            (
+                "<tr>"
+                f"<td>{row['index']}</td>"
+                f"<td><code>{escape(row['bits'])}</code></td>"
+                f"<td>B{row['bucket_id']}</td>"
+                f"<td>{row['local_depth']}</td>"
+                f"<td>{escape(', '.join(value.split('=', 1)[0] for value in row['entries']) or 'empty')}</td>"
+                "</tr>"
+            )
+            for row in directory_rows
+        )
+        buckets_html = "".join(
+            (
+                "<tr>"
+                f"<td>B{bucket['bucket_id']}</td>"
+                f"<td>{bucket['local_depth']}</td>"
+                f"<td>{bucket['aliases']}</td>"
+                f"<td>{bucket['size']}</td>"
+                f"<td>{escape(', '.join(bucket['keys']) or 'empty')}</td>"
+                "</tr>"
+            )
+            for bucket in bucket_rows
+        )
+        step_cards.append(
+            f'''<section class="step-card">
+<h2>Step {item.step} · {escape(item.op.upper())} <code>{escape(item.key)}</code></h2>
+<p class="step-meta">Outcome: <strong>{escape(item.outcome)}</strong> · Events: <strong>{escape(_format_step_events(item))}</strong> · Depth <strong>{item.global_depth}</strong> · Buckets <strong>{item.bucket_count}</strong> · Entries <strong>{item.entry_count}</strong></p>
+<div class="step-grid">
+  <div>
+    <h3>Directory aliases</h3>
+    <table>
+      <thead><tr><th>idx</th><th>bits</th><th>bucket</th><th>ld</th><th>keys</th></tr></thead>
+      <tbody>{directory_html}</tbody>
+    </table>
+  </div>
+  <div>
+    <h3>Bucket state</h3>
+    <table>
+      <thead><tr><th>bucket</th><th>ld</th><th>aliases</th><th>size</th><th>keys</th></tr></thead>
+      <tbody>{buckets_html}</tbody>
+    </table>
+  </div>
+</div>
+</section>'''
+        )
+
+    summary_items = [
+        f"<li><strong>Final global depth:</strong> {table.global_depth}</li>",
+        f"<li><strong>Final bucket count:</strong> {len(table.buckets)}</li>",
+        f"<li><strong>Splits / merges:</strong> {table.split_count} / {table.merge_count}</li>",
+        f"<li><strong>Directory grows / shrinks:</strong> {table.directory_growth_count} / {table.directory_shrink_count}</li>",
+        f"<li><strong>Source:</strong> <code>{escape(source_label or 'inline workload')}</code></li>",
+    ]
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{escape(title)}</title>
+<style>
+  :root {{ color-scheme: light; }}
+  body {{ font-family: Inter, Segoe UI, Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }}
+  main {{ max-width: 1320px; margin: 0 auto; padding: 32px 20px 48px; }}
+  h1 {{ margin-bottom: 8px; }}
+  .lede {{ color: #334155; margin-top: 0; }}
+  .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; padding-left: 18px; }}
+  .visual {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 20px; padding: 14px; overflow-x: auto; }}
+  .visual svg {{ width: 100%; height: auto; display: block; }}
+  .step-card {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 18px; margin-top: 18px; }}
+  .step-meta {{ color: #334155; }}
+  .step-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+  th, td {{ border-bottom: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; vertical-align: top; }}
+  th {{ background: #eff6ff; }}
+  code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+</style>
+</head>
+<body>
+<main>
+  <h1>{escape(title)}</h1>
+  <p class="lede">Self-contained artifact for visualizing how directory aliases, local depth, and bucket contents evolve over a workload.</p>
+  <ul class="summary">{"".join(summary_items)}</ul>
+  <section class="visual">{svg}</section>
+  {"".join(step_cards)}
+</main>
+</body>
+</html>
+'''
 
 
 def load_json(path: Path) -> Any:
@@ -495,6 +776,10 @@ def run_workload(payload: dict[str, Any]) -> WorkloadResult:
         op = operation["op"]
         key = operation["key"]
         value = operation["value"]
+        before_split = table.split_count
+        before_merge = table.merge_count
+        before_growth = table.directory_growth_count
+        before_shrink = table.directory_shrink_count
         if op == "put":
             assert value is not None
             outcome = table.put(key, value)
@@ -513,6 +798,11 @@ def run_workload(payload: dict[str, Any]) -> WorkloadResult:
                 global_depth=table.global_depth,
                 bucket_count=len(table.buckets),
                 entry_count=sum(len(bucket.entries) for bucket in table.buckets.values()),
+                split_delta=table.split_count - before_split,
+                merge_delta=table.merge_count - before_merge,
+                directory_growth_delta=table.directory_growth_count - before_growth,
+                directory_shrink_delta=table.directory_shrink_count - before_shrink,
+                snapshot={"stats": table.stats(), "directory_rows": table.directory_rows()},
             )
         )
     return WorkloadResult(table=table, history=history)
@@ -1000,6 +1290,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="report title to use for --markdown-out",
     )
 
+    visualize_parser = subparsers.add_parser(
+        "visualize",
+        help="render split-sequence visualization artifacts for a workload",
+    )
+    visualize_parser.add_argument("--input", required=True, type=Path, help="workload JSON file")
+    visualize_parser.add_argument("--svg-out", type=Path, help="optional self-contained SVG output")
+    visualize_parser.add_argument("--html-out", type=Path, help="optional self-contained HTML output")
+    visualize_parser.add_argument(
+        "--title",
+        default="Extendible hashing split and aliasing trace",
+        help="title to use for visualization artifacts",
+    )
+
     return parser
 
 
@@ -1061,6 +1364,37 @@ def command_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_visualize(args: argparse.Namespace) -> int:
+    if not args.svg_out and not args.html_out:
+        raise ValueError("visualize requires --svg-out and/or --html-out")
+    workload = load_json(args.input)
+    result = run_workload(workload)
+    if args.svg_out:
+        args.svg_out.parent.mkdir(parents=True, exist_ok=True)
+        args.svg_out.write_text(
+            render_visualization_svg(args.title, result.table, result.history, source_label=str(args.input)) + "\n",
+            encoding="utf-8",
+        )
+    if args.html_out:
+        args.html_out.parent.mkdir(parents=True, exist_ok=True)
+        args.html_out.write_text(
+            render_visualization_html(args.title, result.table, result.history, source_label=str(args.input)) + "\n",
+            encoding="utf-8",
+        )
+    print(
+        json.dumps(
+            {
+                "input": str(args.input),
+                "steps": len(result.history),
+                "svg_out": str(args.svg_out) if args.svg_out else None,
+                "html_out": str(args.html_out) if args.html_out else None,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1074,6 +1408,8 @@ def main(argv: list[str] | None = None) -> int:
         return command_delete(args)
     if args.command == "benchmark":
         return command_benchmark(args)
+    if args.command == "visualize":
+        return command_visualize(args)
     parser.error(f"unsupported command: {args.command}")
     return 2
 

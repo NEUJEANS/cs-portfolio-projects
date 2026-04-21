@@ -9,15 +9,15 @@
 - load factor: `0.5`
 
 ## Workload trace
-| step | op | key | value | outcome | global depth | bucket count | entry count |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | put | `user:1001` | `Ada` | inserted | 0 | 1 | 1 |
-| 2 | put | `user:1009` | `Grace` | inserted | 0 | 1 | 2 |
-| 3 | put | `user:1017` | `Linus` | inserted | 1 | 2 | 3 |
-| 4 | put | `user:1025` | `Barbara` | inserted | 2 | 3 | 4 |
-| 5 | get | `user:1009` | `` | found:Grace | 2 | 3 | 4 |
-| 6 | delete | `user:1017` | `` | deleted | 2 | 3 | 3 |
-| 7 | put | `user:1041` | `Margaret` | inserted | 3 | 4 | 4 |
+| step | op | key | value | outcome | events | global depth | bucket count | entry count |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | put | `user:1001` | `Ada` | inserted | steady-state | 0 | 1 | 1 |
+| 2 | put | `user:1009` | `Grace` | inserted | steady-state | 0 | 1 | 2 |
+| 3 | put | `user:1017` | `Linus` | inserted | 1 split, 1 directory growth | 1 | 2 | 3 |
+| 4 | put | `user:1025` | `Barbara` | inserted | 1 split, 1 directory growth | 2 | 3 | 4 |
+| 5 | get | `user:1009` | `` | found:Grace | steady-state | 2 | 3 | 4 |
+| 6 | delete | `user:1017` | `` | deleted | steady-state | 2 | 3 | 3 |
+| 7 | put | `user:1041` | `Margaret` | inserted | 1 split, 1 directory growth | 3 | 4 | 4 |
 
 ## Directory
 | index | bits | bucket | local depth | entries |

@@ -10,5 +10,5 @@
 - [x] run tests, secret scan, commit, push, and wrap up the slice
 - [x] add bucket merge / directory shrink support for delete-heavy scenarios
 - [x] add benchmark comparisons against cuckoo hashing or B-tree lookup/update workloads
-- [ ] add HTML/SVG visualization exports for split sequences and directory aliasing
+- [x] add HTML/SVG visualization exports for split sequences and directory aliasing
 - [ ] broaden the benchmark story with B-tree pages or linear probing as additional baselines

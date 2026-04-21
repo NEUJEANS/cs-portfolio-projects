@@ -23,6 +23,8 @@ ExtendibleHashTable = MODULE.ExtendibleHashTable
 SnapshotError = MODULE.SnapshotError
 WorkloadError = MODULE.WorkloadError
 load_snapshot = MODULE.load_snapshot
+render_visualization_html = MODULE.render_visualization_html
+render_visualization_svg = MODULE.render_visualization_svg
 run_benchmark_suite = MODULE.run_benchmark_suite
 run_workload = MODULE.run_workload
 stable_hash = MODULE.stable_hash
@@ -292,6 +294,34 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertEqual([item.bucket_count for item in result.history], [1, 1, 2, 3, 2, 1])
         self.assertEqual(result.table.global_depth, 0)
 
+    def test_run_workload_captures_visualization_snapshots_and_events(self) -> None:
+        payload = json.loads(SAMPLE_WORKLOAD.read_text(encoding="utf-8"))
+        result = run_workload(payload)
+        self.assertEqual(len(result.history), len(payload["operations"]))
+        split_steps = [item.step for item in result.history if item.split_delta]
+        self.assertTrue(split_steps)
+        self.assertTrue(all(item.snapshot for item in result.history))
+        self.assertEqual(result.history[-1].snapshot["stats"]["entry_count"], result.table.stats()["entry_count"])
+
+    def test_render_visualization_outputs_include_aliasing_story(self) -> None:
+        payload = json.loads(SAMPLE_WORKLOAD.read_text(encoding="utf-8"))
+        result = run_workload(payload)
+        svg = render_visualization_svg("Sample aliasing trace", result.table, result.history, source_label=str(SAMPLE_WORKLOAD))
+        html = render_visualization_html("Sample aliasing trace", result.table, result.history, source_label=str(SAMPLE_WORKLOAD))
+        self.assertIn("<svg", svg)
+        self.assertIn("Directory aliases", svg)
+        self.assertIn("Bucket state", svg)
+        self.assertIn("splits", svg)
+        self.assertIn("aria-labelledby=\"viz-title-", svg)
+        self.assertIn("<title id=\"viz-title-", svg)
+        self.assertIn("<desc id=\"viz-desc-", svg)
+        self.assertIn("<g><title>Step 1 · PUT user:1001", svg)
+        self.assertIn("<g><title> 0 · 0 · B0 · user:1001", svg)
+        self.assertIn("<section class=\"visual\">", html)
+        self.assertIn("Step 1", html)
+        self.assertIn("Directory aliases", html)
+        self.assertIn("aria-labelledby=\"viz-title-", html)
+
     def test_validate_benchmark_suite_rejects_duplicate_names(self) -> None:
         with self.assertRaises(BenchmarkError):
             validate_benchmark_suite(
@@ -409,6 +439,8 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             benchmark_json = tmp_path / "benchmark.json"
             benchmark_md = tmp_path / "benchmark.md"
             benchmark_csv = tmp_path / "benchmark.csv"
+            visualize_svg = tmp_path / "trace.svg"
+            visualize_html = tmp_path / "trace.html"
 
             run_process = subprocess.run(
                 [
@@ -503,6 +535,28 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertTrue(benchmark_csv.exists())
             self.assertIn('"scenario_count": 3', benchmark_process.stdout)
             self.assertIn("directory-friendly-read-heavy", benchmark_md.read_text(encoding="utf-8"))
+
+            visualize_process = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "visualize",
+                    "--input",
+                    str(SAMPLE_WORKLOAD),
+                    "--svg-out",
+                    str(visualize_svg),
+                    "--html-out",
+                    str(visualize_html),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(visualize_svg.exists())
+            self.assertTrue(visualize_html.exists())
+            self.assertIn('"steps": 7', visualize_process.stdout)
+            self.assertIn("Directory aliases", visualize_svg.read_text(encoding="utf-8"))
+            self.assertIn("Step 1", visualize_html.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
