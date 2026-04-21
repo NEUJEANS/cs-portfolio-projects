@@ -21,6 +21,7 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 BenchmarkError = MODULE.BenchmarkError
 ExtendibleHashTable = MODULE.ExtendibleHashTable
+LinearProbingHashTable = MODULE.LinearProbingHashTable
 SnapshotError = MODULE.SnapshotError
 WorkloadError = MODULE.WorkloadError
 load_snapshot = MODULE.load_snapshot
@@ -42,6 +43,17 @@ def colliding_keys(depth: int, count: int, suffix: int = 0) -> list[str]:
     while len(found) < count:
         candidate = f"collision:{depth}:{suffix}:{index}"
         if stable_hash(candidate) & mask == suffix:
+            found.append(candidate)
+        index += 1
+    return found
+
+
+def linear_collision_keys(capacity: int, count: int, slot: int = 0) -> list[str]:
+    found: list[str] = []
+    index = 0
+    while len(found) < count:
+        candidate = f"linear:{capacity}:{slot}:{index}"
+        if stable_hash(f"linear-probing::{candidate}") % capacity == slot:
             found.append(candidate)
         index += 1
     return found
@@ -72,6 +84,22 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         self.assertTrue(table.delete("beta"))
         self.assertFalse(table.delete("beta"))
         self.assertIsNone(table.get("beta"))
+
+    def test_linear_probing_reuses_tombstone_slots(self) -> None:
+        table = LinearProbingHashTable(capacity=4, max_load_factor=0.95, max_tombstone_ratio=0.9)
+        alpha, beta, gamma = linear_collision_keys(capacity=4, count=3, slot=0)
+        table.put(alpha, "1")
+        table.put(beta, "2")
+        table.put(gamma, "3")
+
+        self.assertTrue(table.delete(beta))
+        self.assertEqual(table.stats()["tombstones"], 1)
+        self.assertEqual(table.put(beta, "2b"), "inserted")
+        self.assertEqual(table.get(beta), "2b")
+        stats = table.stats()
+        self.assertEqual(stats["tombstones"], 0)
+        self.assertEqual(stats["size"], 3)
+        self.assertGreaterEqual(stats["max_probe_count"], 2)
 
     def test_delete_merges_buddy_bucket_and_shrinks_directory(self) -> None:
         table = ExtendibleHashTable(bucket_capacity=2)
@@ -369,15 +397,20 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             ],
         )
         self.assertTrue(all(row["validation"]["final_state_match"] for row in summary["results"]))
+        self.assertEqual(summary["linear_capacity"], 8)
+        self.assertAlmostEqual(summary["linear_max_load_factor"], 0.75)
+        self.assertAlmostEqual(summary["linear_max_tombstone_ratio"], 0.25)
         self.assertTrue(all(row["extendible"]["split_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["extendible"]["directory_growth_count"] >= 0 for row in summary["results"]))
+        self.assertTrue(all(row["linear"]["average_probe_count"] >= 1 for row in summary["results"]))
+        self.assertTrue(all(row["linear"]["final_capacity"] >= summary["linear_capacity"] for row in summary["results"]))
         self.assertTrue(all(row["cuckoo"]["average_rehash_count"] >= 0 for row in summary["results"]))
         self.assertTrue(all(row["btree"]["final_height"] >= 1 for row in summary["results"]))
         self.assertTrue(all(row["btree"]["paged_file_bytes"] > 0 for row in summary["results"]))
 
-    def test_summarize_benchmark_trials_rejects_inconsistent_extendible_metrics(self) -> None:
+    def test_summarize_benchmark_trials_rejects_inconsistent_linear_metrics(self) -> None:
         scenario = {
-            "name": "nondeterministic-extendible",
+            "name": "nondeterministic-linear",
             "description": "synthetic inconsistent benchmark rows",
             "operations": [{"op": "put", "key": "alpha", "value": "1"}],
         }
@@ -408,6 +441,149 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     "directory_growth_count": 0,
                     "directory_shrink_count": 0,
                 },
+                "linear": {
+                    "initial_capacity": 8,
+                    "max_load_factor": 0.75,
+                    "max_tombstone_ratio": 0.25,
+                    "final_capacity": 8,
+                    "final_load_factor": 0.125,
+                    "occupied_load_factor": 0.125,
+                    "tombstone_count": 0,
+                    "resize_count": 0,
+                    "average_probe_count": 1.0,
+                    "max_probe_count": 1,
+                    "rebuild_probe_count": 0,
+                },
+                "cuckoo": {
+                    "final_capacity": 7,
+                    "load_factor": 0.1429,
+                    "rehash_count": 0,
+                    "displacement_count": 0,
+                    "empty_slots": 6,
+                },
+                "btree": {
+                    "minimum_degree": 2,
+                    "page_size": 512,
+                    "value_bytes": 32,
+                    "final_height": 1,
+                    "peak_height": 1,
+                    "final_node_count": 1,
+                    "peak_node_count": 1,
+                    "root_keys": 1,
+                    "page_padding_bytes": 440,
+                    "paged_file_bytes": 541,
+                },
+            },
+            {
+                "trial": 2,
+                "operation_mix": {
+                    "puts": 1,
+                    "insertions": 1,
+                    "updates": 0,
+                    "gets": 0,
+                    "get_hits": 0,
+                    "get_misses": 0,
+                    "deletes": 0,
+                    "delete_hits": 0,
+                    "delete_misses": 0,
+                },
+                "final_entry_count": 1,
+                "extendible": {
+                    "final_global_depth": 0,
+                    "peak_global_depth": 0,
+                    "final_bucket_count": 1,
+                    "peak_bucket_count": 1,
+                    "peak_directory_slots": 1,
+                    "load_factor": 0.5,
+                    "split_count": 0,
+                    "merge_count": 0,
+                    "directory_growth_count": 0,
+                    "directory_shrink_count": 0,
+                },
+                "linear": {
+                    "initial_capacity": 8,
+                    "max_load_factor": 0.75,
+                    "max_tombstone_ratio": 0.25,
+                    "final_capacity": 16,
+                    "final_load_factor": 0.0625,
+                    "occupied_load_factor": 0.0625,
+                    "tombstone_count": 0,
+                    "resize_count": 1,
+                    "average_probe_count": 2.0,
+                    "max_probe_count": 2,
+                    "rebuild_probe_count": 1,
+                },
+                "cuckoo": {
+                    "final_capacity": 7,
+                    "load_factor": 0.1429,
+                    "rehash_count": 0,
+                    "displacement_count": 0,
+                    "empty_slots": 6,
+                },
+                "btree": {
+                    "minimum_degree": 2,
+                    "page_size": 512,
+                    "value_bytes": 32,
+                    "final_height": 1,
+                    "peak_height": 1,
+                    "final_node_count": 1,
+                    "peak_node_count": 1,
+                    "root_keys": 1,
+                    "page_padding_bytes": 440,
+                    "paged_file_bytes": 541,
+                },
+            },
+        ]
+        with self.assertRaises(BenchmarkError):
+            summarize_benchmark_trials(scenario, trial_rows)
+
+    def test_summarize_benchmark_trials_rejects_inconsistent_extendible_metrics(self) -> None:
+        scenario = {
+            "name": "nondeterministic-extendible",
+            "description": "synthetic inconsistent benchmark rows",
+            "operations": [{"op": "put", "key": "alpha", "value": "1"}],
+        }
+        linear = {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.125,
+            "occupied_load_factor": 0.125,
+            "tombstone_count": 0,
+            "resize_count": 0,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "rebuild_probe_count": 0,
+        }
+        trial_rows = [
+            {
+                "trial": 1,
+                "operation_mix": {
+                    "puts": 1,
+                    "insertions": 1,
+                    "updates": 0,
+                    "gets": 0,
+                    "get_hits": 0,
+                    "get_misses": 0,
+                    "deletes": 0,
+                    "delete_hits": 0,
+                    "delete_misses": 0,
+                },
+                "final_entry_count": 1,
+                "extendible": {
+                    "final_global_depth": 0,
+                    "peak_global_depth": 0,
+                    "final_bucket_count": 1,
+                    "peak_bucket_count": 1,
+                    "peak_directory_slots": 1,
+                    "load_factor": 0.5,
+                    "split_count": 0,
+                    "merge_count": 0,
+                    "directory_growth_count": 0,
+                    "directory_shrink_count": 0,
+                },
+                "linear": dict(linear),
                 "cuckoo": {
                     "final_capacity": 7,
                     "load_factor": 0.1429,
@@ -454,6 +630,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     "directory_growth_count": 1,
                     "directory_shrink_count": 0,
                 },
+                "linear": dict(linear),
                 "cuckoo": {
                     "final_capacity": 7,
                     "load_factor": 0.1429,
@@ -478,29 +655,24 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         with self.assertRaises(BenchmarkError):
             summarize_benchmark_trials(scenario, trial_rows)
 
-
-    def test_render_benchmark_dashboard_html_uses_accessible_tables_and_escaped_content(self) -> None:
-        summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
-        html = render_benchmark_dashboard_html(
-            "Extendible hashing <dashboard>",
-            summary,
-            suite_source='projects/extendible-hashing-lab/benchmark_suite.json?x=<unsafe>',
-        )
-        self.assertIn('<title>Extendible hashing &lt;dashboard&gt;</title>', html)
-        self.assertIn('Scenario scoreboard with the headline metrics', html)
-        self.assertIn('<thead>', html)
-        self.assertIn('<tbody>', html)
-        self.assertIn('directory-friendly-read-heavy', html)
-        self.assertIn('B-tree page baseline', html)
-        self.assertIn('benchmark_suite.json?x=&lt;unsafe&gt;', html)
-        self.assertNotIn('benchmark_suite.json?x=<unsafe>', html)
-        self.assertIn('metric-bar', html)
-
     def test_summarize_benchmark_trials_rejects_inconsistent_btree_metrics(self) -> None:
         scenario = {
             "name": "nondeterministic-btree",
             "description": "synthetic inconsistent benchmark rows",
             "operations": [{"op": "put", "key": "alpha", "value": "1"}],
+        }
+        linear = {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.125,
+            "occupied_load_factor": 0.125,
+            "tombstone_count": 0,
+            "resize_count": 0,
+            "average_probe_count": 1.0,
+            "max_probe_count": 1,
+            "rebuild_probe_count": 0,
         }
         trial_rows = [
             {
@@ -529,6 +701,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     "directory_growth_count": 0,
                     "directory_shrink_count": 0,
                 },
+                "linear": dict(linear),
                 "cuckoo": {
                     "final_capacity": 7,
                     "load_factor": 0.1429,
@@ -575,6 +748,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
                     "directory_growth_count": 0,
                     "directory_shrink_count": 0,
                 },
+                "linear": dict(linear),
                 "cuckoo": {
                     "final_capacity": 7,
                     "load_factor": 0.1429,
@@ -598,6 +772,23 @@ class ExtendibleHashingLabTests(unittest.TestCase):
         ]
         with self.assertRaises(BenchmarkError):
             summarize_benchmark_trials(scenario, trial_rows)
+
+    def test_render_benchmark_dashboard_html_uses_accessible_tables_and_escaped_content(self) -> None:
+        summary = run_benchmark_suite(json.loads(BENCHMARK_SUITE.read_text(encoding="utf-8")))
+        html = render_benchmark_dashboard_html(
+            "Extendible hashing <dashboard>",
+            summary,
+            suite_source='projects/extendible-hashing-lab/benchmark_suite.json?x=<unsafe>',
+        )
+        self.assertIn('<title>Extendible hashing &lt;dashboard&gt;</title>', html)
+        self.assertIn('Scenario scoreboard with the headline metrics', html)
+        self.assertIn('<thead>', html)
+        self.assertIn('<tbody>', html)
+        self.assertIn('directory-friendly-read-heavy', html)
+        self.assertIn('B-tree page baseline', html)
+        self.assertIn('benchmark_suite.json?x=&lt;unsafe&gt;', html)
+        self.assertNotIn('benchmark_suite.json?x=<unsafe>', html)
+        self.assertIn('metric-bar', html)
 
     def test_cli_run_inspect_lookup_delete_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -715,6 +906,7 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             benchmark_md_text = benchmark_md.read_text(encoding="utf-8")
             self.assertIn(benchmark_title, benchmark_md_text)
             self.assertIn("directory-friendly-read-heavy", benchmark_md_text)
+            self.assertIn("Linear probing baseline", benchmark_md_text)
             self.assertIn("B-tree page baseline", benchmark_md_text)
             benchmark_json_payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
             self.assertEqual(benchmark_json_payload["title"], benchmark_title)
@@ -722,7 +914,9 @@ class ExtendibleHashingLabTests(unittest.TestCase):
             self.assertIn(benchmark_title, benchmark_html_text)
             self.assertIn("Scenario scoreboard", benchmark_html_text)
             self.assertIn("directory-friendly-read-heavy", benchmark_html_text)
+            self.assertIn("Linear probing baseline", benchmark_html_text)
             benchmark_csv_text = benchmark_csv.read_text(encoding="utf-8")
+            self.assertIn("linear_average_probe_count", benchmark_csv_text)
             self.assertIn("btree_paged_file_bytes", benchmark_csv_text)
             self.assertNotIn("\r", benchmark_csv_text)
 

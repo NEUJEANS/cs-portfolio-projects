@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Extendible hashing vs cuckoo hashing and B-tree benchmark comparison</title>
+<title>Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison</title>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -52,8 +52,8 @@
 </head>
 <body>
 <main>
-  <h1>Extendible hashing vs cuckoo hashing and B-tree benchmark comparison</h1>
-  <p class="lede">Compact benchmark dashboard for the extendible-hashing lab. It keeps the same deterministic benchmark data as the JSON, Markdown, and CSV exports while making the tradeoffs across extendible hashing, cuckoo hashing, and the B-tree page baseline easier to browse visually.</p>
+  <h1>Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison</h1>
+  <p class="lede">Compact benchmark dashboard for the extendible-hashing lab. It keeps the same deterministic benchmark data as the JSON, Markdown, and CSV exports while making the tradeoffs across extendible hashing, a simple linear-probing baseline, cuckoo hashing, and the B-tree page baseline easier to browse visually.</p>
   <p class="suite-source"><strong>Suite source:</strong> <code>projects/extendible-hashing-lab/benchmark_suite.json</code></p>
   <section class="summary-grid"><article class="summary-card">
   <h2>Scenarios</h2>
@@ -82,6 +82,7 @@
           <th scope="col">Final entries</th>
           <th scope="col">Ext splits / merges</th>
           <th scope="col">Ext depth / slots</th>
+          <th scope="col">Linear avg / max probe</th>
           <th scope="col">Cuckoo rehash / displacements</th>
           <th scope="col">B-tree height / nodes</th>
           <th scope="col">B-tree bytes</th>
@@ -93,6 +94,7 @@
   <td>5</td>
   <td>3 / 0</td>
   <td>3 / 8</td>
+  <td>1.462 / 3</td>
   <td>0.333 / 4</td>
   <td>2 / 3</td>
   <td>1569</td>
@@ -102,6 +104,7 @@
   <td>10</td>
   <td>5 / 0</td>
   <td>3 / 8</td>
+  <td>1.357 / 2</td>
   <td>1 / 11.333</td>
   <td>2 / 4</td>
   <td>2081</td>
@@ -111,6 +114,7 @@
   <td>5</td>
   <td>4 / 1</td>
   <td>3 / 8</td>
+  <td>1.357 / 4</td>
   <td>0 / 2.333</td>
   <td>2 / 3</td>
   <td>1569</td>
@@ -164,6 +168,39 @@
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #f59e0b;"></span></div>
   <div class="metric-detail">final occupancy across live buckets</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Linear probing baseline</h3>
+      <p>Primary-clustering pressure, tombstone cleanup, and probe lengths for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg probes</span>
+    <strong>1.462</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #2563eb;"></span></div>
+  <div class="metric-detail">max probe 3</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>max probe</span>
+    <strong>3</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">rebuild probes 0</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>rebuilds</span>
+    <strong>0</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 0.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">tombstones 1</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>final load</span>
+    <strong>0.625</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">occupied load 0.75</div>
 </div>
     </article>
     <article class="metric-panel">
@@ -228,6 +265,9 @@
           <th scope="col">Ext splits</th>
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
+          <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear max probe</th>
+          <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
           <th scope="col">Cuckoo displacements</th>
           <th scope="col">B-tree height</th>
@@ -239,6 +279,9 @@
   <td>3</td>
   <td>0</td>
   <td>3</td>
+  <td>1.462</td>
+  <td>3</td>
+  <td>0</td>
   <td>1</td>
   <td>12</td>
   <td>2</td>
@@ -248,6 +291,9 @@
   <td>3</td>
   <td>0</td>
   <td>3</td>
+  <td>1.462</td>
+  <td>3</td>
+  <td>0</td>
   <td>0</td>
   <td>0</td>
   <td>2</td>
@@ -257,6 +303,9 @@
   <td>3</td>
   <td>0</td>
   <td>3</td>
+  <td>1.462</td>
+  <td>3</td>
+  <td>0</td>
   <td>0</td>
   <td>0</td>
   <td>2</td>
@@ -311,6 +360,39 @@
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
   <div class="metric-detail">final occupancy across live buckets</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Linear probing baseline</h3>
+      <p>Primary-clustering pressure, tombstone cleanup, and probe lengths for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg probes</span>
+    <strong>1.357</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 92.8%; background: #2563eb;"></span></div>
+  <div class="metric-detail">max probe 2</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>max probe</span>
+    <strong>2</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 50.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">rebuild probes 6</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>rebuilds</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">tombstones 0</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>final load</span>
+    <strong>0.625</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">occupied load 0.625</div>
 </div>
     </article>
     <article class="metric-panel">
@@ -375,6 +457,9 @@
           <th scope="col">Ext splits</th>
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
+          <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear max probe</th>
+          <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
           <th scope="col">Cuckoo displacements</th>
           <th scope="col">B-tree height</th>
@@ -386,6 +471,9 @@
   <td>5</td>
   <td>0</td>
   <td>3</td>
+  <td>1.357</td>
+  <td>2</td>
+  <td>1</td>
   <td>1</td>
   <td>14</td>
   <td>2</td>
@@ -395,6 +483,9 @@
   <td>5</td>
   <td>0</td>
   <td>3</td>
+  <td>1.357</td>
+  <td>2</td>
+  <td>1</td>
   <td>1</td>
   <td>12</td>
   <td>2</td>
@@ -404,6 +495,9 @@
   <td>5</td>
   <td>0</td>
   <td>3</td>
+  <td>1.357</td>
+  <td>2</td>
+  <td>1</td>
   <td>1</td>
   <td>8</td>
   <td>2</td>
@@ -458,6 +552,39 @@
   </div>
   <div class="metric-bar" aria-hidden="true"><span style="width: 75.0%; background: #f59e0b;"></span></div>
   <div class="metric-detail">final occupancy across live buckets</div>
+</div>
+    </article>
+    <article class="metric-panel">
+      <h3>Linear probing baseline</h3>
+      <p>Primary-clustering pressure, tombstone cleanup, and probe lengths for the same key stream.</p>
+      <div class="metric">
+  <div class="metric-head">
+    <span>avg probes</span>
+    <strong>1.357</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 92.8%; background: #2563eb;"></span></div>
+  <div class="metric-detail">max probe 4</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>max probe</span>
+    <strong>4</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #7c3aed;"></span></div>
+  <div class="metric-detail">rebuild probes 5</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>rebuilds</span>
+    <strong>1</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #0f766e;"></span></div>
+  <div class="metric-detail">tombstones 0</div>
+</div><div class="metric">
+  <div class="metric-head">
+    <span>final load</span>
+    <strong>0.625</strong>
+  </div>
+  <div class="metric-bar" aria-hidden="true"><span style="width: 100.0%; background: #f59e0b;"></span></div>
+  <div class="metric-detail">occupied load 0.625</div>
 </div>
     </article>
     <article class="metric-panel">
@@ -522,6 +649,9 @@
           <th scope="col">Ext splits</th>
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
+          <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear max probe</th>
+          <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
           <th scope="col">Cuckoo displacements</th>
           <th scope="col">B-tree height</th>
@@ -533,6 +663,9 @@
   <td>4</td>
   <td>1</td>
   <td>3</td>
+  <td>1.357</td>
+  <td>4</td>
+  <td>1</td>
   <td>0</td>
   <td>4</td>
   <td>2</td>
@@ -542,6 +675,9 @@
   <td>4</td>
   <td>1</td>
   <td>3</td>
+  <td>1.357</td>
+  <td>4</td>
+  <td>1</td>
   <td>0</td>
   <td>2</td>
   <td>2</td>
@@ -551,6 +687,9 @@
   <td>4</td>
   <td>1</td>
   <td>3</td>
+  <td>1.357</td>
+  <td>4</td>
+  <td>1</td>
   <td>0</td>
   <td>1</td>
   <td>2</td>

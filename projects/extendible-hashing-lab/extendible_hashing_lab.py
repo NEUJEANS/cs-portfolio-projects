@@ -109,6 +109,170 @@ def benchmark_btree_key(key: str) -> int:
     return stable_hash(f"btree-benchmark::{key}") & BTREE_BENCHMARK_KEY_MASK
 
 
+@dataclass
+class LinearProbingEntry:
+    key: str
+    value: str
+
+
+class _LinearTombstone:
+    pass
+
+
+LINEAR_TOMBSTONE = _LinearTombstone()
+
+
+class LinearProbingHashTable:
+    def __init__(
+        self,
+        capacity: int = 8,
+        max_load_factor: float = 0.75,
+        max_tombstone_ratio: float = 0.25,
+    ) -> None:
+        if capacity < 4:
+            raise ValueError("capacity must be at least 4")
+        if not 0 < float(max_load_factor) < 1:
+            raise ValueError("max_load_factor must be between 0 and 1")
+        if not 0 <= float(max_tombstone_ratio) < 1:
+            raise ValueError("max_tombstone_ratio must be between 0 and 1")
+        self.initial_capacity = capacity
+        self.capacity = capacity
+        self.max_load_factor = float(max_load_factor)
+        self.max_tombstone_ratio = float(max_tombstone_ratio)
+        self.slots: list[LinearProbingEntry | _LinearTombstone | None] = [None] * capacity
+        self.size = 0
+        self.tombstones = 0
+        self.resize_count = 0
+        self.total_probe_count = 0
+        self.max_probe_count = 0
+        self.operation_count = 0
+        self.rebuild_probe_count = 0
+
+    def _hash(self, key: str) -> int:
+        return stable_hash(f"linear-probing::{key}") % self.capacity
+
+    def _record_probes(self, probes: int) -> None:
+        self.total_probe_count += probes
+        self.operation_count += 1
+        self.max_probe_count = max(self.max_probe_count, probes)
+
+    def _should_grow_for_insert(self) -> bool:
+        return ((self.size + 1) / self.capacity) > self.max_load_factor or (self.size + self.tombstones) >= self.capacity
+
+    def _should_rebuild_for_tombstones(self) -> bool:
+        if self.capacity == 0:
+            return False
+        return self.tombstones > 0 and (self.tombstones / self.capacity) > self.max_tombstone_ratio
+
+    def _locate_slot(self, key: str) -> tuple[int | None, int | None, int]:
+        first_tombstone: int | None = None
+        start = self._hash(key)
+        for probe in range(self.capacity):
+            index = (start + probe) % self.capacity
+            slot = self.slots[index]
+            if slot is None:
+                return None, first_tombstone if first_tombstone is not None else index, probe + 1
+            if slot is LINEAR_TOMBSTONE:
+                if first_tombstone is None:
+                    first_tombstone = index
+                continue
+            if slot.key == key:
+                return index, index, probe + 1
+        return None, first_tombstone, self.capacity
+
+    def _live_entries(self) -> list[LinearProbingEntry]:
+        return [
+            LinearProbingEntry(slot.key, slot.value)
+            for slot in self.slots
+            if isinstance(slot, LinearProbingEntry)
+        ]
+
+    def _resize(self, new_capacity: int) -> None:
+        target_capacity = max(int(new_capacity), self.initial_capacity, 4)
+        entries = self._live_entries()
+        self.resize_count += 1
+        self.capacity = target_capacity
+        self.slots = [None] * target_capacity
+        self.size = 0
+        self.tombstones = 0
+        probes_spent = 0
+        for entry in entries:
+            _, insert_index, probes = self._locate_slot(entry.key)
+            if insert_index is None:
+                raise BenchmarkError("linear probing resize failed to find an insertion slot")
+            self.slots[insert_index] = LinearProbingEntry(entry.key, entry.value)
+            self.size += 1
+            probes_spent += probes
+        self.rebuild_probe_count += probes_spent
+
+    def put(self, key: str, value: str) -> str:
+        found_index, insert_index, probes = self._locate_slot(key)
+        if found_index is not None:
+            self._record_probes(probes)
+            self.slots[found_index] = LinearProbingEntry(key, value)
+            return "updated"
+
+        if insert_index is None or self._should_grow_for_insert() or self._should_rebuild_for_tombstones():
+            self._resize(self.capacity * 2 if insert_index is None or self._should_grow_for_insert() else self.capacity)
+            _, insert_index, resize_probes = self._locate_slot(key)
+            probes += resize_probes
+
+        if insert_index is None:
+            raise BenchmarkError("linear probing insert failed to find an insertion slot")
+
+        self._record_probes(probes)
+        if self.slots[insert_index] is LINEAR_TOMBSTONE:
+            self.tombstones -= 1
+        self.slots[insert_index] = LinearProbingEntry(key, value)
+        self.size += 1
+        return "inserted"
+
+    def get(self, key: str) -> str | None:
+        found_index, _, probes = self._locate_slot(key)
+        self._record_probes(probes)
+        if found_index is None:
+            return None
+        slot = self.slots[found_index]
+        assert isinstance(slot, LinearProbingEntry)
+        return slot.value
+
+    def delete(self, key: str) -> bool:
+        found_index, _, probes = self._locate_slot(key)
+        self._record_probes(probes)
+        if found_index is None:
+            if self._should_rebuild_for_tombstones():
+                self._resize(self.capacity)
+            return False
+
+        self.slots[found_index] = LINEAR_TOMBSTONE
+        self.size -= 1
+        self.tombstones += 1
+        if self.size and self._should_rebuild_for_tombstones():
+            self._resize(self.capacity)
+        return True
+
+    def items(self) -> list[tuple[str, str]]:
+        return sorted(
+            [(slot.key, slot.value) for slot in self.slots if isinstance(slot, LinearProbingEntry)],
+            key=lambda item: item[0],
+        )
+
+    def stats(self) -> dict[str, Any]:
+        average_probe_count = round(self.total_probe_count / self.operation_count, 3) if self.operation_count else 0.0
+        return {
+            "capacity": self.capacity,
+            "size": self.size,
+            "tombstones": self.tombstones,
+            "load_factor": round(self.size / self.capacity, 4),
+            "occupied_load_factor": round((self.size + self.tombstones) / self.capacity, 4),
+            "resize_count": self.resize_count,
+            "total_probe_count": self.total_probe_count,
+            "average_probe_count": average_probe_count,
+            "max_probe_count": self.max_probe_count,
+            "rebuild_probe_count": self.rebuild_probe_count,
+        }
+
+
 class ExtendibleHashTable:
     def __init__(self, bucket_capacity: int = 2) -> None:
         if bucket_capacity < 1:
@@ -837,6 +1001,9 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
     bucket_capacity = payload.get("bucket_capacity", 2)
     cuckoo_capacity = payload.get("cuckoo_capacity", 11)
     max_displacements = payload.get("max_displacements", 16)
+    linear_capacity = payload.get("linear_capacity", 8)
+    linear_max_load_factor = payload.get("linear_max_load_factor", 0.75)
+    linear_max_tombstone_ratio = payload.get("linear_max_tombstone_ratio", 0.25)
     btree_minimum_degree = payload.get("btree_minimum_degree", 2)
     btree_page_size = payload.get("btree_page_size", 512)
     btree_value_bytes = payload.get("btree_value_bytes", 32)
@@ -852,6 +1019,12 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
         raise BenchmarkError("benchmark cuckoo_capacity must be an integer >= 3")
     if not isinstance(max_displacements, int) or max_displacements < 1:
         raise BenchmarkError("benchmark max_displacements must be a positive integer")
+    if not isinstance(linear_capacity, int) or linear_capacity < 4:
+        raise BenchmarkError("benchmark linear_capacity must be an integer >= 4")
+    if isinstance(linear_max_load_factor, bool) or not isinstance(linear_max_load_factor, (int, float)) or not 0 < float(linear_max_load_factor) < 1:
+        raise BenchmarkError("benchmark linear_max_load_factor must be between 0 and 1")
+    if isinstance(linear_max_tombstone_ratio, bool) or not isinstance(linear_max_tombstone_ratio, (int, float)) or not 0 <= float(linear_max_tombstone_ratio) < 1:
+        raise BenchmarkError("benchmark linear_max_tombstone_ratio must be between 0 and 1")
     if not isinstance(btree_minimum_degree, int) or btree_minimum_degree < 2:
         raise BenchmarkError("benchmark btree_minimum_degree must be an integer >= 2")
     if not isinstance(btree_page_size, int) or btree_page_size < 1:
@@ -912,6 +1085,9 @@ def validate_benchmark_suite(payload: Any) -> dict[str, Any]:
         "bucket_capacity": bucket_capacity,
         "cuckoo_capacity": cuckoo_capacity,
         "max_displacements": max_displacements,
+        "linear_capacity": linear_capacity,
+        "linear_max_load_factor": float(linear_max_load_factor),
+        "linear_max_tombstone_ratio": float(linear_max_tombstone_ratio),
         "btree_minimum_degree": btree_minimum_degree,
         "btree_page_size": btree_page_size,
         "btree_value_bytes": btree_value_bytes,
@@ -954,6 +1130,9 @@ def _run_benchmark_trial(
     bucket_capacity: int,
     cuckoo_capacity: int,
     max_displacements: int,
+    linear_capacity: int,
+    linear_max_load_factor: float,
+    linear_max_tombstone_ratio: float,
     btree_minimum_degree: int,
     btree_page_size: int,
     btree_value_bytes: int,
@@ -967,6 +1146,11 @@ def _run_benchmark_trial(
         max_displacements=max_displacements,
         salt_a=f"extendible-benchmark-a-{scenario['name']}-{trial}",
         salt_b=f"extendible-benchmark-b-{scenario['name']}-{trial}",
+    )
+    linear = LinearProbingHashTable(
+        capacity=linear_capacity,
+        max_load_factor=linear_max_load_factor,
+        max_tombstone_ratio=linear_max_tombstone_ratio,
     )
     btree = btree_class(minimum_degree=btree_minimum_degree)
 
@@ -1005,6 +1189,11 @@ def _run_benchmark_trial(
                 raise BenchmarkError(
                     f"extendible hashing returned {extendible_outcome!r} for {key!r}; expected {expected_outcome!r}"
                 )
+            linear_outcome = linear.put(key, value)
+            if linear_outcome != expected_outcome:
+                raise BenchmarkError(
+                    f"linear probing returned {linear_outcome!r} for {key!r}; expected {expected_outcome!r}"
+                )
             cuckoo_existing = cuckoo.get(key)
             cuckoo.insert(key, value)
             cuckoo_outcome = "updated" if cuckoo_existing is not None else "inserted"
@@ -1023,11 +1212,16 @@ def _run_benchmark_trial(
         elif op == "get":
             expected_value = reference.get(key)
             extendible_value = extendible.get(key)
+            linear_value = linear.get(key)
             cuckoo_value = cuckoo.get(key)
             btree_value = btree.search(btree_key)
             if extendible_value != expected_value:
                 raise BenchmarkError(
                     f"extendible hashing lookup for {key!r} returned {extendible_value!r}; expected {expected_value!r}"
+                )
+            if linear_value != expected_value:
+                raise BenchmarkError(
+                    f"linear probing lookup for {key!r} returned {linear_value!r}; expected {expected_value!r}"
                 )
             if cuckoo_value != expected_value:
                 raise BenchmarkError(
@@ -1043,11 +1237,16 @@ def _run_benchmark_trial(
             if expected_removed:
                 del reference[key]
             extendible_removed = extendible.delete(key)
+            linear_removed = linear.delete(key)
             cuckoo_removed = cuckoo.remove(key)
             btree_removed = btree.delete(btree_key)
             if extendible_removed != expected_removed:
                 raise BenchmarkError(
                     f"extendible hashing delete for {key!r} returned {extendible_removed}; expected {expected_removed}"
+                )
+            if linear_removed != expected_removed:
+                raise BenchmarkError(
+                    f"linear probing delete for {key!r} returned {linear_removed}; expected {expected_removed}"
                 )
             if cuckoo_removed != expected_removed:
                 raise BenchmarkError(
@@ -1069,11 +1268,16 @@ def _run_benchmark_trial(
 
     expected_items = sorted(reference.items(), key=lambda item: item[0])
     extendible_items = extendible.items()
+    linear_items = linear.items()
     cuckoo_items = cuckoo.items()
     btree_items = btree.items()
     if extendible_items != expected_items:
         raise BenchmarkError(
             f"extendible hashing final items did not match reference for scenario {scenario['name']!r} trial {trial}"
+        )
+    if linear_items != expected_items:
+        raise BenchmarkError(
+            f"linear probing final items did not match reference for scenario {scenario['name']!r} trial {trial}"
         )
     if cuckoo_items != expected_items:
         raise BenchmarkError(
@@ -1085,6 +1289,7 @@ def _run_benchmark_trial(
         )
 
     extendible_stats = extendible.stats()
+    linear_stats = linear.stats()
     cuckoo_stats = cuckoo.stats()
     btree_stats = btree.stats()
     btree_layout = btree.page_layout(page_size=btree_page_size, value_bytes=btree_value_bytes)
@@ -1103,6 +1308,19 @@ def _run_benchmark_trial(
             "merge_count": extendible.merge_count,
             "directory_growth_count": extendible.directory_growth_count,
             "directory_shrink_count": extendible.directory_shrink_count,
+        },
+        "linear": {
+            "initial_capacity": linear.initial_capacity,
+            "max_load_factor": linear.max_load_factor,
+            "max_tombstone_ratio": linear.max_tombstone_ratio,
+            "final_capacity": linear_stats["capacity"],
+            "final_load_factor": linear_stats["load_factor"],
+            "occupied_load_factor": linear_stats["occupied_load_factor"],
+            "tombstone_count": linear_stats["tombstones"],
+            "resize_count": linear_stats["resize_count"],
+            "average_probe_count": linear_stats["average_probe_count"],
+            "max_probe_count": linear_stats["max_probe_count"],
+            "rebuild_probe_count": linear_stats["rebuild_probe_count"],
         },
         "cuckoo": {
             "final_capacity": cuckoo_stats["capacity"],
@@ -1156,6 +1374,15 @@ def summarize_benchmark_trials(scenario: dict[str, Any], trial_rows: list[dict[s
             f"scenario {scenario['name']!r} produced inconsistent extendible-hashing metrics across trials"
         )
 
+    linear_signatures = {
+        json.dumps(row["linear"], sort_keys=True)
+        for row in trial_rows
+    }
+    if len(linear_signatures) != 1:
+        raise BenchmarkError(
+            f"scenario {scenario['name']!r} produced inconsistent linear-probing metrics across trials"
+        )
+
     btree_signatures = {
         json.dumps(row["btree"], sort_keys=True)
         for row in trial_rows
@@ -1176,6 +1403,7 @@ def summarize_benchmark_trials(scenario: dict[str, Any], trial_rows: list[dict[s
             "final_state_match": True,
         },
         "extendible": dict(first_row["extendible"]),
+        "linear": dict(first_row["linear"]),
         "cuckoo": {
             "average_rehash_count": _average([row["cuckoo"]["rehash_count"] for row in trial_rows], digits=3),
             "average_displacement_count": _average(
@@ -1207,6 +1435,9 @@ def run_benchmark_suite(payload: dict[str, Any]) -> dict[str, Any]:
                 bucket_capacity=suite["bucket_capacity"],
                 cuckoo_capacity=suite["cuckoo_capacity"],
                 max_displacements=suite["max_displacements"],
+                linear_capacity=suite["linear_capacity"],
+                linear_max_load_factor=suite["linear_max_load_factor"],
+                linear_max_tombstone_ratio=suite["linear_max_tombstone_ratio"],
                 btree_minimum_degree=suite["btree_minimum_degree"],
                 btree_page_size=suite["btree_page_size"],
                 btree_value_bytes=suite["btree_value_bytes"],
@@ -1220,6 +1451,9 @@ def run_benchmark_suite(payload: dict[str, Any]) -> dict[str, Any]:
         "bucket_capacity": suite["bucket_capacity"],
         "cuckoo_capacity": suite["cuckoo_capacity"],
         "max_displacements": suite["max_displacements"],
+        "linear_capacity": suite["linear_capacity"],
+        "linear_max_load_factor": suite["linear_max_load_factor"],
+        "linear_max_tombstone_ratio": suite["linear_max_tombstone_ratio"],
         "btree_minimum_degree": suite["btree_minimum_degree"],
         "btree_page_size": suite["btree_page_size"],
         "btree_value_bytes": suite["btree_value_bytes"],
@@ -1240,6 +1474,7 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
         [
             f"- Scenario count: `{summary['scenario_count']}`",
             f"- Extendible bucket capacity: `{summary['bucket_capacity']}`",
+            f"- Linear probing capacity / max load / tombstone ratio: `{summary['linear_capacity']}` / `{summary['linear_max_load_factor']}` / `{summary['linear_max_tombstone_ratio']}`",
             f"- Cuckoo starting capacity: `{summary['cuckoo_capacity']}`",
             f"- Cuckoo max displacements: `{summary['max_displacements']}`",
             f"- B-tree minimum degree: `{summary['btree_minimum_degree']}`",
@@ -1247,19 +1482,21 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
             f"- Trials per scenario: `{summary['trials']}`",
             "",
             "## Scenario scoreboard",
-            "| Scenario | Ops | Final entries | Ext splits | Ext merges | Peak depth | Cuckoo avg rehashes | Cuckoo avg displacements | B-tree height | B-tree nodes | B-tree paged bytes |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Scenario | Ops | Final entries | Ext splits | Ext merges | Peak depth | Linear avg probes | Linear max probe | Cuckoo avg rehashes | Cuckoo avg displacements | B-tree height | B-tree nodes | B-tree paged bytes |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in summary["results"]:
         lines.append(
-            "| {name} | {ops} | {entries} | {splits} | {merges} | {peak_depth} | {rehashes} | {displacements} | {btree_height} | {btree_nodes} | {btree_bytes} |".format(
+            "| {name} | {ops} | {entries} | {splits} | {merges} | {peak_depth} | {linear_avg} | {linear_max} | {rehashes} | {displacements} | {btree_height} | {btree_nodes} | {btree_bytes} |".format(
                 name=row["name"],
                 ops=row["operation_count"],
                 entries=row["final_entry_count"],
                 splits=row["extendible"]["split_count"],
                 merges=row["extendible"]["merge_count"],
                 peak_depth=row["extendible"]["peak_global_depth"],
+                linear_avg=row["linear"]["average_probe_count"],
+                linear_max=row["linear"]["max_probe_count"],
                 rehashes=row["cuckoo"]["average_rehash_count"],
                 displacements=row["cuckoo"]["average_displacement_count"],
                 btree_height=row["btree"]["final_height"],
@@ -1277,17 +1514,18 @@ def render_benchmark_markdown_report(title: str, summary: dict[str, Any], suite_
                 f"- Description: {row['description'] or 'No description provided.'}",
                 f"- Operation mix: `puts={row['operation_mix']['puts']}` (`insertions={row['operation_mix']['insertions']}`, `updates={row['operation_mix']['updates']}`), `gets={row['operation_mix']['gets']}` (`hits={row['operation_mix']['get_hits']}`, `misses={row['operation_mix']['get_misses']}`), `deletes={row['operation_mix']['deletes']}` (`hits={row['operation_mix']['delete_hits']}`, `misses={row['operation_mix']['delete_misses']}`)",
                 f"- Extendible hashing finished at global depth `{row['extendible']['final_global_depth']}` with `{row['extendible']['final_bucket_count']}` buckets and load factor `{row['extendible']['load_factor']}` after `{row['extendible']['split_count']}` splits / `{row['extendible']['merge_count']}` merges and `{row['extendible']['directory_growth_count']}` directory growth(s) / `{row['extendible']['directory_shrink_count']}` directory shrink(s).",
+                f"- Linear probing baseline finished at capacity `{row['linear']['final_capacity']}` with load factor `{row['linear']['final_load_factor']}`, tombstones `{row['linear']['tombstone_count']}`, average probe count `{row['linear']['average_probe_count']}`, max probe `{row['linear']['max_probe_count']}`, and `{row['linear']['resize_count']}` rebuild(s).",
                 f"- Cuckoo hashing averaged `{row['cuckoo']['average_rehash_count']}` rehashes and `{row['cuckoo']['average_displacement_count']}` displacements, finishing between capacities `{row['cuckoo']['final_capacity_range'][0]}` and `{row['cuckoo']['final_capacity_range'][1]}`.",
                 f"- B-tree page baseline finished at height `{row['btree']['final_height']}` across `{row['btree']['final_node_count']}` node(s); at `page_size={row['btree']['page_size']}` and `value_bytes={row['btree']['value_bytes']}` the paged snapshot would occupy `{row['btree']['paged_file_bytes']}` bytes with `{row['btree']['page_padding_bytes']}` bytes of fixed slack per page.",
                 f"- Validation: final states matched across `{row['validation']['trials']}` deterministic trial(s).",
                 "",
-                "| Trial | Extendible splits | Extendible merges | Peak depth | Peak buckets | Peak directory slots | Cuckoo rehashes | Cuckoo displacements | Cuckoo final capacity | B-tree height | B-tree nodes | B-tree paged bytes |",
-                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| Trial | Extendible splits | Extendible merges | Peak depth | Peak buckets | Peak directory slots | Linear avg probes | Linear max probe | Linear rebuilds | Cuckoo rehashes | Cuckoo displacements | Cuckoo final capacity | B-tree height | B-tree nodes | B-tree paged bytes |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for trial_row in row["trial_rows"]:
             lines.append(
-                f"| {trial_row['trial']} | {trial_row['extendible']['split_count']} | {trial_row['extendible']['merge_count']} | {trial_row['extendible']['peak_global_depth']} | {trial_row['extendible']['peak_bucket_count']} | {trial_row['extendible']['peak_directory_slots']} | {trial_row['cuckoo']['rehash_count']} | {trial_row['cuckoo']['displacement_count']} | {trial_row['cuckoo']['final_capacity']} | {trial_row['btree']['final_height']} | {trial_row['btree']['final_node_count']} | {trial_row['btree']['paged_file_bytes']} |"
+                f"| {trial_row['trial']} | {trial_row['extendible']['split_count']} | {trial_row['extendible']['merge_count']} | {trial_row['extendible']['peak_global_depth']} | {trial_row['extendible']['peak_bucket_count']} | {trial_row['extendible']['peak_directory_slots']} | {trial_row['linear']['average_probe_count']} | {trial_row['linear']['max_probe_count']} | {trial_row['linear']['resize_count']} | {trial_row['cuckoo']['rehash_count']} | {trial_row['cuckoo']['displacement_count']} | {trial_row['cuckoo']['final_capacity']} | {trial_row['btree']['final_height']} | {trial_row['btree']['final_node_count']} | {trial_row['btree']['paged_file_bytes']} |"
             )
         lines.append("")
 
@@ -1342,6 +1580,10 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
         "extendible_peak_global_depth": max(row["extendible"]["peak_global_depth"] for row in results),
         "extendible_peak_directory_slots": max(row["extendible"]["peak_directory_slots"] for row in results),
         "extendible_load_factor": max(row["extendible"]["load_factor"] for row in results),
+        "linear_average_probe_count": max(row["linear"]["average_probe_count"] for row in results),
+        "linear_max_probe_count": max(row["linear"]["max_probe_count"] for row in results),
+        "linear_resize_count": max(row["linear"]["resize_count"] for row in results),
+        "linear_final_load_factor": max(row["linear"]["final_load_factor"] for row in results),
         "cuckoo_average_rehash_count": max(row["cuckoo"]["average_rehash_count"] for row in results),
         "cuckoo_average_displacement_count": max(row["cuckoo"]["average_displacement_count"] for row in results),
         "cuckoo_average_load_factor": max(row["cuckoo"]["average_load_factor"] for row in results),
@@ -1372,6 +1614,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   <td>{row['final_entry_count']}</td>
   <td>{row['extendible']['split_count']} / {row['extendible']['merge_count']}</td>
   <td>{row['extendible']['peak_global_depth']} / {row['extendible']['peak_directory_slots']}</td>
+  <td>{escape(_format_dashboard_number(row['linear']['average_probe_count']))} / {row['linear']['max_probe_count']}</td>
   <td>{escape(_format_dashboard_number(row['cuckoo']['average_rehash_count']))} / {escape(_format_dashboard_number(row['cuckoo']['average_displacement_count']))}</td>
   <td>{row['btree']['final_height']} / {row['btree']['final_node_count']}</td>
   <td>{row['btree']['paged_file_bytes']}</td>
@@ -1427,6 +1670,38 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
                     maxima["extendible_load_factor"],
                     accent="#f59e0b",
                     detail="final occupancy across live buckets",
+                ),
+            ]
+        )
+        linear_metrics = "".join(
+            [
+                _render_benchmark_dashboard_metric(
+                    "avg probes",
+                    row["linear"]["average_probe_count"],
+                    maxima["linear_average_probe_count"],
+                    accent="#2563eb",
+                    detail=f"max probe {row['linear']['max_probe_count']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "max probe",
+                    row["linear"]["max_probe_count"],
+                    maxima["linear_max_probe_count"],
+                    accent="#7c3aed",
+                    detail=f"rebuild probes {row['linear']['rebuild_probe_count']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "rebuilds",
+                    row["linear"]["resize_count"],
+                    maxima["linear_resize_count"],
+                    accent="#0f766e",
+                    detail=f"tombstones {row['linear']['tombstone_count']}",
+                ),
+                _render_benchmark_dashboard_metric(
+                    "final load",
+                    row["linear"]["final_load_factor"],
+                    maxima["linear_final_load_factor"],
+                    accent="#f59e0b",
+                    detail=f"occupied load {row['linear']['occupied_load_factor']}",
                 ),
             ]
         )
@@ -1486,6 +1761,9 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
   <td>{trial_row['extendible']['split_count']}</td>
   <td>{trial_row['extendible']['merge_count']}</td>
   <td>{trial_row['extendible']['peak_global_depth']}</td>
+  <td>{escape(_format_dashboard_number(trial_row['linear']['average_probe_count']))}</td>
+  <td>{trial_row['linear']['max_probe_count']}</td>
+  <td>{trial_row['linear']['resize_count']}</td>
   <td>{trial_row['cuckoo']['rehash_count']}</td>
   <td>{trial_row['cuckoo']['displacement_count']}</td>
   <td>{trial_row['btree']['final_height']}</td>
@@ -1509,6 +1787,11 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
       {extendible_metrics}
     </article>
     <article class="metric-panel">
+      <h3>Linear probing baseline</h3>
+      <p>Primary-clustering pressure, tombstone cleanup, and probe lengths for the same key stream.</p>
+      {linear_metrics}
+    </article>
+    <article class="metric-panel">
       <h3>Cuckoo hashing</h3>
       <p>Relocation pressure and occupancy characteristics across deterministic trials.</p>
       {cuckoo_metrics}
@@ -1528,6 +1811,9 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
           <th scope="col">Ext splits</th>
           <th scope="col">Ext merges</th>
           <th scope="col">Peak depth</th>
+          <th scope="col">Linear avg probes</th>
+          <th scope="col">Linear max probe</th>
+          <th scope="col">Linear rebuilds</th>
           <th scope="col">Cuckoo rehashes</th>
           <th scope="col">Cuckoo displacements</th>
           <th scope="col">B-tree height</th>
@@ -1600,7 +1886,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
 <body>
 <main>
   <h1>{escape(title)}</h1>
-  <p class="lede">Compact benchmark dashboard for the extendible-hashing lab. It keeps the same deterministic benchmark data as the JSON, Markdown, and CSV exports while making the tradeoffs across extendible hashing, cuckoo hashing, and the B-tree page baseline easier to browse visually.</p>
+  <p class="lede">Compact benchmark dashboard for the extendible-hashing lab. It keeps the same deterministic benchmark data as the JSON, Markdown, and CSV exports while making the tradeoffs across extendible hashing, a simple linear-probing baseline, cuckoo hashing, and the B-tree page baseline easier to browse visually.</p>
   {suite_source_html}
   <section class="summary-grid">{summary_cards_html}</section>
   <section class="scoreboard">
@@ -1613,6 +1899,7 @@ def render_benchmark_dashboard_html(title: str, summary: dict[str, Any], suite_s
           <th scope="col">Final entries</th>
           <th scope="col">Ext splits / merges</th>
           <th scope="col">Ext depth / slots</th>
+          <th scope="col">Linear avg / max probe</th>
           <th scope="col">Cuckoo rehash / displacements</th>
           <th scope="col">B-tree height / nodes</th>
           <th scope="col">B-tree bytes</th>
@@ -1657,6 +1944,17 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                 "extendible_peak_bucket_count",
                 "extendible_peak_directory_slots",
                 "extendible_load_factor",
+                "linear_initial_capacity",
+                "linear_max_load_factor",
+                "linear_max_tombstone_ratio",
+                "linear_final_capacity",
+                "linear_final_load_factor",
+                "linear_occupied_load_factor",
+                "linear_tombstone_count",
+                "linear_resize_count",
+                "linear_average_probe_count",
+                "linear_max_probe_count",
+                "linear_rebuild_probe_count",
                 "cuckoo_average_rehash_count",
                 "cuckoo_average_displacement_count",
                 "cuckoo_average_load_factor",
@@ -1702,6 +2000,17 @@ def save_benchmark_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     "extendible_peak_bucket_count": row["extendible"]["peak_bucket_count"],
                     "extendible_peak_directory_slots": row["extendible"]["peak_directory_slots"],
                     "extendible_load_factor": row["extendible"]["load_factor"],
+                    "linear_initial_capacity": row["linear"]["initial_capacity"],
+                    "linear_max_load_factor": row["linear"]["max_load_factor"],
+                    "linear_max_tombstone_ratio": row["linear"]["max_tombstone_ratio"],
+                    "linear_final_capacity": row["linear"]["final_capacity"],
+                    "linear_final_load_factor": row["linear"]["final_load_factor"],
+                    "linear_occupied_load_factor": row["linear"]["occupied_load_factor"],
+                    "linear_tombstone_count": row["linear"]["tombstone_count"],
+                    "linear_resize_count": row["linear"]["resize_count"],
+                    "linear_average_probe_count": row["linear"]["average_probe_count"],
+                    "linear_max_probe_count": row["linear"]["max_probe_count"],
+                    "linear_rebuild_probe_count": row["linear"]["rebuild_probe_count"],
                     "cuckoo_average_rehash_count": row["cuckoo"]["average_rehash_count"],
                     "cuckoo_average_displacement_count": row["cuckoo"]["average_displacement_count"],
                     "cuckoo_average_load_factor": row["cuckoo"]["average_load_factor"],
@@ -1757,7 +2066,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     benchmark_parser = subparsers.add_parser(
         "benchmark",
-        help="compare extendible hashing against the repo's cuckoo hashing and B-tree labs across mixed workloads",
+        help="compare extendible hashing against linear probing, the repo's cuckoo hashing, and the B-tree lab across mixed workloads",
     )
     benchmark_parser.add_argument("--input", required=True, type=Path, help="benchmark suite JSON file")
     benchmark_parser.add_argument("--json-out", type=Path, help="optional JSON summary output")
@@ -1766,7 +2075,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--csv-out", type=Path, help="optional CSV summary output")
     benchmark_parser.add_argument(
         "--title",
-        help="optional title override for JSON/stdout and --markdown-out",
+        help="optional title override for JSON/stdout and any saved report/dashboard outputs",
     )
 
     visualize_parser = subparsers.add_parser(

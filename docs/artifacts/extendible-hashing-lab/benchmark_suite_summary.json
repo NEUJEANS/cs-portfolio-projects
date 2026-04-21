@@ -1,8 +1,11 @@
 {
-  "title": "Extendible hashing vs cuckoo hashing and B-tree benchmark comparison",
+  "title": "Extendible hashing vs linear probing, cuckoo hashing, and B-tree benchmark comparison",
   "bucket_capacity": 2,
   "cuckoo_capacity": 7,
   "max_displacements": 8,
+  "linear_capacity": 8,
+  "linear_max_load_factor": 0.75,
+  "linear_max_tombstone_ratio": 0.25,
   "btree_minimum_degree": 2,
   "btree_page_size": 512,
   "btree_value_bytes": 32,
@@ -40,6 +43,19 @@
         "merge_count": 0,
         "directory_growth_count": 3,
         "directory_shrink_count": 0
+      },
+      "linear": {
+        "initial_capacity": 8,
+        "max_load_factor": 0.75,
+        "max_tombstone_ratio": 0.25,
+        "final_capacity": 8,
+        "final_load_factor": 0.625,
+        "occupied_load_factor": 0.75,
+        "tombstone_count": 1,
+        "resize_count": 0,
+        "average_probe_count": 1.462,
+        "max_probe_count": 3,
+        "rebuild_probe_count": 0
       },
       "cuckoo": {
         "average_rehash_count": 0.333,
@@ -93,6 +109,19 @@
             "directory_growth_count": 3,
             "directory_shrink_count": 0
           },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.75,
+            "tombstone_count": 1,
+            "resize_count": 0,
+            "average_probe_count": 1.462,
+            "max_probe_count": 3,
+            "rebuild_probe_count": 0
+          },
           "cuckoo": {
             "final_capacity": 15,
             "load_factor": 0.3333,
@@ -139,6 +168,19 @@
             "directory_growth_count": 3,
             "directory_shrink_count": 0
           },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.75,
+            "tombstone_count": 1,
+            "resize_count": 0,
+            "average_probe_count": 1.462,
+            "max_probe_count": 3,
+            "rebuild_probe_count": 0
+          },
           "cuckoo": {
             "final_capacity": 7,
             "load_factor": 0.7143,
@@ -184,6 +226,19 @@
             "merge_count": 0,
             "directory_growth_count": 3,
             "directory_shrink_count": 0
+          },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.75,
+            "tombstone_count": 1,
+            "resize_count": 0,
+            "average_probe_count": 1.462,
+            "max_probe_count": 3,
+            "rebuild_probe_count": 0
           },
           "cuckoo": {
             "final_capacity": 7,
@@ -239,6 +294,19 @@
         "directory_growth_count": 3,
         "directory_shrink_count": 0
       },
+      "linear": {
+        "initial_capacity": 8,
+        "max_load_factor": 0.75,
+        "max_tombstone_ratio": 0.25,
+        "final_capacity": 16,
+        "final_load_factor": 0.625,
+        "occupied_load_factor": 0.625,
+        "tombstone_count": 0,
+        "resize_count": 1,
+        "average_probe_count": 1.357,
+        "max_probe_count": 2,
+        "rebuild_probe_count": 6
+      },
       "cuckoo": {
         "average_rehash_count": 1.0,
         "average_displacement_count": 11.333,
@@ -291,6 +359,19 @@
             "directory_growth_count": 3,
             "directory_shrink_count": 0
           },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 16,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.625,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 1.357,
+            "max_probe_count": 2,
+            "rebuild_probe_count": 6
+          },
           "cuckoo": {
             "final_capacity": 15,
             "load_factor": 0.6667,
@@ -337,6 +418,19 @@
             "directory_growth_count": 3,
             "directory_shrink_count": 0
           },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 16,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.625,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 1.357,
+            "max_probe_count": 2,
+            "rebuild_probe_count": 6
+          },
           "cuckoo": {
             "final_capacity": 15,
             "load_factor": 0.6667,
@@ -382,6 +476,19 @@
             "merge_count": 0,
             "directory_growth_count": 3,
             "directory_shrink_count": 0
+          },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 16,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.625,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 1.357,
+            "max_probe_count": 2,
+            "rebuild_probe_count": 6
           },
           "cuckoo": {
             "final_capacity": 15,
@@ -437,6 +544,19 @@
         "directory_growth_count": 4,
         "directory_shrink_count": 1
       },
+      "linear": {
+        "initial_capacity": 8,
+        "max_load_factor": 0.75,
+        "max_tombstone_ratio": 0.25,
+        "final_capacity": 8,
+        "final_load_factor": 0.625,
+        "occupied_load_factor": 0.625,
+        "tombstone_count": 0,
+        "resize_count": 1,
+        "average_probe_count": 1.357,
+        "max_probe_count": 4,
+        "rebuild_probe_count": 5
+      },
       "cuckoo": {
         "average_rehash_count": 0.0,
         "average_displacement_count": 2.333,
@@ -489,6 +609,19 @@
             "directory_growth_count": 4,
             "directory_shrink_count": 1
           },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.625,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 1.357,
+            "max_probe_count": 4,
+            "rebuild_probe_count": 5
+          },
           "cuckoo": {
             "final_capacity": 7,
             "load_factor": 0.7143,
@@ -535,6 +668,19 @@
             "directory_growth_count": 4,
             "directory_shrink_count": 1
           },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.625,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 1.357,
+            "max_probe_count": 4,
+            "rebuild_probe_count": 5
+          },
           "cuckoo": {
             "final_capacity": 7,
             "load_factor": 0.7143,
@@ -580,6 +726,19 @@
             "merge_count": 1,
             "directory_growth_count": 4,
             "directory_shrink_count": 1
+          },
+          "linear": {
+            "initial_capacity": 8,
+            "max_load_factor": 0.75,
+            "max_tombstone_ratio": 0.25,
+            "final_capacity": 8,
+            "final_load_factor": 0.625,
+            "occupied_load_factor": 0.625,
+            "tombstone_count": 0,
+            "resize_count": 1,
+            "average_probe_count": 1.357,
+            "max_probe_count": 4,
+            "rebuild_probe_count": 5
           },
           "cuckoo": {
             "final_capacity": 7,
