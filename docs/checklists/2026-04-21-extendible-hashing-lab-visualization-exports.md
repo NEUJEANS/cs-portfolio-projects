@@ -8,4 +8,4 @@
 - [x] add or tighten tests for visualization rendering and accessibility metadata
 - [x] refresh the README plus project/root checklists so the visualization slice is visible to portfolio reviewers
 - [x] complete at least 3 review passes, fix issues found, and rerun validation
-- [ ] run secret scan, commit, push, and write the final wrap-up
+- [x] run secret scan, commit, push, and write the final wrap-up
