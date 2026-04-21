@@ -14,5 +14,5 @@
 - [x] run review pass 3 and fix issues found
 - [x] run validation and smoke checks
 - [x] run secret scan before push
-- [ ] commit feature + wrap-up
+- [x] commit feature + wrap-up
 - [ ] push safely to `origin/main`
